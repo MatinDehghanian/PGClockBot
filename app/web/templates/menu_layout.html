@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>دکمه‌های منوی بات</h1>
-    <p>با دکمه‌های ▲▼ جابه‌جا کنید — افزودن و حذف با آیکن</p>
+    <p>با دکمه‌های ساده بالا/پایین جابه‌جا کنید — افزودن و حذف با آیکن</p>
   </div>
 </div>
 {% if saved %}<div class="flash ok">ذخیره شد — از پیام بعدی بات اعمال می‌شود.</div>{% endif %}
@@ -34,10 +34,10 @@
             <div class="muted">{{ item.label }}</div>
           </div>
           <div class="dnd-actions">
-            <button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا">▲</button>
-            <button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین">▼</button>
+            <button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button>
+            <button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
             {% if not item.required %}
-            <button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف">×</button>
+            <button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
             {% else %}
             <span class="badge fixed">ثابت</span>
             {% endif %}
@@ -56,7 +56,7 @@
             <div class="muted">{{ item.label }}</div>
           </div>
           <div class="dnd-actions">
-            <button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن">+</button>
+            <button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
           </div>
         </li>
         {% endfor %}
@@ -91,11 +91,11 @@
     const box = document.createElement('div');
     box.className = 'dnd-actions';
     box.innerHTML =
-      '<button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا">▲</button>' +
-      '<button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین">▼</button>' +
+      '<button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button>' +
+      '<button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>' +
       (required
         ? '<span class="badge fixed">ثابت</span>'
-        : '<button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف">×</button>');
+        : '<button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>');
     li.querySelectorAll('.dnd-actions, button.btn-remove, button.btn-add, span.badge').forEach((n) => n.remove());
     li.appendChild(box);
   }
@@ -104,7 +104,7 @@
     li.querySelectorAll('.dnd-actions, button.btn-remove, button.btn-add, span.badge').forEach((n) => n.remove());
     const box = document.createElement('div');
     box.className = 'dnd-actions';
-    box.innerHTML = '<button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن">+</button>';
+    box.innerHTML = '<button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>';
     li.appendChild(box);
   }
   function moveToActive(li) {
