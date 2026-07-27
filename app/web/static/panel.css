@@ -506,47 +506,49 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   border-radius: 8px;
   font: inherit;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
   text-decoration: none !important;
-  color: var(--accent) !important;
-  border: 1px solid rgba(249, 115, 22, 0.28);
-  background: rgba(249, 115, 22, 0.08);
+  color: #fff !important;
+  border: 1px solid #ea580c;
+  background: #f97316;
   box-sizing: border-box;
 }
 .btn:hover, button.btn:hover, button[type=submit]:hover, a.btn:hover {
-  background: rgba(249, 115, 22, 0.16);
+  background: #fb923c;
+  border-color: #f97316;
   filter: none;
   opacity: 1;
-  color: var(--accent) !important;
+  color: #fff !important;
 }
 .btn-ghost {
-  color: var(--text) !important;
+  color: #fafafa !important;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
 }
 .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text) !important;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff !important;
 }
 .btn-danger, .btn-remove {
-  color: var(--danger) !important;
-  border: 1px solid rgba(248, 113, 113, 0.28);
-  background: rgba(248, 113, 113, 0.08);
+  color: #fff !important;
+  border: 1px solid #ef4444;
+  background: #dc2626;
 }
 .btn-danger:hover, .btn-remove:hover {
-  background: rgba(248, 113, 113, 0.16);
-  color: var(--danger) !important;
+  background: #ef4444;
+  color: #fff !important;
 }
 .btn-ok, .btn-add {
-  color: var(--ok) !important;
-  border: 1px solid rgba(74, 222, 128, 0.28);
-  background: rgba(74, 222, 128, 0.08);
+  color: #052e16 !important;
+  border: 1px solid #22c55e;
+  background: #4ade80;
 }
 .btn-ok:hover, .btn-add:hover {
-  background: rgba(74, 222, 128, 0.16);
-  color: var(--ok) !important;
+  background: #86efac;
+  color: #052e16 !important;
 }
 .btn-sm { min-height: 32px; padding: 0 10px; font-size: 12px; }
 .btn.sm { min-height: 32px; padding: 0 10px; font-size: 12px; }
@@ -827,19 +829,19 @@ tr:last-child td { border-bottom: 0; }
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(249, 115, 22, 0.08);
-  color: var(--accent) !important;
-  border: 1px solid rgba(249, 115, 22, 0.28);
+  background: #f97316;
+  color: #fff !important;
+  border: 1px solid #ea580c;
   border-radius: 8px;
   padding: 0 12px;
   min-height: 34px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   text-decoration: none !important;
 }
 .btn-star:hover {
-  background: rgba(249, 115, 22, 0.16);
-  color: var(--accent) !important;
+  background: #fb923c;
+  color: #fff !important;
   opacity: 1;
 }
 .btn-star svg { width: 14px; height: 14px; flex: 0 0 auto; }

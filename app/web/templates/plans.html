@@ -95,8 +95,9 @@
         <td>{% if p.is_active %}<span class="badge">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td>
           <div class="actions" style="margin:0">
+            <a class="btn btn-sm" href="/plans/{{ p.id }}/edit">ویرایش</a>
             <form method="post" action="/plans/{{ p.id }}/toggle">
-              <button class="btn btn-ghost" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
             </form>
             <form method="post" action="/plans/{{ p.id }}/delete" onsubmit="return confirm('حذف پلن از فروشگاه؟')">
               <button class="icon-btn icon-remove" type="submit" title="حذف" aria-label="حذف">×</button>

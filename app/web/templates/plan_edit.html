@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}ویرایش پلن{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>ویرایش پلن #{{ plan.id }}</h1>
+    <p>{{ plan.name }}</p>
+  </div>
+  <a class="btn btn-ghost" href="/plans">بازگشت</a>
+</div>
+
+{% if pg_error %}<div class="flash warn">پاسارگارد: {{ pg_error }}</div>{% endif %}
+
+<div class="card">
+  <form method="post" action="/plans/{{ plan.id }}/edit">
+    <div class="form-row">
+      <div>
+        <label>نام پلن</label>
+        <input name="name" required value="{{ plan.name }}" />
+      </div>
+      <div>
+        <label>قیمت (تومان)</label>
+        <input name="price" type="number" min="0" required value="{{ plan.price }}" />
+      </div>
+      <div>
+        <label>مدت (روز)</label>
+        <input name="duration_days" type="number" min="1" required value="{{ plan.duration_days }}" />
+      </div>
+      <div>
+        <label>حجم (گیگ) — خالی = نامحدود</label>
+        <input name="data_limit_gb" type="number" step="0.1" min="0" value="{{ plan.data_limit_gb if plan.data_limit_gb is not none else '' }}" placeholder="نامحدود" />
+      </div>
+    </div>
+
+    <label>توضیح کوتاه</label>
+    <input name="description" value="{{ plan.description or '' }}" placeholder="نمایش در بات" />
+
+    <label>ترتیب نمایش</label>
+    <input name="sort_order" type="number" value="{{ plan.sort_order }}" />
+
+    <label>حالت ساخت در پاسارگارد</label>
+    <select name="mode" id="plan-mode">
+      <option value="custom" {% if not plan.pg_template_id %}selected{% endif %}>سفارشی (گروه + حجم + مدت)</option>
+      <option value="template" {% if plan.pg_template_id %}selected{% endif %}>از تمپلیت آماده پاسارگارد</option>
+    </select>
+
+    {% set selected_groups = (plan.pg_group_ids or '').split(',') %}
+    <div id="mode-custom">
+      <label>گروه‌های پاسارگارد (حداقل یکی)</label>
+      <div class="checks">
+        {% for g in groups %}
+        {% set gid = g.get('id')|string %}
+        <label>
+          <input type="checkbox" name="group_{{ g.get('id') }}" value="{{ g.get('id') }}"
+            {% if gid in selected_groups %}checked{% endif %} />
+          {{ g.get('name') or g.get('id') }}
+        </label>
+        {% else %}
+        <span class="muted">گروهی نیست — از منوی پاسارگارد → گروه‌ها بسازید.</span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div id="mode-template" style="display:none">
+      <label>تمپلیت پاسارگارد</label>
+      <select name="pg_template_id">
+        <option value="">— انتخاب کنید —</option>
+        {% for t in templates %}
+        <option value="{{ t.get('id') }}" {% if plan.pg_template_id == t.get('id') %}selected{% endif %}>
+          #{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="actions">
+      <button class="btn" type="submit">ذخیره تغییرات</button>
+      <a class="btn btn-ghost" href="/plans">انصراف</a>
+    </div>
+  </form>
+</div>
+
+<script>
+(function(){
+  const mode = document.getElementById('plan-mode');
+  const custom = document.getElementById('mode-custom');
+  const tpl = document.getElementById('mode-template');
+  function sync(){
+    const t = mode.value === 'template';
+    custom.style.display = t ? 'none' : 'block';
+    tpl.style.display = t ? 'block' : 'none';
+  }
+  mode.addEventListener('change', sync);
+  sync();
+})();
+</script>
+{% endblock %}

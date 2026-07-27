@@ -384,6 +384,109 @@ def create_api_app(lifespan=None) -> FastAPI:
             status_code=303,
         )
 
+    async def _plans_context(session: AsyncSession, request: Request, staff: dict, extra: dict | None = None):
+        result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
+        plans = list(result.scalars().all())
+        templates: list = []
+        groups: list = []
+        pg_error = None
+        try:
+            pg = get_pg()
+            templates = await pg.get_user_templates_simple()
+            full = await pg.get_user_templates()
+            from app.services.pasarguard import as_list
+
+            if isinstance(full, list) and full:
+                templates = full
+            else:
+                templates = as_list(full, "templates") or templates
+            groups = await pg.get_groups_simple()
+        except Exception as e:
+            pg_error = str(e)
+        ctx = {
+            "staff": staff,
+            "plans": plans,
+            "templates": templates,
+            "groups": groups,
+            "pg_error": pg_error,
+            "flash_err": request.query_params.get("err"),
+            "flash_ok": request.query_params.get("ok"),
+        }
+        if extra:
+            ctx.update(extra)
+        return ctx
+
+    @app.get("/plans/{plan_id}/edit", response_class=HTMLResponse)
+    async def plans_edit_page(
+        plan_id: int,
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        plan = await session.get(Plan, plan_id)
+        if not plan:
+            return RedirectResponse("/plans?err=" + quote("پلن یافت نشد"), status_code=303)
+        ctx = await _plans_context(session, request, staff, {"plan": plan})
+        return render(request, "plan_edit.html", ctx)
+
+    @app.post("/plans/{plan_id}/edit")
+    async def plans_edit_save(
+        plan_id: int,
+        request: Request,
+        name: str = Form(...),
+        price: int = Form(...),
+        duration_days: int = Form(30),
+        data_limit_gb: str = Form(""),
+        pg_template_id: str = Form(""),
+        description: str = Form(""),
+        mode: str = Form("custom"),
+        sort_order: int = Form(0),
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        plan = await session.get(Plan, plan_id)
+        if not plan:
+            return RedirectResponse("/plans?err=" + quote("پلن یافت نشد"), status_code=303)
+
+        form = await request.form()
+        gb = float(data_limit_gb) if str(data_limit_gb).strip() else None
+        tpl = None
+        group_csv = None
+
+        if mode == "template":
+            tpl = int(pg_template_id) if str(pg_template_id).strip() else None
+            if not tpl:
+                return RedirectResponse(
+                    f"/plans/{plan_id}/edit?err={quote('تمپلیت پاسارگارد را انتخاب کنید')}",
+                    status_code=303,
+                )
+        else:
+            ids = [
+                int(v)
+                for k, v in form.items()
+                if str(k).startswith("group_") and str(v).isdigit()
+            ]
+            if not ids:
+                return RedirectResponse(
+                    f"/plans/{plan_id}/edit?err={quote('حداقل یک گروه پاسارگارد انتخاب کنید')}",
+                    status_code=303,
+                )
+            group_csv = ",".join(str(i) for i in ids)
+
+        plan.name = name.strip()
+        plan.price = price
+        plan.duration_days = duration_days
+        plan.data_limit_gb = gb
+        plan.description = description or None
+        plan.sort_order = sort_order
+        plan.pg_template_id = tpl
+        plan.pg_group_ids = group_csv
+        await session.commit()
+        return RedirectResponse(
+            f"/plans?ok={quote('پلن به‌روزرسانی شد')}",
+            status_code=303,
+        )
+
     @app.post("/plans/{plan_id}/toggle")
     async def plans_toggle(
         plan_id: int,
