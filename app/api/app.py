@@ -997,7 +997,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         info = await check_github_update(force=True)
         target = (body or {}).get("target") or info.get("remote_version")
         if not info.get("update_available") and not (body or {}).get("force"):
-            # Allow retry after error even if versions match momentarily
             from app.services.panel_update import read_status
 
             st = read_status()
@@ -1005,6 +1004,23 @@ def create_api_app(lifespan=None) -> FastAPI:
                 return {"ok": False, "error": "نسخه جدیدی برای آپدیت نیست", "info": info}
         result = start_update(target_version=target)
         return result
+
+    @app.post("/update/rollback")
+    async def update_rollback(
+        request: Request,
+        staff: dict = Depends(require_admin),
+    ):
+        from app.services.panel_update import start_rollback
+
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        snapshot_id = str((body or {}).get("snapshot_id") or "").strip()
+        if not snapshot_id:
+            return {"ok": False, "error": "نقطه بازگشت مشخص نشده"}
+        return start_rollback(snapshot_id)
 
     @app.get("/notifications", response_class=HTMLResponse)
     async def notifications_page(

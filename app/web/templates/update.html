@@ -78,6 +78,20 @@
   direction: ltr;
   text-align: left;
 }
+.snap-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.snap-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,.18);
+}
+.snap-row strong { display:block; font-size:14px; }
+.snap-row small { color: var(--muted); font-size:12px; }
 @media (max-width: 700px) {
   .update-meta { grid-template-columns: 1fr; }
 }
@@ -86,8 +100,8 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>آپدیت پنل و بات</h1>
-    <p>نسخه فعلی را ببینید و در صورت وجود نسخه جدید، آپدیت را با نوار پیشرفت اجرا کنید.</p>
+    <h1>آپدیت و بازگشت</h1>
+    <p>قبل از هر آپدیت یک نقطه بازگشت ذخیره می‌شود تا اگر پشیمان شدید برگردید عقب.</p>
   </div>
   <div class="version-box">
     <span class="ver-num">نسخه فعلی {{ local_version }}</span>
@@ -103,7 +117,7 @@
   {{ update_info.version }} → {{ update_info.remote_version }}
 </div>
 {% elif update_info.checked %}
-<div class="flash ok">شما روی آخرین نسخه هستید.</div>
+<div class="flash ok">شما روی آخرین نسخه منتشرشده هستید.</div>
 {% else %}
 <div class="flash warn">{{ update_info.label }}</div>
 {% endif %}
@@ -112,14 +126,14 @@
      data-remote="{{ update_info.remote_version or '' }}"
      data-can-start="{{ '1' if update_info.update_available else '0' }}"
      data-running="{{ '1' if status.state == 'running' else '0' }}">
-  <h2>وضعیت آپدیت</h2>
+  <h2>وضعیت عملیات</h2>
   <div class="update-meta">
     <div><span class="muted">از</span> <strong id="upd-from">{{ status.from_version or local_version }}</strong></div>
     <div><span class="muted">به</span> <strong id="upd-to">{{ status.to_version or update_info.remote_version or '—' }}</strong></div>
     <div><span class="muted">وضعیت</span> <strong id="upd-state-label">{{ status.message }}</strong></div>
   </div>
 
-  <div class="progress-wrap" aria-label="نوار پیشرفت آپدیت">
+  <div class="progress-wrap" aria-label="نوار پیشرفت">
     <div class="progress-bar">
       <div class="progress-fill" id="upd-fill" style="width: {{ status.percent or 0 }}%"></div>
     </div>
@@ -151,6 +165,34 @@
 {% endfor %}</pre>
 </div>
 
+<div class="card">
+  <h2>راه برگشت</h2>
+  <p class="muted" style="margin-top:0">
+    قبل از آپدیت، وضعیت فعلی ذخیره می‌شود. اگر از نسخه جدید راضی نبودید، از اینجا برگردید.
+  </p>
+  {% if snapshots %}
+  <div class="snap-list" id="snap-list">
+    {% for s in snapshots %}
+    <div class="snap-row">
+      <div>
+        <strong>{{ s.label or (s.version ~ ' · ' ~ s.short_sha) }}</strong>
+        <small>
+          {{ s.created_at or '' }}
+          {% if s.reason == 'before_update' %} · قبل از آپدیت{% elif s.reason == 'before_rollback' %} · قبل از بازگشت{% endif %}
+        </small>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm snap-rollback" data-id="{{ s.id }}"
+        data-label="{{ s.label }}">
+        بازگشت به این نسخه
+      </button>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">هنوز نقطه بازگشتی نیست. بعد از اولین آپدیت از پنل، اینجا ظاهر می‌شود.</p>
+  {% endif %}
+</div>
+
 <script>
 (function(){
   const startBtn = document.getElementById('upd-start');
@@ -163,11 +205,19 @@
   const toEl = document.getElementById('upd-to');
   const fromEl = document.getElementById('upd-from');
   const steps = Array.from(document.querySelectorAll('#upd-steps li'));
+  const rollbackBtns = () => Array.from(document.querySelectorAll('.snap-rollback'));
   let timer = null;
   let waitingRestart = false;
   const root = document.getElementById('upd-root');
   const targetRemote = (root && root.dataset.remote) || '';
   const canStart = root && root.dataset.canStart === '1';
+
+  function setBusy(busy, label){
+    startBtn.disabled = busy || !canStart;
+    if (busy) startBtn.textContent = label || 'در حال اجرا…';
+    else startBtn.textContent = canStart ? 'شروع آپدیت' : 'آپدیتی نیست';
+    rollbackBtns().forEach(b => { b.disabled = busy; });
+  }
 
   function applyStatus(st){
     const pct = Number(st.percent || 0);
@@ -189,19 +239,19 @@
         li.classList.add('done');
       }
     });
+    const modeLabel = st.mode === 'rollback' ? 'بازگشت' : 'آپدیت';
     if (st.state === 'running') {
-      startBtn.disabled = true;
-      startBtn.textContent = 'در حال آپدیت…';
+      setBusy(true, 'در حال ' + modeLabel + '…');
     } else if (st.state === 'done') {
-      startBtn.disabled = true;
-      startBtn.textContent = 'آپدیت انجام شد';
+      setBusy(true, modeLabel + ' انجام شد');
       steps.forEach(li => { li.classList.remove('current'); li.classList.add('done'); });
+      rollbackBtns().forEach(b => { b.disabled = false; });
     } else if (st.state === 'error') {
       startBtn.disabled = false;
       startBtn.textContent = 'تلاش دوباره';
+      rollbackBtns().forEach(b => { b.disabled = false; });
     } else {
-      startBtn.disabled = !canStart;
-      startBtn.textContent = canStart ? 'شروع آپدیت' : 'آپدیتی نیست';
+      setBusy(false);
     }
   }
 
@@ -214,7 +264,7 @@
       if (waitingRestart && (data.state === 'done' || data.state === 'idle')) {
         waitingRestart = false;
         clearInterval(timer); timer = null;
-        stateEl.textContent = 'آپدیت انجام شد — در حال بارگذاری دوباره…';
+        stateEl.textContent = 'انجام شد — بارگذاری دوباره…';
         setTimeout(() => location.reload(), 1200);
         return;
       }
@@ -244,8 +294,7 @@
   }
 
   startBtn.addEventListener('click', async () => {
-    startBtn.disabled = true;
-    startBtn.textContent = 'شروع…';
+    setBusy(true, 'شروع…');
     try {
       const res = await fetch('/update/start', {
         method: 'POST',
@@ -256,15 +305,42 @@
       const data = await res.json();
       if (!data.ok) {
         stateEl.textContent = data.error || 'شروع آپدیت ممکن نشد';
-        startBtn.disabled = false;
-        startBtn.textContent = 'تلاش دوباره';
+        setBusy(false);
         return;
       }
       if (data.status) applyStatus(data.status);
       startPolling();
     } catch (e) {
       stateEl.textContent = 'خطا در شروع آپدیت';
-      startBtn.disabled = false;
+      setBusy(false);
+    }
+  });
+
+  document.getElementById('snap-list') && document.getElementById('snap-list').addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('.snap-rollback');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const label = btn.dataset.label || id;
+    if (!confirm('بازگشت به «' + label + '»؟\nوضعیت فعلی هم ذخیره می‌شود تا اگر اشتباه بود دوباره برگردید.')) return;
+    setBusy(true, 'شروع بازگشت…');
+    try {
+      const res = await fetch('/update/rollback', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snapshot_id: id })
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        stateEl.textContent = data.error || 'بازگشت ممکن نشد';
+        setBusy(false);
+        return;
+      }
+      if (data.status) applyStatus(data.status);
+      startPolling();
+    } catch (e) {
+      stateEl.textContent = 'خطا در شروع بازگشت';
+      setBusy(false);
     }
   });
 
