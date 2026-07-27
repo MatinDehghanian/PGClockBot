@@ -4,14 +4,16 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.config import get_settings
-from app.db.models import BotUser, Order
-from app.services.formatting import format_toman
-from app.services.orders import create_order, list_active_plans
-from app.services.users import get_setting
+from app.db.models import BotUser, Order, UserService
+from app.services.formatting import format_toman, service_card
+from app.services.orders import create_order, get_plan, list_active_plans, pay_with_wallet, start_card_payment
+from app.services.pasarguard import get_pg
+from app.services.users import get_all_settings, get_setting, on
 
 router = Router(name="shop")
 
@@ -23,14 +25,11 @@ class ShopStates(StatesGroup):
 @router.callback_query(F.data == "shop:list")
 async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
-    trial_on = await get_setting(session, "trial_enabled") == "1"
+    ui = await get_all_settings(session)
+    trial_on = on(ui.get("trial_enabled"))
     plans = await list_active_plans(session, include_trial=True)
     if not trial_on:
         plans = [p for p in plans if not p.is_trial]
-    # one-time trial: hide if user already has a service
-    from sqlalchemy import select
-    from app.db.models import UserService
-
     has_svc = (
         await session.execute(
             select(UserService.id).where(UserService.bot_user_id == db_user.id).limit(1)
@@ -39,23 +38,22 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if has_svc:
         plans = [p for p in plans if not p.is_trial]
     if not plans:
-        text = "در حال حاضر پلنی برای فروش فعال نیست.\nاز وب‌پنل یا پنل ادمین پلن اضافه کنید."
+        text = "در حال حاضر پلنی برای فروش فعال نیست.\nاز وب‌پنل پلن اضافه کنید."
         if callback.message:
-            await callback.message.edit_text(text, reply_markup=kb.back_home())
+            await callback.message.edit_text(text, reply_markup=kb.back_home(ui))
         return
     if callback.message:
         await callback.message.edit_text(
             "🛒 <b>انتخاب پلن</b>\nیکی از پلن‌ها را انتخاب کنید:",
-            reply_markup=kb.plans_keyboard(plans),
+            reply_markup=kb.plans_keyboard(plans, ui),
         )
 
 
 @router.callback_query(F.data.startswith("shop:plan:"))
 async def shop_plan(callback: CallbackQuery, session: AsyncSession):
     await callback.answer()
+    ui = await get_all_settings(session)
     plan_id = int(callback.data.split(":")[-1])
-    from app.services.orders import get_plan
-
     plan = await get_plan(session, plan_id)
     if not plan:
         await callback.answer("پلن پیدا نشد", show_alert=True)
@@ -69,12 +67,13 @@ async def shop_plan(callback: CallbackQuery, session: AsyncSession):
         f"💰 قیمت: {format_toman(plan.price, get_settings().currency)}"
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.plan_actions(plan.id))
+        await callback.message.edit_text(text, reply_markup=kb.plan_actions(plan.id, ui))
 
 
 @router.callback_query(F.data.startswith("shop:buy:"))
 async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
+    ui = await get_all_settings(session)
     plan_id = int(callback.data.split(":")[-1])
     order = await create_order(
         session,
@@ -88,7 +87,7 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         "روش پرداخت را انتخاب کنید:"
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.pay_methods(order.id))
+        await callback.message.edit_text(text, reply_markup=kb.pay_methods(order.id, ui))
 
 
 @router.callback_query(F.data.startswith("pay:discount:"))
@@ -98,27 +97,34 @@ async def ask_discount(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ShopStates.discount)
     await state.update_data(order_id=order_id)
     if callback.message:
-        await callback.message.answer("کد تخفیف را ارسال کنید یا «انصراف» بزنید:", reply_markup=kb.cancel_reply())
+        await callback.message.answer(
+            "کد تخفیف را ارسال کنید یا «انصراف» بزنید:",
+            reply_markup=kb.cancel_reply(),
+        )
 
 
 @router.message(ShopStates.discount)
-async def apply_discount_msg(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
+async def apply_discount_msg(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    ui = await get_all_settings(session)
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.back_home())
+        await message.answer("لغو شد.", reply_markup=kb.back_home(ui))
         return
     data = await state.get_data()
-    order_id = data.get("order_id")
-    order = await session.get(Order, order_id)
+    order = await session.get(Order, data.get("order_id"))
     await state.clear()
     if not order or order.user_id != db_user.id:
         await message.answer("سفارش معتبر نیست.")
         return
     from app.services.orders import apply_discount
 
-    discount, code = await apply_discount(session, message.text.strip(), order.amount + order.discount_amount)
+    discount, code = await apply_discount(
+        session, message.text.strip(), order.amount + order.discount_amount
+    )
     if not code:
-        await message.answer("کد تخفیف نامعتبر است.", reply_markup=kb.pay_methods(order.id))
+        await message.answer("کد تخفیف نامعتبر است.", reply_markup=kb.pay_methods(order.id, ui))
         return
     base = order.amount + order.discount_amount
     order.discount_amount = discount
@@ -127,23 +133,19 @@ async def apply_discount_msg(message: Message, state: FSMContext, session: Async
     await session.commit()
     await message.answer(
         f"تخفیف اعمال شد ✅\nمبلغ جدید: {format_toman(order.amount, get_settings().currency)}",
-        reply_markup=kb.pay_methods(order.id),
+        reply_markup=kb.pay_methods(order.id, ui),
     )
 
 
 @router.callback_query(F.data.startswith("pay:wallet:"))
-async def pay_wallet(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
+    ui = await get_all_settings(session)
     order_id = int(callback.data.split(":")[-1])
     order = await session.get(Order, order_id)
     if not order or order.user_id != db_user.id:
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
-    from app.services.orders import pay_with_wallet
-    from app.db.models import UserService
-    from app.services.formatting import service_card
-    from app.services.pasarguard import get_pg
-
     try:
         order = await pay_with_wallet(session, order, db_user)
     except ValueError as e:
@@ -154,7 +156,10 @@ async def pay_wallet(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         return
 
     svc = await session.get(UserService, order.service_id) if order.service_id else None
-    text = f"✅ پرداخت موفق و سرویس فعال شد.\nسفارش #{order.id}"
+    try:
+        text = ui["purchase_success_text"].format(order_id=order.id)
+    except Exception:
+        text = f"✅ سفارش #{order.id} تحویل شد."
     if svc and svc.subscription_token:
         try:
             info = await get_pg().subscription_info(svc.subscription_token)
@@ -163,31 +168,28 @@ async def pay_wallet(callback: CallbackQuery, session: AsyncSession, db_user: Bo
             pass
         text += f"\n\n🔗 لینک:\n<code>{svc.subscription_url}</code>"
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.back_home())
+        await callback.message.edit_text(text, reply_markup=kb.back_home(ui))
 
 
 @router.callback_query(F.data.startswith("pay:card:"))
-async def pay_card(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def pay_card_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
+    ui = await get_all_settings(session)
     order_id = int(callback.data.split(":")[-1])
     order = await session.get(Order, order_id)
     if not order or order.user_id != db_user.id:
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
-    from app.services.orders import start_card_payment
-
     payment = await start_card_payment(session, order, db_user.id)
-    card = await get_setting(session, "card_number")
-    holder = await get_setting(session, "card_holder")
-    currency = get_settings().currency
-    text = (
-        f"💳 <b>کارت به کارت</b>\n\n"
-        f"مبلغ: <b>{format_toman(order.amount, currency)}</b>\n"
-        f"کارت: <code>{card or '—'}</code>\n"
-        f"به نام: {holder or '—'}\n\n"
-        f"پس از واریز، عکس رسید را همینجا ارسال کنید.\n"
-        f"(پرداخت #{payment.id})"
-    )
+    amount = format_toman(order.amount, get_settings().currency)
+    try:
+        text = ui["card_pay_text"].format(
+            amount=amount,
+            card=ui.get("card_number") or "—",
+            holder=ui.get("card_holder") or "—",
+        )
+    except Exception:
+        text = f"مبلغ {amount} را کارت به کارت کنید و رسید بفرستید."
+    text += f"\n\n(پرداخت #{payment.id})"
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.back_home())
-    # store pending payment expectation via FSM would be nicer; use payment awaiting_receipt globally by last payment
+        await callback.message.edit_text(text, reply_markup=kb.back_home(ui))

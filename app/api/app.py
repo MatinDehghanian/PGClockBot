@@ -33,7 +33,13 @@ from app.db.session import SessionLocal
 from app.services.orders import approve_payment, reject_payment
 from app.services.pasarguard import get_pg
 from app.services.resellers import make_reseller
-from app.services.users import ensure_default_settings, get_setting, set_setting
+from app.services.users import (
+    SETTING_GROUPS,
+    ensure_default_settings,
+    get_all_settings,
+    get_setting,
+    set_setting,
+)
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
@@ -307,20 +313,16 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        keys = [
-            "shop_title",
-            "welcome_text",
-            "card_number",
-            "card_holder",
-            "support_text",
-            "faq_text",
-            "guide_text",
-            "force_join_channel",
-            "force_join_enabled",
-            "trial_enabled",
-        ]
-        values = {k: await get_setting(session, k) for k in keys}
-        return render(request, "settings.html", {"staff": staff, "values": values},
+        values = await get_all_settings(session)
+        return render(
+            request,
+            "settings.html",
+            {
+                "staff": staff,
+                "values": values,
+                "groups": SETTING_GROUPS,
+                "saved": request.query_params.get("saved") == "1",
+            },
         )
 
     @app.post("/settings")
@@ -333,7 +335,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         for key, value in form.items():
             if key.startswith("s_"):
                 await set_setting(session, key[2:], str(value))
-        return RedirectResponse("/settings", status_code=302)
+        return RedirectResponse("/settings?saved=1", status_code=302)
 
     @app.get("/tickets", response_class=HTMLResponse)
     async def tickets_page(

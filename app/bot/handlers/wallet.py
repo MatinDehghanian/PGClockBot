@@ -12,7 +12,7 @@ from app.config import get_settings
 from app.db.models import BotUser, Payment, PaymentStatus
 from app.services.formatting import format_toman
 from app.services.orders import attach_receipt, create_wallet_topup
-from app.services.users import get_setting
+from app.services.users import get_all_settings, get_setting
 from app.services.wallet import list_transactions
 
 router = Router(name="wallet")
@@ -24,14 +24,15 @@ class WalletStates(StatesGroup):
 
 
 @router.callback_query(F.data == "wallet:home")
-async def wallet_home(callback: CallbackQuery, db_user: BotUser):
+async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
+    ui = await get_all_settings(session)
     text = (
         "👛 <b>کیف پول</b>\n\n"
         f"موجودی: <b>{format_toman(db_user.wallet_balance, get_settings().currency)}</b>"
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.wallet_keyboard())
+        await callback.message.edit_text(text, reply_markup=kb.wallet_keyboard(ui))
 
 
 @router.callback_query(F.data == "wallet:tx")
@@ -46,8 +47,9 @@ async def wallet_tx(callback: CallbackQuery, session: AsyncSession, db_user: Bot
             sign = "+" if t.amount > 0 else ""
             lines.append(f"{sign}{t.amount:,} — {t.reason}".replace(",", "٬"))
         text = "📜 <b>آخرین تراکنش‌ها</b>\n\n" + "\n".join(lines)
+    ui = await get_all_settings(session)
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.wallet_keyboard())
+        await callback.message.edit_text(text, reply_markup=kb.wallet_keyboard(ui))
 
 
 @router.callback_query(F.data == "wallet:topup")

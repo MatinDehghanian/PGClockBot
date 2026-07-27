@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.config import get_settings
 from app.db.models import BotUser, UserService
-from app.services.formatting import service_card
+from app.services.formatting import format_toman, service_card
 from app.services.orders import get_plan, list_active_plans
 from app.services.pasarguard import get_pg
-from app.services.formatting import format_toman
-from app.config import get_settings
+from app.services.users import get_all_settings
 
 router = Router(name="services")
 
@@ -19,6 +19,7 @@ router = Router(name="services")
 @router.callback_query(F.data == "svc:list")
 async def svc_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
+    ui = await get_all_settings(session)
     result = await session.execute(
         select(UserService)
         .where(UserService.bot_user_id == db_user.id)
@@ -29,19 +30,20 @@ async def svc_list(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         if callback.message:
             await callback.message.edit_text(
                 "سرویسی ندارید. از بخش خرید شروع کنید.",
-                reply_markup=kb.main_menu(db_user.role, has_services=False),
+                reply_markup=kb.main_menu(db_user.role, has_services=False, ui=ui),
             )
         return
     if callback.message:
         await callback.message.edit_text(
             "📦 <b>سرویس‌های شما</b>",
-            reply_markup=kb.services_keyboard(services),
+            reply_markup=kb.services_keyboard(services, ui),
         )
 
 
 @router.callback_query(F.data.startswith("svc:view:"))
 async def svc_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
+    ui = await get_all_settings(session)
     svc_id = int(callback.data.split(":")[-1])
     svc = await session.get(UserService, svc_id)
     if not svc or svc.bot_user_id != db_user.id:
@@ -55,12 +57,13 @@ async def svc_view(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         except Exception as e:
             text += f"\nخطا در دریافت وضعیت: {e}"
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.service_actions(svc.id))
+        await callback.message.edit_text(text, reply_markup=kb.service_actions(svc.id, ui))
 
 
 @router.callback_query(F.data.startswith("svc:link:"))
 async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
+    ui = await get_all_settings(session)
     svc_id = int(callback.data.split(":")[-1])
     svc = await session.get(UserService, svc_id)
     if not svc or svc.bot_user_id != db_user.id:
@@ -68,12 +71,13 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         return
     text = f"🔗 لینک سابسکریپشن:\n<code>{svc.subscription_url or '—'}</code>"
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.service_actions(svc.id))
+        await callback.message.edit_text(text, reply_markup=kb.service_actions(svc.id, ui))
 
 
 @router.callback_query(F.data.startswith("svc:renew:"))
 async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
+    ui = await get_all_settings(session)
     svc_id = int(callback.data.split(":")[-1])
     svc = await session.get(UserService, svc_id)
     if not svc or svc.bot_user_id != db_user.id:
@@ -83,8 +87,6 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if not plans:
         await callback.answer("پلنی نیست", show_alert=True)
         return
-    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
     rows = [
         [
             InlineKeyboardButton(
@@ -94,7 +96,14 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         ]
         for p in plans
     ]
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data=f"svc:view:{svc_id}")])
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=ui.get("btn_back", "⬅️ بازگشت"),
+                callback_data=f"svc:view:{svc_id}",
+            )
+        ]
+    )
     if callback.message:
         await callback.message.edit_text(
             "پلن تمدید را انتخاب کنید:",
@@ -105,6 +114,7 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 @router.callback_query(F.data.startswith("svc:renewpay:"))
 async def svc_renew_pay(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
+    ui = await get_all_settings(session)
     _, _, svc_id, plan_id = callback.data.split(":")
     svc = await session.get(UserService, int(svc_id))
     plan = await get_plan(session, int(plan_id))
@@ -113,7 +123,6 @@ async def svc_renew_pay(callback: CallbackQuery, session: AsyncSession, db_user:
         return
     from app.services.orders import renew_service_with_plan
 
-    # Prefer wallet if enough balance else card flow
     pay_wallet = db_user.wallet_balance >= plan.price
     try:
         order = await renew_service_with_plan(
@@ -131,16 +140,19 @@ async def svc_renew_pay(callback: CallbackQuery, session: AsyncSession, db_user:
     if pay_wallet:
         text = f"✅ تمدید با کیف پول انجام شد.\nسفارش #{order.id}"
         if callback.message:
-            await callback.message.edit_text(text, reply_markup=kb.service_actions(svc.id))
+            await callback.message.edit_text(
+                text, reply_markup=kb.service_actions(svc.id, ui)
+            )
         return
 
-    from app.services.users import get_setting
-
-    card = await get_setting(session, "card_number")
-    holder = await get_setting(session, "card_holder")
-    text = (
-        f"💳 مبلغ تمدید: {format_toman(order.amount, get_settings().currency)}\n"
-        f"کارت: <code>{card or '—'}</code>\n{holder or ''}\n\nعکس رسید را ارسال کنید."
-    )
+    amount = format_toman(order.amount, get_settings().currency)
+    try:
+        text = ui["card_pay_text"].format(
+            amount=amount,
+            card=ui.get("card_number") or "—",
+            holder=ui.get("card_holder") or "—",
+        )
+    except Exception:
+        text = f"💳 مبلغ تمدید: {amount}\nعکس رسید را ارسال کنید."
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.back_home())
+        await callback.message.edit_text(text, reply_markup=kb.back_home(ui))

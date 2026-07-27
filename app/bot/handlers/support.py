@@ -10,7 +10,7 @@ from app.bot import keyboards as kb
 from app.config import get_settings
 from app.db.models import BotUser, Ticket
 from app.services.tickets import create_ticket, get_ticket, list_user_tickets, reply_ticket
-from app.services.users import get_setting
+from app.services.users import get_all_settings, get_setting
 
 router = Router(name="support")
 
@@ -24,9 +24,13 @@ class SupportStates(StatesGroup):
 @router.callback_query(F.data == "support:home")
 async def support_home(callback: CallbackQuery, session: AsyncSession):
     await callback.answer()
-    text = await get_setting(session, "support_text")
+    ui = await get_all_settings(session)
+    text = ui.get("support_text") or await get_setting(session, "support_text")
     if callback.message:
-        await callback.message.edit_text(f"🎧 <b>پشتیبانی</b>\n\n{text}", reply_markup=kb.support_keyboard())
+        await callback.message.edit_text(
+            f"🎧 <b>پشتیبانی</b>\n\n{text}",
+            reply_markup=kb.support_keyboard(ui),
+        )
 
 
 @router.callback_query(F.data == "support:new")
