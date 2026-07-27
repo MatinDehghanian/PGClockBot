@@ -4,25 +4,24 @@
 <div class="page-head">
   <div>
     <h1>داشبورد</h1>
-    <p>نمای کلی فروش بات و میانبرهای مدیریت</p>
+    <p>خلاصه فروش و میانبرهای پرکاربرد</p>
   </div>
 </div>
 <div class="grid">
-  <div class="stat"><span>کاربران بات</span><strong>{{ stats.users }}</strong></div>
-  <div class="stat"><span>سفارش‌ها</span><strong>{{ stats.orders }}</strong></div>
-  <div class="stat"><span>سرویس‌ها</span><strong>{{ stats.services }}</strong></div>
-  <div class="stat"><span>رسید معلق</span><strong>{{ stats.pending }}</strong></div>
-  <div class="stat"><span>درآمد تحویل‌شده</span><strong>{{ "{:,}".format(stats.revenue).replace(",", "٬") }}</strong></div>
+  <div class="stat"><span>کاربران بات</span><strong>{{ stats.users | num }}</strong></div>
+  <div class="stat"><span>سفارش‌ها</span><strong>{{ stats.orders | num }}</strong></div>
+  <div class="stat"><span>سرویس‌ها</span><strong>{{ stats.services | num }}</strong></div>
+  <div class="stat"><span>رسید معلق</span><strong>{{ stats.pending | num }}</strong></div>
+  <div class="stat"><span>درآمد تحویل‌شده</span><strong>{{ stats.revenue | num }}</strong></div>
 </div>
 <div class="card">
   <h2>میانبر</h2>
-  <div class="actions">
-    <a class="btn" href="/payments">بررسی پرداخت‌ها</a>
-    <a class="btn btn-ghost" href="/plans">پلن‌های فروش</a>
+  <div class="actions" style="margin:0">
+    <a class="btn" href="/payments">پرداخت‌ها</a>
+    <a class="btn btn-ghost" href="/plans">پلن‌ها</a>
     {% if staff.role == 'admin' %}
-    <a class="btn btn-ghost" href="/pg">وضعیت پاسارگارد</a>
-    <a class="btn btn-ghost" href="/pg/templates">تمپلیت‌ها</a>
-    <a class="btn btn-ghost" href="/menu-layout">چیدمان منو</a>
+    <a class="btn btn-ghost" href="/pg">مدیر پاسارگارد</a>
+    <a class="btn btn-ghost" href="/menu-layout">دکمه‌های بات</a>
     <a class="btn btn-ghost" href="/settings">تنظیمات</a>
     {% endif %}
   </div>

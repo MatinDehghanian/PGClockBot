@@ -4,12 +4,21 @@
 <div class="page-head">
   <div>
     <h1>اینباندها</h1>
-    <p>تگ‌ها و جزئیات اینباند از پاسارگارد</p>
+    <p>خواندن زنده از پنل — ساخت اینباند از طریق Core/نود در پاسارگارد انجام می‌شود</p>
   </div>
 </div>
-{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+<div class="section-tabs">
+  <a href="/pg">نمای کلی</a>
+  <a href="/pg/templates">تمپلیت</a>
+  <a href="/pg/groups">گروه‌ها</a>
+  <a href="/pg/hosts">هاست‌ها</a>
+  <a class="active" href="/pg/inbounds">اینباندها</a>
+  <a href="/pg/nodes">نودها</a>
+  <a href="/pg/admins">ادمین‌ها</a>
+</div>
+
 <div class="card">
-  <h2>تگ‌ها</h2>
+  <h2>تگ‌های اینباند</h2>
   {% if not inbounds %}
   <p class="muted">اینباندی نیست.</p>
   {% else %}
@@ -19,11 +28,31 @@
     {% endfor %}
   </div>
   {% endif %}
+  <p class="muted" style="margin-top:16px;font-size:12px">
+    برای ساخت گروه و هاست از همین تگ‌ها استفاده کنید. ویرایش کانفیگ اینباند در پنل اصلی پاسارگارد (Core) است.
+  </p>
 </div>
+
 {% if details %}
 <div class="card">
   <h2>جزئیات</h2>
-  <pre class="mono muted" style="white-space:pre-wrap;margin:0">{{ details }}</pre>
+  <div class="table-wrap">
+  {% if details is mapping %}
+  <table>
+    <thead><tr><th>کلید</th><th>مقدار</th></tr></thead>
+    <tbody>
+    {% for k, v in details.items() %}
+      <tr>
+        <td class="mono">{{ k }}</td>
+        <td class="mono muted" style="max-width:480px;word-break:break-word">{{ v }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <pre class="mono muted" style="white-space:pre-wrap;margin:0;padding:14px">{{ details }}</pre>
+  {% endif %}
+  </div>
 </div>
 {% endif %}
 {% endblock %}

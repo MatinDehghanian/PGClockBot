@@ -4,20 +4,93 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 
-def format_bytes(num: int | float | None) -> str:
+def format_bytes(num: int | float | None, *, precision: int | None = None) -> str:
+    """Human-readable size using IEC binary units (1024): B, KB, MB, GB, TB, PB."""
     if num is None:
-        return "∞"
-    n = float(num)
-    units = ["B", "KB", "MB", "GB", "TB"]
-    for unit in units:
-        if abs(n) < 1024:
-            return f"{n:.1f} {unit}" if unit != "B" else f"{int(n)} B"
+        return "نامحدود"
+    try:
+        n = float(num)
+    except (TypeError, ValueError):
+        return "—"
+    if n < 0:
+        n = abs(n)
+    units = ("B", "KB", "MB", "GB", "TB", "PB")
+    for i, unit in enumerate(units):
+        if n < 1024 or i == len(units) - 1:
+            if unit == "B":
+                return f"{int(round(n))} B"
+            if precision is not None:
+                return f"{n:.{precision}f} {unit}"
+            if n >= 100:
+                val = f"{n:.0f}"
+            elif n >= 10:
+                val = f"{n:.1f}"
+            else:
+                val = f"{n:.2f}".rstrip("0").rstrip(".")
+            return f"{val} {unit}"
         n /= 1024
-    return f"{n:.1f} PB"
+    return f"{n:.2f} PB"
+
+
+def format_gb(gb: float | int | None) -> str:
+    if gb is None:
+        return "نامحدود"
+    try:
+        n = float(gb)
+    except (TypeError, ValueError):
+        return "—"
+    if n <= 0:
+        return "نامحدود"
+    return format_bytes(n * (1024**3))
+
+
+def format_number(num: int | float | None) -> str:
+    if num is None:
+        return "—"
+    try:
+        if isinstance(num, float) and not num.is_integer():
+            return f"{num:,.2f}".replace(",", "٬")
+        return f"{int(num):,}".replace(",", "٬")
+    except (TypeError, ValueError):
+        return str(num)
+
+
+def format_metric(key: str, value: Any) -> str:
+    """Pretty-print PasarGuard / system stats by field name."""
+    if value is None:
+        return "—"
+    if isinstance(value, bool):
+        return "بله" if value else "خیر"
+    key_l = str(key).lower()
+    byte_hints = (
+        "traffic",
+        "bandwidth",
+        "byte",
+        "upload",
+        "download",
+        "memory",
+        "ram",
+        "disk",
+        "storage",
+        "data_limit",
+        "used_traffic",
+        "lifetime",
+    )
+    if any(h in key_l for h in byte_hints) and isinstance(value, (int, float)):
+        # tiny ints like counts should not become "B"
+        if "count" in key_l or "users" in key_l or "nodes" in key_l:
+            return format_number(value)
+        if abs(float(value)) >= 1024 or "traffic" in key_l or "byte" in key_l or "memory" in key_l:
+            return format_bytes(value)
+    if isinstance(value, float):
+        return format_number(value)
+    if isinstance(value, int):
+        return format_number(value)
+    return str(value)
 
 
 def format_toman(amount: int, currency: str = "تومان") -> str:
-    return f"{amount:,} {currency}".replace(",", "٬")
+    return f"{format_number(amount)} {currency}"
 
 
 def progress_bar(used: float, total: float | None, width: int = 10) -> str:
@@ -35,7 +108,6 @@ def parse_expire(value: Any) -> Optional[datetime]:
     if value is None:
         return None
     if isinstance(value, (int, float)):
-        # unix seconds
         ts = int(value)
         if ts > 10_000_000_000:
             ts //= 1000
@@ -96,10 +168,6 @@ def service_card(info: dict, currency_note: str = "") -> str:
 
 
 def format_message(title: str, body: str = "") -> str:
-    """
-    کارت پیام فارسی با ظاهر مرتب و وسط‌چین‌مانند.
-    (تلگرام CSS ندارد؛ با جداکننده و نقل‌قول بصری می‌سازیم.)
-    """
     sep = "┄┄┄┄┄┄┄┄┄┄┄┄"
     parts = [f"<b>{title}</b>", f"<code>{sep}</code>"]
     body = (body or "").strip()

@@ -4,28 +4,95 @@
 <div class="page-head">
   <div>
     <h1>هاست‌ها</h1>
-    <p>لیست هاست‌های تعریف‌شده در پاسارگارد</p>
+    <p>ساخت، فعال/غیرفعال و حذف هاست روی پنل پاسارگارد</p>
   </div>
 </div>
-{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+<div class="section-tabs">
+  <a href="/pg">نمای کلی</a>
+  <a href="/pg/templates">تمپلیت</a>
+  <a href="/pg/groups">گروه‌ها</a>
+  <a class="active" href="/pg/hosts">هاست‌ها</a>
+  <a href="/pg/inbounds">اینباندها</a>
+  <a href="/pg/nodes">نودها</a>
+  <a href="/pg/admins">ادمین‌ها</a>
+</div>
+
 <div class="card">
+  <h2>ساخت هاست</h2>
+  <form method="post" action="/pg/hosts">
+    <div class="form-row">
+      <div>
+        <label>عنوان (remark)
+          <input name="remark" required placeholder="IR-1" />
+        </label>
+      </div>
+      <div>
+        <label>آدرس (چندتایی با ویرگول)
+          <input name="address" required placeholder="1.2.3.4 یا domain.com" />
+        </label>
+      </div>
+      <div>
+        <label>پورت (اختیاری)
+          <input name="port" type="number" placeholder="443" />
+        </label>
+      </div>
+      <div>
+        <label>اولویت
+          <input name="priority" type="number" value="0" />
+        </label>
+      </div>
+    </div>
+    <label>اینباند
+      <select name="inbound_tag" required>
+        <option value="">— انتخاب —</option>
+        {% for tag in inbound_tags %}
+        <option value="{{ tag }}">{{ tag }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="actions">
+      <button class="btn" type="submit">ساخت در پاسارگارد</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>لیست هاست‌ها</h2>
   {% if not hosts %}
-  <p class="muted">هاستی یافت نشد.</p>
+  <p class="muted">هاستی نیست.</p>
   {% else %}
+  <div class="table-wrap">
   <table>
-    <thead><tr><th>شناسه</th><th>عنوان</th><th>آدرس</th><th>پورت</th><th>اینباند</th></tr></thead>
+    <thead><tr><th>شناسه</th><th>عنوان</th><th>آدرس</th><th>پورت</th><th>اینباند</th><th>وضعیت</th><th></th></tr></thead>
     <tbody>
     {% for h in hosts %}
       <tr>
         <td class="mono">{{ h.get('id') or '—' }}</td>
         <td>{{ h.get('remark') or h.get('name') or '—' }}</td>
-        <td class="mono">{{ h.get('address') or h.get('host') or '—' }}</td>
+        <td class="mono">
+          {% set addr = h.get('address') %}
+          {% if addr is string %}{{ addr }}
+          {% elif addr is iterable %}{{ addr | join(', ') }}
+          {% else %}—{% endif %}
+        </td>
         <td class="mono">{{ h.get('port') or '—' }}</td>
-        <td class="mono">{{ h.get('inbound_tag') or h.get('tag') or '—' }}</td>
+        <td class="mono">{{ h.get('inbound_tag') or '—' }}</td>
+        <td>{% if h.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge">فعال</span>{% endif %}</td>
+        <td>
+          <div class="actions" style="margin:0">
+            <form method="post" action="/pg/hosts/{{ h.get('id') }}/toggle">
+              <button class="btn btn-ghost btn-sm" type="submit">{% if h.get('is_disabled') %}روشن{% else %}خاموش{% endif %}</button>
+            </form>
+            <form method="post" action="/pg/hosts/{{ h.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
+              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+            </form>
+          </div>
+        </td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% endif %}
 </div>
 {% endblock %}

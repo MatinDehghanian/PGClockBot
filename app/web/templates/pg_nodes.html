@@ -4,14 +4,23 @@
 <div class="page-head">
   <div>
     <h1>نودها</h1>
-    <p>وضعیت زنده نودهای پاسارگارد</p>
+    <p>وضعیت زنده و اتصال مجدد نودهای پاسارگارد</p>
   </div>
 </div>
-{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+<div class="section-tabs">
+  <a href="/pg">نمای کلی</a>
+  <a href="/pg/templates">تمپلیت</a>
+  <a href="/pg/groups">گروه‌ها</a>
+  <a href="/pg/hosts">هاست‌ها</a>
+  <a href="/pg/inbounds">اینباندها</a>
+  <a class="active" href="/pg/nodes">نودها</a>
+  <a href="/pg/admins">ادمین‌ها</a>
+</div>
 <div class="card">
   {% if not nodes %}
   <p class="muted">نودی یافت نشد.</p>
   {% else %}
+  <div class="table-wrap">
   <table>
     <thead><tr><th>شناسه</th><th>نام</th><th>آدرس</th><th>وضعیت</th><th></th></tr></thead>
     <tbody>
@@ -24,7 +33,7 @@
         <td>
           {% if n.get('id') %}
           <form method="post" action="/pg/nodes/{{ n.get('id') }}/reconnect">
-            <button class="btn btn-ghost" type="submit">اتصال مجدد</button>
+            <button class="btn btn-ghost btn-sm" type="submit">اتصال مجدد</button>
           </form>
           {% endif %}
         </td>
@@ -32,6 +41,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% endif %}
 </div>
 {% endblock %}

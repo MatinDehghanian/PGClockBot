@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}ادمین‌های پاسارگارد{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>ادمین‌های پنل</h1>
+    <p>ادمین‌های خودِ پاسارگارد (جدا از کاربران بات)</p>
+  </div>
+</div>
+<div class="section-tabs">
+  <a href="/pg">نمای کلی</a>
+  <a href="/pg/templates">تمپلیت</a>
+  <a href="/pg/groups">گروه‌ها</a>
+  <a href="/pg/hosts">هاست‌ها</a>
+  <a href="/pg/inbounds">اینباندها</a>
+  <a href="/pg/nodes">نودها</a>
+  <a class="active" href="/pg/admins">ادمین‌ها</a>
+</div>
+
+<div class="card">
+  <h2>ساخت ادمین پنل</h2>
+  <form method="post" action="/pg/admins">
+    <div class="form-row">
+      <div>
+        <label>نام کاربری
+          <input name="username" required autocomplete="off" />
+        </label>
+      </div>
+      <div>
+        <label>رمز عبور
+          <input name="password" type="password" required autocomplete="new-password" />
+        </label>
+      </div>
+    </div>
+    <label class="checks">
+      <input type="checkbox" name="is_sudo" value="1" />
+      دسترسی sudo
+    </label>
+    <div class="actions">
+      <button class="btn" type="submit">ساخت در پاسارگارد</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>لیست ادمین‌ها</h2>
+  {% if not admins %}
+  <p class="muted">ادمینی یافت نشد یا دسترسی کافی نیست.</p>
+  {% else %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>شناسه</th><th>نام کاربری</th><th>جزئیات</th></tr></thead>
+    <tbody>
+    {% for a in admins %}
+      <tr>
+        <td class="mono">{{ a.get('id') or '—' }}</td>
+        <td>{{ a.get('username') or '—' }}</td>
+        <td class="mono muted">
+          {% if a.get('is_sudo') %}sudo · {% endif %}
+          {% if a.get('status') %}{{ a.get('status') }}{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

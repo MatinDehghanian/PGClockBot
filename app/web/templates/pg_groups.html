@@ -4,52 +4,94 @@
 <div class="page-head">
   <div>
     <h1>گروه‌ها</h1>
-    <p>هر گروه مجموعه‌ای از اینباندهاست — برای ساخت کاربر لازم است</p>
+    <p>ساخت، ویرایش و حذف گروه — متصل به اینباندهای زنده پنل</p>
   </div>
 </div>
+<div class="section-tabs">
+  <a href="/pg">نمای کلی</a>
+  <a href="/pg/templates">تمپلیت</a>
+  <a class="active" href="/pg/groups">گروه‌ها</a>
+  <a href="/pg/hosts">هاست‌ها</a>
+  <a href="/pg/inbounds">اینباندها</a>
+  <a href="/pg/nodes">نودها</a>
+  <a href="/pg/admins">ادمین‌ها</a>
+</div>
 
+{% if edit_group %}
 <div class="card">
-  <h2>ساخت گروه جدید</h2>
+  <h2>ویرایش گروه #{{ edit_group.get('id') }}</h2>
+  <form method="post" action="/pg/groups/{{ edit_group.get('id') }}/edit">
+    <label>نام گروه
+      <input name="name" required value="{{ edit_group.get('name') or '' }}" />
+    </label>
+    <label>اینباندها</label>
+    <div class="checks">
+      {% set selected = edit_group.get('inbound_tags') or [] %}
+      {% for tag in inbound_tags %}
+      <label><input type="checkbox" name="tag_{{ loop.index }}" value="{{ tag }}" {% if tag in selected %}checked{% endif %} /> {{ tag }}</label>
+      {% endfor %}
+    </div>
+    <label class="checks" style="margin-top:12px">
+      <input type="checkbox" name="is_disabled" value="1" {% if edit_group.get('is_disabled') %}checked{% endif %} />
+      غیرفعال
+    </label>
+    <div class="actions">
+      <button class="btn" type="submit">ذخیره تغییرات</button>
+      <a class="btn btn-ghost" href="/pg/groups">انصراف</a>
+    </div>
+  </form>
+</div>
+{% else %}
+<div class="card">
+  <h2>ساخت گروه</h2>
   <form method="post" action="/pg/groups">
-    <label>نام گروه</label>
-    <input name="name" required placeholder="مثلاً پیش‌فرض" />
+    <label>نام گروه
+      <input name="name" required placeholder="مثلاً default" />
+    </label>
     <label>اینباندها</label>
     <div class="checks">
       {% for tag in inbound_tags %}
       <label><input type="checkbox" name="tag_{{ loop.index }}" value="{{ tag }}" /> {{ tag }}</label>
       {% else %}
-      <span class="muted">اینباندی از پاسارگارد دریافت نشد.</span>
+      <span class="muted">اینباندی یافت نشد.</span>
       {% endfor %}
     </div>
     <div class="actions">
       <button class="btn" type="submit">ساخت در پاسارگارد</button>
-      <a class="btn btn-ghost" href="/pg/inbounds">مشاهده اینباندها</a>
     </div>
   </form>
 </div>
+{% endif %}
 
 <div class="card">
   <h2>گروه‌های موجود</h2>
   {% if not groups %}
   <p class="muted">گروهی نیست.</p>
   {% else %}
+  <div class="table-wrap">
   <table>
-    <thead><tr><th>شناسه</th><th>نام</th><th>اینباندها</th><th></th></tr></thead>
+    <thead><tr><th>شناسه</th><th>نام</th><th>اینباندها</th><th>کاربران</th><th>وضعیت</th><th></th></tr></thead>
     <tbody>
     {% for g in groups %}
       <tr>
         <td class="mono">{{ g.get('id') }}</td>
         <td>{{ g.get('name') }}</td>
-        <td class="mono">{{ g.get('inbound_tags') or '—' }}</td>
+        <td class="mono muted">{{ g.get('inbound_tags') or '—' }}</td>
+        <td class="mono">{{ g.get('total_users') if g.get('total_users') is not none else '—' }}</td>
+        <td>{% if g.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge">فعال</span>{% endif %}</td>
         <td>
-          <form method="post" action="/pg/groups/{{ g.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
-            <button class="btn btn-danger" type="submit">حذف</button>
-          </form>
+          <div class="actions" style="margin:0">
+            <a class="btn btn-ghost btn-sm" href="/pg/groups?edit={{ g.get('id') }}">ویرایش</a>
+            <form method="post" action="/pg/groups/{{ g.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
+              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+            </form>
+          </div>
         </td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% endif %}
 </div>
 {% endblock %}

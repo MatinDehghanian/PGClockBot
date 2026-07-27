@@ -86,7 +86,7 @@
         <td>{{ p.name }}</td>
         <td>{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
         <td>{{ p.duration_days }} روز</td>
-        <td>{% if p.data_limit_gb is not none %}{{ p.data_limit_gb }} GB{% else %}نامحدود{% endif %}</td>
+        <td>{% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}</td>
         <td class="mono">
           {% if p.pg_template_id %}تمپلیت #{{ p.pg_template_id }}
           {% elif p.pg_group_ids %}گروه {{ p.pg_group_ids }}

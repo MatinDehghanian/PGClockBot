@@ -1,65 +1,177 @@
 {% extends "base.html" %}
-{% block title %}چیدمان منو{% endblock %}
+{% block title %}دکمه‌های بات{% endblock %}
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 {% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>چیدمان منوی کاربر</h1>
-    <p>دکمه‌ها را بکشید و رها کنید — منوی ادمین جداست</p>
+    <h1>دکمه‌های منوی بات</h1>
+    <p>کل باکس را با موس بگیرید و جابه‌جا کنید — افزودن از مخزن، حذف به مخزن</p>
   </div>
 </div>
-{% if saved %}<div class="flash ok">ذخیره شد</div>{% endif %}
+{% if saved %}<div class="flash ok">ذخیره شد — از پیام بعدی بات اعمال می‌شود.</div>{% endif %}
 
 <form method="post" action="/menu-layout" id="menu-form">
   <input type="hidden" name="menu_order" id="menu_order" value="{{ order_csv }}" />
-  <input type="hidden" name="menu_layout" value="{{ values.get('menu_layout', 'classic') }}" />
+  <input type="hidden" name="menu_layout" id="menu_layout" value="{{ values.get('menu_layout', 'classic') }}" />
 
   <div class="card">
-    <label>حالت ردیف‌ها
-      <select name="menu_layout_select" id="menu_layout_select">
+    <h2>حالت ردیف‌ها</h2>
+    <label>
+      <select id="menu_layout_select">
         <option value="classic" {% if values.get('menu_layout')=='classic' %}selected{% endif %}>کلاسیک — هر دکمه یک ردیف</option>
         <option value="compact" {% if values.get('menu_layout')=='compact' %}selected{% endif %}>فشرده — دکمه‌های میانی جفتی</option>
       </select>
     </label>
-    <p class="muted">دستگیره ⠿ را بگیرید و جابه‌جا کنید</p>
-    <ul class="dnd-list" id="dnd-list">
-      {% for item in items %}
-      <li class="dnd-item" data-key="{{ item.key }}">
-        <span class="dnd-handle">⠿</span>
-        <div style="flex:1">
-          <strong>{{ item.label }}</strong>
-          <div class="muted">{{ item.key }} · {{ item.btn }}</div>
-        </div>
-        {% if item.toggle %}
-        <label class="checks" style="margin:0">
-          <input type="checkbox" name="show_{{ item.key }}" value="1" {% if item.visible %}checked{% endif %} />
-          نمایش
-        </label>
+  </div>
+
+  <div class="dnd-cols">
+    <div class="card" style="margin:0">
+      <h2>منوی فعال</h2>
+      <p class="muted" style="margin:0 0 12px;font-size:12px">با کشیدن کل کارت مرتب کنید</p>
+      <ul class="dnd-list" id="active-list">
+        {% for item in items %}
+        <li class="dnd-item" data-key="{{ item.key }}" data-required="{{ '1' if item.required else '0' }}">
+          <div class="meta">
+            <strong>{{ item.btn or item.label }}</strong>
+            <div class="muted">{{ item.label }} · {{ item.key }}</div>
+          </div>
+          {% if not item.required %}
+          <button type="button" class="btn btn-ghost btn-sm btn-remove">حذف</button>
+          {% else %}
+          <span class="badge">ثابت</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="card" style="margin:0">
+      <h2>مخزن (افزودن)</h2>
+      <p class="muted" style="margin:0 0 12px;font-size:12px">برای افزودن به منو، «افزودن» را بزنید یا بکشید</p>
+      <ul class="dnd-list" id="pool-list">
+        {% for item in pool %}
+        <li class="dnd-item" data-key="{{ item.key }}" data-required="0">
+          <div class="meta">
+            <strong>{{ item.btn or item.label }}</strong>
+            <div class="muted">{{ item.label }} · {{ item.key }}</div>
+          </div>
+          <button type="button" class="btn btn-sm btn-add">افزودن</button>
+        </li>
         {% else %}
-        <span class="badge">همیشه</span>
-        {% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-    <div class="actions">
-      <button class="btn" type="submit">ذخیره چیدمان</button>
+        <li class="pool-empty" id="pool-empty">همه دکمه‌ها در منو هستند</li>
+        {% endfor %}
+      </ul>
     </div>
   </div>
+
+  <div class="actions sticky-actions">
+    <button class="btn" type="submit">ذخیره چیدمان</button>
+  </div>
 </form>
+
 <script>
 (function () {
-  const list = document.getElementById('dnd-list');
+  const active = document.getElementById('active-list');
+  const pool = document.getElementById('pool-list');
   const orderInput = document.getElementById('menu_order');
   const layoutSelect = document.getElementById('menu_layout_select');
-  const layoutHidden = document.querySelector('input[name="menu_layout"]');
+  const layoutHidden = document.getElementById('menu_layout');
+  const labels = {{ catalog | tojson }};
+
   function syncOrder() {
-    orderInput.value = [...list.querySelectorAll('.dnd-item')].map((el) => el.dataset.key).join(',');
+    orderInput.value = [...active.querySelectorAll('.dnd-item')].map((el) => el.dataset.key).join(',');
   }
+  function ensureEmptyHint() {
+    let empty = document.getElementById('pool-empty');
+    const items = pool.querySelectorAll('.dnd-item');
+    if (items.length === 0) {
+      if (!empty) {
+        empty = document.createElement('li');
+        empty.className = 'pool-empty';
+        empty.id = 'pool-empty';
+        empty.textContent = 'همه دکمه‌ها در منو هستند';
+        pool.appendChild(empty);
+      }
+    } else if (empty) {
+      empty.remove();
+    }
+  }
+  function makeActiveItem(key) {
+    const meta = labels[key] || { label: key, btn: key, required: false };
+    const li = document.createElement('li');
+    li.className = 'dnd-item';
+    li.dataset.key = key;
+    li.dataset.required = meta.required ? '1' : '0';
+    li.innerHTML = `<div class="meta"><strong>${meta.btn || meta.label}</strong><div class="muted">${meta.label} · ${key}</div></div>` +
+      (meta.required ? '<span class="badge">ثابت</span>' : '<button type="button" class="btn btn-ghost btn-sm btn-remove">حذف</button>');
+    return li;
+  }
+  function makePoolItem(key) {
+    const meta = labels[key] || { label: key, btn: key };
+    const li = document.createElement('li');
+    li.className = 'dnd-item';
+    li.dataset.key = key;
+    li.dataset.required = '0';
+    li.innerHTML = `<div class="meta"><strong>${meta.btn || meta.label}</strong><div class="muted">${meta.label} · ${key}</div></div>` +
+      '<button type="button" class="btn btn-sm btn-add">افزودن</button>';
+    return li;
+  }
+
   layoutSelect.addEventListener('change', () => { layoutHidden.value = layoutSelect.value; });
-  new Sortable(list, { animation: 150, handle: '.dnd-handle', ghostClass: 'dragging', onSort: syncOrder });
+
+  active.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-remove');
+    if (!btn) return;
+    const li = btn.closest('.dnd-item');
+    if (!li || li.dataset.required === '1') return;
+    const key = li.dataset.key;
+    li.remove();
+    pool.appendChild(makePoolItem(key));
+    ensureEmptyHint();
+    syncOrder();
+  });
+  pool.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-add');
+    if (!btn) return;
+    const li = btn.closest('.dnd-item');
+    if (!li) return;
+    const key = li.dataset.key;
+    li.remove();
+    active.appendChild(makeActiveItem(key));
+    ensureEmptyHint();
+    syncOrder();
+  });
+
+  new Sortable(active, {
+    group: 'menu',
+    animation: 150,
+    ghostClass: 'dnd-ghost',
+    dragClass: 'dragging',
+    onSort: syncOrder,
+    onAdd: syncOrder,
+  });
+  new Sortable(pool, {
+    group: 'menu',
+    animation: 150,
+    ghostClass: 'dnd-ghost',
+    dragClass: 'dragging',
+    onAdd: (evt) => {
+      const li = evt.item;
+      if (li.dataset.required === '1') {
+        active.appendChild(li);
+        return;
+      }
+      // normalize pool button
+      const key = li.dataset.key;
+      li.replaceWith(makePoolItem(key));
+      ensureEmptyHint();
+      syncOrder();
+    },
+    onRemove: () => { ensureEmptyHint(); syncOrder(); },
+  });
   syncOrder();
+  ensureEmptyHint();
 })();
 </script>
 {% endblock %}

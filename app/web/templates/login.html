@@ -2,8 +2,13 @@
 {% block auth %}
 <div class="auth-wrap">
   <div class="auth-box">
-    <h1>ورود به پنل</h1>
-    <p class="lead">مدیریت فروش PGClockBot</p>
+    <div class="logo-row">
+      <img src="/static/logo.svg" alt="" />
+      <div>
+        <h1>ورود به پنل</h1>
+        <p class="lead">مدیریت فروش PGClock</p>
+      </div>
+    </div>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     <form method="post" action="/login" autocomplete="on">
       <label>نام کاربری
@@ -12,14 +17,10 @@
       <label>رمز عبور
         <input name="password" type="password" required autocomplete="current-password" />
       </label>
-      <div class="actions" style="margin-top:1rem">
+      <div class="actions" style="margin-top:16px">
         <button class="btn" type="submit" style="width:100%">ورود</button>
       </div>
     </form>
-    <p class="muted" style="margin-top:1rem;font-size:12px">
-      ریست رمز روی سرور:<br/>
-      <code>python scripts/set_web_password.py</code>
-    </p>
   </div>
 </div>
 {% endblock %}

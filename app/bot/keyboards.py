@@ -34,14 +34,11 @@ def _t(ui: dict | None, key: str) -> str:
 def _menu_order(ui: dict | None) -> list[str]:
     raw = _t(ui, "menu_order")
     parts = [p.strip() for p in (raw or "").split(",") if p.strip()]
-    if not parts:
-        return list(DEFAULT_MENU_ORDER)
-    # keep known keys, append any missing defaults at end
     known = set(DEFAULT_MENU_ORDER)
     ordered = [p for p in parts if p in known]
-    for key in DEFAULT_MENU_ORDER:
-        if key not in ordered:
-            ordered.append(key)
+    # shop always present
+    if "shop" not in ordered:
+        ordered.insert(0, "shop")
     return ordered
 
 

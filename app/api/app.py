@@ -30,7 +30,7 @@ from app.db.models import (
 )
 from app.db.session import SessionLocal
 from app.services.orders import approve_payment, reject_payment
-from app.services.pasarguard import get_pg
+from app.services.pasarguard import get_pg, parse_group_ids
 from app.services.resellers import make_reseller
 from app.services.users import (
     SETTING_GROUPS,
@@ -39,10 +39,15 @@ from app.services.users import (
 )
 from app.services.web_auth import load_web_admin, verify_web_admin
 from app.api.pg_pages import register_pg_pages
-from app.services.pasarguard import get_pg, parse_group_ids
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
+
+from app.services.formatting import format_bytes, format_gb, format_number
+
+templates.env.filters["bytes"] = format_bytes
+templates.env.filters["gb"] = format_gb
+templates.env.filters["num"] = format_number
 
 
 class NotAuthenticated(Exception):
@@ -439,8 +444,51 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         result = await session.execute(select(BotUser).order_by(BotUser.id.desc()).limit(200))
         users = list(result.scalars().all())
-        return render(request, "users.html", {"staff": staff, "users": users},
+        return render(
+            request,
+            "users.html",
+            {
+                "staff": staff,
+                "users": users,
+                "flash_ok": request.query_params.get("ok"),
+                "flash_err": request.query_params.get("err"),
+            },
         )
+
+    @app.post("/users/{user_id}/role")
+    async def users_set_role(
+        user_id: int,
+        role: str = Form(...),
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from urllib.parse import quote
+
+        user = await session.get(BotUser, user_id)
+        if not user:
+            return RedirectResponse(f"/users?err={quote('کاربر یافت نشد')}", status_code=303)
+        if role not in {Role.USER.value, Role.RESELLER.value, Role.ADMIN.value}:
+            return RedirectResponse(f"/users?err={quote('نقش نامعتبر')}", status_code=303)
+        if role == Role.RESELLER.value:
+            await make_reseller(session, user, commission_percent=10, can_approve_receipts=False)
+        else:
+            user.role = role
+            await session.commit()
+        return RedirectResponse(f"/users?ok={quote('نقش به‌روز شد')}", status_code=303)
+
+    @app.post("/users/{user_id}/block")
+    async def users_toggle_block(
+        user_id: int,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from urllib.parse import quote
+
+        user = await session.get(BotUser, user_id)
+        if user:
+            user.is_blocked = not user.is_blocked
+            await session.commit()
+        return RedirectResponse(f"/users?ok={quote('وضعیت مسدودی تغییر کرد')}", status_code=303)
 
     @app.get("/resellers", response_class=HTMLResponse)
     async def resellers_page(
@@ -461,6 +509,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         telegram_id: int = Form(...),
         commission_percent: int = Form(10),
         can_approve: str = Form(""),
+        pg_admin_username: str = Form(""),
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
@@ -472,8 +521,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 user,
                 commission_percent=commission_percent,
                 can_approve_receipts=bool(can_approve),
+                pg_admin_username=(pg_admin_username.strip() or None),
             )
-        return RedirectResponse("/resellers", status_code=302)
+        return RedirectResponse("/resellers", status_code=303)
 
     @app.get("/menu-layout", response_class=HTMLResponse)
     async def menu_layout_page(
@@ -486,42 +536,49 @@ def create_api_app(lifespan=None) -> FastAPI:
         values = await get_all_settings(session)
         order_raw = values.get("menu_order") or ",".join(DEFAULT_MENU_ORDER)
         order = [p.strip() for p in order_raw.split(",") if p.strip()]
-        for key in DEFAULT_MENU_ORDER:
-            if key not in order:
-                order.append(key)
-        labels = {
-            "shop": "خرید سرویس",
-            "services": "سرویس‌های من",
-            "wallet": "کیف پول",
-            "support": "پشتیبانی",
-            "guide": "راهنما",
-            "faq": "سوالات متداول",
-            "referral": "دعوت دوستان",
-            "miniapp": "مینی‌اپ",
+        order = [k for k in order if k in DEFAULT_MENU_ORDER]
+        if "shop" not in order:
+            order.insert(0, "shop")
+
+        catalog_meta = {
+            "shop": {"label": "خرید سرویس", "required": True},
+            "services": {"label": "سرویس‌های من", "required": False},
+            "wallet": {"label": "کیف پول", "required": False},
+            "support": {"label": "پشتیبانی", "required": False},
+            "guide": {"label": "راهنما", "required": False},
+            "faq": {"label": "سوالات متداول", "required": False},
+            "referral": {"label": "دعوت دوستان", "required": False},
+            "miniapp": {"label": "مینی‌اپ", "required": False},
         }
-        toggles = {
-            "wallet": "show_wallet",
-            "support": "show_support",
-            "guide": "show_guide",
-            "faq": "show_faq",
-            "referral": "show_referral",
-            "miniapp": "show_miniapp",
-        }
+        catalog = {}
+        for key, meta in catalog_meta.items():
+            catalog[key] = {
+                "label": meta["label"],
+                "btn": values.get(f"btn_{key}", meta["label"]),
+                "required": meta["required"],
+            }
+
         items = []
         for key in order:
-            toggle = toggles.get(key)
-            visible = True
-            if toggle:
-                visible = (values.get(toggle) or "1").strip() in {"1", "true", "yes", "on"}
             items.append(
                 {
                     "key": key,
-                    "label": labels.get(key, key),
-                    "btn": values.get(f"btn_{key}", key),
-                    "toggle": toggle,
-                    "visible": visible,
+                    "label": catalog[key]["label"],
+                    "btn": catalog[key]["btn"],
+                    "required": catalog[key]["required"],
                 }
             )
+        pool = []
+        for key in DEFAULT_MENU_ORDER:
+            if key not in order and key != "shop":
+                pool.append(
+                    {
+                        "key": key,
+                        "label": catalog[key]["label"],
+                        "btn": catalog[key]["btn"],
+                        "required": False,
+                    }
+                )
         return render(
             request,
             "menu_layout.html",
@@ -529,6 +586,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "staff": staff,
                 "values": values,
                 "items": items,
+                "pool": pool,
+                "catalog": catalog,
                 "order_csv": ",".join(order),
                 "saved": request.query_params.get("saved") == "1",
             },
@@ -540,17 +599,21 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.bot.keyboards import DEFAULT_MENU_ORDER
+
         form = await request.form()
-        order = str(form.get("menu_order") or "").strip()
+        order = [p.strip() for p in str(form.get("menu_order") or "").split(",") if p.strip()]
+        order = [k for k in order if k in DEFAULT_MENU_ORDER]
+        if "shop" not in order:
+            order.insert(0, "shop")
         layout = str(form.get("menu_layout") or "classic").strip()
-        if order:
-            await set_setting(session, "menu_order", order)
+        await set_setting(session, "menu_order", ",".join(order))
         if layout in {"classic", "compact"}:
             await set_setting(session, "menu_layout", layout)
-        for key in ("wallet", "support", "guide", "faq", "referral", "miniapp"):
-            flag = "1" if form.get(f"show_{key}") else "0"
-            await set_setting(session, f"show_{key}", flag)
-        return RedirectResponse("/menu-layout?saved=1", status_code=302)
+        # visibility follows presence in active menu
+        for key in ("wallet", "support", "guide", "faq", "referral", "miniapp", "services"):
+            await set_setting(session, f"show_{key}", "1" if key in order else "0")
+        return RedirectResponse("/menu-layout?saved=1", status_code=303)
 
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(

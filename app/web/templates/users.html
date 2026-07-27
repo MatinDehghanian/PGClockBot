@@ -4,26 +4,49 @@
 <div class="page-head">
   <div>
     <h1>کاربران بات</h1>
-    <p>کاربران تلگرامی ثبت‌شده</p>
+    <p>نقش، مسدودسازی و موجودی کیف پول</p>
   </div>
 </div>
 <div class="card">
+  <div class="table-wrap">
   <table>
-    <thead><tr><th>#</th><th>تلگرام</th><th>نام</th><th>نقش</th><th>کیف پول</th><th>کد دعوت</th></tr></thead>
+    <thead>
+      <tr>
+        <th>#</th><th>تلگرام</th><th>نام</th><th>نقش</th><th>کیف پول</th><th>وضعیت</th><th>عملیات</th>
+      </tr>
+    </thead>
     <tbody>
     {% for u in users %}
       <tr>
         <td class="mono">{{ u.id }}</td>
         <td class="mono">{{ u.telegram_id }}</td>
         <td>{{ u.full_name or u.username or "—" }}</td>
-        <td><span class="badge">{{ u.role }}</span></td>
-        <td>{{ "{:,}".format(u.wallet_balance).replace(",", "٬") }}</td>
-        <td class="mono">{{ u.referral_code }}</td>
+        <td><span class="badge">{% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}</span></td>
+        <td class="mono">{{ u.wallet_balance | num }}</td>
+        <td>{% if u.is_blocked %}<span class="badge danger">مسدود</span>{% else %}<span class="badge">فعال</span>{% endif %}</td>
+        <td>
+          <div class="actions" style="margin:0">
+            <form method="post" action="/users/{{ u.id }}/role" style="display:flex;gap:6px;align-items:center">
+              <select name="role" style="min-height:30px;margin:0;width:auto">
+                <option value="user" {% if u.role=='user' %}selected{% endif %}>کاربر</option>
+                <option value="reseller" {% if u.role=='reseller' %}selected{% endif %}>نماینده</option>
+                <option value="admin" {% if u.role=='admin' %}selected{% endif %}>مدیر</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" type="submit">نقش</button>
+            </form>
+            <form method="post" action="/users/{{ u.id }}/block">
+              <button class="btn btn-sm {% if u.is_blocked %}{% else %}btn-danger{% endif %}" type="submit">
+                {% if u.is_blocked %}رفع مسدودی{% else %}مسدود{% endif %}
+              </button>
+            </form>
+          </div>
+        </td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="muted">کاربری نیست</td></tr>
+      <tr><td colspan="7" class="muted">کاربری نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 {% endblock %}

@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>نمایندگان</h1>
-    <p>ساخت و مدیریت نماینده فروش</p>
+    <p>ساخت نماینده، کمیسیون و اتصال به ادمین پاسارگارد</p>
   </div>
 </div>
 
@@ -13,12 +13,19 @@
   <form method="post" action="/resellers">
     <div class="form-row">
       <div>
-        <label>آیدی عددی تلگرام</label>
-        <input name="telegram_id" type="number" required />
+        <label>آیدی عددی تلگرام
+          <input name="telegram_id" type="number" required />
+        </label>
       </div>
       <div>
-        <label>کمیسیون ٪</label>
-        <input name="commission_percent" type="number" value="10" />
+        <label>کمیسیون ٪
+          <input name="commission_percent" type="number" value="10" />
+        </label>
+      </div>
+      <div>
+        <label>یوزرنیم ادمین پاسارگارد (اختیاری)
+          <input name="pg_admin_username" placeholder="reseller1" />
+        </label>
       </div>
     </div>
     <label class="checks">
@@ -33,22 +40,27 @@
 
 <div class="card">
   <h2>لیست نمایندگان</h2>
+  <div class="table-wrap">
   <table>
-    <thead><tr><th>کاربر</th><th>تلگرام</th><th>کمیسیون</th><th>موجودی</th><th>تأیید رسید</th><th>کد</th></tr></thead>
+    <thead>
+      <tr><th>کاربر</th><th>تلگرام</th><th>کمیسیون</th><th>موجودی</th><th>تأیید رسید</th><th>ادمین PG</th><th>کد</th></tr>
+    </thead>
     <tbody>
     {% for u, p in rows %}
       <tr>
-        <td>{{ u.full_name or u.username }}</td>
+        <td>{{ u.full_name or u.username or '—' }}</td>
         <td class="mono">{{ u.telegram_id }}</td>
-        <td>{{ p.commission_percent }}%</td>
-        <td>{{ "{:,}".format(p.balance).replace(",", "٬") }}</td>
+        <td class="mono">{{ p.commission_percent }}%</td>
+        <td class="mono">{{ p.balance | num }}</td>
         <td>{{ "بله" if p.can_approve_receipts else "خیر" }}</td>
+        <td class="mono">{{ p.pg_admin_username or '—' }}</td>
         <td class="mono">{{ u.referral_code }}</td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="muted">نماینده‌ای نیست</td></tr>
+      <tr><td colspan="7" class="muted">نماینده‌ای نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 {% endblock %}

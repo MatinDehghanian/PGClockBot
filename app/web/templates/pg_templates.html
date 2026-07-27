@@ -7,6 +7,15 @@
     <p>ساخت و مدیریت تمپلیت مستقیم روی پاسارگارد</p>
   </div>
 </div>
+<div class="section-tabs">
+  <a href="/pg">نمای کلی</a>
+  <a class="active" href="/pg/templates">تمپلیت</a>
+  <a href="/pg/groups">گروه‌ها</a>
+  <a href="/pg/hosts">هاست‌ها</a>
+  <a href="/pg/inbounds">اینباندها</a>
+  <a href="/pg/nodes">نودها</a>
+  <a href="/pg/admins">ادمین‌ها</a>
+</div>
 
 <div class="card">
   <h2>ساخت تمپلیت جدید</h2>
@@ -44,6 +53,7 @@
   {% if not templates %}
   <p class="muted">تمپلیتی نیست.</p>
   {% else %}
+  <div class="table-wrap">
   <table>
     <thead>
       <tr><th>شناسه</th><th>نام</th><th>حجم</th><th>مدت</th><th>گروه‌ها</th><th></th></tr>
@@ -55,7 +65,7 @@
         <td>{{ t.get('name') or '—' }}</td>
         <td>
           {% if t.get('data_limit') %}
-            {{ (t.get('data_limit') / (1024**3)) | round(1) }} GB
+            {{ t.get('data_limit') | bytes }}
           {% else %}نامحدود{% endif %}
         </td>
         <td>
@@ -66,13 +76,14 @@
         <td class="mono">{{ t.get('group_ids') or '—' }}</td>
         <td>
           <form method="post" action="/pg/templates/{{ t.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
-            <button class="btn btn-danger" type="submit">حذف</button>
+            <button class="btn btn-danger btn-sm" type="submit">حذف</button>
           </form>
         </td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% endif %}
 </div>
 {% endblock %}

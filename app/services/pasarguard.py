@@ -171,6 +171,9 @@ class PasarGuardClient:
     async def delete_user_template(self, template_id: int) -> None:
         await self.request("DELETE", f"/api/user_template/{template_id}")
 
+    async def modify_user_template(self, template_id: int, payload: dict) -> dict:
+        return await self.request("PUT", f"/api/user_template/{template_id}", json=payload)
+
     async def get_groups(self) -> Any:
         return await self.request("GET", "/api/groups")
 
@@ -184,8 +187,15 @@ class PasarGuardClient:
     async def get_group(self, group_id: int) -> dict:
         return await self.request("GET", f"/api/group/{group_id}")
 
+    async def modify_group(self, group_id: int, payload: dict) -> dict:
+        return await self.request("PUT", f"/api/group/{group_id}", json=payload)
+
     async def delete_group(self, group_id: int) -> None:
         await self.request("DELETE", f"/api/group/{group_id}")
+
+    async def set_group_disabled(self, group_id: int, disabled: bool) -> Any:
+        path = "/api/groups/bulk/disable" if disabled else "/api/groups/bulk/enable"
+        return await self.request("POST", path, json={"ids": [group_id]})
 
     async def get_inbounds(self) -> list:
         data = await self.request("GET", "/api/inbounds")
@@ -197,6 +207,33 @@ class PasarGuardClient:
     async def get_hosts(self) -> list[dict]:
         data = await self.request("GET", "/api/hosts")
         return as_list(data, "hosts")
+
+    async def get_host(self, host_id: int) -> dict:
+        return await self.request("GET", f"/api/host/{host_id}")
+
+    async def create_host(self, payload: dict) -> dict:
+        return await self.request("POST", "/api/host/", json=payload)
+
+    async def modify_host(self, host_id: int, payload: dict) -> dict:
+        return await self.request("PUT", f"/api/host/{host_id}", json=payload)
+
+    async def delete_host(self, host_id: int) -> None:
+        await self.request("DELETE", f"/api/host/{host_id}")
+
+    async def set_host_disabled(self, host_id: int, disabled: bool) -> Any:
+        path = "/api/hosts/bulk/disable" if disabled else "/api/hosts/bulk/enable"
+        return await self.request("POST", path, json={"ids": [host_id]})
+
+    async def get_admins(self) -> list[dict]:
+        data = await self.request("GET", "/api/admins")
+        return as_list(data, "admins")
+
+    async def get_admins_simple(self) -> list[dict]:
+        data = await self.request("GET", "/api/admins/simple")
+        return as_list(data, "admins")
+
+    async def create_admin(self, payload: dict) -> dict:
+        return await self.request("POST", "/api/admin", json=payload)
 
     async def get_system_stats(self) -> dict:
         data = await self.request("GET", "/api/system")
