@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # PGClockBot — Interactive installer (Ubuntu 22.04+ only)
 set -euo pipefail
+set +H   # disable history expansion so passwords with ! stay intact
 
 # ── colors ──────────────────────────────────────────────
 R='\033[0;31m'; G='\033[0;32m'; C='\033[0;36m'
@@ -32,23 +33,13 @@ ART
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Escape a value for double-quoted .env assignment
-env_quote() {
-  local s="$1"
-  s="${s//\\/\\\\}"
-  s="${s//\"/\\\"}"
-  s="${s//$'\n'/\\n}"
-  printf '"%s"' "$s"
-}
-
+# ask PROMPT [DEFAULT]
+# If DEFAULT is provided (even empty string with ask_opt), empty Enter uses default.
 ask() {
   local prompt="$1"
-  local default="${2:-}"
+  local default="${2-__REQUIRED__}"
   local var
-  if [[ -n "$default" ]]; then
-    read -r -p "  ${B}${prompt}${N} ${D}[${default}]${N}: " var
-    echo "${var:-$default}"
-  else
+  if [[ "$default" == "__REQUIRED__" ]]; then
     while true; do
       read -r -p "  ${B}${prompt}${N}: " var
       if [[ -n "$var" ]]; then
@@ -57,6 +48,13 @@ ask() {
       fi
       err "This field is required."
     done
+  else
+    if [[ -n "$default" ]]; then
+      read -r -p "  ${B}${prompt}${N} ${D}[${default}]${N}: " var
+    else
+      read -r -p "  ${B}${prompt}${N} ${D}[optional — press Enter to skip]${N}: " var
+    fi
+    echo "${var:-$default}"
   fi
 }
 
@@ -179,27 +177,50 @@ ensure_python_version() {
 }
 
 write_env() {
-  # All values are double-quoted so special chars (!$#&) stay intact
-  cat > .env <<EOF
-BOT_TOKEN=$(env_quote "$BOT_TOKEN")
-BOT_USERNAME=$(env_quote "$BOT_USERNAME")
-ADMIN_IDS=$(env_quote "$ADMIN_IDS")
-PG_BASE_URL=$(env_quote "$PG_BASE_URL")
-PG_USERNAME=$(env_quote "$PG_USERNAME")
-PG_PASSWORD=$(env_quote "$PG_PASSWORD")
-WEB_HOST="0.0.0.0"
-WEB_PORT=$(env_quote "$WEB_PORT")
-WEB_SECRET=$(env_quote "$WEB_SECRET")
-WEB_ADMIN_USER=$(env_quote "$WEB_ADMIN_USER")
-WEB_ADMIN_PASSWORD=$(env_quote "$WEB_ADMIN_PASSWORD")
-DATABASE_URL="sqlite+aiosqlite:///./data/bot.db"
-WEBHOOK_URL=""
-WEBHOOK_PATH="/telegram/webhook"
-PUBLIC_BASE_URL=$(env_quote "$PUBLIC_BASE_URL")
-CURRENCY=$(env_quote "$CURRENCY")
-DEFAULT_LOCALE="fa"
-EOF
-  chmod 600 .env
+  # Write via Python so special characters never break .env
+  WEB_ADMIN_PASSWORD="$WEB_ADMIN_PASSWORD" \
+  BOT_TOKEN="$BOT_TOKEN" \
+  BOT_USERNAME="$BOT_USERNAME" \
+  ADMIN_IDS="$ADMIN_IDS" \
+  PG_BASE_URL="$PG_BASE_URL" \
+  PG_USERNAME="$PG_USERNAME" \
+  PG_PASSWORD="$PG_PASSWORD" \
+  WEB_PORT="$WEB_PORT" \
+  WEB_SECRET="$WEB_SECRET" \
+  WEB_ADMIN_USER="$WEB_ADMIN_USER" \
+  PUBLIC_BASE_URL="$PUBLIC_BASE_URL" \
+  CURRENCY="$CURRENCY" \
+  "$PY" - <<'PY'
+import json, os, subprocess, sys
+from pathlib import Path
+payload = {
+    "BOT_TOKEN": os.environ["BOT_TOKEN"],
+    "BOT_USERNAME": os.environ["BOT_USERNAME"],
+    "ADMIN_IDS": os.environ["ADMIN_IDS"],
+    "PG_BASE_URL": os.environ["PG_BASE_URL"],
+    "PG_USERNAME": os.environ["PG_USERNAME"],
+    "PG_PASSWORD": os.environ["PG_PASSWORD"],
+    "WEB_HOST": "0.0.0.0",
+    "WEB_PORT": os.environ["WEB_PORT"],
+    "WEB_SECRET": os.environ["WEB_SECRET"],
+    "WEB_ADMIN_USER": os.environ["WEB_ADMIN_USER"],
+    "WEB_ADMIN_PASSWORD": os.environ["WEB_ADMIN_PASSWORD"],
+    "DATABASE_URL": "sqlite+aiosqlite:///./data/bot.db",
+    "WEBHOOK_URL": "",
+    "WEBHOOK_PATH": "/telegram/webhook",
+    "PUBLIC_BASE_URL": os.environ.get("PUBLIC_BASE_URL", ""),
+    "CURRENCY": os.environ.get("CURRENCY", "تومان"),
+    "DEFAULT_LOCALE": "fa",
+}
+proc = subprocess.run(
+    [sys.executable, str(Path("scripts/write_env.py"))],
+    input=json.dumps(payload),
+    text=True,
+    check=True,
+    capture_output=True,
+)
+print(proc.stdout.strip())
+PY
 }
 
 # ── run ─────────────────────────────────────────────────
@@ -229,7 +250,7 @@ WEB_ADMIN_PASSWORD="$(ask_password "Web panel password")"
 WEB_SECRET="$(gen_secret)"
 
 step "4/7  Optional"
-PUBLIC_BASE_URL="$(ask "Public HTTPS URL for Mini App (empty = skip)" "")"
+PUBLIC_BASE_URL="$(ask "Public HTTPS URL for Mini App" "")"
 CURRENCY="$(ask "Currency label" "تومان")"
 
 step "5/7  Python packages"
@@ -248,21 +269,29 @@ ok "Python dependencies installed"
 step "6/7  Configuration file"
 write_env
 mkdir -p data
-ok ".env written (quoted secrets) · data/ ready"
+ok ".env written safely · data/ ready"
 
-# Quick self-check: reload settings
-CHECK_USER="$("$PY" - <<'PY'
+# Verify password round-trip (never prints the password)
+CHECK="$("$PY" - <<PY
 from app.config import get_settings
 get_settings.cache_clear()
 s = get_settings()
+expect_user = ${WEB_ADMIN_USER@Q}
+expect_pass = ${WEB_ADMIN_PASSWORD@Q}
+ok_user = (s.web_admin_user == expect_user)
+ok_pass = (s.web_admin_password == expect_pass)
+ok_bot = bool(s.bot_token and s.admin_ids)
 print(s.web_admin_user)
-print("OK" if s.bot_token and s.admin_ids else "FAIL")
+print("OK" if ok_user and ok_pass and ok_bot else "FAIL")
 print(",".join(str(i) for i in s.admin_ids))
+print("user_match=" + str(ok_user))
+print("pass_match=" + str(ok_pass))
 PY
 )"
-mapfile -t CHECK_LINES <<< "$CHECK_USER"
+mapfile -t CHECK_LINES <<< "$CHECK"
 if [[ "${CHECK_LINES[1]:-}" != "OK" ]]; then
-  err "Config self-check failed. Re-run installer and verify inputs."
+  err "Config self-check failed (${CHECK_LINES[3]:-} ${CHECK_LINES[4]:-})."
+  err "Try: python scripts/set_web_password.py"
   exit 1
 fi
 ok "Config OK · web user=${CHECK_LINES[0]} · admin_ids=${CHECK_LINES[2]}"

@@ -11,6 +11,13 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "data"
 
 
+def _clean_str(value: object) -> str:
+    s = "" if value is None else str(value).strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'":
+        s = s[1:-1].strip()
+    return s
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=str(ROOT_DIR / ".env"),
@@ -45,6 +52,29 @@ class Settings(BaseSettings):
     currency: str = Field(default="تومان", alias="CURRENCY")
     default_locale: str = Field(default="fa", alias="DEFAULT_LOCALE")
 
+    @field_validator(
+        "bot_token",
+        "bot_username",
+        "pg_base_url",
+        "pg_username",
+        "pg_password",
+        "pg_access_token",
+        "web_host",
+        "web_secret",
+        "web_admin_user",
+        "web_admin_password",
+        "webhook_url",
+        "webhook_path",
+        "public_base_url",
+        "currency",
+        "default_locale",
+        "database_url",
+        mode="before",
+    )
+    @classmethod
+    def strip_wrap_quotes(cls, value: object) -> str:
+        return _clean_str(value)
+
     @field_validator("admin_ids", mode="before")
     @classmethod
     def parse_admin_ids(cls, value: object) -> List[int]:
@@ -52,7 +82,8 @@ class Settings(BaseSettings):
             return []
         if isinstance(value, list):
             return [int(v) for v in value]
-        return [int(x.strip()) for x in str(value).split(",") if x.strip()]
+        cleaned = _clean_str(value)
+        return [int(x.strip()) for x in cleaned.split(",") if x.strip()]
 
     @property
     def miniapp_enabled(self) -> bool:

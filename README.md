@@ -22,7 +22,7 @@
 ```bash
 git clone https://github.com/Mrclocks/PGClockBot.git
 cd PGClockBot
-chmod +x install.sh
+chmod +x install.sh update.sh
 ./install.sh
 ```
 
@@ -31,11 +31,31 @@ chmod +x install.sh
 1. نسخه Ubuntu را چک می‌کند (کمتر از ۲۲ → توقف)
 2. پیش‌نیازها را نصب می‌کند (`python3`, `venv`, `pip`, `git`, …)
 3. سوال‌ها را **به انگلیسی** می‌پرسد (توکن، ادمین، پاسارگارد، یوزر/پسورد وب)
-4. پسورد وب را با قانون امن اجباری می‌کند (۸+ / حرف بزرگ / کاراکتر خاص)
-5. `.env` را با مقدارهای **کوت‌شده** می‌نویسد (رمزهای خاص خراب نمی‌شوند)
-6. اختیاری systemd می‌سازد و ربات را اجرا می‌کند
+4. Mini App URL را می‌توانید **خالی Enter** بزنید
+5. پسورد وب را با قانون امن اجباری می‌کند (۸+ / حرف بزرگ / کاراکتر خاص)
+6. `.env` را با Python امن می‌نویسد
+7. اختیاری systemd می‌سازد و ربات را اجرا می‌کند
 
-بعد از نصب، متن‌ها / دکمه‌ها / پلن‌ها / کارت از **وب‌پنل** تنظیم می‌شوند.
+---
+
+## آپدیت بدون وارد کردن دوباره اطلاعات
+
+`.env` دست نمی‌خورد؛ فقط کد و پکیج‌ها به‌روز می‌شوند:
+
+```bash
+cd PGClockBot
+git pull
+chmod +x update.sh
+./update.sh
+```
+
+اگر فقط رمز وب‌پنل را عوض می‌خواهید (بدون نصب دوباره):
+
+```bash
+source .venv/bin/activate
+python scripts/set_web_password.py
+sudo systemctl restart pgclockbot
+```
 
 ---
 
@@ -66,21 +86,16 @@ chmod +x install.sh
 
 ## اگر وب‌پنل «رمز اشتباه» می‌گوید
 
-معمولاً به‌خاطر کاراکتر خاص در پسورد بوده که در نسخه قبل `.env` را خراب می‌کرد.
+بدون نصب دوباره، رمز را ریست کنید:
 
 ```bash
 cd PGClockBot
-./install.sh
-```
-
-دوباره نصب/تنظیم را بزنید (نسخه جدید پسورد را درست quote می‌کند)، بعد:
-
-```bash
 source .venv/bin/activate
-python run.py
-# یا:
+python scripts/set_web_password.py
 sudo systemctl restart pgclockbot
 ```
+
+یا `./install.sh` را دوباره اجرا کنید (نسخه جدید `.env` را با Python می‌نویسد).
 
 ---
 

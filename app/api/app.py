@@ -100,12 +100,17 @@ def create_api_app(lifespan=None) -> FastAPI:
         password: str = Form(...),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.config import _clean_str, get_settings
+
+        get_settings.cache_clear()
         settings = get_settings()
         role = None
         display = username.strip()
-        u = username.strip()
-        p = password.strip()
-        if u == settings.web_admin_user.strip() and p == settings.web_admin_password:
+        u = _clean_str(username)
+        p = _clean_str(password)
+        expected_user = _clean_str(settings.web_admin_user)
+        expected_pass = _clean_str(settings.web_admin_password)
+        if u == expected_user and p == expected_pass and expected_user:
             role = "admin"
         else:
             # reseller login: username=telegram_id password=referral_code
