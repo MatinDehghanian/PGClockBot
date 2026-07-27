@@ -52,8 +52,29 @@ async def notify_admins_receipt(bot: Bot, payment: Payment, user_tg_id: int | No
         f"پرداخت #{payment.id}\n"
         f"مبلغ: {format_toman(payment.amount, settings.currency)}\n"
         f"کاربر: {user_tg_id or '—'}\n"
-        f"نوع: {'شارژ کیف' if payment.is_wallet_topup else 'خرید'}",
+        f"نوع: {'شارژ کیف' if payment.is_wallet_topup else 'خرید'}"
+        + (f"\nسفارش: #{payment.order_id}" if payment.order_id else ""),
     )
+    if payment.order_id and not payment.is_wallet_topup:
+        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🟢✅ تأیید سفارش",
+                        callback_data=f"ordrev:ok:{payment.order_id}",
+                    ),
+                    InlineKeyboardButton(
+                        text="🔴❌ رد",
+                        callback_data=f"ordrev:no:{payment.order_id}",
+                    ),
+                ],
+                [InlineKeyboardButton(text="🛒 جزئیات سفارش", callback_data=f"adm:order:{payment.order_id}")],
+            ]
+        )
+    else:
+        markup = kb.payment_review(payment.id)
     for admin_id in settings.admin_ids:
         try:
             if payment.receipt_file_id:
@@ -61,20 +82,20 @@ async def notify_admins_receipt(bot: Bot, payment: Payment, user_tg_id: int | No
                     admin_id,
                     photo=payment.receipt_file_id,
                     caption=caption,
-                    reply_markup=kb.payment_review(payment.id),
+                    reply_markup=markup,
                 )
             else:
                 await bot.send_message(
                     admin_id,
                     caption,
-                    reply_markup=kb.payment_review(payment.id),
+                    reply_markup=markup,
                 )
         except Exception:
             try:
                 await bot.send_message(
                     admin_id,
                     caption,
-                    reply_markup=kb.payment_review(payment.id),
+                    reply_markup=markup,
                 )
             except Exception:
                 pass

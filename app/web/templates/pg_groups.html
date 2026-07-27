@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% block title %}گروه‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -83,7 +83,7 @@
           <div class="actions" style="margin:0">
             <a class="btn btn-ghost btn-sm" href="/pg/groups?edit={{ g.get('id') }}">ویرایش</a>
             <form method="post" action="/pg/groups/{{ g.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
-              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+              <button class="icon-btn icon-remove" type="submit" title="حذف" aria-label="حذف">×</button>
             </form>
           </div>
         </td>

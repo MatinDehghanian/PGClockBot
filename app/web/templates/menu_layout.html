@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>دکمه‌های منوی بات</h1>
-    <p>کل کارت را بگیرید و بکشید — افزودن از مخزن، حذف به مخزن</p>
+    <p>با دکمه‌های ▲▼ جابه‌جا کنید — افزودن و حذف با آیکن</p>
   </div>
 </div>
 {% if saved %}<div class="flash ok">ذخیره شد — از پیام بعدی بات اعمال می‌شود.</div>{% endif %}
@@ -13,9 +13,9 @@
   <input type="hidden" name="menu_order" id="menu_order" value="{{ order_csv }}" />
   <input type="hidden" name="menu_layout" id="menu_layout" value="{{ values.get('menu_layout', 'classic') }}" />
 
-  <div class="card">
+  <div class="card" style="margin-bottom:14px">
     <h2>حالت ردیف‌ها</h2>
-    <label>
+    <label style="margin:0">
       <select id="menu_layout_select">
         <option value="classic" {% if values.get('menu_layout')=='classic' %}selected{% endif %}>کلاسیک — هر دکمه یک ردیف</option>
         <option value="compact" {% if values.get('menu_layout')=='compact' %}selected{% endif %}>فشرده — دکمه‌های میانی جفتی</option>
@@ -26,36 +26,38 @@
   <div class="dnd-cols">
     <div class="card" style="margin:0">
       <h2>منوی فعال</h2>
-      <p class="muted" style="margin:0 0 12px;font-size:12px">با موس کل باکس را جابه‌جا کنید</p>
       <ul class="dnd-list" id="active-list" data-zone="active">
         {% for item in items %}
-        <li class="dnd-item" draggable="true" data-key="{{ item.key }}" data-required="{{ '1' if item.required else '0' }}">
-          <span class="dnd-handle" title="بکشید">⠿</span>
+        <li class="dnd-item" data-key="{{ item.key }}" data-required="{{ '1' if item.required else '0' }}">
           <div class="meta">
             <strong>{{ item.btn or item.label }}</strong>
             <div class="muted">{{ item.label }}</div>
           </div>
-          {% if not item.required %}
-          <button type="button" class="btn btn-ghost btn-sm btn-remove">حذف</button>
-          {% else %}
-          <span class="badge">ثابت</span>
-          {% endif %}
+          <div class="dnd-actions">
+            <button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا">▲</button>
+            <button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین">▼</button>
+            {% if not item.required %}
+            <button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف">×</button>
+            {% else %}
+            <span class="badge">ثابت</span>
+            {% endif %}
+          </div>
         </li>
         {% endfor %}
       </ul>
     </div>
     <div class="card" style="margin:0">
       <h2>مخزن</h2>
-      <p class="muted" style="margin:0 0 12px;font-size:12px">این دکمه‌ها در منو نیستند — بکشید یا «افزودن»</p>
       <ul class="dnd-list" id="pool-list" data-zone="pool">
         {% for item in pool %}
-        <li class="dnd-item" draggable="true" data-key="{{ item.key }}" data-required="0">
-          <span class="dnd-handle" title="بکشید">⠿</span>
+        <li class="dnd-item" data-key="{{ item.key }}" data-required="0">
           <div class="meta">
             <strong>{{ item.btn or item.label }}</strong>
             <div class="muted">{{ item.label }}</div>
           </div>
-          <button type="button" class="btn btn-sm btn-add">افزودن</button>
+          <div class="dnd-actions">
+            <button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن">+</button>
+          </div>
         </li>
         {% endfor %}
         <li class="pool-empty" id="pool-empty" {% if pool %}style="display:none"{% endif %}>همه دکمه‌ها در منو هستند</li>
@@ -75,8 +77,6 @@
   const orderInput = document.getElementById('menu_order');
   const layoutSelect = document.getElementById('menu_layout_select');
   const layoutHidden = document.getElementById('menu_layout');
-  const catalog = {{ catalog | tojson }};
-  let dragEl = null;
 
   function syncOrder() {
     orderInput.value = [...active.querySelectorAll('.dnd-item')].map((el) => el.dataset.key).join(',');
@@ -88,28 +88,24 @@
   }
   function setActiveControls(li) {
     const required = li.dataset.required === '1';
-    li.querySelectorAll('button.btn-remove, button.btn-add, span.badge').forEach((n) => n.remove());
-    if (required) {
-      const b = document.createElement('span');
-      b.className = 'badge';
-      b.textContent = 'ثابت';
-      li.appendChild(b);
-    } else {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'btn btn-ghost btn-sm btn-remove';
-      b.textContent = 'حذف';
-      li.appendChild(b);
-    }
+    const box = document.createElement('div');
+    box.className = 'dnd-actions';
+    box.innerHTML =
+      '<button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا">▲</button>' +
+      '<button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین">▼</button>' +
+      (required
+        ? '<span class="badge">ثابت</span>'
+        : '<button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف">×</button>');
+    li.querySelectorAll('.dnd-actions, button.btn-remove, button.btn-add, span.badge').forEach((n) => n.remove());
+    li.appendChild(box);
   }
   function setPoolControls(li) {
     li.dataset.required = '0';
-    li.querySelectorAll('button.btn-remove, button.btn-add, span.badge').forEach((n) => n.remove());
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'btn btn-sm btn-add';
-    b.textContent = 'افزودن';
-    li.appendChild(b);
+    li.querySelectorAll('.dnd-actions, button.btn-remove, button.btn-add, span.badge').forEach((n) => n.remove());
+    const box = document.createElement('div');
+    box.className = 'dnd-actions';
+    box.innerHTML = '<button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن">+</button>';
+    li.appendChild(box);
   }
   function moveToActive(li) {
     active.appendChild(li);
@@ -124,77 +120,38 @@
     ensureEmpty();
     syncOrder();
   }
+  function moveItem(li, dir) {
+    if (!li || !li.parentElement || li.parentElement !== active) return;
+    if (dir < 0 && li.previousElementSibling) {
+      active.insertBefore(li, li.previousElementSibling);
+    } else if (dir > 0 && li.nextElementSibling) {
+      active.insertBefore(li.nextElementSibling, li);
+    }
+    syncOrder();
+  }
 
   layoutSelect.addEventListener('change', () => { layoutHidden.value = layoutSelect.value; });
 
   document.getElementById('menu-form').addEventListener('click', (e) => {
     const rem = e.target.closest('.btn-remove');
     const add = e.target.closest('.btn-add');
+    const up = e.target.closest('.btn-up');
+    const down = e.target.closest('.btn-down');
     if (rem) {
       e.preventDefault();
       moveToPool(rem.closest('.dnd-item'));
-    }
-    if (add) {
+    } else if (add) {
       e.preventDefault();
       moveToActive(add.closest('.dnd-item'));
+    } else if (up) {
+      e.preventDefault();
+      moveItem(up.closest('.dnd-item'), -1);
+    } else if (down) {
+      e.preventDefault();
+      moveItem(down.closest('.dnd-item'), 1);
     }
   });
 
-  function bindList(list) {
-    list.addEventListener('dragstart', (e) => {
-      const item = e.target.closest('.dnd-item');
-      if (!item) return;
-      dragEl = item;
-      item.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', item.dataset.key);
-    });
-    list.addEventListener('dragend', () => {
-      if (dragEl) dragEl.classList.remove('dragging');
-      document.querySelectorAll('.drag-over').forEach((n) => n.classList.remove('drag-over'));
-      dragEl = null;
-      syncOrder();
-      ensureEmpty();
-    });
-    list.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      const item = e.target.closest('.dnd-item');
-      if (!dragEl) return;
-      if (list.dataset.zone === 'pool' && dragEl.dataset.required === '1') return;
-      e.dataTransfer.dropEffect = 'move';
-      if (item && item !== dragEl) {
-        item.classList.add('drag-over');
-        const rect = item.getBoundingClientRect();
-        const before = (e.clientY - rect.top) < rect.height / 2;
-        list.insertBefore(dragEl, before ? item : item.nextSibling);
-      } else if (!item && list.dataset.zone === 'pool') {
-        list.insertBefore(dragEl, document.getElementById('pool-empty'));
-      } else if (!item && list.dataset.zone === 'active') {
-        list.appendChild(dragEl);
-      }
-    });
-    list.addEventListener('dragleave', (e) => {
-      const item = e.target.closest('.dnd-item');
-      if (item) item.classList.remove('drag-over');
-    });
-    list.addEventListener('drop', (e) => {
-      e.preventDefault();
-      if (!dragEl) return;
-      if (list.dataset.zone === 'active') setActiveControls(dragEl);
-      if (list.dataset.zone === 'pool') {
-        if (dragEl.dataset.required === '1') {
-          moveToActive(dragEl);
-          return;
-        }
-        setPoolControls(dragEl);
-      }
-      ensureEmpty();
-      syncOrder();
-    });
-  }
-
-  bindList(active);
-  bindList(pool);
   syncOrder();
   ensureEmpty();
 })();

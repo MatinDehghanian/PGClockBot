@@ -120,15 +120,16 @@ def admin_main_menu(ui: dict | None = None) -> InlineKeyboardMarkup:
     """Primary home for bot owner — management tools only."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text=_t(ui, "btn_admin"), callback_data="adm:home")],
             [
-                InlineKeyboardButton(text=_t(ui, "btn_admin"), callback_data="adm:home"),
-            ],
-            [
+                InlineKeyboardButton(text="🛒 سفارش‌ها", callback_data="adm:orders"),
                 InlineKeyboardButton(text="🧾 رسیدها", callback_data="adm:payments"),
-                InlineKeyboardButton(text="🎫 تیکت‌ها", callback_data="adm:tickets"),
             ],
             [
+                InlineKeyboardButton(text="🎫 تیکت‌ها", callback_data="adm:tickets"),
                 InlineKeyboardButton(text="📦 پلن‌ها", callback_data="adm:plans"),
+            ],
+            [
                 InlineKeyboardButton(text="🖥 پاسارگارد", callback_data="adm:pg"),
             ],
             [
@@ -266,8 +267,12 @@ def admin_home() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="💎 پلن‌ها", callback_data="adm:plans"),
+                InlineKeyboardButton(text="📊 داشبورد", callback_data="adm:dash"),
                 InlineKeyboardButton(text="🧾 رسیدها", callback_data="adm:payments"),
+            ],
+            [
+                InlineKeyboardButton(text="🛒 سفارش‌ها", callback_data="adm:orders"),
+                InlineKeyboardButton(text="💎 پلن‌ها", callback_data="adm:plans"),
             ],
             [
                 InlineKeyboardButton(text="🎫 تیکت‌ها", callback_data="adm:tickets"),
@@ -281,6 +286,18 @@ def admin_home() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🖥 پاسارگارد", callback_data="adm:pg"),
             ],
             [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="menu:home")],
+        ]
+    )
+
+
+def order_review(order_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🟢✅ تأیید سفارش", callback_data=f"ordrev:ok:{order_id}"),
+                InlineKeyboardButton(text="🔴❌ رد", callback_data=f"ordrev:no:{order_id}"),
+            ],
+            [InlineKeyboardButton(text="⬅️ لیست سفارش‌ها", callback_data="adm:orders")],
         ]
     )
 

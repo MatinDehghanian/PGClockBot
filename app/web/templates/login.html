@@ -1,26 +1,24 @@
 {% extends "base.html" %}
+{% block title %}ورود{% endblock %}
 {% block auth %}
 <div class="auth-wrap">
-  <div class="auth-box">
-    <div class="logo-row">
+  <div class="auth-panel">
+    <div class="auth-brand">
       <img src="/static/logo.svg" alt="" />
-      <div>
-        <h1>ورود به پنل</h1>
-        <p class="lead">مدیریت فروش کلاک بات</p>
-      </div>
+      <h1>کلاک بات</h1>
+      <p>ورود به پنل مدیریت فروش و پاسارگارد</p>
     </div>
-    {% if error %}<div class="error">{{ error }}</div>{% endif %}
-    <form method="post" action="/login" autocomplete="on">
+    <form class="auth-form" method="post" action="/login" autocomplete="on">
+      {% if error %}<div class="error" style="margin:0">{{ error }}</div>{% endif %}
       <label>نام کاربری
-        <input name="username" value="{{ hint_user or 'admin' }}" required autocomplete="username" autofocus />
+        <input name="username" value="{{ hint_user or 'admin' }}" required autocomplete="username" autofocus inputmode="text" />
       </label>
       <label>رمز عبور
         <input name="password" type="password" required autocomplete="current-password" />
       </label>
-      <div class="actions" style="margin-top:16px">
-        <button class="btn" type="submit" style="width:100%">ورود</button>
-      </div>
+      <button class="btn" type="submit">ورود به پنل</button>
     </form>
+    <div class="auth-foot">© ۲۰۲۶ کلاک بات</div>
   </div>
 </div>
 {% endblock %}

@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% block title %}تمپلیت‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -76,7 +76,7 @@
         <td class="mono">{{ t.get('group_ids') or '—' }}</td>
         <td>
           <form method="post" action="/pg/templates/{{ t.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
-            <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+            <button class="icon-btn icon-remove" type="submit" title="حذف" aria-label="حذف">×</button>
           </form>
         </td>
       </tr>

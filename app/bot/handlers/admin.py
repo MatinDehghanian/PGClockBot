@@ -9,17 +9,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.config import get_settings
-from app.db.models import BotUser, Order, Payment, PaymentStatus, Plan, Role, Ticket
+from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Plan, Role, Ticket, UserService
 from app.services.formatting import (
     format_system_stats,
     format_toman,
     node_status_fa,
+    order_status_fa,
     service_card,
 )
+from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.pasarguard import get_pg
 from app.services.resellers import make_reseller
 from app.services.tickets import get_ticket, list_open_tickets, reply_ticket
 from app.services.users import get_setting, set_setting
+from app.services.updates import local_version
 
 
 def _plan_line(p: Plan) -> str:
@@ -57,7 +60,240 @@ async def adm_home(callback: CallbackQuery, db_user: BotUser):
         return
     await callback.answer()
     if callback.message:
-        await callback.message.edit_text("🛠 <b>پنل ادمین</b>", reply_markup=kb.admin_home())
+        await callback.message.edit_text(
+            f"🛠 <b>پنل ادمین</b>\nنسخه: <code>{local_version()}</code>",
+            reply_markup=kb.admin_home(),
+        )
+
+
+@router.callback_query(F.data == "adm:dash")
+async def adm_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await callback.answer()
+    users_count = await session.scalar(select(func.count()).select_from(BotUser)) or 0
+    orders_count = await session.scalar(select(func.count()).select_from(Order)) or 0
+    pending_pay = await session.scalar(
+        select(func.count())
+        .select_from(Payment)
+        .where(Payment.status == PaymentStatus.PENDING.value, Payment.receipt_file_id.is_not(None))
+    ) or 0
+    pending_orders = await session.scalar(
+        select(func.count())
+        .select_from(Order)
+        .where(Order.status.in_([OrderStatus.AWAITING_APPROVAL.value, OrderStatus.PAID.value]))
+    ) or 0
+    services = await session.scalar(select(func.count()).select_from(UserService)) or 0
+    text = (
+        "📊 <b>داشبورد</b>\n\n"
+        f"👥 کاربران: {users_count}\n"
+        f"🛒 سفارش‌ها: {orders_count}\n"
+        f"⏳ سفارش منتظر تأیید: {pending_orders}\n"
+        f"🧾 رسید معلق: {pending_pay}\n"
+        f"📦 سرویس‌ها: {services}\n"
+        f"🔢 نسخه: {local_version()}"
+    )
+    rows = [
+        [
+            InlineKeyboardButton(text="🛒 سفارش‌ها", callback_data="adm:orders"),
+            InlineKeyboardButton(text="🧾 رسیدها", callback_data="adm:payments"),
+        ],
+        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
+    ]
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+def _order_actions(order: Order, payment: Payment | None) -> list[list[InlineKeyboardButton]]:
+    rows: list[list[InlineKeyboardButton]] = []
+    can_decide = False
+    if payment and payment.status == PaymentStatus.PENDING.value:
+        can_decide = True
+    elif order.status in {OrderStatus.PAID.value, OrderStatus.AWAITING_APPROVAL.value}:
+        can_decide = True
+    if can_decide and order.status not in {OrderStatus.DELIVERED.value, OrderStatus.REJECTED.value}:
+        rows.append(
+            [
+                InlineKeyboardButton(text="✅ تأیید", callback_data=f"ordrev:ok:{order.id}"),
+                InlineKeyboardButton(text="❌ رد", callback_data=f"ordrev:no:{order.id}"),
+            ]
+        )
+    return rows
+
+
+@router.callback_query(F.data == "adm:orders")
+async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await callback.answer()
+    result = await session.execute(select(Order).order_by(Order.id.desc()).limit(12))
+    orders = list(result.scalars().all())
+    if not orders:
+        if callback.message:
+            await callback.message.edit_text("سفارشی نیست.", reply_markup=kb.admin_home())
+        return
+    rows = []
+    for o in orders:
+        label = f"#{o.id} · {order_status_fa(o.status)} · {format_toman(o.amount, get_settings().currency)}"
+        rows.append([InlineKeyboardButton(text=label[:64], callback_data=f"adm:order:{o.id}")])
+    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")])
+    if callback.message:
+        await callback.message.edit_text(
+            "🛒 <b>سفارش‌ها</b>\nیکی را برای جزئیات و تأیید/رد انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:order:"))
+async def adm_order_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    order_id = int(callback.data.split(":")[-1])
+    order = await session.get(Order, order_id)
+    if not order:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await callback.answer()
+    user = await session.get(BotUser, order.user_id)
+    plan = await session.get(Plan, order.plan_id) if order.plan_id else None
+    pay = (
+        await session.execute(
+            select(Payment).where(Payment.order_id == order_id).order_by(Payment.id.desc()).limit(1)
+        )
+    ).scalar_one_or_none()
+    who = (user.full_name or user.username or str(order.user_id)) if user else str(order.user_id)
+    text = (
+        f"🛒 <b>سفارش #{order.id}</b>\n\n"
+        f"وضعیت: <b>{order_status_fa(order.status)}</b>\n"
+        f"کاربر: {who}\n"
+        f"پلن: {plan.name if plan else (order.plan_id or '—')}\n"
+        f"مبلغ: {format_toman(order.amount, get_settings().currency)}\n"
+        f"روش: {order.payment_method or '—'}\n"
+    )
+    if pay:
+        text += f"پرداخت: #{pay.id} ({pay.status})\n"
+    rows = _order_actions(order, pay)
+    rows.append([InlineKeyboardButton(text="⬅️ لیست سفارش‌ها", callback_data="adm:orders")])
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+async def _approve_order_bot(session: AsyncSession, order: Order, bot) -> str:
+    pay = (
+        await session.execute(
+            select(Payment).where(Payment.order_id == order.id).order_by(Payment.id.desc()).limit(1)
+        )
+    ).scalar_one_or_none()
+    if order.status == OrderStatus.DELIVERED.value:
+        return "قبلاً تحویل شده"
+    if pay and pay.status == PaymentStatus.PENDING.value:
+        delivered = await approve_payment(session, pay, reviewer_tg=0)
+        try:
+            from app.services.receipts import build_approved_user_text
+
+            user = await session.get(BotUser, pay.user_id)
+            if user:
+                text, markup = await build_approved_user_text(session, pay, delivered or order)
+                await bot.send_message(user.telegram_id, text, reply_markup=markup)
+        except Exception:
+            pass
+        return "سفارش تأیید و تحویل شد"
+    if order.status == OrderStatus.PAID.value or (
+        pay and pay.status == PaymentStatus.APPROVED.value and order.status != OrderStatus.DELIVERED.value
+    ):
+        delivered = await deliver_order(session, order)
+        if pay:
+            try:
+                from app.services.receipts import build_approved_user_text
+
+                user = await session.get(BotUser, pay.user_id)
+                if user:
+                    text, markup = await build_approved_user_text(session, pay, delivered)
+                    await bot.send_message(user.telegram_id, text, reply_markup=markup)
+            except Exception:
+                pass
+        return "سفارش تحویل شد"
+    raise ValueError("این سفارش هنوز قابل تأیید نیست (رسید لازم است)")
+
+
+@router.callback_query(F.data.startswith("ordrev:ok:"))
+async def order_approve_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user) and db_user.role != Role.RESELLER.value:
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
+    if not _is_admin(db_user):
+        await callback.answer("فقط ادمین", show_alert=True)
+        return
+    order_id = int(callback.data.split(":")[-1])
+    order = await session.get(Order, order_id)
+    if not order:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    try:
+        msg = await _approve_order_bot(session, order, callback.bot)
+        await callback.answer(msg, show_alert=True)
+    except Exception as e:
+        await callback.answer(str(e), show_alert=True)
+        return
+    await session.refresh(order)
+    pay = (
+        await session.execute(
+            select(Payment).where(Payment.order_id == order_id).order_by(Payment.id.desc()).limit(1)
+        )
+    ).scalar_one_or_none()
+    text = f"🛒 سفارش #{order.id}\nوضعیت: <b>{order_status_fa(order.status)}</b>\n✅ انجام شد"
+    if callback.message:
+        try:
+            await callback.message.edit_text(text, reply_markup=kb.order_review(order.id) if order.status != OrderStatus.DELIVERED.value else InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ سفارش‌ها", callback_data="adm:orders")]]))
+        except Exception:
+            pass
+
+
+@router.callback_query(F.data.startswith("ordrev:no:"))
+async def order_reject_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("فقط ادمین", show_alert=True)
+        return
+    order_id = int(callback.data.split(":")[-1])
+    order = await session.get(Order, order_id)
+    if not order:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    pay = (
+        await session.execute(
+            select(Payment).where(Payment.order_id == order_id).order_by(Payment.id.desc()).limit(1)
+        )
+    ).scalar_one_or_none()
+    if pay and pay.status == PaymentStatus.PENDING.value:
+        await reject_payment(session, pay, reviewer_tg=db_user.telegram_id, note="bot reject")
+        user = await session.get(BotUser, pay.user_id)
+        if user:
+            try:
+                from app.services.formatting import format_message
+
+                await callback.bot.send_message(
+                    user.telegram_id,
+                    format_message("❌ سفارش رد شد", f"سفارش #{order_id} رد شد."),
+                )
+            except Exception:
+                pass
+    else:
+        order.status = OrderStatus.REJECTED.value
+        await session.commit()
+    await callback.answer("رد شد", show_alert=True)
+    if callback.message:
+        try:
+            await callback.message.edit_text(
+                f"🛒 سفارش #{order_id}\nوضعیت: <b>ردشده</b>",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[[InlineKeyboardButton(text="⬅️ سفارش‌ها", callback_data="adm:orders")]]
+                ),
+            )
+        except Exception:
+            pass
 
 
 @router.callback_query(F.data == "adm:payments")

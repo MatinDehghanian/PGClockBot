@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% block title %}هاست‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -84,7 +84,7 @@
               <button class="btn btn-ghost btn-sm" type="submit">{% if h.get('is_disabled') %}روشن{% else %}خاموش{% endif %}</button>
             </form>
             <form method="post" action="/pg/hosts/{{ h.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
-              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+              <button class="icon-btn icon-remove" type="submit" title="حذف" aria-label="حذف">×</button>
             </form>
           </div>
         </td>
