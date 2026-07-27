@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}داشبورد — PGClock{% endblock %}
+{% block content %}
+<h1>داشبورد</h1>
+<p class="lead">نمای کلی فروش و وضعیت ربات</p>
+<div class="stats">
+  <div class="stat"><span>کاربران</span><strong>{{ stats.users }}</strong></div>
+  <div class="stat"><span>سفارش‌ها</span><strong>{{ stats.orders }}</strong></div>
+  <div class="stat"><span>سرویس‌ها</span><strong>{{ stats.services }}</strong></div>
+  <div class="stat"><span>رسید معلق</span><strong>{{ stats.pending }}</strong></div>
+  <div class="stat"><span>درآمد تحویل‌شده</span><strong>{{ "{:,}".format(stats.revenue).replace(",", "٬") }}</strong></div>
+</div>
+<div class="panel">
+  <div class="panel-head">میانبرها</div>
+  <div class="form-actions" style="padding:18px;display:flex;gap:10px;flex-wrap:wrap">
+    <a class="btn" href="/payments">بررسی پرداخت‌ها</a>
+    <a class="btn ghost" href="/orders">سفارش‌ها</a>
+    {% if staff.role == 'admin' %}
+    <a class="btn ghost" href="/plans">مدیریت پلن</a>
+    <a class="btn ghost" href="/settings">تنظیمات</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

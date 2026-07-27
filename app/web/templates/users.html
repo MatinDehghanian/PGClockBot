@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}کاربران — PGClock{% endblock %}
+{% block content %}
+<h1>کاربران بات</h1>
+<p class="lead">کاربران تلگرامی ثبت‌شده</p>
+<div class="panel">
+  <table>
+    <thead><tr><th>#</th><th>تلگرام</th><th>نام</th><th>نقش</th><th>کیف پول</th><th>کد دعوت</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td>{{ u.id }}</td>
+        <td>{{ u.telegram_id }}</td>
+        <td>{{ u.full_name or u.username or "—" }}</td>
+        <td><span class="badge">{{ u.role }}</span></td>
+        <td>{{ "{:,}".format(u.wallet_balance).replace(",", "٬") }}</td>
+        <td><code>{{ u.referral_code }}</code></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6">کاربری نیست</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

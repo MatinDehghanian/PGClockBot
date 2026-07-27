@@ -1,0 +1,235 @@
+from __future__ import annotations
+
+from datetime import datetime
+from enum import Enum
+from typing import Optional
+
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db import Base
+
+
+class Role(str, Enum):
+    USER = "user"
+    RESELLER = "reseller"
+    ADMIN = "admin"
+
+
+class OrderStatus(str, Enum):
+    PENDING = "pending"
+    AWAITING_RECEIPT = "awaiting_receipt"
+    AWAITING_APPROVAL = "awaiting_approval"
+    PAID = "paid"
+    DELIVERED = "delivered"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+
+
+class PaymentMethod(str, Enum):
+    WALLET = "wallet"
+    CARD = "card"
+
+
+class PaymentStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class TicketStatus(str, Enum):
+    OPEN = "open"
+    ANSWERED = "answered"
+    CLOSED = "closed"
+
+
+class BotUser(Base):
+    __tablename__ = "bot_users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    role: Mapped[str] = mapped_column(String(32), default=Role.USER.value, index=True)
+    wallet_balance: Mapped[int] = mapped_column(Integer, default=0)
+    referral_code: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    referred_by_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True
+    )
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True
+    )
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    services: Mapped[list["UserService"]] = relationship(
+        back_populates="owner", foreign_keys="UserService.bot_user_id"
+    )
+    orders: Mapped[list["Order"]] = relationship(
+        back_populates="user", foreign_keys="Order.user_id"
+    )
+
+
+class Plan(Base):
+    __tablename__ = "plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    price: Mapped[int] = mapped_column(Integer)  # toman
+    duration_days: Mapped[int] = mapped_column(Integer, default=30)
+    data_limit_gb: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    pg_template_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_trial: Mapped[bool] = mapped_column(Boolean, default=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("plans.id"), nullable=True)
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True
+    )
+    amount: Mapped[int] = mapped_column(Integer)
+    discount_amount: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(32), default=OrderStatus.PENDING.value, index=True)
+    payment_method: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    discount_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    service_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("user_services.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped["BotUser"] = relationship(back_populates="orders", foreign_keys=[user_id])
+    plan: Mapped[Optional["Plan"]] = relationship()
+    payment: Mapped[Optional["Payment"]] = relationship(back_populates="order", uselist=False)
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    amount: Mapped[int] = mapped_column(Integer)
+    method: Mapped[str] = mapped_column(String(32), default=PaymentMethod.CARD.value)
+    status: Mapped[str] = mapped_column(String(32), default=PaymentStatus.PENDING.value, index=True)
+    receipt_file_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    reviewed_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    review_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_wallet_topup: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    order: Mapped[Optional["Order"]] = relationship(back_populates="payment")
+
+
+class UserService(Base):
+    __tablename__ = "user_services"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("plans.id"), nullable=True)
+    pg_user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    pg_username: Mapped[str] = mapped_column(String(128))
+    subscription_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    subscription_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    remark: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    notified_expire: Mapped[bool] = mapped_column(Boolean, default=False)
+    notified_traffic: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    owner: Mapped["BotUser"] = relationship(
+        back_populates="services", foreign_keys=[bot_user_id]
+    )
+    plan: Mapped[Optional["Plan"]] = relationship()
+
+
+class Ticket(Base):
+    __tablename__ = "tickets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    subject: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(32), default=TicketStatus.OPEN.value, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    messages: Mapped[list["TicketMessage"]] = relationship(back_populates="ticket")
+
+
+class TicketMessage(Base):
+    __tablename__ = "ticket_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    sender_id: Mapped[int] = mapped_column(BigInteger)
+    is_staff: Mapped[bool] = mapped_column(Boolean, default=False)
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    ticket: Mapped["Ticket"] = relationship(back_populates="messages")
+
+
+class DiscountCode(Base):
+    __tablename__ = "discount_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    percent: Mapped[int] = mapped_column(Integer, default=0)
+    max_uses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class ResellerProfile(Base):
+    __tablename__ = "reseller_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), unique=True)
+    commission_percent: Mapped[int] = mapped_column(Integer, default=10)
+    balance: Mapped[int] = mapped_column(Integer, default=0)
+    can_approve_receipts: Mapped[bool] = mapped_column(Boolean, default=False)
+    pg_admin_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Setting(Base):
+    __tablename__ = "settings"
+    __table_args__ = (UniqueConstraint("key", name="uq_settings_key"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(128), index=True)
+    value: Mapped[str] = mapped_column(Text, default="")
+
+
+class WalletTransaction(Base):
+    __tablename__ = "wallet_transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    amount: Mapped[int] = mapped_column(Integer)
+    balance_after: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

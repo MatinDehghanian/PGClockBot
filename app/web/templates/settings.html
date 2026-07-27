@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}تنظیمات — PGClock{% endblock %}
+{% block content %}
+<h1>تنظیمات</h1>
+<p class="lead">متن‌ها و اطلاعات فروشگاه</p>
+<div class="panel">
+  <form method="post" action="/settings" class="form-grid">
+    <label>عنوان فروشگاه<input name="s_shop_title" value="{{ values.shop_title }}" /></label>
+    <label>شماره کارت<input name="s_card_number" value="{{ values.card_number }}" /></label>
+    <label>صاحب کارت<input name="s_card_holder" value="{{ values.card_holder }}" /></label>
+    <label>کانال اجباری<input name="s_force_join_channel" value="{{ values.force_join_channel }}" /></label>
+    <label>عضویت اجباری (0/1)<input name="s_force_join_enabled" value="{{ values.force_join_enabled }}" /></label>
+    <label>تست رایگان (0/1)<input name="s_trial_enabled" value="{{ values.trial_enabled }}" /></label>
+    <label class="full">متن خوش‌آمد<textarea name="s_welcome_text" rows="4">{{ values.welcome_text }}</textarea></label>
+    <label class="full">متن پشتیبانی<textarea name="s_support_text" rows="3">{{ values.support_text }}</textarea></label>
+    <label class="full">FAQ<textarea name="s_faq_text" rows="3">{{ values.faq_text }}</textarea></label>
+    <label class="full">راهنما<textarea name="s_guide_text" rows="3">{{ values.guide_text }}</textarea></label>
+    <div class="full"><button class="btn" type="submit">ذخیره</button></div>
+  </form>
+</div>
+{% endblock %}

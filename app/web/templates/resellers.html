@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}نمایندگان — PGClock{% endblock %}
+{% block content %}
+<h1>نمایندگان</h1>
+<p class="lead">ساخت و مدیریت نماینده فروش</p>
+<div class="panel" style="margin-bottom:18px">
+  <div class="panel-head">افزودن نماینده</div>
+  <form method="post" action="/resellers" class="form-grid">
+    <label>Telegram ID<input name="telegram_id" type="number" required /></label>
+    <label>کمیسیون ٪<input name="commission_percent" type="number" value="10" /></label>
+    <label><span>اجازه تأیید رسید</span><input name="can_approve" type="checkbox" value="1" /></label>
+    <div class="full"><button class="btn" type="submit">ثبت نماینده</button></div>
+  </form>
+</div>
+<div class="panel">
+  <table>
+    <thead><tr><th>کاربر</th><th>تلگرام</th><th>کمیسیون</th><th>موجودی</th><th>تأیید رسید</th><th>کد ورود وب</th></tr></thead>
+    <tbody>
+    {% for u, p in rows %}
+      <tr>
+        <td>{{ u.full_name or u.username }}</td>
+        <td>{{ u.telegram_id }}</td>
+        <td>{{ p.commission_percent }}%</td>
+        <td>{{ "{:,}".format(p.balance).replace(",", "٬") }}</td>
+        <td>{{ "بله" if p.can_approve_receipts else "خیر" }}</td>
+        <td><code>{{ u.referral_code }}</code></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6">نماینده‌ای نیست</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

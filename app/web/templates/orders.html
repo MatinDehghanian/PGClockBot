@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}سفارش‌ها — PGClock{% endblock %}
+{% block content %}
+<h1>سفارش‌ها</h1>
+<p class="lead">آخرین سفارش‌های ثبت‌شده در ربات</p>
+<div class="panel">
+  <table>
+    <thead><tr><th>#</th><th>کاربر</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th>روش</th><th>زمان</th></tr></thead>
+    <tbody>
+    {% for o in orders %}
+      <tr>
+        <td>{{ o.id }}</td>
+        <td>{{ o.user_id }}</td>
+        <td>{{ o.plan_id or "—" }}</td>
+        <td>{{ "{:,}".format(o.amount).replace(",", "٬") }}</td>
+        <td><span class="badge">{{ o.status }}</span></td>
+        <td>{{ o.payment_method or "—" }}</td>
+        <td>{{ o.created_at }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7">سفارشی نیست</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

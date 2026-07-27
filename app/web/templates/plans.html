@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}پلن‌ها — PGClock{% endblock %}
+{% block content %}
+<h1>پلن‌ها</h1>
+<p class="lead">قیمت‌گذاری فروش روی تمپلیت‌های پاسارگارد</p>
+<div class="panel" style="margin-bottom:18px">
+  <div class="panel-head">افزودن پلن</div>
+  <form method="post" action="/plans" class="form-grid">
+    <label>نام<input name="name" required /></label>
+    <label>قیمت (تومان)<input name="price" type="number" required /></label>
+    <label>مدت (روز)<input name="duration_days" type="number" value="30" /></label>
+    <label>حجم GB (خالی=نامحدود)<input name="data_limit_gb" /></label>
+    <label>Template ID پاسارگارد<input name="pg_template_id" /></label>
+    <label class="full">توضیح<textarea name="description" rows="2"></textarea></label>
+    <div class="full"><button class="btn" type="submit">ذخیره پلن</button></div>
+  </form>
+</div>
+<div class="panel">
+  <div class="panel-head">لیست</div>
+  <table>
+    <thead><tr><th>#</th><th>نام</th><th>قیمت</th><th>مدت</th><th>GB</th><th>Template</th><th>وضعیت</th><th></th></tr></thead>
+    <tbody>
+    {% for p in plans %}
+      <tr>
+        <td>{{ p.id }}</td>
+        <td>{{ p.name }}</td>
+        <td>{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
+        <td>{{ p.duration_days }}</td>
+        <td>{{ p.data_limit_gb if p.data_limit_gb is not none else "∞" }}</td>
+        <td>{{ p.pg_template_id or "—" }}</td>
+        <td><span class="badge {% if p.is_active %}ok{% else %}bad{% endif %}">{{ "فعال" if p.is_active else "خاموش" }}</span></td>
+        <td>
+          <form method="post" action="/plans/{{ p.id }}/toggle">
+            <button class="btn ghost sm" type="submit">تغییر وضعیت</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8">پلنی نیست</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

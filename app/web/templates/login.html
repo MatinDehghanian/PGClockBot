@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block auth %}
+<div class="auth-wrap">
+  <div class="auth-box">
+    <h1>ورود به پنل</h1>
+    <p class="lead">مدیریت فروش PGClockBot</p>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="post" action="/login">
+      <label>نام کاربری
+        <input name="username" required autocomplete="username" />
+      </label>
+      <label>رمز عبور
+        <input name="password" type="password" required autocomplete="current-password" />
+      </label>
+      <button class="btn" type="submit">ورود</button>
+    </form>
+    <p class="lead" style="margin-top:18px;font-size:12px">
+      ادمین: از .env — نماینده: آیدی تلگرام / کد دعوت
+    </p>
+  </div>
+</div>
+{% endblock %}
