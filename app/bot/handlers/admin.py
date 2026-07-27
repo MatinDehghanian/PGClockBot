@@ -10,11 +10,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment, PaymentStatus, Plan, Role, Ticket
-from app.services.formatting import format_toman, service_card
+from app.services.formatting import (
+    format_system_stats,
+    format_toman,
+    node_status_fa,
+    service_card,
+)
 from app.services.pasarguard import get_pg
 from app.services.resellers import make_reseller
 from app.services.tickets import get_ticket, list_open_tickets, reply_ticket
 from app.services.users import get_setting, set_setting
+
+
+def _plan_line(p: Plan) -> str:
+    flag = "✅" if p.is_active else "⏸"
+    tpl = f"تمپلیت #{p.pg_template_id}" if p.pg_template_id else "بدون تمپلیت"
+    return (
+        f"{flag} #{p.id} {p.name} — {format_toman(p.price, get_settings().currency)} "
+        f"| {p.duration_days} روز | {tpl}"
+    )
 
 router = Router(name="admin")
 
@@ -91,13 +105,7 @@ async def adm_plans(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     await callback.answer()
     result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
     plans = list(result.scalars().all())
-    lines = ["📦 <b>پلن‌ها</b>\n"]
-    for p in plans:
-        flag = "✅" if p.is_active else "⏸"
-        lines.append(
-            f"{flag} #{p.id} {p.name} — {format_toman(p.price, get_settings().currency)} "
-            f"| {p.duration_days}d | tpl={p.pg_template_id or '-'}"
-        )
+    lines = ["📦 <b>پلن‌ها</b>\n"] + [_plan_line(p) for p in plans]
     rows = [[InlineKeyboardButton(text="➕ پلن جدید", callback_data="adm:plan:add")]]
     for p in plans[:10]:
         rows.append(
@@ -210,13 +218,7 @@ async def plan_toggle(callback: CallbackQuery, session: AsyncSession, db_user: B
     await callback.answer("بروز شد")
     result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
     plans = list(result.scalars().all())
-    lines = ["📦 <b>پلن‌ها</b>\n"]
-    for p in plans:
-        flag = "✅" if p.is_active else "⏸"
-        lines.append(
-            f"{flag} #{p.id} {p.name} — {format_toman(p.price, get_settings().currency)} "
-            f"| {p.duration_days}d | tpl={p.pg_template_id or '-'}"
-        )
+    lines = ["📦 <b>پلن‌ها</b>\n"] + [_plan_line(p) for p in plans]
     rows = [[InlineKeyboardButton(text="➕ پلن جدید", callback_data="adm:plan:add")]]
     for p in plans[:10]:
         rows.append(
@@ -299,8 +301,12 @@ async def adm_resellers(callback: CallbackQuery, state: FSMContext, db_user: Bot
     await state.set_state(AdminStates.make_reseller)
     if callback.message:
         await callback.message.answer(
-            "آیدی عددی تلگرام کاربر برای نماینده شدن را بفرستید:\n"
-            "فرمت: telegram_id کمیسیون(٪) [approve=1]",
+            "آیدی عددی تلگرام کاربر را برای نماینده‌شدن بفرستید.\n\n"
+            "مثال:\n"
+            "<code>123456789 15 1</code>\n\n"
+            "• عدد اول: آیدی تلگرام\n"
+            "• عدد دوم: درصد کمیسیون (پیش‌فرض ۱۰)\n"
+            "• عدد سوم: ۱ = اجازه تأیید رسید، ۰ یا خالی = بدون تأیید",
             reply_markup=kb.cancel_reply(),
         )
 
@@ -309,15 +315,17 @@ async def adm_resellers(callback: CallbackQuery, state: FSMContext, db_user: Bot
 async def make_res(message: Message, state: FSMContext, session: AsyncSession):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو")
+        await message.answer("لغو شد.", reply_markup=kb.admin_home())
         return
     parts = (message.text or "").split()
     try:
         tg_id = int(parts[0])
         commission = int(parts[1]) if len(parts) > 1 else 10
-        can_approve = len(parts) > 2 and parts[2] in {"1", "approve=1", "yes"}
+        can_approve = len(parts) > 2 and parts[2] in {"1", "approve=1", "yes", "بله"}
     except ValueError:
-        await message.answer("فرمت نامعتبر")
+        await message.answer(
+            "فرمت نامعتبر است.\nمثال: <code>123456789 15 1</code>"
+        )
         return
     result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))
     user = result.scalar_one_or_none()
@@ -364,7 +372,7 @@ async def adm_ticket_view(callback: CallbackQuery, session: AsyncSession, db_use
     await callback.answer()
     lines = [f"🎫 #{ticket.id} — {ticket.subject}"]
     for m in ticket.messages[-12:]:
-        who = "استف" if m.is_staff else "کاربر"
+        who = "پشتیبانی" if m.is_staff else "کاربر"
         lines.append(f"<b>{who}:</b> {m.body}")
     await state.set_state(AdminStates.ticket_reply)
     await state.update_data(ticket_id=ticket.id)
@@ -377,7 +385,7 @@ async def adm_ticket_view(callback: CallbackQuery, session: AsyncSession, db_use
 async def adm_ticket_reply(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو")
+        await message.answer("لغو شد.", reply_markup=kb.admin_home())
         return
     data = await state.get_data()
     ticket = await session.get(Ticket, data.get("ticket_id"))
@@ -420,9 +428,7 @@ async def pg_stats(callback: CallbackQuery, db_user: BotUser):
         if callback.message:
             await callback.message.edit_text(f"خطا: {e}", reply_markup=kb.pg_admin_keyboard())
         return
-    text = "📊 <b>آمار سیستم</b>\n\n" + "\n".join(
-        f"<b>{k}</b>: {v}" for k, v in list(stats.items())[:30]
-    )
+    text = "📊 <b>آمار سیستم</b>\n\n" + format_system_stats(stats)
     if callback.message:
         await callback.message.edit_text(text[:3500], reply_markup=kb.pg_admin_keyboard())
 
@@ -447,11 +453,16 @@ async def pg_nodes(callback: CallbackQuery, db_user: BotUser):
             continue
         nid = n.get("id")
         name = n.get("name") or n.get("address") or nid
-        status = n.get("status") or n.get("connection_status") or "?"
+        status = node_status_fa(n.get("status") or n.get("connection_status"))
         lines.append(f"#{nid} {name} — {status}")
         if nid is not None:
             rows.append(
-                [InlineKeyboardButton(text=f"Reconnect #{nid}", callback_data=f"adm:pg:recon:{nid}")]
+                [
+                    InlineKeyboardButton(
+                        text=f"♻️ اتصال مجدد #{nid}",
+                        callback_data=f"adm:pg:recon:{nid}",
+                    )
+                ]
             )
     rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:pg")])
     if callback.message:
@@ -469,7 +480,7 @@ async def pg_recon(callback: CallbackQuery, db_user: BotUser):
     node_id = int(callback.data.split(":")[-1])
     try:
         await get_pg().reconnect_node(node_id)
-        await callback.answer("Reconnect ارسال شد ✅", show_alert=True)
+        await callback.answer("درخواست اتصال مجدد ارسال شد ✅", show_alert=True)
     except Exception as e:
         await callback.answer(str(e), show_alert=True)
 
@@ -489,7 +500,7 @@ async def pg_search_start(callback: CallbackQuery, state: FSMContext, db_user: B
 async def pg_search(message: Message, state: FSMContext):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو", reply_markup=kb.pg_admin_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.pg_admin_keyboard())
         return
     username = (message.text or "").strip()
     try:
@@ -503,11 +514,11 @@ async def pg_search(message: Message, state: FSMContext):
     rows = [
         [
             InlineKeyboardButton(text="♻️ ریست حجم", callback_data=f"adm:pg:reset:{uid}"),
-            InlineKeyboardButton(text="🚫 Disable", callback_data=f"adm:pg:dis:{uid}"),
+            InlineKeyboardButton(text="🚫 غیرفعال", callback_data=f"adm:pg:dis:{uid}"),
         ],
         [
-            InlineKeyboardButton(text="✅ Enable", callback_data=f"adm:pg:en:{uid}"),
-            InlineKeyboardButton(text="🔏 Revoke Sub", callback_data=f"adm:pg:rev:{uid}"),
+            InlineKeyboardButton(text="✅ فعال", callback_data=f"adm:pg:en:{uid}"),
+            InlineKeyboardButton(text="🔏 باطل‌کردن ساب", callback_data=f"adm:pg:rev:{uid}"),
         ],
         [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:pg")],
     ]
@@ -567,7 +578,7 @@ async def pg_rev(callback: CallbackQuery, db_user: BotUser):
     uid = int(callback.data.split(":")[-1])
     try:
         user = await get_pg().revoke_sub_by_id(uid)
-        await callback.answer("ساب revoke شد", show_alert=True)
+        await callback.answer("سابسکریپشن باطل شد", show_alert=True)
         if callback.message:
             await callback.message.edit_text(service_card(user), reply_markup=kb.pg_admin_keyboard())
     except Exception as e:

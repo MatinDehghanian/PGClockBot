@@ -55,6 +55,30 @@ def format_number(num: int | float | None) -> str:
         return str(num)
 
 
+def format_uptime(seconds: int | float | None) -> str:
+    if seconds is None:
+        return "—"
+    try:
+        total = int(seconds)
+    except (TypeError, ValueError):
+        return str(seconds)
+    if total < 0:
+        total = abs(total)
+    days, rem = divmod(total, 86400)
+    hours, rem = divmod(rem, 3600)
+    mins, secs = divmod(rem, 60)
+    parts: list[str] = []
+    if days:
+        parts.append(f"{days} روز")
+    if hours or days:
+        parts.append(f"{hours} ساعت")
+    if mins or not parts:
+        parts.append(f"{mins} دقیقه")
+    if not days and not hours:
+        parts.append(f"{secs} ثانیه")
+    return " و ".join(parts)
+
+
 def format_metric(key: str, value: Any) -> str:
     """Pretty-print PasarGuard / system stats by field name."""
     if value is None:
@@ -62,6 +86,12 @@ def format_metric(key: str, value: Any) -> str:
     if isinstance(value, bool):
         return "بله" if value else "خیر"
     key_l = str(key).lower()
+
+    if "uptime" in key_l and isinstance(value, (int, float)):
+        return format_uptime(value)
+    if key_l in {"cpu_usage", "cpu"} and isinstance(value, (int, float)):
+        return f"{float(value):.1f}٪".replace(".", "٫")
+
     byte_hints = (
         "traffic",
         "bandwidth",
@@ -69,6 +99,7 @@ def format_metric(key: str, value: Any) -> str:
         "upload",
         "download",
         "memory",
+        "mem_",
         "ram",
         "disk",
         "storage",
@@ -77,10 +108,10 @@ def format_metric(key: str, value: Any) -> str:
         "lifetime",
     )
     if any(h in key_l for h in byte_hints) and isinstance(value, (int, float)):
-        if "count" in key_l or "users" in key_l or "nodes" in key_l:
+        # user counts must stay numeric
+        if key_l.endswith("_users") or key_l.endswith("_user") or "count" in key_l:
             return format_number(value)
-        if abs(float(value)) >= 1024 or "traffic" in key_l or "byte" in key_l or "memory" in key_l:
-            return format_bytes(value)
+        return format_bytes(value)
     if isinstance(value, float):
         return format_number(value)
     if isinstance(value, int):
@@ -91,12 +122,21 @@ def format_metric(key: str, value: Any) -> str:
 STAT_LABELS_FA: dict[str, str] = {
     "version": "نسخه پنل",
     "started_at": "شروع سرویس",
+    "uptime": "آپ‌تایم",
+    "uptime_seconds": "آپ‌تایم",
+    "system_uptime": "آپ‌تایم سیستم",
     "mem_total": "کل حافظه",
     "mem_used": "حافظه مصرفی",
     "mem_free": "حافظه آزاد",
-    "cpu_usage": "مصرف CPU",
-    "cpu_cores": "هسته‌های CPU",
+    "memory_total": "کل حافظه",
+    "memory_used": "حافظه مصرفی",
+    "disk_total": "کل دیسک",
+    "disk_used": "دیسک مصرفی",
+    "disk_free": "دیسک آزاد",
+    "cpu_usage": "مصرف پردازنده",
+    "cpu_cores": "هسته‌های پردازنده",
     "total_user": "کل کاربران",
+    "total_users": "کل کاربران",
     "users_total": "کل کاربران",
     "active_users": "کاربران فعال",
     "users_active": "کاربران فعال",
@@ -119,7 +159,6 @@ STAT_LABELS_FA: dict[str, str] = {
     "incoming_bandwidth_speed": "سرعت ورودی",
     "outgoing_bandwidth_speed": "سرعت خروجی",
     "panel_traffic": "ترافیک پنل",
-    "system_uptime": "آپ‌تایم سیستم",
     "users_active_percentage": "درصد کاربران فعال",
 }
 
@@ -131,8 +170,6 @@ def label_stat_key(key: str) -> str:
     low = k.lower()
     if low in STAT_LABELS_FA:
         return STAT_LABELS_FA[low]
-    # snake_case → readable Persian-ish fallback
-    pretty = k.replace("_", " ").strip()
     known_bits = {
         "users": "کاربران",
         "user": "کاربر",
@@ -152,16 +189,87 @@ def label_stat_key(key: str) -> str:
         "outgoing": "خروجی",
         "memory": "حافظه",
         "mem": "حافظه",
-        "cpu": "CPU",
+        "disk": "دیسک",
+        "cpu": "پردازنده",
+        "cores": "هسته‌ها",
+        "usage": "مصرف",
         "version": "نسخه",
         "speed": "سرعت",
+        "uptime": "آپ‌تایم",
+        "seconds": "",
+        "hold": "انتظار",
+        "on": "",
+        "used": "مصرفی",
+        "free": "آزاد",
     }
     parts = [known_bits.get(p, p) for p in low.split("_") if p]
-    return " ".join(parts) if parts else pretty
+    parts = [p for p in parts if p]
+    return " ".join(parts) if parts else k.replace("_", " ")
 
 
 def format_stat_row(key: str, value: Any) -> tuple[str, str]:
     return label_stat_key(key), format_metric(key, value)
+
+
+def format_system_stats(stats: dict | Any, *, limit: int = 40) -> str:
+    """Full Persian human-readable system stats block for bot/web."""
+    if not isinstance(stats, dict):
+        return str(stats)
+    lines: list[str] = []
+    for key, val in list(stats.items())[:limit]:
+        if isinstance(val, (dict, list)):
+            continue
+        label, pretty = format_stat_row(str(key), val)
+        lines.append(f"• <b>{label}</b>: {pretty}")
+    return "\n".join(lines) if lines else "آماری نیست."
+
+
+TICKET_STATUS_FA = {
+    "open": "باز",
+    "answered": "پاسخ‌داده‌شده",
+    "closed": "بسته",
+}
+
+
+def ticket_status_fa(status: str | None) -> str:
+    if not status:
+        return "نامشخص"
+    return TICKET_STATUS_FA.get(str(status).lower(), str(status))
+
+
+ORDER_STATUS_FA = {
+    "pending": "در انتظار",
+    "awaiting_receipt": "منتظر رسید",
+    "awaiting_approval": "منتظر تأیید",
+    "paid": "پرداخت‌شده",
+    "delivered": "تحویل‌شده",
+    "rejected": "ردشده",
+    "cancelled": "لغوشده",
+}
+
+
+def order_status_fa(status: str | None) -> str:
+    if not status:
+        return "نامشخص"
+    return ORDER_STATUS_FA.get(str(status).lower(), str(status))
+
+
+NODE_STATUS_FA = {
+    "connected": "متصل",
+    "connecting": "در حال اتصال",
+    "error": "خطا",
+    "disabled": "غیرفعال",
+    "healthy": "سالم",
+    "unhealthy": "ناسالم",
+    "online": "آنلاین",
+    "offline": "آفلاین",
+}
+
+
+def node_status_fa(status: str | None) -> str:
+    if not status:
+        return "نامشخص"
+    return NODE_STATUS_FA.get(str(status).lower(), str(status))
 
 
 def format_toman(amount: int, currency: str = "تومان") -> str:

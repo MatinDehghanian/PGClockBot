@@ -15,11 +15,13 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
 from app.db.models import (
     BotUser,
     Order,
+    OrderStatus,
     Payment,
     PaymentStatus,
     Plan,
@@ -29,7 +31,7 @@ from app.db.models import (
     UserService,
 )
 from app.db.session import SessionLocal
-from app.services.orders import approve_payment, reject_payment
+from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.pasarguard import get_pg, parse_group_ids
 from app.services.resellers import make_reseller
 from app.services.users import (
@@ -43,11 +45,13 @@ from app.api.pg_pages import register_pg_pages
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
-from app.services.formatting import format_bytes, format_gb, format_number
+from app.services.formatting import format_bytes, format_gb, format_number, order_status_fa, ticket_status_fa
 
 templates.env.filters["bytes"] = format_bytes
 templates.env.filters["gb"] = format_gb
 templates.env.filters["num"] = format_number
+templates.env.filters["order_status"] = order_status_fa
+templates.env.filters["ticket_status"] = ticket_status_fa
 
 
 class NotAuthenticated(Exception):
@@ -391,10 +395,124 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        result = await session.execute(select(Order).order_by(Order.id.desc()).limit(100))
-        orders = list(result.scalars().all())
-        return render(request, "orders.html", {"staff": staff, "orders": orders},
+        result = await session.execute(
+            select(Order)
+            .options(
+                selectinload(Order.payment),
+                selectinload(Order.plan),
+                selectinload(Order.user),
+            )
+            .order_by(Order.id.desc())
+            .limit(100)
         )
+        orders = list(result.scalars().all())
+        return render(
+            request,
+            "orders.html",
+            {
+                "staff": staff,
+                "orders": orders,
+                "flash_ok": request.query_params.get("ok"),
+                "flash_err": request.query_params.get("err"),
+            },
+        )
+
+    async def _notify_order_user(session: AsyncSession, payment: Payment, order: Order | None) -> None:
+        user = await session.get(BotUser, payment.user_id)
+        if not user:
+            return
+        try:
+            from aiogram import Bot
+
+            from app.services.receipts import build_approved_user_text
+
+            text, markup = await build_approved_user_text(session, payment, order)
+            bot = Bot(token=get_settings().bot_token)
+            try:
+                await bot.send_message(user.telegram_id, text, reply_markup=markup)
+            finally:
+                await bot.session.close()
+        except Exception:
+            pass
+
+    @app.post("/orders/{order_id}/approve")
+    async def order_approve(
+        order_id: int,
+        staff: dict = Depends(require_staff),
+        session: AsyncSession = Depends(get_db),
+    ):
+        order = await session.get(Order, order_id)
+        if not order:
+            return RedirectResponse("/orders?err=سفارش یافت نشد", status_code=303)
+        if order.status == OrderStatus.DELIVERED.value:
+            return RedirectResponse("/orders?ok=قبلاً تحویل شده", status_code=303)
+
+        result = await session.execute(
+            select(Payment)
+            .where(Payment.order_id == order_id)
+            .order_by(Payment.id.desc())
+            .limit(1)
+        )
+        payment = result.scalar_one_or_none()
+        try:
+            if payment and payment.status == PaymentStatus.PENDING.value:
+                delivered = await approve_payment(session, payment, reviewer_tg=0)
+                await _notify_order_user(session, payment, delivered or order)
+            elif order.status == OrderStatus.PAID.value:
+                delivered = await deliver_order(session, order)
+                if payment:
+                    await _notify_order_user(session, payment, delivered)
+            elif payment and payment.status == PaymentStatus.APPROVED.value and order.status != OrderStatus.DELIVERED.value:
+                delivered = await deliver_order(session, order)
+                await _notify_order_user(session, payment, delivered)
+            else:
+                return RedirectResponse(
+                    "/orders?err=این سفارش هنوز قابل تأیید نیست (رسید لازم است)",
+                    status_code=303,
+                )
+        except Exception as e:
+            return RedirectResponse(f"/orders?err={e}", status_code=303)
+        return RedirectResponse("/orders?ok=سفارش تأیید و تحویل شد", status_code=303)
+
+    @app.post("/orders/{order_id}/reject")
+    async def order_reject(
+        order_id: int,
+        staff: dict = Depends(require_staff),
+        session: AsyncSession = Depends(get_db),
+    ):
+        order = await session.get(Order, order_id)
+        if not order:
+            return RedirectResponse("/orders?err=سفارش یافت نشد", status_code=303)
+        result = await session.execute(
+            select(Payment)
+            .where(Payment.order_id == order_id)
+            .order_by(Payment.id.desc())
+            .limit(1)
+        )
+        payment = result.scalar_one_or_none()
+        if payment and payment.status == PaymentStatus.PENDING.value:
+            await reject_payment(session, payment, reviewer_tg=0, note="web order reject")
+            user = await session.get(BotUser, payment.user_id)
+            if user:
+                try:
+                    from aiogram import Bot
+
+                    from app.services.formatting import format_message
+
+                    bot = Bot(token=get_settings().bot_token)
+                    try:
+                        await bot.send_message(
+                            user.telegram_id,
+                            format_message("❌ سفارش رد شد", f"سفارش #{order_id} رد شد."),
+                        )
+                    finally:
+                        await bot.session.close()
+                except Exception:
+                    pass
+        else:
+            order.status = OrderStatus.REJECTED.value
+            await session.commit()
+        return RedirectResponse("/orders?ok=سفارش رد شد", status_code=303)
 
     @app.get("/payments", response_class=HTMLResponse)
     async def payments_page(

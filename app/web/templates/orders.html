@@ -4,27 +4,62 @@
 <div class="page-head">
   <div>
     <h1>سفارش‌ها</h1>
-    <p>آخرین سفارش‌های ثبت‌شده در ربات</p>
+    <p>تأیید یا رد دستی سفارش‌های در انتظار</p>
   </div>
 </div>
 <div class="card">
+  <div class="table-wrap">
   <table>
-    <thead><tr><th>#</th><th>کاربر</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th>روش</th><th>زمان</th></tr></thead>
+    <thead>
+      <tr>
+        <th>#</th><th>کاربر</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th>روش</th><th>زمان</th><th>عملیات</th>
+      </tr>
+    </thead>
     <tbody>
     {% for o in orders %}
+      {% set pay = o.payment %}
       <tr>
         <td class="mono">{{ o.id }}</td>
-        <td>{{ o.user_id }}</td>
-        <td>{{ o.plan_id or "—" }}</td>
-        <td>{{ "{:,}".format(o.amount).replace(",", "٬") }}</td>
-        <td><span class="badge {% if o.status=='delivered' %}{% elif o.status=='pending' %}warn{% elif o.status in ['rejected','failed'] %}danger{% endif %}">{{ o.status }}</span></td>
-        <td>{{ o.payment_method or "—" }}</td>
+        <td>{% if o.user %}{{ o.user.full_name or o.user.username or o.user_id }}{% else %}{{ o.user_id }}{% endif %}</td>
+        <td>{% if o.plan %}{{ o.plan.name }}{% else %}{{ o.plan_id or "—" }}{% endif %}</td>
+        <td>{{ o.amount | num }}</td>
+        <td>
+          <span class="badge {% if o.status=='delivered' %}ok{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}warn{% elif o.status in ['rejected','cancelled','failed'] %}danger{% endif %}">
+            {{ o.status | order_status }}
+          </span>
+        </td>
+        <td>{% if o.payment_method=='card' %}کارت{% elif o.payment_method=='wallet' %}کیف پول{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
         <td class="muted">{{ o.created_at }}</td>
+        <td>
+          {% if o.status == 'delivered' %}
+            <span class="muted">تحویل شده</span>
+          {% elif o.status in ['rejected','cancelled'] %}
+            <span class="muted">—</span>
+          {% elif pay and pay.status == 'pending' %}
+            <div class="actions" style="margin:0">
+              <form method="post" action="/orders/{{ o.id }}/approve">
+                <button class="btn btn-sm" type="submit">تأیید</button>
+              </form>
+              <form method="post" action="/orders/{{ o.id }}/reject">
+                <button class="btn btn-danger btn-sm" type="submit">رد</button>
+              </form>
+            </div>
+          {% elif o.status in ['paid','awaiting_approval'] %}
+            <div class="actions" style="margin:0">
+              <form method="post" action="/orders/{{ o.id }}/approve">
+                <button class="btn btn-sm" type="submit">تأیید و تحویل</button>
+              </form>
+            </div>
+          {% else %}
+            <span class="muted">منتظر رسید</span>
+          {% endif %}
+        </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">سفارشی نیست</td></tr>
+      <tr><td colspan="8" class="muted">سفارشی نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 {% endblock %}

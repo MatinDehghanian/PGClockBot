@@ -16,7 +16,7 @@
         <td class="mono">{{ t.id }}</td>
         <td>{{ t.user_id }}</td>
         <td>{{ t.subject }}</td>
-        <td><span class="badge">{{ t.status }}</span></td>
+        <td><span class="badge">{{ t.status | ticket_status }}</span></td>
         <td class="muted">{{ t.created_at }}</td>
       </tr>
     {% else %}

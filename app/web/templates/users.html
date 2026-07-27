@@ -27,12 +27,12 @@
         <td>
           <div class="actions" style="margin:0">
             <form method="post" action="/users/{{ u.id }}/role" style="display:flex;gap:6px;align-items:center">
-              <select name="role" style="min-height:30px;margin:0;width:auto">
+              <select name="role" class="select-sm">
                 <option value="user" {% if u.role=='user' %}selected{% endif %}>کاربر</option>
                 <option value="reseller" {% if u.role=='reseller' %}selected{% endif %}>نماینده</option>
                 <option value="admin" {% if u.role=='admin' %}selected{% endif %}>مدیر</option>
               </select>
-              <button class="btn btn-ghost btn-sm" type="submit">نقش</button>
+              <button class="btn btn-sm" type="submit">اعمال نقش</button>
             </form>
             <form method="post" action="/users/{{ u.id }}/block">
               <button class="btn btn-sm {% if u.is_blocked %}{% else %}btn-danger{% endif %}" type="submit">

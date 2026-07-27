@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.config import get_settings
 from app.db.models import BotUser, Ticket
+from app.services.formatting import ticket_status_fa
 from app.services.tickets import create_ticket, get_ticket, list_user_tickets, reply_ticket
 from app.services.users import get_all_settings, get_setting
 
@@ -89,7 +90,12 @@ async def support_list(callback: CallbackQuery, session: AsyncSession, db_user: 
         from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
         rows = [
-            [InlineKeyboardButton(text=f"#{t.id} — {t.status} — {t.subject[:20]}", callback_data=f"support:view:{t.id}")]
+            [
+                InlineKeyboardButton(
+                    text=f"#{t.id} — {ticket_status_fa(t.status)} — {t.subject[:20]}",
+                    callback_data=f"support:view:{t.id}",
+                )
+            ]
             for t in tickets[:20]
         ]
         rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="support:home")])
@@ -107,7 +113,11 @@ async def support_view(callback: CallbackQuery, session: AsyncSession, db_user: 
         await callback.answer("یافت نشد", show_alert=True)
         return
     await callback.answer()
-    lines = [f"🎫 تیکت #{ticket.id} — {ticket.status}", f"<b>{ticket.subject}</b>", ""]
+    lines = [
+        f"🎫 تیکت #{ticket.id} — {ticket_status_fa(ticket.status)}",
+        f"<b>{ticket.subject}</b>",
+        "",
+    ]
     for m in ticket.messages[-10:]:
         who = "پشتیبانی" if m.is_staff else "شما"
         lines.append(f"<b>{who}:</b> {m.body}")

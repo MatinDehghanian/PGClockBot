@@ -71,7 +71,7 @@
           <tr>
             <td class="mono">{{ o.id }}</td>
             <td class="mono">{{ o.amount | num }}</td>
-            <td><span class="badge">{{ o.status }}</span></td>
+            <td><span class="badge">{{ o.status | order_status }}</span></td>
           </tr>
         {% endfor %}
         </tbody>

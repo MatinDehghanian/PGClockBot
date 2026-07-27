@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
-  <title>{% block title %}پنل مدیریت{% endblock %} · PGClock</title>
+  <title>{% block title %}پنل مدیریت{% endblock %} · کلاک بات</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/panel.css" />
+  <link rel="stylesheet" href="/static/panel.css?v=orange-rtl3" />
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
   {% block head %}{% endblock %}
 </head>
@@ -17,7 +17,7 @@
   {% set path = request.url.path %}
   {% set pg_open = path.startswith('/pg') %}
   {% set people_open = path.startswith('/users') or path.startswith('/resellers') or path.startswith('/menu-layout') or path.startswith('/settings') %}
-  {% set shop_open = path == '/dashboard' or path.startswith('/plans') or path.startswith('/orders') or path.startswith('/payments') or path.startswith('/tickets') or (not pg_open and not people_open) %}
+  {% set shop_open = path.startswith('/plans') or path.startswith('/orders') or path.startswith('/payments') or path.startswith('/tickets') %}
   <div class="shell">
     <header class="topbar">
       <button type="button" class="menu-toggle" id="menu-toggle" aria-label="منو" aria-expanded="false">
@@ -25,31 +25,34 @@
       </button>
       <div class="topbar-brand">
         <img src="/static/logo.svg" alt="" />
-        <strong>کلاک</strong>
+        <strong>کلاک بات</strong>
       </div>
       <a class="btn btn-ghost btn-sm" href="/payments">پرداخت‌ها</a>
     </header>
 
     <aside class="side" id="sidebar">
       <div class="brand">
-        <img src="/static/logo.svg" alt="PGClock" />
+        <img src="/static/logo.svg" alt="کلاک بات" />
         <div>
-          <strong>کلاک پنل</strong>
+          <strong>کلاک بات</strong>
           <small>{{ staff.username }} · {% if staff.role == 'admin' %}مدیر{% elif staff.role == 'reseller' %}نماینده{% else %}{{ staff.role }}{% endif %}</small>
         </div>
       </div>
 
       <div class="side-nav">
+        <div class="nav-standalone">
+          <a href="/dashboard" class="nav-link {% if path=='/dashboard' %}active{% endif %}">
+            <span class="nav-ico c1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+            داشبورد
+          </a>
+        </div>
+
         <details class="nav-group" {% if shop_open %}open{% endif %}>
           <summary class="nav-summary">
             <span class="nav-summary-text">فروشگاه</span>
             <span class="nav-chevron" aria-hidden="true"></span>
           </summary>
           <nav class="nav-body">
-            <a href="/dashboard" class="{% if path=='/dashboard' %}active{% endif %}">
-              <span class="nav-ico c1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
-              داشبورد
-            </a>
             <a href="/plans" class="{% if path.startswith('/plans') %}active{% endif %}">
               <span class="nav-ico c2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4.5L19 21l-7-4-7 4 2.5-7.5L2 9h7z"/></svg></span>
               پلن‌ها
@@ -141,9 +144,20 @@
 
     <div class="side-backdrop" id="side-backdrop"></div>
     <main class="main">
-      {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
-      {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
-      {% block content %}{% endblock %}
+      <div class="main-body">
+        {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+        {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+        {% block content %}{% endblock %}
+      </div>
+      <footer class="site-footer">
+        <div class="footer-meta">
+          <span>© ۲۰۲۶ کلاک بات — همه حقوق محفوظ است</span>
+          <a href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener noreferrer">github.com/Mrclocks/PGClockBot</a>
+        </div>
+        <div class="footer-actions">
+          <a class="btn btn-sm btn-star" href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener noreferrer">⭐ ستاره به پروژه</a>
+        </div>
+      </footer>
     </main>
   </div>
   <script>
