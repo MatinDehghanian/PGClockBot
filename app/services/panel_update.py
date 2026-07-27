@@ -210,17 +210,85 @@ def _restart_service() -> tuple[bool, str]:
     return False, "systemd موجود نیست — سرویس را دستی ری‌استارت کنید"
 
 
-def _git_bin() -> str:
-    git = _which("git")
-    if not git:
-        raise RuntimeError(
-            "دستور git روی سرور پیدا نشد. با دسترسی root نصب کنید: apt install -y git"
-        )
+def _git_bin() -> str | None:
+    return _which("git")
+
+
+def _ensure_git() -> str | None:
+    """Locate git; if missing and we are root, try apt install once."""
+    git = _git_bin()
+    if git:
+        return git
+    try:
+        is_root = hasattr(os, "geteuid") and os.geteuid() == 0
+    except Exception:
+        is_root = False
+    if not is_root:
+        return None
+    apt = _which("apt-get")
+    if not apt:
+        return None
+    _append_log("git پیدا نشد — تلاش برای نصب با apt…")
+    code, out = _run([apt, "install", "-y", "git"], timeout=300)
+    if code != 0:
+        _append_log((out or "apt install git ناموفق")[:200])
+        return None
+    git = _git_bin()
+    if git:
+        _append_log(f"git نصب شد: {git}")
     return git
+
+
+def _update_via_archive(root: Path) -> None:
+    """Download main branch zip from GitHub and overlay onto install dir."""
+    import tempfile
+    import zipfile
+    from urllib.error import URLError, HTTPError
+    from urllib.request import Request, urlopen
+
+    from app.version import GITHUB_REPO
+
+    url = f"https://github.com/{GITHUB_REPO}/archive/refs/heads/main.zip"
+    _append_log("آپدیت از طریق آرشیو گیت‌هاب…")
+    req = Request(url, headers={"User-Agent": "PGClockBot-Panel-Update"})
+    try:
+        with urlopen(req, timeout=120) as resp:
+            data = resp.read()
+    except (URLError, HTTPError, TimeoutError, OSError) as e:
+        raise RuntimeError(f"دانلود آرشیو ناموفق: {e}") from e
+    if not data or len(data) < 1000:
+        raise RuntimeError("آرشیو دانلودشده خالی یا ناقص است")
+
+    preserve_top = {".env", "data", ".venv", ".git"}
+    with tempfile.TemporaryDirectory(prefix="pgclock-upd-") as tmp:
+        zpath = Path(tmp) / "src.zip"
+        zpath.write_bytes(data)
+        with zipfile.ZipFile(zpath, "r") as zf:
+            zf.extractall(tmp)
+        extracted = [p for p in Path(tmp).iterdir() if p.is_dir() and p.name != "__MACOSX"]
+        if not extracted:
+            raise RuntimeError("محتوای آرشیو پیدا نشد")
+        src = extracted[0]
+        copied = 0
+        for path in src.rglob("*"):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(src)
+            if rel.parts and rel.parts[0] in preserve_top:
+                continue
+            if rel.parts and str(rel.parts[0]).startswith(".env.bak"):
+                continue
+            dest = root / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, dest)
+            copied += 1
+        _append_log(f"تعداد فایل به‌روز شده: {copied}")
 
 
 def _git_head() -> tuple[str, str]:
     git = _git_bin()
+    if not git:
+        return "", "main"
     root = _repo_root()
     code, sha = _run([git, "rev-parse", "HEAD"], cwd=root)
     sha = (sha or "").strip()
@@ -344,16 +412,19 @@ def _do_update(target_version: str | None) -> None:
         _set_step("prepare", "شروع آپدیت…")
         _append_log(f"root={root}")
 
-        git = _git_bin()
-        _append_log(f"git={git}")
+        git = _ensure_git()
+        if git:
+            _append_log(f"git={git}")
+        else:
+            _append_log("git در دسترس نیست — از آرشیو zip استفاده می‌شود")
 
         _set_step("backup", "ثبت نقطه بازگشت + پشتیبان .env")
-        snap = create_snapshot(reason="before_update")
+        snap = create_snapshot(reason="before_update") if git else None
         if snap:
             write_status({"snapshot_id": snap["id"]})
             _append_log(f"نقطه بازگشت ذخیره شد: {snap['label']}")
         else:
-            _append_log("هشدار: نتوانستیم نقطه بازگشت git بسازیم")
+            _append_log("هشدار: نقطه بازگشت git ساخته نشد")
 
         env_path = root / ".env"
         if env_path.exists():
@@ -361,53 +432,60 @@ def _do_update(target_version: str | None) -> None:
             shutil.copy2(env_path, bak)
             _append_log(f"پشتیبان env: {bak.name}")
 
-        if not (root / ".git").exists():
-            raise RuntimeError(
-                f"مخزن git در مسیر پیدا نشد: {root}\n"
-                "نصب باید با git clone انجام شده باشد."
-            )
-
-        _set_step("fetch", "git fetch…")
-        code, out = _run([git, "fetch", "--all", "--tags"], cwd=root, timeout=180)
-        if out:
-            _append_log(out.splitlines()[-1][:200])
-        if code != 0:
-            raise RuntimeError(f"git fetch ناموفق: {out[:300]}")
-
-        _set_step("pull", "دریافت کد (origin/main)…")
-        _, branch = _run([git, "rev-parse", "--abbrev-ref", "HEAD"], cwd=root)
-        branch = (branch or "main").strip() or "main"
-        if branch == "HEAD":
-            branch = "main"
-        code, out = _run([git, "pull", "--ff-only", "origin", branch], cwd=root, timeout=180)
-        if code != 0:
-            _append_log("ff-only ناموفق — همگام‌سازی با origin/main")
-            code2, out2 = _run(
-                [git, "checkout", "-f", "-B", "main", "origin/main"], cwd=root, timeout=120
-            )
-            if code2 != 0:
-                raise RuntimeError(f"checkout main ناموفق: {out2[:300]}")
-            code3, out3 = _run([git, "reset", "--hard", "origin/main"], cwd=root, timeout=120)
-            if code3 != 0:
-                raise RuntimeError(f"reset ناموفق: {out3[:300]}")
-            _run(
-                [
-                    git,
-                    "clean",
-                    "-fd",
-                    "--exclude=.env",
-                    "--exclude=data",
-                    "--exclude=.venv",
-                    "--exclude=.env.bak.*",
-                ],
-                cwd=root,
-                timeout=60,
-            )
-            _append_log("کد با origin/main همگام شد")
-        else:
-            _append_log(f"کد به‌روز شد ({branch})")
+        use_git = bool(git and (root / ".git").exists())
+        if use_git:
+            _set_step("fetch", "git fetch…")
+            code, out = _run([git, "fetch", "--all", "--tags"], cwd=root, timeout=180)
             if out:
                 _append_log(out.splitlines()[-1][:200])
+            if code != 0:
+                _append_log(f"git fetch ناموفق — سوییچ به zip: {(out or '')[:160]}")
+                use_git = False
+            else:
+                _set_step("pull", "دریافت کد (origin/main)…")
+                _, branch = _run([git, "rev-parse", "--abbrev-ref", "HEAD"], cwd=root)
+                branch = (branch or "main").strip() or "main"
+                if branch == "HEAD":
+                    branch = "main"
+                code, out = _run([git, "pull", "--ff-only", "origin", branch], cwd=root, timeout=180)
+                if code != 0:
+                    _append_log("ff-only ناموفق — همگام‌سازی با origin/main")
+                    code2, out2 = _run(
+                        [git, "checkout", "-f", "-B", "main", "origin/main"], cwd=root, timeout=120
+                    )
+                    if code2 != 0:
+                        _append_log(f"checkout ناموفق — سوییچ به zip: {(out2 or '')[:160]}")
+                        use_git = False
+                    else:
+                        code3, out3 = _run([git, "reset", "--hard", "origin/main"], cwd=root, timeout=120)
+                        if code3 != 0:
+                            _append_log(f"reset ناموفق — سوییچ به zip: {(out3 or '')[:160]}")
+                            use_git = False
+                        else:
+                            _run(
+                                [
+                                    git,
+                                    "clean",
+                                    "-fd",
+                                    "--exclude=.env",
+                                    "--exclude=data",
+                                    "--exclude=.venv",
+                                    "--exclude=.env.bak.*",
+                                ],
+                                cwd=root,
+                                timeout=60,
+                            )
+                            _append_log("کد با origin/main همگام شد")
+                else:
+                    _append_log(f"کد به‌روز شد ({branch})")
+                    if out:
+                        _append_log(out.splitlines()[-1][:200])
+
+        if not use_git:
+            _set_step("fetch", "دانلود نسخه جدید…")
+            _update_via_archive(root)
+            _set_step("pull", "اعمال فایل‌ها…")
+            _append_log("کد از آرشیو گیت‌هاب اعمال شد")
 
         _set_step("deps", "نصب پکیج‌های پایتون…")
         code, out = _pip_install()
@@ -443,7 +521,11 @@ def _do_rollback(snapshot_id: str) -> None:
             raise RuntimeError("نقطه بازگشت پیدا نشد")
         sha = snap["sha"]
         root = _repo_root()
-        git = _git_bin()
+        git = _ensure_git()
+        if not git:
+            raise RuntimeError(
+                "برای بازگشت به نسخه قبلی به git نیاز است. نصب کنید: apt install -y git"
+            )
         write_status(
             {
                 "state": "running",
@@ -460,6 +542,7 @@ def _do_rollback(snapshot_id: str) -> None:
         )
         _set_step("prepare", f"شروع بازگشت به {snap.get('label')}")
         _append_log(f"root={root}")
+        _append_log(f"git={git}")
 
         if not (root / ".git").exists():
             raise RuntimeError(f"مخزن git پیدا نشد: {root}")
@@ -538,6 +621,18 @@ def _start_thread(target, *args) -> dict[str, Any]:
     return {"ok": True, "status": read_status()}
 
 
+def clear_idle_status(*, keep_if_update: bool = False) -> dict[str, Any]:
+    """Hide stale logs/progress when there is nothing to show."""
+    st = read_status()
+    if st.get("state") == "running":
+        return st
+    if keep_if_update and st.get("state") == "error":
+        return st
+    if st.get("state") in {"idle", None} and not st.get("log") and not st.get("error"):
+        return st
+    return write_status(_default_status())
+
+
 def start_update(target_version: str | None = None) -> dict[str, Any]:
     return _start_thread(_do_update, target_version)
 
@@ -550,8 +645,18 @@ def start_rollback(snapshot_id: str) -> dict[str, Any]:
 
 async def update_page_context() -> dict[str, Any]:
     info = await check_github_update()
+    available = bool(info.get("update_available"))
     status = read_status()
+    # When up-to-date and idle/error leftover: don't show old logs/progress
+    if status.get("state") != "running" and not available:
+        if status.get("state") in {"error", "done"} or status.get("log"):
+            status = clear_idle_status()
     snaps = list_snapshots()
+    show_ops = bool(
+        available
+        or status.get("state") in {"running", "error", "done"}
+        or (status.get("log") and status.get("state") != "idle")
+    )
     return {
         "update_info": info,
         "status": status,
@@ -559,4 +664,5 @@ async def update_page_context() -> dict[str, Any]:
         "steps": [{"key": k, "label": lab, "percent": pct} for k, lab, pct in STEPS],
         "snapshots": snaps,
         "can_rollback": bool(snaps),
+        "show_ops": show_ops,
     }
