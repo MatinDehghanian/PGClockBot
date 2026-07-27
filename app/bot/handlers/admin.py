@@ -208,7 +208,31 @@ async def plan_toggle(callback: CallbackQuery, session: AsyncSession, db_user: B
     plan.is_active = not plan.is_active
     await session.commit()
     await callback.answer("بروز شد")
-    await adm_plans(callback, session, db_user)
+    result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
+    plans = list(result.scalars().all())
+    lines = ["📦 <b>پلن‌ها</b>\n"]
+    for p in plans:
+        flag = "✅" if p.is_active else "⏸"
+        lines.append(
+            f"{flag} #{p.id} {p.name} — {format_toman(p.price, get_settings().currency)} "
+            f"| {p.duration_days}d | tpl={p.pg_template_id or '-'}"
+        )
+    rows = [[InlineKeyboardButton(text="➕ پلن جدید", callback_data="adm:plan:add")]]
+    for p in plans[:10]:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{'⏸' if p.is_active else '▶️'} #{p.id}",
+                    callback_data=f"adm:plan:toggle:{p.id}",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")])
+    if callback.message:
+        await callback.message.edit_text(
+            "\n".join(lines) or "پلنی نیست",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
 
 
 @router.callback_query(F.data == "adm:settings")
@@ -333,11 +357,11 @@ async def adm_ticket_view(callback: CallbackQuery, session: AsyncSession, db_use
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
-    await callback.answer()
     ticket = await get_ticket(session, int(callback.data.split(":")[-1]))
     if not ticket:
         await callback.answer("یافت نشد", show_alert=True)
         return
+    await callback.answer()
     lines = [f"🎫 #{ticket.id} — {ticket.subject}"]
     for m in ticket.messages[-12:]:
         who = "استف" if m.is_staff else "کاربر"

@@ -17,6 +17,7 @@ from app.db.session import SessionLocal, init_db
 from app.jobs.scheduler import start_scheduler
 from app.services.pasarguard import get_pg
 from app.services.users import ensure_default_settings
+from app.services.web_auth import load_web_admin
 
 logging.basicConfig(
     level=logging.INFO,
@@ -136,7 +137,20 @@ def main() -> None:
             await dp.feed_update(bot, update)
             return {"ok": True}
 
-    logger.info("Web panel on http://%s:%s", settings.web_host, settings.web_port)
+    # Ensure web panel credentials exist (migrate from .env if needed)
+    creds = load_web_admin()
+    if not creds.get("password"):
+        logger.error(
+            "Web panel password missing. Run: python scripts/set_web_password.py"
+        )
+    else:
+        logger.info(
+            "Web panel login ready · user=%s · http://%s:%s/login · /health",
+            creds["username"],
+            settings.web_host,
+            settings.web_port,
+        )
+
     uvicorn.run(api, host=settings.web_host, port=settings.web_port, log_level="info")
 
 

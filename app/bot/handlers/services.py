@@ -42,13 +42,13 @@ async def svc_list(callback: CallbackQuery, session: AsyncSession, db_user: BotU
 
 @router.callback_query(F.data.startswith("svc:view:"))
 async def svc_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    await callback.answer()
     ui = await get_all_settings(session)
     svc_id = int(callback.data.split(":")[-1])
     svc = await session.get(UserService, svc_id)
     if not svc or svc.bot_user_id != db_user.id:
         await callback.answer("یافت نشد", show_alert=True)
         return
+    await callback.answer()
     text = f"🔹 <b>{svc.pg_username}</b>"
     if svc.subscription_token:
         try:
@@ -62,13 +62,13 @@ async def svc_view(callback: CallbackQuery, session: AsyncSession, db_user: BotU
 
 @router.callback_query(F.data.startswith("svc:link:"))
 async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    await callback.answer()
     ui = await get_all_settings(session)
     svc_id = int(callback.data.split(":")[-1])
     svc = await session.get(UserService, svc_id)
     if not svc or svc.bot_user_id != db_user.id:
         await callback.answer("یافت نشد", show_alert=True)
         return
+    await callback.answer()
     text = f"🔗 لینک سابسکریپشن:\n<code>{svc.subscription_url or '—'}</code>"
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.service_actions(svc.id, ui))
@@ -76,7 +76,6 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
 
 @router.callback_query(F.data.startswith("svc:renew:"))
 async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    await callback.answer()
     ui = await get_all_settings(session)
     svc_id = int(callback.data.split(":")[-1])
     svc = await session.get(UserService, svc_id)
@@ -87,6 +86,7 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if not plans:
         await callback.answer("پلنی نیست", show_alert=True)
         return
+    await callback.answer()
     rows = [
         [
             InlineKeyboardButton(
@@ -113,7 +113,6 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 
 @router.callback_query(F.data.startswith("svc:renewpay:"))
 async def svc_renew_pay(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    await callback.answer()
     ui = await get_all_settings(session)
     _, _, svc_id, plan_id = callback.data.split(":")
     svc = await session.get(UserService, int(svc_id))
@@ -137,6 +136,7 @@ async def svc_renew_pay(callback: CallbackQuery, session: AsyncSession, db_user:
         await callback.answer(str(e), show_alert=True)
         return
 
+    await callback.answer()
     if pay_wallet:
         text = f"✅ تمدید با کیف پول انجام شد.\nسفارش #{order.id}"
         if callback.message:

@@ -38,6 +38,20 @@ def _reply_message(event: TelegramObject) -> Message | None:
     return None
 
 
+def _extract_start_payload(event: TelegramObject) -> str | None:
+    text = None
+    if isinstance(event, Message) and event.text:
+        text = event.text
+    elif isinstance(event, Update) and event.message and event.message.text:
+        text = event.message.text
+    if not text:
+        return None
+    parts = text.strip().split(maxsplit=1)
+    if len(parts) == 2 and parts[0].startswith("/start"):
+        return parts[1].strip()
+    return None
+
+
 class DbSessionMiddleware(BaseMiddleware):
     async def __call__(
         self,
@@ -60,12 +74,17 @@ class UserMiddleware(BaseMiddleware):
         session: AsyncSession = data["session"]
         tg_user = _extract_from_user(event)
         if tg_user:
+            referred_by_code = None
+            payload = _extract_start_payload(event)
+            if payload and payload.startswith("ref_"):
+                referred_by_code = payload[4:].strip()
             try:
                 user = await get_or_create_user(
                     session,
                     tg_user.id,
                     username=tg_user.username,
                     full_name=tg_user.full_name,
+                    referred_by_code=referred_by_code,
                 )
             except Exception:
                 logger.exception("Failed to load/create bot user tg_id=%s", tg_user.id)

@@ -85,6 +85,8 @@ async def create_order(
 
 
 async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
+    if order.status == OrderStatus.DELIVERED.value:
+        return order
     if order.amount > 0:
         await debit_wallet(session, user, order.amount, f"خرید سفارش #{order.id}")
     order.payment_method = PaymentMethod.WALLET.value
@@ -99,7 +101,14 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     session.add(payment)
     await session.commit()
     await session.refresh(order)
-    return await deliver_order(session, order)
+    try:
+        return await deliver_order(session, order)
+    except Exception:
+        if order.amount > 0:
+            await credit_wallet(session, user, order.amount, f"برگشت خرید ناموفق #{order.id}")
+        order.status = OrderStatus.PENDING.value
+        await session.commit()
+        raise
 
 
 async def start_card_payment(session: AsyncSession, order: Order, user_id: int) -> Payment:
@@ -131,6 +140,15 @@ async def attach_receipt(session: AsyncSession, payment: Payment, file_id: str) 
 
 
 async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: int) -> Order | None:
+    if payment.status == PaymentStatus.APPROVED.value:
+        if payment.is_wallet_topup:
+            return None
+        if payment.order_id:
+            return await session.get(Order, payment.order_id)
+        return None
+    if payment.status != PaymentStatus.PENDING.value:
+        raise ValueError("این پرداخت قابل تأیید نیست")
+
     payment.status = PaymentStatus.APPROVED.value
     payment.reviewed_by = reviewer_tg
     if payment.is_wallet_topup:
@@ -143,6 +161,9 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
     if not order:
         await session.commit()
         return None
+    if order.status == OrderStatus.DELIVERED.value:
+        await session.commit()
+        return order
     order.status = OrderStatus.PAID.value
     await session.commit()
     # Renewal orders extend existing service instead of creating a new panel user.
@@ -294,21 +315,28 @@ async def renew_service_with_plan(
     await session.refresh(order)
 
     if pay_wallet:
-        if order.amount > 0:
-            await debit_wallet(session, user, order.amount, f"تمدید سفارش #{order.id}")
-        order.payment_method = PaymentMethod.WALLET.value
-        order.status = OrderStatus.PAID.value
-        session.add(
-            Payment(
-                order_id=order.id,
-                user_id=user_id,
-                amount=order.amount,
-                method=PaymentMethod.WALLET.value,
-                status=PaymentStatus.APPROVED.value,
+        try:
+            if order.amount > 0:
+                await debit_wallet(session, user, order.amount, f"تمدید سفارش #{order.id}")
+            order.payment_method = PaymentMethod.WALLET.value
+            order.status = OrderStatus.PAID.value
+            session.add(
+                Payment(
+                    order_id=order.id,
+                    user_id=user_id,
+                    amount=order.amount,
+                    method=PaymentMethod.WALLET.value,
+                    status=PaymentStatus.APPROVED.value,
+                )
             )
-        )
-        await session.commit()
-        return await apply_renewal(session, order, service, plan)
+            await session.commit()
+            return await apply_renewal(session, order, service, plan)
+        except Exception:
+            if order.amount > 0 and order.status == OrderStatus.PAID.value:
+                await credit_wallet(session, user, order.amount, f"برگشت تمدید ناموفق #{order.id}")
+            order.status = OrderStatus.PENDING.value
+            await session.commit()
+            raise
 
     await start_card_payment(session, order, user_id)
     await session.refresh(order)

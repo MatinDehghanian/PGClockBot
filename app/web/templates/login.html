@@ -5,9 +5,9 @@
     <h1>ورود به پنل</h1>
     <p class="lead">مدیریت فروش PGClockBot</p>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
-    <form method="post" action="/login">
+    <form method="post" action="/login" autocomplete="on">
       <label>نام کاربری
-        <input name="username" required autocomplete="username" />
+        <input name="username" value="{{ hint_user or 'admin' }}" required autocomplete="username" autofocus />
       </label>
       <label>رمز عبور
         <input name="password" type="password" required autocomplete="current-password" />
@@ -15,7 +15,8 @@
       <button class="btn" type="submit">ورود</button>
     </form>
     <p class="lead" style="margin-top:18px;font-size:12px">
-      ادمین: از .env — نماینده: آیدی تلگرام / کد دعوت
+      اگر رمز را فراموش کردید روی سرور بزنید:<br/>
+      <code>python scripts/set_web_password.py</code>
     </p>
   </div>
 </div>

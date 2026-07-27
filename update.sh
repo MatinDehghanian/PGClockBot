@@ -53,6 +53,14 @@ pip install -U pip wheel -q
 pip install -r requirements.txt -q
 ok "Dependencies up to date"
 
+# Migrate web login to data/web_admin.json if missing (old installs)
+mkdir -p data
+"$SCRIPT_DIR/.venv/bin/python" - <<'PY' || true
+from app.services.web_auth import AUTH_FILE, load_web_admin
+creds = load_web_admin()
+print(f"web_admin={creds.get('username')} file={AUTH_FILE.exists()}")
+PY
+
 # Ensure .env still present after pull
 if [[ ! -f .env ]]; then
   LATEST_BAK="$(ls -1t .env.bak.* 2>/dev/null | head -n1 || true)"

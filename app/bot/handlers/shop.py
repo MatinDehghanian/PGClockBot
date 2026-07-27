@@ -51,13 +51,13 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 
 @router.callback_query(F.data.startswith("shop:plan:"))
 async def shop_plan(callback: CallbackQuery, session: AsyncSession):
-    await callback.answer()
     ui = await get_all_settings(session)
     plan_id = int(callback.data.split(":")[-1])
     plan = await get_plan(session, plan_id)
     if not plan:
         await callback.answer("پلن پیدا نشد", show_alert=True)
         return
+    await callback.answer()
     limit = f"{plan.data_limit_gb:g} GB" if plan.data_limit_gb is not None else "نامحدود"
     text = (
         f"💎 <b>{plan.name}</b>\n\n"
@@ -139,7 +139,6 @@ async def apply_discount_msg(
 
 @router.callback_query(F.data.startswith("pay:wallet:"))
 async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    await callback.answer()
     ui = await get_all_settings(session)
     order_id = int(callback.data.split(":")[-1])
     order = await session.get(Order, order_id)
@@ -155,6 +154,7 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
         await callback.answer(f"خطا در تحویل: {e}", show_alert=True)
         return
 
+    await callback.answer()
     svc = await session.get(UserService, order.service_id) if order.service_id else None
     try:
         text = ui["purchase_success_text"].format(order_id=order.id)
@@ -173,13 +173,13 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
 
 @router.callback_query(F.data.startswith("pay:card:"))
 async def pay_card_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    await callback.answer()
     ui = await get_all_settings(session)
     order_id = int(callback.data.split(":")[-1])
     order = await session.get(Order, order_id)
     if not order or order.user_id != db_user.id:
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
+    await callback.answer()
     payment = await start_card_payment(session, order, db_user.id)
     amount = format_toman(order.amount, get_settings().currency)
     try:

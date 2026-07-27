@@ -67,6 +67,7 @@ async def cmd_start(
         await message.answer(
             f"برای استفاده، ابتدا در کانال {channel} عضو شوید سپس دوباره /start بزنید."
         )
+        return
     await render_home(message, session, db_user)
 
 

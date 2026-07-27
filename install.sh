@@ -33,29 +33,46 @@ ART
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# ask PROMPT [DEFAULT]
-# If DEFAULT is provided (even empty string with ask_opt), empty Enter uses default.
+# ask PROMPT
+# ask PROMPT DEFAULT   (Enter keeps default; empty DEFAULT is allowed = optional)
 ask() {
   local prompt="$1"
-  local default="${2-__REQUIRED__}"
+  local has_default=0
+  local default=""
+  if [[ $# -ge 2 ]]; then
+    has_default=1
+    default="$2"
+  fi
   local var
-  if [[ "$default" == "__REQUIRED__" ]]; then
+  if [[ "$has_default" -eq 0 ]]; then
     while true; do
-      read -r -p "  ${B}${prompt}${N}: " var
-      if [[ -n "$var" ]]; then
-        echo "$var"
+      read -r -p "  ${B}${prompt}${N}: " var || true
+      if [[ -n "${var}" ]]; then
+        printf '%s\n' "$var"
         return
       fi
       err "This field is required."
     done
   else
     if [[ -n "$default" ]]; then
-      read -r -p "  ${B}${prompt}${N} ${D}[${default}]${N}: " var
+      read -r -p "  ${B}${prompt}${N} ${D}[${default}]${N}: " var || true
     else
-      read -r -p "  ${B}${prompt}${N} ${D}[optional — press Enter to skip]${N}: " var
+      read -r -p "  ${B}${prompt}${N} ${D}[press Enter to skip]${N}: " var || true
     fi
-    echo "${var:-$default}"
+    if [[ -z "${var}" ]]; then
+      printf '%s\n' "$default"
+    else
+      printf '%s\n' "$var"
+    fi
   fi
+}
+
+ask_optional() {
+  # Always optional — empty Enter returns empty string
+  local prompt="$1"
+  local var=""
+  read -r -p "  ${B}${prompt}${N} ${D}[press Enter to skip]${N}: " var || true
+  printf '%s\n' "${var}"
 }
 
 ask_secret() {
@@ -205,7 +222,7 @@ payload = {
     "WEB_SECRET": os.environ["WEB_SECRET"],
     "WEB_ADMIN_USER": os.environ["WEB_ADMIN_USER"],
     "WEB_ADMIN_PASSWORD": os.environ["WEB_ADMIN_PASSWORD"],
-    "DATABASE_URL": "sqlite+aiosqlite:///./data/bot.db",
+    "DATABASE_URL": f"sqlite+aiosqlite:///{Path.cwd() / 'data' / 'bot.db'}",
     "WEBHOOK_URL": "",
     "WEBHOOK_PATH": "/telegram/webhook",
     "PUBLIC_BASE_URL": os.environ.get("PUBLIC_BASE_URL", ""),
@@ -250,7 +267,7 @@ WEB_ADMIN_PASSWORD="$(ask_password "Web panel password")"
 WEB_SECRET="$(gen_secret)"
 
 step "4/7  Optional"
-PUBLIC_BASE_URL="$(ask "Public HTTPS URL for Mini App" "")"
+PUBLIC_BASE_URL="$(ask_optional "Public HTTPS URL for Mini App")"
 CURRENCY="$(ask "Currency label" "تومان")"
 
 step "5/7  Python packages"
@@ -269,32 +286,34 @@ ok "Python dependencies installed"
 step "6/7  Configuration file"
 write_env
 mkdir -p data
-ok ".env written safely · data/ ready"
 
-# Verify password round-trip (never prints the password)
-CHECK="$("$PY" - <<PY
-from app.config import get_settings
-get_settings.cache_clear()
-s = get_settings()
-expect_user = ${WEB_ADMIN_USER@Q}
-expect_pass = ${WEB_ADMIN_PASSWORD@Q}
-ok_user = (s.web_admin_user == expect_user)
-ok_pass = (s.web_admin_password == expect_pass)
-ok_bot = bool(s.bot_token and s.admin_ids)
-print(s.web_admin_user)
-print("OK" if ok_user and ok_pass and ok_bot else "FAIL")
-print(",".join(str(i) for i in s.admin_ids))
-print("user_match=" + str(ok_user))
-print("pass_match=" + str(ok_pass))
+# Save web login to dedicated JSON (bulletproof — not fragile .env parsing)
+WEB_ADMIN_USER="$WEB_ADMIN_USER" WEB_ADMIN_PASSWORD="$WEB_ADMIN_PASSWORD" "$PY" - <<'PY'
+import os, sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd()))
+from app.services.web_auth import save_web_admin
+print(save_web_admin(os.environ["WEB_ADMIN_USER"], os.environ["WEB_ADMIN_PASSWORD"]))
+PY
+ok ".env + data/web_admin.json written"
+
+CHECK="$(
+  WEB_ADMIN_USER="$WEB_ADMIN_USER" WEB_ADMIN_PASSWORD="$WEB_ADMIN_PASSWORD" "$PY" - <<'PY'
+from app.services.web_auth import load_web_admin, verify_web_admin
+import os
+creds = load_web_admin()
+ok = verify_web_admin(os.environ["WEB_ADMIN_USER"], os.environ["WEB_ADMIN_PASSWORD"])
+print(creds["username"])
+print("OK" if ok else "FAIL")
 PY
 )"
 mapfile -t CHECK_LINES <<< "$CHECK"
 if [[ "${CHECK_LINES[1]:-}" != "OK" ]]; then
-  err "Config self-check failed (${CHECK_LINES[3]:-} ${CHECK_LINES[4]:-})."
-  err "Try: python scripts/set_web_password.py"
+  err "Web login self-check failed."
   exit 1
 fi
-ok "Config OK · web user=${CHECK_LINES[0]} · admin_ids=${CHECK_LINES[2]}"
+ok "Web login OK · username=${CHECK_LINES[0]}"
+ok "Open: http://SERVER_IP:${WEB_PORT}/login"
 
 step "7/7  systemd (optional)"
 INSTALL_SERVICE="$(ask "Enable systemd service now? (y/N)" "N")"

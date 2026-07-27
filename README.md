@@ -84,18 +84,24 @@ sudo systemctl restart pgclockbot
 
 ---
 
-## اگر وب‌پنل «رمز اشتباه» می‌گوید
+## اگر وب‌پنل «رمز اشتباه» می‌گوید یا وارد نمی‌شوید
 
-بدون نصب دوباره، رمز را ریست کنید:
+ورود وب از فایل جداگانه `data/web_admin.json` خوانده می‌شود (نه فقط `.env`).
 
-```bash
-cd PGClockBot
-source .venv/bin/activate
-python scripts/set_web_password.py
-sudo systemctl restart pgclockbot
-```
-
-یا `./install.sh` را دوباره اجرا کنید (نسخه جدید `.env` را با Python می‌نویسد).
+1. سلامت پنل را چک کنید:
+   ```bash
+   curl http://127.0.0.1:9000/health
+   ```
+   باید `"ok": true` و `"admin_username"` را ببینید.
+2. رمز را ریست کنید:
+   ```bash
+   cd PGClockBot
+   source .venv/bin/activate
+   python scripts/set_web_password.py
+   sudo systemctl restart pgclockbot
+   ```
+3. فایروال را باز کنید: `sudo ufw allow 9000/tcp`
+4. آدرس درست: `http://IP_SERVER:9000/login` (نه دامنه پاسارگارد)
 
 ---
 

@@ -29,11 +29,11 @@ async def res_stats(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if db_user.role != Role.RESELLER.value:
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
-    await callback.answer()
     profile = await get_reseller_profile(session, db_user.id)
     if not profile:
         await callback.answer("پروفایل نیست", show_alert=True)
         return
+    await callback.answer()
     text = (
         "📊 <b>وضعیت نماینده</b>\n\n"
         f"کمیسیون: {profile.commission_percent}%\n"

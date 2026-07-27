@@ -101,12 +101,12 @@ async def support_list(callback: CallbackQuery, session: AsyncSession, db_user: 
 
 @router.callback_query(F.data.startswith("support:view:"))
 async def support_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
-    await callback.answer()
     ticket_id = int(callback.data.split(":")[-1])
     ticket = await get_ticket(session, ticket_id)
     if not ticket or ticket.user_id != db_user.id:
         await callback.answer("یافت نشد", show_alert=True)
         return
+    await callback.answer()
     lines = [f"🎫 تیکت #{ticket.id} — {ticket.status}", f"<b>{ticket.subject}</b>", ""]
     for m in ticket.messages[-10:]:
         who = "پشتیبانی" if m.is_staff else "شما"

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qsl
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
+from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -25,7 +25,6 @@ from app.db.models import (
     Plan,
     ResellerProfile,
     Role,
-    Setting,
     Ticket,
     UserService,
 )
@@ -35,14 +34,21 @@ from app.services.pasarguard import get_pg
 from app.services.resellers import make_reseller
 from app.services.users import (
     SETTING_GROUPS,
-    ensure_default_settings,
     get_all_settings,
-    get_setting,
     set_setting,
 )
+from app.services.web_auth import load_web_admin, verify_web_admin
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
+
+
+class NotAuthenticated(Exception):
+    pass
+
+
+class NotAdmin(Exception):
+    pass
 
 
 def render(request: Request, name: str, context: dict | None = None, status_code: int = 200):
@@ -51,10 +57,12 @@ def render(request: Request, name: str, context: dict | None = None, status_code
 
 
 def create_api_app(lifespan=None) -> FastAPI:
-    settings = get_settings()
     app = FastAPI(title="PGClockBot Panel", docs_url=None, redoc_url=None, lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
-    signer = URLSafeSerializer(settings.web_secret, salt="pgclock-session")
+
+    def get_signer() -> URLSafeSerializer:
+        settings = get_settings()
+        return URLSafeSerializer(settings.web_secret or "pgclock-secret", salt="pgclock-session")
 
     async def get_db():
         async with SessionLocal() as session:
@@ -65,33 +73,54 @@ def create_api_app(lifespan=None) -> FastAPI:
         if not cookie:
             return None
         try:
-            return signer.loads(cookie)
+            return get_signer().loads(cookie)
         except BadSignature:
             return None
 
     def require_staff(request: Request) -> dict:
         user = get_session_user(request)
         if not user or user.get("role") not in {"admin", "reseller"}:
-            raise HTTPException(status_code=401, detail="unauthorized")
+            raise NotAuthenticated()
         return user
 
     def require_admin(request: Request) -> dict:
         user = require_staff(request)
         if user.get("role") != "admin":
-            raise HTTPException(status_code=403, detail="admin only")
+            raise NotAdmin()
         return user
+
+    @app.exception_handler(NotAuthenticated)
+    async def _unauth(request: Request, exc: NotAuthenticated):
+        return RedirectResponse("/login", status_code=303)
+
+    @app.exception_handler(NotAdmin)
+    async def _not_admin(request: Request, exc: NotAdmin):
+        return RedirectResponse("/dashboard", status_code=303)
+
+    @app.get("/health")
+    async def health():
+        creds = load_web_admin()
+        return {
+            "ok": True,
+            "web_panel": True,
+            "admin_user_configured": bool(creds.get("username") and creds.get("password")),
+            "admin_username": creds.get("username") or None,
+        }
 
     @app.get("/", response_class=HTMLResponse)
     async def root(request: Request):
         user = get_session_user(request)
         if not user:
-            return RedirectResponse("/login", status_code=302)
-        return RedirectResponse("/dashboard", status_code=302)
+            return RedirectResponse("/login", status_code=303)
+        return RedirectResponse("/dashboard", status_code=303)
 
     @app.get("/login", response_class=HTMLResponse)
     async def login_page(request: Request):
-        return render(request, "login.html", {"error": None},
-        )
+        if get_session_user(request):
+            return RedirectResponse("/dashboard", status_code=303)
+        creds = load_web_admin()
+        hint = creds.get("username") or "admin"
+        return render(request, "login.html", {"error": None, "hint_user": hint})
 
     @app.post("/login")
     async def login_submit(
@@ -100,52 +129,57 @@ def create_api_app(lifespan=None) -> FastAPI:
         password: str = Form(...),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.config import _clean_str, get_settings
-
-        get_settings.cache_clear()
-        settings = get_settings()
         role = None
-        display = username.strip()
-        u = _clean_str(username)
-        p = _clean_str(password)
-        expected_user = _clean_str(settings.web_admin_user)
-        expected_pass = _clean_str(settings.web_admin_password)
-        if u == expected_user and p == expected_pass and expected_user:
+        display = (username or "").strip()
+        u = display
+        p = password or ""
+
+        if verify_web_admin(u, p):
             role = "admin"
+            display = load_web_admin()["username"]
         else:
-            # reseller login: username=telegram_id password=referral_code
             try:
                 tg_id = int(u)
             except ValueError:
                 tg_id = None
             if tg_id is not None:
                 result = await session.execute(
-                    select(BotUser).where(BotUser.telegram_id == tg_id, BotUser.role == Role.RESELLER.value)
+                    select(BotUser).where(
+                        BotUser.telegram_id == tg_id,
+                        BotUser.role == Role.RESELLER.value,
+                    )
                 )
                 ru = result.scalar_one_or_none()
                 if ru and p == (ru.referral_code or ""):
                     role = "reseller"
                     display = ru.full_name or str(tg_id)
+
         if not role:
             return render(
                 request,
                 "login.html",
-                {"error": "نام کاربری یا رمز عبور اشتباه است"},
+                {
+                    "error": "نام کاربری یا رمز عبور اشتباه است. اگر تازه نصب کرده‌اید: python scripts/set_web_password.py",
+                    "hint_user": load_web_admin().get("username") or "admin",
+                },
                 status_code=400,
             )
-        resp = RedirectResponse("/dashboard", status_code=302)
+
+        resp = RedirectResponse("/dashboard", status_code=303)
         resp.set_cookie(
             "session",
-            signer.dumps({"role": role, "username": display}),
+            get_signer().dumps({"role": role, "username": display}),
             httponly=True,
             samesite="lax",
+            max_age=60 * 60 * 24 * 7,
+            path="/",
         )
         return resp
 
     @app.get("/logout")
     async def logout():
-        resp = RedirectResponse("/login", status_code=302)
-        resp.delete_cookie("session")
+        resp = RedirectResponse("/login", status_code=303)
+        resp.delete_cookie("session", path="/")
         return resp
 
     @app.get("/dashboard", response_class=HTMLResponse)
