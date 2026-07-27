@@ -20,19 +20,23 @@ R=$'\033[0;31m'; G=$'\033[0;32m'; C=$'\033[0;36m'
 Y=$'\033[1;33m'; B=$'\033[1;37m'; D=$'\033[2m'; N=$'\033[0m'
 BOLD=$'\033[1m'
 
-info()  { printf '  %s>%s %s\n' "$C" "$N" "$*"; }
-ok()    { printf '  %s+%s %s\n' "$G" "$N" "$*"; }
-warn()  { printf '  %s!%s %s\n' "$Y" "$N" "$*"; }
-err()   { printf '  %sx%s %s\n' "$R" "$N" "$*" >&2; }
-step()  { printf '\n%s%s-- %s --%s\n\n' "$BOLD" "$C" "$*" "$N"; }
-pause() { echo ""; printf '  Press Enter to continue... '; read -r _ || true; }
+info()  { printf '  %s>%s %s\n' "$C" "$N" "$*" > /dev/tty; }
+ok()    { printf '  %s+%s %s\n' "$G" "$N" "$*" > /dev/tty; }
+warn()  { printf '  %s!%s %s\n' "$Y" "$N" "$*" > /dev/tty; }
+err()   { printf '  %sx%s %s\n' "$R" "$N" "$*" > /dev/tty; }
+step()  { printf '\n%s%s-- %s --%s\n\n' "$BOLD" "$C" "$*" "$N" > /dev/tty; }
+pause() {
+  printf '\n  Press Enter to continue... ' > /dev/tty
+  read -r _ < /dev/tty || true
+}
 
 prompt_read() {
-  # prompt_read VAR "colored prompt text"
+  # Always talk to the real terminal — prompts must NOT go to stdout
+  # (values are captured with VAR="$(ask ...)")
   local __var="$1"
   shift
-  printf '%b' "$*"
-  read -r "$__var" || true
+  printf '%b' "$*" > /dev/tty
+  read -r "$__var" < /dev/tty || true
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -86,9 +90,9 @@ ask_secret() {
   local prompt="$1"
   local var
   while true; do
-    printf '  %b: ' "${B}${prompt}${N}"
-    read -r -s var || true
-    echo ""
+    printf '  %b: ' "${B}${prompt}${N}" > /dev/tty
+    read -r -s var < /dev/tty || true
+    printf '\n' > /dev/tty
     # strip accidental CR / leading-trailing whitespace from paste
     var="${var//$'\r'/}"
     var="${var#"${var%%[![:space:]]*}"}"
@@ -186,22 +190,24 @@ print_success() {
   port="$(env_get WEB_PORT "${WEB_PORT:-9000}")"
   ip="$(detect_server_ip)"
   user="$(web_username)"
-  echo ""
-  printf '%s==========================================%s\n' "$G" "$N"
-  printf '%s  SUCCESS · %s%s\n' "$G" "$title" "$N"
-  printf '%s==========================================%s\n' "$G" "$N"
-  printf '  Web panel:  %shttp://%s:%s/login%s\n' "$B" "$ip" "$port" "$N"
-  printf '  Health:     %shttp://127.0.0.1:%s/health%s\n' "$B" "$port" "$N"
-  printf '  Username:   %s%s%s\n' "$B" "$user" "$N"
-  if [[ $# -gt 0 ]]; then
+  {
     echo ""
-    local line
-    for line in "$@"; do
-      printf '  %b\n' "$line"
-    done
-  fi
-  printf '%s==========================================%s\n' "$G" "$N"
-  echo ""
+    printf '%s==========================================%s\n' "$G" "$N"
+    printf '%s  SUCCESS · %s%s\n' "$G" "$title" "$N"
+    printf '%s==========================================%s\n' "$G" "$N"
+    printf '  Web panel:  %shttp://%s:%s/login%s\n' "$B" "$ip" "$port" "$N"
+    printf '  Health:     %shttp://127.0.0.1:%s/health%s\n' "$B" "$port" "$N"
+    printf '  Username:   %s%s%s\n' "$B" "$user" "$N"
+    if [[ $# -gt 0 ]]; then
+      echo ""
+      local line
+      for line in "$@"; do
+        printf '  %b\n' "$line"
+      done
+    fi
+    printf '%s==========================================%s\n' "$G" "$N"
+    echo ""
+  } > /dev/tty
 }
 
 require_ubuntu_22_plus() {
@@ -714,39 +720,50 @@ cmd_service() {
 
 cmd_uninstall() {
   banner_small "Uninstall"
-  warn "This removes the systemd service and can wipe local runtime files."
-  if ! ask_yn "Continue uninstall?" "N"; then
+  warn "FULL uninstall removes EVERYTHING for this bot:"
+  warn "  systemd service, running processes, .venv, data, .env, backups,"
+  warn "  and the entire project folder: ${SCRIPT_DIR}"
+  if ! ask_yn "Continue full uninstall?" "N"; then
     info "Cancelled."
     return 0
   fi
 
-  if service_installed; then
-    info "Stopping service..."
+  # Stop & remove systemd
+  if service_installed || [[ -f "$SERVICE_PATH" ]]; then
+    info "Stopping systemd service..."
     sudo_wrap systemctl disable --now "$SERVICE_NAME" 2>/dev/null || true
     sudo_wrap rm -f "$SERVICE_PATH"
-    sudo_wrap systemctl daemon-reload
+    sudo_wrap systemctl daemon-reload 2>/dev/null || true
     ok "systemd unit removed"
   else
     info "No systemd unit found."
   fi
 
-  if ask_yn "Also delete .venv, data/, and .env?" "N"; then
-    rm -rf .venv data
-    [[ -f .env ]] && mv .env ".env.removed.$(date +%Y%m%d%H%M%S)"
-    ok "Local runtime files removed (project code kept)"
-  else
-    ok "Service removed. Project files kept."
+  # Kill leftover bot processes from this install
+  info "Stopping leftover processes..."
+  pkill -f "${SCRIPT_DIR}/.venv/bin/python .*run.py" 2>/dev/null || true
+  pkill -f "python .*${SCRIPT_DIR}/run.py" 2>/dev/null || true
+  # free web port if still held
+  local port
+  port="$(env_get WEB_PORT 9000)"
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -k "${port}/tcp" 2>/dev/null || true
   fi
 
-  echo ""
-  echo -e "${G}==========================================${N}"
-  echo -e "${G}  SUCCESS · Uninstall complete${N}"
-  echo -e "${G}==========================================${N}"
-  echo -e "  To remove the whole folder:"
-  echo -e "    ${C}cd .. && rm -rf PGClockBot${N}"
-  echo -e "${G}==========================================${N}"
-  echo ""
-  return 0
+  local root="$SCRIPT_DIR"
+  info "Deleting project folder: ${root}"
+  cd / || cd "$HOME" || true
+  rm -rf "$root"
+
+  printf '\n' > /dev/tty
+  printf '%s==========================================%s\n' "$G" "$N" > /dev/tty
+  printf '%s  SUCCESS · Full uninstall complete%s\n' "$G" "$N" > /dev/tty
+  printf '%s==========================================%s\n' "$G" "$N" > /dev/tty
+  printf '  Removed: %s\n' "$root" > /dev/tty
+  printf '  Reinstall:\n' > /dev/tty
+  printf '    bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)\n' > /dev/tty
+  printf '%s==========================================%s\n\n' "$G" "$N" > /dev/tty
+  exit 0
 }
 
 cmd_status() {
@@ -809,39 +826,44 @@ EOF
 
 # ── UI ──────────────────────────────────────────────────
 banner() {
-  # Screen is cleared in show_menu(); keep banner simple
-  printf '%s\n' "$C"
-  cat <<'ART'
+  {
+    printf '%s\n' "$C"
+    cat <<'ART'
    ==========================================
             P G C l o c k B o t
         PasarGuard Telegram Shop CLI
    ==========================================
 ART
-  printf '%s\n' "$N"
-  printf '  %sUbuntu 22.04+  ·  English  ·  One command for everything%s\n' "$D" "$N"
-  echo ""
+    printf '%s\n' "$N"
+    printf '  %sUbuntu 22.04+  ·  English  ·  One command for everything%s\n' "$D" "$N"
+    echo ""
+  } > /dev/tty
 }
 
 banner_small() {
-  echo ""
-  printf '%s==========================================%s\n' "$C" "$N"
-  printf '%s  PGClockBot · %s%s\n' "$B" "$*" "$N"
-  printf '%s==========================================%s\n' "$C" "$N"
-  echo ""
+  {
+    echo ""
+    printf '%s==========================================%s\n' "$C" "$N"
+    printf '%s  PGClockBot · %s%s\n' "$B" "$*" "$N"
+    printf '%s==========================================%s\n' "$C" "$N"
+    echo ""
+  } > /dev/tty
 }
 
 show_menu() {
-  clear 2>/dev/null || printf '\033c'
+  clear > /dev/tty 2>/dev/null || printf '\033c' > /dev/tty
   banner
-  printf '  %s1)%s Install        Fresh setup (bot + web panel)\n' "$B" "$N"
-  printf '  %s2)%s Update         Pull latest code (keep .env)\n' "$B" "$N"
-  printf '  %s3)%s Edit .env      Change tokens / panel / ports\n' "$B" "$N"
-  printf '  %s4)%s Web panel      URL, password reset, health\n' "$B" "$N"
-  printf '  %s5)%s Service        Status / restart / logs\n' "$B" "$N"
-  printf '  %s6)%s Status         Quick health overview\n' "$B" "$N"
-  printf '  %s7)%s Uninstall      Remove service (optional wipe)\n' "$B" "$N"
-  printf '  %s0)%s Exit\n' "$B" "$N"
-  echo ""
+  {
+    printf '  %s1)%s Install        Fresh setup (bot + web panel)\n' "$B" "$N"
+    printf '  %s2)%s Update         Pull latest code (keep .env)\n' "$B" "$N"
+    printf '  %s3)%s Edit .env      Change tokens / panel / ports\n' "$B" "$N"
+    printf '  %s4)%s Web panel      URL, password reset, health\n' "$B" "$N"
+    printf '  %s5)%s Service        Status / restart / logs\n' "$B" "$N"
+    printf '  %s6)%s Status         Quick health overview\n' "$B" "$N"
+    printf '  %s7)%s Uninstall      Remove EVERYTHING (full wipe)\n' "$B" "$N"
+    printf '  %s0)%s Exit\n' "$B" "$N"
+    echo ""
+  } > /dev/tty
 }
 
 run_menu() {
