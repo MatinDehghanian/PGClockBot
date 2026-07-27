@@ -564,12 +564,26 @@ def create_api_app(lifespan=None) -> FastAPI:
             from aiogram import Bot
 
             from app.services.delivery import send_delivery_to_user
+            from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok
 
             bot = Bot(token=get_settings().bot_token)
             try:
                 await send_delivery_to_user(
                     bot, user.telegram_id, session, payment, order
                 )
+                if payment.is_wallet_topup:
+                    await notify_wallet_topup_ok(bot, session, payment, user.telegram_id)
+                elif order:
+                    plan = await session.get(Plan, order.plan_id) if order.plan_id else None
+                    await notify_new_subscription(
+                        bot,
+                        session,
+                        order=order,
+                        user_tg_id=user.telegram_id,
+                        user_name=user.full_name or user.username,
+                        plan_name=plan.name if plan else None,
+                        needs_approval=False,
+                    )
             finally:
                 await bot.session.close()
         except Exception:
@@ -695,12 +709,26 @@ def create_api_app(lifespan=None) -> FastAPI:
                 from aiogram import Bot
 
                 from app.services.delivery import send_delivery_to_user
+                from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok
 
                 bot = Bot(token=get_settings().bot_token)
                 try:
                     await send_delivery_to_user(
                         bot, user.telegram_id, session, payment, order
                     )
+                    if payment.is_wallet_topup:
+                        await notify_wallet_topup_ok(bot, session, payment, user.telegram_id)
+                    elif order:
+                        plan = await session.get(Plan, order.plan_id) if order.plan_id else None
+                        await notify_new_subscription(
+                            bot,
+                            session,
+                            order=order,
+                            user_tg_id=user.telegram_id,
+                            user_name=user.full_name or user.username,
+                            plan_name=plan.name if plan else None,
+                            needs_approval=False,
+                        )
                 finally:
                     await bot.session.close()
             except Exception:
@@ -921,6 +949,110 @@ def create_api_app(lifespan=None) -> FastAPI:
         for key in ("wallet", "support", "guide", "faq", "referral", "miniapp", "services"):
             await set_setting(session, f"show_{key}", "1" if key in order else "0")
         return RedirectResponse("/menu-layout?saved=1", status_code=303)
+
+    @app.get("/update", response_class=HTMLResponse)
+    async def update_page(
+        request: Request,
+        staff: dict = Depends(require_admin),
+    ):
+        from app.services.panel_update import update_page_context
+        from app.services.updates import check_github_update, clear_update_cache
+
+        if request.query_params.get("force") == "1":
+            clear_update_cache()
+            await check_github_update(force=True)
+        ctx = await update_page_context()
+        return render(
+            request,
+            "update.html",
+            {
+                "staff": staff,
+                **ctx,
+            },
+        )
+
+    @app.get("/update/status")
+    async def update_status(staff: dict = Depends(require_admin)):
+        from app.services.panel_update import read_status
+        from app.services.updates import local_version
+
+        st = read_status()
+        st["current_version"] = local_version()
+        return st
+
+    @app.post("/update/start")
+    async def update_start(
+        request: Request,
+        staff: dict = Depends(require_admin),
+    ):
+        from app.services.panel_update import start_update
+        from app.services.updates import check_github_update, clear_update_cache
+
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        clear_update_cache()
+        info = await check_github_update(force=True)
+        target = (body or {}).get("target") or info.get("remote_version")
+        if not info.get("update_available") and not (body or {}).get("force"):
+            from app.services.panel_update import read_status
+
+            st = read_status()
+            if st.get("state") != "error":
+                return {"ok": False, "error": "نسخه جدیدی برای آپدیت نیست", "info": info}
+        result = start_update(target_version=target)
+        return result
+
+    @app.post("/update/rollback")
+    async def update_rollback(
+        request: Request,
+        staff: dict = Depends(require_admin),
+    ):
+        from app.services.panel_update import start_rollback
+
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        snapshot_id = str((body or {}).get("snapshot_id") or "").strip()
+        if not snapshot_id:
+            return {"ok": False, "error": "نقطه بازگشت مشخص نشده"}
+        return start_rollback(snapshot_id)
+
+    @app.get("/notifications", response_class=HTMLResponse)
+    async def notifications_page(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.notifications import NOTIFY_PREFS, get_notify_prefs
+
+        prefs = await get_notify_prefs(session)
+        return render(
+            request,
+            "notifications.html",
+            {
+                "staff": staff,
+                "prefs": prefs,
+                "items": NOTIFY_PREFS,
+                "flash_ok": "ذخیره شد." if request.query_params.get("saved") == "1" else None,
+            },
+        )
+
+    @app.post("/notifications")
+    async def notifications_save(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.notifications import save_notify_prefs
+
+        form = await request.form()
+        await save_notify_prefs(session, dict(form))
+        return RedirectResponse("/notifications?saved=1", status_code=303)
 
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(

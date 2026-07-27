@@ -1,40 +1,47 @@
 {% extends "base.html" %}
 {% from "macros.html" import ord_status, pay_status %}
-{% block title %}داشبورد{% endblock %}
+{% block title %}خانه{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>داشبورد</h1>
-    <p>خلاصه فروش، پرداخت‌ها و دسترسی سریع</p>
+    <h1>خانه</h1>
+    <p>نمای کلی فروش و دسترسی سریع به بخش‌های مهم</p>
   </div>
   <div class="version-box">
     <span class="ver-num">نسخه {{ update.version }}</span>
     <span class="ver-badge {{ update.tone }}">{{ update.label }}</span>
-    {% if update.update_available and update.remote_version %}
-    <span class="muted" style="font-size:11px">ریموت: {{ update.remote_version }}</span>
-    {% endif %}
   </div>
 </div>
 
+{% if update.update_available %}
+<div class="flash err" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between">
+  <div>
+    <strong>آپدیت جدید آماده است</strong>
+    <span class="muted"> — نسخه {{ update.version }} → {{ update.remote_version }}</span>
+  </div>
+  <a class="btn btn-sm" href="/update">مشاهده و آپدیت</a>
+</div>
+{% endif %}
+
 <div class="stats-grid">
-  <div class="stat"><span>کاربران بات</span><strong>{{ stats.users | num }}</strong></div>
+  <div class="stat"><span>کاربران</span><strong>{{ stats.users | num }}</strong></div>
   <div class="stat"><span>سفارش‌ها</span><strong>{{ stats.orders | num }}</strong></div>
-  <div class="stat"><span>سرویس‌های فعال</span><strong>{{ stats.services | num }}</strong></div>
+  <div class="stat"><span>سرویس‌ها</span><strong>{{ stats.services | num }}</strong></div>
   <div class="stat"><span>رسید معلق</span><strong>{{ stats.pending | num }}</strong></div>
-  <div class="stat"><span>درآمد تحویل‌شده</span><strong>{{ stats.revenue | num }}</strong></div>
+  <div class="stat"><span>درآمد</span><strong>{{ stats.revenue | num }}</strong></div>
 </div>
 
 <div class="card">
-  <h2>میانبرها</h2>
+  <h2>دسترسی سریع</h2>
   <div class="quick-links">
     <a href="/payments">پرداخت‌ها{% if stats.pending %} ({{ stats.pending }}){% endif %}</a>
-    <a href="/plans">پلن‌ها ({{ stats.plans | num }})</a>
     <a href="/orders">سفارش‌ها</a>
     <a href="/tickets">تیکت‌ها{% if stats.tickets %} ({{ stats.tickets }}){% endif %}</a>
     {% if staff.role == 'admin' %}
-    <a href="/pg">مدیر پاسارگارد</a>
-    <a href="/menu-layout">دکمه‌های بات</a>
-    <a href="/users">کاربران</a>
+    <a href="/plans">پلن‌ها</a>
+    <a href="/update">آپدیت{% if update.update_available %} ⬆{% endif %}</a>
+    <a href="/notifications">نوتیفیکیشن</a>
+    <a href="/pg">پاسارگارد</a>
     <a href="/settings">تنظیمات</a>
     {% endif %}
   </div>

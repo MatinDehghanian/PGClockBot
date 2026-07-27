@@ -50,13 +50,15 @@ async def svc_view(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         await callback.answer("یافت نشد", show_alert=True)
         return
     await callback.answer()
-    text = f"🔹 <b>{svc.pg_username}</b>"
+    from app.services.formatting import format_message
+
+    text = format_message("📦 سرویس", f"🔹 <b>{svc.pg_username}</b>")
     if svc.subscription_token:
         try:
             info = await get_pg().subscription_info(svc.subscription_token)
-            text = service_card(info)
+            text = format_message("📦 سرویس شما", service_card(info))
         except Exception as e:
-            text += f"\nخطا در دریافت وضعیت: {e}"
+            text = format_message("📦 سرویس", f"🔹 <b>{svc.pg_username}</b>\n\nخطا در دریافت وضعیت: {e}")
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.service_actions(svc.id, ui))
 
@@ -75,11 +77,25 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         return
     await callback.answer()
     url = svc.subscription_url or ""
+    sub_info = None
+    if svc.subscription_token:
+        try:
+            sub_info = await get_pg().subscription_info(svc.subscription_token)
+        except Exception:
+            sub_info = None
     parts = ["🔗 لینک و QR اشتراک"]
     if url and on(ui.get("show_sub_link_in_text", "1")):
         parts.append(f"<code>{url}</code>")
     elif not url:
         parts.append("لینک موجود نیست.")
+    if isinstance(sub_info, dict):
+        from app.services.formatting import format_bytes, format_expire
+
+        parts.append(
+            f"📦 حجم: <b>{format_bytes(sub_info.get('used_traffic'))} از "
+            f"{format_bytes(sub_info.get('data_limit'))}</b>"
+        )
+        parts.append(f"⏱ زمان: <b>{format_expire(sub_info.get('expire'))}</b>")
     text = format_message("📱 اشتراک", "\n\n".join(parts))
     if callback.message:
         try:
@@ -87,7 +103,14 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         except Exception:
             await callback.message.answer(text, reply_markup=kb.service_actions(svc.id, ui))
     if url:
-        await send_subscription_qr_photo(callback.bot, db_user.telegram_id, url, ui)
+        await send_subscription_qr_photo(
+            callback.bot,
+            db_user.telegram_id,
+            url,
+            ui,
+            info=sub_info if isinstance(sub_info, dict) else None,
+            username=svc.pg_username,
+        )
 
 
 @router.callback_query(F.data.startswith("svc:renew:"))

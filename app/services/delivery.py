@@ -9,7 +9,7 @@ from aiogram.types import BufferedInputFile, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Payment, UserService
-from app.services.formatting import format_message, format_toman, service_card
+from app.services.formatting import format_message, format_toman, info_block, kv_line, service_card
 from app.bot import keyboards as kb
 from app.config import get_settings
 from app.services.pasarguard import get_pg
@@ -22,11 +22,12 @@ async def build_delivery_content(
     payment: Payment | None,
     order,
 ) -> dict[str, Any]:
-    """Build title/body/markup/url for a successful delivery."""
+    """Build title/body/markup/url/info for a successful delivery."""
     ui = await get_all_settings(session)
     markup = kb.back_home(ui)
     title = ui.get("delivery_title") or "✅ سرویس آماده است"
     sub_url = None
+    sub_info: dict | None = None
     body_parts: list[str] = []
 
     if order and order.service_id:
@@ -41,13 +42,21 @@ async def build_delivery_content(
         if svc and svc.subscription_token:
             try:
                 info = await get_pg().subscription_info(svc.subscription_token)
+                sub_info = info if isinstance(info, dict) else None
                 body_parts.append(service_card(info))
             except Exception:
                 if svc.pg_username:
                     body_parts.append(f"👤 <b>{svc.pg_username}</b>")
             sub_url = svc.subscription_url
             if sub_url and on(ui.get("show_sub_link_in_text", "1")):
-                body_parts.append(f"🔗 لینک اشتراک:\n<code>{sub_url}</code>")
+                body_parts.append(
+                    info_block(
+                        [
+                            "🔗 <b>لینک اشتراک</b>",
+                            f"<code>{sub_url}</code>",
+                        ]
+                    )
+                )
             markup = kb.service_actions(svc.id, ui)
         body = "\n\n".join(body_parts)
         return {
@@ -55,6 +64,7 @@ async def build_delivery_content(
             "text": format_message(title, body),
             "markup": markup,
             "sub_url": sub_url,
+            "sub_info": sub_info,
             "ui": ui,
         }
 
@@ -76,16 +86,23 @@ async def build_delivery_content(
             "text": format_message(title, body),
             "markup": markup,
             "sub_url": None,
+            "sub_info": None,
             "ui": ui,
         }
 
     title = ui.get("payment_ok_title") or "✅ پرداخت تأیید شد"
-    body = f"پرداخت #{payment.id if payment else '—'} تأیید شد."
+    body = info_block(
+        [
+            kv_line("🧾", "پرداخت", f"#{payment.id if payment else '—'}"),
+            kv_line("✅", "وضعیت", "تأیید شد"),
+        ]
+    )
     return {
         "title": title,
         "text": format_message(title, body),
         "markup": markup,
         "sub_url": None,
+        "sub_info": None,
         "ui": ui,
     }
 
@@ -106,18 +123,20 @@ async def send_delivery_to_user(
     markup: InlineKeyboardMarkup | None = payload["markup"]
     ui = payload["ui"]
     sub_url = payload["sub_url"]
+    sub_info = payload.get("sub_info")
 
     try:
         await bot.send_message(chat_id, text, reply_markup=markup)
     except Exception:
-        # fallback without markup
         try:
             await bot.send_message(chat_id, text)
         except Exception:
             pass
 
     if sub_url:
-        await send_subscription_qr_photo(bot, chat_id, sub_url, ui)
+        await send_subscription_qr_photo(
+            bot, chat_id, sub_url, ui, info=sub_info
+        )
 
     return text
 
@@ -127,27 +146,38 @@ async def send_subscription_qr_photo(
     chat_id: int,
     sub_url: str,
     ui: dict[str, str] | None = None,
+    *,
+    info: dict | None = None,
+    data_limit: float | int | None = None,
+    expire: Any = None,
+    username: str | None = None,
 ) -> bool:
-    """Send QR photo for a subscription URL. Returns True if sent."""
+    """Send QR photo for a subscription URL with full caption. Returns True if sent."""
     if not sub_url:
         return False
     ui = ui or {}
     if ui and not on(ui.get("qr_enabled", "1")):
         return False
     try:
+        from app.services.notifications import build_qr_caption
+
         buf = make_subscription_qr(
             sub_url,
             background=(ui.get("qr_background") if ui else None) or None,
         )
-        caption = (ui.get("qr_caption") if ui else None) or "📱 QR اشتراک — با دوربین اسکن کنید"
-        try:
-            caption = caption.format(url=sub_url)
-        except Exception:
-            pass
+        caption = build_qr_caption(
+            sub_url=sub_url,
+            ui=ui,
+            info=info,
+            data_limit=data_limit,
+            expire=expire,
+            username=username,
+        )
         await bot.send_photo(
             chat_id,
             photo=BufferedInputFile(buf.read(), filename="subscription_qr.png"),
             caption=caption[:1024],
+            parse_mode="HTML",
         )
         return True
     except Exception:

@@ -329,33 +329,46 @@ def status_label(status: str | None) -> str:
     return STATUS_FA.get(status.lower(), status)
 
 
+def kv_line(emoji: str, label: str, value: str) -> str:
+    """One labeled row for Telegram HTML cards."""
+    return f"{emoji} <b>{label}:</b> {value}"
+
+
+def info_block(lines: list[str]) -> str:
+    """Join info rows with comfortable spacing."""
+    clean = [ln.strip() for ln in lines if ln and str(ln).strip()]
+    return "\n".join(clean)
+
+
 def service_card(info: dict, currency_note: str = "") -> str:
     username = info.get("username", "—")
     status = status_label(info.get("status"))
     used = info.get("used_traffic") or 0
     limit = info.get("data_limit")
     expire = format_expire(info.get("expire"))
+    bar = progress_bar(float(used), float(limit) if limit else None)
     lines = [
         f"👤 <b>{username}</b>",
-        f"وضعیت: {status}",
-        f"📦 حجم: {format_bytes(used)} از {format_bytes(limit)}",
-        progress_bar(float(used), float(limit) if limit else None),
-        f"📅 انقضا: {expire}",
+        "",
+        kv_line("📶", "وضعیت", status),
+        kv_line("📦", "حجم", f"{format_bytes(used)} از {format_bytes(limit)}"),
+        f"<code>{bar}</code>",
+        kv_line("📅", "انقضا", f"<b>{expire}</b>"),
     ]
     if currency_note:
-        lines.append(currency_note)
+        lines.extend(["", currency_note])
     online = info.get("online_at")
     if online:
-        lines.append(f"⏱ آخرین آنلاین: {format_expire(online)}")
+        lines.append(kv_line("⏱", "آخرین آنلاین", format_expire(online)))
     return "\n".join(lines)
 
 
 def format_message(title: str, body: str = "") -> str:
-    """Clean Telegram HTML card — title + body, no noisy separators."""
+    """Pretty Telegram HTML card — bold title, soft divider, spaced body."""
     title = (title or "").strip()
     body = (body or "").strip()
     if not body:
         return f"<b>{title}</b>" if title else ""
     if not title:
         return body
-    return f"<b>{title}</b>\n\n{body}"
+    return f"<b>{title}</b>\n┄┄┄┄┄┄┄┄┄┄\n{body}"

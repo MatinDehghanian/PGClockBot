@@ -7,9 +7,8 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
-from app.config import get_settings
 from app.db.models import BotUser, Ticket
-from app.services.formatting import ticket_status_fa
+from app.services.formatting import format_message, ticket_status_fa
 from app.services.tickets import create_ticket, get_ticket, list_user_tickets, reply_ticket
 from app.services.users import get_all_settings, get_setting
 
@@ -29,7 +28,7 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
     text = ui.get("support_text") or await get_setting(session, "support_text")
     if callback.message:
         await callback.message.edit_text(
-            f"🎧 <b>پشتیبانی</b>\n\n{text}",
+            format_message("🎧 پشتیبانی", text),
             reply_markup=kb.support_keyboard(ui),
         )
 
@@ -68,15 +67,22 @@ async def support_body(message: Message, state: FSMContext, session: AsyncSessio
         message.text or "",
         db_user.telegram_id,
     )
-    await message.answer(f"تیکت #{ticket.id} ثبت شد ✅", reply_markup=kb.back_home())
-    for admin_id in get_settings().admin_ids:
-        try:
-            await message.bot.send_message(
-                admin_id,
-                f"🎫 تیکت جدید #{ticket.id}\nاز: {db_user.full_name}\n{ticket.subject}",
-            )
-        except Exception:
-            pass
+    await message.answer(
+        format_message("✅ تیکت ثبت شد", f"تیکت <b>#{ticket.id}</b> با موفقیت ثبت شد.\nبه‌زودی پاسخ می‌دهیم."),
+        reply_markup=kb.back_home(),
+    )
+    try:
+        from app.services.notifications import notify_new_ticket
+
+        await notify_new_ticket(
+            message.bot,
+            session,
+            ticket_id=ticket.id,
+            subject=ticket.subject,
+            user_name=db_user.full_name or db_user.username,
+        )
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data == "support:list")

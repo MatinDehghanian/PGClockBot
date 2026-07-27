@@ -28,9 +28,16 @@ class WalletStates(StatesGroup):
 async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
     ui = await get_all_settings(session)
+    from app.services.formatting import info_block, kv_line
+
     text = format_message(
         "👛 کیف پول",
-        f"موجودی فعلی:\n<b>{format_toman(db_user.wallet_balance, get_settings().currency)}</b>",
+        info_block(
+            [
+                kv_line("💵", "موجودی", f"<b>{format_toman(db_user.wallet_balance, get_settings().currency)}</b>"),
+                "<i>می‌توانید شارژ کنید یا از موجودی برای خرید استفاده کنید.</i>",
+            ]
+        ),
     )
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.wallet_keyboard(ui))

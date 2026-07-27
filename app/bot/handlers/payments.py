@@ -51,6 +51,26 @@ async def pay_approve(callback: CallbackQuery, session: AsyncSession, db_user: B
     if not user:
         return
     await send_delivery_to_user(callback.bot, user.telegram_id, session, payment, order)
+    try:
+        from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok
+
+        if payment.is_wallet_topup:
+            await notify_wallet_topup_ok(callback.bot, session, payment, user.telegram_id)
+        elif order:
+            from app.db.models import Plan
+
+            plan = await session.get(Plan, order.plan_id) if order.plan_id else None
+            await notify_new_subscription(
+                callback.bot,
+                session,
+                order=order,
+                user_tg_id=user.telegram_id,
+                user_name=user.full_name or user.username,
+                plan_name=plan.name if plan else None,
+                needs_approval=False,
+            )
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data.startswith("payrev:no:"))

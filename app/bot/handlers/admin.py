@@ -189,6 +189,7 @@ async def _approve_order_bot(session: AsyncSession, order: Order, bot) -> str:
     ).scalar_one_or_none()
     if order.status == OrderStatus.DELIVERED.value:
         return "قبلاً تحویل شده"
+    delivered = None
     if pay and pay.status == PaymentStatus.PENDING.value:
         delivered = await approve_payment(session, pay, reviewer_tg=0)
         try:
@@ -201,8 +202,8 @@ async def _approve_order_bot(session: AsyncSession, order: Order, bot) -> str:
                 )
         except Exception:
             pass
-        return "سفارش تأیید و تحویل شد"
-    if order.status == OrderStatus.PAID.value or (
+        msg = "سفارش تأیید و تحویل شد"
+    elif order.status == OrderStatus.PAID.value or (
         pay and pay.status == PaymentStatus.APPROVED.value and order.status != OrderStatus.DELIVERED.value
     ):
         delivered = await deliver_order(session, order)
@@ -217,8 +218,28 @@ async def _approve_order_bot(session: AsyncSession, order: Order, bot) -> str:
                     )
             except Exception:
                 pass
-        return "سفارش تحویل شد"
-    raise ValueError("این سفارش هنوز قابل تأیید نیست (رسید لازم است)")
+        msg = "سفارش تحویل شد"
+    else:
+        raise ValueError("این سفارش هنوز قابل تأیید نیست (رسید لازم است)")
+
+    try:
+        from app.services.notifications import notify_new_subscription
+
+        final = delivered or order
+        user = await session.get(BotUser, final.user_id)
+        plan = await session.get(Plan, final.plan_id) if final.plan_id else None
+        await notify_new_subscription(
+            bot,
+            session,
+            order=final,
+            user_tg_id=user.telegram_id if user else None,
+            user_name=(user.full_name or user.username) if user else None,
+            plan_name=plan.name if plan else None,
+            needs_approval=False,
+        )
+    except Exception:
+        pass
+    return msg
 
 
 @router.callback_query(F.data.startswith("ordrev:ok:"))
