@@ -137,8 +137,13 @@ def main() -> None:
             await dp.feed_update(bot, update)
             return {"ok": True}
 
-    # Ensure web panel credentials exist (migrate from .env if needed)
-    creds = load_web_admin()
+    # Ensure web panel credentials exist (migrate/repair from .env if needed)
+    from app.services.web_auth import repair_web_admin_from_env
+
+    try:
+        creds = repair_web_admin_from_env()
+    except Exception:
+        creds = load_web_admin()
     if not creds.get("password"):
         logger.error(
             "Web panel password missing. Run: python scripts/set_web_password.py"

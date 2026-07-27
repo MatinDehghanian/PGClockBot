@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reset web panel login (writes data/web_admin.json)."""
+"""Reset web panel login (writes data/web_admin.json and syncs .env)."""
 from __future__ import annotations
 
 import getpass
@@ -13,34 +13,45 @@ sys.path.insert(0, str(ROOT))
 from app.services.web_auth import save_web_admin  # noqa: E402
 
 
-def validate_password(p: str) -> str | None:
-    if len(p) < 8:
-        return "Password must be at least 8 characters."
-    if not re.search(r"[A-Z]", p):
-        return "Password must include at least one uppercase letter (A-Z)."
-    if not re.search(r"[^a-zA-Z0-9]", p):
-        return "Password must include at least one special character."
-    return None
+def _sync_env(user: str, password: str) -> None:
+    env_path = ROOT / ".env"
+    if not env_path.exists():
+        return
+    text = env_path.read_text(encoding="utf-8")
+
+    def esc(v: str) -> str:
+        return v.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "").replace("\r", "")
+
+    def upsert(src: str, key: str, value: str) -> str:
+        line = f'{key}="{esc(value)}"'
+        pattern = re.compile(rf"^{re.escape(key)}=.*$", re.M)
+        if pattern.search(src):
+            return pattern.sub(line, src)
+        return src.rstrip() + "\n" + line + "\n"
+
+    text = upsert(text, "WEB_ADMIN_USER", user)
+    text = upsert(text, "WEB_ADMIN_PASSWORD", password)
+    env_path.write_text(text, encoding="utf-8")
 
 
 def main() -> None:
     print("Reset web panel login")
-    print("(credentials are stored in data/web_admin.json)")
+    print("(saved to data/web_admin.json and .env)")
     user = input("Web username [admin]: ").strip() or "admin"
     while True:
-        p1 = getpass.getpass("New password: ")
-        err = validate_password(p1)
-        if err:
-            print(err)
+        p1 = getpass.getpass("New password: ").replace("\r", "").strip()
+        if not p1:
+            print("Password cannot be empty.")
             continue
-        p2 = getpass.getpass("Confirm password: ")
+        p2 = getpass.getpass("Confirm password: ").replace("\r", "").strip()
         if p1 != p2:
             print("Passwords do not match.")
             continue
         break
     path = save_web_admin(user, p1)
+    _sync_env(user, p1)
     print(f"Saved: {path}")
-    print("Restart is NOT required for next login attempt, but recommended:")
+    print("Restart recommended:")
     print("  sudo systemctl restart pgclockbot")
 
 

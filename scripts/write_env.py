@@ -33,8 +33,10 @@ def main() -> None:
     lines: list[str] = []
     for key in order:
         val = "" if data.get(key) is None else str(data.get(key))
+        # Never allow accidental newlines to break .env / logins
+        val = val.replace("\r", "").strip()
         # Always use double quotes; escape backslash and quotes
-        escaped = val.replace("\\", "\\\\").replace('"', '\\"')
+        escaped = val.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         lines.append(f'{key}="{escaped}"')
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     path.chmod(0o600)

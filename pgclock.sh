@@ -16,16 +16,24 @@ if [[ ! -t 0 ]]; then
   fi
 fi
 
-R='\033[0;31m'; G='\033[0;32m'; C='\033[0;36m'
-Y='\033[1;33m'; B='\033[1;37m'; D='\033[2m'; N='\033[0m'
-BOLD='\033[1m'
+R=$'\033[0;31m'; G=$'\033[0;32m'; C=$'\033[0;36m'
+Y=$'\033[1;33m'; B=$'\033[1;37m'; D=$'\033[2m'; N=$'\033[0m'
+BOLD=$'\033[1m'
 
-info()  { echo -e "  ${C}>${N} $*"; }
-ok()    { echo -e "  ${G}+${N} $*"; }
-warn()  { echo -e "  ${Y}!${N} $*"; }
-err()   { echo -e "  ${R}x${N} $*" >&2; }
-step()  { echo -e "\n${BOLD}${C}-- $* --${N}\n"; }
-pause() { echo ""; read -r -p "  Press Enter to continue... " _ || true; }
+info()  { printf '  %s>%s %s\n' "$C" "$N" "$*"; }
+ok()    { printf '  %s+%s %s\n' "$G" "$N" "$*"; }
+warn()  { printf '  %s!%s %s\n' "$Y" "$N" "$*"; }
+err()   { printf '  %sx%s %s\n' "$R" "$N" "$*" >&2; }
+step()  { printf '\n%s%s-- %s --%s\n\n' "$BOLD" "$C" "$*" "$N"; }
+pause() { echo ""; printf '  Press Enter to continue... '; read -r _ || true; }
+
+prompt_read() {
+  # prompt_read VAR "colored prompt text"
+  local __var="$1"
+  shift
+  printf '%b' "$*"
+  read -r "$__var" || true
+}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -46,7 +54,7 @@ ask() {
   local var
   if [[ "$has_default" -eq 0 ]]; then
     while true; do
-      read -r -p "  ${B}${prompt}${N}: " var || true
+      prompt_read var "  ${B}${prompt}${N}: "
       if [[ -n "${var}" ]]; then
         printf '%s\n' "$var"
         return
@@ -55,9 +63,9 @@ ask() {
     done
   else
     if [[ -n "$default" ]]; then
-      read -r -p "  ${B}${prompt}${N} ${D}[${default}]${N}: " var || true
+      prompt_read var "  ${B}${prompt}${N} ${D}[${default}]${N}: "
     else
-      read -r -p "  ${B}${prompt}${N} ${D}[Enter to skip]${N}: " var || true
+      prompt_read var "  ${B}${prompt}${N} ${D}[Enter to skip]${N}: "
     fi
     if [[ -z "${var}" ]]; then
       printf '%s\n' "$default"
@@ -70,7 +78,7 @@ ask() {
 ask_optional() {
   local prompt="$1"
   local var=""
-  read -r -p "  ${B}${prompt}${N} ${D}[Enter to skip]${N}: " var || true
+  prompt_read var "  ${B}${prompt}${N} ${D}[Enter to skip]${N}: "
   printf '%s\n' "${var}"
 }
 
@@ -78,8 +86,13 @@ ask_secret() {
   local prompt="$1"
   local var
   while true; do
-    read -r -s -p "  ${B}${prompt}${N}: " var
+    printf '  %b: ' "${B}${prompt}${N}"
+    read -r -s var || true
     echo ""
+    # strip accidental CR / leading-trailing whitespace from paste
+    var="${var//$'\r'/}"
+    var="${var#"${var%%[![:space:]]*}"}"
+    var="${var%"${var##*[![:space:]]}"}"
     if [[ -n "$var" ]]; then
       printf '%s\n' "$var"
       return
@@ -88,31 +101,11 @@ ask_secret() {
   done
 }
 
-validate_password() {
-  local p="$1"
-  if [[ ${#p} -lt 8 ]]; then
-    err "Password must be at least 8 characters."
-    return 1
-  fi
-  if ! [[ "$p" =~ [A-Z] ]]; then
-    err "Password must include at least one uppercase letter (A-Z)."
-    return 1
-  fi
-  if ! [[ "$p" =~ [^a-zA-Z0-9] ]]; then
-    err "Password must include at least one special character (e.g. ! @ # \$ % & *)."
-    return 1
-  fi
-  return 0
-}
-
 ask_password() {
   local prompt="$1"
   local p1 p2
   while true; do
     p1="$(ask_secret "$prompt")"
-    if ! validate_password "$p1"; then
-      continue
-    fi
     p2="$(ask_secret "Confirm password")"
     if [[ "$p1" != "$p2" ]]; then
       err "Passwords do not match."
@@ -149,7 +142,7 @@ ask_yn() {
   else
     hint="y/N"
   fi
-  read -r -p "  ${B}${prompt}${N} ${D}[${hint}]${N}: " var || true
+  prompt_read var "  ${B}${prompt}${N} ${D}[${hint}]${N}: "
   if [[ -z "${var}" ]]; then
     var="$default"
   fi
@@ -194,20 +187,20 @@ print_success() {
   ip="$(detect_server_ip)"
   user="$(web_username)"
   echo ""
-  echo -e "${G}==========================================${N}"
-  echo -e "${G}  SUCCESS · ${title}${N}"
-  echo -e "${G}==========================================${N}"
-  echo -e "  Web panel:  ${B}http://${ip}:${port}/login${N}"
-  echo -e "  Health:     ${B}http://127.0.0.1:${port}/health${N}"
-  echo -e "  Username:   ${B}${user}${N}"
+  printf '%s==========================================%s\n' "$G" "$N"
+  printf '%s  SUCCESS · %s%s\n' "$G" "$title" "$N"
+  printf '%s==========================================%s\n' "$G" "$N"
+  printf '  Web panel:  %shttp://%s:%s/login%s\n' "$B" "$ip" "$port" "$N"
+  printf '  Health:     %shttp://127.0.0.1:%s/health%s\n' "$B" "$port" "$N"
+  printf '  Username:   %s%s%s\n' "$B" "$user" "$N"
   if [[ $# -gt 0 ]]; then
     echo ""
     local line
     for line in "$@"; do
-      echo -e "  $line"
+      printf '  %b\n' "$line"
     done
   fi
-  echo -e "${G}==========================================${N}"
+  printf '%s==========================================%s\n' "$G" "$N"
   echo ""
 }
 
@@ -418,7 +411,6 @@ cmd_install() {
   step "3/7  Web panel"
   WEB_PORT="$(ask "Web panel port" "9000")"
   WEB_ADMIN_USER="$(ask "Web panel username" "admin")"
-  echo -e "  ${D}Password rules: 8+ chars, 1 uppercase, 1 special character${N}"
   WEB_ADMIN_PASSWORD="$(ask_password "Web panel password")"
   WEB_SECRET="$(gen_secret)"
 
@@ -600,9 +592,7 @@ cmd_web_panel() {
     echo -e "  ${B}0)${N} Back"
     echo ""
     local choice=""
-    if ! read -r -p "  Select: " choice; then
-      return 0
-    fi
+    prompt_read choice "  ${B}Select${N}: "
     case "${choice}" in
       1)
         if [[ ! -f .venv/bin/python ]]; then
@@ -663,9 +653,7 @@ cmd_service() {
     echo -e "  ${B}0)${N} Back"
     echo ""
     local choice=""
-    if ! read -r -p "  Select: " choice; then
-      return 0
-    fi
+    prompt_read choice "  ${B}Select${N}: "
     case "${choice}" in
       1)
         if service_installed; then
@@ -821,37 +809,38 @@ EOF
 
 # ── UI ──────────────────────────────────────────────────
 banner() {
-  # Do not clear the screen in a loop — causes flicker over SSH
-  echo -e "${C}"
+  # Screen is cleared in show_menu(); keep banner simple
+  printf '%s\n' "$C"
   cat <<'ART'
    ==========================================
             P G C l o c k B o t
         PasarGuard Telegram Shop CLI
    ==========================================
 ART
-  echo -e "${N}"
-  echo -e "  ${D}Ubuntu 22.04+  ·  English  ·  One command for everything${N}"
+  printf '%s\n' "$N"
+  printf '  %sUbuntu 22.04+  ·  English  ·  One command for everything%s\n' "$D" "$N"
   echo ""
 }
 
 banner_small() {
   echo ""
-  echo -e "${C}==========================================${N}"
-  echo -e "${B}  PGClockBot · $*${N}"
-  echo -e "${C}==========================================${N}"
+  printf '%s==========================================%s\n' "$C" "$N"
+  printf '%s  PGClockBot · %s%s\n' "$B" "$*" "$N"
+  printf '%s==========================================%s\n' "$C" "$N"
   echo ""
 }
 
 show_menu() {
+  clear 2>/dev/null || printf '\033c'
   banner
-  echo -e "  ${B}1)${N} Install        Fresh setup (bot + web panel)"
-  echo -e "  ${B}2)${N} Update         Pull latest code (keep .env)"
-  echo -e "  ${B}3)${N} Edit .env      Change tokens / panel / ports"
-  echo -e "  ${B}4)${N} Web panel      URL, password reset, health"
-  echo -e "  ${B}5)${N} Service        Status / restart / logs"
-  echo -e "  ${B}6)${N} Status         Quick health overview"
-  echo -e "  ${B}7)${N} Uninstall      Remove service (optional wipe)"
-  echo -e "  ${B}0)${N} Exit"
+  printf '  %s1)%s Install        Fresh setup (bot + web panel)\n' "$B" "$N"
+  printf '  %s2)%s Update         Pull latest code (keep .env)\n' "$B" "$N"
+  printf '  %s3)%s Edit .env      Change tokens / panel / ports\n' "$B" "$N"
+  printf '  %s4)%s Web panel      URL, password reset, health\n' "$B" "$N"
+  printf '  %s5)%s Service        Status / restart / logs\n' "$B" "$N"
+  printf '  %s6)%s Status         Quick health overview\n' "$B" "$N"
+  printf '  %s7)%s Uninstall      Remove service (optional wipe)\n' "$B" "$N"
+  printf '  %s0)%s Exit\n' "$B" "$N"
   echo ""
 }
 
@@ -859,11 +848,7 @@ run_menu() {
   while true; do
     show_menu
     local choice=""
-    if ! read -r -p "  Select option: " choice; then
-      echo ""
-      ok "Bye."
-      exit 0
-    fi
+    prompt_read choice "  ${B}Select option${N}: "
     case "${choice}" in
       1|install|i) cmd_install ; pause ;;
       2|update|u)  cmd_update  ; pause ;;
@@ -878,7 +863,6 @@ run_menu() {
         exit 0
         ;;
       "")
-        # empty Enter — just redraw, no error spam
         ;;
       *)
         err "Invalid option."
