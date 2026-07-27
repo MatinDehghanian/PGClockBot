@@ -139,6 +139,78 @@ sudo_wrap() {
   fi
 }
 
+ask_yn() {
+  # ask_yn "Prompt" Y|N
+  local prompt="$1"
+  local default="${2:-N}"
+  local hint var
+  if [[ "${default^^}" == "Y" ]]; then
+    hint="Y/n"
+  else
+    hint="y/N"
+  fi
+  read -r -p "  ${B}${prompt}${N} ${D}[${hint}]${N}: " var || true
+  if [[ -z "${var}" ]]; then
+    var="$default"
+  fi
+  case "${var,,}" in
+    y|yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+detect_server_ip() {
+  local ip=""
+  ip="$(curl -4 -fsS --max-time 4 https://api.ipify.org 2>/dev/null || true)"
+  if [[ -z "$ip" ]]; then
+    ip="$(curl -4 -fsS --max-time 4 https://ifconfig.me 2>/dev/null || true)"
+  fi
+  if [[ -z "$ip" ]]; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  fi
+  if [[ -z "$ip" ]]; then
+    ip="YOUR_SERVER_IP"
+  fi
+  printf '%s\n' "$ip"
+}
+
+web_username() {
+  if [[ -f data/web_admin.json ]] && [[ -f "$PY" || -x "$PY" ]]; then
+    "$PY" - <<'PY' 2>/dev/null || echo admin
+from app.services.web_auth import load_web_admin
+print(load_web_admin().get("username") or "admin")
+PY
+  else
+    env_get WEB_ADMIN_USER admin
+  fi
+}
+
+print_success() {
+  # print_success "Title" [extra lines...]
+  local title="$1"
+  shift || true
+  local port ip user
+  port="$(env_get WEB_PORT "${WEB_PORT:-9000}")"
+  ip="$(detect_server_ip)"
+  user="$(web_username)"
+  echo ""
+  echo -e "${G}==========================================${N}"
+  echo -e "${G}  SUCCESS · ${title}${N}"
+  echo -e "${G}==========================================${N}"
+  echo -e "  Web panel:  ${B}http://${ip}:${port}/login${N}"
+  echo -e "  Health:     ${B}http://127.0.0.1:${port}/health${N}"
+  echo -e "  Username:   ${B}${user}${N}"
+  if [[ $# -gt 0 ]]; then
+    echo ""
+    local line
+    for line in "$@"; do
+      echo -e "  $line"
+    done
+  fi
+  echo -e "${G}==========================================${N}"
+  echo ""
+}
+
 require_ubuntu_22_plus() {
   if [[ ! -f /etc/os-release ]]; then
     err "Unsupported system: /etc/os-release not found."
@@ -165,8 +237,9 @@ ensure_apt_packages() {
     err "apt-get not found."
     return 1
   fi
+  export DEBIAN_FRONTEND=noninteractive
   sudo_wrap apt-get update -y >/dev/null
-  sudo_wrap DEBIAN_FRONTEND=noninteractive apt-get install -y \
+  sudo_wrap apt-get install -y \
     python3 python3-venv python3-pip ca-certificates curl git openssl nano \
     >/dev/null
   ok "Prerequisites ready"
@@ -316,15 +389,13 @@ restart_service_if_any() {
 # ── actions ─────────────────────────────────────────────
 cmd_install() {
   banner_small "Install"
-  require_ubuntu_22_plus
-  ensure_apt_packages
-  ensure_python
+  require_ubuntu_22_plus || return 1
+  ensure_apt_packages || return 1
+  ensure_python || return 1
 
   if [[ -f .env ]]; then
     warn ".env already exists."
-    local overwrite
-    overwrite="$(ask "Overwrite existing install? (y/N)" "N")"
-    if [[ "${overwrite,,}" != "y" && "${overwrite,,}" != "yes" ]]; then
+    if ! ask_yn "Overwrite existing install?" "N"; then
       info "Cancelled. Use Update or Edit .env instead."
       return 0
     fi
@@ -356,7 +427,7 @@ cmd_install() {
   CURRENCY="$(ask "Currency label" "Toman")"
 
   step "5/7  Python packages"
-  ensure_venv
+  ensure_venv || return 1
 
   step "6/7  Configuration"
   write_env_file
@@ -388,35 +459,38 @@ PY
   ok "Web login OK · username=${CHECK_LINES[0]}"
 
   step "7/7  systemd"
-  local install_service
-  install_service="$(ask "Enable systemd service now? (Y/n)" "Y")"
-  if [[ "${install_service,,}" != "n" && "${install_service,,}" != "no" ]]; then
+  if ask_yn "Enable systemd service now?" "Y"; then
     local service_user
     service_user="$(ask "System user" "$(whoami)")"
     install_systemd "$service_user"
   fi
 
-  echo ""
-  echo -e "${G}  Installation complete${N}"
-  echo -e "  Web panel:  ${B}http://YOUR_SERVER_IP:${WEB_PORT}/login${N}"
-  echo -e "  Username:   ${B}${WEB_ADMIN_USER}${N}"
-  echo -e "  Password:   ${D}(the one you entered)${N}"
-  echo -e "  Manage:     ${C}bash pgclock.sh${N}"
-  echo ""
-
-  local start_now
-  start_now="$(ask "Start / keep bot running now? (Y/n)" "Y")"
-  if [[ "${start_now,,}" != "n" && "${start_now,,}" != "no" ]]; then
-    if service_active; then
-      ok "systemd is running — logs: journalctl -u ${SERVICE_NAME} -f"
-    elif service_installed; then
-      sudo_wrap systemctl start "$SERVICE_NAME"
-      ok "Service started"
+  if ask_yn "Start / keep bot running now?" "Y"; then
+    if service_installed; then
+      sudo_wrap systemctl enable --now "$SERVICE_NAME" || true
+      if service_active; then
+        ok "Service is running"
+      else
+        warn "Service installed but not active — check: journalctl -u ${SERVICE_NAME} -n 50"
+      fi
     else
-      info "Starting in foreground… Ctrl+C to stop"
-      exec "$PY" run.py
+      warn "No systemd unit. Use menu -> Service -> Install systemd unit"
+      warn "Or run manually: source .venv/bin/activate && python run.py"
     fi
   fi
+
+  if command -v ufw >/dev/null 2>&1; then
+    if ask_yn "Allow web panel port ${WEB_PORT}/tcp in UFW?" "Y"; then
+      sudo_wrap ufw allow "${WEB_PORT}/tcp" >/dev/null 2>&1 || true
+      ok "UFW rule added for ${WEB_PORT}/tcp"
+    fi
+  fi
+
+  print_success "Install complete" \
+    "Password:   (the one you entered during setup)" \
+    "Manage:     bash pgclock.sh" \
+    "Logs:       journalctl -u ${SERVICE_NAME} -f"
+  return 0
 }
 
 cmd_update() {
@@ -431,17 +505,27 @@ cmd_update() {
 
   if [[ -d .git ]]; then
     info "Pulling latest code from GitHub..."
-    git fetch --all --tags
+    git fetch --all --tags || true
     local branch
-    branch="$(git rev-parse --abbrev-ref HEAD)"
-    git pull --ff-only origin "$branch" || git pull --ff-only
-    ok "Code updated (branch: ${branch})"
+    branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
+    if [[ "$branch" == "HEAD" ]]; then
+      branch="main"
+    fi
+    if git pull --ff-only origin "$branch" 2>/dev/null || git pull --ff-only 2>/dev/null; then
+      ok "Code updated (branch: ${branch})"
+    else
+      warn "Fast-forward failed — syncing hard to origin/main (keeps .env + data)"
+      git checkout -f -B main origin/main
+      git reset --hard origin/main
+      git clean -fd --exclude=.env --exclude=data --exclude=.venv --exclude='.env.bak.*'
+      ok "Code synced to origin/main"
+    fi
   else
     warn "Not a git repo — skipped git pull."
   fi
 
-  ensure_python
-  ensure_venv
+  ensure_python || return 1
+  ensure_venv || return 1
   mkdir -p data
   "$PY" - <<'PY' || true
 from app.services.web_auth import AUTH_FILE, load_web_admin
@@ -462,8 +546,10 @@ PY
   fi
 
   restart_service_if_any
-  echo ""
-  ok "Update complete — configuration was not changed."
+  print_success "Update complete" \
+    "Config:     .env was not changed" \
+    "Logs:       journalctl -u ${SERVICE_NAME} -f"
+  return 0
 }
 
 cmd_edit_env() {
@@ -489,34 +575,28 @@ cmd_edit_env() {
   info "Opening with ${editor}..."
   "$editor" .env
   echo ""
-  local restart
-  restart="$(ask "Restart service to apply changes? (Y/n)" "Y")"
-  if [[ "${restart,,}" != "n" && "${restart,,}" != "no" ]]; then
+  if ask_yn "Restart service to apply changes?" "Y"; then
     restart_service_if_any
   fi
-  ok "Done"
+  print_success "Configuration saved" \
+    "Edited:     .env"
+  return 0
 }
 
 cmd_web_panel() {
   while true; do
     banner_small "Web panel"
-    local port user
+    local port user ip
     port="$(env_get WEB_PORT 9000)"
-    user="admin"
-    if [[ -f data/web_admin.json ]] && [[ -x "$PY" || -f "$PY" ]]; then
-      user="$("$PY" - <<'PY' 2>/dev/null || echo admin
-from app.services.web_auth import load_web_admin
-print(load_web_admin().get("username") or "admin")
-PY
-)"
-    fi
-    echo -e "  Login URL : ${B}http://YOUR_SERVER_IP:${port}/login${N}"
+    user="$(web_username)"
+    ip="$(detect_server_ip)"
+    echo -e "  Login URL : ${B}http://${ip}:${port}/login${N}"
     echo -e "  Health    : ${B}http://127.0.0.1:${port}/health${N}"
     echo -e "  Username  : ${B}${user}${N}"
     echo ""
     echo -e "  ${B}1)${N} Reset web password"
     echo -e "  ${B}2)${N} Check /health"
-    echo -e "  ${B}3)${N} Show firewall tip (open port ${port})"
+    echo -e "  ${B}3)${N} Allow firewall port ${port}/tcp"
     echo -e "  ${B}0)${N} Back"
     echo ""
     local choice=""
@@ -530,23 +610,29 @@ PY
         else
           "$PY" scripts/set_web_password.py
           restart_service_if_any
+          print_success "Web password updated"
         fi
         pause
         ;;
       2)
         if command -v curl >/dev/null 2>&1; then
+          echo ""
           curl -sS "http://127.0.0.1:${port}/health" || err "Health check failed (is the bot running?)"
           echo ""
+          echo ""
+          ok "Health check finished"
         else
           err "curl not installed."
         fi
         pause
         ;;
       3)
-        echo ""
-        echo -e "  ${C}sudo ufw allow ${port}/tcp${N}"
-        echo -e "  ${C}sudo ufw reload${N}"
-        echo ""
+        if command -v ufw >/dev/null 2>&1; then
+          sudo_wrap ufw allow "${port}/tcp" >/dev/null 2>&1 || true
+          ok "UFW allowed ${port}/tcp"
+        else
+          echo -e "  Run manually: ${C}sudo ufw allow ${port}/tcp && sudo ufw reload${N}"
+        fi
         pause
         ;;
       0) return 0 ;;
@@ -584,6 +670,7 @@ cmd_service() {
       1)
         if service_installed; then
           systemctl status "$SERVICE_NAME" --no-pager || true
+          ok "Status shown"
         else
           warn "Service not installed."
         fi
@@ -596,10 +683,12 @@ cmd_service() {
           sudo_wrap systemctl enable --now "$SERVICE_NAME"
           ok "Started"
         fi
+        print_success "Service start requested"
         pause
         ;;
       3)
         restart_service_if_any
+        print_success "Service restart requested"
         pause
         ;;
       4)
@@ -624,6 +713,7 @@ cmd_service() {
           err "Run Install first."
         else
           install_systemd "$(ask "System user" "$(whoami)")"
+          print_success "systemd unit installed"
         fi
         pause
         ;;
@@ -636,10 +726,8 @@ cmd_service() {
 
 cmd_uninstall() {
   banner_small "Uninstall"
-  warn "This can remove the systemd service and optionally wipe local data."
-  local confirm
-  confirm="$(ask "Type UNINSTALL to continue" "")"
-  if [[ "$confirm" != "UNINSTALL" ]]; then
+  warn "This removes the systemd service and can wipe local runtime files."
+  if ! ask_yn "Continue uninstall?" "N"; then
     info "Cancelled."
     return 0
   fi
@@ -650,18 +738,27 @@ cmd_uninstall() {
     sudo_wrap rm -f "$SERVICE_PATH"
     sudo_wrap systemctl daemon-reload
     ok "systemd unit removed"
+  else
+    info "No systemd unit found."
   fi
 
-  local wipe
-  wipe="$(ask "Also delete .venv, data/, and .env? (y/N)" "N")"
-  if [[ "${wipe,,}" == "y" || "${wipe,,}" == "yes" ]]; then
+  if ask_yn "Also delete .venv, data/, and .env?" "N"; then
     rm -rf .venv data
     [[ -f .env ]] && mv .env ".env.removed.$(date +%Y%m%d%H%M%S)"
     ok "Local runtime files removed (project code kept)"
   else
     ok "Service removed. Project files kept."
   fi
-  echo -e "  To remove the whole folder: ${C}cd .. && rm -rf PGClockBot${N}"
+
+  echo ""
+  echo -e "${G}==========================================${N}"
+  echo -e "${G}  SUCCESS · Uninstall complete${N}"
+  echo -e "${G}==========================================${N}"
+  echo -e "  To remove the whole folder:"
+  echo -e "    ${C}cd .. && rm -rf PGClockBot${N}"
+  echo -e "${G}==========================================${N}"
+  echo ""
+  return 0
 }
 
 cmd_status() {
@@ -692,6 +789,8 @@ cmd_status() {
       warn "Web health: unreachable on :${port}"
     fi
   fi
+  print_success "Status check"
+  return 0
 }
 
 cmd_help() {
