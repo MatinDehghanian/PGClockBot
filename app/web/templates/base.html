@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/panel.css?v=shadcn-dark3" />
+  <link rel="stylesheet" href="/static/panel.css?v=fix-backdrop-152" />
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
   {% block head %}{% endblock %}
 </head>
@@ -73,7 +73,7 @@
       </div>
     </aside>
 
-    <div class="side-backdrop mobile-only" id="side-backdrop" hidden></div>
+    <div class="side-backdrop" id="side-backdrop" hidden aria-hidden="true"></div>
 
     <main class="main">
       <div class="main-body">
@@ -98,10 +98,13 @@
       if (back) {
         back.hidden = !v;
         back.classList.toggle('show', v);
+        back.setAttribute('aria-hidden', v ? 'false' : 'true');
       }
       document.body.classList.toggle('nav-open', v);
       if (btn) btn.setAttribute('aria-expanded', v ? 'true' : 'false');
     }
+    // ensure closed on load (no sticky overlay)
+    setOpen(false);
     if (btn) btn.addEventListener('click', () => setOpen(!side.classList.contains('open')));
     if (back) back.addEventListener('click', () => setOpen(false));
     side && side.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setOpen(false)));

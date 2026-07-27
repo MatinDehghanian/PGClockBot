@@ -841,7 +841,7 @@ tr:last-child td { border-bottom: 0; }
   background: var(--bg-card);
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: 55;
   width: 100%;
 }
 .topbar-brand {
@@ -880,20 +880,25 @@ tr:last-child td { border-bottom: 0; }
   background: var(--foreground);
 }
 .side-backdrop {
-  display: none;
+  display: none !important;
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
   z-index: 45;
+  pointer-events: none;
 }
-.side-backdrop.show { display: block; }
+.side-backdrop.show {
+  display: block !important;
+  pointer-events: auto;
+}
 
 .mobile-only { display: none !important; }
 
 /* —— Mobile layout: toolbar + hamburger drawer —— */
 @media (max-width: 900px) {
   .desk-only { display: none !important; }
-  .mobile-only { display: flex !important; }
+  /* فقط تولبار — نه backdrop (قبلاً flex!important کل صفحه را قفل می‌کرد) */
+  .topbar.mobile-only { display: flex !important; }
 
   .shell {
     display: flex;
@@ -1026,7 +1031,8 @@ tr:last-child td { border-bottom: 0; }
 @media (min-width: 901px) {
   input, select, textarea { font-size: 14px; min-height: var(--btn-h); }
   .mobile-only { display: none !important; }
-  .side-backdrop { display: none !important; }
+  .side-backdrop,
+  .side-backdrop.show { display: none !important; pointer-events: none !important; }
 }
 
 @media (max-width: 560px) {
