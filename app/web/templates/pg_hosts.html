@@ -77,7 +77,7 @@
         </td>
         <td class="mono">{{ h.get('port') or '—' }}</td>
         <td class="mono">{{ h.get('inbound_tag') or '—' }}</td>
-        <td>{% if h.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge">فعال</span>{% endif %}</td>
+        <td>{% if h.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
         <td>
           <div class="actions" style="margin:0">
             <form method="post" action="/pg/hosts/{{ h.get('id') }}/toggle">

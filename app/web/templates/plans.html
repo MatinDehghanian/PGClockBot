@@ -74,8 +74,9 @@
   </form>
 </div>
 
-<div class="card">
+<div class="card card-flush">
   <h2>پلن‌های فعال در بات</h2>
+  <div class="table-wrap">
   <table>
     <thead>
       <tr><th>نام</th><th>قیمت</th><th>مدت</th><th>حجم</th><th>منبع پاسارگارد</th><th>وضعیت</th><th></th></tr>
@@ -92,7 +93,7 @@
           {% elif p.pg_group_ids %}گروه {{ p.pg_group_ids }}
           {% else %}—{% endif %}
         </td>
-        <td>{% if p.is_active %}<span class="badge">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+        <td>{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td>
           <div class="actions" style="margin:0">
             <a class="btn btn-sm" href="/plans/{{ p.id }}/edit">ویرایش</a>
@@ -110,6 +111,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 
 <script>

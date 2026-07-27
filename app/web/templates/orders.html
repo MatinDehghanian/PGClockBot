@@ -25,7 +25,7 @@
         <td>{% if o.plan %}{{ o.plan.name }}{% else %}{{ o.plan_id or "—" }}{% endif %}</td>
         <td>{{ o.amount | num }}</td>
         <td>
-          <span class="badge {% if o.status=='delivered' %}ok{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}warn{% elif o.status in ['rejected','cancelled','failed'] %}danger{% endif %}">
+          <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}pending{% elif o.status in ['rejected','cancelled','failed'] %}rejected{% else %}neutral{% endif %}">
             {{ ord_status(o.status) }}
           </span>
         </td>

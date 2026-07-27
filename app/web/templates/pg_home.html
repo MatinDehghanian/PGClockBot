@@ -53,7 +53,12 @@
       <tr>
         <td class="mono">{{ n.get('id') }}</td>
         <td>{{ n.get('name') or n.get('address') or '—' }}</td>
-        <td><span class="badge">{{ n.get('status') or n.get('connection_status') or '—' }}</span></td>
+        <td>
+          {% set st = (n.get('status') or n.get('connection_status') or '')|string|lower %}
+          <span class="badge {% if st in ['connected','online','healthy'] %}connected{% elif 'connect' in st %}connecting{% elif st in ['error','offline','unhealthy','disabled'] %}error{% else %}neutral{% endif %}">
+            {{ n.get('status') or n.get('connection_status') or '—' }}
+          </span>
+        </td>
       </tr>
     {% endfor %}
     </tbody>

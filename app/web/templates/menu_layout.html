@@ -39,7 +39,7 @@
             {% if not item.required %}
             <button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف">×</button>
             {% else %}
-            <span class="badge">ثابت</span>
+            <span class="badge fixed">ثابت</span>
             {% endif %}
           </div>
         </li>
@@ -94,7 +94,7 @@
       '<button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا">▲</button>' +
       '<button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین">▼</button>' +
       (required
-        ? '<span class="badge">ثابت</span>'
+        ? '<span class="badge fixed">ثابت</span>'
         : '<button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف">×</button>');
     li.querySelectorAll('.dnd-actions, button.btn-remove, button.btn-add, span.badge').forEach((n) => n.remove());
     li.appendChild(box);

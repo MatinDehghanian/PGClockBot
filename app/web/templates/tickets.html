@@ -19,7 +19,7 @@
         <td>{{ t.user_id }}</td>
         <td>{{ t.subject }}</td>
         <td>
-          <span class="badge {% if t.status=='open' %}warn{% elif t.status=='closed' %}{% else %}ok{% endif %}">
+          <span class="badge {% if t.status=='open' %}open{% elif t.status=='closed' %}neutral{% else %}answered{% endif %}">
             {{ tkt_status(t.status) }}
           </span>
         </td>

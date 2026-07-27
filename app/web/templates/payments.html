@@ -21,7 +21,7 @@
         <td>{{ "{:,}".format(p.amount).replace(",", "٬") }}</td>
         <td>{{ "شارژ کیف" if p.is_wallet_topup else "خرید" }}</td>
         <td>
-          <span class="badge {% if p.status=='pending' %}warn{% elif p.status=='approved' %}ok{% else %}danger{% endif %}">
+          <span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}approved{% else %}rejected{% endif %}">
             {{ pay_status(p.status) }}
           </span>
         </td>

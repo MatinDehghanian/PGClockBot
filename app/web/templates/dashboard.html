@@ -53,7 +53,7 @@
             <td class="mono">{{ p.id }}</td>
             <td class="mono">{{ p.amount | num }}</td>
             <td>
-              <span class="badge {% if p.status=='pending' %}warn{% elif p.status=='approved' %}ok{% else %}danger{% endif %}">
+              <span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}approved{% else %}rejected{% endif %}">
                 {{ pay_status(p.status) }}
               </span>
             </td>
@@ -80,7 +80,7 @@
             <td class="mono">{{ o.id }}</td>
             <td class="mono">{{ o.amount | num }}</td>
             <td>
-              <span class="badge {% if o.status=='delivered' %}ok{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}warn{% elif o.status in ['rejected','cancelled'] %}danger{% endif %}">
+              <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}pending{% elif o.status in ['rejected','cancelled'] %}rejected{% else %}neutral{% endif %}">
                 {{ ord_status(o.status) }}
               </span>
             </td>
