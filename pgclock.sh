@@ -694,8 +694,12 @@ cmd_help() {
     bash pgclock.sh uninstall       Remove service / data
     bash pgclock.sh help            This help
 
-  One-liner after clone:
-    git clone https://github.com/Mrclocks/PGClockBot.git && cd PGClockBot && bash pgclock.sh
+  One-liner (clone OR update existing folder, then menu):
+    curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh | bash
+
+  Inside the project:
+    bash get.sh
+    bash pgclock.sh
 
 EOF
 }

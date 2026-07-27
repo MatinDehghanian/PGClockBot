@@ -6,8 +6,31 @@ Telegram shop bot for **PasarGuard** — Persian bot UI, English management CLI,
 
 ## One-line manager (Ubuntu 22.04+)
 
+Works on **fresh servers** and when `PGClockBot` **already exists** (old/partial install):
+
 ```bash
-git clone https://github.com/Mrclocks/PGClockBot.git && cd PGClockBot && bash pgclock.sh
+curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh | bash
+```
+
+What it does:
+
+1. If `./PGClockBot` is missing → `git clone`
+2. If it already exists → `cd` + `git pull`
+3. Opens the English menu (`pgclock.sh`)
+
+Already inside the project folder:
+
+```bash
+bash get.sh
+# or
+bash pgclock.sh
+```
+
+If the folder is broken beyond repair:
+
+```bash
+mv PGClockBot "PGClockBot.bak.$(date +%Y%m%d)" 
+curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh | bash
 ```
 
 Or after clone:
