@@ -2,6 +2,9 @@
 # PGClockBot bootstrap — clone if missing, update if present, then open the menu.
 #
 # Fresh or existing server (from any directory):
+#   bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
+#
+# Also works (TTY is reattached automatically):
 #   curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh | bash
 #
 # Or locally (inside / next to the repo):
@@ -122,7 +125,7 @@ ensure_repo() {
       err "Folder exists but is empty/incomplete and has no .git: ${ROOT}"
       err "Remove or rename it, then re-run:"
       err "  mv ${DIR_NAME} ${DIR_NAME}.bak.\$(date +%Y%m%d)"
-      err "  curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh | bash"
+      err "  bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)"
       exit 1
     else
       warn "Folder exists without .git — re-cloning into place"
@@ -158,11 +161,15 @@ if [[ ! -f pgclock.sh ]]; then
   err "pgclock.sh still missing in ${ROOT}"
   err "Manual fix:"
   err "  cd ~ && mv ${DIR_NAME} ${DIR_NAME}.bak.\$(date +%Y%m%d)"
-  err "  curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh | bash"
+  err "  bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)"
   exit 1
 fi
 
 chmod +x pgclock.sh get.sh install.sh update.sh 2>/dev/null || true
 
 # Pass through optional subcommand (install/update/...), default = menu
+# Re-attach TTY so the menu can read keyboard even when launched via curl|bash
+if [[ ! -t 0 && -r /dev/tty ]]; then
+  exec bash pgclock.sh "$@" </dev/tty
+fi
 exec bash pgclock.sh "$@"

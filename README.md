@@ -9,13 +9,15 @@ Telegram shop bot for **PasarGuard** — Persian bot UI, English management CLI,
 Works on **fresh servers** and when `PGClockBot` **already exists** (old/partial install):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh | bash
+bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
 ```
+
+(Use process substitution so the keyboard stays connected. `curl | bash` also works now, but the form above is preferred.)
 
 What it does:
 
 1. If `./PGClockBot` is missing → `git clone`
-2. If it already exists → `cd` + `git pull`
+2. If it already exists → `cd` + sync to latest
 3. Opens the English menu (`pgclock.sh`)
 
 Already inside the project folder:
@@ -29,8 +31,8 @@ bash pgclock.sh
 If the folder is broken beyond repair:
 
 ```bash
-mv PGClockBot "PGClockBot.bak.$(date +%Y%m%d)" 
-curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh | bash
+mv PGClockBot "PGClockBot.bak.$(date +%Y%m%d)"
+bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
 ```
 
 Or after clone:

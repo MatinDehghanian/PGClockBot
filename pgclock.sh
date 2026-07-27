@@ -6,6 +6,16 @@
 set -euo pipefail
 set +H
 
+# curl|bash leaves stdin as a dead pipe — always read from the real terminal
+if [[ ! -t 0 ]]; then
+  if [[ -r /dev/tty ]]; then
+    exec </dev/tty
+  else
+    echo "  x No interactive terminal (TTY). Run: bash pgclock.sh" >&2
+    exit 1
+  fi
+fi
+
 R='\033[0;31m'; G='\033[0;32m'; C='\033[0;36m'
 Y='\033[1;33m'; B='\033[1;37m'; D='\033[2m'; N='\033[0m'
 BOLD='\033[1m'
@@ -509,8 +519,10 @@ PY
     echo -e "  ${B}3)${N} Show firewall tip (open port ${port})"
     echo -e "  ${B}0)${N} Back"
     echo ""
-    local choice
-    read -r -p "  Select: " choice || true
+    local choice=""
+    if ! read -r -p "  Select: " choice; then
+      return 0
+    fi
     case "${choice}" in
       1)
         if [[ ! -f .venv/bin/python ]]; then
@@ -537,7 +549,8 @@ PY
         echo ""
         pause
         ;;
-      0|"") return 0 ;;
+      0) return 0 ;;
+      "") ;;
       *) err "Invalid option." ; pause ;;
     esac
   done
@@ -563,8 +576,10 @@ cmd_service() {
     echo -e "  ${B}6)${N} Install systemd unit"
     echo -e "  ${B}0)${N} Back"
     echo ""
-    local choice
-    read -r -p "  Select: " choice || true
+    local choice=""
+    if ! read -r -p "  Select: " choice; then
+      return 0
+    fi
     case "${choice}" in
       1)
         if service_installed; then
@@ -612,7 +627,8 @@ cmd_service() {
         fi
         pause
         ;;
-      0|"") return 0 ;;
+      0) return 0 ;;
+      "") ;;
       *) err "Invalid option." ; pause ;;
     esac
   done
@@ -695,7 +711,7 @@ cmd_help() {
     bash pgclock.sh help            This help
 
   One-liner (clone OR update existing folder, then menu):
-    curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh | bash
+    bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
 
   Inside the project:
     bash get.sh
@@ -706,7 +722,7 @@ EOF
 
 # ── UI ──────────────────────────────────────────────────
 banner() {
-  clear 2>/dev/null || true
+  # Do not clear the screen in a loop — causes flicker over SSH
   echo -e "${C}"
   cat <<'ART'
    ==========================================
@@ -743,8 +759,12 @@ show_menu() {
 run_menu() {
   while true; do
     show_menu
-    local choice
-    read -r -p "  Select option: " choice || true
+    local choice=""
+    if ! read -r -p "  Select option: " choice; then
+      echo ""
+      ok "Bye."
+      exit 0
+    fi
     case "${choice}" in
       1|install|i) cmd_install ; pause ;;
       2|update|u)  cmd_update  ; pause ;;
@@ -757,6 +777,9 @@ run_menu() {
         echo ""
         ok "Bye."
         exit 0
+        ;;
+      "")
+        # empty Enter — just redraw, no error spam
         ;;
       *)
         err "Invalid option."
