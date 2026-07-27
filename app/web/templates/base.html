@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="color-scheme" content="light" />
   <title>{% block title %}پنل مدیریت{% endblock %} · کلاک بات</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/panel.css?v=liquid-glass-upd1" />
+  <link rel="stylesheet" href="/static/panel.css?v=shadcn-min1" />
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
   {% block head %}{% endblock %}
 </head>
@@ -16,32 +16,18 @@
   {% if staff is defined and staff %}
   {% set path = request.url.path %}
   <div class="shell">
-    <header class="topbar">
-      <button type="button" class="menu-toggle" id="menu-toggle" aria-label="منو" aria-expanded="false">
-        <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span>
-      </button>
-      <div class="topbar-brand">
-        <img src="/static/logo.svg" alt="" />
-        <strong>کلاک بات</strong>
-      </div>
-      <a class="btn btn-sm btn-ghost" href="/payments">پرداخت‌ها</a>
-    </header>
-
-    <aside class="side" id="sidebar">
+    {# —— Desktop sidebar —— #}
+    <aside class="side desk-only" id="sidebar" aria-label="منوی اصلی">
       <div class="brand">
-        <img src="/static/logo.svg" alt="کلاک بات" />
+        <img src="/static/logo.svg" alt="" />
         <div>
           <strong>کلاک بات</strong>
           <small>{{ staff.username }} · {% if staff.role == 'admin' %}مدیر{% elif staff.role == 'reseller' %}نماینده{% else %}{{ staff.role }}{% endif %}</small>
-          <span class="brand-version">v{{ app_version }}</span>
         </div>
       </div>
 
       <nav class="side-nav">
-        <a href="/dashboard" class="nav-item {% if path=='/dashboard' %}active{% endif %}">
-          <span class="nav-ico">⌂</span>
-          خانه
-        </a>
+        <a href="/dashboard" class="nav-item {% if path=='/dashboard' %}active{% endif %}">خانه</a>
 
         <div class="nav-section">
           <span class="nav-label">فروش</span>
@@ -61,57 +47,102 @@
         </div>
 
         <div class="nav-section">
-          <span class="nav-label">زیرساخت</span>
+          <span class="nav-label">سیستم</span>
           <a href="/pg" class="nav-item {% if path.startswith('/pg') %}active{% endif %}">پاسارگارد</a>
-        </div>
-
-        <div class="nav-section">
-          <span class="nav-label">پیکربندی</span>
-          <a href="/update" class="nav-item {% if path.startswith('/update') %}active{% endif %}">آپدیت / بازگشت</a>
+          <a href="/update" class="nav-item {% if path.startswith('/update') %}active{% endif %}">آپدیت</a>
           <a href="/notifications" class="nav-item {% if path.startswith('/notifications') %}active{% endif %}">نوتیفیکیشن</a>
           <a href="/menu-layout" class="nav-item {% if path.startswith('/menu-layout') %}active{% endif %}">منوی بات</a>
-          <a href="/settings" class="nav-item {% if path.startswith('/settings') %}active{% endif %}">متن‌ها و تنظیمات</a>
+          <a href="/settings" class="nav-item {% if path.startswith('/settings') %}active{% endif %}">تنظیمات</a>
         </div>
         {% endif %}
       </nav>
 
       <div class="side-foot">
+        <span class="brand-version">v{{ app_version }}</span>
         <a href="/logout" class="logout-link">خروج</a>
       </div>
     </aside>
 
-    <div class="side-backdrop" id="side-backdrop"></div>
+    {# —— Mobile top —— #}
+    <header class="m-top mobile-only">
+      <div class="m-top-brand">
+        <img src="/static/logo.svg" alt="" />
+        <strong>کلاک بات</strong>
+      </div>
+      <a class="m-top-link" href="/logout">خروج</a>
+    </header>
+
     <main class="main">
       <div class="main-body">
         {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
         {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
         {% block content %}{% endblock %}
       </div>
-      <footer class="site-footer">
-        <div class="footer-meta">
-          <span>© ۲۰۲۶ کلاک بات</span>
-          <a href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener noreferrer">GitHub</a>
-        </div>
-        <div class="footer-actions">
-          <a class="btn-star" href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener noreferrer">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21 8 14 2 9.4h7.6L12 2z"/></svg>
-            ستاره
-          </a>
-        </div>
+      <footer class="site-footer desk-only">
+        <span class="muted">© ۲۰۲۶ کلاک بات</span>
+        <a class="link-quiet" href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener">GitHub</a>
       </footer>
     </main>
+
+    {# —— Mobile bottom tabs —— #}
+    <nav class="m-tabs mobile-only" aria-label="ناوبری موبایل">
+      <a href="/dashboard" class="m-tab {% if path=='/dashboard' %}active{% endif %}">
+        <span class="m-tab-ico">خانه</span>
+      </a>
+      <a href="/orders" class="m-tab {% if path.startswith('/orders') %}active{% endif %}">
+        <span class="m-tab-ico">سفارش</span>
+      </a>
+      <a href="/payments" class="m-tab {% if path.startswith('/payments') %}active{% endif %}">
+        <span class="m-tab-ico">پرداخت</span>
+      </a>
+      <a href="/tickets" class="m-tab {% if path.startswith('/tickets') %}active{% endif %}">
+        <span class="m-tab-ico">تیکت</span>
+      </a>
+      <button type="button" class="m-tab" id="more-toggle" aria-expanded="false" aria-controls="more-sheet">
+        <span class="m-tab-ico">بیشتر</span>
+      </button>
+    </nav>
+
+    <div class="more-backdrop mobile-only" id="more-backdrop" hidden></div>
+    <div class="more-sheet mobile-only" id="more-sheet" hidden role="dialog" aria-label="منوی بیشتر">
+      <div class="more-handle" aria-hidden="true"></div>
+      <div class="more-head">
+        <strong>منو</strong>
+        <button type="button" class="btn btn-ghost btn-sm" id="more-close">بستن</button>
+      </div>
+      <div class="more-body">
+        {% if staff.role == 'admin' %}
+        <a href="/plans" class="more-link">پلن‌ها</a>
+        <a href="/users" class="more-link">کاربران</a>
+        <a href="/resellers" class="more-link">نمایندگان</a>
+        <a href="/pg" class="more-link">پاسارگارد</a>
+        <a href="/update" class="more-link">آپدیت و بازگشت</a>
+        <a href="/notifications" class="more-link">نوتیفیکیشن</a>
+        <a href="/menu-layout" class="more-link">منوی بات</a>
+        <a href="/settings" class="more-link">تنظیمات</a>
+        {% else %}
+        <a href="/tickets" class="more-link">تیکت‌ها</a>
+        {% endif %}
+        <a href="/logout" class="more-link more-danger">خروج از پنل</a>
+        <p class="more-ver muted">نسخه {{ app_version }}</p>
+      </div>
+    </div>
   </div>
   <script>
   (function(){
-    const side = document.getElementById('sidebar');
-    const btn = document.getElementById('menu-toggle');
-    const back = document.getElementById('side-backdrop');
+    const sheet = document.getElementById('more-sheet');
+    const back = document.getElementById('more-backdrop');
+    const openBtn = document.getElementById('more-toggle');
+    const closeBtn = document.getElementById('more-close');
     function setOpen(v){
-      side.classList.toggle('open', v);
-      back.classList.toggle('show', v);
-      if (btn) btn.setAttribute('aria-expanded', v ? 'true' : 'false');
+      if (!sheet || !back) return;
+      sheet.hidden = !v;
+      back.hidden = !v;
+      document.body.classList.toggle('sheet-open', v);
+      if (openBtn) openBtn.setAttribute('aria-expanded', v ? 'true' : 'false');
     }
-    if (btn) btn.addEventListener('click', () => setOpen(!side.classList.contains('open')));
+    if (openBtn) openBtn.addEventListener('click', () => setOpen(true));
+    if (closeBtn) closeBtn.addEventListener('click', () => setOpen(false));
     if (back) back.addEventListener('click', () => setOpen(false));
   })();
   </script>
