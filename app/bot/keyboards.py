@@ -12,6 +12,18 @@ from app.config import get_settings
 from app.db.models import Plan, Role
 from app.services.users import DEFAULT_SETTINGS, on
 
+# Default order for user menu items (drag-and-drop in web panel edits menu_order)
+DEFAULT_MENU_ORDER = [
+    "shop",
+    "services",
+    "wallet",
+    "support",
+    "guide",
+    "faq",
+    "referral",
+    "miniapp",
+]
+
 
 def _t(ui: dict | None, key: str) -> str:
     if ui and key in ui and ui[key]:
@@ -19,67 +31,117 @@ def _t(ui: dict | None, key: str) -> str:
     return DEFAULT_SETTINGS.get(key, key)
 
 
+def _menu_order(ui: dict | None) -> list[str]:
+    raw = _t(ui, "menu_order")
+    parts = [p.strip() for p in (raw or "").split(",") if p.strip()]
+    if not parts:
+        return list(DEFAULT_MENU_ORDER)
+    # keep known keys, append any missing defaults at end
+    known = set(DEFAULT_MENU_ORDER)
+    ordered = [p for p in parts if p in known]
+    for key in DEFAULT_MENU_ORDER:
+        if key not in ordered:
+            ordered.append(key)
+    return ordered
+
+
 def main_menu(
     role: str,
     *,
     has_services: bool = False,
     ui: dict | None = None,
+    as_user: bool = False,
 ) -> InlineKeyboardMarkup:
+    """
+    User/reseller: shop-style sales menu.
+    Admin: management home only (no customer shop clutter), unless as_user=True.
+    """
+    if role == Role.ADMIN.value and not as_user:
+        return admin_main_menu(ui)
+
     settings = get_settings()
     layout = _t(ui, "menu_layout")
-    rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text=_t(ui, "btn_shop"), callback_data="shop:list")],
-    ]
-    if has_services:
-        rows.append(
-            [InlineKeyboardButton(text=_t(ui, "btn_services"), callback_data="svc:list")]
-        )
+    rows: list[list[InlineKeyboardButton]] = []
+    pending_row: list[InlineKeyboardButton] = []
 
-    mid: list[InlineKeyboardButton] = []
-    if on(_t(ui, "show_wallet")):
-        mid.append(InlineKeyboardButton(text=_t(ui, "btn_wallet"), callback_data="wallet:home"))
-    if on(_t(ui, "show_support")):
-        mid.append(InlineKeyboardButton(text=_t(ui, "btn_support"), callback_data="support:home"))
-    if mid:
+    def flush_pending() -> None:
+        nonlocal pending_row
+        if not pending_row:
+            return
         if layout == "compact":
-            # pair buttons on one row when possible
-            for i in range(0, len(mid), 2):
-                rows.append(mid[i : i + 2])
+            for i in range(0, len(pending_row), 2):
+                rows.append(pending_row[i : i + 2])
         else:
-            for b in mid:
+            for b in pending_row:
                 rows.append([b])
+        pending_row = []
 
-    help_row: list[InlineKeyboardButton] = []
-    if on(_t(ui, "show_guide")):
-        help_row.append(InlineKeyboardButton(text=_t(ui, "btn_guide"), callback_data="help:guide"))
-    if on(_t(ui, "show_faq")):
-        help_row.append(InlineKeyboardButton(text=_t(ui, "btn_faq"), callback_data="help:faq"))
-    if help_row:
-        rows.append(help_row)
+    def add_full(btn: InlineKeyboardButton) -> None:
+        flush_pending()
+        rows.append([btn])
 
-    if on(_t(ui, "show_referral")):
-        rows.append(
-            [InlineKeyboardButton(text=_t(ui, "btn_referral"), callback_data="ref:home")]
-        )
+    def add_mid(btn: InlineKeyboardButton) -> None:
+        pending_row.append(btn)
 
-    if settings.miniapp_enabled and on(_t(ui, "show_miniapp")):
-        rows.append(
-            [
+    for key in _menu_order(ui):
+        if key == "shop":
+            add_full(InlineKeyboardButton(text=_t(ui, "btn_shop"), callback_data="shop:list"))
+        elif key == "services" and has_services:
+            add_full(InlineKeyboardButton(text=_t(ui, "btn_services"), callback_data="svc:list"))
+        elif key == "wallet" and on(_t(ui, "show_wallet")):
+            add_mid(InlineKeyboardButton(text=_t(ui, "btn_wallet"), callback_data="wallet:home"))
+        elif key == "support" and on(_t(ui, "show_support")):
+            add_mid(InlineKeyboardButton(text=_t(ui, "btn_support"), callback_data="support:home"))
+        elif key == "guide" and on(_t(ui, "show_guide")):
+            add_mid(InlineKeyboardButton(text=_t(ui, "btn_guide"), callback_data="help:guide"))
+        elif key == "faq" and on(_t(ui, "show_faq")):
+            add_mid(InlineKeyboardButton(text=_t(ui, "btn_faq"), callback_data="help:faq"))
+        elif key == "referral" and on(_t(ui, "show_referral")):
+            add_full(InlineKeyboardButton(text=_t(ui, "btn_referral"), callback_data="ref:home"))
+        elif key == "miniapp" and settings.miniapp_enabled and on(_t(ui, "show_miniapp")):
+            add_full(
                 InlineKeyboardButton(
                     text=_t(ui, "btn_miniapp"),
                     web_app=WebAppInfo(url=settings.miniapp_url),
                 )
-            ]
-        )
+            )
+
+    flush_pending()
+
     if role == Role.RESELLER.value:
         rows.append(
             [InlineKeyboardButton(text=_t(ui, "btn_reseller"), callback_data="res:home")]
         )
-    if role == Role.ADMIN.value:
+    if role == Role.ADMIN.value and as_user:
         rows.append(
             [InlineKeyboardButton(text=_t(ui, "btn_admin"), callback_data="adm:home")]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_main_menu(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Primary home for bot owner — management tools only."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=_t(ui, "btn_admin"), callback_data="adm:home"),
+            ],
+            [
+                InlineKeyboardButton(text="🧾 رسیدها", callback_data="adm:payments"),
+                InlineKeyboardButton(text="🎫 تیکت‌ها", callback_data="adm:tickets"),
+            ],
+            [
+                InlineKeyboardButton(text="📦 پلن‌ها", callback_data="adm:plans"),
+                InlineKeyboardButton(text="🖥 پاسارگارد", callback_data="adm:pg"),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👁 پیش‌نمایش منوی کاربر",
+                    callback_data="menu:as_user",
+                )
+            ],
+        ]
+    )
 
 
 def plans_keyboard(plans: list[Plan], ui: dict | None = None) -> InlineKeyboardMarkup:

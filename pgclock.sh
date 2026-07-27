@@ -33,10 +33,13 @@ pause() {
 prompt_read() {
   # Always talk to the real terminal — prompts must NOT go to stdout
   # (values are captured with VAR="$(ask ...)")
+  # -e enables readline so Backspace / arrows work when editing mistakes
   local __var="$1"
   shift
   printf '%b' "$*" > /dev/tty
-  read -r "$__var" < /dev/tty || true
+  if ! read -e -r "$__var" < /dev/tty; then
+    printf -v "$__var" '%s' ""
+  fi
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -409,10 +412,46 @@ cmd_install() {
   ADMIN_IDS="$(echo "$ADMIN_IDS" | tr -d '[:space:]')"
 
   step "2/7  PasarGuard panel"
-  PG_BASE_URL="$(ask "PasarGuard panel URL" "https://dev.mrclock.website")"
-  PG_BASE_URL="${PG_BASE_URL%/}"
+    PG_BASE_URL="$(ask "PasarGuard panel URL" "https://dev.mrclock.website")"
+  # Keep only origin (strip accidental path like /panel)
+  PG_BASE_URL="$("$SYSTEM_PY" - <<PY
+from urllib.parse import urlparse, urlunparse
+s = """${PG_BASE_URL}""".strip().rstrip("/")
+if "://" not in s:
+    s = "https://" + s
+p = urlparse(s)
+print(urlunparse((p.scheme, p.netloc, "", "", "", "")).rstrip("/") or s)
+PY
+)"
+  ok "Using panel URL: ${PG_BASE_URL}"
   PG_USERNAME="$(ask "PasarGuard admin username")"
   PG_PASSWORD="$(ask_secret "PasarGuard admin password")"
+
+  # Quick login check before continuing
+  info "Testing PasarGuard login..."
+  if PG_BASE_URL="$PG_BASE_URL" PG_USERNAME="$PG_USERNAME" PG_PASSWORD="$PG_PASSWORD" "$SYSTEM_PY" - <<'PY'
+import os, urllib.parse, urllib.request
+base = os.environ["PG_BASE_URL"].rstrip("/")
+data = urllib.parse.urlencode({
+    "username": os.environ["PG_USERNAME"],
+    "password": os.environ["PG_PASSWORD"],
+}).encode()
+req = urllib.request.Request(base + "/api/admin/token", data=data, method="POST")
+try:
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        body = resp.read().decode()
+        assert "access_token" in body
+        print("OK")
+except Exception as e:
+    print("FAIL", e)
+    raise SystemExit(1)
+PY
+  then
+    ok "PasarGuard login OK"
+  else
+    err "PasarGuard login failed — check URL / username / password"
+    return 1
+  fi
 
   step "3/7  Web panel"
   WEB_PORT="$(ask "Web panel port" "9000")"

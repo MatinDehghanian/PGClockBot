@@ -145,6 +145,8 @@ DEFAULT_SETTINGS = {
     "show_support": "1",
     "show_miniapp": "1",
     "menu_layout": "classic",  # classic | compact
+    # comma-separated order for user menu (edited via drag-and-drop in web panel)
+    "menu_order": "shop,services,wallet,support,guide,faq,referral,miniapp",
 }
 
 
@@ -187,7 +189,8 @@ SETTING_GROUPS = {
         ("btn_sub_link", "دکمه لینک ساب"),
     ],
     "چیدمان منو": [
-        ("menu_layout", "چیدمان (classic یا compact)"),
+        ("menu_layout", "چیدمان ردیف‌ها (classic یا compact)"),
+        ("menu_order", "ترتیب دکمه‌ها (از صفحه Menu Layout)"),
         ("show_guide", "نمایش راهنما (1/0)"),
         ("show_faq", "نمایش FAQ (1/0)"),
         ("show_referral", "نمایش دعوت (1/0)"),

@@ -18,6 +18,21 @@ def _clean_str(value: object) -> str:
     return s
 
 
+def normalize_pg_base_url(raw: str) -> str:
+    """Keep only scheme://host[:port] — drop path/query typos."""
+    from urllib.parse import urlparse, urlunparse
+
+    s = (raw or "").strip().rstrip("/")
+    if not s:
+        return s
+    if "://" not in s:
+        s = "https://" + s
+    parsed = urlparse(s)
+    if not parsed.scheme or not parsed.netloc:
+        return s
+    return urlunparse((parsed.scheme, parsed.netloc, "", "", "", "")).rstrip("/")
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=str(ROOT_DIR / ".env"),
@@ -74,6 +89,11 @@ class Settings(BaseSettings):
     @classmethod
     def strip_wrap_quotes(cls, value: object) -> str:
         return _clean_str(value)
+
+    @field_validator("pg_base_url", mode="after")
+    @classmethod
+    def normalize_pg_url(cls, value: str) -> str:
+        return normalize_pg_base_url(value) or value
 
     @field_validator("admin_ids", mode="before")
     @classmethod

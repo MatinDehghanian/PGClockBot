@@ -351,6 +351,83 @@ def create_api_app(lifespan=None) -> FastAPI:
             )
         return RedirectResponse("/resellers", status_code=302)
 
+    @app.get("/menu-layout", response_class=HTMLResponse)
+    async def menu_layout_page(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.bot.keyboards import DEFAULT_MENU_ORDER
+
+        values = await get_all_settings(session)
+        order_raw = values.get("menu_order") or ",".join(DEFAULT_MENU_ORDER)
+        order = [p.strip() for p in order_raw.split(",") if p.strip()]
+        for key in DEFAULT_MENU_ORDER:
+            if key not in order:
+                order.append(key)
+        labels = {
+            "shop": "Shop / Buy",
+            "services": "My services",
+            "wallet": "Wallet",
+            "support": "Support",
+            "guide": "Guide",
+            "faq": "FAQ",
+            "referral": "Referral",
+            "miniapp": "Mini App",
+        }
+        toggles = {
+            "wallet": "show_wallet",
+            "support": "show_support",
+            "guide": "show_guide",
+            "faq": "show_faq",
+            "referral": "show_referral",
+            "miniapp": "show_miniapp",
+        }
+        items = []
+        for key in order:
+            toggle = toggles.get(key)
+            visible = True
+            if toggle:
+                visible = (values.get(toggle) or "1").strip() in {"1", "true", "yes", "on"}
+            items.append(
+                {
+                    "key": key,
+                    "label": labels.get(key, key),
+                    "btn": values.get(f"btn_{key}", key),
+                    "toggle": toggle,
+                    "visible": visible,
+                }
+            )
+        return render(
+            request,
+            "menu_layout.html",
+            {
+                "staff": staff,
+                "values": values,
+                "items": items,
+                "order_csv": ",".join(order),
+                "saved": request.query_params.get("saved") == "1",
+            },
+        )
+
+    @app.post("/menu-layout")
+    async def menu_layout_save(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        form = await request.form()
+        order = str(form.get("menu_order") or "").strip()
+        layout = str(form.get("menu_layout") or "classic").strip()
+        if order:
+            await set_setting(session, "menu_order", order)
+        if layout in {"classic", "compact"}:
+            await set_setting(session, "menu_layout", layout)
+        for key in ("wallet", "support", "guide", "faq", "referral", "miniapp"):
+            flag = "1" if form.get(f"show_{key}") else "0"
+            await set_setting(session, f"show_{key}", flag)
+        return RedirectResponse("/menu-layout?saved=1", status_code=302)
+
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(
         request: Request,

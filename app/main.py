@@ -86,6 +86,15 @@ def main() -> None:
             )
             raise
 
+        try:
+            await get_pg().ensure_token()
+            logger.info("PasarGuard panel login OK · %s", get_settings().pg_base_url)
+        except Exception:
+            logger.exception(
+                "PasarGuard login FAILED — fix PG_BASE_URL / PG_USERNAME / PG_PASSWORD "
+                "(use https://host only, no path)"
+            )
+
         if settings.webhook_url.strip():
             url = settings.webhook_url.rstrip("/") + settings.webhook_path
             await bot.set_webhook(url, drop_pending_updates=True)

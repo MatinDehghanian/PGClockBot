@@ -27,15 +27,23 @@ async def render_home(
     message: Message, session: AsyncSession, db_user: BotUser, *, edit: bool = False
 ):
     ui = await get_all_settings(session)
-    welcome = ui.get("welcome_text", "")
-    title = ui.get("shop_title", "")
-    try:
-        text = welcome.format(name=db_user.full_name or "دوست عزیز")
-    except Exception:
-        text = welcome
-    text = f"<b>{title}</b>\n\n{text}"
-    has = await _has_services(session, db_user.id)
-    markup = kb.main_menu(db_user.role, has_services=has, ui=ui)
+    if db_user.role == "admin":
+        text = (
+            f"<b>{ui.get('shop_title', 'PGClock')}</b>\n\n"
+            "🛠 پنل مدیریت\n"
+            "از گزینه‌های زیر برای مدیریت فروشگاه استفاده کنید."
+        )
+        markup = kb.main_menu(db_user.role, has_services=False, ui=ui)
+    else:
+        welcome = ui.get("welcome_text", "")
+        title = ui.get("shop_title", "")
+        try:
+            text = welcome.format(name=db_user.full_name or "دوست عزیز")
+        except Exception:
+            text = welcome
+        text = f"<b>{title}</b>\n\n{text}"
+        has = await _has_services(session, db_user.id)
+        markup = kb.main_menu(db_user.role, has_services=has, ui=ui)
     if edit and isinstance(message, Message):
         try:
             await message.edit_text(text, reply_markup=markup)
@@ -76,6 +84,21 @@ async def cb_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUs
     await callback.answer()
     if callback.message:
         await render_home(callback.message, session, db_user, edit=True)
+
+
+@router.callback_query(F.data == "menu:as_user")
+async def cb_home_as_user(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    """Admin preview of the customer menu."""
+    await callback.answer()
+    ui = await get_all_settings(session)
+    has = await _has_services(session, db_user.id)
+    markup = kb.main_menu(db_user.role, has_services=has, ui=ui, as_user=True)
+    text = "👁 <b>پیش‌نمایش منوی کاربر</b>\nاین همان منویی است که مشتری می‌بیند."
+    if callback.message:
+        try:
+            await callback.message.edit_text(text, reply_markup=markup)
+        except Exception:
+            await callback.message.answer(text, reply_markup=markup)
 
 
 @router.message(Command("menu"))

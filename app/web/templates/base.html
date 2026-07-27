@@ -4,10 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}PGClock{% endblock %}</title>
+  <meta name="color-scheme" content="dark" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/panel.css" />
+  {% block head %}{% endblock %}
 </head>
 <body>
   {% if staff is defined and staff %}
@@ -21,17 +23,18 @@
         </div>
       </div>
       <nav>
-        <a href="/dashboard">داشبورد</a>
-        <a href="/orders">سفارش‌ها</a>
-        <a href="/payments">پرداخت‌ها</a>
-        <a href="/tickets">تیکت‌ها</a>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/orders">Orders</a>
+        <a href="/payments">Payments</a>
+        <a href="/tickets">Tickets</a>
         {% if staff.role == 'admin' %}
-        <a href="/plans">پلن‌ها</a>
-        <a href="/users">کاربران</a>
-        <a href="/resellers">نمایندگان</a>
-        <a href="/settings">تنظیمات</a>
+        <a href="/plans">Plans</a>
+        <a href="/users">Users</a>
+        <a href="/resellers">Resellers</a>
+        <a href="/menu-layout">Menu layout</a>
+        <a href="/settings">Settings</a>
         {% endif %}
-        <a href="/logout" class="danger">خروج</a>
+        <a href="/logout" class="danger">Logout</a>
       </nav>
     </aside>
     <main class="main">
