@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros.html" import pay_status %}
 {% block title %}پرداخت‌ها{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -9,6 +10,7 @@
   <a class="btn btn-ghost" href="/settings">⚙ تنظیمات پرداخت</a>
 </div>
 <div class="card">
+  <div class="table-wrap">
   <table>
     <thead><tr><th>#</th><th>کاربر</th><th>مبلغ</th><th>نوع</th><th>وضعیت</th><th>سفارش</th><th>عملیات</th></tr></thead>
     <tbody>
@@ -20,15 +22,15 @@
         <td>{{ "شارژ کیف" if p.is_wallet_topup else "خرید" }}</td>
         <td>
           <span class="badge {% if p.status=='pending' %}warn{% elif p.status=='approved' %}ok{% else %}danger{% endif %}">
-            {% if p.status=='pending' %}در انتظار{% elif p.status=='approved' %}تأییدشده{% elif p.status=='rejected' %}ردشده{% else %}{{ p.status }}{% endif %}
+            {{ pay_status(p.status) }}
           </span>
         </td>
         <td>{{ p.order_id or "—" }}</td>
         <td>
           {% if p.status == 'pending' %}
           <div class="actions" style="margin:0">
-            <form method="post" action="/payments/{{ p.id }}/approve"><button class="btn" type="submit">تأیید</button></form>
-            <form method="post" action="/payments/{{ p.id }}/reject"><button class="btn btn-danger" type="submit">رد</button></form>
+            <form method="post" action="/payments/{{ p.id }}/approve"><button class="btn btn-sm" type="submit">تأیید</button></form>
+            <form method="post" action="/payments/{{ p.id }}/reject"><button class="btn btn-danger btn-sm" type="submit">رد</button></form>
           </div>
           {% else %}
           <span class="muted">—</span>
@@ -40,5 +42,6 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 {% endblock %}

@@ -1,10 +1,18 @@
 {% extends "base.html" %}
+{% from "macros.html" import ord_status, pay_status %}
 {% block title %}داشبورد{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>داشبورد</h1>
     <p>خلاصه فروش، پرداخت‌ها و دسترسی سریع</p>
+  </div>
+  <div class="version-box">
+    <span class="ver-num">نسخه {{ update.version }}</span>
+    <span class="ver-badge {{ update.tone }}">{{ update.label }}</span>
+    {% if update.update_available and update.remote_version %}
+    <span class="muted" style="font-size:11px">ریموت: {{ update.remote_version }}</span>
+    {% endif %}
   </div>
 </div>
 
@@ -46,7 +54,7 @@
             <td class="mono">{{ p.amount | num }}</td>
             <td>
               <span class="badge {% if p.status=='pending' %}warn{% elif p.status=='approved' %}ok{% else %}danger{% endif %}">
-                {% if p.status=='pending' %}معلق{% elif p.status=='approved' %}تأیید{% elif p.status=='rejected' %}رد{% else %}{{ p.status }}{% endif %}
+                {{ pay_status(p.status) }}
               </span>
             </td>
             <td>{% if p.is_wallet_topup %}شارژ کیف{% else %}خرید{% endif %}</td>
@@ -71,14 +79,18 @@
           <tr>
             <td class="mono">{{ o.id }}</td>
             <td class="mono">{{ o.amount | num }}</td>
-            <td><span class="badge">{{ o.status | order_status }}</span></td>
+            <td>
+              <span class="badge {% if o.status=='delivered' %}ok{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}warn{% elif o.status in ['rejected','cancelled'] %}danger{% endif %}">
+                {{ ord_status(o.status) }}
+              </span>
+            </td>
           </tr>
         {% endfor %}
         </tbody>
       </table>
     </div>
     {% else %}
-    <p class="muted">سفارشی نیست.</p>
+    <p class="muted">سفارشی ثبت نشده.</p>
     {% endif %}
   </div>
 </div>

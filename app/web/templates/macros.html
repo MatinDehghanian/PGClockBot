@@ -1,0 +1,32 @@
+{# Shared Persian labels — works even if Python filters are not registered yet #}
+
+{% macro ord_status(s) -%}
+{%- if s == 'pending' -%}در انتظار
+{%- elif s == 'awaiting_receipt' -%}منتظر رسید
+{%- elif s == 'awaiting_approval' -%}منتظر تأیید
+{%- elif s == 'paid' -%}پرداخت‌شده
+{%- elif s == 'delivered' -%}تحویل‌شده
+{%- elif s == 'rejected' -%}ردشده
+{%- elif s == 'cancelled' -%}لغوشده
+{%- elif s -%}{{ s }}
+{%- else -%}نامشخص
+{%- endif -%}
+{%- endmacro %}
+
+{% macro tkt_status(s) -%}
+{%- if s == 'open' -%}باز
+{%- elif s == 'answered' -%}پاسخ‌داده‌شده
+{%- elif s == 'closed' -%}بسته
+{%- elif s -%}{{ s }}
+{%- else -%}نامشخص
+{%- endif -%}
+{%- endmacro %}
+
+{% macro pay_status(s) -%}
+{%- if s == 'pending' -%}در انتظار
+{%- elif s == 'approved' -%}تأییدشده
+{%- elif s == 'rejected' -%}ردشده
+{%- elif s -%}{{ s }}
+{%- else -%}نامشخص
+{%- endif -%}
+{%- endmacro %}

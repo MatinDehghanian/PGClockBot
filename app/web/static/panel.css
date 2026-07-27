@@ -499,9 +499,9 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  background: var(--accent);
-  color: var(--accent-fg);
-  border: 0;
+  background: rgba(249, 115, 22, 0.25);
+  color: #000;
+  border: 1px solid var(--accent);
   border-radius: 8px;
   padding: 0 14px;
   min-height: 36px;
@@ -510,15 +510,33 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   font-weight: 650;
   cursor: pointer;
   white-space: nowrap;
+  text-decoration: none;
 }
-.btn:hover { filter: brightness(1.05); }
+.btn:hover, button.btn:hover, button[type=submit]:hover {
+  background: rgba(249, 115, 22, 0.38);
+  filter: none;
+  opacity: 1;
+  color: #000;
+}
 .btn-ghost {
-  background: transparent;
-  color: var(--text);
-  border: 1px solid var(--border);
-  font-weight: 550;
+  background: rgba(249, 115, 22, 0.25);
+  color: #000;
+  border: 1px solid var(--accent);
+  font-weight: 650;
 }
-.btn-danger { background: var(--danger); color: #1a0508; }
+.btn-ghost:hover {
+  background: rgba(249, 115, 22, 0.38);
+  color: #000;
+}
+.btn-danger {
+  background: rgba(248, 113, 113, 0.25);
+  color: #000;
+  border: 1px solid var(--danger);
+}
+.btn-danger:hover {
+  background: rgba(248, 113, 113, 0.38);
+  color: #000;
+}
 .btn-sm { min-height: 30px; padding: 0 10px; font-size: 12px; }
 .btn.sm { min-height: 30px; padding: 0 10px; font-size: 12px; }
 .actions {
@@ -639,12 +657,71 @@ tr:last-child td { border-bottom: 0; }
 }
 .footer-actions { display: flex; align-items: center; gap: 8px; }
 .btn-star {
-  background: var(--accent);
-  color: var(--accent-fg);
-  border: 0;
-  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(249, 115, 22, 0.25);
+  color: #000 !important;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 0 12px;
+  min-height: 32px;
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none !important;
 }
-.btn-star:hover { filter: brightness(1.06); opacity: 1; color: var(--accent-fg); }
+.btn-star:hover {
+  background: rgba(249, 115, 22, 0.38);
+  color: #000 !important;
+  opacity: 1;
+}
+.btn-star svg { width: 14px; height: 14px; flex: 0 0 auto; }
+
+.version-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.ver-num {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ver-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+.ver-badge.ok {
+  background: rgba(74, 222, 128, 0.14);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.35);
+}
+.ver-badge.err {
+  background: rgba(248, 113, 113, 0.14);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+.ver-badge.warn {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.35);
+}
+.brand-version {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 500;
+}
 .auth-box {
   width: min(400px, 100%);
   background: var(--bg-card);

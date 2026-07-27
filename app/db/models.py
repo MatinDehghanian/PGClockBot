@@ -123,7 +123,7 @@ class Order(Base):
 
     user: Mapped["BotUser"] = relationship(back_populates="orders", foreign_keys=[user_id])
     plan: Mapped[Optional["Plan"]] = relationship()
-    payment: Mapped[Optional["Payment"]] = relationship(back_populates="order", uselist=False)
+    payments: Mapped[list["Payment"]] = relationship(back_populates="order")
 
 
 class Payment(Base):
@@ -141,7 +141,7 @@ class Payment(Base):
     is_wallet_topup: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    order: Mapped[Optional["Order"]] = relationship(back_populates="payment")
+    order: Mapped[Optional["Order"]] = relationship(back_populates="payments")
 
 
 class UserService(Base):

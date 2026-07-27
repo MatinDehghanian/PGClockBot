@@ -6,7 +6,7 @@ import json
 import time
 from pathlib import Path
 from typing import Optional
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, quote
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -34,6 +34,7 @@ from app.db.session import SessionLocal
 from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.pasarguard import get_pg, parse_group_ids
 from app.services.resellers import make_reseller
+from app.services.updates import check_github_update, local_version
 from app.services.users import (
     SETTING_GROUPS,
     get_all_settings,
@@ -52,6 +53,9 @@ templates.env.filters["gb"] = format_gb
 templates.env.filters["num"] = format_number
 templates.env.filters["order_status"] = order_status_fa
 templates.env.filters["ticket_status"] = ticket_status_fa
+templates.env.globals["app_version"] = local_version()
+templates.env.globals["order_status_fa"] = order_status_fa
+templates.env.globals["ticket_status_fa"] = ticket_status_fa
 
 
 class NotAuthenticated(Exception):
@@ -64,7 +68,20 @@ class NotAdmin(Exception):
 
 def render(request: Request, name: str, context: dict | None = None, status_code: int = 200):
     ctx = dict(context or {})
+    ctx.setdefault("flash_ok", None)
+    ctx.setdefault("flash_err", None)
+    ctx.setdefault("app_version", local_version())
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
+
+
+def _redirect_msg(path: str, *, ok: str | None = None, err: str | None = None) -> RedirectResponse:
+    q = []
+    if ok:
+        q.append(f"ok={quote(ok)}")
+    if err:
+        q.append(f"err={quote(err)}")
+    url = path if not q else f"{path}?{'&'.join(q)}"
+    return RedirectResponse(url, status_code=303)
 
 
 def create_api_app(lifespan=None) -> FastAPI:
@@ -231,6 +248,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 await session.execute(select(Order).order_by(Order.id.desc()).limit(6))
             ).scalars().all()
         )
+        update = await check_github_update()
         return render(
             request,
             "dashboard.html",
@@ -247,6 +265,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 },
                 "recent_payments": recent_payments,
                 "recent_orders": recent_orders,
+                "update": update,
             },
         )
 
@@ -398,7 +417,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         result = await session.execute(
             select(Order)
             .options(
-                selectinload(Order.payment),
                 selectinload(Order.plan),
                 selectinload(Order.user),
             )
@@ -406,12 +424,26 @@ def create_api_app(lifespan=None) -> FastAPI:
             .limit(100)
         )
         orders = list(result.scalars().all())
+        payments_by_order: dict[int, Payment] = {}
+        if orders:
+            ids = [o.id for o in orders]
+            pay_rows = (
+                await session.execute(
+                    select(Payment)
+                    .where(Payment.order_id.in_(ids))
+                    .order_by(Payment.id.desc())
+                )
+            ).scalars().all()
+            for p in pay_rows:
+                if p.order_id is not None and p.order_id not in payments_by_order:
+                    payments_by_order[p.order_id] = p
         return render(
             request,
             "orders.html",
             {
                 "staff": staff,
                 "orders": orders,
+                "payments_by_order": payments_by_order,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -443,9 +475,9 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         order = await session.get(Order, order_id)
         if not order:
-            return RedirectResponse("/orders?err=سفارش یافت نشد", status_code=303)
+            return _redirect_msg("/orders", err="سفارش یافت نشد")
         if order.status == OrderStatus.DELIVERED.value:
-            return RedirectResponse("/orders?ok=قبلاً تحویل شده", status_code=303)
+            return _redirect_msg("/orders", ok="قبلاً تحویل شده")
 
         result = await session.execute(
             select(Payment)
@@ -466,13 +498,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 delivered = await deliver_order(session, order)
                 await _notify_order_user(session, payment, delivered)
             else:
-                return RedirectResponse(
-                    "/orders?err=این سفارش هنوز قابل تأیید نیست (رسید لازم است)",
-                    status_code=303,
-                )
+                return _redirect_msg("/orders", err="این سفارش هنوز قابل تأیید نیست (رسید لازم است)")
         except Exception as e:
-            return RedirectResponse(f"/orders?err={e}", status_code=303)
-        return RedirectResponse("/orders?ok=سفارش تأیید و تحویل شد", status_code=303)
+            return _redirect_msg("/orders", err=str(e))
+        return _redirect_msg("/orders", ok="سفارش تأیید و تحویل شد")
 
     @app.post("/orders/{order_id}/reject")
     async def order_reject(
@@ -482,7 +511,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         order = await session.get(Order, order_id)
         if not order:
-            return RedirectResponse("/orders?err=سفارش یافت نشد", status_code=303)
+            return _redirect_msg("/orders", err="سفارش یافت نشد")
         result = await session.execute(
             select(Payment)
             .where(Payment.order_id == order_id)
@@ -512,7 +541,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         else:
             order.status = OrderStatus.REJECTED.value
             await session.commit()
-        return RedirectResponse("/orders?ok=سفارش رد شد", status_code=303)
+        return _redirect_msg("/orders", ok="سفارش رد شد")
 
     @app.get("/payments", response_class=HTMLResponse)
     async def payments_page(
@@ -522,8 +551,20 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         result = await session.execute(select(Payment).order_by(Payment.id.desc()).limit(100))
         payments = list(result.scalars().all())
-        return render(request, "payments.html", {"staff": staff, "payments": payments},
+        return render(
+            request,
+            "payments.html",
+            {
+                "staff": staff,
+                "payments": payments,
+                "flash_ok": request.query_params.get("ok"),
+                "flash_err": request.query_params.get("err"),
+            },
         )
+
+    @app.get("/payments/{payment_id}/approve")
+    async def payment_approve_get(payment_id: int):
+        return _redirect_msg("/payments", err="برای تأیید از دکمه داخل صفحه پرداخت‌ها استفاده کنید")
 
     @app.post("/payments/{payment_id}/approve")
     async def payment_approve(
@@ -532,24 +573,30 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         payment = await session.get(Payment, payment_id)
-        if payment and payment.status == PaymentStatus.PENDING.value:
+        if not payment:
+            return _redirect_msg("/payments", err="پرداخت یافت نشد")
+        if payment.status != PaymentStatus.PENDING.value:
+            return _redirect_msg("/payments", err="این پرداخت قابل تأیید نیست")
+        try:
             order = await approve_payment(session, payment, reviewer_tg=0)
-            user = await session.get(BotUser, payment.user_id)
-            if user:
+        except Exception as e:
+            return _redirect_msg("/payments", err=str(e))
+        user = await session.get(BotUser, payment.user_id)
+        if user:
+            try:
+                from aiogram import Bot
+
+                from app.services.receipts import build_approved_user_text
+
+                text, markup = await build_approved_user_text(session, payment, order)
+                bot = Bot(token=get_settings().bot_token)
                 try:
-                    from aiogram import Bot
-
-                    from app.services.receipts import build_approved_user_text
-
-                    text, markup = await build_approved_user_text(session, payment, order)
-                    bot = Bot(token=get_settings().bot_token)
-                    try:
-                        await bot.send_message(user.telegram_id, text, reply_markup=markup)
-                    finally:
-                        await bot.session.close()
-                except Exception:
-                    pass
-        return RedirectResponse("/payments", status_code=303)
+                    await bot.send_message(user.telegram_id, text, reply_markup=markup)
+                finally:
+                    await bot.session.close()
+            except Exception:
+                pass
+        return _redirect_msg("/payments", ok="پرداخت تأیید شد")
 
     @app.post("/payments/{payment_id}/reject")
     async def payment_reject(
@@ -558,26 +605,30 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         payment = await session.get(Payment, payment_id)
-        if payment:
+        if not payment:
+            return _redirect_msg("/payments", err="پرداخت یافت نشد")
+        try:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
-            user = await session.get(BotUser, payment.user_id)
-            if user:
+        except Exception as e:
+            return _redirect_msg("/payments", err=str(e))
+        user = await session.get(BotUser, payment.user_id)
+        if user:
+            try:
+                from aiogram import Bot
+
+                from app.services.formatting import format_message
+
+                bot = Bot(token=get_settings().bot_token)
                 try:
-                    from aiogram import Bot
-
-                    from app.services.formatting import format_message
-
-                    bot = Bot(token=get_settings().bot_token)
-                    try:
-                        await bot.send_message(
-                            user.telegram_id,
-                            format_message("❌ پرداخت رد شد", f"پرداخت #{payment.id} رد شد."),
-                        )
-                    finally:
-                        await bot.session.close()
-                except Exception:
-                    pass
-        return RedirectResponse("/payments", status_code=303)
+                    await bot.send_message(
+                        user.telegram_id,
+                        format_message("❌ پرداخت رد شد", f"پرداخت #{payment.id} رد شد."),
+                    )
+                finally:
+                    await bot.session.close()
+            except Exception:
+                pass
+        return _redirect_msg("/payments", ok="پرداخت رد شد")
 
     @app.get("/users", response_class=HTMLResponse)
     async def users_page(

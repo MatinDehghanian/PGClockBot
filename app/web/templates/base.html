@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/panel.css?v=orange-rtl3" />
+  <link rel="stylesheet" href="/static/panel.css?v=btn-ver-1" />
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
   {% block head %}{% endblock %}
 </head>
@@ -36,6 +36,7 @@
         <div>
           <strong>کلاک بات</strong>
           <small>{{ staff.username }} · {% if staff.role == 'admin' %}مدیر{% elif staff.role == 'reseller' %}نماینده{% else %}{{ staff.role }}{% endif %}</small>
+          <span class="brand-version">v{{ app_version }}</span>
         </div>
       </div>
 
@@ -155,7 +156,10 @@
           <a href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener noreferrer">github.com/Mrclocks/PGClockBot</a>
         </div>
         <div class="footer-actions">
-          <a class="btn btn-sm btn-star" href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener noreferrer">⭐ ستاره به پروژه</a>
+          <a class="btn-star" href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener noreferrer">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21 8 14 2 9.4h7.6L12 2z"/></svg>
+            ستاره در گیت‌هاب
+          </a>
         </div>
       </footer>
     </main>

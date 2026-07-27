@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros.html" import ord_status %}
 {% block title %}سفارش‌ها{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -17,7 +18,7 @@
     </thead>
     <tbody>
     {% for o in orders %}
-      {% set pay = o.payment %}
+      {% set pay = payments_by_order.get(o.id) %}
       <tr>
         <td class="mono">{{ o.id }}</td>
         <td>{% if o.user %}{{ o.user.full_name or o.user.username or o.user_id }}{% else %}{{ o.user_id }}{% endif %}</td>
@@ -25,7 +26,7 @@
         <td>{{ o.amount | num }}</td>
         <td>
           <span class="badge {% if o.status=='delivered' %}ok{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}warn{% elif o.status in ['rejected','cancelled','failed'] %}danger{% endif %}">
-            {{ o.status | order_status }}
+            {{ ord_status(o.status) }}
           </span>
         </td>
         <td>{% if o.payment_method=='card' %}کارت{% elif o.payment_method=='wallet' %}کیف پول{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
