@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}اینباندهای پاسارگارد{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>اینباندها</h1>
+    <p>تگ‌ها و جزئیات اینباند از پاسارگارد</p>
+  </div>
+</div>
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+<div class="card">
+  <h2>تگ‌ها</h2>
+  {% if not inbounds %}
+  <p class="muted">اینباندی نیست.</p>
+  {% else %}
+  <div class="checks">
+    {% for item in inbounds %}
+      <span class="badge">{{ item if item is string else (item.get('tag') or item.get('name') or item) }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% if details %}
+<div class="card">
+  <h2>جزئیات</h2>
+  <pre class="mono muted" style="white-space:pre-wrap;margin:0">{{ details }}</pre>
+</div>
+{% endif %}
+{% endblock %}

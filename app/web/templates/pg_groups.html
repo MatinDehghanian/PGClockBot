@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}گروه‌های پاسارگارد{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>گروه‌ها</h1>
+    <p>هر گروه مجموعه‌ای از اینباندهاست — برای ساخت کاربر لازم است</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>ساخت گروه جدید</h2>
+  <form method="post" action="/pg/groups">
+    <label>نام گروه</label>
+    <input name="name" required placeholder="مثلاً پیش‌فرض" />
+    <label>اینباندها</label>
+    <div class="checks">
+      {% for tag in inbound_tags %}
+      <label><input type="checkbox" name="tag_{{ loop.index }}" value="{{ tag }}" /> {{ tag }}</label>
+      {% else %}
+      <span class="muted">اینباندی از پاسارگارد دریافت نشد.</span>
+      {% endfor %}
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit">ساخت در پاسارگارد</button>
+      <a class="btn btn-ghost" href="/pg/inbounds">مشاهده اینباندها</a>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>گروه‌های موجود</h2>
+  {% if not groups %}
+  <p class="muted">گروهی نیست.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>شناسه</th><th>نام</th><th>اینباندها</th><th></th></tr></thead>
+    <tbody>
+    {% for g in groups %}
+      <tr>
+        <td class="mono">{{ g.get('id') }}</td>
+        <td>{{ g.get('name') }}</td>
+        <td class="mono">{{ g.get('inbound_tags') or '—' }}</td>
+        <td>
+          <form method="post" action="/pg/groups/{{ g.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
+            <button class="btn btn-danger" type="submit">حذف</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

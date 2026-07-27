@@ -1,24 +1,29 @@
 {% extends "base.html" %}
-{% block title %}داشبورد — PGClock{% endblock %}
+{% block title %}داشبورد{% endblock %}
 {% block content %}
-<h1>داشبورد</h1>
-<p class="lead">نمای کلی فروش و وضعیت ربات</p>
-<div class="grid">
-  <div class="stat"><span>Users</span><strong>{{ stats.users }}</strong></div>
-  <div class="stat"><span>Orders</span><strong>{{ stats.orders }}</strong></div>
-  <div class="stat"><span>Services</span><strong>{{ stats.services }}</strong></div>
-  <div class="stat"><span>Pending</span><strong>{{ stats.pending }}</strong></div>
-  <div class="stat"><span>Revenue</span><strong>{{ "{:,}".format(stats.revenue).replace(",", "٬") }}</strong></div>
+<div class="page-head">
+  <div>
+    <h1>داشبورد</h1>
+    <p>نمای کلی فروش بات و میانبرهای مدیریت</p>
+  </div>
 </div>
-<div class="panel-card" style="margin-top:0.5rem">
-  <p class="lead" style="margin-bottom:0.75rem">Shortcuts</p>
-  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-    <a class="btn" href="/payments">Payments</a>
-    <a class="btn btn-outline" href="/orders">Orders</a>
+<div class="grid">
+  <div class="stat"><span>کاربران بات</span><strong>{{ stats.users }}</strong></div>
+  <div class="stat"><span>سفارش‌ها</span><strong>{{ stats.orders }}</strong></div>
+  <div class="stat"><span>سرویس‌ها</span><strong>{{ stats.services }}</strong></div>
+  <div class="stat"><span>رسید معلق</span><strong>{{ stats.pending }}</strong></div>
+  <div class="stat"><span>درآمد تحویل‌شده</span><strong>{{ "{:,}".format(stats.revenue).replace(",", "٬") }}</strong></div>
+</div>
+<div class="card">
+  <h2>میانبر</h2>
+  <div class="actions">
+    <a class="btn" href="/payments">بررسی پرداخت‌ها</a>
+    <a class="btn btn-ghost" href="/plans">پلن‌های فروش</a>
     {% if staff.role == 'admin' %}
-    <a class="btn btn-outline" href="/plans">Plans</a>
-    <a class="btn btn-outline" href="/menu-layout">Menu layout</a>
-    <a class="btn btn-outline" href="/settings">Settings</a>
+    <a class="btn btn-ghost" href="/pg">وضعیت پاسارگارد</a>
+    <a class="btn btn-ghost" href="/pg/templates">تمپلیت‌ها</a>
+    <a class="btn btn-ghost" href="/menu-layout">چیدمان منو</a>
+    <a class="btn btn-ghost" href="/settings">تنظیمات</a>
     {% endif %}
   </div>
 </div>

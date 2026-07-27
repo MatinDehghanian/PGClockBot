@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}تمپلیت‌های پاسارگارد{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>تمپلیت‌های کاربر</h1>
+    <p>ساخت و مدیریت تمپلیت مستقیم روی پاسارگارد</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>ساخت تمپلیت جدید</h2>
+  <form method="post" action="/pg/templates">
+    <div class="form-row">
+      <div>
+        <label>نام تمپلیت</label>
+        <input name="name" required placeholder="مثلاً ماهانه ۳۰ گیگ" />
+      </div>
+      <div>
+        <label>حجم (گیگابایت) — خالی = نامحدود</label>
+        <input name="data_limit_gb" type="number" step="0.1" min="0" placeholder="30" />
+      </div>
+      <div>
+        <label>مدت (روز)</label>
+        <input name="expire_days" type="number" min="1" value="30" required />
+      </div>
+    </div>
+    <label>گروه‌های پاسارگارد</label>
+    <div class="checks">
+      {% for g in groups %}
+      <label><input type="checkbox" name="g_{{ g.get('id') }}" value="{{ g.get('id') }}" /> {{ g.get('name') or g.get('id') }}</label>
+      {% else %}
+      <span class="muted">گروهی یافت نشد — ابتدا در بخش گروه‌ها بسازید.</span>
+      {% endfor %}
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit">ساخت در پاسارگارد</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>تمپلیت‌های موجود</h2>
+  {% if not templates %}
+  <p class="muted">تمپلیتی نیست.</p>
+  {% else %}
+  <table>
+    <thead>
+      <tr><th>شناسه</th><th>نام</th><th>حجم</th><th>مدت</th><th>گروه‌ها</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for t in templates %}
+      <tr>
+        <td class="mono">{{ t.get('id') }}</td>
+        <td>{{ t.get('name') or '—' }}</td>
+        <td>
+          {% if t.get('data_limit') %}
+            {{ (t.get('data_limit') / (1024**3)) | round(1) }} GB
+          {% else %}نامحدود{% endif %}
+        </td>
+        <td>
+          {% if t.get('expire_duration') %}
+            {{ (t.get('expire_duration') / 86400) | round(0) }} روز
+          {% else %}—{% endif %}
+        </td>
+        <td class="mono">{{ t.get('group_ids') or '—' }}</td>
+        <td>
+          <form method="post" action="/pg/templates/{{ t.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
+            <button class="btn btn-danger" type="submit">حذف</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

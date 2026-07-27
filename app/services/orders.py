@@ -209,6 +209,8 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         }
         pg_user = await pg.create_user_from_template(payload)
     else:
+        from app.services.pasarguard import parse_group_ids
+
         data_limit = None
         if plan.data_limit_gb is not None:
             data_limit = int(plan.data_limit_gb * (1024**3))
@@ -217,19 +219,18 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             import time
 
             expire = int(time.time()) + plan.duration_days * 86400
-        groups = await pg.get_groups_simple()
-        group_ids = []
-        if isinstance(groups, list):
-            group_ids = [g["id"] for g in groups if isinstance(g, dict) and "id" in g]
-        elif isinstance(groups, dict) and "groups" in groups:
-            group_ids = [g["id"] for g in groups["groups"]]
+        group_ids = parse_group_ids(getattr(plan, "pg_group_ids", None))
+        if not group_ids:
+            raise ValueError(
+                "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
+            )
         pg_user = await pg.create_user(
             {
                 "username": username,
                 "status": "active",
                 "data_limit": data_limit,
                 "expire": expire,
-                "group_ids": group_ids[:1] if group_ids else None,
+                "group_ids": group_ids,
                 "note": f"PGClockBot order #{order.id}",
             }
         )

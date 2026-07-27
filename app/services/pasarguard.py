@@ -158,17 +158,57 @@ class PasarGuardClient:
     async def get_user_templates(self) -> Any:
         return await self.request("GET", "/api/user_templates")
 
-    async def get_user_templates_simple(self) -> Any:
-        return await self.request("GET", "/api/user_templates/simple")
+    async def get_user_templates_simple(self) -> list[dict]:
+        data = await self.request("GET", "/api/user_templates/simple")
+        return as_list(data, "templates")
 
-    async def get_groups_simple(self) -> Any:
-        return await self.request("GET", "/api/groups/simple")
+    async def create_user_template(self, payload: dict) -> dict:
+        return await self.request("POST", "/api/user_template", json=payload)
+
+    async def get_user_template(self, template_id: int) -> dict:
+        return await self.request("GET", f"/api/user_template/{template_id}")
+
+    async def delete_user_template(self, template_id: int) -> None:
+        await self.request("DELETE", f"/api/user_template/{template_id}")
+
+    async def get_groups(self) -> Any:
+        return await self.request("GET", "/api/groups")
+
+    async def get_groups_simple(self) -> list[dict]:
+        data = await self.request("GET", "/api/groups/simple")
+        return as_list(data, "groups")
+
+    async def create_group(self, payload: dict) -> dict:
+        return await self.request("POST", "/api/group", json=payload)
+
+    async def get_group(self, group_id: int) -> dict:
+        return await self.request("GET", f"/api/group/{group_id}")
+
+    async def delete_group(self, group_id: int) -> None:
+        await self.request("DELETE", f"/api/group/{group_id}")
+
+    async def get_inbounds(self) -> list:
+        data = await self.request("GET", "/api/inbounds")
+        return as_any_list(data, "inbounds")
+
+    async def get_inbounds_details(self) -> Any:
+        return await self.request("GET", "/api/inbounds/details")
+
+    async def get_hosts(self) -> list[dict]:
+        data = await self.request("GET", "/api/hosts")
+        return as_list(data, "hosts")
 
     async def get_system_stats(self) -> dict:
-        return await self.request("GET", "/api/system")
+        data = await self.request("GET", "/api/system")
+        return data if isinstance(data, dict) else {"raw": data}
 
-    async def get_nodes(self) -> Any:
-        return await self.request("GET", "/api/nodes")
+    async def get_nodes(self) -> list[dict]:
+        data = await self.request("GET", "/api/nodes")
+        return as_list(data, "nodes")
+
+    async def get_nodes_simple(self) -> list[dict]:
+        data = await self.request("GET", "/api/nodes/simple")
+        return as_list(data, "nodes")
 
     async def get_nodes_realtime(self) -> Any:
         return await self.request("GET", "/api/nodes/realtime_stats")
@@ -181,6 +221,25 @@ class PasarGuardClient:
 
     async def subscription_usage(self, token: str) -> Any:
         return await self.request("GET", f"/sub/{token}/usage", auth=False)
+
+
+def as_any_list(data: Any, *keys: str) -> list:
+    if data is None:
+        return []
+    if isinstance(data, list):
+        return list(data)
+    if isinstance(data, dict):
+        for key in keys:
+            if key in data and isinstance(data[key], list):
+                return list(data[key])
+        for key in ("items", "data", "results"):
+            if key in data and isinstance(data[key], list):
+                return list(data[key])
+    return []
+
+
+def as_list(data: Any, *keys: str) -> list[dict]:
+    return [x for x in as_any_list(data, *keys) if isinstance(x, dict)]
 
 
 _pg: Optional[PasarGuardClient] = None
@@ -207,3 +266,17 @@ def extract_sub_token(subscription_url: str | None) -> str | None:
         return None
     token = parts[-1].split("?")[0].strip("/")
     return token or None
+
+
+def parse_group_ids(raw: str | None) -> list[int]:
+    if not raw:
+        return []
+    out: list[int] = []
+    for part in str(raw).replace(" ", "").split(","):
+        if not part:
+            continue
+        try:
+            out.append(int(part))
+        except ValueError:
+            continue
+    return out

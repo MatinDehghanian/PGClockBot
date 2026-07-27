@@ -95,7 +95,7 @@ async def set_setting(session: AsyncSession, key: str, value: str) -> None:
 
 DEFAULT_SETTINGS = {
     # texts
-    "shop_title": "فروشگاه Clock",
+    "shop_title": "فروشگاه کلاک",
     "welcome_text": (
         "سلام {name} 👋\n"
         "به ربات فروش پاسارگارد خوش آمدید.\n"
@@ -108,8 +108,9 @@ DEFAULT_SETTINGS = {
     "force_join_enabled": "0",
     "trial_enabled": "0",
     "referral_bonus": "0",
+    "auto_approve_payments": "0",
     "faq_text": "سوالات متداول به‌زودی تکمیل می‌شود.",
-    "guide_text": "برای اتصال، لینک سابسکریپشن را در کلاینت خود وارد کنید.",
+    "guide_text": "برای اتصال، لینک اشتراک را در کلاینت خود وارد کنید.",
     "purchase_success_text": "✅ پرداخت موفق و سرویس فعال شد.\nسفارش #{order_id}",
     "card_pay_text": (
         "💳 کارت به کارت\n\n"
@@ -119,24 +120,24 @@ DEFAULT_SETTINGS = {
         "پس از واریز، عکس رسید را همینجا ارسال کنید."
     ),
     "referral_text": "🎁 دعوت دوستان\n\nکد شما: {code}\nلینک دعوت:\n{link}",
-    # button labels
-    "btn_shop": "🛒 خرید سرویس",
-    "btn_services": "📦 سرویس‌های من",
-    "btn_wallet": "👛 کیف پول",
-    "btn_support": "🎧 پشتیبانی",
+    # button labels (emoji = رنگ بصری؛ تلگرام رنگ دکمه ندارد)
+    "btn_shop": "🟢🛒 خرید سرویس",
+    "btn_services": "🔵📦 سرویس‌های من",
+    "btn_wallet": "🟡👛 کیف پول",
+    "btn_support": "🟣🎧 پشتیبانی",
     "btn_guide": "📘 راهنما",
-    "btn_faq": "❓ FAQ",
+    "btn_faq": "❓ سوالات متداول",
     "btn_referral": "🎁 دعوت دوستان",
     "btn_miniapp": "📱 مینی‌اپ",
     "btn_reseller": "🤝 پنل نماینده",
     "btn_admin": "🛠 پنل ادمین",
     "btn_back": "⬅️ بازگشت",
-    "btn_pay_wallet": "👛 پرداخت از کیف پول",
-    "btn_pay_card": "💳 کارت به کارت",
+    "btn_pay_wallet": "🟢👛 پرداخت از کیف پول",
+    "btn_pay_card": "🔵💳 کارت به کارت",
     "btn_pay_discount": "🏷 کد تخفیف",
     "btn_cancel": "❌ انصراف",
     "btn_renew": "🔄 تمدید",
-    "btn_sub_link": "🔗 لینک ساب",
+    "btn_sub_link": "🔗 لینک اشتراک",
     # visibility / layout (1=on 0=off)
     "show_guide": "1",
     "show_faq": "1",
@@ -145,59 +146,79 @@ DEFAULT_SETTINGS = {
     "show_support": "1",
     "show_miniapp": "1",
     "menu_layout": "classic",  # classic | compact
-    # comma-separated order for user menu (edited via drag-and-drop in web panel)
     "menu_order": "shop,services,wallet,support,guide,faq,referral,miniapp",
 }
 
-
+# field kinds: text | textarea | toggle | select | number | note
+# (key, label, kind, help?, options?)
 SETTING_GROUPS = {
-    "عمومی و متن‌ها": [
-        ("shop_title", "عنوان فروشگاه"),
-        ("welcome_text", "متن خوش‌آمد ({name})"),
-        ("support_text", "متن پشتیبانی"),
-        ("faq_text", "متن FAQ"),
-        ("guide_text", "متن راهنما"),
-        ("purchase_success_text", "متن موفقیت خرید ({order_id})"),
-        ("card_pay_text", "متن کارت‌به‌کارت ({amount} {card} {holder})"),
-        ("referral_text", "متن دعوت ({code} {link})"),
+    "🛒 فروشگاه": [
+        ("shop_title", "عنوان فروشگاه", "text", "نمایش در بالای منوی ربات"),
+        ("welcome_text", "متن خوش‌آمد", "textarea", "متغیر: {name}"),
+        ("trial_enabled", "تست رایگان", "toggle", "اگر روشن باشد پلن‌های تست در بات دیده می‌شوند"),
     ],
-    "پرداخت و کانال": [
-        ("card_number", "شماره کارت"),
-        ("card_holder", "صاحب کارت"),
-        ("force_join_channel", "کانال اجباری (@channel یا لینک)"),
-        ("force_join_enabled", "عضویت اجباری (1/0)"),
-        ("trial_enabled", "تست رایگان (1/0)"),
-        ("referral_bonus", "پاداش دعوت (تومان)"),
+    "💳 پرداخت": [
+        (
+            "auto_approve_payments",
+            "تأیید خودکار رسید",
+            "toggle",
+            "روشن = بلافاصله بعد از ارسال رسید تأیید و تحویل می‌شود. خاموش = تأیید دستی ادمین در بات یا وب‌پنل",
+        ),
+        ("card_number", "شماره کارت", "text", "برای کارت‌به‌کارت"),
+        ("card_holder", "صاحب کارت", "text", "نام روی کارت"),
+        ("card_pay_text", "متن راهنمای کارت‌به‌کارت", "textarea", "متغیرها: {amount} {card} {holder}"),
+        ("purchase_success_text", "متن موفقیت خرید", "textarea", "متغیر: {order_id}"),
+        ("referral_bonus", "پاداش دعوت (تومان)", "number", "مبلغ هدیه به معرف"),
     ],
-    "برچسب دکمه‌ها": [
-        ("btn_shop", "دکمه خرید"),
-        ("btn_services", "دکمه سرویس‌ها"),
-        ("btn_wallet", "دکمه کیف پول"),
-        ("btn_support", "دکمه پشتیبانی"),
-        ("btn_guide", "دکمه راهنما"),
-        ("btn_faq", "دکمه FAQ"),
-        ("btn_referral", "دکمه دعوت"),
-        ("btn_miniapp", "دکمه مینی‌اپ"),
-        ("btn_reseller", "دکمه نماینده"),
-        ("btn_admin", "دکمه ادمین"),
-        ("btn_back", "دکمه بازگشت"),
-        ("btn_pay_wallet", "دکمه پرداخت کیف پول"),
-        ("btn_pay_card", "دکمه کارت‌به‌کارت"),
-        ("btn_pay_discount", "دکمه کد تخفیف"),
-        ("btn_cancel", "دکمه انصراف"),
-        ("btn_renew", "دکمه تمدید"),
-        ("btn_sub_link", "دکمه لینک ساب"),
+    "📢 کانال و پشتیبانی": [
+        ("force_join_enabled", "عضویت اجباری کانال", "toggle", ""),
+        ("force_join_channel", "آدرس کانال", "text", "@channel یا لینک"),
+        ("support_text", "متن پشتیبانی", "textarea", ""),
+        ("faq_text", "متن سوالات متداول", "textarea", ""),
+        ("guide_text", "متن راهنما", "textarea", ""),
+        ("referral_text", "متن دعوت دوستان", "textarea", "متغیرها: {code} {link}"),
     ],
-    "چیدمان منو": [
-        ("menu_layout", "چیدمان ردیف‌ها (classic یا compact)"),
-        ("menu_order", "ترتیب دکمه‌ها (از صفحه Menu Layout)"),
-        ("show_guide", "نمایش راهنما (1/0)"),
-        ("show_faq", "نمایش FAQ (1/0)"),
-        ("show_referral", "نمایش دعوت (1/0)"),
-        ("show_wallet", "نمایش کیف پول (1/0)"),
-        ("show_support", "نمایش پشتیبانی (1/0)"),
-        ("show_miniapp", "نمایش مینی‌اپ (1/0)"),
+    "🎛 برچسب دکمه‌ها": [
+        ("btn_shop", "خرید", "text", "تلگرام رنگ دکمه ندارد — از ایموجی رنگی استفاده کنید"),
+        ("btn_services", "سرویس‌ها", "text", ""),
+        ("btn_wallet", "کیف پول", "text", ""),
+        ("btn_support", "پشتیبانی", "text", ""),
+        ("btn_guide", "راهنما", "text", ""),
+        ("btn_faq", "سوالات متداول", "text", ""),
+        ("btn_referral", "دعوت", "text", ""),
+        ("btn_miniapp", "مینی‌اپ", "text", ""),
+        ("btn_reseller", "نماینده", "text", ""),
+        ("btn_admin", "ادمین", "text", ""),
+        ("btn_back", "بازگشت", "text", ""),
+        ("btn_pay_wallet", "پرداخت کیف پول", "text", ""),
+        ("btn_pay_card", "کارت‌به‌کارت", "text", ""),
+        ("btn_pay_discount", "کد تخفیف", "text", ""),
+        ("btn_cancel", "انصراف", "text", ""),
+        ("btn_renew", "تمدید", "text", ""),
+        ("btn_sub_link", "لینک اشتراک", "text", ""),
     ],
+    "🗂 نمایش منو": [
+        (
+            "menu_layout",
+            "حالت ردیف‌ها",
+            "select",
+            "از صفحه چیدمان منو هم قابل تنظیم است",
+            [("classic", "کلاسیک — هر دکمه یک ردیف"), ("compact", "فشرده — دکمه‌ها جفتی")],
+        ),
+        ("show_wallet", "نمایش کیف پول", "toggle", ""),
+        ("show_support", "نمایش پشتیبانی", "toggle", ""),
+        ("show_guide", "نمایش راهنما", "toggle", ""),
+        ("show_faq", "نمایش سوالات متداول", "toggle", ""),
+        ("show_referral", "نمایش دعوت", "toggle", ""),
+        ("show_miniapp", "نمایش مینی‌اپ", "toggle", ""),
+    ],
+}
+
+TOGGLE_KEYS = {
+    item[0]
+    for fields in SETTING_GROUPS.values()
+    for item in fields
+    if len(item) >= 3 and item[2] == "toggle"
 }
 
 

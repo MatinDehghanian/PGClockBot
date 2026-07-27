@@ -1,44 +1,128 @@
 {% extends "base.html" %}
-{% block title %}پلن‌ها — PGClock{% endblock %}
+{% block title %}پلن‌های فروش{% endblock %}
 {% block content %}
-<h1>پلن‌ها</h1>
-<p class="lead">قیمت‌گذاری فروش روی تمپلیت‌های پاسارگارد</p>
-<div class="panel" style="margin-bottom:18px">
-  <div class="panel-head">افزودن پلن</div>
-  <form method="post" action="/plans" class="form-grid">
-    <label>نام<input name="name" required /></label>
-    <label>قیمت (تومان)<input name="price" type="number" required /></label>
-    <label>مدت (روز)<input name="duration_days" type="number" value="30" /></label>
-    <label>حجم GB (خالی=نامحدود)<input name="data_limit_gb" /></label>
-    <label>Template ID پاسارگارد<input name="pg_template_id" /></label>
-    <label class="full">توضیح<textarea name="description" rows="2"></textarea></label>
-    <div class="full"><button class="btn" type="submit">ذخیره پلن</button></div>
+<div class="page-head">
+  <div>
+    <h1>پلن‌های فروش</h1>
+    <p>نام، حجم، مدت و قیمت دلخواه — ساخت کاربر در پاسارگارد هنگام خرید</p>
+  </div>
+</div>
+
+{% if pg_error %}<div class="flash warn">پاسارگارد: {{ pg_error }} — پلن‌ها را می‌توانید ذخیره کنید ولی تحویل نیاز به اتصال دارد.</div>{% endif %}
+
+<div class="card">
+  <h2>افزودن پلن</h2>
+  <form method="post" action="/plans">
+    <div class="form-row">
+      <div>
+        <label>نام پلن</label>
+        <input name="name" required placeholder="مثلاً ویژه ۴۰ گیگ" />
+      </div>
+      <div>
+        <label>قیمت (تومان)</label>
+        <input name="price" type="number" min="0" required placeholder="150000" />
+      </div>
+      <div>
+        <label>مدت (روز)</label>
+        <input name="duration_days" type="number" min="1" value="30" required />
+      </div>
+      <div>
+        <label>حجم (گیگ) — خالی = نامحدود</label>
+        <input name="data_limit_gb" type="number" step="0.1" min="0" placeholder="30" />
+      </div>
+    </div>
+
+    <label>توضیح کوتاه</label>
+    <input name="description" placeholder="نمایش در بات" />
+
+    <label>حالت ساخت در پاسارگارد</label>
+    <select name="mode" id="plan-mode">
+      <option value="custom">سفارشی (گروه + حجم + مدت)</option>
+      <option value="template">از تمپلیت آماده پاسارگارد</option>
+    </select>
+
+    <div id="mode-custom">
+      <label>گروه‌های پاسارگارد (حداقل یکی)</label>
+      <div class="checks">
+        {% for g in groups %}
+        <label><input type="checkbox" name="group_{{ g.get('id') }}" value="{{ g.get('id') }}" /> {{ g.get('name') or g.get('id') }}</label>
+        {% else %}
+        <span class="muted">گروهی نیست — از منوی پاسارگارد → گروه‌ها بسازید.</span>
+        {% endfor %}
+      </div>
+      <label class="checks" style="margin-top:.8rem">
+        <input type="checkbox" name="also_create_template" value="1" />
+        همزمان تمپلیت مشابه در پاسارگارد هم ساخته شود
+      </label>
+    </div>
+
+    <div id="mode-template" style="display:none">
+      <label>تمپلیت پاسارگارد</label>
+      <select name="pg_template_id">
+        <option value="">— انتخاب کنید —</option>
+        {% for t in templates %}
+        <option value="{{ t.get('id') }}">#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="actions">
+      <button class="btn" type="submit">ذخیره پلن</button>
+      <a class="btn btn-ghost" href="/pg/templates">مدیریت تمپلیت‌ها</a>
+      <a class="btn btn-ghost" href="/pg/groups">مدیریت گروه‌ها</a>
+    </div>
   </form>
 </div>
-<div class="panel">
-  <div class="panel-head">لیست</div>
+
+<div class="card">
+  <h2>پلن‌های فعال در بات</h2>
   <table>
-    <thead><tr><th>#</th><th>نام</th><th>قیمت</th><th>مدت</th><th>GB</th><th>Template</th><th>وضعیت</th><th></th></tr></thead>
+    <thead>
+      <tr><th>نام</th><th>قیمت</th><th>مدت</th><th>حجم</th><th>منبع پاسارگارد</th><th>وضعیت</th><th></th></tr>
+    </thead>
     <tbody>
     {% for p in plans %}
       <tr>
-        <td>{{ p.id }}</td>
         <td>{{ p.name }}</td>
         <td>{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
-        <td>{{ p.duration_days }}</td>
-        <td>{{ p.data_limit_gb if p.data_limit_gb is not none else "∞" }}</td>
-        <td>{{ p.pg_template_id or "—" }}</td>
-        <td><span class="badge {% if p.is_active %}ok{% else %}bad{% endif %}">{{ "فعال" if p.is_active else "خاموش" }}</span></td>
+        <td>{{ p.duration_days }} روز</td>
+        <td>{% if p.data_limit_gb is not none %}{{ p.data_limit_gb }} GB{% else %}نامحدود{% endif %}</td>
+        <td class="mono">
+          {% if p.pg_template_id %}تمپلیت #{{ p.pg_template_id }}
+          {% elif p.pg_group_ids %}گروه {{ p.pg_group_ids }}
+          {% else %}—{% endif %}
+        </td>
+        <td>{% if p.is_active %}<span class="badge">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td>
-          <form method="post" action="/plans/{{ p.id }}/toggle">
-            <button class="btn ghost sm" type="submit">تغییر وضعیت</button>
-          </form>
+          <div class="actions" style="margin:0">
+            <form method="post" action="/plans/{{ p.id }}/toggle">
+              <button class="btn btn-ghost" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
+            </form>
+            <form method="post" action="/plans/{{ p.id }}/delete" onsubmit="return confirm('حذف پلن از فروشگاه؟')">
+              <button class="btn btn-danger" type="submit">حذف</button>
+            </form>
+          </div>
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="8">پلنی نیست</td></tr>
+      <tr><td colspan="7" class="muted">پلنی نیست.</td></tr>
     {% endfor %}
     </tbody>
   </table>
 </div>
+
+<script>
+(function(){
+  const mode = document.getElementById('plan-mode');
+  const custom = document.getElementById('mode-custom');
+  const tpl = document.getElementById('mode-template');
+  function sync(){
+    const t = mode.value === 'template';
+    custom.style.display = t ? 'none' : 'block';
+    tpl.style.display = t ? 'block' : 'none';
+  }
+  mode.addEventListener('change', sync);
+  sync();
+})();
+</script>
 {% endblock %}

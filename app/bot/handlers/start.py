@@ -26,22 +26,23 @@ async def _has_services(session: AsyncSession, user_id: int) -> bool:
 async def render_home(
     message: Message, session: AsyncSession, db_user: BotUser, *, edit: bool = False
 ):
+    from app.services.formatting import format_message
+
     ui = await get_all_settings(session)
     if db_user.role == "admin":
-        text = (
-            f"<b>{ui.get('shop_title', 'PGClock')}</b>\n\n"
-            "🛠 پنل مدیریت\n"
-            "از گزینه‌های زیر برای مدیریت فروشگاه استفاده کنید."
+        text = format_message(
+            f"🛠 {ui.get('shop_title', 'کلاک')}",
+            "پنل مدیریت فروشگاه\nاز گزینه‌های زیر استفاده کنید.",
         )
         markup = kb.main_menu(db_user.role, has_services=False, ui=ui)
     else:
         welcome = ui.get("welcome_text", "")
         title = ui.get("shop_title", "")
         try:
-            text = welcome.format(name=db_user.full_name or "دوست عزیز")
+            body = welcome.format(name=db_user.full_name or "دوست عزیز")
         except Exception:
-            text = welcome
-        text = f"<b>{title}</b>\n\n{text}"
+            body = welcome
+        text = format_message(f"✨ {title}", body)
         has = await _has_services(session, db_user.id)
         markup = kb.main_menu(db_user.role, has_services=has, ui=ui)
     if edit and isinstance(message, Message):
@@ -89,11 +90,13 @@ async def cb_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUs
 @router.callback_query(F.data == "menu:as_user")
 async def cb_home_as_user(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     """Admin preview of the customer menu."""
+    from app.services.formatting import format_message
+
     await callback.answer()
     ui = await get_all_settings(session)
     has = await _has_services(session, db_user.id)
     markup = kb.main_menu(db_user.role, has_services=has, ui=ui, as_user=True)
-    text = "👁 <b>پیش‌نمایش منوی کاربر</b>\nاین همان منویی است که مشتری می‌بیند."
+    text = format_message("👁 پیش‌نمایش منوی کاربر", "این همان منویی است که مشتری می‌بیند.")
     if callback.message:
         try:
             await callback.message.edit_text(text, reply_markup=markup)
@@ -108,38 +111,55 @@ async def cmd_menu(message: Message, session: AsyncSession, db_user: BotUser):
 
 @router.callback_query(F.data == "help:guide")
 async def help_guide(callback: CallbackQuery, session: AsyncSession):
+    from app.services.formatting import format_message
+
     await callback.answer()
     ui = await get_all_settings(session)
     if callback.message:
-        await callback.message.edit_text(ui["guide_text"], reply_markup=kb.back_home(ui))
+        await callback.message.edit_text(
+            format_message("📘 راهنما", ui.get("guide_text") or ""),
+            reply_markup=kb.back_home(ui),
+        )
 
 
 @router.callback_query(F.data == "help:faq")
 async def help_faq(callback: CallbackQuery, session: AsyncSession):
+    from app.services.formatting import format_message
+
     await callback.answer()
     ui = await get_all_settings(session)
     if callback.message:
-        await callback.message.edit_text(ui["faq_text"], reply_markup=kb.back_home(ui))
+        await callback.message.edit_text(
+            format_message("❓ سوالات متداول", ui.get("faq_text") or ""),
+            reply_markup=kb.back_home(ui),
+        )
 
 
 @router.callback_query(F.data == "ref:home")
-async def ref_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def referral_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    from app.services.formatting import format_message
+
     await callback.answer()
     ui = await get_all_settings(session)
-    settings = get_settings()
-    uname = settings.bot_username or "bot"
+    me = await callback.bot.get_me()
+    uname = me.username or get_settings().bot_username or "bot"
     link = f"https://t.me/{uname}?start=ref_{db_user.referral_code}"
     try:
-        text = ui["referral_text"].format(code=db_user.referral_code, link=link)
+        body = ui["referral_text"].format(code=db_user.referral_code, link=link)
     except Exception:
-        text = f"کد: {db_user.referral_code}\n{link}"
+        body = f"کد: {db_user.referral_code}\n{link}"
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.back_home(ui))
+        await callback.message.edit_text(
+            format_message("🎁 دعوت دوستان", body),
+            reply_markup=kb.back_home(ui),
+        )
 
 
 async def _link_subscription(
     message: Message, session: AsyncSession, db_user: BotUser, token: str
 ):
+    from app.services.formatting import format_message
+
     ui = await get_all_settings(session)
     pg = get_pg()
     try:
@@ -170,6 +190,6 @@ async def _link_subscription(
         await session.commit()
 
     await message.answer(
-        "✅ سرویس به حساب شما متصل شد:\n\n" + service_card(info),
+        format_message("✅ اتصال سرویس", service_card(info)),
         reply_markup=kb.service_actions(svc.id, ui),
     )

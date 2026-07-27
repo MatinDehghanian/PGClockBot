@@ -1,24 +1,28 @@
 {% extends "base.html" %}
-{% block title %}سفارش‌ها — PGClock{% endblock %}
+{% block title %}سفارش‌ها{% endblock %}
 {% block content %}
-<h1>سفارش‌ها</h1>
-<p class="lead">آخرین سفارش‌های ثبت‌شده در ربات</p>
-<div class="panel">
+<div class="page-head">
+  <div>
+    <h1>سفارش‌ها</h1>
+    <p>آخرین سفارش‌های ثبت‌شده در ربات</p>
+  </div>
+</div>
+<div class="card">
   <table>
     <thead><tr><th>#</th><th>کاربر</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th>روش</th><th>زمان</th></tr></thead>
     <tbody>
     {% for o in orders %}
       <tr>
-        <td>{{ o.id }}</td>
+        <td class="mono">{{ o.id }}</td>
         <td>{{ o.user_id }}</td>
         <td>{{ o.plan_id or "—" }}</td>
         <td>{{ "{:,}".format(o.amount).replace(",", "٬") }}</td>
-        <td><span class="badge">{{ o.status }}</span></td>
+        <td><span class="badge {% if o.status=='delivered' %}{% elif o.status=='pending' %}warn{% elif o.status in ['rejected','failed'] %}danger{% endif %}">{{ o.status }}</span></td>
         <td>{{ o.payment_method or "—" }}</td>
-        <td>{{ o.created_at }}</td>
+        <td class="muted">{{ o.created_at }}</td>
       </tr>
     {% else %}
-      <tr><td colspan="7">سفارشی نیست</td></tr>
+      <tr><td colspan="7" class="muted">سفارشی نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>

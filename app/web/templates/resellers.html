@@ -1,32 +1,52 @@
 {% extends "base.html" %}
-{% block title %}نمایندگان — PGClock{% endblock %}
+{% block title %}نمایندگان{% endblock %}
 {% block content %}
-<h1>نمایندگان</h1>
-<p class="lead">ساخت و مدیریت نماینده فروش</p>
-<div class="panel" style="margin-bottom:18px">
-  <div class="panel-head">افزودن نماینده</div>
-  <form method="post" action="/resellers" class="form-grid">
-    <label>Telegram ID<input name="telegram_id" type="number" required /></label>
-    <label>کمیسیون ٪<input name="commission_percent" type="number" value="10" /></label>
-    <label><span>اجازه تأیید رسید</span><input name="can_approve" type="checkbox" value="1" /></label>
-    <div class="full"><button class="btn" type="submit">ثبت نماینده</button></div>
+<div class="page-head">
+  <div>
+    <h1>نمایندگان</h1>
+    <p>ساخت و مدیریت نماینده فروش</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>افزودن نماینده</h2>
+  <form method="post" action="/resellers">
+    <div class="form-row">
+      <div>
+        <label>آیدی عددی تلگرام</label>
+        <input name="telegram_id" type="number" required />
+      </div>
+      <div>
+        <label>کمیسیون ٪</label>
+        <input name="commission_percent" type="number" value="10" />
+      </div>
+    </div>
+    <label class="checks">
+      <input name="can_approve" type="checkbox" value="1" />
+      اجازه تأیید رسید
+    </label>
+    <div class="actions">
+      <button class="btn" type="submit">ثبت نماینده</button>
+    </div>
   </form>
 </div>
-<div class="panel">
+
+<div class="card">
+  <h2>لیست نمایندگان</h2>
   <table>
-    <thead><tr><th>کاربر</th><th>تلگرام</th><th>کمیسیون</th><th>موجودی</th><th>تأیید رسید</th><th>کد ورود وب</th></tr></thead>
+    <thead><tr><th>کاربر</th><th>تلگرام</th><th>کمیسیون</th><th>موجودی</th><th>تأیید رسید</th><th>کد</th></tr></thead>
     <tbody>
     {% for u, p in rows %}
       <tr>
         <td>{{ u.full_name or u.username }}</td>
-        <td>{{ u.telegram_id }}</td>
+        <td class="mono">{{ u.telegram_id }}</td>
         <td>{{ p.commission_percent }}%</td>
         <td>{{ "{:,}".format(p.balance).replace(",", "٬") }}</td>
         <td>{{ "بله" if p.can_approve_receipts else "خیر" }}</td>
-        <td><code>{{ u.referral_code }}</code></td>
+        <td class="mono">{{ u.referral_code }}</td>
       </tr>
     {% else %}
-      <tr><td colspan="6">نماینده‌ای نیست</td></tr>
+      <tr><td colspan="6" class="muted">نماینده‌ای نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>

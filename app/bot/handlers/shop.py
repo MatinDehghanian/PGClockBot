@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.config import get_settings
 from app.db.models import BotUser, Order, UserService
-from app.services.formatting import format_toman, service_card
+from app.services.formatting import format_message, format_toman, service_card
 from app.services.orders import create_order, get_plan, list_active_plans, pay_with_wallet, start_card_payment
 from app.services.pasarguard import get_pg
 from app.services.users import get_all_settings, get_setting, on
@@ -38,13 +38,16 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if has_svc:
         plans = [p for p in plans if not p.is_trial]
     if not plans:
-        text = "در حال حاضر پلنی برای فروش فعال نیست.\nاز وب‌پنل پلن اضافه کنید."
+        text = format_message(
+            "🛒 فروشگاه",
+            "در حال حاضر پلنی برای فروش فعال نیست.\nاز وب‌پنل پلن اضافه کنید.",
+        )
         if callback.message:
             await callback.message.edit_text(text, reply_markup=kb.back_home(ui))
         return
     if callback.message:
         await callback.message.edit_text(
-            "🛒 <b>انتخاب پلن</b>\nیکی از پلن‌ها را انتخاب کنید:",
+            format_message("🛒 انتخاب پلن", "یکی از پلن‌ها را انتخاب کنید:"),
             reply_markup=kb.plans_keyboard(plans, ui),
         )
 
@@ -58,14 +61,14 @@ async def shop_plan(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("پلن پیدا نشد", show_alert=True)
         return
     await callback.answer()
-    limit = f"{plan.data_limit_gb:g} GB" if plan.data_limit_gb is not None else "نامحدود"
-    text = (
-        f"💎 <b>{plan.name}</b>\n\n"
+    limit = f"{plan.data_limit_gb:g} گیگ" if plan.data_limit_gb is not None else "نامحدود"
+    body = (
         f"{plan.description or ''}\n"
         f"⏱ مدت: {plan.duration_days} روز\n"
         f"📦 حجم: {limit}\n"
         f"💰 قیمت: {format_toman(plan.price, get_settings().currency)}"
-    )
+    ).strip()
+    text = format_message(f"💎 {plan.name}", body)
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.plan_actions(plan.id, ui))
 
@@ -81,10 +84,10 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         plan_id=plan_id,
         reseller_id=db_user.reseller_id,
     )
-    text = (
-        f"سفارش <b>#{order.id}</b> ساخته شد.\n"
-        f"مبلغ قابل پرداخت: <b>{format_toman(order.amount, get_settings().currency)}</b>\n\n"
-        "روش پرداخت را انتخاب کنید:"
+    text = format_message(
+        f"🧾 سفارش #{order.id}",
+        f"مبلغ قابل پرداخت:\n<b>{format_toman(order.amount, get_settings().currency)}</b>\n\n"
+        "روش پرداخت را انتخاب کنید:",
     )
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.pay_methods(order.id, ui))
@@ -167,6 +170,7 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
         except Exception:
             pass
         text += f"\n\n🔗 لینک:\n<code>{svc.subscription_url}</code>"
+    text = format_message("✅ خرید موفق", text)
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.back_home(ui))
 
@@ -183,13 +187,16 @@ async def pay_card_cb(callback: CallbackQuery, session: AsyncSession, db_user: B
     payment = await start_card_payment(session, order, db_user.id)
     amount = format_toman(order.amount, get_settings().currency)
     try:
-        text = ui["card_pay_text"].format(
+        body = ui["card_pay_text"].format(
             amount=amount,
             card=ui.get("card_number") or "—",
             holder=ui.get("card_holder") or "—",
         )
     except Exception:
-        text = f"مبلغ {amount} را کارت به کارت کنید و رسید بفرستید."
-    text += f"\n\n(پرداخت #{payment.id})"
+        body = f"مبلغ {amount} را کارت به کارت کنید و رسید بفرستید."
+    body += f"\n\n(پرداخت #{payment.id})"
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.back_home(ui))
+        await callback.message.edit_text(
+            format_message("💳 کارت به کارت", body),
+            reply_markup=kb.back_home(ui),
+        )

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}نودهای پاسارگارد{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>نودها</h1>
+    <p>وضعیت زنده نودهای پاسارگارد</p>
+  </div>
+</div>
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+<div class="card">
+  {% if not nodes %}
+  <p class="muted">نودی یافت نشد.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>شناسه</th><th>نام</th><th>آدرس</th><th>وضعیت</th><th></th></tr></thead>
+    <tbody>
+    {% for n in nodes %}
+      <tr>
+        <td class="mono">{{ n.get('id') }}</td>
+        <td>{{ n.get('name') or '—' }}</td>
+        <td class="mono">{{ n.get('address') or n.get('host') or '—' }}</td>
+        <td><span class="badge">{{ n.get('status') or n.get('connection_status') or '—' }}</span></td>
+        <td>
+          {% if n.get('id') %}
+          <form method="post" action="/pg/nodes/{{ n.get('id') }}/reconnect">
+            <button class="btn btn-ghost" type="submit">اتصال مجدد</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

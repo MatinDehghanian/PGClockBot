@@ -38,6 +38,8 @@ from app.services.users import (
     set_setting,
 )
 from app.services.web_auth import load_web_admin, verify_web_admin
+from app.api.pg_pages import register_pg_pages
+from app.services.pasarguard import get_pg, parse_group_ids
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
@@ -96,6 +98,8 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.exception_handler(NotAdmin)
     async def _not_admin(request: Request, exc: NotAdmin):
         return RedirectResponse("/dashboard", status_code=303)
+
+    register_pg_pages(app, render=render, require_admin=require_admin, get_db=get_db)
 
     @app.get("/health")
     async def health():
@@ -220,7 +224,34 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
         plans = list(result.scalars().all())
-        return render(request, "plans.html", {"staff": staff, "plans": plans},
+        templates: list = []
+        groups: list = []
+        pg_error = None
+        try:
+            pg = get_pg()
+            templates = await pg.get_user_templates_simple()
+            full = await pg.get_user_templates()
+            from app.services.pasarguard import as_list
+
+            if isinstance(full, list) and full:
+                templates = full
+            else:
+                templates = as_list(full, "templates") or templates
+            groups = await pg.get_groups_simple()
+        except Exception as e:
+            pg_error = str(e)
+        return render(
+            request,
+            "plans.html",
+            {
+                "staff": staff,
+                "plans": plans,
+                "templates": templates,
+                "groups": groups,
+                "pg_error": pg_error,
+                "flash_err": request.query_params.get("err"),
+                "flash_ok": request.query_params.get("ok"),
+            },
         )
 
     @app.post("/plans")
@@ -232,24 +263,73 @@ def create_api_app(lifespan=None) -> FastAPI:
         data_limit_gb: str = Form(""),
         pg_template_id: str = Form(""),
         description: str = Form(""),
+        mode: str = Form("custom"),
+        also_create_template: str = Form(""),
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        gb = float(data_limit_gb) if data_limit_gb.strip() else None
-        tpl = int(pg_template_id) if pg_template_id.strip() else None
+        from urllib.parse import quote
+
+        form = await request.form()
+        gb = float(data_limit_gb) if str(data_limit_gb).strip() else None
+        tpl = None
+        group_csv = None
+
+        if mode == "template":
+            tpl = int(pg_template_id) if str(pg_template_id).strip() else None
+            if not tpl:
+                return RedirectResponse(
+                    f"/plans?err={quote('تمپلیت پاسارگارد را انتخاب کنید')}",
+                    status_code=303,
+                )
+        else:
+            ids = [
+                int(v)
+                for k, v in form.items()
+                if str(k).startswith("group_") and str(v).isdigit()
+            ]
+            if not ids:
+                return RedirectResponse(
+                    f"/plans?err={quote('حداقل یک گروه پاسارگارد انتخاب کنید')}",
+                    status_code=303,
+                )
+            group_csv = ",".join(str(i) for i in ids)
+            if also_create_template:
+                try:
+                    created = await get_pg().create_user_template(
+                        {
+                            "name": name.strip(),
+                            "group_ids": ids,
+                            "expire_duration": duration_days * 86400,
+                            "data_limit": int(gb * (1024**3)) if gb is not None else None,
+                            "status": "active",
+                        }
+                    )
+                    if isinstance(created, dict) and created.get("id"):
+                        tpl = int(created["id"])
+                except Exception as e:
+                    return RedirectResponse(
+                        f"/plans?err={quote(f'ساخت تمپلیت در پاسارگارد ناموفق: {e}')}",
+                        status_code=303,
+                    )
+
         session.add(
             Plan(
-                name=name,
+                name=name.strip(),
                 price=price,
                 duration_days=duration_days,
                 data_limit_gb=gb,
                 pg_template_id=tpl,
+                pg_group_ids=group_csv,
                 description=description or None,
                 is_active=True,
             )
         )
         await session.commit()
-        return RedirectResponse("/plans", status_code=302)
+        return RedirectResponse(
+            f"/plans?ok={quote('پلن ذخیره شد')}",
+            status_code=303,
+        )
 
     @app.post("/plans/{plan_id}/toggle")
     async def plans_toggle(
@@ -261,7 +341,19 @@ def create_api_app(lifespan=None) -> FastAPI:
         if plan:
             plan.is_active = not plan.is_active
             await session.commit()
-        return RedirectResponse("/plans", status_code=302)
+        return RedirectResponse("/plans", status_code=303)
+
+    @app.post("/plans/{plan_id}/delete")
+    async def plans_delete(
+        plan_id: int,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        plan = await session.get(Plan, plan_id)
+        if plan:
+            await session.delete(plan)
+            await session.commit()
+        return RedirectResponse("/plans", status_code=303)
 
     @app.get("/orders", response_class=HTMLResponse)
     async def orders_page(
@@ -292,9 +384,24 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         payment = await session.get(Payment, payment_id)
-        if payment:
-            await approve_payment(session, payment, reviewer_tg=0)
-        return RedirectResponse("/payments", status_code=302)
+        if payment and payment.status == PaymentStatus.PENDING.value:
+            order = await approve_payment(session, payment, reviewer_tg=0)
+            user = await session.get(BotUser, payment.user_id)
+            if user:
+                try:
+                    from aiogram import Bot
+
+                    from app.services.receipts import build_approved_user_text
+
+                    text, markup = await build_approved_user_text(session, payment, order)
+                    bot = Bot(token=get_settings().bot_token)
+                    try:
+                        await bot.send_message(user.telegram_id, text, reply_markup=markup)
+                    finally:
+                        await bot.session.close()
+                except Exception:
+                    pass
+        return RedirectResponse("/payments", status_code=303)
 
     @app.post("/payments/{payment_id}/reject")
     async def payment_reject(
@@ -305,7 +412,24 @@ def create_api_app(lifespan=None) -> FastAPI:
         payment = await session.get(Payment, payment_id)
         if payment:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
-        return RedirectResponse("/payments", status_code=302)
+            user = await session.get(BotUser, payment.user_id)
+            if user:
+                try:
+                    from aiogram import Bot
+
+                    from app.services.formatting import format_message
+
+                    bot = Bot(token=get_settings().bot_token)
+                    try:
+                        await bot.send_message(
+                            user.telegram_id,
+                            format_message("❌ پرداخت رد شد", f"پرداخت #{payment.id} رد شد."),
+                        )
+                    finally:
+                        await bot.session.close()
+                except Exception:
+                    pass
+        return RedirectResponse("/payments", status_code=303)
 
     @app.get("/users", response_class=HTMLResponse)
     async def users_page(
@@ -366,14 +490,14 @@ def create_api_app(lifespan=None) -> FastAPI:
             if key not in order:
                 order.append(key)
         labels = {
-            "shop": "Shop / Buy",
-            "services": "My services",
-            "wallet": "Wallet",
-            "support": "Support",
-            "guide": "Guide",
-            "faq": "FAQ",
-            "referral": "Referral",
-            "miniapp": "Mini App",
+            "shop": "خرید سرویس",
+            "services": "سرویس‌های من",
+            "wallet": "کیف پول",
+            "support": "پشتیبانی",
+            "guide": "راهنما",
+            "faq": "سوالات متداول",
+            "referral": "دعوت دوستان",
+            "miniapp": "مینی‌اپ",
         }
         toggles = {
             "wallet": "show_wallet",
@@ -452,11 +576,20 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.services.users import TOGGLE_KEYS
+
         form = await request.form()
-        for key, value in form.items():
-            if key.startswith("s_"):
-                await set_setting(session, key[2:], str(value))
-        return RedirectResponse("/settings?saved=1", status_code=302)
+        known = {item[0] for fields in SETTING_GROUPS.values() for item in fields}
+        for key in TOGGLE_KEYS:
+            if key in known:
+                await set_setting(session, key, "1" if form.get(f"s_{key}") else "0")
+        for key in known:
+            if key in TOGGLE_KEYS:
+                continue
+            raw = form.get(f"s_{key}")
+            if raw is not None:
+                await set_setting(session, key, str(raw))
+        return RedirectResponse("/settings?saved=1", status_code=303)
 
     @app.get("/tickets", response_class=HTMLResponse)
     async def tickets_page(

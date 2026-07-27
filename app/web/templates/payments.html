@@ -1,33 +1,42 @@
 {% extends "base.html" %}
-{% block title %}پرداخت‌ها — PGClock{% endblock %}
+{% block title %}پرداخت‌ها{% endblock %}
 {% block content %}
-<h1>پرداخت‌ها</h1>
-<p class="lead">تأیید یا رد رسیدهای کارت‌به‌کارت</p>
-<div class="panel">
+<div class="page-head">
+  <div>
+    <h1>پرداخت‌ها</h1>
+    <p>تأیید یا رد دستی — اگر «تأیید خودکار» در تنظیمات روشن باشد، رسیدها خودکار تأیید می‌شوند</p>
+  </div>
+  <a class="btn btn-ghost" href="/settings">⚙ تنظیمات پرداخت</a>
+</div>
+<div class="card">
   <table>
     <thead><tr><th>#</th><th>کاربر</th><th>مبلغ</th><th>نوع</th><th>وضعیت</th><th>سفارش</th><th>عملیات</th></tr></thead>
     <tbody>
     {% for p in payments %}
       <tr>
-        <td>{{ p.id }}</td>
+        <td class="mono">{{ p.id }}</td>
         <td>{{ p.user_id }}</td>
         <td>{{ "{:,}".format(p.amount).replace(",", "٬") }}</td>
         <td>{{ "شارژ کیف" if p.is_wallet_topup else "خرید" }}</td>
         <td>
-          <span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}ok{% else %}bad{% endif %}">
+          <span class="badge {% if p.status=='pending' %}warn{% elif p.status=='approved' %}{% else %}danger{% endif %}">
             {{ p.status }}
           </span>
         </td>
         <td>{{ p.order_id or "—" }}</td>
-        <td style="display:flex;gap:6px">
+        <td>
           {% if p.status == 'pending' %}
-          <form method="post" action="/payments/{{ p.id }}/approve"><button class="btn sm" type="submit">تأیید</button></form>
-          <form method="post" action="/payments/{{ p.id }}/reject"><button class="btn danger sm" type="submit">رد</button></form>
+          <div class="actions" style="margin:0">
+            <form method="post" action="/payments/{{ p.id }}/approve"><button class="btn" type="submit">تأیید</button></form>
+            <form method="post" action="/payments/{{ p.id }}/reject"><button class="btn btn-danger" type="submit">رد</button></form>
+          </div>
+          {% else %}
+          <span class="muted">—</span>
           {% endif %}
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7">پرداختی نیست</td></tr>
+      <tr><td colspan="7" class="muted">پرداختی نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>

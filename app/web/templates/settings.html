@@ -1,37 +1,69 @@
 {% extends "base.html" %}
-{% block title %}تنظیمات — PGClock{% endblock %}
+{% block title %}تنظیمات{% endblock %}
 {% block content %}
-<h1>تنظیمات فروشگاه</h1>
-<p class="lead">متن‌ها، دکمه‌ها، چیدمان منو و پرداخت — همه از اینجا قابل تغییر است</p>
-
-{% if saved %}
-<div class="panel" style="margin-bottom:14px;padding:12px 16px;border-color:#1f6f5b;color:#0e4f40">
-  ذخیره شد ✅ تغییرات از پیام بعدی ربات اعمال می‌شود.
+<div class="page-head">
+  <div>
+    <h1>تنظیمات فروشگاه</h1>
+    <p>دسته‌بندی‌شده — هر تغییر از پیام بعدی بات اعمال می‌شود</p>
+  </div>
+  <a class="btn btn-ghost" href="/menu-layout">🗂 چیدمان منو</a>
 </div>
-{% endif %}
 
-<form method="post" action="/settings">
+{% if saved %}<div class="flash ok">ذخیره شد.</div>{% endif %}
+
+<form method="post" action="/settings" class="settings-form">
 {% for group, fields in groups.items() %}
-<div class="panel" style="margin-bottom:18px">
-  <div class="panel-head">{{ group }}</div>
-  <div class="form-grid">
-    {% for key, label in fields %}
-      {% set val = values.get(key, '') %}
-      {% if key.endswith('_text') or 'text' in key %}
-      <label class="full">{{ label }}
-        <textarea name="s_{{ key }}" rows="3">{{ val }}</textarea>
+<div class="card settings-card">
+  <h2>{{ group }}</h2>
+  <div class="settings-grid">
+  {% for field in fields %}
+    {% set key = field[0] %}
+    {% set label = field[1] %}
+    {% set kind = field[2] if field|length > 2 else 'text' %}
+    {% set help = field[3] if field|length > 3 else '' %}
+    {% set options = field[4] if field|length > 4 else [] %}
+    {% set val = values.get(key, '') %}
+    <div class="setting-item {% if kind == 'textarea' %}full{% endif %}">
+      {% if kind == 'toggle' %}
+      <label class="toggle-row">
+        <span>
+          <strong>{{ label }}</strong>
+          {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+        </span>
+        <input type="checkbox" name="s_{{ key }}" value="1" {% if val in ['1','true','yes','on'] %}checked{% endif %} />
+      </label>
+      {% elif kind == 'select' %}
+      <label>{{ label }}
+        {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+        <select name="s_{{ key }}">
+          {% for opt_val, opt_label in options %}
+          <option value="{{ opt_val }}" {% if val == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% elif kind == 'textarea' %}
+      <label>{{ label }}
+        {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+        <textarea name="s_{{ key }}" rows="4">{{ val }}</textarea>
+      </label>
+      {% elif kind == 'number' %}
+      <label>{{ label }}
+        {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+        <input name="s_{{ key }}" type="number" value="{{ val }}" />
       </label>
       {% else %}
       <label>{{ label }}
+        {% if help %}<small class="muted">{{ help }}</small>{% endif %}
         <input name="s_{{ key }}" value="{{ val }}" />
       </label>
       {% endif %}
-    {% endfor %}
+    </div>
+  {% endfor %}
   </div>
 </div>
 {% endfor %}
-<div class="form-actions" style="padding-bottom:28px">
-  <button class="btn" type="submit">ذخیره همه تنظیمات</button>
+<div class="actions sticky-actions">
+  <button class="btn" type="submit">💾 ذخیره تنظیمات</button>
 </div>
 </form>
 {% endblock %}

@@ -3,44 +3,82 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{% block title %}PGClock{% endblock %}</title>
   <meta name="color-scheme" content="dark" />
+  <title>{% block title %}پنل مدیریت{% endblock %} · PGClock</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/panel.css" />
   {% block head %}{% endblock %}
 </head>
 <body>
   {% if staff is defined and staff %}
+  {% set path = request.url.path %}
   <div class="shell">
-    <aside class="side">
+    <header class="topbar">
+      <button type="button" class="menu-toggle" id="menu-toggle" aria-label="منو">☰</button>
+      <div class="topbar-brand">
+        <span class="brand-mark sm">PG</span>
+        <strong>کلاک پنل</strong>
+      </div>
+      <a class="btn btn-ghost topbar-pay" href="/payments">💳 پرداخت‌ها</a>
+    </header>
+    <aside class="side" id="sidebar">
       <div class="brand">
         <span class="brand-mark">PG</span>
         <div>
-          <strong>Clock Panel</strong>
-          <small>{{ staff.username }} · {{ staff.role }}</small>
+          <strong>کلاک پنل</strong>
+          <small>{{ staff.username }} · {% if staff.role == 'admin' %}مدیر{% elif staff.role == 'reseller' %}نماینده{% else %}{{ staff.role }}{% endif %}</small>
         </div>
       </div>
+      <div class="nav-label">فروش</div>
       <nav>
-        <a href="/dashboard">Dashboard</a>
-        <a href="/orders">Orders</a>
-        <a href="/payments">Payments</a>
-        <a href="/tickets">Tickets</a>
-        {% if staff.role == 'admin' %}
-        <a href="/plans">Plans</a>
-        <a href="/users">Users</a>
-        <a href="/resellers">Resellers</a>
-        <a href="/menu-layout">Menu layout</a>
-        <a href="/settings">Settings</a>
-        {% endif %}
-        <a href="/logout" class="danger">Logout</a>
+        <a href="/dashboard" class="{% if path=='/dashboard' %}active{% endif %}"><span class="nav-ico c1">▣</span> داشبورد</a>
+        <a href="/plans" class="{% if path.startswith('/plans') %}active{% endif %}"><span class="nav-ico c2">◆</span> پلن‌های فروش</a>
+        <a href="/orders" class="{% if path.startswith('/orders') %}active{% endif %}"><span class="nav-ico c3">☰</span> سفارش‌ها</a>
+        <a href="/payments" class="{% if path.startswith('/payments') %}active{% endif %}"><span class="nav-ico c4">💳</span> پرداخت‌ها</a>
+        <a href="/tickets" class="{% if path.startswith('/tickets') %}active{% endif %}"><span class="nav-ico c5">✉</span> تیکت‌ها</a>
+      </nav>
+      {% if staff.role == 'admin' %}
+      <div class="nav-label">پاسارگارد</div>
+      <nav>
+        <a href="/pg" class="{% if path=='/pg' %}active{% endif %}"><span class="nav-ico c6">◉</span> وضعیت پنل</a>
+        <a href="/pg/templates" class="{% if path.startswith('/pg/templates') %}active{% endif %}"><span class="nav-ico c1">▤</span> تمپلیت‌ها</a>
+        <a href="/pg/groups" class="{% if path.startswith('/pg/groups') %}active{% endif %}"><span class="nav-ico c2">⧉</span> گروه‌ها</a>
+        <a href="/pg/nodes" class="{% if path.startswith('/pg/nodes') %}active{% endif %}"><span class="nav-ico c3">⬡</span> نودها</a>
+        <a href="/pg/hosts" class="{% if path.startswith('/pg/hosts') %}active{% endif %}"><span class="nav-ico c4">⌂</span> هاست‌ها</a>
+        <a href="/pg/inbounds" class="{% if path.startswith('/pg/inbounds') %}active{% endif %}"><span class="nav-ico c5">⇄</span> اینباندها</a>
+      </nav>
+      <div class="nav-label">مدیریت</div>
+      <nav>
+        <a href="/users" class="{% if path.startswith('/users') %}active{% endif %}"><span class="nav-ico c6">☺</span> کاربران بات</a>
+        <a href="/resellers" class="{% if path.startswith('/resellers') %}active{% endif %}"><span class="nav-ico c1">★</span> نمایندگان</a>
+        <a href="/menu-layout" class="{% if path.startswith('/menu-layout') %}active{% endif %}"><span class="nav-ico c2">↕</span> چیدمان منو</a>
+        <a href="/settings" class="{% if path.startswith('/settings') %}active{% endif %}"><span class="nav-ico c3">⚙</span> تنظیمات</a>
+      </nav>
+      {% endif %}
+      <nav>
+        <a href="/logout" class="danger"><span class="nav-ico c-danger">✕</span> خروج</a>
       </nav>
     </aside>
+    <div class="side-backdrop" id="side-backdrop"></div>
     <main class="main">
+      {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+      {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
       {% block content %}{% endblock %}
     </main>
   </div>
+  <script>
+  (function(){
+    const side = document.getElementById('sidebar');
+    const btn = document.getElementById('menu-toggle');
+    const back = document.getElementById('side-backdrop');
+    function close(){ side.classList.remove('open'); back.classList.remove('show'); }
+    function toggle(){ side.classList.toggle('open'); back.classList.toggle('show'); }
+    if (btn) btn.addEventListener('click', toggle);
+    if (back) back.addEventListener('click', close);
+  })();
+  </script>
   {% else %}
     {% block auth %}{% endblock %}
   {% endif %}

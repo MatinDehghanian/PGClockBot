@@ -1,73 +1,64 @@
 {% extends "base.html" %}
-{% block title %}Menu layout · PGClock{% endblock %}
+{% block title %}چیدمان منو{% endblock %}
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 {% endblock %}
 {% block content %}
-<h1>Menu layout</h1>
-<p class="lead">Drag and drop to reorder customer bot buttons. Toggle visibility. Admin home stays separate.</p>
-{% if saved %}<div class="ok">Saved — bot menu updates on next /start</div>{% endif %}
+<div class="page-head">
+  <div>
+    <h1>چیدمان منوی کاربر</h1>
+    <p>دکمه‌ها را بکشید و رها کنید — منوی ادمین جداست</p>
+  </div>
+</div>
+{% if saved %}<div class="flash ok">ذخیره شد</div>{% endif %}
 
 <form method="post" action="/menu-layout" id="menu-form">
   <input type="hidden" name="menu_order" id="menu_order" value="{{ order_csv }}" />
   <input type="hidden" name="menu_layout" value="{{ values.get('menu_layout', 'classic') }}" />
 
-  <label>Row packing
-    <select name="menu_layout_select" id="menu_layout_select">
-      <option value="classic" {% if values.get('menu_layout')=='classic' %}selected{% endif %}>classic — one button per row</option>
-      <option value="compact" {% if values.get('menu_layout')=='compact' %}selected{% endif %}>compact — pair mid buttons</option>
-    </select>
-  </label>
-
-  <p class="dnd-hint">⠿ grab handle · drop to reorder · shop is always available to users</p>
-  <ul class="dnd-list" id="dnd-list">
-    {% for item in items %}
-    <li class="dnd-item" data-key="{{ item.key }}">
-      <span class="dnd-handle">⠿</span>
-      <div class="meta">
-        <strong>{{ item.label }}</strong>
-        <span>{{ item.key }} · {{ item.btn }}</span>
-      </div>
-      {% if item.toggle %}
-      <label class="dnd-toggle">
-        <input type="checkbox" name="show_{{ item.key }}" value="1" {% if item.visible %}checked{% endif %} />
-        visible
-      </label>
-      {% else %}
-      <span class="badge">always</span>
-      {% endif %}
-    </li>
-    {% endfor %}
-  </ul>
-
-  <p style="margin-top:1.25rem">
-    <button class="btn" type="submit">Save layout</button>
-    <a class="btn btn-outline" href="/settings" style="margin-inline-start:0.5rem">All settings</a>
-  </p>
+  <div class="card">
+    <label>حالت ردیف‌ها
+      <select name="menu_layout_select" id="menu_layout_select">
+        <option value="classic" {% if values.get('menu_layout')=='classic' %}selected{% endif %}>کلاسیک — هر دکمه یک ردیف</option>
+        <option value="compact" {% if values.get('menu_layout')=='compact' %}selected{% endif %}>فشرده — دکمه‌های میانی جفتی</option>
+      </select>
+    </label>
+    <p class="muted">دستگیره ⠿ را بگیرید و جابه‌جا کنید</p>
+    <ul class="dnd-list" id="dnd-list">
+      {% for item in items %}
+      <li class="dnd-item" data-key="{{ item.key }}">
+        <span class="dnd-handle">⠿</span>
+        <div style="flex:1">
+          <strong>{{ item.label }}</strong>
+          <div class="muted">{{ item.key }} · {{ item.btn }}</div>
+        </div>
+        {% if item.toggle %}
+        <label class="checks" style="margin:0">
+          <input type="checkbox" name="show_{{ item.key }}" value="1" {% if item.visible %}checked{% endif %} />
+          نمایش
+        </label>
+        {% else %}
+        <span class="badge">همیشه</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="actions">
+      <button class="btn" type="submit">ذخیره چیدمان</button>
+    </div>
+  </div>
 </form>
-
 <script>
 (function () {
   const list = document.getElementById('dnd-list');
   const orderInput = document.getElementById('menu_order');
   const layoutSelect = document.getElementById('menu_layout_select');
   const layoutHidden = document.querySelector('input[name="menu_layout"]');
-
   function syncOrder() {
-    const keys = [...list.querySelectorAll('.dnd-item')].map((el) => el.dataset.key);
-    orderInput.value = keys.join(',');
+    orderInput.value = [...list.querySelectorAll('.dnd-item')].map((el) => el.dataset.key).join(',');
   }
-
-  layoutSelect.addEventListener('change', () => {
-    layoutHidden.value = layoutSelect.value;
-  });
-
-  new Sortable(list, {
-    animation: 150,
-    handle: '.dnd-handle',
-    ghostClass: 'dragging',
-    onSort: syncOrder,
-  });
+  layoutSelect.addEventListener('change', () => { layoutHidden.value = layoutSelect.value; });
+  new Sortable(list, { animation: 150, handle: '.dnd-handle', ghostClass: 'dragging', onSort: syncOrder });
   syncOrder();
 })();
 </script>

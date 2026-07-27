@@ -5,11 +5,11 @@ from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
-from app.db.models import BotUser, Order, Payment, Role, UserService
-from app.services.formatting import format_toman, service_card
+from app.db.models import BotUser, Payment, Role
+from app.services.formatting import format_message
 from app.services.orders import approve_payment, reject_payment
-from app.services.pasarguard import get_pg
-from app.config import get_settings
+from app.services.receipts import build_approved_user_text
+from app.services.users import get_all_settings
 
 router = Router(name="payments")
 
@@ -35,32 +35,22 @@ async def pay_approve(callback: CallbackQuery, session: AsyncSession, db_user: B
         return
     await callback.answer("تأیید شد ✅")
     if callback.message:
-        await callback.message.edit_caption(
-            caption=(callback.message.caption or "") + "\n\n✅ تأیید شد"
-        ) if callback.message.photo else await callback.message.edit_text(
-            (callback.message.text or "") + "\n\n✅ تأیید شد"
-        )
+        try:
+            if callback.message.photo:
+                await callback.message.edit_caption(
+                    caption=(callback.message.caption or "") + "\n\n✅ تأیید دستی شد"
+                )
+            else:
+                await callback.message.edit_text(
+                    (callback.message.text or "") + "\n\n✅ تأیید دستی شد"
+                )
+        except Exception:
+            pass
 
-    # notify user
     user = await session.get(BotUser, payment.user_id)
     if not user:
         return
-    text = f"✅ پرداخت #{payment.id} تأیید شد."
-    markup = kb.back_home()
-    if order and order.service_id:
-        svc = await session.get(UserService, order.service_id)
-        if svc and svc.subscription_token:
-            try:
-                info = await get_pg().subscription_info(svc.subscription_token)
-                text += "\n\n" + service_card(info)
-            except Exception:
-                pass
-            text += f"\n\n🔗 <code>{svc.subscription_url}</code>"
-            markup = kb.service_actions(svc.id)
-        elif payment.is_wallet_topup:
-            text = f"✅ کیف پول شما {format_toman(payment.amount, get_settings().currency)} شارژ شد."
-    elif payment.is_wallet_topup:
-        text = f"✅ کیف پول شما {format_toman(payment.amount, get_settings().currency)} شارژ شد."
+    text, markup = await build_approved_user_text(session, payment, order)
     try:
         await callback.bot.send_message(user.telegram_id, text, reply_markup=markup)
     except Exception:
@@ -82,14 +72,23 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     if callback.message:
         try:
             if callback.message.photo:
-                await callback.message.edit_caption(caption=(callback.message.caption or "") + "\n\n❌ رد شد")
+                await callback.message.edit_caption(
+                    caption=(callback.message.caption or "") + "\n\n❌ رد شد"
+                )
             else:
-                await callback.message.edit_text((callback.message.text or "") + "\n\n❌ رد شد")
+                await callback.message.edit_text(
+                    (callback.message.text or "") + "\n\n❌ رد شد"
+                )
         except Exception:
             pass
     user = await session.get(BotUser, payment.user_id)
+    ui = await get_all_settings(session)
     if user:
         try:
-            await callback.bot.send_message(user.telegram_id, f"❌ پرداخت #{payment.id} رد شد.")
+            await callback.bot.send_message(
+                user.telegram_id,
+                format_message("❌ پرداخت رد شد", f"پرداخت #{payment.id} توسط ادمین رد شد."),
+                reply_markup=kb.back_home(ui),
+            )
         except Exception:
             pass

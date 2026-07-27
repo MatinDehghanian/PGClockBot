@@ -163,7 +163,7 @@ def plans_keyboard(plans: list[Plan], ui: dict | None = None) -> InlineKeyboardM
 def plan_actions(plan_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✅ ادامه خرید", callback_data=f"shop:buy:{plan_id}")],
+            [InlineKeyboardButton(text="🟢✅ ادامه خرید", callback_data=f"shop:buy:{plan_id}")],
             [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:list")],
         ]
     )
@@ -248,8 +248,8 @@ def service_actions(service_id: int, ui: dict | None = None) -> InlineKeyboardMa
 def wallet_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="➕ شارژ کیف پول", callback_data="wallet:topup")],
-            [InlineKeyboardButton(text="📜 تراکنش‌ها", callback_data="wallet:tx")],
+            [InlineKeyboardButton(text="🟢➕ شارژ کیف پول", callback_data="wallet:topup")],
+            [InlineKeyboardButton(text="🟡📜 تراکنش‌ها", callback_data="wallet:tx")],
             [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="menu:home")],
         ]
     )
@@ -258,7 +258,7 @@ def wallet_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
 def support_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✉️ تیکت جدید", callback_data="support:new")],
+            [InlineKeyboardButton(text="🟣✉️ تیکت جدید", callback_data="support:new")],
             [InlineKeyboardButton(text="📋 تیکت‌های من", callback_data="support:list")],
             [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="menu:home")],
         ]
@@ -269,7 +269,7 @@ def admin_home() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="📦 پلن‌ها", callback_data="adm:plans"),
+                InlineKeyboardButton(text="💎 پلن‌ها", callback_data="adm:plans"),
                 InlineKeyboardButton(text="🧾 رسیدها", callback_data="adm:payments"),
             ],
             [
@@ -313,8 +313,8 @@ def payment_review(payment_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ تأیید", callback_data=f"payrev:ok:{payment_id}"),
-                InlineKeyboardButton(text="❌ رد", callback_data=f"payrev:no:{payment_id}"),
+                InlineKeyboardButton(text="🟢✅ تأیید دستی", callback_data=f"payrev:ok:{payment_id}"),
+                InlineKeyboardButton(text="🔴❌ رد", callback_data=f"payrev:no:{payment_id}"),
             ]
         ]
     )

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}وضعیت پاسارگارد{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>وضعیت پاسارگارد</h1>
+    <p>داده‌ها مستقیم از پنل پاسارگارد خوانده می‌شوند</p>
+  </div>
+  <a class="btn btn-ghost" href="/pg">بروزرسانی</a>
+</div>
+
+{% if flash_err %}
+{# خطا در نوار بالا نمایش داده شده #}
+{% else %}
+{% if stats_rows %}
+<div class="grid">
+  {% for key, val in stats_rows %}
+  <div class="stat"><span>{{ key }}</span><strong>{{ val }}</strong></div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="muted">آمار ساده‌ای برنگشت — نودها را در پایین ببینید.</p>
+{% endif %}
+
+<div class="card">
+  <h2>نودها (خلاصه)</h2>
+  {% if not nodes %}
+  <p class="muted">نودی یافت نشد.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>شناسه</th><th>نام</th><th>وضعیت</th></tr></thead>
+    <tbody>
+    {% for n in nodes %}
+      <tr>
+        <td class="mono">{{ n.get('id') }}</td>
+        <td>{{ n.get('name') or n.get('address') or '—' }}</td>
+        <td><span class="badge">{{ n.get('status') or n.get('connection_status') or '—' }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <div class="actions">
+    <a class="btn btn-ghost" href="/pg/nodes">جزئیات نودها</a>
+    <a class="btn btn-ghost" href="/pg/templates">تمپلیت‌ها</a>
+    <a class="btn btn-ghost" href="/pg/groups">گروه‌ها</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

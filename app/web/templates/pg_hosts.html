@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}هاست‌های پاسارگارد{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>هاست‌ها</h1>
+    <p>لیست هاست‌های تعریف‌شده در پاسارگارد</p>
+  </div>
+</div>
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+<div class="card">
+  {% if not hosts %}
+  <p class="muted">هاستی یافت نشد.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>شناسه</th><th>عنوان</th><th>آدرس</th><th>پورت</th><th>اینباند</th></tr></thead>
+    <tbody>
+    {% for h in hosts %}
+      <tr>
+        <td class="mono">{{ h.get('id') or '—' }}</td>
+        <td>{{ h.get('remark') or h.get('name') or '—' }}</td>
+        <td class="mono">{{ h.get('address') or h.get('host') or '—' }}</td>
+        <td class="mono">{{ h.get('port') or '—' }}</td>
+        <td class="mono">{{ h.get('inbound_tag') or h.get('tag') or '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

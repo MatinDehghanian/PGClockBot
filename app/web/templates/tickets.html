@@ -1,22 +1,26 @@
 {% extends "base.html" %}
-{% block title %}تیکت‌ها — PGClock{% endblock %}
+{% block title %}تیکت‌ها{% endblock %}
 {% block content %}
-<h1>تیکت‌ها</h1>
-<p class="lead">درخواست‌های پشتیبانی کاربران</p>
-<div class="panel">
+<div class="page-head">
+  <div>
+    <h1>تیکت‌ها</h1>
+    <p>درخواست‌های پشتیبانی کاربران</p>
+  </div>
+</div>
+<div class="card">
   <table>
     <thead><tr><th>#</th><th>کاربر</th><th>موضوع</th><th>وضعیت</th><th>زمان</th></tr></thead>
     <tbody>
     {% for t in tickets %}
       <tr>
-        <td>{{ t.id }}</td>
+        <td class="mono">{{ t.id }}</td>
         <td>{{ t.user_id }}</td>
         <td>{{ t.subject }}</td>
         <td><span class="badge">{{ t.status }}</span></td>
-        <td>{{ t.created_at }}</td>
+        <td class="muted">{{ t.created_at }}</td>
       </tr>
     {% else %}
-      <tr><td colspan="5">تیکتی نیست</td></tr>
+      <tr><td colspan="5" class="muted">تیکتی نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>

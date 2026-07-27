@@ -93,3 +93,17 @@ def service_card(info: dict, currency_note: str = "") -> str:
     if online:
         lines.append(f"آخرین آنلاین: {format_expire(online)}")
     return "\n".join(lines)
+
+
+def format_message(title: str, body: str = "") -> str:
+    """
+    کارت پیام فارسی با ظاهر مرتب و وسط‌چین‌مانند.
+    (تلگرام CSS ندارد؛ با جداکننده و نقل‌قول بصری می‌سازیم.)
+    """
+    sep = "┄┄┄┄┄┄┄┄┄┄┄┄"
+    parts = [f"<b>{title}</b>", f"<code>{sep}</code>"]
+    body = (body or "").strip()
+    if body:
+        parts.append(f"<blockquote>{body}</blockquote>")
+        parts.append(f"<code>{sep}</code>")
+    return "\n".join(parts)
