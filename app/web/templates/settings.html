@@ -1,19 +1,25 @@
 {% extends "base.html" %}
-{% block title %}تنظیمات{% endblock %}
+{% block title %}تنظیمات ربات{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>تنظیمات فروشگاه</h1>
-    <p>دسته‌بندی‌شده — هر تغییر از پیام بعدی بات اعمال می‌شود</p>
+    <h1>تنظیمات ربات و فروشگاه</h1>
+    <p>هر بخش جدا — متن‌ها، پرداخت، QR، منو. تغییرات از پیام بعدی بات اعمال می‌شود.</p>
   </div>
   <a class="btn btn-ghost" href="/menu-layout">🗂 چیدمان منو</a>
 </div>
 
 {% if saved %}<div class="flash ok">ذخیره شد.</div>{% endif %}
 
-<form method="post" action="/settings" class="settings-form">
+<nav class="settings-jump" aria-label="بخش‌های تنظیمات">
 {% for group, fields in groups.items() %}
-<div class="card settings-card">
+  <a href="#set-{{ loop.index }}">{{ group }}</a>
+{% endfor %}
+</nav>
+
+<form method="post" action="/settings" enctype="multipart/form-data" class="settings-form">
+{% for group, fields in groups.items() %}
+<div class="card settings-card" id="set-{{ loop.index }}">
   <h2>{{ group }}</h2>
   <div class="settings-grid">
   {% for field in fields %}
@@ -23,7 +29,7 @@
     {% set help = field[3] if field|length > 3 else '' %}
     {% set options = field[4] if field|length > 4 else [] %}
     {% set val = values.get(key, '') %}
-    <div class="setting-item {% if kind == 'textarea' %}full{% endif %}">
+    <div class="setting-item {% if kind in ['textarea', 'image'] %}full{% endif %}">
       {% if kind == 'toggle' %}
       <label class="toggle-row">
         <span>
@@ -44,13 +50,30 @@
       {% elif kind == 'textarea' %}
       <label>{{ label }}
         {% if help %}<small class="muted">{{ help }}</small>{% endif %}
-        <textarea name="s_{{ key }}" rows="4">{{ val }}</textarea>
+        <textarea name="s_{{ key }}" rows="5">{{ val }}</textarea>
       </label>
       {% elif kind == 'number' %}
       <label>{{ label }}
         {% if help %}<small class="muted">{{ help }}</small>{% endif %}
         <input name="s_{{ key }}" type="number" value="{{ val }}" />
       </label>
+      {% elif kind == 'image' %}
+      <div class="image-setting">
+        <strong>{{ label }}</strong>
+        {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+        {% if val %}
+        <div class="image-preview">
+          <img src="/media/{{ val }}" alt="پیش‌نمایش" />
+          <label class="clear-img">
+            <input type="checkbox" name="s_{{ key }}_clear" value="1" />
+            حذف عکس فعلی
+          </label>
+        </div>
+        {% endif %}
+        <label class="file-label">آپلود عکس جدید
+          <input name="s_{{ key }}" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+        </label>
+      </div>
       {% else %}
       <label>{{ label }}
         {% if help %}<small class="muted">{{ help }}</small>{% endif %}

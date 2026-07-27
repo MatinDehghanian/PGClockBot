@@ -338,23 +338,24 @@ def service_card(info: dict, currency_note: str = "") -> str:
     lines = [
         f"👤 <b>{username}</b>",
         f"وضعیت: {status}",
-        f"حجم: {format_bytes(used)} / {format_bytes(limit)}",
+        f"📦 حجم: {format_bytes(used)} از {format_bytes(limit)}",
         progress_bar(float(used), float(limit) if limit else None),
-        f"انقضا: {expire}",
+        f"📅 انقضا: {expire}",
     ]
     if currency_note:
         lines.append(currency_note)
     online = info.get("online_at")
     if online:
-        lines.append(f"آخرین آنلاین: {format_expire(online)}")
+        lines.append(f"⏱ آخرین آنلاین: {format_expire(online)}")
     return "\n".join(lines)
 
 
 def format_message(title: str, body: str = "") -> str:
-    sep = "┄┄┄┄┄┄┄┄┄┄┄┄"
-    parts = [f"<b>{title}</b>", f"<code>{sep}</code>"]
+    """Clean Telegram HTML card — title + body, no noisy separators."""
+    title = (title or "").strip()
     body = (body or "").strip()
-    if body:
-        parts.append(f"<blockquote>{body}</blockquote>")
-        parts.append(f"<code>{sep}</code>")
-    return "\n".join(parts)
+    if not body:
+        return f"<b>{title}</b>" if title else ""
+    if not title:
+        return body
+    return f"<b>{title}</b>\n\n{body}"

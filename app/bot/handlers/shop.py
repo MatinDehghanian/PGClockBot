@@ -10,9 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.config import get_settings
 from app.db.models import BotUser, Order, UserService
-from app.services.formatting import format_message, format_toman, service_card
+from app.services.delivery import send_delivery_to_user
+from app.services.formatting import format_message, format_toman
 from app.services.orders import create_order, get_plan, list_active_plans, pay_with_wallet, start_card_payment
-from app.services.pasarguard import get_pg
 from app.services.users import get_all_settings, get_setting, on
 
 router = Router(name="shop")
@@ -40,7 +40,8 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if not plans:
         text = format_message(
             "🛒 فروشگاه",
-            "در حال حاضر پلنی برای فروش فعال نیست.\nاز وب‌پنل پلن اضافه کنید.",
+            ui.get("shop_empty_text")
+            or "در حال حاضر پلنی برای فروش فعال نیست.",
         )
         if callback.message:
             await callback.message.edit_text(text, reply_markup=kb.back_home(ui))
@@ -158,21 +159,17 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
         return
 
     await callback.answer()
-    svc = await session.get(UserService, order.service_id) if order.service_id else None
-    try:
-        text = ui["purchase_success_text"].format(order_id=order.id)
-    except Exception:
-        text = f"✅ سفارش #{order.id} تحویل شد."
-    if svc and svc.subscription_token:
+    if callback.message:
         try:
-            info = await get_pg().subscription_info(svc.subscription_token)
-            text += "\n\n" + service_card(info)
+            await callback.message.edit_text(
+                format_message("✅ خرید موفق", "سرویس در حال تحویل است…"),
+                reply_markup=kb.back_home(ui),
+            )
         except Exception:
             pass
-        text += f"\n\n🔗 لینک:\n<code>{svc.subscription_url}</code>"
-    text = format_message("✅ خرید موفق", text)
-    if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.back_home(ui))
+    await send_delivery_to_user(
+        callback.bot, db_user.telegram_id, session, None, order
+    )
 
 
 @router.callback_query(F.data.startswith("pay:card:"))

@@ -1012,9 +1012,74 @@ tr:last-child td { border-bottom: 0; }
 .setting-item.full { grid-column: 1 / -1; }
 .settings-card {
   margin-bottom: 22px;
+  scroll-margin-top: 80px;
 }
 .settings-form .card:last-of-type {
   margin-bottom: 24px;
+}
+.settings-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.settings-jump a {
+  display: inline-block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.settings-jump a:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.image-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.image-setting strong { display: block; }
+.image-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+.image-preview img {
+  max-width: 180px;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.clear-img {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+}
+.file-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+}
+.file-label input[type="file"] {
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: transparent;
 }
 .toggle-row {
   display: flex;

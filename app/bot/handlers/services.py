@@ -29,7 +29,8 @@ async def svc_list(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     if not services:
         if callback.message:
             await callback.message.edit_text(
-                "سرویسی ندارید. از بخش خرید شروع کنید.",
+                ui.get("empty_services_text")
+                or "هنوز سرویسی ندارید.\nاز بخش «خرید سرویس» شروع کنید.",
                 reply_markup=kb.main_menu(db_user.role, has_services=False, ui=ui),
             )
         return
@@ -62,6 +63,10 @@ async def svc_view(callback: CallbackQuery, session: AsyncSession, db_user: BotU
 
 @router.callback_query(F.data.startswith("svc:link:"))
 async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    from app.services.delivery import send_subscription_qr_photo
+    from app.services.formatting import format_message
+    from app.services.users import on
+
     ui = await get_all_settings(session)
     svc_id = int(callback.data.split(":")[-1])
     svc = await session.get(UserService, svc_id)
@@ -69,9 +74,20 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         await callback.answer("یافت نشد", show_alert=True)
         return
     await callback.answer()
-    text = f"🔗 لینک سابسکریپشن:\n<code>{svc.subscription_url or '—'}</code>"
+    url = svc.subscription_url or ""
+    parts = ["🔗 لینک و QR اشتراک"]
+    if url and on(ui.get("show_sub_link_in_text", "1")):
+        parts.append(f"<code>{url}</code>")
+    elif not url:
+        parts.append("لینک موجود نیست.")
+    text = format_message("📱 اشتراک", "\n\n".join(parts))
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.service_actions(svc.id, ui))
+        try:
+            await callback.message.edit_text(text, reply_markup=kb.service_actions(svc.id, ui))
+        except Exception:
+            await callback.message.answer(text, reply_markup=kb.service_actions(svc.id, ui))
+    if url:
+        await send_subscription_qr_photo(callback.bot, db_user.telegram_id, url, ui)
 
 
 @router.callback_query(F.data.startswith("svc:renew:"))

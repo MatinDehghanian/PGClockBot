@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.config import get_settings
+from app.config import DATA_DIR, get_settings
 from app.db.models import (
     BotUser,
     Order,
@@ -36,6 +36,7 @@ from app.services.pasarguard import get_pg, parse_group_ids
 from app.services.resellers import make_reseller
 from app.services.updates import check_github_update, local_version
 from app.services.users import (
+    IMAGE_KEYS,
     SETTING_GROUPS,
     get_all_settings,
     set_setting,
@@ -87,6 +88,9 @@ def _redirect_msg(path: str, *, ok: str | None = None, err: str | None = None) -
 def create_api_app(lifespan=None) -> FastAPI:
     app = FastAPI(title="PGClockBot Panel", docs_url=None, redoc_url=None, lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    (DATA_DIR / "uploads").mkdir(parents=True, exist_ok=True)
+    app.mount("/media", StaticFiles(directory=str(DATA_DIR)), name="media")
 
     def get_signer() -> URLSafeSerializer:
         settings = get_settings()
@@ -559,12 +563,13 @@ def create_api_app(lifespan=None) -> FastAPI:
         try:
             from aiogram import Bot
 
-            from app.services.receipts import build_approved_user_text
+            from app.services.delivery import send_delivery_to_user
 
-            text, markup = await build_approved_user_text(session, payment, order)
             bot = Bot(token=get_settings().bot_token)
             try:
-                await bot.send_message(user.telegram_id, text, reply_markup=markup)
+                await send_delivery_to_user(
+                    bot, user.telegram_id, session, payment, order
+                )
             finally:
                 await bot.session.close()
         except Exception:
@@ -689,12 +694,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             try:
                 from aiogram import Bot
 
-                from app.services.receipts import build_approved_user_text
+                from app.services.delivery import send_delivery_to_user
 
-                text, markup = await build_approved_user_text(session, payment, order)
                 bot = Bot(token=get_settings().bot_token)
                 try:
-                    await bot.send_message(user.telegram_id, text, reply_markup=markup)
+                    await send_delivery_to_user(
+                        bot, user.telegram_id, session, payment, order
+                    )
                 finally:
                     await bot.session.close()
             except Exception:
@@ -721,11 +727,15 @@ def create_api_app(lifespan=None) -> FastAPI:
 
                 from app.services.formatting import format_message
 
+                ui = await get_all_settings(session)
+                body = ui.get("payment_reject_text") or (
+                    "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
+                )
                 bot = Bot(token=get_settings().bot_token)
                 try:
                     await bot.send_message(
                         user.telegram_id,
-                        format_message("❌ پرداخت رد شد", f"پرداخت #{payment.id} رد شد."),
+                        format_message("❌ پرداخت رد شد", body),
                     )
                 finally:
                     await bot.session.close()
@@ -936,6 +946,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        import uuid
+
+        from starlette.datastructures import UploadFile
+
         from app.services.users import TOGGLE_KEYS
 
         form = await request.form()
@@ -944,11 +958,31 @@ def create_api_app(lifespan=None) -> FastAPI:
             if key in known:
                 await set_setting(session, key, "1" if form.get(f"s_{key}") else "0")
         for key in known:
-            if key in TOGGLE_KEYS:
+            if key in TOGGLE_KEYS or key in IMAGE_KEYS:
                 continue
             raw = form.get(f"s_{key}")
-            if raw is not None:
+            if raw is not None and not isinstance(raw, UploadFile):
                 await set_setting(session, key, str(raw))
+        uploads = DATA_DIR / "uploads"
+        uploads.mkdir(parents=True, exist_ok=True)
+        for key in IMAGE_KEYS:
+            if key not in known:
+                continue
+            if form.get(f"s_{key}_clear"):
+                await set_setting(session, key, "")
+                continue
+            upload = form.get(f"s_{key}")
+            if isinstance(upload, UploadFile) and upload.filename:
+                name = upload.filename.lower()
+                ext = Path(name).suffix
+                if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+                    continue
+                dest_name = f"{key}_{uuid.uuid4().hex[:10]}{ext}"
+                dest = uploads / dest_name
+                content = await upload.read()
+                if content:
+                    dest.write_bytes(content)
+                    await set_setting(session, key, f"uploads/{dest_name}")
         return RedirectResponse("/settings?saved=1", status_code=303)
 
     @app.get("/tickets", response_class=HTMLResponse)

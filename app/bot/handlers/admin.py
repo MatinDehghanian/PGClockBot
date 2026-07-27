@@ -192,12 +192,13 @@ async def _approve_order_bot(session: AsyncSession, order: Order, bot) -> str:
     if pay and pay.status == PaymentStatus.PENDING.value:
         delivered = await approve_payment(session, pay, reviewer_tg=0)
         try:
-            from app.services.receipts import build_approved_user_text
+            from app.services.delivery import send_delivery_to_user
 
             user = await session.get(BotUser, pay.user_id)
             if user:
-                text, markup = await build_approved_user_text(session, pay, delivered or order)
-                await bot.send_message(user.telegram_id, text, reply_markup=markup)
+                await send_delivery_to_user(
+                    bot, user.telegram_id, session, pay, delivered or order
+                )
         except Exception:
             pass
         return "سفارش تأیید و تحویل شد"
@@ -207,12 +208,13 @@ async def _approve_order_bot(session: AsyncSession, order: Order, bot) -> str:
         delivered = await deliver_order(session, order)
         if pay:
             try:
-                from app.services.receipts import build_approved_user_text
+                from app.services.delivery import send_delivery_to_user
 
                 user = await session.get(BotUser, pay.user_id)
                 if user:
-                    text, markup = await build_approved_user_text(session, pay, delivered)
-                    await bot.send_message(user.telegram_id, text, reply_markup=markup)
+                    await send_delivery_to_user(
+                        bot, user.telegram_id, session, pay, delivered
+                    )
             except Exception:
                 pass
         return "سفارش تحویل شد"

@@ -2,47 +2,16 @@ from __future__ import annotations
 
 """Receipt submission: manual admin approve or optional auto-approve."""
 
-from typing import Any
-
 from aiogram import Bot
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.config import get_settings
-from app.db.models import BotUser, Payment, UserService
-from app.services.formatting import format_message, format_toman, service_card
+from app.db.models import Payment
+from app.services.delivery import send_delivery_to_user
+from app.services.formatting import format_message, format_toman
 from app.services.orders import approve_payment
-from app.services.pasarguard import get_pg
-from app.services.users import get_all_settings, get_setting, on
-
-
-async def build_approved_user_text(session: AsyncSession, payment: Payment, order) -> tuple[str, Any]:
-    """Return (text, reply_markup) after a successful approval."""
-    ui = await get_all_settings(session)
-    markup = kb.back_home(ui)
-    if order and order.service_id:
-        svc = await session.get(UserService, order.service_id)
-        try:
-            text = ui["purchase_success_text"].format(order_id=order.id)
-        except Exception:
-            text = f"✅ سفارش #{order.id} فعال شد."
-        if svc and svc.subscription_token:
-            try:
-                info = await get_pg().subscription_info(svc.subscription_token)
-                text += "\n\n" + service_card(info)
-            except Exception:
-                pass
-            if svc.subscription_url:
-                text += f"\n\n🔗 لینک اشتراک:\n<code>{svc.subscription_url}</code>"
-            markup = kb.service_actions(svc.id, ui)
-        return format_message("✅ تحویل شد", text), markup
-    if payment.is_wallet_topup:
-        text = (
-            f"✅ کیف پول شما "
-            f"{format_toman(payment.amount, get_settings().currency)} شارژ شد."
-        )
-        return format_message("💰 شارژ کیف پول", text), markup
-    return format_message("✅ تأیید شد", f"پرداخت #{payment.id} تأیید شد."), markup
+from app.services.users import get_setting, on
 
 
 async def notify_admins_receipt(bot: Bot, payment: Payment, user_tg_id: int | None) -> None:
@@ -107,18 +76,18 @@ async def process_receipt(
     *,
     bot: Bot,
     user_tg_id: int | None,
-) -> str:
+) -> str | None:
     """
     After receipt is attached:
-    - if auto_approve_payments=1 → approve & deliver, notify user text returned
-    - else → notify admins for manual approve
+    - if auto_approve_payments=1 → approve, deliver (+QR), return None (already sent)
+    - else → notify admins; return status text for the user
     """
     auto = on(await get_setting(session, "auto_approve_payments", "0"))
     if auto:
         try:
             order = await approve_payment(session, payment, reviewer_tg=0)
-            text, _ = await build_approved_user_text(session, payment, order)
-            # also ping admins that it was auto-approved
+            if user_tg_id:
+                await send_delivery_to_user(bot, user_tg_id, session, payment, order)
             settings = get_settings()
             note = format_message(
                 "⚡ تأیید خودکار",
@@ -129,7 +98,7 @@ async def process_receipt(
                     await bot.send_message(admin_id, note)
                 except Exception:
                     pass
-            return text
+            return None
         except Exception as e:
             await notify_admins_receipt(bot, payment, user_tg_id)
             return format_message(

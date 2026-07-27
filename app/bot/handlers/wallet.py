@@ -112,8 +112,9 @@ async def wallet_receipt_photo(message: Message, state: FSMContext, session: Asy
         bot=message.bot,
         user_tg_id=message.from_user.id if message.from_user else None,
     )
-    ui = await get_all_settings(session)
-    await message.answer(text, reply_markup=kb.back_home(ui))
+    if text:
+        ui = await get_all_settings(session)
+        await message.answer(text, reply_markup=kb.back_home(ui))
 
 
 @router.message(F.photo)
@@ -142,5 +143,6 @@ async def generic_receipt(message: Message, session: AsyncSession, db_user: BotU
         bot=message.bot,
         user_tg_id=message.from_user.id if message.from_user else None,
     )
-    ui = await get_all_settings(session)
-    await message.answer(text, reply_markup=kb.back_home(ui))
+    if text:
+        ui = await get_all_settings(session)
+        await message.answer(text, reply_markup=kb.back_home(ui))

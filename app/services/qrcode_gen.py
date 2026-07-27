@@ -1,0 +1,89 @@
+from __future__ import annotations
+
+"""Generate subscription QR codes (optional branded background)."""
+
+from io import BytesIO
+from pathlib import Path
+
+import qrcode
+from PIL import Image
+from qrcode.constants import ERROR_CORRECT_H
+
+from app.config import DATA_DIR
+
+
+UPLOADS_DIR = DATA_DIR / "uploads"
+
+
+def uploads_dir() -> Path:
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    return UPLOADS_DIR
+
+
+def resolve_media_path(relative: str | None) -> Path | None:
+    if not relative:
+        return None
+    rel = str(relative).strip().lstrip("/").replace("\\", "/")
+    if not rel or ".." in rel:
+        return None
+    path = DATA_DIR / rel
+    if path.is_file():
+        return path
+    # also allow uploads/foo stored as bare filename
+    alt = uploads_dir() / Path(rel).name
+    return alt if alt.is_file() else None
+
+
+def make_subscription_qr(
+    url: str,
+    *,
+    background: str | None = None,
+    box_size: int = 10,
+    border: int = 2,
+) -> BytesIO:
+    """Return PNG bytes of a QR for the subscription URL."""
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=ERROR_CORRECT_H,
+        box_size=box_size,
+        border=border,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
+
+    bg_path = resolve_media_path(background)
+    if bg_path:
+        try:
+            bg = Image.open(bg_path).convert("RGBA")
+            # canvas from background, QR centered with padding
+            side = max(qr_img.size) + 80
+            canvas = Image.new("RGBA", (side, side), (255, 255, 255, 255))
+            # cover-fit background
+            bw, bh = bg.size
+            scale = max(side / bw, side / bh)
+            nw, nh = int(bw * scale), int(bh * scale)
+            bg = bg.resize((nw, nh), Image.Resampling.LANCZOS)
+            canvas.paste(bg, ((side - nw) // 2, (side - nh) // 2))
+            # white plate behind QR for readability
+            pad = 16
+            plate = Image.new(
+                "RGBA",
+                (qr_img.size[0] + pad * 2, qr_img.size[1] + pad * 2),
+                (255, 255, 255, 230),
+            )
+            px = (side - plate.size[0]) // 2
+            py = (side - plate.size[1]) // 2
+            canvas.paste(plate, (px, py), plate)
+            canvas.paste(qr_img, (px + pad, py + pad), qr_img)
+            out_img = canvas.convert("RGB")
+        except Exception:
+            out_img = qr_img.convert("RGB")
+    else:
+        out_img = qr_img.convert("RGB")
+
+    buf = BytesIO()
+    out_img.save(buf, format="PNG", optimize=True)
+    buf.seek(0)
+    buf.name = "subscription_qr.png"
+    return buf

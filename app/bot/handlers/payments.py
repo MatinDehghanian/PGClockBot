@@ -6,9 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.db.models import BotUser, Payment, Role
+from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
 from app.services.orders import approve_payment, reject_payment
-from app.services.receipts import build_approved_user_text
 from app.services.users import get_all_settings
 
 router = Router(name="payments")
@@ -50,11 +50,7 @@ async def pay_approve(callback: CallbackQuery, session: AsyncSession, db_user: B
     user = await session.get(BotUser, payment.user_id)
     if not user:
         return
-    text, markup = await build_approved_user_text(session, payment, order)
-    try:
-        await callback.bot.send_message(user.telegram_id, text, reply_markup=markup)
-    except Exception:
-        pass
+    await send_delivery_to_user(callback.bot, user.telegram_id, session, payment, order)
 
 
 @router.callback_query(F.data.startswith("payrev:no:"))
@@ -84,10 +80,13 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     user = await session.get(BotUser, payment.user_id)
     ui = await get_all_settings(session)
     if user:
+        reject_body = ui.get("payment_reject_text") or (
+            "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
+        )
         try:
             await callback.bot.send_message(
                 user.telegram_id,
-                format_message("❌ پرداخت رد شد", f"پرداخت #{payment.id} توسط ادمین رد شد."),
+                format_message("❌ پرداخت رد شد", reject_body),
                 reply_markup=kb.back_home(ui),
             )
         except Exception:

@@ -94,33 +94,52 @@ async def set_setting(session: AsyncSession, key: str, value: str) -> None:
 
 
 DEFAULT_SETTINGS = {
-    # texts
-    "shop_title": "فروشگاه کلاک",
+    "shop_title": "کلاک بات",
     "welcome_text": (
-        "سلام {name} 👋\n"
-        "به ربات فروش پاسارگارد خوش آمدید.\n"
-        "از اینجا می‌توانید سرویس بخرید، تمدید کنید و پشتیبانی بگیرید."
+        "سلام {name} 👋\n\n"
+        "به فروشگاه کلاک خوش آمدید.\n"
+        "از منوی زیر می‌توانید سرویس بخرید، وضعیت را ببینید و پشتیبانی بگیرید."
     ),
     "card_number": "",
     "card_holder": "",
-    "support_text": "پیام خود را بنویسید؛ پشتیبانی پاسخ می‌دهد.",
+    "support_text": "پیام خود را بنویسید؛ تیم پشتیبانی پاسخ می‌دهد.",
     "force_join_channel": "",
     "force_join_enabled": "0",
     "trial_enabled": "0",
     "referral_bonus": "0",
     "auto_approve_payments": "0",
-    "faq_text": "سوالات متداول به‌زودی تکمیل می‌شود.",
-    "guide_text": "برای اتصال، لینک اشتراک را در کلاینت خود وارد کنید.",
-    "purchase_success_text": "✅ پرداخت موفق و سرویس فعال شد.\nسفارش #{order_id}",
-    "card_pay_text": (
-        "💳 کارت به کارت\n\n"
-        "مبلغ: {amount}\n"
-        "کارت: {card}\n"
-        "به نام: {holder}\n\n"
-        "پس از واریز، عکس رسید را همینجا ارسال کنید."
+    "faq_text": (
+        "❓ حجم تمام شد چه کنم؟\nاز بخش سرویس‌ها → تمدید.\n\n"
+        "❓ لینک کار نمی‌کند؟\nQR یا لینک را دوباره از سرویس‌های من بگیرید."
     ),
-    "referral_text": "🎁 دعوت دوستان\n\nکد شما: {code}\nلینک دعوت:\n{link}",
-    # button labels (emoji = رنگ بصری؛ تلگرام رنگ دکمه ندارد)
+    "guide_text": (
+        "۱) سرویس را بخرید و پرداخت را انجام دهید\n"
+        "۲) لینک یا QR اشتراک را دریافت کنید\n"
+        "۳) در کلاینت (v2rayNG / Streisand / …) لینک را Import کنید"
+    ),
+    "purchase_success_text": "پرداخت شما تأیید شد و سرویس فعال است.\nشماره سفارش: #{order_id}",
+    "delivery_title": "✅ سرویس آماده است",
+    "wallet_success_title": "💰 شارژ کیف پول",
+    "wallet_success_text": "مبلغ {amount} به کیف پول شما اضافه شد.",
+    "payment_ok_title": "✅ پرداخت تأیید شد",
+    "payment_reject_text": "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید.",
+    "card_pay_text": (
+        "مبلغ قابل پرداخت: <b>{amount}</b>\n"
+        "شماره کارت: <code>{card}</code>\n"
+        "به نام: {holder}\n\n"
+        "پس از واریز، عکس رسید را در همین گفتگو ارسال کنید."
+    ),
+    "referral_text": (
+        "با دعوت دوستان پاداش بگیرید.\n\n"
+        "کد دعوت شما: <code>{code}</code>\n"
+        "لینک دعوت:\n{link}"
+    ),
+    "empty_services_text": "هنوز سرویسی ندارید.\nاز بخش «خرید سرویس» شروع کنید.",
+    "shop_empty_text": "در حال حاضر پلنی برای فروش فعال نیست.",
+    "qr_enabled": "1",
+    "qr_caption": "📱 QR اشتراک\nبا دوربین گوشی اسکن کنید یا در کلاینت Import کنید.",
+    "qr_background": "",
+    "show_sub_link_in_text": "1",
     "btn_shop": "🟢🛒 خرید سرویس",
     "btn_services": "🔵📦 سرویس‌های من",
     "btn_wallet": "🟡👛 کیف پول",
@@ -137,72 +156,164 @@ DEFAULT_SETTINGS = {
     "btn_pay_discount": "🏷 کد تخفیف",
     "btn_cancel": "❌ انصراف",
     "btn_renew": "🔄 تمدید",
-    "btn_sub_link": "🔗 لینک اشتراک",
-    # visibility / layout (1=on 0=off)
+    "btn_sub_link": "🔗 لینک و QR",
     "show_guide": "1",
     "show_faq": "1",
     "show_referral": "1",
     "show_wallet": "1",
     "show_support": "1",
     "show_miniapp": "1",
-    "menu_layout": "classic",  # classic | compact
+    "menu_layout": "classic",
     "menu_order": "shop,services,wallet,support,guide,faq,referral,miniapp",
 }
 
-# field kinds: text | textarea | toggle | select | number | note
+# field kinds: text | textarea | toggle | select | number | image
 # (key, label, kind, help?, options?)
 SETTING_GROUPS = {
-    "🛒 فروشگاه": [
-        ("shop_title", "عنوان فروشگاه", "text", "نمایش در بالای منوی ربات"),
-        ("welcome_text", "متن خوش‌آمد", "textarea", "متغیر: {name}"),
-        ("trial_enabled", "تست رایگان", "toggle", "اگر روشن باشد پلن‌های تست در بات دیده می‌شوند"),
+    "🏠 خوش‌آمد و هویت": [
+        ("shop_title", "نام فروشگاه", "text", "بالای منوی اصلی ربات دیده می‌شود"),
+        (
+            "welcome_text",
+            "پیام خوش‌آمد (/start)",
+            "textarea",
+            "اولین پیامی که کاربر بعد از استارت می‌بیند. متغیر: {name}",
+        ),
+        ("trial_enabled", "نمایش پلن تست رایگان", "toggle", "اگر پلن تست ساخته‌اید، در فروشگاه دیده شود"),
     ],
-    "💳 پرداخت": [
+    "📝 متن‌های ربات (هر بخش جدا)": [
+        (
+            "guide_text",
+            "متن راهنما",
+            "textarea",
+            "دکمه راهنما در منوی کاربر",
+        ),
+        (
+            "faq_text",
+            "متن سوالات متداول",
+            "textarea",
+            "دکمه سوالات متداول",
+        ),
+        (
+            "support_text",
+            "متن صفحه پشتیبانی",
+            "textarea",
+            "بالای فرم تیکت نمایش داده می‌شود",
+        ),
+        (
+            "referral_text",
+            "متن دعوت دوستان",
+            "textarea",
+            "متغیرها: {code} و {link}",
+        ),
+        (
+            "empty_services_text",
+            "وقتی سرویسی ندارد",
+            "textarea",
+            "پیام بخش سرویس‌های من اگر لیست خالی باشد",
+        ),
+        (
+            "shop_empty_text",
+            "وقتی پلنی نیست",
+            "textarea",
+            "پیام فروشگاه اگر پلن فعالی نباشد",
+        ),
+    ],
+    "💳 پرداخت و تحویل": [
         (
             "auto_approve_payments",
             "تأیید خودکار رسید",
             "toggle",
-            "روشن = بلافاصله بعد از ارسال رسید تأیید و تحویل می‌شود. خاموش = تأیید دستی ادمین در بات یا وب‌پنل",
+            "روشن = بلافاصله بعد از رسید، سرویس تحویل می‌شود",
         ),
-        ("card_number", "شماره کارت", "text", "برای کارت‌به‌کارت"),
-        ("card_holder", "صاحب کارت", "text", "نام روی کارت"),
-        ("card_pay_text", "متن راهنمای کارت‌به‌کارت", "textarea", "متغیرها: {amount} {card} {holder}"),
-        ("purchase_success_text", "متن موفقیت خرید", "textarea", "متغیر: {order_id}"),
-        ("referral_bonus", "پاداش دعوت (تومان)", "number", "مبلغ هدیه به معرف"),
+        ("card_number", "شماره کارت", "text", "۱۶ رقم — برای کارت‌به‌کارت"),
+        ("card_holder", "نام صاحب کارت", "text", ""),
+        (
+            "card_pay_text",
+            "راهنمای کارت‌به‌کارت",
+            "textarea",
+            "متغیرها: {amount} {card} {holder}",
+        ),
+        (
+            "delivery_title",
+            "عنوان پیام تحویل سرویس",
+            "text",
+            "مثلاً: ✅ سرویس آماده است",
+        ),
+        (
+            "purchase_success_text",
+            "متن موفقیت خرید / تحویل",
+            "textarea",
+            "متغیر: {order_id} — بالای جزئیات سرویس می‌آید",
+        ),
+        (
+            "wallet_success_text",
+            "متن موفقیت شارژ کیف پول",
+            "textarea",
+            "متغیر: {amount}",
+        ),
+        (
+            "payment_reject_text",
+            "متن رد پرداخت",
+            "textarea",
+            "وقتی ادمین رسید را رد می‌کند به کاربر ارسال می‌شود",
+        ),
+        ("referral_bonus", "پاداش دعوت (تومان)", "number", "هدیه به معرف بعد از خرید موفق دعوت‌شده"),
     ],
-    "📢 کانال و پشتیبانی": [
-        ("force_join_enabled", "عضویت اجباری کانال", "toggle", ""),
-        ("force_join_channel", "آدرس کانال", "text", "@channel یا لینک"),
-        ("support_text", "متن پشتیبانی", "textarea", ""),
-        ("faq_text", "متن سوالات متداول", "textarea", ""),
-        ("guide_text", "متن راهنما", "textarea", ""),
-        ("referral_text", "متن دعوت دوستان", "textarea", "متغیرها: {code} {link}"),
+    "📱 QR اشتراک": [
+        (
+            "qr_enabled",
+            "ارسال خودکار QR",
+            "toggle",
+            "بعد از تحویل سرویس، QR لینک اشتراک به‌صورت عکس فرستاده می‌شود",
+        ),
+        (
+            "show_sub_link_in_text",
+            "نمایش لینک در متن پیام",
+            "toggle",
+            "علاوه بر QR، لینک متنی هم در پیام باشد",
+        ),
+        (
+            "qr_caption",
+            "کپشن زیر عکس QR",
+            "textarea",
+            "متغیر اختیاری: {url}",
+        ),
+        (
+            "qr_background",
+            "عکس پس‌زمینه QR",
+            "image",
+            "اختیاری — لوگو یا بک‌گراند پشت QR (PNG/JPG)",
+        ),
     ],
-    "🎛 برچسب دکمه‌ها": [
-        ("btn_shop", "خرید", "text", "تلگرام رنگ دکمه ندارد — از ایموجی رنگی استفاده کنید"),
-        ("btn_services", "سرویس‌ها", "text", ""),
-        ("btn_wallet", "کیف پول", "text", ""),
-        ("btn_support", "پشتیبانی", "text", ""),
-        ("btn_guide", "راهنما", "text", ""),
-        ("btn_faq", "سوالات متداول", "text", ""),
-        ("btn_referral", "دعوت", "text", ""),
-        ("btn_miniapp", "مینی‌اپ", "text", ""),
-        ("btn_reseller", "نماینده", "text", ""),
-        ("btn_admin", "ادمین", "text", ""),
-        ("btn_back", "بازگشت", "text", ""),
-        ("btn_pay_wallet", "پرداخت کیف پول", "text", ""),
-        ("btn_pay_card", "کارت‌به‌کارت", "text", ""),
+    "📢 کانال اجباری": [
+        ("force_join_enabled", "عضویت اجباری کانال", "toggle", "قبل از استفاده از ربات"),
+        ("force_join_channel", "آدرس کانال", "text", "@channel یا لینک عمومی"),
+    ],
+    "🎛 متن دکمه‌های منو": [
+        ("btn_shop", "دکمه خرید", "text", "ایموجی = رنگ بصری"),
+        ("btn_services", "دکمه سرویس‌ها", "text", ""),
+        ("btn_wallet", "دکمه کیف پول", "text", ""),
+        ("btn_support", "دکمه پشتیبانی", "text", ""),
+        ("btn_guide", "دکمه راهنما", "text", ""),
+        ("btn_faq", "دکمه سوالات", "text", ""),
+        ("btn_referral", "دکمه دعوت", "text", ""),
+        ("btn_miniapp", "دکمه مینی‌اپ", "text", ""),
+        ("btn_reseller", "دکمه نماینده", "text", ""),
+        ("btn_admin", "دکمه ادمین", "text", ""),
+        ("btn_back", "دکمه بازگشت", "text", ""),
+        ("btn_pay_wallet", "پرداخت با کیف پول", "text", ""),
+        ("btn_pay_card", "پرداخت کارت‌به‌کارت", "text", ""),
         ("btn_pay_discount", "کد تخفیف", "text", ""),
         ("btn_cancel", "انصراف", "text", ""),
         ("btn_renew", "تمدید", "text", ""),
-        ("btn_sub_link", "لینک اشتراک", "text", ""),
+        ("btn_sub_link", "لینک و QR", "text", ""),
     ],
     "🗂 نمایش منو": [
         (
             "menu_layout",
             "حالت ردیف‌ها",
             "select",
-            "از صفحه چیدمان منو هم قابل تنظیم است",
+            "از صفحه «دکمه‌های بات» هم قابل تنظیم است",
             [("classic", "کلاسیک — هر دکمه یک ردیف"), ("compact", "فشرده — دکمه‌ها جفتی")],
         ),
         ("show_wallet", "نمایش کیف پول", "toggle", ""),
@@ -219,6 +330,13 @@ TOGGLE_KEYS = {
     for fields in SETTING_GROUPS.values()
     for item in fields
     if len(item) >= 3 and item[2] == "toggle"
+}
+
+IMAGE_KEYS = {
+    item[0]
+    for fields in SETTING_GROUPS.values()
+    for item in fields
+    if len(item) >= 3 and item[2] == "image"
 }
 
 
