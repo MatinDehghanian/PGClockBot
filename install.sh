@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PGClockBot — Easy interactive installer
+# PGClockBot — Easy interactive installer (Ubuntu 22.04+ only)
 set -euo pipefail
 
 RED='\033[0;31m'
@@ -17,12 +17,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo ""
-echo "========================================"
-echo "   PGClockBot — نصب آسان"
-echo "========================================"
+echo "==============================================="
+echo "   PGClockBot — Interactive Installer"
+echo "   Ubuntu 22.04+ only"
+echo "==============================================="
 echo ""
 
-# ---- helpers ----
 ask() {
   local prompt="$1"
   local default="${2:-}"
@@ -37,7 +37,7 @@ ask() {
         echo "$var"
         return
       fi
-      err "این فیلد الزامی است."
+      err "This field is required."
     done
   fi
 }
@@ -52,23 +52,22 @@ ask_secret() {
       echo "$var"
       return
     fi
-    err "این فیلد الزامی است."
+    err "This field is required."
   done
 }
 
-# حداقل ۸ کاراکتر، یک حرف بزرگ، یک کاراکتر خاص
 validate_password() {
   local p="$1"
   if [[ ${#p} -lt 8 ]]; then
-    err "پسورد باید حداقل ۸ کاراکتر باشد."
+    err "Password must be at least 8 characters."
     return 1
   fi
   if ! [[ "$p" =~ [A-Z] ]]; then
-    err "پسورد باید حداقل یک حرف بزرگ انگلیسی (A-Z) داشته باشد."
+    err "Password must include at least one uppercase letter (A-Z)."
     return 1
   fi
   if ! [[ "$p" =~ [^a-zA-Z0-9] ]]; then
-    err "پسورد باید حداقل یک کاراکتر خاص داشته باشد (مثل ! @ # \$ % & *)."
+    err "Password must include at least one special character (e.g. ! @ # $ % & *)."
     return 1
   fi
   return 0
@@ -82,9 +81,9 @@ ask_password() {
     if ! validate_password "$p1"; then
       continue
     fi
-    p2="$(ask_secret "تکرار پسورد")"
+    p2="$(ask_secret "Confirm password")"
     if [[ "$p1" != "$p2" ]]; then
-      err "پسوردها یکسان نیستند."
+      err "Passwords do not match."
       continue
     fi
     echo "$p1"
@@ -100,64 +99,113 @@ gen_secret() {
   fi
 }
 
-# ---- step 0: python ----
-info "بررسی پیش‌نیازها..."
-if command -v python3 >/dev/null 2>&1; then
+require_ubuntu_22_plus() {
+  if [[ ! -f /etc/os-release ]]; then
+    err "Unsupported system: /etc/os-release not found."
+    exit 1
+  fi
+  # shellcheck disable=SC1091
+  source /etc/os-release
+  if [[ "${ID:-}" != "ubuntu" ]]; then
+    err "This installer supports Ubuntu only."
+    err "Detected: ${PRETTY_NAME:-unknown}"
+    exit 1
+  fi
+  local major
+  major="$(echo "${VERSION_ID:-0}" | cut -d. -f1)"
+  if [[ -z "$major" || "$major" -lt 22 ]]; then
+    err "Ubuntu 22.04 or newer is required."
+    err "Detected: ${PRETTY_NAME:-unknown}"
+    exit 1
+  fi
+  ok "Detected supported OS: ${PRETTY_NAME}"
+}
+
+ensure_apt_packages() {
+  info "Checking and installing system prerequisites..."
+  if ! command -v apt-get >/dev/null 2>&1; then
+    err "apt-get not found. This installer requires Ubuntu with apt."
+    exit 1
+  fi
+
+  local sudo_cmd=""
+  if [[ "$(id -u)" -ne 0 ]]; then
+    if ! command -v sudo >/dev/null 2>&1; then
+      err "sudo is required to install prerequisites."
+      exit 1
+    fi
+    sudo_cmd="sudo"
+  fi
+
+  $sudo_cmd apt-get update -y
+  $sudo_cmd apt-get install -y \
+    python3 \
+    python3-venv \
+    python3-pip \
+    ca-certificates \
+    curl \
+    git \
+    openssl
+  ok "System prerequisites are installed."
+}
+
+ensure_python_version() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    err "python3 is not available after package installation."
+    exit 1
+  fi
   PY=python3
-elif command -v python >/dev/null 2>&1; then
-  PY=python
-else
-  err "Python پیدا نشد. Python 3.10+ نصب کنید."
-  exit 1
-fi
+  PY_VER="$($PY -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+  ok "Python version: $PY_VER"
+}
 
-PY_VER="$($PY -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
-ok "Python $PY_VER"
-
-# ---- interactive config ----
-echo ""
-info "مرحله ۱ — تلگرام"
-BOT_TOKEN="$(ask "توکن ربات (از BotFather)")"
-BOT_USERNAME="$(ask "یوزرنیم ربات بدون @" "PGClockBot")"
-ADMIN_IDS="$(ask "آیدی عددی ادمین(ها) — چندتایی با ویرگول")"
+require_ubuntu_22_plus
+ensure_apt_packages
+ensure_python_version
 
 echo ""
-info "مرحله ۲ — اتصال پاسارگارد"
-PG_BASE_URL="$(ask "آدرس پنل پاسارگارد" "https://dev.mrclock.website")"
+info "Step 1/7 — Telegram bot settings"
+BOT_TOKEN="$(ask "Bot token (from BotFather)")"
+BOT_USERNAME="$(ask "Bot username without @" "PGClockBot")"
+ADMIN_IDS="$(ask "Admin Telegram ID(s), comma-separated")"
+
+echo ""
+info "Step 2/7 — PasarGuard API settings"
+PG_BASE_URL="$(ask "PasarGuard panel URL" "https://dev.mrclock.website")"
 PG_BASE_URL="${PG_BASE_URL%/}"
-PG_USERNAME="$(ask "یوزرنیم ادمین پاسارگارد")"
-PG_PASSWORD="$(ask_secret "رمز عبور ادمین پاسارگارد")"
+PG_USERNAME="$(ask "PasarGuard admin username")"
+PG_PASSWORD="$(ask_secret "PasarGuard admin password")"
 
 echo ""
-info "مرحله ۳ — وب‌پنل مدیریت (پورت ۹۰۰۰)"
-WEB_PORT="$(ask "پورت وب‌پنل" "9000")"
-WEB_ADMIN_USER="$(ask "نام کاربری ورود وب‌پنل" "admin")"
-echo "قوانین پسورد وب‌پنل: حداقل ۸ کاراکتر + یک حرف بزرگ + یک کاراکتر خاص"
-WEB_ADMIN_PASSWORD="$(ask_password "پسورد وب‌پنل")"
+info "Step 3/7 — Web panel settings (port 9000 default)"
+WEB_PORT="$(ask "Web panel port" "9000")"
+WEB_ADMIN_USER="$(ask "Web panel login username" "admin")"
+echo "Password policy: at least 8 chars, 1 uppercase letter, 1 special char."
+WEB_ADMIN_PASSWORD="$(ask_password "Web panel login password")"
 WEB_SECRET="$(gen_secret)"
 
 echo ""
-info "مرحله ۴ — تنظیمات اختیاری (Enter = رد کردن)"
-PUBLIC_BASE_URL="$(ask "آدرس HTTPS عمومی برای مینی‌اپ (خالی بگذارید اگر ندارید)" "")"
-CURRENCY="$(ask "واحد پول" "تومان")"
+info "Step 4/7 — Optional settings"
+PUBLIC_BASE_URL="$(ask "Public HTTPS URL for Mini App (leave empty if not ready)" "")"
+CURRENCY="$(ask "Currency label" "تومان")"
 
 echo ""
-info "مرحله ۵ — نصب وابستگی‌ها"
+info "Step 5/7 — Python environment and dependencies"
 if [[ ! -d .venv ]]; then
-  $PY -m venv .venv
-  ok "محیط مجازی ساخته شد"
+  "$PY" -m venv .venv
+  ok "Virtual environment created."
 else
-  ok "محیط مجازی از قبل موجود است"
+  ok "Virtual environment already exists."
 fi
 
 # shellcheck disable=SC1091
 source .venv/bin/activate
 pip install -U pip wheel >/dev/null
 pip install -r requirements.txt
-ok "پکیج‌ها نصب شدند"
+ok "Python dependencies installed."
 
 echo ""
-info "مرحله ۶ — نوشتن فایل .env"
+info "Step 6/7 — Writing .env"
 cat > .env <<EOF
 BOT_TOKEN=${BOT_TOKEN}
 BOT_USERNAME=${BOT_USERNAME}
@@ -178,16 +226,14 @@ CURRENCY=${CURRENCY}
 DEFAULT_LOCALE=fa
 EOF
 chmod 600 .env
-ok "فایل .env ذخیره شد (دسترسی محدود)"
-
 mkdir -p data
-ok "پوشه data آماده است"
+ok ".env and data directory are ready."
 
 echo ""
-info "مرحله ۷ — سرویس systemd (اختیاری)"
-INSTALL_SERVICE="$(ask "سرویس دائمی systemd ساخته شود؟ (y/N)" "N")"
+info "Step 7/7 — Optional systemd service"
+INSTALL_SERVICE="$(ask "Create and enable systemd service? (y/N)" "N")"
 if [[ "${INSTALL_SERVICE,,}" == "y" || "${INSTALL_SERVICE,,}" == "yes" ]]; then
-  SERVICE_USER="$(ask "یوزر سیستم برای اجرا" "$(whoami)")"
+  SERVICE_USER="$(ask "Linux user to run service as" "$(whoami)")"
   SERVICE_PATH="/etc/systemd/system/pgclockbot.service"
   SERVICE_CONTENT="[Unit]
 Description=PGClockBot
@@ -209,39 +255,45 @@ WantedBy=multi-user.target
     echo "$SERVICE_CONTENT" > "$SERVICE_PATH"
     systemctl daemon-reload
     systemctl enable --now pgclockbot
-    ok "سرویس pgclockbot فعال شد"
+    ok "systemd service enabled: pgclockbot"
   else
+    if ! command -v sudo >/dev/null 2>&1; then
+      err "sudo is required to create the service as non-root user."
+      exit 1
+    fi
     TMP_SVC="$(mktemp)"
     echo "$SERVICE_CONTENT" > "$TMP_SVC"
-    warn "برای ساخت سرویس به sudo نیاز است:"
-    echo "  sudo cp $TMP_SVC $SERVICE_PATH"
-    echo "  sudo systemctl daemon-reload && sudo systemctl enable --now pgclockbot"
+    sudo cp "$TMP_SVC" "$SERVICE_PATH"
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now pgclockbot
+    ok "systemd service enabled: pgclockbot"
   fi
 fi
 
 echo ""
-echo "========================================"
-ok "نصب تمام شد"
-echo "========================================"
+echo "==============================================="
+ok "Installation completed successfully."
+echo "==============================================="
 echo ""
-echo "ورود وب‌پنل:"
-echo "  آدرس:   http://SERVER_IP:${WEB_PORT}"
-echo "  کاربر:  ${WEB_ADMIN_USER}"
-echo "  (پسورد همانی که وارد کردید)"
+echo "Web panel:"
+echo "  URL:      http://SERVER_IP:${WEB_PORT}"
+echo "  Username: ${WEB_ADMIN_USER}"
+echo "  Password: (the one you entered)"
 echo ""
-echo "از وب‌پنل می‌توانید متن‌ها، دکمه‌ها، کارت بانکی، پلن‌ها و بقیه تنظیمات را تغییر دهید."
+echo "You can configure texts, buttons, menu layout, cards, plans,"
+echo "and most bot behavior directly from the web panel."
 echo ""
-echo "اجرای دستی:"
+echo "Manual run:"
 echo "  source .venv/bin/activate"
 echo "  python run.py"
 echo ""
 
-START_NOW="$(ask "الان ربات را اجرا کنم؟ (Y/n)" "Y")"
+START_NOW="$(ask "Start the bot now? (Y/n)" "Y")"
 if [[ "${START_NOW,,}" != "n" && "${START_NOW,,}" != "no" ]]; then
-  if systemctl is-active --quiet pgclockbot 2>/dev/null; then
-    ok "سرویس systemd در حال اجراست — journalctl -u pgclockbot -f"
+  if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet pgclockbot 2>/dev/null; then
+    ok "systemd service is running. Check logs with: journalctl -u pgclockbot -f"
   else
-    info "در حال اجرا... (Ctrl+C برای توقف)"
+    info "Starting bot... (Ctrl+C to stop)"
     exec .venv/bin/python run.py
   fi
 fi

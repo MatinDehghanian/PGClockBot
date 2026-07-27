@@ -17,7 +17,7 @@
 
 ## نصب آسان (پیشنهادی)
 
-### لینوکس / سرور
+### لینوکس / سرور (Ubuntu 22.04+ only)
 
 ```bash
 git clone https://github.com/Mrclocks/PGClockBot.git
@@ -25,6 +25,9 @@ cd PGClockBot
 chmod +x install.sh
 ./install.sh
 ```
+
+The installer is fully interactive and prompts in English.
+It also checks OS + prerequisites first, then installs missing packages automatically.
 
 اسکریپت مرحله‌به‌مرحله می‌پرسد:
 
