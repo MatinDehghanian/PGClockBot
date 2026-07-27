@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% block title %}آپدیت{% endblock %}
+{% block head %}
+<style>
+.update-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.update-meta > div {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,.18);
+}
+.update-meta .muted { display:block; font-size:11px; margin-bottom:4px; }
+.progress-wrap { margin: 8px 0 18px; }
+.progress-bar {
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #5eead4, #38bdf8);
+  box-shadow: 0 0 18px rgba(56,189,248,.35);
+  transition: width .35s ease;
+}
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.update-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.update-steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.update-steps li.done { color: var(--ok); }
+.update-steps li.current {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.step-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: currentColor; opacity: .7; flex: 0 0 auto;
+}
+.update-log {
+  margin-top: 18px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,.28);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  direction: ltr;
+  text-align: left;
+}
+@media (max-width: 700px) {
+  .update-meta { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>آپدیت پنل و بات</h1>
+    <p>نسخه فعلی را ببینید و در صورت وجود نسخه جدید، آپدیت را با نوار پیشرفت اجرا کنید.</p>
+  </div>
+  <div class="version-box">
+    <span class="ver-num">نسخه فعلی {{ local_version }}</span>
+    {% if update_info.remote_version %}
+    <span class="ver-badge {{ update_info.tone }}">ریموت: {{ update_info.remote_version }}</span>
+    {% endif %}
+  </div>
+</div>
+
+{% if update_info.update_available %}
+<div class="flash err">
+  <strong>نسخه جدید آماده است:</strong>
+  {{ update_info.version }} → {{ update_info.remote_version }}
+</div>
+{% elif update_info.checked %}
+<div class="flash ok">شما روی آخرین نسخه هستید.</div>
+{% else %}
+<div class="flash warn">{{ update_info.label }}</div>
+{% endif %}
+
+<div class="card update-card" id="upd-root"
+     data-remote="{{ update_info.remote_version or '' }}"
+     data-can-start="{{ '1' if update_info.update_available else '0' }}"
+     data-running="{{ '1' if status.state == 'running' else '0' }}">
+  <h2>وضعیت آپدیت</h2>
+  <div class="update-meta">
+    <div><span class="muted">از</span> <strong id="upd-from">{{ status.from_version or local_version }}</strong></div>
+    <div><span class="muted">به</span> <strong id="upd-to">{{ status.to_version or update_info.remote_version or '—' }}</strong></div>
+    <div><span class="muted">وضعیت</span> <strong id="upd-state-label">{{ status.message }}</strong></div>
+  </div>
+
+  <div class="progress-wrap" aria-label="نوار پیشرفت آپدیت">
+    <div class="progress-bar">
+      <div class="progress-fill" id="upd-fill" style="width: {{ status.percent or 0 }}%"></div>
+    </div>
+    <div class="progress-meta">
+      <span id="upd-step">{{ status.step or 'آماده' }}</span>
+      <strong id="upd-percent">{{ status.percent or 0 }}٪</strong>
+    </div>
+  </div>
+
+  <ol class="update-steps" id="upd-steps">
+    {% for s in steps %}
+    <li data-key="{{ s.key }}" class="{% if status.step_key == s.key %}current{% endif %}">
+      <span class="step-dot"></span>
+      <span>{{ s.label }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+
+  <div class="actions" style="margin-top:18px">
+    <button type="button" class="btn" id="upd-start"
+      {% if not update_info.update_available and status.state != 'error' %}disabled{% endif %}>
+      {% if update_info.update_available %}شروع آپدیت{% else %}آپدیتی نیست{% endif %}
+    </button>
+    <button type="button" class="btn btn-ghost" id="upd-refresh">بررسی دوباره</button>
+    <a class="btn btn-ghost" href="{{ update_info.repo_url }}" target="_blank" rel="noopener">گیت‌هاب</a>
+  </div>
+
+  <pre class="update-log" id="upd-log">{% for line in status.log or [] %}{{ line }}
+{% endfor %}</pre>
+</div>
+
+<script>
+(function(){
+  const startBtn = document.getElementById('upd-start');
+  const refreshBtn = document.getElementById('upd-refresh');
+  const fill = document.getElementById('upd-fill');
+  const percentEl = document.getElementById('upd-percent');
+  const stepEl = document.getElementById('upd-step');
+  const stateEl = document.getElementById('upd-state-label');
+  const logEl = document.getElementById('upd-log');
+  const toEl = document.getElementById('upd-to');
+  const fromEl = document.getElementById('upd-from');
+  const steps = Array.from(document.querySelectorAll('#upd-steps li'));
+  let timer = null;
+  let waitingRestart = false;
+  const root = document.getElementById('upd-root');
+  const targetRemote = (root && root.dataset.remote) || '';
+  const canStart = root && root.dataset.canStart === '1';
+
+  function applyStatus(st){
+    const pct = Number(st.percent || 0);
+    fill.style.width = pct + '%';
+    percentEl.textContent = pct + '٪';
+    stepEl.textContent = st.step || 'آماده';
+    stateEl.textContent = st.message || st.state || '';
+    if (st.from_version) fromEl.textContent = st.from_version;
+    if (st.to_version) toEl.textContent = st.to_version;
+    logEl.textContent = (st.log || []).join('\n');
+    logEl.scrollTop = logEl.scrollHeight;
+    let seenCurrent = false;
+    steps.forEach(li => {
+      li.classList.remove('current', 'done');
+      if (li.dataset.key === st.step_key) {
+        li.classList.add('current');
+        seenCurrent = true;
+      } else if (!seenCurrent && st.step_key) {
+        li.classList.add('done');
+      }
+    });
+    if (st.state === 'running') {
+      startBtn.disabled = true;
+      startBtn.textContent = 'در حال آپدیت…';
+    } else if (st.state === 'done') {
+      startBtn.disabled = true;
+      startBtn.textContent = 'آپدیت انجام شد';
+      steps.forEach(li => { li.classList.remove('current'); li.classList.add('done'); });
+    } else if (st.state === 'error') {
+      startBtn.disabled = false;
+      startBtn.textContent = 'تلاش دوباره';
+    } else {
+      startBtn.disabled = !canStart;
+      startBtn.textContent = canStart ? 'شروع آپدیت' : 'آپدیتی نیست';
+    }
+  }
+
+  async function poll(){
+    try {
+      const res = await fetch('/update/status', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('status ' + res.status);
+      const data = await res.json();
+      applyStatus(data);
+      if (waitingRestart && (data.state === 'done' || data.state === 'idle')) {
+        waitingRestart = false;
+        clearInterval(timer); timer = null;
+        stateEl.textContent = 'آپدیت انجام شد — در حال بارگذاری دوباره…';
+        setTimeout(() => location.reload(), 1200);
+        return;
+      }
+      waitingRestart = false;
+      if (data.state === 'running') return;
+      if (data.state === 'done') {
+        clearInterval(timer); timer = null;
+        setTimeout(() => location.reload(), 1500);
+        return;
+      }
+      if (data.state === 'error' || data.state === 'idle') {
+        clearInterval(timer); timer = null;
+      }
+    } catch (e) {
+      waitingRestart = true;
+      stateEl.textContent = 'در حال راه‌اندازی مجدد سرویس…';
+      stepEl.textContent = 'راه‌اندازی مجدد';
+      fill.style.width = '96%';
+      percentEl.textContent = '۹۶٪';
+    }
+  }
+
+  function startPolling(){
+    if (timer) return;
+    timer = setInterval(poll, 900);
+    poll();
+  }
+
+  startBtn.addEventListener('click', async () => {
+    startBtn.disabled = true;
+    startBtn.textContent = 'شروع…';
+    try {
+      const res = await fetch('/update/start', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: targetRemote || null })
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        stateEl.textContent = data.error || 'شروع آپدیت ممکن نشد';
+        startBtn.disabled = false;
+        startBtn.textContent = 'تلاش دوباره';
+        return;
+      }
+      if (data.status) applyStatus(data.status);
+      startPolling();
+    } catch (e) {
+      stateEl.textContent = 'خطا در شروع آپدیت';
+      startBtn.disabled = false;
+    }
+  });
+
+  refreshBtn.addEventListener('click', () => {
+    location.href = '/update?force=1';
+  });
+
+  if (root && root.dataset.running === '1') startPolling();
+})();
+</script>
+{% endblock %}

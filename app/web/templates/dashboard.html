@@ -13,6 +13,16 @@
   </div>
 </div>
 
+{% if update.update_available %}
+<div class="flash err" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between">
+  <div>
+    <strong>آپدیت جدید آماده است</strong>
+    <span class="muted"> — نسخه {{ update.version }} → {{ update.remote_version }}</span>
+  </div>
+  <a class="btn btn-sm" href="/update">مشاهده و آپدیت</a>
+</div>
+{% endif %}
+
 <div class="stats-grid">
   <div class="stat"><span>کاربران</span><strong>{{ stats.users | num }}</strong></div>
   <div class="stat"><span>سفارش‌ها</span><strong>{{ stats.orders | num }}</strong></div>
@@ -29,6 +39,7 @@
     <a href="/tickets">تیکت‌ها{% if stats.tickets %} ({{ stats.tickets }}){% endif %}</a>
     {% if staff.role == 'admin' %}
     <a href="/plans">پلن‌ها</a>
+    <a href="/update">آپدیت{% if update.update_available %} ⬆{% endif %}</a>
     <a href="/notifications">نوتیفیکیشن</a>
     <a href="/pg">پاسارگارد</a>
     <a href="/settings">تنظیمات</a>

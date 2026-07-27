@@ -950,6 +950,62 @@ def create_api_app(lifespan=None) -> FastAPI:
             await set_setting(session, f"show_{key}", "1" if key in order else "0")
         return RedirectResponse("/menu-layout?saved=1", status_code=303)
 
+    @app.get("/update", response_class=HTMLResponse)
+    async def update_page(
+        request: Request,
+        staff: dict = Depends(require_admin),
+    ):
+        from app.services.panel_update import update_page_context
+        from app.services.updates import check_github_update, clear_update_cache
+
+        if request.query_params.get("force") == "1":
+            clear_update_cache()
+            await check_github_update(force=True)
+        ctx = await update_page_context()
+        return render(
+            request,
+            "update.html",
+            {
+                "staff": staff,
+                **ctx,
+            },
+        )
+
+    @app.get("/update/status")
+    async def update_status(staff: dict = Depends(require_admin)):
+        from app.services.panel_update import read_status
+        from app.services.updates import local_version
+
+        st = read_status()
+        st["current_version"] = local_version()
+        return st
+
+    @app.post("/update/start")
+    async def update_start(
+        request: Request,
+        staff: dict = Depends(require_admin),
+    ):
+        from app.services.panel_update import start_update
+        from app.services.updates import check_github_update, clear_update_cache
+
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        clear_update_cache()
+        info = await check_github_update(force=True)
+        target = (body or {}).get("target") or info.get("remote_version")
+        if not info.get("update_available") and not (body or {}).get("force"):
+            # Allow retry after error even if versions match momentarily
+            from app.services.panel_update import read_status
+
+            st = read_status()
+            if st.get("state") != "error":
+                return {"ok": False, "error": "نسخه جدیدی برای آپدیت نیست", "info": info}
+        result = start_update(target_version=target)
+        return result
+
     @app.get("/notifications", response_class=HTMLResponse)
     async def notifications_page(
         request: Request,

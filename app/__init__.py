@@ -1,3 +1,3 @@
 """PGClockBot — PasarGuard Telegram sales bot."""
 
-__version__ = "1.0.0"
+from app.version import __version__ as __version__

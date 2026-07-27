@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/panel.css?v=liquid-glass1" />
+  <link rel="stylesheet" href="/static/panel.css?v=liquid-glass-upd1" />
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
   {% block head %}{% endblock %}
 </head>
@@ -67,6 +67,7 @@
 
         <div class="nav-section">
           <span class="nav-label">پیکربندی</span>
+          <a href="/update" class="nav-item {% if path.startswith('/update') %}active{% endif %}">آپدیت</a>
           <a href="/notifications" class="nav-item {% if path.startswith('/notifications') %}active{% endif %}">نوتیفیکیشن</a>
           <a href="/menu-layout" class="nav-item {% if path.startswith('/menu-layout') %}active{% endif %}">منوی بات</a>
           <a href="/settings" class="nav-item {% if path.startswith('/settings') %}active{% endif %}">متن‌ها و تنظیمات</a>
