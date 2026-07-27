@@ -408,7 +408,18 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   background: var(--bg-card);
   width: 100%;
   position: relative;
+  scrollbar-gutter: stable;
 }
+.h-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+.h-scroll > * { flex: 0 0 auto; }
 .card > .table-wrap {
   border: 0;
   border-radius: 0;
@@ -934,7 +945,7 @@ tr:last-child td { border-bottom: 0; }
   .quick-links { grid-template-columns: 1fr 1fr; gap: 8px; }
   .quick-links a { height: var(--btn-h); min-height: var(--btn-h); }
 
-  /* Horizontal tables: edge-to-edge scroll + hint */
+  /* Horizontal tables: edge-to-edge scroll + hint when needed */
   .table-wrap {
     margin-inline: -14px;
     width: calc(100% + 28px);
@@ -942,12 +953,15 @@ tr:last-child td { border-bottom: 0; }
     border-left: 0;
     border-right: 0;
   }
+  .table-wrap.is-scrollable {
+    mask-image: linear-gradient(to left, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
+  }
   .card > .table-wrap,
   .card.card-flush > .table-wrap {
     margin-inline: 0;
     width: 100%;
   }
-  .table-wrap::after {
+  .table-wrap.is-scrollable::after {
     content: "← برای دیدن بقیه، افقی بکشید →";
     display: block;
     text-align: center;
@@ -967,22 +981,45 @@ tr:last-child td { border-bottom: 0; }
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    gap: 6px;
+    padding-bottom: 4px;
   }
-  .section-tabs a { flex: 0 0 auto; }
+  .section-tabs.is-scrollable {
+    mask-image: linear-gradient(to left, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  }
+  .section-tabs a {
+    flex: 0 0 auto;
+    height: var(--btn-h);
+    min-height: var(--btn-h);
+  }
 
   .sticky-actions { bottom: 10px; }
   body.nav-open { overflow: hidden; }
 
   .notify-row { flex-direction: row; }
   .actions { gap: 8px; }
-  td .actions {
-    max-width: none;
-    flex-wrap: nowrap;
-  }
-  td .actions .btn,
-  td .actions button {
+  .topbar .btn {
     height: var(--btn-h);
     min-height: var(--btn-h);
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  td .actions {
+    max-width: min(70vw, 280px);
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  td .actions .btn,
+  td .actions button,
+  .actions .btn,
+  .actions button,
+  .actions a.btn {
+    height: var(--btn-h);
+    min-height: var(--btn-h);
+    flex: 0 0 auto;
   }
 }
 
