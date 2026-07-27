@@ -5,21 +5,21 @@
 <div class="page-head">
   <div>
     <h1>خانه</h1>
-    <p>نمای کلی فروش و دسترسی سریع به بخش‌های مهم</p>
+    <p class="desk-only">خلاصه فروش و دسترسی سریع</p>
   </div>
   <div class="version-box">
-    <span class="ver-num">نسخه {{ update.version }}</span>
+    <span class="ver-num">v{{ update.version }}</span>
     <span class="ver-badge {{ update.tone }}">{{ update.label }}</span>
   </div>
 </div>
 
 {% if update.update_available %}
-<div class="flash err" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between">
+<div class="flash err" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
   <div>
-    <strong>آپدیت جدید آماده است</strong>
-    <span class="muted"> — نسخه {{ update.version }} → {{ update.remote_version }}</span>
+    <strong>آپدیت جدید</strong>
+    <span class="muted"> {{ update.version }} → {{ update.remote_version }}</span>
   </div>
-  <a class="btn btn-sm" href="/update">مشاهده و آپدیت</a>
+  <a class="btn btn-sm" href="/update">آپدیت</a>
 </div>
 {% endif %}
 
@@ -38,11 +38,9 @@
     <a href="/orders">سفارش‌ها</a>
     <a href="/tickets">تیکت‌ها{% if stats.tickets %} ({{ stats.tickets }}){% endif %}</a>
     {% if staff.role == 'admin' %}
-    <a href="/plans">پلن‌ها</a>
-    <a href="/update">آپدیت{% if update.update_available %} ⬆{% endif %}</a>
-    <a href="/notifications">نوتیفیکیشن</a>
-    <a href="/pg">پاسارگارد</a>
-    <a href="/settings">تنظیمات</a>
+    <a class="desk-only" href="/plans">پلن‌ها</a>
+    <a href="/update">آپدیت</a>
+    <a class="desk-only" href="/settings">تنظیمات</a>
     {% endif %}
   </div>
 </div>
