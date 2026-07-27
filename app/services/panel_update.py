@@ -27,6 +27,49 @@ _LOCK = threading.Lock()
 _THREAD: threading.Thread | None = None
 MAX_SNAPSHOTS = 8
 
+# systemd often has a short PATH — resolve absolute binaries
+_EXTRA_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+
+def _which(name: str) -> str | None:
+    found = shutil.which(name)
+    if found:
+        return found
+    for prefix in ("/usr/bin", "/bin", "/usr/local/bin"):
+        candidate = Path(prefix) / name
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def _repo_root() -> Path:
+    """Prefer ROOT_DIR; walk up if .git lives in a parent (unusual installs)."""
+    candidates = [ROOT_DIR, Path.cwd()]
+    for base in candidates:
+        try:
+            cur = base.resolve()
+        except Exception:
+            cur = base
+        for _ in range(6):
+            if (cur / ".git").exists() and (cur / "requirements.txt").exists():
+                return cur
+            if (cur / ".git").exists() and (cur / "run.py").exists():
+                return cur
+            if cur.parent == cur:
+                break
+            cur = cur.parent
+    return ROOT_DIR.resolve()
+
+
+def _env_with_path() -> dict[str, str]:
+    env = dict(os.environ)
+    path = env.get("PATH") or ""
+    if _EXTRA_PATH not in path:
+        env["PATH"] = f"{_EXTRA_PATH}:{path}" if path else _EXTRA_PATH
+    env["DEBIAN_FRONTEND"] = "noninteractive"
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    return env
+
 STEPS = [
     ("prepare", "آماده‌سازی", 5),
     ("backup", "پشتیبان‌گیری", 15),
@@ -115,16 +158,25 @@ def _set_step(key: str, message: str | None = None) -> None:
 
 def _run(cmd: list[str], *, cwd: Path | None = None, timeout: int = 300) -> tuple[int, str]:
     try:
+        # Resolve first token if it's a bare command name
+        exe = cmd[0]
+        if "/" not in exe and not Path(exe).exists():
+            resolved = _which(exe)
+            if not resolved:
+                return 1, f"دستور «{exe}» روی سرور پیدا نشد (PATH ناقص است)"
+            cmd = [resolved, *cmd[1:]]
         proc = subprocess.run(
             cmd,
-            cwd=str(cwd or ROOT_DIR),
+            cwd=str(cwd or _repo_root()),
             capture_output=True,
             text=True,
             timeout=timeout,
-            env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"},
+            env=_env_with_path(),
         )
         out = ((proc.stdout or "") + (proc.stderr or "")).strip()
         return proc.returncode, out
+    except FileNotFoundError as e:
+        return 1, f"فایل/دستور پیدا نشد: {e.filename or e}"
     except subprocess.TimeoutExpired:
         return 1, "timeout"
     except Exception as e:
@@ -132,7 +184,8 @@ def _run(cmd: list[str], *, cwd: Path | None = None, timeout: int = 300) -> tupl
 
 
 def _python_bin() -> str:
-    venv_py = ROOT_DIR / ".venv" / "bin" / "python"
+    root = _repo_root()
+    venv_py = root / ".venv" / "bin" / "python"
     if venv_py.exists():
         return str(venv_py)
     return sys.executable
@@ -140,25 +193,38 @@ def _python_bin() -> str:
 
 def _pip_install() -> tuple[int, str]:
     py = _python_bin()
-    req = ROOT_DIR / "requirements.txt"
+    req = _repo_root() / "requirements.txt"
     if not req.exists():
         return 0, "no requirements.txt"
     return _run([py, "-m", "pip", "install", "-q", "-r", str(req)], timeout=600)
 
 
 def _restart_service() -> tuple[bool, str]:
-    if shutil.which("systemctl"):
-        code, out = _run(["systemctl", "restart", SERVICE_NAME], timeout=60)
+    systemctl = _which("systemctl")
+    if systemctl:
+        code, out = _run([systemctl, "restart", SERVICE_NAME], timeout=60)
         if code == 0:
             return True, f"systemd restart {SERVICE_NAME}"
+        # try without failing hard
         return False, out or "systemctl restart failed"
     return False, "systemd موجود نیست — سرویس را دستی ری‌استارت کنید"
 
 
+def _git_bin() -> str:
+    git = _which("git")
+    if not git:
+        raise RuntimeError(
+            "دستور git روی سرور پیدا نشد. با دسترسی root نصب کنید: apt install -y git"
+        )
+    return git
+
+
 def _git_head() -> tuple[str, str]:
-    code, sha = _run(["git", "rev-parse", "HEAD"])
+    git = _git_bin()
+    root = _repo_root()
+    code, sha = _run([git, "rev-parse", "HEAD"], cwd=root)
     sha = (sha or "").strip()
-    code2, branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    code2, branch = _run([git, "rev-parse", "--abbrev-ref", "HEAD"], cwd=root)
     branch = (branch or "main").strip() or "main"
     if branch == "HEAD":
         branch = "detached"
@@ -189,9 +255,14 @@ def _save_snapshots(items: list[dict[str, Any]]) -> None:
 
 def create_snapshot(*, reason: str = "before_update") -> dict[str, Any] | None:
     """Save current HEAD so the admin can roll back later."""
-    if not (ROOT_DIR / ".git").exists():
+    root = _repo_root()
+    if not (root / ".git").exists():
         return None
-    sha, branch = _git_head()
+    try:
+        sha, branch = _git_head()
+    except Exception as e:
+        logger.warning("snapshot skipped: %s", e)
+        return None
     if not sha:
         return None
     items = list_snapshots()
@@ -255,6 +326,7 @@ def _finish_error(err: Exception | str) -> None:
 
 def _do_update(target_version: str | None) -> None:
     try:
+        root = _repo_root()
         write_status(
             {
                 "state": "running",
@@ -270,6 +342,10 @@ def _do_update(target_version: str | None) -> None:
             }
         )
         _set_step("prepare", "شروع آپدیت…")
+        _append_log(f"root={root}")
+
+        git = _git_bin()
+        _append_log(f"git={git}")
 
         _set_step("backup", "ثبت نقطه بازگشت + پشتیبان .env")
         snap = create_snapshot(reason="before_update")
@@ -279,39 +355,44 @@ def _do_update(target_version: str | None) -> None:
         else:
             _append_log("هشدار: نتوانستیم نقطه بازگشت git بسازیم")
 
-        env_path = ROOT_DIR / ".env"
+        env_path = root / ".env"
         if env_path.exists():
-            bak = ROOT_DIR / f".env.bak.{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            bak = root / f".env.bak.{datetime.now().strftime('%Y%m%d%H%M%S')}"
             shutil.copy2(env_path, bak)
             _append_log(f"پشتیبان env: {bak.name}")
 
-        if not (ROOT_DIR / ".git").exists():
-            raise RuntimeError("مخزن git پیدا نشد — آپدیت از پنل ممکن نیست")
+        if not (root / ".git").exists():
+            raise RuntimeError(
+                f"مخزن git در مسیر پیدا نشد: {root}\n"
+                "نصب باید با git clone انجام شده باشد."
+            )
 
         _set_step("fetch", "git fetch…")
-        code, out = _run(["git", "fetch", "--all", "--tags"], timeout=180)
+        code, out = _run([git, "fetch", "--all", "--tags"], cwd=root, timeout=180)
         if out:
             _append_log(out.splitlines()[-1][:200])
         if code != 0:
             raise RuntimeError(f"git fetch ناموفق: {out[:300]}")
 
         _set_step("pull", "دریافت کد (origin/main)…")
-        _, branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+        _, branch = _run([git, "rev-parse", "--abbrev-ref", "HEAD"], cwd=root)
         branch = (branch or "main").strip() or "main"
         if branch == "HEAD":
             branch = "main"
-        code, out = _run(["git", "pull", "--ff-only", "origin", branch], timeout=180)
+        code, out = _run([git, "pull", "--ff-only", "origin", branch], cwd=root, timeout=180)
         if code != 0:
             _append_log("ff-only ناموفق — همگام‌سازی با origin/main")
-            code2, out2 = _run(["git", "checkout", "-f", "-B", "main", "origin/main"], timeout=120)
+            code2, out2 = _run(
+                [git, "checkout", "-f", "-B", "main", "origin/main"], cwd=root, timeout=120
+            )
             if code2 != 0:
                 raise RuntimeError(f"checkout main ناموفق: {out2[:300]}")
-            code3, out3 = _run(["git", "reset", "--hard", "origin/main"], timeout=120)
+            code3, out3 = _run([git, "reset", "--hard", "origin/main"], cwd=root, timeout=120)
             if code3 != 0:
                 raise RuntimeError(f"reset ناموفق: {out3[:300]}")
             _run(
                 [
-                    "git",
+                    git,
                     "clean",
                     "-fd",
                     "--exclude=.env",
@@ -319,6 +400,7 @@ def _do_update(target_version: str | None) -> None:
                     "--exclude=.venv",
                     "--exclude=.env.bak.*",
                 ],
+                cwd=root,
                 timeout=60,
             )
             _append_log("کد با origin/main همگام شد")
@@ -333,7 +415,7 @@ def _do_update(target_version: str | None) -> None:
             raise RuntimeError(f"pip install ناموفق: {out[:400]}")
         _append_log("وابستگی‌ها نصب شد")
 
-        ver_file = ROOT_DIR / "VERSION"
+        ver_file = root / "VERSION"
         new_ver = (
             ver_file.read_text(encoding="utf-8").strip().splitlines()[0].strip()
             if ver_file.exists()
@@ -360,6 +442,8 @@ def _do_rollback(snapshot_id: str) -> None:
         if not snap:
             raise RuntimeError("نقطه بازگشت پیدا نشد")
         sha = snap["sha"]
+        root = _repo_root()
+        git = _git_bin()
         write_status(
             {
                 "state": "running",
@@ -375,9 +459,10 @@ def _do_rollback(snapshot_id: str) -> None:
             }
         )
         _set_step("prepare", f"شروع بازگشت به {snap.get('label')}")
+        _append_log(f"root={root}")
 
-        if not (ROOT_DIR / ".git").exists():
-            raise RuntimeError("مخزن git پیدا نشد")
+        if not (root / ".git").exists():
+            raise RuntimeError(f"مخزن git پیدا نشد: {root}")
 
         # Snapshot current state before rolling back (so they can undo the undo)
         _set_step("backup", "ثبت وضعیت فعلی قبل از بازگشت")
@@ -385,27 +470,27 @@ def _do_rollback(snapshot_id: str) -> None:
         if pre:
             _append_log(f"وضعیت فعلی هم ذخیره شد: {pre['label']}")
 
-        env_path = ROOT_DIR / ".env"
+        env_path = root / ".env"
         if env_path.exists():
-            bak = ROOT_DIR / f".env.bak.rollback.{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            bak = root / f".env.bak.rollback.{datetime.now().strftime('%Y%m%d%H%M%S')}"
             shutil.copy2(env_path, bak)
             _append_log(f"پشتیبان env: {bak.name}")
 
         _set_step("fetch", "بررسی دسترسی به کامیت…")
-        code, out = _run(["git", "cat-file", "-t", sha], timeout=30)
+        code, out = _run([git, "cat-file", "-t", sha], cwd=root, timeout=30)
         if code != 0 or "commit" not in (out or ""):
-            _run(["git", "fetch", "--all", "--tags"], timeout=180)
-            code, out = _run(["git", "cat-file", "-t", sha], timeout=30)
+            _run([git, "fetch", "--all", "--tags"], cwd=root, timeout=180)
+            code, out = _run([git, "cat-file", "-t", sha], cwd=root, timeout=30)
             if code != 0:
                 raise RuntimeError(f"کامیت {sha[:7]} در دسترس نیست")
 
         _set_step("pull", f"بازگردانی کد به {sha[:7]}…")
-        code, out = _run(["git", "reset", "--hard", sha], timeout=120)
+        code, out = _run([git, "reset", "--hard", sha], cwd=root, timeout=120)
         if code != 0:
             raise RuntimeError(f"reset ناموفق: {out[:300]}")
         _run(
             [
-                "git",
+                git,
                 "clean",
                 "-fd",
                 "--exclude=.env",
@@ -413,6 +498,7 @@ def _do_rollback(snapshot_id: str) -> None:
                 "--exclude=.venv",
                 "--exclude=.env.bak.*",
             ],
+            cwd=root,
             timeout=60,
         )
         _append_log(f"کد به {sha[:7]} برگشت")
@@ -422,7 +508,7 @@ def _do_rollback(snapshot_id: str) -> None:
         if code != 0:
             raise RuntimeError(f"pip install ناموفق: {out[:400]}")
 
-        ver_file = ROOT_DIR / "VERSION"
+        ver_file = root / "VERSION"
         new_ver = (
             ver_file.read_text(encoding="utf-8").strip().splitlines()[0].strip()
             if ver_file.exists()
