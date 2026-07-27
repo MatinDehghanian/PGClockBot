@@ -1,13 +1,41 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware
-from aiogram.types import CallbackQuery, Message, TelegramObject
+from aiogram.types import CallbackQuery, Message, TelegramObject, Update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import SessionLocal
 from app.services.users import get_or_create_user
+
+logger = logging.getLogger("pgclock.bot")
+
+
+def _extract_from_user(event: TelegramObject):
+    if isinstance(event, Message) and event.from_user:
+        return event.from_user
+    if isinstance(event, CallbackQuery) and event.from_user:
+        return event.from_user
+    if isinstance(event, Update):
+        if event.message and event.message.from_user:
+            return event.message.from_user
+        if event.callback_query and event.callback_query.from_user:
+            return event.callback_query.from_user
+        if event.edited_message and event.edited_message.from_user:
+            return event.edited_message.from_user
+    return None
+
+
+def _reply_message(event: TelegramObject) -> Message | None:
+    if isinstance(event, Message):
+        return event
+    if isinstance(event, CallbackQuery) and event.message and isinstance(event.message, Message):
+        return event.message
+    if isinstance(event, Update):
+        return event.message or event.edited_message
+    return None
 
 
 class DbSessionMiddleware(BaseMiddleware):
@@ -30,23 +58,57 @@ class UserMiddleware(BaseMiddleware):
         data: Dict[str, Any],
     ) -> Any:
         session: AsyncSession = data["session"]
-        tg_user = None
-        if isinstance(event, Message) and event.from_user:
-            tg_user = event.from_user
-        elif isinstance(event, CallbackQuery) and event.from_user:
-            tg_user = event.from_user
+        tg_user = _extract_from_user(event)
         if tg_user:
-            user = await get_or_create_user(
-                session,
-                tg_user.id,
-                username=tg_user.username,
-                full_name=tg_user.full_name,
-            )
+            try:
+                user = await get_or_create_user(
+                    session,
+                    tg_user.id,
+                    username=tg_user.username,
+                    full_name=tg_user.full_name,
+                )
+            except Exception:
+                logger.exception("Failed to load/create bot user tg_id=%s", tg_user.id)
+                msg = _reply_message(event)
+                if msg:
+                    try:
+                        await msg.answer("خطای موقت. چند ثانیه بعد دوباره /start بزنید.")
+                    except Exception:
+                        pass
+                return None
             data["db_user"] = user
             if user.is_blocked:
-                if isinstance(event, Message):
-                    await event.answer("دسترسی شما مسدود شده است.")
-                elif isinstance(event, CallbackQuery):
-                    await event.answer("دسترسی شما مسدود شده است.", show_alert=True)
+                msg = _reply_message(event)
+                if msg:
+                    try:
+                        await msg.answer("دسترسی شما مسدود شده است.")
+                    except Exception:
+                        pass
+                if isinstance(event, CallbackQuery):
+                    try:
+                        await event.answer("دسترسی شما مسدود شده است.", show_alert=True)
+                    except Exception:
+                        pass
                 return None
         return await handler(event, data)
+
+
+class ErrorLogMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any],
+    ) -> Any:
+        try:
+            return await handler(event, data)
+        except Exception:
+            logger.exception("Unhandled bot error")
+            msg = _reply_message(event)
+            if msg:
+                try:
+                    await msg.answer("خطایی رخ داد. لطفاً دوباره /start را بزنید.")
+                except Exception:
+                    pass
+            # do not re-raise so polling keeps running
+            return None

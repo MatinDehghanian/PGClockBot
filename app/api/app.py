@@ -102,13 +102,15 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         settings = get_settings()
         role = None
-        display = username
-        if username == settings.web_admin_user and password == settings.web_admin_password:
+        display = username.strip()
+        u = username.strip()
+        p = password.strip()
+        if u == settings.web_admin_user.strip() and p == settings.web_admin_password:
             role = "admin"
         else:
             # reseller login: username=telegram_id password=referral_code
             try:
-                tg_id = int(username)
+                tg_id = int(u)
             except ValueError:
                 tg_id = None
             if tg_id is not None:
@@ -116,11 +118,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                     select(BotUser).where(BotUser.telegram_id == tg_id, BotUser.role == Role.RESELLER.value)
                 )
                 ru = result.scalar_one_or_none()
-                if ru and password == ru.referral_code:
+                if ru and p == (ru.referral_code or ""):
                     role = "reseller"
                     display = ru.full_name or str(tg_id)
         if not role:
-            return render(request, "login.html", {"error": "ورود نامعتبر"},
+            return render(
+                request,
+                "login.html",
+                {"error": "نام کاربری یا رمز عبور اشتباه است"},
                 status_code=400,
             )
         resp = RedirectResponse("/dashboard", status_code=302)

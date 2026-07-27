@@ -58,6 +58,8 @@ async def seed_demo_plan() -> None:
 
 
 def main() -> None:
+    # Always reload settings from project .env
+    get_settings.cache_clear()
     settings = get_settings()
     bot = create_bot()
     dp = create_dispatcher()
@@ -68,6 +70,21 @@ def main() -> None:
         await seed_demo_plan()
         start_scheduler(bot)
         poll_task = None
+
+        try:
+            me = await bot.get_me()
+            logger.info(
+                "Bot online as @%s (id=%s) · admins=%s",
+                me.username,
+                me.id,
+                settings.admin_ids,
+            )
+        except Exception:
+            logger.exception(
+                "Cannot connect to Telegram. Check BOT_TOKEN in .env"
+            )
+            raise
+
         if settings.webhook_url.strip():
             url = settings.webhook_url.rstrip("/") + settings.webhook_path
             await bot.set_webhook(url, drop_pending_updates=True)
@@ -76,10 +93,24 @@ def main() -> None:
             await bot.delete_webhook(drop_pending_updates=True)
 
             async def _poll():
-                logger.info("Starting polling…")
-                await dp.start_polling(bot)
+                logger.info("Starting long-polling…")
+                try:
+                    await dp.start_polling(bot)
+                except Exception:
+                    logger.exception("Polling crashed")
+                    raise
 
             poll_task = asyncio.create_task(_poll())
+
+            def _on_done(task: asyncio.Task) -> None:
+                if task.cancelled():
+                    return
+                exc = task.exception()
+                if exc:
+                    logger.error("Polling task failed: %s", exc)
+
+            poll_task.add_done_callback(_on_done)
+
         try:
             yield
         finally:
@@ -105,6 +136,7 @@ def main() -> None:
             await dp.feed_update(bot, update)
             return {"ok": True}
 
+    logger.info("Web panel on http://%s:%s", settings.web_host, settings.web_port)
     uvicorn.run(api, host=settings.web_host, port=settings.web_port, log_level="info")
 
 

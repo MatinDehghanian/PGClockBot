@@ -5,7 +5,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from app.bot.middlewares import DbSessionMiddleware, UserMiddleware
+from app.bot.middlewares import DbSessionMiddleware, ErrorLogMiddleware, UserMiddleware
 from app.config import get_settings
 
 
@@ -19,6 +19,7 @@ def create_bot() -> Bot:
 
 def create_dispatcher() -> Dispatcher:
     dp = Dispatcher(storage=MemoryStorage())
+    dp.update.middleware(ErrorLogMiddleware())
     dp.update.middleware(DbSessionMiddleware())
     dp.update.middleware(UserMiddleware())
 

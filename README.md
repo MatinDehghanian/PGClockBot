@@ -9,15 +9,15 @@
 - خرید برای کاربر تازه‌وارد (پلن، کیف پول، کارت‌به‌کارت)
 - سرویس من، تمدید، پشتیبانی، اعلان انقضا / اتمام حجم
 - نقش **نماینده** (کمیسیون، تأیید رسید)
-- پنل ادمین داخل بات + عملیات پاسارگارد (جستجو، ریست، disable، نودها، آمار)
+- پنل ادمین داخل بات + عملیات پاسارگارد
 - وب‌پنل مدیریت مینیمال روی `:9000`
 - مینی‌اپ تلگرام (با دامنه HTTPS)
 
 ---
 
-## نصب آسان (پیشنهادی)
+## نصب آسان (Ubuntu 22.04+)
 
-### لینوکس / سرور (Ubuntu 22.04+ only)
+فقط روی **Ubuntu 22.04 و بالاتر** پشتیبانی می‌شود.
 
 ```bash
 git clone https://github.com/Mrclocks/PGClockBot.git
@@ -26,38 +26,25 @@ chmod +x install.sh
 ./install.sh
 ```
 
-The installer is fully interactive and prompts in English.
-It also checks OS + prerequisites first, then installs missing packages automatically.
+اسکریپت:
 
-اسکریپت مرحله‌به‌مرحله می‌پرسد:
+1. نسخه Ubuntu را چک می‌کند (کمتر از ۲۲ → توقف)
+2. پیش‌نیازها را نصب می‌کند (`python3`, `venv`, `pip`, `git`, …)
+3. سوال‌ها را **به انگلیسی** می‌پرسد (توکن، ادمین، پاسارگارد، یوزر/پسورد وب)
+4. پسورد وب را با قانون امن اجباری می‌کند (۸+ / حرف بزرگ / کاراکتر خاص)
+5. `.env` را با مقدارهای **کوت‌شده** می‌نویسد (رمزهای خاص خراب نمی‌شوند)
+6. اختیاری systemd می‌سازد و ربات را اجرا می‌کند
 
-1. توکن و یوزرنیم بات
-2. آیدی ادمین
-3. آدرس و یوزر/رمز پاسارگارد
-4. یوزر وب‌پنل + **پسورد امن** (حداقل ۸ کاراکتر، یک حرف بزرگ، یک کاراکتر خاص)
-5. پورت (پیش‌فرض ۹۰۰۰) و دامنه مینی‌اپ (اختیاری)
-6. ساخت venv، نصب پکیج، نوشتن `.env`، اختیاری systemd، و اجرای ربات
-
-بعد از نصب، بقیه تنظیمات (متن‌ها، دکمه‌ها، چیدمان منو، کارت بانکی، پلن‌ها) از **وب‌پنل** انجام می‌شود.
-
-### ویندوز
-
-```powershell
-git clone https://github.com/Mrclocks/PGClockBot.git
-cd PGClockBot
-powershell -ExecutionPolicy Bypass -File .\install.ps1
-```
+بعد از نصب، متن‌ها / دکمه‌ها / پلن‌ها / کارت از **وب‌پنل** تنظیم می‌شوند.
 
 ---
 
 ## پیش‌نیازها
 
-
 | مورد | توضیح |
 |------|--------|
-| سرور / سیستم | Linux یا Windows با دسترسی اینترنت |
-| Python | **3.10 تا 3.12** (پیشنهادی 3.11+) |
-| پنل PasarGuard | API در دسترس (مثلاً `https://your-panel.com`) |
+| OS | **Ubuntu 22.04+** |
+| پنل PasarGuard | API در دسترس |
 | بات تلگرام | توکن از [@BotFather](https://t.me/BotFather) |
 | آیدی عددی ادمین | از [@userinfobot](https://t.me/userinfobot) |
 
@@ -65,276 +52,96 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 
 ## تنظیم از وب‌پنل
 
-تقریباً همه چیز بعد از نصب از `http://IP:9000` → **تنظیمات**:
+`http://IP:9000` → ورود با یوزر/رمزی که در نصب ساختید → **تنظیمات**
 
 | بخش | مثال |
 |-----|------|
-| عمومی و متن‌ها | خوش‌آمد، FAQ، راهنما، متن خرید، متن کارت‌به‌کارت |
-| پرداخت و کانال | شماره کارت، عضویت اجباری، تست رایگان |
-| برچسب دکمه‌ها | خرید، کیف پول، پشتیبانی، دعوت، مینی‌اپ و ... |
-| چیدمان منو | classic / compact و نمایش/مخفی کردن دکمه‌ها |
+| عمومی و متن‌ها | خوش‌آمد، FAQ، راهنما |
+| پرداخت و کانال | شماره کارت، عضویت اجباری |
+| برچسب دکمه‌ها | خرید، کیف پول، پشتیبانی |
+| چیدمان منو | classic / compact |
 | پلن‌ها | قیمت + Template ID پاسارگارد |
+
+---
+
+## اگر وب‌پنل «رمز اشتباه» می‌گوید
+
+معمولاً به‌خاطر کاراکتر خاص در پسورد بوده که در نسخه قبل `.env` را خراب می‌کرد.
+
+```bash
+cd PGClockBot
+./install.sh
+```
+
+دوباره نصب/تنظیم را بزنید (نسخه جدید پسورد را درست quote می‌کند)، بعد:
+
+```bash
+source .venv/bin/activate
+python run.py
+# یا:
+sudo systemctl restart pgclockbot
+```
+
+---
+
+## اگر ربات به /start جواب نمی‌دهد
+
+1. لاگ را ببینید:
+   ```bash
+   journalctl -u pgclockbot -f
+   # یا اگر دستی اجرا کرده‌اید خروجی ترمینال را ببینید
+   ```
+2. باید خطی شبیه این باشد: `Bot online as @YourBot …`
+3. مطمئن شوید فقط **یک** پروسه ربات در حال اجراست
+4. در BotFather بات را Disable / Enable کنید و دوباره `/start` بزنید
+5. `ADMIN_IDS` را با آیدی عددی خودتان از `@userinfobot` چک کنید (نه یوزرنیم)
 
 ---
 
 ## نصب دستی (بدون اسکریپت)
 
-
-### ۱) کلون ریپو
-
 ```bash
 git clone https://github.com/Mrclocks/PGClockBot.git
 cd PGClockBot
-```
-
-### ۲) ساخت محیط مجازی و نصب پکیج‌ها
-
-```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -U pip
 pip install -r requirements.txt
-```
-
-### ۳) ساخت فایل تنظیمات
-
-```bash
 cp .env.example .env
-nano .env   # یا هر ادیتور دیگر
+nano .env
+python run.py
 ```
 
-حداقل این مقادیر را پر کنید:
+در `.env` مقادیر دارای کاراکتر خاص را داخل کوتیشن بگذارید:
 
 ```env
-BOT_TOKEN=123456:AA...your_token
-BOT_USERNAME=YourBotUsername
-ADMIN_IDS=123456789
-
-PG_BASE_URL=https://dev.mrclock.website
-PG_USERNAME=admin
-PG_PASSWORD=your_panel_password
-
-WEB_HOST=0.0.0.0
-WEB_PORT=9000
-WEB_SECRET=یک-رمز-بلند-تصادفی
-WEB_ADMIN_USER=admin
-WEB_ADMIN_PASSWORD=یک-رمز-قوی
-
-DATABASE_URL=sqlite+aiosqlite:///./data/bot.db
+WEB_ADMIN_PASSWORD="MyPass!A"
+PG_PASSWORD="Secret#1"
 ```
-
-نکته‌ها:
-
-- `ADMIN_IDS` را با ویرگول جدا کنید اگر چند ادمین دارید: `111,222`
-- اگر توکن آماده پاسارگارد دارید، می‌توانید `PG_ACCESS_TOKEN=...` بگذارید و یوزر/پسورد را خالی بگذارید
-- برای شروع، `WEBHOOK_URL` و `PUBLIC_BASE_URL` را خالی بگذارید (حالت polling)
-
-### ۴) اجرای ربات
-
-```bash
-source .venv/bin/activate
-python run.py
-```
-
-اگر درست باشد:
-
-- ربات در تلگرام به `/start` جواب می‌دهد
-- وب‌پنل روی `http://YOUR_SERVER_IP:9000` باز می‌شود
-
-ورود وب‌پنل پیش‌فرض:
-
-- کاربر: مقدار `WEB_ADMIN_USER`
-- رمز: مقدار `WEB_ADMIN_PASSWORD`
-
-### ۵) تست سریع در تلگرام
-
-1. بات را باز کنید و `/start` بزنید
-2. اگر آیدی شما در `ADMIN_IDS` باشد، دکمه **پنل ادمین** را می‌بینید
-3. از وب‌پنل → **تنظیمات** شماره کارت را وارد کنید
-4. از وب‌پنل → **پلن‌ها** یک پلن بسازید و `Template ID` پاسارگارد را بزنید
-5. با اکانت عادی «خرید سرویس» را تست کنید
 
 ---
 
-## نصب روی Windows
-
-```powershell
-git clone https://github.com/Mrclocks/PGClockBot.git
-cd PGClockBot
-
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-
-copy .env.example .env
-notepad .env
-
-python run.py
-```
-
-وب‌پنل: [http://127.0.0.1:9000](http://127.0.0.1:9000)
-
----
-
-## اجرای دائمی با systemd (لینوکس)
+## systemd
 
 ```bash
-sudo nano /etc/systemd/system/pgclockbot.service
-```
-
-محتوا (مسیرها را عوض کنید):
-
-```ini
-[Unit]
-Description=PGClockBot
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/opt/PGClockBot
-Environment=PATH=/opt/PGClockBot/.venv/bin
-ExecStart=/opt/PGClockBot/.venv/bin/python run.py
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload
 sudo systemctl enable --now pgclockbot
 sudo systemctl status pgclockbot
-```
-
-لاگ:
-
-```bash
 journalctl -u pgclockbot -f
 ```
 
 ---
 
-## تنظیم پلن‌های فروش (مهم)
+## مینی‌اپ (اختیاری)
 
-منبع حقیقت حجم/زمان = **پاسارگارد**. بات فقط قیمت و تحویل را مدیریت می‌کند.
-
-1. وارد داشبورد PasarGuard شوید
-2. یک **User Template** بسازید (حجم، مدت، گروه‌ها)
-3. ID تمپلیت را بردارید
-4. در وب‌پنل بات → **پلن‌ها** → نام، قیمت، مدت، و `Template ID` را ذخیره کنید
-5. در **تنظیمات** شماره کارت و نام صاحب کارت را وارد کنید
-
-بدون `Template ID` هم می‌تواند یوزر بسازد (با حجم/مدت پلن)، ولی تمپلیت پیشنهادی است.
-
----
-
-## نقش‌ها
-
-### ادمین
-
-- آیدی تلگرام در `ADMIN_IDS`
-- دسترسی کامل بات + وب‌پنل
-
-### نماینده
-
-از بات (پنل ادمین) یا وب‌پنل → نمایندگان بسازید.
-
-ورود وب برای نماینده:
-
-| فیلد | مقدار |
-|------|--------|
-| نام کاربری | Telegram ID عددی |
-| رمز | کد دعوت همان کاربر (`referral_code`) |
-
-### کاربر عادی
-
-با `/start` می‌تواند بخرد، کیف پول شارژ کند، سرویس ببیند و تیکت بزند.
-
-اتصال سرویس موجود با لینک ساب:
-
-```text
-https://t.me/YourBotUsername?start=sub_TOKEN
-```
-
----
-
-## مینی‌اپ و Webhook (اختیاری)
-
-برای مینی‌اپ، تلگرام **HTTPS عمومی** می‌خواهد.
-
-1. دامنه را به سرور وصل کنید و SSL بگیرید (مثلاً Nginx + Certbot)
-2. ریورس‌پراکسی به پورت `9000`:
-
-```nginx
-server {
-    listen 443 ssl;
-    server_name bot.example.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:9000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-3. در `.env`:
+دامنه HTTPS + ریورس‌پراکسی به پورت `9000`، سپس در `.env`:
 
 ```env
-PUBLIC_BASE_URL=https://bot.example.com
-WEBHOOK_URL=https://bot.example.com
-WEBHOOK_PATH=/telegram/webhook
+PUBLIC_BASE_URL="https://bot.example.com"
 ```
-
-4. سرویس را ری‌استارت کنید. دکمه مینی‌اپ در منوی ربات ظاهر می‌شود.
-
----
-
-## ساختار پروژه
-
-```text
-PGClockBot/
-├── app/
-│   ├── bot/           # هندلرهای تلگرام
-│   ├── api/           # FastAPI وب‌پنل + API مینی‌اپ
-│   ├── web/           # قالب‌ها و استاتیک
-│   ├── services/      # پاسارگارد، سفارش، کیف پول، ...
-│   ├── db/            # مدل‌ها و دیتابیس
-│   ├── jobs/          # اعلان انقضا/حجم
-│   └── main.py
-├── run.py
-├── requirements.txt
-├── .env.example
-└── README.md
-```
-
----
-
-## عیب‌یابی
-
-| مشکل | کار پیشنهادی |
-|------|----------------|
-| ربات جواب نمی‌دهد | `BOT_TOKEN` و اتصال اینترنت را چک کنید؛ لاگ را ببینید |
-| خطای لاگین پاسارگارد | `PG_BASE_URL` بدون اسلش انتهایی اضافه، یوزر/پسورد درست |
-| خرید تحویل نمی‌شود | Template ID معتبر؟ دسترسی ادمین پنل کامل است؟ |
-| وب‌پنل باز نمی‌شود | فایروال پورت `9000`، `WEB_HOST=0.0.0.0` |
-| مینی‌اپ نیست | `PUBLIC_BASE_URL` با HTTPS ست شده باشد |
 
 ---
 
 ## امنیت
 
-- فایل `.env` را هرگز در گیت commit نکنید
-- رمز وب‌پنل و `WEB_SECRET` را عوض کنید
-- در پروداکشن ترجیحاً پشت Nginx + HTTPS اجرا کنید
-- دسترسی پنل پاسارگارد را محدود نگه دارید
-
----
-
-## لایسنس
-
-استفاده شخصی / تجاری طبق نیاز خودتان؛ اتصال فقط به API پنل PasarGuard.
+- `.env` را commit نکنید
+- پسورد وب و `WEB_SECRET` را قوی نگه دارید
+- در پروداکشن پشت Nginx + HTTPS اجرا کنید
