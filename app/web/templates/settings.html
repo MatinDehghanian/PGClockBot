@@ -1,12 +1,15 @@
 {% extends "base.html" %}
-{% block title %}تنظیمات ربات{% endblock %}
+{% block title %}متن‌ها و تنظیمات{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>تنظیمات ربات و فروشگاه</h1>
-    <p>هر بخش جدا — متن‌ها، پرداخت، QR، منو. تغییرات از پیام بعدی بات اعمال می‌شود.</p>
+    <h1>متن‌ها و تنظیمات</h1>
+    <p>پیام‌ها، پرداخت، QR و نمایش منو. برای نوتیف‌های ادمین به بخش نوتیفیکیشن بروید.</p>
   </div>
-  <a class="btn btn-ghost" href="/menu-layout">🗂 چیدمان منو</a>
+  <div class="actions" style="margin:0">
+    <a class="btn btn-ghost" href="/notifications">نوتیفیکیشن</a>
+    <a class="btn btn-ghost" href="/menu-layout">منوی بات</a>
+  </div>
 </div>
 
 {% if saved %}<div class="flash ok">ذخیره شد.</div>{% endif %}

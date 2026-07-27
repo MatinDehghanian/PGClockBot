@@ -140,6 +140,14 @@ DEFAULT_SETTINGS = {
     "qr_caption": "📱 QR اشتراک\nبا دوربین گوشی اسکن کنید یا در کلاینت Import کنید.",
     "qr_background": "",
     "show_sub_link_in_text": "1",
+    # Admin Telegram notification toggles (also managed on /notifications)
+    "notify_new_subscription": "1",
+    "notify_pending_approval": "1",
+    "notify_new_order": "0",
+    "notify_wallet_topup": "1",
+    "notify_new_ticket": "1",
+    "notify_auto_approve": "1",
+
     "btn_shop": "🟢🛒 خرید سرویس",
     "btn_services": "🔵📦 سرویس‌های من",
     "btn_wallet": "🟡👛 کیف پول",
@@ -276,7 +284,7 @@ SETTING_GROUPS = {
             "qr_caption",
             "کپشن زیر عکس QR",
             "textarea",
-            "متغیر اختیاری: {url}",
+            "متن سفارشی بالای جزئیات. لینک، حجم و زمان به‌صورت خودکار اضافه می‌شوند. متغیر اختیاری: {url}",
         ),
         (
             "qr_background",

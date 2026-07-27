@@ -564,12 +564,26 @@ def create_api_app(lifespan=None) -> FastAPI:
             from aiogram import Bot
 
             from app.services.delivery import send_delivery_to_user
+            from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok
 
             bot = Bot(token=get_settings().bot_token)
             try:
                 await send_delivery_to_user(
                     bot, user.telegram_id, session, payment, order
                 )
+                if payment.is_wallet_topup:
+                    await notify_wallet_topup_ok(bot, session, payment, user.telegram_id)
+                elif order:
+                    plan = await session.get(Plan, order.plan_id) if order.plan_id else None
+                    await notify_new_subscription(
+                        bot,
+                        session,
+                        order=order,
+                        user_tg_id=user.telegram_id,
+                        user_name=user.full_name or user.username,
+                        plan_name=plan.name if plan else None,
+                        needs_approval=False,
+                    )
             finally:
                 await bot.session.close()
         except Exception:
@@ -695,12 +709,26 @@ def create_api_app(lifespan=None) -> FastAPI:
                 from aiogram import Bot
 
                 from app.services.delivery import send_delivery_to_user
+                from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok
 
                 bot = Bot(token=get_settings().bot_token)
                 try:
                     await send_delivery_to_user(
                         bot, user.telegram_id, session, payment, order
                     )
+                    if payment.is_wallet_topup:
+                        await notify_wallet_topup_ok(bot, session, payment, user.telegram_id)
+                    elif order:
+                        plan = await session.get(Plan, order.plan_id) if order.plan_id else None
+                        await notify_new_subscription(
+                            bot,
+                            session,
+                            order=order,
+                            user_tg_id=user.telegram_id,
+                            user_name=user.full_name or user.username,
+                            plan_name=plan.name if plan else None,
+                            needs_approval=False,
+                        )
                 finally:
                     await bot.session.close()
             except Exception:
@@ -921,6 +949,38 @@ def create_api_app(lifespan=None) -> FastAPI:
         for key in ("wallet", "support", "guide", "faq", "referral", "miniapp", "services"):
             await set_setting(session, f"show_{key}", "1" if key in order else "0")
         return RedirectResponse("/menu-layout?saved=1", status_code=303)
+
+    @app.get("/notifications", response_class=HTMLResponse)
+    async def notifications_page(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.notifications import NOTIFY_PREFS, get_notify_prefs
+
+        prefs = await get_notify_prefs(session)
+        return render(
+            request,
+            "notifications.html",
+            {
+                "staff": staff,
+                "prefs": prefs,
+                "items": NOTIFY_PREFS,
+                "flash_ok": "ذخیره شد." if request.query_params.get("saved") == "1" else None,
+            },
+        )
+
+    @app.post("/notifications")
+    async def notifications_save(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.notifications import save_notify_prefs
+
+        form = await request.form()
+        await save_notify_prefs(session, dict(form))
+        return RedirectResponse("/notifications?saved=1", status_code=303)
 
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(

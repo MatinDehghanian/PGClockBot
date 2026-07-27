@@ -63,12 +63,16 @@ async def shop_plan(callback: CallbackQuery, session: AsyncSession):
         return
     await callback.answer()
     limit = f"{plan.data_limit_gb:g} گیگ" if plan.data_limit_gb is not None else "نامحدود"
-    body = (
-        f"{plan.description or ''}\n"
-        f"⏱ مدت: {plan.duration_days} روز\n"
-        f"📦 حجم: {limit}\n"
-        f"💰 قیمت: {format_toman(plan.price, get_settings().currency)}"
-    ).strip()
+    from app.services.formatting import info_block, kv_line
+
+    body = info_block(
+        [
+            plan.description or "",
+            kv_line("⏱", "مدت", f"<b>{plan.duration_days}</b> روز"),
+            kv_line("📦", "حجم", f"<b>{limit}</b>"),
+            kv_line("💰", "قیمت", f"<b>{format_toman(plan.price, get_settings().currency)}</b>"),
+        ]
+    )
     text = format_message(f"💎 {plan.name}", body)
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.plan_actions(plan.id, ui))
@@ -92,6 +96,20 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     )
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.pay_methods(order.id, ui))
+    try:
+        from app.services.notifications import notify_new_order
+
+        plan = await get_plan(session, plan_id)
+        await notify_new_order(
+            callback.bot,
+            session,
+            order=order,
+            user_tg_id=db_user.telegram_id,
+            user_name=db_user.full_name or db_user.username,
+            plan_name=plan.name if plan else None,
+        )
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data.startswith("pay:discount:"))
@@ -170,6 +188,21 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
     await send_delivery_to_user(
         callback.bot, db_user.telegram_id, session, None, order
     )
+    try:
+        from app.services.notifications import notify_new_subscription
+
+        plan = await get_plan(session, order.plan_id) if order.plan_id else None
+        await notify_new_subscription(
+            callback.bot,
+            session,
+            order=order,
+            user_tg_id=db_user.telegram_id,
+            user_name=db_user.full_name or db_user.username,
+            plan_name=plan.name if plan else None,
+            needs_approval=False,
+        )
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data.startswith("pay:card:"))
