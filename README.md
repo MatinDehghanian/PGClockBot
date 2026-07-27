@@ -1,125 +1,107 @@
 # PGClockBot
 
-ربات فروش و مدیریت پنل **PasarGuard** — سبک، فارسی، با وب‌پنل روی پورت `9000` و مینی‌اپ تلگرام.
+Telegram shop bot for **PasarGuard** — Persian bot UI, English management CLI, web panel on port `9000`.
 
 ---
 
-## امکانات
-
-- خرید برای کاربر تازه‌وارد (پلن، کیف پول، کارت‌به‌کارت)
-- سرویس من، تمدید، پشتیبانی، اعلان انقضا / اتمام حجم
-- نقش **نماینده** (کمیسیون، تأیید رسید)
-- پنل ادمین داخل بات + عملیات پاسارگارد
-- وب‌پنل مدیریت مینیمال روی `:9000`
-- مینی‌اپ تلگرام (با دامنه HTTPS)
-
----
-
-## نصب آسان (Ubuntu 22.04+)
-
-فقط روی **Ubuntu 22.04 و بالاتر** پشتیبانی می‌شود.
+## One-line manager (Ubuntu 22.04+)
 
 ```bash
-git clone https://github.com/Mrclocks/PGClockBot.git
-cd PGClockBot
-chmod +x install.sh update.sh
-./install.sh
+git clone https://github.com/Mrclocks/PGClockBot.git && cd PGClockBot && bash pgclock.sh
 ```
 
-اسکریپت:
+Or after clone:
 
-1. نسخه Ubuntu را چک می‌کند (کمتر از ۲۲ → توقف)
-2. پیش‌نیازها را نصب می‌کند (`python3`, `venv`, `pip`, `git`, …)
-3. سوال‌ها را **به انگلیسی** می‌پرسد (توکن، ادمین، پاسارگارد، یوزر/پسورد وب)
-4. Mini App URL را می‌توانید **خالی Enter** بزنید
-5. پسورد وب را با قانون امن اجباری می‌کند (۸+ / حرف بزرگ / کاراکتر خاص)
-6. `.env` را با Python امن می‌نویسد
-7. اختیاری systemd می‌سازد و ربات را اجرا می‌کند
+```bash
+bash pgclock.sh
+```
+
+Menu:
+
+| # | Action | What it does |
+|---|--------|----------------|
+| 1 | **Install** | Fresh setup (Telegram + PasarGuard + web login + systemd) |
+| 2 | **Update** | `git pull` + deps — keeps `.env` |
+| 3 | **Edit .env** | Open config in nano/vi, optional restart |
+| 4 | **Web panel** | Show URL, reset password, `/health` check |
+| 5 | **Service** | Status / start / restart / stop / logs |
+| 6 | **Status** | Quick overview |
+| 7 | **Uninstall** | Remove systemd (+ optional wipe data) |
+| 0 | **Exit** | Quit |
+
+Direct commands (no menu):
+
+```bash
+bash pgclock.sh install
+bash pgclock.sh update
+bash pgclock.sh env
+bash pgclock.sh web
+bash pgclock.sh service
+bash pgclock.sh status
+bash pgclock.sh uninstall
+bash pgclock.sh help
+```
+
+Legacy wrappers still work: `./install.sh` → install, `./update.sh` → update.
 
 ---
 
-## آپدیت بدون وارد کردن دوباره اطلاعات
+## Features
 
-`.env` دست نمی‌خورد؛ فقط کد و پکیج‌ها به‌روز می‌شوند:
-
-```bash
-cd PGClockBot
-git pull
-chmod +x update.sh
-./update.sh
-```
-
-اگر فقط رمز وب‌پنل را عوض می‌خواهید (بدون نصب دوباره):
-
-```bash
-source .venv/bin/activate
-python scripts/set_web_password.py
-sudo systemctl restart pgclockbot
-```
+- Guest purchase (plans, wallet, card-to-card)
+- My services, renew, support, expiry / traffic alerts
+- Reseller role (commission, receipt approve)
+- Admin tools in bot + PasarGuard ops
+- Web admin panel on `:9000`
+- Optional Telegram Mini App (HTTPS URL)
 
 ---
 
-## پیش‌نیازها
+## Requirements
 
-| مورد | توضیح |
+| Item | Notes |
 |------|--------|
 | OS | **Ubuntu 22.04+** |
-| پنل PasarGuard | API در دسترس |
-| بات تلگرام | توکن از [@BotFather](https://t.me/BotFather) |
-| آیدی عددی ادمین | از [@userinfobot](https://t.me/userinfobot) |
+| PasarGuard panel | Reachable API |
+| Telegram bot | Token from [@BotFather](https://t.me/BotFather) |
+| Admin Telegram ID | Numeric ID from [@userinfobot](https://t.me/userinfobot) |
 
 ---
 
-## تنظیم از وب‌پنل
+## Web panel
 
-`http://IP:9000` → ورود با یوزر/رمزی که در نصب ساختید → **تنظیمات**
+Open `http://SERVER_IP:9000/login` with the username/password from Install.
 
-| بخش | مثال |
-|-----|------|
-| عمومی و متن‌ها | خوش‌آمد، FAQ، راهنما |
-| پرداخت و کانال | شماره کارت، عضویت اجباری |
-| برچسب دکمه‌ها | خرید، کیف پول، پشتیبانی |
-| چیدمان منو | classic / compact |
-| پلن‌ها | قیمت + Template ID پاسارگارد |
+Configure texts, buttons, card number, and plans from **Settings**.
 
----
+### Login / health issues
 
-## اگر وب‌پنل «رمز اشتباه» می‌گوید یا وارد نمی‌شوید
+```bash
+bash pgclock.sh web
+# or:
+curl http://127.0.0.1:9000/health
+bash pgclock.sh   # → Web panel → Reset password
+sudo ufw allow 9000/tcp
+```
 
-ورود وب از فایل جداگانه `data/web_admin.json` خوانده می‌شود (نه فقط `.env`).
-
-1. سلامت پنل را چک کنید:
-   ```bash
-   curl http://127.0.0.1:9000/health
-   ```
-   باید `"ok": true` و `"admin_username"` را ببینید.
-2. رمز را ریست کنید:
-   ```bash
-   cd PGClockBot
-   source .venv/bin/activate
-   python scripts/set_web_password.py
-   sudo systemctl restart pgclockbot
-   ```
-3. فایروال را باز کنید: `sudo ufw allow 9000/tcp`
-4. آدرس درست: `http://IP_SERVER:9000/login` (نه دامنه پاسارگارد)
+Credentials live in `data/web_admin.json` (not only `.env`).
 
 ---
 
-## اگر ربات به /start جواب نمی‌دهد
+## Bot not answering /start
 
-1. لاگ را ببینید:
-   ```bash
-   journalctl -u pgclockbot -f
-   # یا اگر دستی اجرا کرده‌اید خروجی ترمینال را ببینید
-   ```
-2. باید خطی شبیه این باشد: `Bot online as @YourBot …`
-3. مطمئن شوید فقط **یک** پروسه ربات در حال اجراست
-4. در BotFather بات را Disable / Enable کنید و دوباره `/start` بزنید
-5. `ADMIN_IDS` را با آیدی عددی خودتان از `@userinfobot` چک کنید (نه یوزرنیم)
+```bash
+bash pgclock.sh service   # → Logs
+# or:
+journalctl -u pgclockbot -f
+```
+
+Expect: `Bot online as @YourBot …`  
+Ensure only one bot process is running. Check `ADMIN_IDS` is your numeric ID.
 
 ---
 
-## نصب دستی (بدون اسکریپت)
+## Manual install (without menu)
 
 ```bash
 git clone https://github.com/Mrclocks/PGClockBot.git
@@ -132,7 +114,7 @@ nano .env
 python run.py
 ```
 
-در `.env` مقادیر دارای کاراکتر خاص را داخل کوتیشن بگذارید:
+Quote secrets with special characters:
 
 ```env
 WEB_ADMIN_PASSWORD="MyPass!A"
@@ -141,28 +123,20 @@ PG_PASSWORD="Secret#1"
 
 ---
 
-## systemd
+## Mini App (optional)
 
-```bash
-sudo systemctl enable --now pgclockbot
-sudo systemctl status pgclockbot
-journalctl -u pgclockbot -f
-```
-
----
-
-## مینی‌اپ (اختیاری)
-
-دامنه HTTPS + ریورس‌پراکسی به پورت `9000`، سپس در `.env`:
+HTTPS reverse proxy → port `9000`, then in `.env`:
 
 ```env
 PUBLIC_BASE_URL="https://bot.example.com"
 ```
 
+Or set it during Install (Enter to skip).
+
 ---
 
-## امنیت
+## Security
 
-- `.env` را commit نکنید
-- پسورد وب و `WEB_SECRET` را قوی نگه دارید
-- در پروداکشن پشت Nginx + HTTPS اجرا کنید
+- Do not commit `.env` or `data/`
+- Use a strong web password and `WEB_SECRET`
+- Prefer Nginx + HTTPS in production

@@ -1,0 +1,785 @@
+#!/usr/bin/env bash
+# PGClockBot — single entry CLI (Ubuntu 22.04+)
+# Usage:
+#   bash pgclock.sh
+#   bash pgclock.sh install|update|env|web|service|uninstall|status|help
+set -euo pipefail
+set +H
+
+R='\033[0;31m'; G='\033[0;32m'; C='\033[0;36m'
+Y='\033[1;33m'; B='\033[1;37m'; D='\033[2m'; N='\033[0m'
+BOLD='\033[1m'
+
+info()  { echo -e "  ${C}>${N} $*"; }
+ok()    { echo -e "  ${G}+${N} $*"; }
+warn()  { echo -e "  ${Y}!${N} $*"; }
+err()   { echo -e "  ${R}x${N} $*" >&2; }
+step()  { echo -e "\n${BOLD}${C}-- $* --${N}\n"; }
+pause() { echo ""; read -r -p "  Press Enter to continue... " _ || true; }
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+SERVICE_NAME="pgclockbot"
+SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
+PY="${SCRIPT_DIR}/.venv/bin/python"
+PIP="${SCRIPT_DIR}/.venv/bin/pip"
+
+# ── helpers ─────────────────────────────────────────────
+ask() {
+  local prompt="$1"
+  local has_default=0
+  local default=""
+  if [[ $# -ge 2 ]]; then
+    has_default=1
+    default="$2"
+  fi
+  local var
+  if [[ "$has_default" -eq 0 ]]; then
+    while true; do
+      read -r -p "  ${B}${prompt}${N}: " var || true
+      if [[ -n "${var}" ]]; then
+        printf '%s\n' "$var"
+        return
+      fi
+      err "This field is required."
+    done
+  else
+    if [[ -n "$default" ]]; then
+      read -r -p "  ${B}${prompt}${N} ${D}[${default}]${N}: " var || true
+    else
+      read -r -p "  ${B}${prompt}${N} ${D}[Enter to skip]${N}: " var || true
+    fi
+    if [[ -z "${var}" ]]; then
+      printf '%s\n' "$default"
+    else
+      printf '%s\n' "$var"
+    fi
+  fi
+}
+
+ask_optional() {
+  local prompt="$1"
+  local var=""
+  read -r -p "  ${B}${prompt}${N} ${D}[Enter to skip]${N}: " var || true
+  printf '%s\n' "${var}"
+}
+
+ask_secret() {
+  local prompt="$1"
+  local var
+  while true; do
+    read -r -s -p "  ${B}${prompt}${N}: " var
+    echo ""
+    if [[ -n "$var" ]]; then
+      printf '%s\n' "$var"
+      return
+    fi
+    err "This field is required."
+  done
+}
+
+validate_password() {
+  local p="$1"
+  if [[ ${#p} -lt 8 ]]; then
+    err "Password must be at least 8 characters."
+    return 1
+  fi
+  if ! [[ "$p" =~ [A-Z] ]]; then
+    err "Password must include at least one uppercase letter (A-Z)."
+    return 1
+  fi
+  if ! [[ "$p" =~ [^a-zA-Z0-9] ]]; then
+    err "Password must include at least one special character (e.g. ! @ # \$ % & *)."
+    return 1
+  fi
+  return 0
+}
+
+ask_password() {
+  local prompt="$1"
+  local p1 p2
+  while true; do
+    p1="$(ask_secret "$prompt")"
+    if ! validate_password "$p1"; then
+      continue
+    fi
+    p2="$(ask_secret "Confirm password")"
+    if [[ "$p1" != "$p2" ]]; then
+      err "Passwords do not match."
+      continue
+    fi
+    printf '%s\n' "$p1"
+    return
+  done
+}
+
+gen_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 24
+  else
+    head -c 48 /dev/urandom | xxd -p | tr -d '\n' | head -c 48
+  fi
+}
+
+sudo_wrap() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    "$@"
+  else
+    sudo "$@"
+  fi
+}
+
+require_ubuntu_22_plus() {
+  if [[ ! -f /etc/os-release ]]; then
+    err "Unsupported system: /etc/os-release not found."
+    return 1
+  fi
+  # shellcheck disable=SC1091
+  source /etc/os-release
+  if [[ "${ID:-}" != "ubuntu" ]]; then
+    err "This tool supports Ubuntu only. Detected: ${PRETTY_NAME:-unknown}"
+    return 1
+  fi
+  local major
+  major="$(echo "${VERSION_ID:-0}" | cut -d. -f1)"
+  if [[ -z "$major" || "$major" -lt 22 ]]; then
+    err "Ubuntu 22.04 or newer is required. Detected: ${PRETTY_NAME:-unknown}"
+    return 1
+  fi
+  ok "OS: ${PRETTY_NAME}"
+}
+
+ensure_apt_packages() {
+  info "Checking system packages..."
+  if ! command -v apt-get >/dev/null 2>&1; then
+    err "apt-get not found."
+    return 1
+  fi
+  sudo_wrap apt-get update -y >/dev/null
+  sudo_wrap DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    python3 python3-venv python3-pip ca-certificates curl git openssl nano \
+    >/dev/null
+  ok "Prerequisites ready"
+}
+
+ensure_python() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    err "python3 is not available."
+    return 1
+  fi
+  SYSTEM_PY=python3
+  ok "Python $($SYSTEM_PY -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+}
+
+ensure_venv() {
+  if [[ ! -d .venv ]]; then
+    info "Creating virtualenv..."
+    "$SYSTEM_PY" -m venv .venv
+    ok "venv created"
+  else
+    ok "venv exists"
+  fi
+  # shellcheck disable=SC1091
+  source .venv/bin/activate
+  pip install -U pip wheel -q
+  pip install -r requirements.txt -q
+  ok "Python dependencies installed"
+  PY="${SCRIPT_DIR}/.venv/bin/python"
+  PIP="${SCRIPT_DIR}/.venv/bin/pip"
+}
+
+service_installed() {
+  [[ -f "$SERVICE_PATH" ]] || systemctl list-unit-files 2>/dev/null | grep -q "^${SERVICE_NAME}.service"
+}
+
+service_active() {
+  systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null
+}
+
+env_get() {
+  local key="$1"
+  local fallback="${2:-}"
+  if [[ ! -f .env ]]; then
+    printf '%s\n' "$fallback"
+    return
+  fi
+  local line
+  line="$(grep -E "^${key}=" .env | tail -n1 || true)"
+  if [[ -z "$line" ]]; then
+    printf '%s\n' "$fallback"
+    return
+  fi
+  local val="${line#*=}"
+  val="${val%\"}"
+  val="${val#\"}"
+  val="${val%\'}"
+  val="${val#\'}"
+  printf '%s\n' "$val"
+}
+
+write_env_file() {
+  WEB_ADMIN_PASSWORD="$WEB_ADMIN_PASSWORD" \
+  BOT_TOKEN="$BOT_TOKEN" \
+  BOT_USERNAME="$BOT_USERNAME" \
+  ADMIN_IDS="$ADMIN_IDS" \
+  PG_BASE_URL="$PG_BASE_URL" \
+  PG_USERNAME="$PG_USERNAME" \
+  PG_PASSWORD="$PG_PASSWORD" \
+  WEB_PORT="$WEB_PORT" \
+  WEB_SECRET="$WEB_SECRET" \
+  WEB_ADMIN_USER="$WEB_ADMIN_USER" \
+  PUBLIC_BASE_URL="$PUBLIC_BASE_URL" \
+  CURRENCY="$CURRENCY" \
+  "$PY" - <<'PY'
+import json, os, subprocess, sys
+from pathlib import Path
+payload = {
+    "BOT_TOKEN": os.environ["BOT_TOKEN"],
+    "BOT_USERNAME": os.environ["BOT_USERNAME"],
+    "ADMIN_IDS": os.environ["ADMIN_IDS"],
+    "PG_BASE_URL": os.environ["PG_BASE_URL"],
+    "PG_USERNAME": os.environ["PG_USERNAME"],
+    "PG_PASSWORD": os.environ["PG_PASSWORD"],
+    "WEB_HOST": "0.0.0.0",
+    "WEB_PORT": os.environ["WEB_PORT"],
+    "WEB_SECRET": os.environ["WEB_SECRET"],
+    "WEB_ADMIN_USER": os.environ["WEB_ADMIN_USER"],
+    "WEB_ADMIN_PASSWORD": os.environ["WEB_ADMIN_PASSWORD"],
+    "DATABASE_URL": f"sqlite+aiosqlite:///{Path.cwd() / 'data' / 'bot.db'}",
+    "WEBHOOK_URL": "",
+    "WEBHOOK_PATH": "/telegram/webhook",
+    "PUBLIC_BASE_URL": os.environ.get("PUBLIC_BASE_URL", ""),
+    "CURRENCY": os.environ.get("CURRENCY", "Toman"),
+    "DEFAULT_LOCALE": "fa",
+}
+proc = subprocess.run(
+    [sys.executable, str(Path("scripts/write_env.py"))],
+    input=json.dumps(payload),
+    text=True,
+    check=True,
+    capture_output=True,
+)
+print(proc.stdout.strip())
+PY
+}
+
+install_systemd() {
+  local service_user="${1:-$(whoami)}"
+  local content
+  content="[Unit]
+Description=PGClockBot — PasarGuard Telegram shop
+After=network.target
+
+[Service]
+Type=simple
+User=${service_user}
+WorkingDirectory=${SCRIPT_DIR}
+Environment=PATH=${SCRIPT_DIR}/.venv/bin
+ExecStart=${SCRIPT_DIR}/.venv/bin/python run.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+"
+  local tmp
+  tmp="$(mktemp)"
+  printf '%s\n' "$content" > "$tmp"
+  sudo_wrap cp "$tmp" "$SERVICE_PATH"
+  rm -f "$tmp"
+  sudo_wrap systemctl daemon-reload
+  sudo_wrap systemctl enable --now "$SERVICE_NAME"
+  ok "systemd service enabled: ${SERVICE_NAME}"
+}
+
+restart_service_if_any() {
+  if service_installed; then
+    info "Restarting ${SERVICE_NAME}..."
+    sudo_wrap systemctl restart "$SERVICE_NAME"
+    ok "Service restarted"
+  else
+    warn "systemd service not installed. Start manually:"
+    echo -e "    ${C}source .venv/bin/activate && python run.py${N}"
+  fi
+}
+
+# ── actions ─────────────────────────────────────────────
+cmd_install() {
+  banner_small "Install"
+  require_ubuntu_22_plus
+  ensure_apt_packages
+  ensure_python
+
+  if [[ -f .env ]]; then
+    warn ".env already exists."
+    local overwrite
+    overwrite="$(ask "Overwrite existing install? (y/N)" "N")"
+    if [[ "${overwrite,,}" != "y" && "${overwrite,,}" != "yes" ]]; then
+      info "Cancelled. Use Update or Edit .env instead."
+      return 0
+    fi
+    cp -a .env ".env.bak.$(date +%Y%m%d%H%M%S)"
+    ok ".env backup created"
+  fi
+
+  step "1/7  Telegram"
+  BOT_TOKEN="$(ask "Bot token (from @BotFather)")"
+  BOT_USERNAME="$(ask "Bot username without @" "PGClockBot")"
+  ADMIN_IDS="$(ask "Your Telegram numeric ID (admin)")"
+  ADMIN_IDS="$(echo "$ADMIN_IDS" | tr -d '[:space:]')"
+
+  step "2/7  PasarGuard panel"
+  PG_BASE_URL="$(ask "PasarGuard panel URL" "https://dev.mrclock.website")"
+  PG_BASE_URL="${PG_BASE_URL%/}"
+  PG_USERNAME="$(ask "PasarGuard admin username")"
+  PG_PASSWORD="$(ask_secret "PasarGuard admin password")"
+
+  step "3/7  Web panel"
+  WEB_PORT="$(ask "Web panel port" "9000")"
+  WEB_ADMIN_USER="$(ask "Web panel username" "admin")"
+  echo -e "  ${D}Password rules: 8+ chars, 1 uppercase, 1 special character${N}"
+  WEB_ADMIN_PASSWORD="$(ask_password "Web panel password")"
+  WEB_SECRET="$(gen_secret)"
+
+  step "4/7  Optional"
+  PUBLIC_BASE_URL="$(ask_optional "Public HTTPS URL for Mini App")"
+  CURRENCY="$(ask "Currency label" "Toman")"
+
+  step "5/7  Python packages"
+  ensure_venv
+
+  step "6/7  Configuration"
+  write_env_file
+  mkdir -p data
+  WEB_ADMIN_USER="$WEB_ADMIN_USER" WEB_ADMIN_PASSWORD="$WEB_ADMIN_PASSWORD" "$PY" - <<'PY'
+import os, sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd()))
+from app.services.web_auth import save_web_admin
+print(save_web_admin(os.environ["WEB_ADMIN_USER"], os.environ["WEB_ADMIN_PASSWORD"]))
+PY
+  ok ".env + data/web_admin.json written"
+
+  CHECK="$(
+    WEB_ADMIN_USER="$WEB_ADMIN_USER" WEB_ADMIN_PASSWORD="$WEB_ADMIN_PASSWORD" "$PY" - <<'PY'
+from app.services.web_auth import load_web_admin, verify_web_admin
+import os
+creds = load_web_admin()
+ok = verify_web_admin(os.environ["WEB_ADMIN_USER"], os.environ["WEB_ADMIN_PASSWORD"])
+print(creds["username"])
+print("OK" if ok else "FAIL")
+PY
+  )"
+  mapfile -t CHECK_LINES <<< "$CHECK"
+  if [[ "${CHECK_LINES[1]:-}" != "OK" ]]; then
+    err "Web login self-check failed."
+    return 1
+  fi
+  ok "Web login OK · username=${CHECK_LINES[0]}"
+
+  step "7/7  systemd"
+  local install_service
+  install_service="$(ask "Enable systemd service now? (Y/n)" "Y")"
+  if [[ "${install_service,,}" != "n" && "${install_service,,}" != "no" ]]; then
+    local service_user
+    service_user="$(ask "System user" "$(whoami)")"
+    install_systemd "$service_user"
+  fi
+
+  echo ""
+  echo -e "${G}  Installation complete${N}"
+  echo -e "  Web panel:  ${B}http://YOUR_SERVER_IP:${WEB_PORT}/login${N}"
+  echo -e "  Username:   ${B}${WEB_ADMIN_USER}${N}"
+  echo -e "  Password:   ${D}(the one you entered)${N}"
+  echo -e "  Manage:     ${C}bash pgclock.sh${N}"
+  echo ""
+
+  local start_now
+  start_now="$(ask "Start / keep bot running now? (Y/n)" "Y")"
+  if [[ "${start_now,,}" != "n" && "${start_now,,}" != "no" ]]; then
+    if service_active; then
+      ok "systemd is running — logs: journalctl -u ${SERVICE_NAME} -f"
+    elif service_installed; then
+      sudo_wrap systemctl start "$SERVICE_NAME"
+      ok "Service started"
+    else
+      info "Starting in foreground… Ctrl+C to stop"
+      exec "$PY" run.py
+    fi
+  fi
+}
+
+cmd_update() {
+  banner_small "Update"
+  if [[ ! -f .env ]]; then
+    err ".env not found. Run Install first."
+    return 1
+  fi
+  ok "Keeping existing .env"
+  cp -a .env ".env.bak.$(date +%Y%m%d%H%M%S)"
+  ok ".env backup created"
+
+  if [[ -d .git ]]; then
+    info "Pulling latest code from GitHub..."
+    git fetch --all --tags
+    local branch
+    branch="$(git rev-parse --abbrev-ref HEAD)"
+    git pull --ff-only origin "$branch" || git pull --ff-only
+    ok "Code updated (branch: ${branch})"
+  else
+    warn "Not a git repo — skipped git pull."
+  fi
+
+  ensure_python
+  ensure_venv
+  mkdir -p data
+  "$PY" - <<'PY' || true
+from app.services.web_auth import AUTH_FILE, load_web_admin
+creds = load_web_admin()
+print(f"web_admin={creds.get('username')} file={AUTH_FILE.exists()}")
+PY
+
+  if [[ ! -f .env ]]; then
+    local latest_bak
+    latest_bak="$(ls -1t .env.bak.* 2>/dev/null | head -n1 || true)"
+    if [[ -n "$latest_bak" ]]; then
+      cp -a "$latest_bak" .env
+      warn "Restored .env from backup"
+    else
+      err ".env missing after update."
+      return 1
+    fi
+  fi
+
+  restart_service_if_any
+  echo ""
+  ok "Update complete — configuration was not changed."
+}
+
+cmd_edit_env() {
+  banner_small "Edit .env"
+  if [[ ! -f .env ]]; then
+    if [[ -f .env.example ]]; then
+      cp .env.example .env
+      warn "Created .env from .env.example — fill in values."
+    else
+      err ".env not found. Run Install first."
+      return 1
+    fi
+  fi
+  cp -a .env ".env.bak.$(date +%Y%m%d%H%M%S)"
+  ok "Backup created"
+  local editor="${EDITOR:-nano}"
+  if ! command -v "$editor" >/dev/null 2>&1; then
+    editor="nano"
+  fi
+  if ! command -v "$editor" >/dev/null 2>&1; then
+    editor="vi"
+  fi
+  info "Opening with ${editor}..."
+  "$editor" .env
+  echo ""
+  local restart
+  restart="$(ask "Restart service to apply changes? (Y/n)" "Y")"
+  if [[ "${restart,,}" != "n" && "${restart,,}" != "no" ]]; then
+    restart_service_if_any
+  fi
+  ok "Done"
+}
+
+cmd_web_panel() {
+  while true; do
+    banner_small "Web panel"
+    local port user
+    port="$(env_get WEB_PORT 9000)"
+    user="admin"
+    if [[ -f data/web_admin.json ]] && [[ -x "$PY" || -f "$PY" ]]; then
+      user="$("$PY" - <<'PY' 2>/dev/null || echo admin
+from app.services.web_auth import load_web_admin
+print(load_web_admin().get("username") or "admin")
+PY
+)"
+    fi
+    echo -e "  Login URL : ${B}http://YOUR_SERVER_IP:${port}/login${N}"
+    echo -e "  Health    : ${B}http://127.0.0.1:${port}/health${N}"
+    echo -e "  Username  : ${B}${user}${N}"
+    echo ""
+    echo -e "  ${B}1)${N} Reset web password"
+    echo -e "  ${B}2)${N} Check /health"
+    echo -e "  ${B}3)${N} Show firewall tip (open port ${port})"
+    echo -e "  ${B}0)${N} Back"
+    echo ""
+    local choice
+    read -r -p "  Select: " choice || true
+    case "${choice}" in
+      1)
+        if [[ ! -f .venv/bin/python ]]; then
+          err "venv missing. Run Install first."
+        else
+          "$PY" scripts/set_web_password.py
+          restart_service_if_any
+        fi
+        pause
+        ;;
+      2)
+        if command -v curl >/dev/null 2>&1; then
+          curl -sS "http://127.0.0.1:${port}/health" || err "Health check failed (is the bot running?)"
+          echo ""
+        else
+          err "curl not installed."
+        fi
+        pause
+        ;;
+      3)
+        echo ""
+        echo -e "  ${C}sudo ufw allow ${port}/tcp${N}"
+        echo -e "  ${C}sudo ufw reload${N}"
+        echo ""
+        pause
+        ;;
+      0|"") return 0 ;;
+      *) err "Invalid option." ; pause ;;
+    esac
+  done
+}
+
+cmd_service() {
+  while true; do
+    banner_small "Service"
+    if service_installed; then
+      local state
+      state="$(systemctl is-active "$SERVICE_NAME" 2>/dev/null || echo unknown)"
+      echo -e "  Unit  : ${B}${SERVICE_NAME}${N}"
+      echo -e "  State : ${B}${state}${N}"
+    else
+      echo -e "  ${D}systemd unit not installed${N}"
+    fi
+    echo ""
+    echo -e "  ${B}1)${N} Status"
+    echo -e "  ${B}2)${N} Start / Enable"
+    echo -e "  ${B}3)${N} Restart"
+    echo -e "  ${B}4)${N} Stop"
+    echo -e "  ${B}5)${N} Logs (follow, Ctrl+C to stop)"
+    echo -e "  ${B}6)${N} Install systemd unit"
+    echo -e "  ${B}0)${N} Back"
+    echo ""
+    local choice
+    read -r -p "  Select: " choice || true
+    case "${choice}" in
+      1)
+        if service_installed; then
+          systemctl status "$SERVICE_NAME" --no-pager || true
+        else
+          warn "Service not installed."
+        fi
+        pause
+        ;;
+      2)
+        if ! service_installed; then
+          install_systemd "$(whoami)"
+        else
+          sudo_wrap systemctl enable --now "$SERVICE_NAME"
+          ok "Started"
+        fi
+        pause
+        ;;
+      3)
+        restart_service_if_any
+        pause
+        ;;
+      4)
+        if service_installed; then
+          sudo_wrap systemctl stop "$SERVICE_NAME"
+          ok "Stopped"
+        else
+          warn "Service not installed."
+        fi
+        pause
+        ;;
+      5)
+        if service_installed; then
+          journalctl -u "$SERVICE_NAME" -f
+        else
+          warn "Service not installed."
+          pause
+        fi
+        ;;
+      6)
+        if [[ ! -d .venv ]]; then
+          err "Run Install first."
+        else
+          install_systemd "$(ask "System user" "$(whoami)")"
+        fi
+        pause
+        ;;
+      0|"") return 0 ;;
+      *) err "Invalid option." ; pause ;;
+    esac
+  done
+}
+
+cmd_uninstall() {
+  banner_small "Uninstall"
+  warn "This can remove the systemd service and optionally wipe local data."
+  local confirm
+  confirm="$(ask "Type UNINSTALL to continue" "")"
+  if [[ "$confirm" != "UNINSTALL" ]]; then
+    info "Cancelled."
+    return 0
+  fi
+
+  if service_installed; then
+    info "Stopping service..."
+    sudo_wrap systemctl disable --now "$SERVICE_NAME" 2>/dev/null || true
+    sudo_wrap rm -f "$SERVICE_PATH"
+    sudo_wrap systemctl daemon-reload
+    ok "systemd unit removed"
+  fi
+
+  local wipe
+  wipe="$(ask "Also delete .venv, data/, and .env? (y/N)" "N")"
+  if [[ "${wipe,,}" == "y" || "${wipe,,}" == "yes" ]]; then
+    rm -rf .venv data
+    [[ -f .env ]] && mv .env ".env.removed.$(date +%Y%m%d%H%M%S)"
+    ok "Local runtime files removed (project code kept)"
+  else
+    ok "Service removed. Project files kept."
+  fi
+  echo -e "  To remove the whole folder: ${C}cd .. && rm -rf PGClockBot${N}"
+}
+
+cmd_status() {
+  banner_small "Status"
+  if [[ -f .env ]]; then
+    ok ".env present"
+  else
+    warn ".env missing"
+  fi
+  if [[ -d .venv ]]; then
+    ok "venv present"
+  else
+    warn "venv missing"
+  fi
+  local port
+  port="$(env_get WEB_PORT 9000)"
+  if service_installed; then
+    echo -e "  Service: ${B}$(systemctl is-active "$SERVICE_NAME" 2>/dev/null || echo unknown)${N}"
+  else
+    echo -e "  Service: ${D}not installed${N}"
+  fi
+  if command -v curl >/dev/null 2>&1; then
+    local health
+    health="$(curl -sS --max-time 3 "http://127.0.0.1:${port}/health" 2>/dev/null || true)"
+    if [[ -n "$health" ]]; then
+      ok "Web health: ${health}"
+    else
+      warn "Web health: unreachable on :${port}"
+    fi
+  fi
+}
+
+cmd_help() {
+  cat <<EOF
+
+  PGClockBot manager
+
+  Usage:
+    bash pgclock.sh                 Interactive menu
+    bash pgclock.sh install         Fresh install
+    bash pgclock.sh update          Update code + deps
+    bash pgclock.sh env             Edit .env
+    bash pgclock.sh web             Web panel tools
+    bash pgclock.sh service         systemd controls
+    bash pgclock.sh status          Quick status
+    bash pgclock.sh uninstall       Remove service / data
+    bash pgclock.sh help            This help
+
+  One-liner after clone:
+    git clone https://github.com/Mrclocks/PGClockBot.git && cd PGClockBot && bash pgclock.sh
+
+EOF
+}
+
+# ── UI ──────────────────────────────────────────────────
+banner() {
+  clear 2>/dev/null || true
+  echo -e "${C}"
+  cat <<'ART'
+   ==========================================
+            P G C l o c k B o t
+        PasarGuard Telegram Shop CLI
+   ==========================================
+ART
+  echo -e "${N}"
+  echo -e "  ${D}Ubuntu 22.04+  ·  English  ·  One command for everything${N}"
+  echo ""
+}
+
+banner_small() {
+  echo ""
+  echo -e "${C}==========================================${N}"
+  echo -e "${B}  PGClockBot · $*${N}"
+  echo -e "${C}==========================================${N}"
+  echo ""
+}
+
+show_menu() {
+  banner
+  echo -e "  ${B}1)${N} Install        Fresh setup (bot + web panel)"
+  echo -e "  ${B}2)${N} Update         Pull latest code (keep .env)"
+  echo -e "  ${B}3)${N} Edit .env      Change tokens / panel / ports"
+  echo -e "  ${B}4)${N} Web panel      URL, password reset, health"
+  echo -e "  ${B}5)${N} Service        Status / restart / logs"
+  echo -e "  ${B}6)${N} Status         Quick health overview"
+  echo -e "  ${B}7)${N} Uninstall      Remove service (optional wipe)"
+  echo -e "  ${B}0)${N} Exit"
+  echo ""
+}
+
+run_menu() {
+  while true; do
+    show_menu
+    local choice
+    read -r -p "  Select option: " choice || true
+    case "${choice}" in
+      1|install|i) cmd_install ; pause ;;
+      2|update|u)  cmd_update  ; pause ;;
+      3|env|edit)  cmd_edit_env ; pause ;;
+      4|web)       cmd_web_panel ;;
+      5|service)   cmd_service ;;
+      6|status)    cmd_status ; pause ;;
+      7|uninstall) cmd_uninstall ; pause ;;
+      0|exit|q|quit)
+        echo ""
+        ok "Bye."
+        exit 0
+        ;;
+      *)
+        err "Invalid option."
+        pause
+        ;;
+    esac
+  done
+}
+
+dispatch() {
+  local cmd="${1:-}"
+  case "${cmd}" in
+    ""|menu)       run_menu ;;
+    install|i)     cmd_install ;;
+    update|u)      cmd_update ;;
+    env|edit|edit-env|dotenv) cmd_edit_env ;;
+    web|panel|web-panel) cmd_web_panel ;;
+    service|svc)   cmd_service ;;
+    status|s)      cmd_status ;;
+    uninstall|remove) cmd_uninstall ;;
+    help|-h|--help) cmd_help ;;
+    *)
+      err "Unknown command: ${cmd}"
+      cmd_help
+      exit 1
+      ;;
+  esac
+}
+
+dispatch "${1:-}"
