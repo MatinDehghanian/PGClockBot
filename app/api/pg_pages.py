@@ -7,7 +7,7 @@ from urllib.parse import quote
 from fastapi import Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app.services.formatting import format_metric
+from app.services.formatting import format_stat_row
 from app.services.pasarguard import as_list, get_pg
 
 
@@ -43,7 +43,7 @@ def register_pg_pages(app, *, render, require_admin, get_db):
                 for key, val in raw.items():
                     if isinstance(val, (dict, list)):
                         continue
-                    stats_rows.append((str(key), format_metric(str(key), val)))
+                    stats_rows.append(format_stat_row(str(key), val))
             nodes = await pg.get_nodes_simple()
             counts["nodes"] = len(nodes)
             counts["templates"] = len(await pg.get_user_templates_simple())

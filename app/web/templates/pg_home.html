@@ -22,7 +22,7 @@
 {% if flash_err %}
 {# shown in base #}
 {% else %}
-<div class="grid">
+<div class="stats-grid" style="grid-template-columns: repeat(4, minmax(0, 1fr))">
   <div class="stat"><span>تمپلیت‌ها</span><strong>{{ counts.templates }}</strong></div>
   <div class="stat"><span>گروه‌ها</span><strong>{{ counts.groups }}</strong></div>
   <div class="stat"><span>هاست‌ها</span><strong>{{ counts.hosts }}</strong></div>
@@ -32,7 +32,7 @@
 {% if stats_rows %}
 <div class="card">
   <h2>آمار سیستم</h2>
-  <div class="grid" style="margin:0">
+  <div class="stats-grid" style="margin:0">
     {% for key, val in stats_rows %}
     <div class="stat"><span>{{ key }}</span><strong>{{ val }}</strong></div>
     {% endfor %}

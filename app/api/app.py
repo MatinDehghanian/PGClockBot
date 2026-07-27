@@ -209,7 +209,28 @@ def create_api_app(lifespan=None) -> FastAPI:
         revenue = await session.scalar(
             select(func.coalesce(func.sum(Order.amount), 0)).where(Order.status == "delivered")
         ) or 0
-        return render(request, "dashboard.html", {
+        plans_count = await session.scalar(
+            select(func.count()).select_from(Plan).where(Plan.is_active.is_(True))
+        ) or 0
+        open_tickets = await session.scalar(
+            select(func.count()).select_from(Ticket).where(Ticket.status == "open")
+        ) or 0
+        recent_payments = list(
+            (
+                await session.execute(
+                    select(Payment).order_by(Payment.id.desc()).limit(6)
+                )
+            ).scalars().all()
+        )
+        recent_orders = list(
+            (
+                await session.execute(select(Order).order_by(Order.id.desc()).limit(6))
+            ).scalars().all()
+        )
+        return render(
+            request,
+            "dashboard.html",
+            {
                 "staff": staff,
                 "stats": {
                     "users": users_count,
@@ -217,7 +238,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                     "pending": pending_payments,
                     "services": services_count,
                     "revenue": revenue,
+                    "plans": plans_count,
+                    "tickets": open_tickets,
                 },
+                "recent_payments": recent_payments,
+                "recent_orders": recent_orders,
             },
         )
 

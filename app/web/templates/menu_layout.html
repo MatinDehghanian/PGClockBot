@@ -1,13 +1,10 @@
 {% extends "base.html" %}
 {% block title %}دکمه‌های بات{% endblock %}
-{% block head %}
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>دکمه‌های منوی بات</h1>
-    <p>کل باکس را با موس بگیرید و جابه‌جا کنید — افزودن از مخزن، حذف به مخزن</p>
+    <p>کل کارت را بگیرید و بکشید — افزودن از مخزن، حذف به مخزن</p>
   </div>
 </div>
 {% if saved %}<div class="flash ok">ذخیره شد — از پیام بعدی بات اعمال می‌شود.</div>{% endif %}
@@ -29,13 +26,14 @@
   <div class="dnd-cols">
     <div class="card" style="margin:0">
       <h2>منوی فعال</h2>
-      <p class="muted" style="margin:0 0 12px;font-size:12px">با کشیدن کل کارت مرتب کنید</p>
-      <ul class="dnd-list" id="active-list">
+      <p class="muted" style="margin:0 0 12px;font-size:12px">با موس کل باکس را جابه‌جا کنید</p>
+      <ul class="dnd-list" id="active-list" data-zone="active">
         {% for item in items %}
-        <li class="dnd-item" data-key="{{ item.key }}" data-required="{{ '1' if item.required else '0' }}">
+        <li class="dnd-item" draggable="true" data-key="{{ item.key }}" data-required="{{ '1' if item.required else '0' }}">
+          <span class="dnd-handle" title="بکشید">⠿</span>
           <div class="meta">
             <strong>{{ item.btn or item.label }}</strong>
-            <div class="muted">{{ item.label }} · {{ item.key }}</div>
+            <div class="muted">{{ item.label }}</div>
           </div>
           {% if not item.required %}
           <button type="button" class="btn btn-ghost btn-sm btn-remove">حذف</button>
@@ -47,20 +45,20 @@
       </ul>
     </div>
     <div class="card" style="margin:0">
-      <h2>مخزن (افزودن)</h2>
-      <p class="muted" style="margin:0 0 12px;font-size:12px">برای افزودن به منو، «افزودن» را بزنید یا بکشید</p>
-      <ul class="dnd-list" id="pool-list">
+      <h2>مخزن</h2>
+      <p class="muted" style="margin:0 0 12px;font-size:12px">این دکمه‌ها در منو نیستند — بکشید یا «افزودن»</p>
+      <ul class="dnd-list" id="pool-list" data-zone="pool">
         {% for item in pool %}
-        <li class="dnd-item" data-key="{{ item.key }}" data-required="0">
+        <li class="dnd-item" draggable="true" data-key="{{ item.key }}" data-required="0">
+          <span class="dnd-handle" title="بکشید">⠿</span>
           <div class="meta">
             <strong>{{ item.btn or item.label }}</strong>
-            <div class="muted">{{ item.label }} · {{ item.key }}</div>
+            <div class="muted">{{ item.label }}</div>
           </div>
           <button type="button" class="btn btn-sm btn-add">افزودن</button>
         </li>
-        {% else %}
-        <li class="pool-empty" id="pool-empty">همه دکمه‌ها در منو هستند</li>
         {% endfor %}
+        <li class="pool-empty" id="pool-empty" {% if pool %}style="display:none"{% endif %}>همه دکمه‌ها در منو هستند</li>
       </ul>
     </div>
   </div>
@@ -77,101 +75,128 @@
   const orderInput = document.getElementById('menu_order');
   const layoutSelect = document.getElementById('menu_layout_select');
   const layoutHidden = document.getElementById('menu_layout');
-  const labels = {{ catalog | tojson }};
+  const catalog = {{ catalog | tojson }};
+  let dragEl = null;
 
   function syncOrder() {
     orderInput.value = [...active.querySelectorAll('.dnd-item')].map((el) => el.dataset.key).join(',');
   }
-  function ensureEmptyHint() {
-    let empty = document.getElementById('pool-empty');
-    const items = pool.querySelectorAll('.dnd-item');
-    if (items.length === 0) {
-      if (!empty) {
-        empty = document.createElement('li');
-        empty.className = 'pool-empty';
-        empty.id = 'pool-empty';
-        empty.textContent = 'همه دکمه‌ها در منو هستند';
-        pool.appendChild(empty);
-      }
-    } else if (empty) {
-      empty.remove();
+  function ensureEmpty() {
+    const empty = document.getElementById('pool-empty');
+    const count = pool.querySelectorAll('.dnd-item').length;
+    if (empty) empty.style.display = count ? 'none' : 'block';
+  }
+  function setActiveControls(li) {
+    const required = li.dataset.required === '1';
+    li.querySelectorAll('button.btn-remove, button.btn-add, span.badge').forEach((n) => n.remove());
+    if (required) {
+      const b = document.createElement('span');
+      b.className = 'badge';
+      b.textContent = 'ثابت';
+      li.appendChild(b);
+    } else {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn btn-ghost btn-sm btn-remove';
+      b.textContent = 'حذف';
+      li.appendChild(b);
     }
   }
-  function makeActiveItem(key) {
-    const meta = labels[key] || { label: key, btn: key, required: false };
-    const li = document.createElement('li');
-    li.className = 'dnd-item';
-    li.dataset.key = key;
-    li.dataset.required = meta.required ? '1' : '0';
-    li.innerHTML = `<div class="meta"><strong>${meta.btn || meta.label}</strong><div class="muted">${meta.label} · ${key}</div></div>` +
-      (meta.required ? '<span class="badge">ثابت</span>' : '<button type="button" class="btn btn-ghost btn-sm btn-remove">حذف</button>');
-    return li;
-  }
-  function makePoolItem(key) {
-    const meta = labels[key] || { label: key, btn: key };
-    const li = document.createElement('li');
-    li.className = 'dnd-item';
-    li.dataset.key = key;
+  function setPoolControls(li) {
     li.dataset.required = '0';
-    li.innerHTML = `<div class="meta"><strong>${meta.btn || meta.label}</strong><div class="muted">${meta.label} · ${key}</div></div>` +
-      '<button type="button" class="btn btn-sm btn-add">افزودن</button>';
-    return li;
+    li.querySelectorAll('button.btn-remove, button.btn-add, span.badge').forEach((n) => n.remove());
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn btn-sm btn-add';
+    b.textContent = 'افزودن';
+    li.appendChild(b);
+  }
+  function moveToActive(li) {
+    active.appendChild(li);
+    setActiveControls(li);
+    ensureEmpty();
+    syncOrder();
+  }
+  function moveToPool(li) {
+    if (li.dataset.required === '1') return;
+    pool.insertBefore(li, document.getElementById('pool-empty'));
+    setPoolControls(li);
+    ensureEmpty();
+    syncOrder();
   }
 
   layoutSelect.addEventListener('change', () => { layoutHidden.value = layoutSelect.value; });
 
-  active.addEventListener('click', (e) => {
-    const btn = e.target.closest('.btn-remove');
-    if (!btn) return;
-    const li = btn.closest('.dnd-item');
-    if (!li || li.dataset.required === '1') return;
-    const key = li.dataset.key;
-    li.remove();
-    pool.appendChild(makePoolItem(key));
-    ensureEmptyHint();
-    syncOrder();
-  });
-  pool.addEventListener('click', (e) => {
-    const btn = e.target.closest('.btn-add');
-    if (!btn) return;
-    const li = btn.closest('.dnd-item');
-    if (!li) return;
-    const key = li.dataset.key;
-    li.remove();
-    active.appendChild(makeActiveItem(key));
-    ensureEmptyHint();
-    syncOrder();
+  document.getElementById('menu-form').addEventListener('click', (e) => {
+    const rem = e.target.closest('.btn-remove');
+    const add = e.target.closest('.btn-add');
+    if (rem) {
+      e.preventDefault();
+      moveToPool(rem.closest('.dnd-item'));
+    }
+    if (add) {
+      e.preventDefault();
+      moveToActive(add.closest('.dnd-item'));
+    }
   });
 
-  new Sortable(active, {
-    group: 'menu',
-    animation: 150,
-    ghostClass: 'dnd-ghost',
-    dragClass: 'dragging',
-    onSort: syncOrder,
-    onAdd: syncOrder,
-  });
-  new Sortable(pool, {
-    group: 'menu',
-    animation: 150,
-    ghostClass: 'dnd-ghost',
-    dragClass: 'dragging',
-    onAdd: (evt) => {
-      const li = evt.item;
-      if (li.dataset.required === '1') {
-        active.appendChild(li);
-        return;
-      }
-      // normalize pool button
-      const key = li.dataset.key;
-      li.replaceWith(makePoolItem(key));
-      ensureEmptyHint();
+  function bindList(list) {
+    list.addEventListener('dragstart', (e) => {
+      const item = e.target.closest('.dnd-item');
+      if (!item) return;
+      dragEl = item;
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', item.dataset.key);
+    });
+    list.addEventListener('dragend', () => {
+      if (dragEl) dragEl.classList.remove('dragging');
+      document.querySelectorAll('.drag-over').forEach((n) => n.classList.remove('drag-over'));
+      dragEl = null;
       syncOrder();
-    },
-    onRemove: () => { ensureEmptyHint(); syncOrder(); },
-  });
+      ensureEmpty();
+    });
+    list.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const item = e.target.closest('.dnd-item');
+      if (!dragEl) return;
+      if (list.dataset.zone === 'pool' && dragEl.dataset.required === '1') return;
+      e.dataTransfer.dropEffect = 'move';
+      if (item && item !== dragEl) {
+        item.classList.add('drag-over');
+        const rect = item.getBoundingClientRect();
+        const before = (e.clientY - rect.top) < rect.height / 2;
+        list.insertBefore(dragEl, before ? item : item.nextSibling);
+      } else if (!item && list.dataset.zone === 'pool') {
+        list.insertBefore(dragEl, document.getElementById('pool-empty'));
+      } else if (!item && list.dataset.zone === 'active') {
+        list.appendChild(dragEl);
+      }
+    });
+    list.addEventListener('dragleave', (e) => {
+      const item = e.target.closest('.dnd-item');
+      if (item) item.classList.remove('drag-over');
+    });
+    list.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!dragEl) return;
+      if (list.dataset.zone === 'active') setActiveControls(dragEl);
+      if (list.dataset.zone === 'pool') {
+        if (dragEl.dataset.required === '1') {
+          moveToActive(dragEl);
+          return;
+        }
+        setPoolControls(dragEl);
+      }
+      ensureEmpty();
+      syncOrder();
+    });
+  }
+
+  bindList(active);
+  bindList(pool);
   syncOrder();
-  ensureEmptyHint();
+  ensureEmpty();
 })();
 </script>
 {% endblock %}

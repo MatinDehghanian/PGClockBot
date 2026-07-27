@@ -77,7 +77,6 @@ def format_metric(key: str, value: Any) -> str:
         "lifetime",
     )
     if any(h in key_l for h in byte_hints) and isinstance(value, (int, float)):
-        # tiny ints like counts should not become "B"
         if "count" in key_l or "users" in key_l or "nodes" in key_l:
             return format_number(value)
         if abs(float(value)) >= 1024 or "traffic" in key_l or "byte" in key_l or "memory" in key_l:
@@ -87,6 +86,82 @@ def format_metric(key: str, value: Any) -> str:
     if isinstance(value, int):
         return format_number(value)
     return str(value)
+
+
+STAT_LABELS_FA: dict[str, str] = {
+    "version": "نسخه پنل",
+    "started_at": "شروع سرویس",
+    "mem_total": "کل حافظه",
+    "mem_used": "حافظه مصرفی",
+    "mem_free": "حافظه آزاد",
+    "cpu_usage": "مصرف CPU",
+    "cpu_cores": "هسته‌های CPU",
+    "total_user": "کل کاربران",
+    "users_total": "کل کاربران",
+    "active_users": "کاربران فعال",
+    "users_active": "کاربران فعال",
+    "disabled_users": "کاربران غیرفعال",
+    "users_disabled": "کاربران غیرفعال",
+    "expired_users": "کاربران منقضی",
+    "users_expired": "کاربران منقضی",
+    "limited_users": "کاربران اتمام‌حجم",
+    "users_limited": "کاربران اتمام‌حجم",
+    "on_hold_users": "کاربران در انتظار",
+    "online_users": "کاربران آنلاین",
+    "users_online": "کاربران آنلاین",
+    "total_admin": "تعداد ادمین",
+    "admins_total": "تعداد ادمین",
+    "total_node": "تعداد نود",
+    "nodes_total": "تعداد نود",
+    "nodes_online": "نودهای آنلاین",
+    "incoming_bandwidth": "پهنای باند ورودی",
+    "outgoing_bandwidth": "پهنای باند خروجی",
+    "incoming_bandwidth_speed": "سرعت ورودی",
+    "outgoing_bandwidth_speed": "سرعت خروجی",
+    "panel_traffic": "ترافیک پنل",
+    "system_uptime": "آپ‌تایم سیستم",
+    "users_active_percentage": "درصد کاربران فعال",
+}
+
+
+def label_stat_key(key: str) -> str:
+    k = str(key)
+    if k in STAT_LABELS_FA:
+        return STAT_LABELS_FA[k]
+    low = k.lower()
+    if low in STAT_LABELS_FA:
+        return STAT_LABELS_FA[low]
+    # snake_case → readable Persian-ish fallback
+    pretty = k.replace("_", " ").strip()
+    known_bits = {
+        "users": "کاربران",
+        "user": "کاربر",
+        "disabled": "غیرفعال",
+        "active": "فعال",
+        "expired": "منقضی",
+        "limited": "محدود",
+        "online": "آنلاین",
+        "total": "کل",
+        "nodes": "نودها",
+        "node": "نود",
+        "admins": "ادمین‌ها",
+        "admin": "ادمین",
+        "traffic": "ترافیک",
+        "bandwidth": "پهنای باند",
+        "incoming": "ورودی",
+        "outgoing": "خروجی",
+        "memory": "حافظه",
+        "mem": "حافظه",
+        "cpu": "CPU",
+        "version": "نسخه",
+        "speed": "سرعت",
+    }
+    parts = [known_bits.get(p, p) for p in low.split("_") if p]
+    return " ".join(parts) if parts else pretty
+
+
+def format_stat_row(key: str, value: Any) -> tuple[str, str]:
+    return label_stat_key(key), format_metric(key, value)
 
 
 def format_toman(amount: int, currency: str = "تومان") -> str:

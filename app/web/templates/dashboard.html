@@ -4,25 +4,81 @@
 <div class="page-head">
   <div>
     <h1>داشبورد</h1>
-    <p>خلاصه فروش و میانبرهای پرکاربرد</p>
+    <p>خلاصه فروش، پرداخت‌ها و دسترسی سریع</p>
   </div>
 </div>
-<div class="grid">
+
+<div class="stats-grid">
   <div class="stat"><span>کاربران بات</span><strong>{{ stats.users | num }}</strong></div>
   <div class="stat"><span>سفارش‌ها</span><strong>{{ stats.orders | num }}</strong></div>
-  <div class="stat"><span>سرویس‌ها</span><strong>{{ stats.services | num }}</strong></div>
+  <div class="stat"><span>سرویس‌های فعال</span><strong>{{ stats.services | num }}</strong></div>
   <div class="stat"><span>رسید معلق</span><strong>{{ stats.pending | num }}</strong></div>
   <div class="stat"><span>درآمد تحویل‌شده</span><strong>{{ stats.revenue | num }}</strong></div>
 </div>
+
 <div class="card">
-  <h2>میانبر</h2>
-  <div class="actions" style="margin:0">
-    <a class="btn" href="/payments">پرداخت‌ها</a>
-    <a class="btn btn-ghost" href="/plans">پلن‌ها</a>
+  <h2>میانبرها</h2>
+  <div class="quick-links">
+    <a href="/payments">پرداخت‌ها{% if stats.pending %} ({{ stats.pending }}){% endif %}</a>
+    <a href="/plans">پلن‌ها ({{ stats.plans | num }})</a>
+    <a href="/orders">سفارش‌ها</a>
+    <a href="/tickets">تیکت‌ها{% if stats.tickets %} ({{ stats.tickets }}){% endif %}</a>
     {% if staff.role == 'admin' %}
-    <a class="btn btn-ghost" href="/pg">مدیر پاسارگارد</a>
-    <a class="btn btn-ghost" href="/menu-layout">دکمه‌های بات</a>
-    <a class="btn btn-ghost" href="/settings">تنظیمات</a>
+    <a href="/pg">مدیر پاسارگارد</a>
+    <a href="/menu-layout">دکمه‌های بات</a>
+    <a href="/users">کاربران</a>
+    <a href="/settings">تنظیمات</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="dash-cols">
+  <div class="card">
+    <h2>آخرین پرداخت‌ها</h2>
+    {% if recent_payments %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>مبلغ</th><th>وضعیت</th><th>نوع</th></tr></thead>
+        <tbody>
+        {% for p in recent_payments %}
+          <tr>
+            <td class="mono">{{ p.id }}</td>
+            <td class="mono">{{ p.amount | num }}</td>
+            <td>
+              <span class="badge {% if p.status=='pending' %}warn{% elif p.status=='approved' %}ok{% else %}danger{% endif %}">
+                {% if p.status=='pending' %}معلق{% elif p.status=='approved' %}تأیید{% elif p.status=='rejected' %}رد{% else %}{{ p.status }}{% endif %}
+              </span>
+            </td>
+            <td>{% if p.is_wallet_topup %}شارژ کیف{% else %}خرید{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="muted">پرداختی ثبت نشده.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>آخرین سفارش‌ها</h2>
+    {% if recent_orders %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>مبلغ</th><th>وضعیت</th></tr></thead>
+        <tbody>
+        {% for o in recent_orders %}
+          <tr>
+            <td class="mono">{{ o.id }}</td>
+            <td class="mono">{{ o.amount | num }}</td>
+            <td><span class="badge">{{ o.status }}</span></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="muted">سفارشی نیست.</p>
     {% endif %}
   </div>
 </div>
