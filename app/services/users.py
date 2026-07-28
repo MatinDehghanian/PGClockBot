@@ -173,12 +173,38 @@ DEFAULT_SETTINGS = {
     "show_miniapp": "1",
     "menu_layout": "classic",
     "menu_order": "shop,services,wallet,support,guide,faq,referral,miniapp",
+    "pg_username_prefix": "clk",
+    "pg_username_suffix": "",
+    "pg_username_pattern": "{prefix}_{random}{suffix}",
+    "custom_plan_enabled": "0",
+    "custom_plan_price_per_gb": "1000",
+    "custom_plan_price_per_day": "500",
+    "custom_plan_min_gb": "1",
+    "custom_plan_max_gb": "500",
+    "custom_plan_min_days": "1",
+    "custom_plan_max_days": "365",
+    "custom_plan_template_id": "",
+    "custom_plan_group_ids": "",
 }
 
 # field kinds: text | textarea | toggle | select | number | image
 # (key, label, kind, help?, options?)
+# Tabs for /settings?tab=... (order matches product IA)
+SETTINGS_TABS: list[tuple[str, str]] = [
+    ("menu", "منوی بات"),
+    ("welcome", "خوش‌آمد و هویت"),
+    ("messages", "متن پیام‌ها"),
+    ("buttons", "متن دکمه‌ها"),
+    ("qr", "QR اشتراک"),
+    ("payment", "پرداخت"),
+    ("users", "کاربر و پلن"),
+    ("forcejoin", "کانال اجباری"),
+    ("notifications", "نوتیفیکیشن"),
+    ("update", "آپدیت"),
+]
+
 SETTING_GROUPS = {
-    "🏠 خوش‌آمد و هویت": [
+    "خوش‌آمد و هویت": [
         ("shop_title", "نام فروشگاه", "text", "بالای منوی اصلی ربات دیده می‌شود"),
         (
             "welcome_text",
@@ -188,117 +214,20 @@ SETTING_GROUPS = {
         ),
         ("trial_enabled", "نمایش پلن تست رایگان", "toggle", "اگر پلن تست ساخته‌اید، در فروشگاه دیده شود"),
     ],
-    "📝 متن‌های ربات (هر بخش جدا)": [
-        (
-            "guide_text",
-            "متن راهنما",
-            "textarea",
-            "دکمه راهنما در منوی کاربر",
-        ),
-        (
-            "faq_text",
-            "متن سوالات متداول",
-            "textarea",
-            "دکمه سوالات متداول",
-        ),
-        (
-            "support_text",
-            "متن صفحه پشتیبانی",
-            "textarea",
-            "بالای فرم تیکت نمایش داده می‌شود",
-        ),
-        (
-            "referral_text",
-            "متن دعوت دوستان",
-            "textarea",
-            "متغیرها: {code} و {link}",
-        ),
-        (
-            "empty_services_text",
-            "وقتی سرویسی ندارد",
-            "textarea",
-            "پیام بخش سرویس‌های من اگر لیست خالی باشد",
-        ),
-        (
-            "shop_empty_text",
-            "وقتی پلنی نیست",
-            "textarea",
-            "پیام فروشگاه اگر پلن فعالی نباشد",
-        ),
+    "متن پیام‌ها": [
+        ("guide_text", "متن راهنما", "textarea", "دکمه راهنما در منوی کاربر"),
+        ("faq_text", "متن سوالات متداول", "textarea", "دکمه سوالات متداول"),
+        ("support_text", "متن صفحه پشتیبانی", "textarea", "بالای فرم تیکت نمایش داده می‌شود"),
+        ("referral_text", "متن دعوت دوستان", "textarea", "متغیرها: {code} و {link}"),
+        ("empty_services_text", "وقتی سرویسی ندارد", "textarea", "پیام بخش سرویس‌های من اگر لیست خالی باشد"),
+        ("shop_empty_text", "وقتی پلنی نیست", "textarea", "پیام فروشگاه اگر پلن فعالی نباشد"),
+        ("delivery_title", "عنوان پیام تحویل سرویس", "text", "مثلاً: ✅ سرویس آماده است"),
+        ("purchase_success_text", "متن موفقیت خرید", "textarea", "متغیر: {order_id} — پیام کوتاه موفقیت (جزئیات روی QR است)"),
+        ("wallet_success_text", "متن موفقیت شارژ کیف پول", "textarea", "متغیر: {amount}"),
+        ("payment_reject_text", "متن رد پرداخت", "textarea", "وقتی ادمین رسید را رد می‌کند"),
     ],
-    "💳 پرداخت و تحویل": [
-        (
-            "auto_approve_payments",
-            "تأیید خودکار رسید",
-            "toggle",
-            "روشن = بلافاصله بعد از رسید، سرویس تحویل می‌شود",
-        ),
-        ("card_number", "شماره کارت", "text", "۱۶ رقم — برای کارت‌به‌کارت"),
-        ("card_holder", "نام صاحب کارت", "text", ""),
-        (
-            "card_pay_text",
-            "راهنمای کارت‌به‌کارت",
-            "textarea",
-            "متغیرها: {amount} {card} {holder}",
-        ),
-        (
-            "delivery_title",
-            "عنوان پیام تحویل سرویس",
-            "text",
-            "مثلاً: ✅ سرویس آماده است",
-        ),
-        (
-            "purchase_success_text",
-            "متن موفقیت خرید / تحویل",
-            "textarea",
-            "متغیر: {order_id} — بالای جزئیات سرویس می‌آید",
-        ),
-        (
-            "wallet_success_text",
-            "متن موفقیت شارژ کیف پول",
-            "textarea",
-            "متغیر: {amount}",
-        ),
-        (
-            "payment_reject_text",
-            "متن رد پرداخت",
-            "textarea",
-            "وقتی ادمین رسید را رد می‌کند به کاربر ارسال می‌شود",
-        ),
-        ("referral_bonus", "پاداش دعوت (تومان)", "number", "هدیه به معرف بعد از خرید موفق دعوت‌شده"),
-    ],
-    "📱 QR اشتراک": [
-        (
-            "qr_enabled",
-            "ارسال خودکار QR",
-            "toggle",
-            "بعد از تحویل سرویس، QR لینک اشتراک به‌صورت عکس فرستاده می‌شود",
-        ),
-        (
-            "show_sub_link_in_text",
-            "نمایش لینک در متن پیام",
-            "toggle",
-            "علاوه بر QR، لینک متنی هم در پیام باشد",
-        ),
-        (
-            "qr_caption",
-            "کپشن زیر عکس QR",
-            "textarea",
-            "متن سفارشی بالای جزئیات. لینک، حجم و زمان به‌صورت خودکار اضافه می‌شوند. متغیر اختیاری: {url}",
-        ),
-        (
-            "qr_background",
-            "عکس پس‌زمینه QR",
-            "image",
-            "اختیاری — لوگو یا بک‌گراند پشت QR (PNG/JPG)",
-        ),
-    ],
-    "📢 کانال اجباری": [
-        ("force_join_enabled", "عضویت اجباری کانال", "toggle", "قبل از استفاده از ربات"),
-        ("force_join_channel", "آدرس کانال", "text", "@channel یا لینک عمومی"),
-    ],
-    "🎛 متن دکمه‌های منو": [
-        ("btn_shop", "دکمه خرید", "text", "ایموجی = رنگ بصری"),
+    "متن دکمه‌های منو": [
+        ("btn_shop", "دکمه خرید", "text", ""),
         ("btn_services", "دکمه سرویس‌ها", "text", ""),
         ("btn_wallet", "دکمه کیف پول", "text", ""),
         ("btn_support", "دکمه پشتیبانی", "text", ""),
@@ -316,12 +245,12 @@ SETTING_GROUPS = {
         ("btn_renew", "تمدید", "text", ""),
         ("btn_sub_link", "لینک و QR", "text", ""),
     ],
-    "🗂 نمایش منو": [
+    "نمایش منو": [
         (
             "menu_layout",
             "حالت ردیف‌ها",
             "select",
-            "از صفحه «دکمه‌های بات» هم قابل تنظیم است",
+            "کلاسیک یا فشرده",
             [("classic", "کلاسیک — هر دکمه یک ردیف"), ("compact", "فشرده — دکمه‌ها جفتی")],
         ),
         ("show_wallet", "نمایش کیف پول", "toggle", ""),
@@ -331,6 +260,56 @@ SETTING_GROUPS = {
         ("show_referral", "نمایش دعوت", "toggle", ""),
         ("show_miniapp", "نمایش مینی‌اپ", "toggle", ""),
     ],
+    "QR اشتراک": [
+        ("qr_enabled", "ارسال خودکار QR", "toggle", "بعد از تحویل سرویس، QR لینک اشتراک فرستاده می‌شود"),
+        ("show_sub_link_in_text", "نمایش لینک در کپشن QR", "toggle", "لینک متنی هم در کپشن QR باشد"),
+        ("qr_caption", "کپشن عکس QR", "textarea", "جزئیات لینک/حجم/زمان خودکار اضافه می‌شود. متغیر: {url}"),
+        ("qr_background", "عکس پس‌زمینه QR", "image", "اختیاری — PNG/JPG"),
+    ],
+    "پرداخت": [
+        ("auto_approve_payments", "تأیید خودکار رسید", "toggle", "روشن = بلافاصله بعد از رسید، سرویس تحویل می‌شود"),
+        ("card_number", "شماره کارت", "text", "۱۶ رقم — برای کارت‌به‌کارت"),
+        ("card_holder", "نام صاحب کارت", "text", ""),
+        ("card_pay_text", "راهنمای کارت‌به‌کارت", "textarea", "متغیرها: {amount} {card} {holder}"),
+        ("referral_bonus", "پاداش دعوت (تومان)", "number", "هدیه به معرف بعد از خرید موفق دعوت‌شده"),
+    ],
+    "کاربر و پلن دلخواه": [
+        ("pg_username_prefix", "پیشوند یوزرنیم سرویس", "text", "مثلاً clk"),
+        ("pg_username_suffix", "پسوند یوزرنیم سرویس", "text", "اختیاری"),
+        (
+            "pg_username_pattern",
+            "الگوی یوزرنیم",
+            "text",
+            "متغیرها: {prefix} {random} {suffix} {id} — مثال: {prefix}_{random}{suffix}",
+        ),
+        ("custom_plan_enabled", "فعال‌سازی پلن دلخواه کاربر", "toggle", "کاربر می‌تواند حجم و روز دلخواه بسازد"),
+        ("custom_plan_price_per_gb", "قیمت هر گیگ (تومان)", "number", ""),
+        ("custom_plan_price_per_day", "قیمت هر روز (تومان)", "number", ""),
+        ("custom_plan_min_gb", "حداقل گیگ", "number", ""),
+        ("custom_plan_max_gb", "حداکثر گیگ", "number", ""),
+        ("custom_plan_min_days", "حداقل روز", "number", ""),
+        ("custom_plan_max_days", "حداکثر روز", "number", ""),
+        ("custom_plan_template_id", "تمپلیت پاسارگارد (اختیاری)", "text", "شناسه تمپلیت؛ خالی = ساخت سفارشی"),
+        ("custom_plan_group_ids", "گروه‌های اینباند", "text", "شناسه‌ها با کاما"),
+    ],
+    "کانال اجباری": [
+        ("force_join_enabled", "عضویت اجباری کانال", "toggle", "قبل از استفاده از ربات"),
+        ("force_join_channel", "آدرس کانال", "text", "@channel یا لینک عمومی"),
+    ],
+}
+
+# Map tab id → which SETTING_GROUPS cards to show (menu/notifications/update are special)
+TAB_SETTING_GROUPS: dict[str, list[str]] = {
+    "menu": ["نمایش منو"],
+    "welcome": ["خوش‌آمد و هویت"],
+    "messages": ["متن پیام‌ها"],
+    "buttons": ["متن دکمه‌های منو"],
+    "qr": ["QR اشتراک"],
+    "payment": ["پرداخت"],
+    "users": ["کاربر و پلن دلخواه"],
+    "forcejoin": ["کانال اجباری"],
+    "notifications": [],
+    "update": [],
 }
 
 TOGGLE_KEYS = {

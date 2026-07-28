@@ -21,12 +21,62 @@ from app.db.models import (
     UserService,
 )
 from app.services.pasarguard import extract_sub_token, get_pg
+from app.services.users import get_setting
 from app.services.wallet import credit_wallet, debit_wallet
 
 
-def _random_username(prefix: str = "clk") -> str:
-    suffix = "".join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(8))
-    return f"{prefix}_{suffix}"
+def _random_alnum(length: int = 8) -> str:
+    alphabet = string.ascii_lowercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def _random_username(
+    prefix: str = "clk",
+    suffix: str = "",
+    pattern: str | None = None,
+    *,
+    user_id: str | int | None = None,
+) -> str:
+    """Build a PG username from prefix/suffix or an optional pattern.
+
+    Pattern placeholders: ``{prefix}``, ``{random}`` (8 alnum), ``{suffix}``, ``{id}``.
+    """
+    random_part = _random_alnum(8)
+    id_part = "" if user_id is None else str(user_id)
+    prefix = (prefix or "clk").strip() or "clk"
+    suffix = suffix or ""
+    if pattern and pattern.strip():
+        try:
+            return pattern.format(
+                prefix=prefix,
+                random=random_part,
+                suffix=suffix,
+                id=id_part,
+            )
+        except Exception:
+            pass
+    base = f"{prefix}_{random_part}"
+    return f"{base}{suffix}" if suffix else base
+
+
+async def generate_pg_username(
+    session: AsyncSession,
+    *,
+    user_id: int | None = None,
+) -> str:
+    """Read username prefix/suffix/pattern from settings and generate a name."""
+    prefix = await get_setting(session, "pg_username_prefix", "clk")
+    suffix = await get_setting(session, "pg_username_suffix", "")
+    pattern = await get_setting(session, "pg_username_pattern", "{prefix}_{random}{suffix}")
+    # Optional alias key some panels may use
+    if not pattern:
+        pattern = await get_setting(session, "pg_username_vars", "")
+    return _random_username(
+        prefix=prefix or "clk",
+        suffix=suffix or "",
+        pattern=pattern or None,
+        user_id=user_id,
+    )
 
 
 async def list_active_plans(session: AsyncSession, *, include_trial: bool = True) -> list[Plan]:
@@ -77,6 +127,88 @@ async def create_order(
         discount_amount=discount,
         discount_code=used_code,
         status=OrderStatus.PENDING.value,
+    )
+    session.add(order)
+    await session.commit()
+    await session.refresh(order)
+    return order
+
+
+def calc_custom_plan_price(
+    *,
+    gb: float | int,
+    days: int,
+    price_per_gb: int,
+    price_per_day: int,
+) -> int:
+    return max(0, int(gb) * int(price_per_gb) + int(days) * int(price_per_day))
+
+
+async def create_custom_order(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    data_limit_gb: float,
+    duration_days: int,
+    reseller_id: int | None = None,
+    discount_code: str | None = None,
+) -> Order:
+    """Create an order for a user-chosen GB/days combo via an inactive temp Plan."""
+    from app.services.users import get_all_settings, on
+
+    ui = await get_all_settings(session)
+    if not on(ui.get("custom_plan_enabled")):
+        raise ValueError("پلن دلخواه فعال نیست")
+
+    min_gb = int(float(ui.get("custom_plan_min_gb") or 1))
+    max_gb = int(float(ui.get("custom_plan_max_gb") or 500))
+    min_days = int(float(ui.get("custom_plan_min_days") or 1))
+    max_days = int(float(ui.get("custom_plan_max_days") or 365))
+    price_per_gb = int(float(ui.get("custom_plan_price_per_gb") or 1000))
+    price_per_day = int(float(ui.get("custom_plan_price_per_day") or 500))
+
+    gb = float(data_limit_gb)
+    days = int(duration_days)
+    if gb < min_gb or gb > max_gb:
+        raise ValueError(f"حجم باید بین {min_gb} تا {max_gb} گیگ باشد")
+    if days < min_days or days > max_days:
+        raise ValueError(f"مدت باید بین {min_days} تا {max_days} روز باشد")
+
+    amount = calc_custom_plan_price(
+        gb=gb,
+        days=days,
+        price_per_gb=price_per_gb,
+        price_per_day=price_per_day,
+    )
+    tpl_raw = (ui.get("custom_plan_template_id") or "").strip()
+    tpl_id = int(tpl_raw) if tpl_raw.isdigit() else None
+    group_ids = (ui.get("custom_plan_group_ids") or "").strip() or None
+
+    plan = Plan(
+        name="پلن دلخواه",
+        description=f"سفارشی {gb:g} گیگ / {days} روز",
+        price=amount,
+        duration_days=days,
+        data_limit_gb=gb,
+        pg_template_id=tpl_id,
+        pg_group_ids=group_ids,
+        is_active=False,
+        is_trial=False,
+        sort_order=9999,
+    )
+    session.add(plan)
+    await session.flush()
+
+    discount, used_code = await apply_discount(session, discount_code, amount)
+    order = Order(
+        user_id=user_id,
+        plan_id=plan.id,
+        reseller_id=reseller_id,
+        amount=max(0, amount - discount),
+        discount_amount=discount,
+        discount_code=used_code,
+        status=OrderStatus.PENDING.value,
+        note="custom",
     )
     session.add(order)
     await session.commit()
@@ -199,7 +331,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         raise ValueError("plan missing")
 
     pg = get_pg()
-    username = _random_username()
+    username = await generate_pg_username(session, user_id=order.user_id)
     pg_user: dict
     if plan.pg_template_id:
         payload = {

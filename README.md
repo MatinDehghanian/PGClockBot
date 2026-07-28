@@ -45,7 +45,7 @@ Menu:
 
 | # | Action | What it does |
 |---|--------|----------------|
-| 1 | **Install** | Fresh setup (Telegram + PasarGuard + web login + systemd) |
+| 1 | **Install** | Silent install (deps + systemd) — open `/setup` wizard in browser |
 | 2 | **Update** | `git pull` + deps — keeps `.env` |
 | 3 | **Edit .env** | Open config in nano/vi, optional restart |
 | 4 | **Web panel** | Show URL, reset password, `/health` check |
@@ -95,7 +95,13 @@ Legacy wrappers still work: `./install.sh` → install, `./update.sh` → update
 
 ## Web panel
 
-Open `http://SERVER_IP:9000/login` with the username/password from Install.
+After Install, open the **first-run wizard** (no terminal questions):
+
+`http://SERVER_IP:9000/setup`
+
+Steps: welcome → admin user/password → bot token → PasarGuard → done.
+
+Then use `http://SERVER_IP:9000/login`.
 
 Configure texts, buttons, card number, and plans from **Settings**.
 
@@ -156,7 +162,7 @@ HTTPS reverse proxy → port `9000`, then in `.env`:
 PUBLIC_BASE_URL="https://bot.example.com"
 ```
 
-Or set it during Install (Enter to skip).
+Or set `PUBLIC_BASE_URL` in the web setup wizard / Settings.
 
 ---
 

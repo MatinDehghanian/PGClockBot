@@ -4,9 +4,15 @@ import json
 import secrets
 from pathlib import Path
 
+from passlib.context import CryptContext
+
 from app.config import DATA_DIR
 
 AUTH_FILE = DATA_DIR / "web_admin.json"
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+_BCRYPT_PREFIXES = ("$2b$", "$2a$", "$2y$")
 
 
 def _ensure_data_dir() -> None:
@@ -18,16 +24,43 @@ def _clean_secret(value: str | None) -> str:
     return (value or "").replace("\r", "").strip()
 
 
+def _is_bcrypt_hash(value: str) -> bool:
+    return bool(value) and value.startswith(_BCRYPT_PREFIXES)
+
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def validate_password_strength(password: str) -> tuple[bool, str]:
+    """Return (ok, persian_error). Empty error string when ok."""
+    p = password or ""
+    if len(p) < 8:
+        return False, "رمز عبور باید حداقل ۸ کاراکتر باشد."
+    if not any(c.isupper() for c in p):
+        return False, "رمز عبور باید حداقل یک حرف بزرگ انگلیسی داشته باشد."
+    if not any(c.islower() for c in p):
+        return False, "رمز عبور باید حداقل یک حرف کوچک انگلیسی داشته باشد."
+    if not any(not c.isalnum() for c in p):
+        return False, "رمز عبور باید حداقل یک کاراکتر خاص (غیر حرف و عدد) داشته باشد."
+    return True, ""
+
+
 def save_web_admin(username: str, password: str) -> Path:
-    """Persist web panel credentials in a dedicated JSON file (not fragile .env)."""
+    """Persist web panel credentials in a dedicated JSON file (not fragile .env).
+
+    Password is stored as a bcrypt hash. If the value already looks like bcrypt,
+    it is kept as-is (avoids re-hashing hashes on repair paths).
+    """
     _ensure_data_dir()
     username = _clean_secret(username) or "admin"
     password = _clean_secret(password)
     if not username or not password:
         raise ValueError("username and password are required")
+    stored = password if _is_bcrypt_hash(password) else hash_password(password)
     payload = {
         "username": username,
-        "password": password,
+        "password": stored,
         "token": secrets.token_hex(16),
     }
     AUTH_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -61,7 +94,7 @@ def load_web_admin() -> dict[str, str]:
     password = _clean_secret(settings.web_admin_password)
     if password:
         save_web_admin(user, password)
-        return {"username": user, "password": password}
+        return {"username": user, "password": load_web_admin().get("password", "")}
     return {"username": "admin", "password": ""}
 
 
@@ -75,10 +108,25 @@ def verify_web_admin(username: str, password: str) -> bool:
         return False
     try:
         user_ok = secrets.compare_digest(u.encode("utf-8"), expected_u.encode("utf-8"))
+    except ValueError:
+        return False
+    if not user_ok:
+        return False
+
+    if _is_bcrypt_hash(expected_p):
+        try:
+            return pwd_context.verify(p, expected_p)
+        except (ValueError, TypeError):
+            return False
+
+    # Legacy plaintext — upgrade to bcrypt on successful login
+    try:
         pass_ok = secrets.compare_digest(p.encode("utf-8"), expected_p.encode("utf-8"))
     except ValueError:
         return False
-    return user_ok and pass_ok
+    if pass_ok:
+        save_web_admin(expected_u, p)
+    return pass_ok
 
 
 def repair_web_admin_from_env() -> dict[str, str]:
@@ -92,4 +140,4 @@ def repair_web_admin_from_env() -> dict[str, str]:
     if not password:
         return load_web_admin()
     save_web_admin(user, password)
-    return {"username": user, "password": password}
+    return load_web_admin()

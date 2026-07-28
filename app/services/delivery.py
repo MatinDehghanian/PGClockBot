@@ -17,12 +17,26 @@ from app.services.qrcode_gen import make_subscription_qr
 from app.services.users import get_all_settings, on
 
 
+def _subscription_success_body(ui: dict[str, str], order) -> str:
+    try:
+        success = (ui.get("purchase_success_text") or "").format(order_id=order.id)
+    except Exception:
+        success = f"سفارش #{order.id} با موفقیت فعال شد."
+    return (success or "").strip()
+
+
 async def build_delivery_content(
     session: AsyncSession,
     payment: Payment | None,
     order,
+    *,
+    include_details: bool = True,
 ) -> dict[str, Any]:
-    """Build title/body/markup/url/info for a successful delivery."""
+    """Build title/body/markup/url/info for a successful delivery.
+
+    For subscriptions, ``include_details=False`` yields a short success-only body
+    (no service card / sub link); details stay available via sub_info/sub_url for QR.
+    """
     ui = await get_all_settings(session)
     markup = kb.back_home(ui)
     title = ui.get("delivery_title") or "✅ سرویس آماده است"
@@ -32,23 +46,21 @@ async def build_delivery_content(
 
     if order and order.service_id:
         svc = await session.get(UserService, order.service_id)
-        try:
-            success = (ui.get("purchase_success_text") or "").format(order_id=order.id)
-        except Exception:
-            success = f"سفارش #{order.id} با موفقیت فعال شد."
-        if success.strip():
-            body_parts.append(success.strip())
+        success = _subscription_success_body(ui, order)
+        if success:
+            body_parts.append(success)
 
         if svc and svc.subscription_token:
             try:
                 info = await get_pg().subscription_info(svc.subscription_token)
                 sub_info = info if isinstance(info, dict) else None
-                body_parts.append(service_card(info))
+                if include_details:
+                    body_parts.append(service_card(info))
             except Exception:
-                if svc.pg_username:
+                if include_details and svc.pg_username:
                     body_parts.append(f"👤 <b>{svc.pg_username}</b>")
             sub_url = svc.subscription_url
-            if sub_url and on(ui.get("show_sub_link_in_text", "1")):
+            if include_details and sub_url and on(ui.get("show_sub_link_in_text", "1")):
                 body_parts.append(
                     info_block(
                         [
@@ -66,6 +78,7 @@ async def build_delivery_content(
             "sub_url": sub_url,
             "sub_info": sub_info,
             "ui": ui,
+            "is_subscription": True,
         }
 
     if payment and payment.is_wallet_topup:
@@ -88,6 +101,7 @@ async def build_delivery_content(
             "sub_url": None,
             "sub_info": None,
             "ui": ui,
+            "is_subscription": False,
         }
 
     title = ui.get("payment_ok_title") or "✅ پرداخت تأیید شد"
@@ -104,6 +118,7 @@ async def build_delivery_content(
         "sub_url": None,
         "sub_info": None,
         "ui": ui,
+        "is_subscription": False,
     }
 
 
@@ -118,7 +133,24 @@ async def send_delivery_to_user(
     Send delivery text to user; if subscription URL exists and QR is enabled,
     also send QR as a photo. Returns the HTML text that was sent.
     """
-    payload = await build_delivery_content(session, payment, order)
+    ui = await get_all_settings(session)
+    # Peek whether QR can carry the details (subscription only).
+    sub_url_peek = None
+    if order and order.service_id:
+        svc = await session.get(UserService, order.service_id)
+        if svc:
+            sub_url_peek = svc.subscription_url
+    qr_enabled = on(ui.get("qr_enabled", "1"))
+    use_short = bool(
+        order
+        and order.service_id
+        and sub_url_peek
+        and qr_enabled
+    )
+
+    payload = await build_delivery_content(
+        session, payment, order, include_details=not use_short
+    )
     text = payload["text"]
     markup: InlineKeyboardMarkup | None = payload["markup"]
     ui = payload["ui"]
@@ -133,10 +165,23 @@ async def send_delivery_to_user(
         except Exception:
             pass
 
+    qr_sent = False
     if sub_url:
-        await send_subscription_qr_photo(
+        qr_sent = await send_subscription_qr_photo(
             bot, chat_id, sub_url, ui, info=sub_info
         )
+
+    # QR disabled / missing URL / send failed → ensure details still reach the user.
+    if use_short and not qr_sent:
+        detailed = await build_delivery_content(
+            session, payment, order, include_details=True
+        )
+        if detailed["text"] != text:
+            try:
+                await bot.send_message(chat_id, detailed["text"])
+            except Exception:
+                pass
+            text = detailed["text"]
 
     return text
 

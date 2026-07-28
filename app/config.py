@@ -40,11 +40,11 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    bot_token: str = Field(alias="BOT_TOKEN")
+    bot_token: str = Field(default="", alias="BOT_TOKEN")
     bot_username: str = Field(default="", alias="BOT_USERNAME")
     admin_ids: List[int] = Field(default_factory=list, alias="ADMIN_IDS")
 
-    pg_base_url: str = Field(alias="PG_BASE_URL")
+    pg_base_url: str = Field(default="", alias="PG_BASE_URL")
     pg_username: str = Field(default="", alias="PG_USERNAME")
     pg_password: str = Field(default="", alias="PG_PASSWORD")
     pg_access_token: str = Field(default="", alias="PG_ACCESS_TOKEN")

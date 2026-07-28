@@ -62,15 +62,33 @@ def main() -> None:
     # Always reload settings from project .env
     get_settings.cache_clear()
     settings = get_settings()
-    bot = create_bot()
-    dp = create_dispatcher()
+    setup_pending = not bool((settings.bot_token or "").strip())
+    bot = None
+    dp = None
+    if not setup_pending:
+        bot = create_bot()
+        dp = create_dispatcher()
 
     @asynccontextmanager
     async def lifespan(app):
         await init_db()
         await seed_demo_plan()
-        start_scheduler(bot)
         poll_task = None
+
+        if setup_pending or bot is None or dp is None:
+            logger.warning(
+                "BOT_TOKEN missing — web panel only. Open /setup to finish first-run wizard."
+            )
+            try:
+                yield
+            finally:
+                try:
+                    await get_pg().close()
+                except Exception:
+                    pass
+            return
+
+        start_scheduler(bot)
 
         try:
             me = await bot.get_me()
@@ -82,7 +100,7 @@ def main() -> None:
             )
         except Exception:
             logger.exception(
-                "Cannot connect to Telegram. Check BOT_TOKEN in .env"
+                "Cannot connect to Telegram. Check BOT_TOKEN in .env / setup wizard"
             )
             raise
 
@@ -137,7 +155,7 @@ def main() -> None:
 
     api = create_api_app(lifespan=lifespan)
 
-    if settings.webhook_url.strip():
+    if not setup_pending and bot is not None and dp is not None and settings.webhook_url.strip():
 
         @api.post(settings.webhook_path)
         async def telegram_webhook(request: Request):
@@ -147,15 +165,23 @@ def main() -> None:
             return {"ok": True}
 
     # Ensure web panel credentials exist (migrate/repair from .env if needed)
+    # Skip forcing repair during first-run wizard (no password yet).
+    from app.services.setup_wizard import is_setup_complete
     from app.services.web_auth import repair_web_admin_from_env
 
-    try:
-        creds = repair_web_admin_from_env()
-    except Exception:
+    if is_setup_complete():
+        try:
+            creds = repair_web_admin_from_env()
+        except Exception:
+            creds = load_web_admin()
+    else:
         creds = load_web_admin()
+
     if not creds.get("password"):
-        logger.error(
-            "Web panel password missing. Run: python scripts/set_web_password.py"
+        logger.warning(
+            "Web panel not configured yet — open http://%s:%s/setup",
+            settings.web_host,
+            settings.web_port,
         )
     else:
         logger.info(

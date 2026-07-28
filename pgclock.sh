@@ -6,15 +6,23 @@
 set -euo pipefail
 set +H
 
-# curl|bash leaves stdin as a dead pipe — always read from the real terminal
+# curl|bash leaves stdin as a dead pipe. For interactive menus, attach to TTY.
+# `install` / `update` / `status` / `help` can run without a TTY.
+_CMD="${1:-}"
 if [[ ! -t 0 ]]; then
-  if [[ -r /dev/tty ]]; then
-    exec </dev/tty
-  else
-    echo "  x No interactive terminal (TTY). Run: bash pgclock.sh" >&2
-    exit 1
-  fi
+  case "${_CMD}" in
+    install|i|update|u|status|s|help|h|-h|--help) ;;
+    *)
+      if [[ -r /dev/tty ]]; then
+        exec </dev/tty
+      else
+        echo "  x No interactive terminal (TTY). Run: bash pgclock.sh install" >&2
+        exit 1
+      fi
+      ;;
+  esac
 fi
+unset _CMD
 
 R=$'\033[0;31m'; G=$'\033[0;32m'; C=$'\033[0;36m'
 Y=$'\033[1;33m'; B=$'\033[1;37m'; D=$'\033[2m'; N=$'\033[0m'
@@ -189,18 +197,27 @@ print_success() {
   # print_success "Title" [extra lines...]
   local title="$1"
   shift || true
-  local port ip user
+  local port ip user panel_path
   port="$(env_get WEB_PORT "${WEB_PORT:-9000}")"
   ip="$(detect_server_ip)"
   user="$(web_username)"
+  if [[ -f data/setup_complete.flag ]]; then
+    panel_path="/login"
+  else
+    panel_path="/setup"
+  fi
   {
     echo ""
     printf '%s==========================================%s\n' "$G" "$N"
     printf '%s  SUCCESS · %s%s\n' "$G" "$title" "$N"
     printf '%s==========================================%s\n' "$G" "$N"
-    printf '  Web panel:  %shttp://%s:%s/login%s\n' "$B" "$ip" "$port" "$N"
+    printf '  Web panel:  %shttp://%s:%s%s%s\n' "$B" "$ip" "$port" "$panel_path" "$N"
     printf '  Health:     %shttp://127.0.0.1:%s/health%s\n' "$B" "$port" "$N"
-    printf '  Username:   %s%s%s\n' "$B" "$user" "$N"
+    if [[ -f data/setup_complete.flag ]]; then
+      printf '  Username:   %s%s%s\n' "$B" "$user" "$N"
+    else
+      printf '  Next step:  %sopen the URL above and finish the wizard%s\n' "$B" "$N"
+    fi
     if [[ $# -gt 0 ]]; then
       echo ""
       local line
@@ -395,138 +412,81 @@ cmd_install() {
   ensure_apt_packages || return 1
   ensure_python || return 1
 
-  if [[ -f .env ]]; then
-    warn ".env already exists."
-    if ! ask_yn "Overwrite existing install?" "N"; then
-      info "Cancelled. Use Update or Edit .env instead."
-      return 0
-    fi
-    cp -a .env ".env.bak.$(date +%Y%m%d%H%M%S)"
-    ok ".env backup created"
-  fi
-
-  step "1/7  Telegram"
-  BOT_TOKEN="$(ask "Bot token (from @BotFather)")"
-  BOT_USERNAME="$(ask "Bot username without @" "PGClockBot")"
-  ADMIN_IDS="$(ask "Your Telegram numeric ID (admin)")"
-  ADMIN_IDS="$(echo "$ADMIN_IDS" | tr -d '[:space:]')"
-
-  step "2/7  PasarGuard panel"
-    PG_BASE_URL="$(ask "PasarGuard panel URL" "https://dev.mrclock.website")"
-  # Keep only origin (strip accidental path like /panel)
-  PG_BASE_URL="$("$SYSTEM_PY" - <<PY
-from urllib.parse import urlparse, urlunparse
-s = """${PG_BASE_URL}""".strip().rstrip("/")
-if "://" not in s:
-    s = "https://" + s
-p = urlparse(s)
-print(urlunparse((p.scheme, p.netloc, "", "", "", "")).rstrip("/") or s)
-PY
-)"
-  ok "Using panel URL: ${PG_BASE_URL}"
-  PG_USERNAME="$(ask "PasarGuard admin username")"
-  PG_PASSWORD="$(ask_secret "PasarGuard admin password")"
-
-  # Quick login check before continuing
-  info "Testing PasarGuard login..."
-  if PG_BASE_URL="$PG_BASE_URL" PG_USERNAME="$PG_USERNAME" PG_PASSWORD="$PG_PASSWORD" "$SYSTEM_PY" - <<'PY'
-import os, urllib.parse, urllib.request
-base = os.environ["PG_BASE_URL"].rstrip("/")
-data = urllib.parse.urlencode({
-    "username": os.environ["PG_USERNAME"],
-    "password": os.environ["PG_PASSWORD"],
-}).encode()
-req = urllib.request.Request(base + "/api/admin/token", data=data, method="POST")
-try:
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        body = resp.read().decode()
-        assert "access_token" in body
-        print("OK")
-except Exception as e:
-    print("FAIL", e)
-    raise SystemExit(1)
-PY
-  then
-    ok "PasarGuard login OK"
-  else
-    err "PasarGuard login failed — check URL / username / password"
-    return 1
-  fi
-
-  step "3/7  Web panel"
-  WEB_PORT="$(ask "Web panel port" "9000")"
-  WEB_ADMIN_USER="$(ask "Web panel username" "admin")"
-  WEB_ADMIN_PASSWORD="$(ask_password "Web panel password")"
+  # Defaults — all bot/admin/PasarGuard config is done in the web wizard (/setup)
+  WEB_PORT="${WEB_PORT:-9000}"
   WEB_SECRET="$(gen_secret)"
+  BOT_TOKEN=""
+  BOT_USERNAME=""
+  ADMIN_IDS=""
+  PG_BASE_URL=""
+  PG_USERNAME=""
+  PG_PASSWORD=""
+  WEB_ADMIN_USER="admin"
+  WEB_ADMIN_PASSWORD=""
+  PUBLIC_BASE_URL=""
+  CURRENCY="تومان"
 
-  step "4/7  Optional"
-  PUBLIC_BASE_URL="$(ask_optional "Public HTTPS URL for Mini App")"
-  CURRENCY="$(ask "Currency label" "Toman")"
+  local fresh=0
+  if [[ -f .env ]]; then
+    warn ".env already exists — keeping it (no overwrite)."
+    WEB_PORT="$(env_get WEB_PORT "${WEB_PORT}")"
+    ok "Using existing config · port=${WEB_PORT}"
+  else
+    fresh=1
+    step "Scaffold configuration"
+    write_env_file
+    mkdir -p data
+    rm -f data/web_admin.json data/setup_complete.flag data/setup_in_progress.flag 2>/dev/null || true
+    ok ".env scaffold written · finish setup in the browser"
+  fi
 
-  step "5/7  Python packages"
+  step "Python packages"
   ensure_venv || return 1
-
-  step "6/7  Configuration"
-  write_env_file
   mkdir -p data
-  WEB_ADMIN_USER="$WEB_ADMIN_USER" WEB_ADMIN_PASSWORD="$WEB_ADMIN_PASSWORD" "$PY" - <<'PY'
-import os, sys
-from pathlib import Path
-sys.path.insert(0, str(Path.cwd()))
-from app.services.web_auth import save_web_admin
-print(save_web_admin(os.environ["WEB_ADMIN_USER"], os.environ["WEB_ADMIN_PASSWORD"]))
-PY
-  ok ".env + data/web_admin.json written"
 
-  CHECK="$(
-    WEB_ADMIN_USER="$WEB_ADMIN_USER" WEB_ADMIN_PASSWORD="$WEB_ADMIN_PASSWORD" "$PY" - <<'PY'
-from app.services.web_auth import load_web_admin, verify_web_admin
-import os
-creds = load_web_admin()
-ok = verify_web_admin(os.environ["WEB_ADMIN_USER"], os.environ["WEB_ADMIN_PASSWORD"])
-print(creds["username"])
-print("OK" if ok else "FAIL")
-PY
-  )"
-  mapfile -t CHECK_LINES <<< "$CHECK"
-  if [[ "${CHECK_LINES[1]:-}" != "OK" ]]; then
-    err "Web login self-check failed."
-    return 1
-  fi
-  ok "Web login OK · username=${CHECK_LINES[0]}"
-
-  step "7/7  systemd"
-  if ask_yn "Enable systemd service now?" "Y"; then
-    local service_user
-    service_user="$(ask "System user" "$(whoami)")"
-    install_systemd "$service_user"
-  fi
-
-  if ask_yn "Start / keep bot running now?" "Y"; then
-    if service_installed; then
-      sudo_wrap systemctl enable --now "$SERVICE_NAME" || true
-      if service_active; then
-        ok "Service is running"
-      else
-        warn "Service installed but not active — check: journalctl -u ${SERVICE_NAME} -n 50"
-      fi
+  step "systemd service"
+  install_systemd "$(whoami)" || true
+  if service_installed; then
+    sudo_wrap systemctl enable --now "$SERVICE_NAME" || true
+    if service_active; then
+      ok "Service is running"
     else
-      warn "No systemd unit. Use menu -> Service -> Install systemd unit"
-      warn "Or run manually: source .venv/bin/activate && python run.py"
+      warn "Service installed but not active — check: journalctl -u ${SERVICE_NAME} -n 50"
     fi
+  else
+    warn "systemd unit missing — starting panel in background"
+    nohup "${SCRIPT_DIR}/.venv/bin/python" "${SCRIPT_DIR}/run.py" \
+      >/tmp/pgclock-panel.log 2>&1 &
+    ok "Panel started (pid $!) · log: /tmp/pgclock-panel.log"
   fi
 
+  step "Firewall"
   if command -v ufw >/dev/null 2>&1; then
-    if ask_yn "Allow web panel port ${WEB_PORT}/tcp in UFW?" "Y"; then
-      sudo_wrap ufw allow "${WEB_PORT}/tcp" >/dev/null 2>&1 || true
-      ok "UFW rule added for ${WEB_PORT}/tcp"
-    fi
+    sudo_wrap ufw allow "${WEB_PORT}/tcp" >/dev/null 2>&1 || true
+    ok "UFW: allowed ${WEB_PORT}/tcp (if UFW is active)"
+  else
+    info "UFW not installed — open port ${WEB_PORT} manually if needed"
   fi
 
-  print_success "Install complete" \
-    "Password:   (the one you entered during setup)" \
-    "Manage:     bash pgclock.sh" \
-    "Logs:       journalctl -u ${SERVICE_NAME} -f"
+  local ip setup_url login_url
+  ip="$(detect_server_ip)"
+  setup_url="http://${ip}:${WEB_PORT}/setup"
+  login_url="http://${ip}:${WEB_PORT}/login"
+
+  if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
+    print_success "Install complete — open the web wizard" \
+      "Setup:      ${setup_url}" \
+      "Login:      ${login_url}" \
+      "Wizard:     welcome → admin → bot → PasarGuard → done" \
+      "No more terminal questions — configure everything in the browser" \
+      "Manage:     bash pgclock.sh" \
+      "Logs:       journalctl -u ${SERVICE_NAME} -f"
+  else
+    print_success "Install/refresh complete" \
+      "Panel:      ${login_url}" \
+      "Manage:     bash pgclock.sh" \
+      "Logs:       journalctl -u ${SERVICE_NAME} -f"
+  fi
   return 0
 }
 
@@ -844,7 +804,7 @@ cmd_help() {
 
   Usage:
     bash pgclock.sh                 Interactive menu
-    bash pgclock.sh install         Fresh install
+    bash pgclock.sh install         Silent install (config via /setup wizard)
     bash pgclock.sh update          Update code + deps
     bash pgclock.sh env             Edit .env
     bash pgclock.sh web             Web panel tools
@@ -893,7 +853,7 @@ show_menu() {
   clear > /dev/tty 2>/dev/null || printf '\033c' > /dev/tty
   banner
   {
-    printf '  %s1)%s Install        Fresh setup (bot + web panel)\n' "$B" "$N"
+    printf '  %s1)%s Install        Silent install → finish in /setup wizard\n' "$B" "$N"
     printf '  %s2)%s Update         Pull latest code (keep .env)\n' "$B" "$N"
     printf '  %s3)%s Edit .env      Change tokens / panel / ports\n' "$B" "$N"
     printf '  %s4)%s Web panel      URL, password reset, health\n' "$B" "$N"

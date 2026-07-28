@@ -12,21 +12,43 @@ from app.config import get_settings
 from app.db.models import BotUser, Order, UserService
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message, format_toman
-from app.services.orders import create_order, get_plan, list_active_plans, pay_with_wallet, start_card_payment
-from app.services.users import get_all_settings, get_setting, on
+from app.services.orders import (
+    calc_custom_plan_price,
+    create_custom_order,
+    create_order,
+    get_plan,
+    list_active_plans,
+    pay_with_wallet,
+    start_card_payment,
+)
+from app.services.users import get_all_settings, on
 
 router = Router(name="shop")
 
 
 class ShopStates(StatesGroup):
     discount = State()
+    custom_gb_input = State()
+    custom_days_input = State()
+
+
+def _custom_bounds(ui: dict) -> tuple[int, int, int, int, int, int]:
+    min_gb = max(1, int(float(ui.get("custom_plan_min_gb") or 1)))
+    max_gb = max(min_gb, int(float(ui.get("custom_plan_max_gb") or 500)))
+    min_days = max(1, int(float(ui.get("custom_plan_min_days") or 1)))
+    max_days = max(min_days, int(float(ui.get("custom_plan_max_days") or 365)))
+    price_gb = int(float(ui.get("custom_plan_price_per_gb") or 1000))
+    price_day = int(float(ui.get("custom_plan_price_per_day") or 500))
+    return min_gb, max_gb, min_days, max_days, price_gb, price_day
 
 
 @router.callback_query(F.data == "shop:list")
-async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     await callback.answer()
+    await state.clear()
     ui = await get_all_settings(session)
     trial_on = on(ui.get("trial_enabled"))
+    custom_on = on(ui.get("custom_plan_enabled"))
     plans = await list_active_plans(session, include_trial=True)
     if not trial_on:
         plans = [p for p in plans if not p.is_trial]
@@ -37,7 +59,7 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     ).scalar_one_or_none()
     if has_svc:
         plans = [p for p in plans if not p.is_trial]
-    if not plans:
+    if not plans and not custom_on:
         text = format_message(
             "🛒 فروشگاه",
             ui.get("shop_empty_text")
@@ -49,8 +71,272 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if callback.message:
         await callback.message.edit_text(
             format_message("🛒 انتخاب پلن", "یکی از پلن‌ها را انتخاب کنید:"),
-            reply_markup=kb.plans_keyboard(plans, ui),
+            reply_markup=kb.plans_keyboard(plans, ui, custom_enabled=custom_on),
         )
+
+
+@router.callback_query(F.data == "shop:custom:noop")
+async def custom_noop(callback: CallbackQuery):
+    await callback.answer()
+
+
+@router.callback_query(F.data == "shop:custom")
+async def custom_start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    ui = await get_all_settings(session)
+    if not on(ui.get("custom_plan_enabled")):
+        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+        return
+    await callback.answer()
+    min_gb, max_gb, _, _, _, _ = _custom_bounds(ui)
+    data = await state.get_data()
+    gb = int(data.get("custom_gb") or min_gb)
+    gb = max(min_gb, min(max_gb, gb))
+    await state.update_data(custom_gb=gb, custom_days=data.get("custom_days"))
+    text = format_message(
+        "✨ پلن دلخواه — حجم",
+        f"حجم سرویس را انتخاب کنید ({min_gb} تا {max_gb} گیگ):\n"
+        f"فعلی: <b>{gb}</b> گیگ",
+    )
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=kb.custom_gb_keyboard(gb, ui))
+
+
+@router.callback_query(F.data.in_({"shop:custom:gb:+", "shop:custom:gb:-"}))
+async def custom_gb_step(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    ui = await get_all_settings(session)
+    if not on(ui.get("custom_plan_enabled")):
+        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+        return
+    min_gb, max_gb, _, _, _, _ = _custom_bounds(ui)
+    data = await state.get_data()
+    gb = int(data.get("custom_gb") or min_gb)
+    if callback.data.endswith("+"):
+        gb = min(max_gb, gb + 1)
+    else:
+        gb = max(min_gb, gb - 1)
+    await state.update_data(custom_gb=gb)
+    await callback.answer()
+    text = format_message(
+        "✨ پلن دلخواه — حجم",
+        f"حجم سرویس را انتخاب کنید ({min_gb} تا {max_gb} گیگ):\n"
+        f"فعلی: <b>{gb}</b> گیگ",
+    )
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=kb.custom_gb_keyboard(gb, ui))
+
+
+@router.callback_query(F.data == "shop:custom:gb:input")
+async def custom_gb_ask(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    ui = await get_all_settings(session)
+    if not on(ui.get("custom_plan_enabled")):
+        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+        return
+    await callback.answer()
+    min_gb, max_gb, _, _, _, _ = _custom_bounds(ui)
+    await state.set_state(ShopStates.custom_gb_input)
+    if callback.message:
+        await callback.message.answer(
+            f"حجم به گیگ را وارد کنید ({min_gb} تا {max_gb}):",
+            reply_markup=kb.cancel_reply(),
+        )
+
+
+@router.message(ShopStates.custom_gb_input)
+async def custom_gb_entered(message: Message, state: FSMContext, session: AsyncSession):
+    ui = await get_all_settings(session)
+    if (message.text or "").strip() == "انصراف":
+        await state.set_state(None)
+        await message.answer("لغو شد.", reply_markup=kb.back_home(ui))
+        return
+    min_gb, max_gb, _, _, _, _ = _custom_bounds(ui)
+    try:
+        gb = int(float((message.text or "").replace(",", "").replace("٬", "").strip()))
+    except ValueError:
+        await message.answer("عدد معتبر بفرستید")
+        return
+    if gb < min_gb or gb > max_gb:
+        await message.answer(f"حجم باید بین {min_gb} تا {max_gb} باشد")
+        return
+    await state.set_state(None)
+    await state.update_data(custom_gb=gb)
+    await message.answer(
+        format_message(
+            "✨ پلن دلخواه — حجم",
+            f"حجم انتخاب‌شده: <b>{gb}</b> گیگ",
+        ),
+        reply_markup=kb.custom_gb_keyboard(gb, ui),
+    )
+
+
+@router.callback_query(F.data == "shop:custom:gb:next")
+async def custom_days_start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    ui = await get_all_settings(session)
+    if not on(ui.get("custom_plan_enabled")):
+        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+        return
+    await callback.answer()
+    _, _, min_days, max_days, _, _ = _custom_bounds(ui)
+    data = await state.get_data()
+    gb = int(data.get("custom_gb") or _custom_bounds(ui)[0])
+    days = int(data.get("custom_days") or min_days)
+    days = max(min_days, min(max_days, days))
+    await state.update_data(custom_gb=gb, custom_days=days)
+    text = format_message(
+        "✨ پلن دلخواه — مدت",
+        f"حجم: <b>{gb}</b> گیگ\n"
+        f"مدت را انتخاب کنید ({min_days} تا {max_days} روز):\n"
+        f"فعلی: <b>{days}</b> روز",
+    )
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=kb.custom_days_keyboard(days, ui))
+
+
+@router.callback_query(F.data.in_({"shop:custom:days:+", "shop:custom:days:-"}))
+async def custom_days_step(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    ui = await get_all_settings(session)
+    if not on(ui.get("custom_plan_enabled")):
+        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+        return
+    _, _, min_days, max_days, _, _ = _custom_bounds(ui)
+    data = await state.get_data()
+    gb = int(data.get("custom_gb") or _custom_bounds(ui)[0])
+    days = int(data.get("custom_days") or min_days)
+    if callback.data.endswith("+"):
+        days = min(max_days, days + 1)
+    else:
+        days = max(min_days, days - 1)
+    await state.update_data(custom_days=days)
+    await callback.answer()
+    text = format_message(
+        "✨ پلن دلخواه — مدت",
+        f"حجم: <b>{gb}</b> گیگ\n"
+        f"مدت را انتخاب کنید ({min_days} تا {max_days} روز):\n"
+        f"فعلی: <b>{days}</b> روز",
+    )
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=kb.custom_days_keyboard(days, ui))
+
+
+@router.callback_query(F.data == "shop:custom:days:input")
+async def custom_days_ask(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    ui = await get_all_settings(session)
+    if not on(ui.get("custom_plan_enabled")):
+        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+        return
+    await callback.answer()
+    _, _, min_days, max_days, _, _ = _custom_bounds(ui)
+    await state.set_state(ShopStates.custom_days_input)
+    if callback.message:
+        await callback.message.answer(
+            f"مدت به روز را وارد کنید ({min_days} تا {max_days}):",
+            reply_markup=kb.cancel_reply(),
+        )
+
+
+@router.message(ShopStates.custom_days_input)
+async def custom_days_entered(message: Message, state: FSMContext, session: AsyncSession):
+    ui = await get_all_settings(session)
+    if (message.text or "").strip() == "انصراف":
+        await state.set_state(None)
+        await message.answer("لغو شد.", reply_markup=kb.back_home(ui))
+        return
+    _, _, min_days, max_days, _, _ = _custom_bounds(ui)
+    try:
+        days = int((message.text or "").replace(",", "").replace("٬", "").strip())
+    except ValueError:
+        await message.answer("عدد معتبر بفرستید")
+        return
+    if days < min_days or days > max_days:
+        await message.answer(f"مدت باید بین {min_days} تا {max_days} باشد")
+        return
+    data = await state.get_data()
+    gb = int(data.get("custom_gb") or _custom_bounds(ui)[0])
+    await state.set_state(None)
+    await state.update_data(custom_days=days)
+    await message.answer(
+        format_message(
+            "✨ پلن دلخواه — مدت",
+            f"حجم: <b>{gb}</b> گیگ\nمدت انتخاب‌شده: <b>{days}</b> روز",
+        ),
+        reply_markup=kb.custom_days_keyboard(days, ui),
+    )
+
+
+@router.callback_query(F.data == "shop:custom:confirm")
+async def custom_confirm(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    ui = await get_all_settings(session)
+    if not on(ui.get("custom_plan_enabled")):
+        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+        return
+    data = await state.get_data()
+    min_gb, _, min_days, _, price_gb, price_day = _custom_bounds(ui)
+    gb = int(data.get("custom_gb") or min_gb)
+    days = int(data.get("custom_days") or min_days)
+    amount = calc_custom_plan_price(
+        gb=gb, days=days, price_per_gb=price_gb, price_per_day=price_day
+    )
+    await callback.answer()
+    from app.services.formatting import info_block, kv_line
+
+    body = info_block(
+        [
+            kv_line("📦", "حجم", f"<b>{gb}</b> گیگ"),
+            kv_line("⏱", "مدت", f"<b>{days}</b> روز"),
+            kv_line("💰", "قیمت", f"<b>{format_toman(amount, get_settings().currency)}</b>"),
+            f"<i>({price_gb:,} ت/گیگ + {price_day:,} ت/روز)</i>".replace(",", "٬"),
+        ]
+    )
+    if callback.message:
+        await callback.message.edit_text(
+            format_message("✨ تأیید پلن دلخواه", body),
+            reply_markup=kb.custom_confirm_keyboard(ui),
+        )
+
+
+@router.callback_query(F.data == "shop:custom:buy")
+async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
+    ui = await get_all_settings(session)
+    if not on(ui.get("custom_plan_enabled")):
+        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+        return
+    data = await state.get_data()
+    min_gb, _, min_days, _, _, _ = _custom_bounds(ui)
+    gb = float(data.get("custom_gb") or min_gb)
+    days = int(data.get("custom_days") or min_days)
+    try:
+        order = await create_custom_order(
+            session,
+            user_id=db_user.id,
+            data_limit_gb=gb,
+            duration_days=days,
+            reseller_id=db_user.reseller_id,
+        )
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
+    await state.clear()
+    await callback.answer()
+    text = format_message(
+        f"🧾 سفارش #{order.id}",
+        f"پلن دلخواه — {gb:g} گیگ / {days} روز\n"
+        f"مبلغ قابل پرداخت:\n<b>{format_toman(order.amount, get_settings().currency)}</b>\n\n"
+        "روش پرداخت را انتخاب کنید:",
+    )
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=kb.pay_methods(order.id, ui))
+    try:
+        from app.services.notifications import notify_new_order
+
+        await notify_new_order(
+            callback.bot,
+            session,
+            order=order,
+            user_tg_id=db_user.telegram_id,
+            user_name=db_user.full_name or db_user.username,
+            plan_name="پلن دلخواه",
+        )
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data.startswith("shop:plan:"))

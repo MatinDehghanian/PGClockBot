@@ -1,0 +1,247 @@
+from __future__ import annotations
+
+import re
+import secrets
+from pathlib import Path
+
+from app.config import DATA_DIR, ROOT_DIR, get_settings
+from app.services.web_auth import load_web_admin
+
+SETUP_FLAG = DATA_DIR / "setup_complete.flag"
+SETUP_IN_PROGRESS = DATA_DIR / "setup_in_progress.flag"
+ENV_PATH = ROOT_DIR / ".env"
+
+# Keys the wizard may write; unknown keys in .env are preserved on merge.
+WIZARD_ENV_KEYS = (
+    "BOT_TOKEN",
+    "BOT_USERNAME",
+    "ADMIN_IDS",
+    "PG_BASE_URL",
+    "PG_USERNAME",
+    "PG_PASSWORD",
+    "WEB_HOST",
+    "WEB_PORT",
+    "WEB_SECRET",
+    "PUBLIC_BASE_URL",
+    "CURRENCY",
+)
+
+
+def _ensure_data_dir() -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def mark_setup_complete() -> Path:
+    _ensure_data_dir()
+    SETUP_FLAG.write_text("ok\n", encoding="utf-8")
+    try:
+        SETUP_FLAG.chmod(0o600)
+    except OSError:
+        pass
+    try:
+        if SETUP_IN_PROGRESS.exists():
+            SETUP_IN_PROGRESS.unlink()
+    except OSError:
+        pass
+    return SETUP_FLAG
+
+
+def begin_setup() -> None:
+    """Mark wizard in progress so partial saves do not auto-complete setup."""
+    _ensure_data_dir()
+    if SETUP_FLAG.exists():
+        return
+    SETUP_IN_PROGRESS.write_text("1\n", encoding="utf-8")
+
+
+def _read_env_file() -> dict[str, str]:
+    """Parse KEY=VALUE pairs from .env (best-effort, preserves simple quoted values)."""
+    out: dict[str, str] = {}
+    if not ENV_PATH.exists():
+        return out
+    for raw in ENV_PATH.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        val = val.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+            val = val[1:-1]
+        val = val.replace("\\n", "\n").replace('\\"', '"').replace("\\\\", "\\")
+        out[key] = val.replace("\r", "").strip()
+    return out
+
+
+def _env_get(key: str) -> str:
+    data = _read_env_file()
+    if key in data and data[key]:
+        return data[key]
+    try:
+        get_settings.cache_clear()
+        settings = get_settings()
+        mapping = {
+            "BOT_TOKEN": settings.bot_token,
+            "BOT_USERNAME": settings.bot_username,
+            "ADMIN_IDS": ",".join(str(i) for i in settings.admin_ids),
+            "PG_BASE_URL": settings.pg_base_url,
+            "PG_USERNAME": settings.pg_username,
+            "PG_PASSWORD": settings.pg_password,
+            "WEB_HOST": settings.web_host,
+            "WEB_PORT": str(settings.web_port),
+            "WEB_SECRET": settings.web_secret,
+            "PUBLIC_BASE_URL": settings.public_base_url,
+            "CURRENCY": settings.currency,
+        }
+        return str(mapping.get(key, "") or "").strip()
+    except Exception:
+        return ""
+
+
+def _has_web_password() -> bool:
+    creds = load_web_admin()
+    return bool((creds.get("password") or "").strip())
+
+
+def _has_bot_token() -> bool:
+    return bool(_env_get("BOT_TOKEN"))
+
+
+def _has_admin_ids() -> bool:
+    raw = _env_get("ADMIN_IDS")
+    if not raw:
+        return False
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    for p in parts:
+        try:
+            int(p)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def is_setup_complete() -> bool:
+    """True when setup flag exists, or required config is present.
+
+    Existing installs that already have a bot token and web password are
+    auto-flagged on first check so the wizard never traps them — unless a
+    setup session is in progress (partial wizard saves).
+    """
+    if SETUP_FLAG.exists():
+        return True
+
+    has_pw = _has_web_password()
+    has_token = _has_bot_token()
+    has_admins = _has_admin_ids()
+
+    # Wizard mid-flight: do not treat partial credentials as "done"
+    if SETUP_IN_PROGRESS.exists():
+        return False
+
+    # Existing installs: token + web password → never trap behind wizard
+    if has_pw and has_token:
+        mark_setup_complete()
+        return True
+
+    return has_pw and has_token and has_admins
+
+
+def _escape_env_value(val: str) -> str:
+    return (
+        (val or "")
+        .replace("\r", "")
+        .strip()
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+    )
+
+
+def update_env_keys(updates: dict[str, str | int | None]) -> Path:
+    """Merge keys into .env without wiping unknown keys or comments when possible.
+
+    Known keys are upserted; if the file is missing, a minimal file is created.
+    Ensures WEB_SECRET exists (generates one if blank/missing).
+    """
+    cleaned: dict[str, str] = {}
+    for k, v in updates.items():
+        if v is None:
+            continue
+        cleaned[str(k)] = str(v).replace("\r", "").strip()
+
+    if ENV_PATH.exists():
+        text = ENV_PATH.read_text(encoding="utf-8")
+    else:
+        text = ""
+
+    def upsert(src: str, key: str, value: str) -> str:
+        line = f'{key}="{_escape_env_value(value)}"'
+        pattern = re.compile(rf"^{re.escape(key)}=.*$", re.M)
+        if pattern.search(src):
+            return pattern.sub(line, src)
+        if src and not src.endswith("\n"):
+            src += "\n"
+        return src + line + "\n"
+
+    for key, value in cleaned.items():
+        text = upsert(text, key, value)
+
+    # Ensure WEB_SECRET is present and not a known placeholder
+    placeholders = {"", "change-me", "change-this-long-random-secret"}
+    merged_secret = (cleaned.get("WEB_SECRET") or _read_env_file().get("WEB_SECRET") or "").strip()
+    if merged_secret in placeholders:
+        text = upsert(text, "WEB_SECRET", secrets.token_hex(32))
+
+    ENV_PATH.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
+    try:
+        ENV_PATH.chmod(0o600)
+    except OSError:
+        pass
+    get_settings.cache_clear()
+    return ENV_PATH
+
+
+def ensure_web_secret() -> str:
+    """Return current WEB_SECRET, generating and persisting one if missing."""
+    placeholders = {"", "change-me", "change-this-long-random-secret"}
+    secret = (_env_get("WEB_SECRET") or "").strip()
+    if secret in placeholders:
+        secret = secrets.token_hex(32)
+        update_env_keys({"WEB_SECRET": secret})
+        return secret
+    return secret
+
+
+def current_setup_values() -> dict[str, str]:
+    """Values for pre-filling the wizard form."""
+    creds = load_web_admin()
+    return {
+        "username": creds.get("username") or "admin",
+        "BOT_TOKEN": _env_get("BOT_TOKEN"),
+        "BOT_USERNAME": _env_get("BOT_USERNAME"),
+        "ADMIN_IDS": _env_get("ADMIN_IDS"),
+        "PG_BASE_URL": _env_get("PG_BASE_URL"),
+        "PG_USERNAME": _env_get("PG_USERNAME"),
+        "PG_PASSWORD": _env_get("PG_PASSWORD"),
+        "WEB_PORT": _env_get("WEB_PORT") or "9000",
+        "PUBLIC_BASE_URL": _env_get("PUBLIC_BASE_URL"),
+        "CURRENCY": _env_get("CURRENCY") or "تومان",
+    }
+
+
+def parse_admin_ids(raw: str) -> list[int]:
+    ids: list[int] = []
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        ids.append(int(part))
+    return ids
+
+
+def panel_url_hint(public_base: str = "", web_port: str = "9000") -> str:
+    base = (public_base or "").rstrip("/")
+    if base:
+        return base + "/login"
+    return f"http://127.0.0.1:{web_port or '9000'}/login"
