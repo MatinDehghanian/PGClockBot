@@ -1239,6 +1239,57 @@ def create_api_app(lifespan=None) -> FastAPI:
         await save_notify_prefs(session, dict(form))
         return RedirectResponse("/settings?tab=notifications&saved=1", status_code=303)
 
+    @app.post("/supports/save")
+    async def supports_save(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from urllib.parse import quote
+
+        from app.services.support_contacts import upsert_support_contact
+
+        form = await request.form()
+        contact_id = str(form.get("id") or "").strip() or None
+        title = str(form.get("title") or "").strip()
+        telegram = str(form.get("telegram") or "").strip()
+        try:
+            sort = int(str(form.get("sort") or "0").strip() or "0")
+        except ValueError:
+            sort = 0
+        enabled = str(form.get("enabled") or "") in {"1", "on", "true", "yes"}
+        # unchecked checkbox means disabled when editing existing
+        if contact_id and "enabled" not in form:
+            enabled = False
+        _, err = await upsert_support_contact(
+            session,
+            contact_id=contact_id,
+            title=title,
+            telegram=telegram,
+            sort=sort,
+            enabled=enabled,
+        )
+        if err:
+            return RedirectResponse(
+                f"/settings?tab=supports&err={quote(err)}",
+                status_code=303,
+            )
+        return RedirectResponse("/settings?tab=supports&saved=1", status_code=303)
+
+    @app.post("/supports/delete")
+    async def supports_delete(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.support_contacts import delete_support_contact
+
+        form = await request.form()
+        contact_id = str(form.get("id") or "").strip()
+        if contact_id:
+            await delete_support_contact(session, contact_id)
+        return RedirectResponse("/settings?tab=supports&saved=1", status_code=303)
+
     def _menu_tab_context(values: dict) -> dict:
         from app.bot.keyboards import DEFAULT_MENU_ORDER
 
@@ -1329,6 +1380,10 @@ def create_api_app(lifespan=None) -> FastAPI:
             env_values = current_setup_values()
             ctx["env_values"] = env_values
             ctx["bot_status"] = await _bot_token_status(env_values.get("BOT_TOKEN") or "")
+        elif tab == "supports":
+            from app.services.support_contacts import get_support_contacts
+
+            ctx["support_contacts"] = await get_support_contacts(session)
 
         return render(request, "settings.html", ctx)
 

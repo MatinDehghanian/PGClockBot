@@ -10,6 +10,11 @@ from aiogram.types import (
 
 from app.config import get_settings
 from app.db.models import Plan, Role
+from app.services.support_contacts import (
+    active_support_contacts,
+    parse_support_contacts,
+    support_chat_url,
+)
 from app.services.users import DEFAULT_SETTINGS, on
 
 # Default order for user menu items (drag-and-drop in web panel edits menu_order)
@@ -88,7 +93,27 @@ def main_menu(
         elif key == "wallet" and on(_t(ui, "show_wallet")):
             add_mid(InlineKeyboardButton(text=_t(ui, "btn_wallet"), callback_data="wallet:home"))
         elif key == "support" and on(_t(ui, "show_support")):
-            add_mid(InlineKeyboardButton(text=_t(ui, "btn_support"), callback_data="support:home"))
+            contacts = active_support_contacts(
+                parse_support_contacts((ui or {}).get("support_contacts"))
+            )
+            if len(contacts) == 1:
+                url = support_chat_url(contacts[0].get("telegram") or "")
+                if url:
+                    add_mid(
+                        InlineKeyboardButton(text=_t(ui, "btn_support"), url=url)
+                    )
+                else:
+                    add_mid(
+                        InlineKeyboardButton(
+                            text=_t(ui, "btn_support"), callback_data="support:home"
+                        )
+                    )
+            else:
+                add_mid(
+                    InlineKeyboardButton(
+                        text=_t(ui, "btn_support"), callback_data="support:home"
+                    )
+                )
         elif key == "guide" and on(_t(ui, "show_guide")):
             add_mid(InlineKeyboardButton(text=_t(ui, "btn_guide"), callback_data="help:guide"))
         elif key == "faq" and on(_t(ui, "show_faq")):
@@ -321,6 +346,20 @@ def support_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="menu:home")],
         ]
     )
+
+
+def support_contacts_keyboard(contacts: list[dict], ui: dict | None = None) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for c in contacts:
+        url = support_chat_url(c.get("telegram") or "")
+        title = str(c.get("title") or "پشتیبان")[:64]
+        if url:
+            rows.append([InlineKeyboardButton(text=f"💬 {title}", url=url)])
+    rows.append(
+        [InlineKeyboardButton(text="🟣✉️ تیکت پشتیبانی", callback_data="support:tickets")]
+    )
+    rows.append([InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="menu:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def admin_home() -> InlineKeyboardMarkup:

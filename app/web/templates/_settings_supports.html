@@ -1,0 +1,74 @@
+<div class="card settings-card">
+  <h2>پشتیبان‌های تلگرام</h2>
+  <p class="muted update-card-caption">
+    اگر فقط یک پشتیبان فعال باشد، دکمه پشتیبانی در بات مستقیم به چت او می‌رود.
+    اگر چند پشتیبان فعال باشد، لیست برای انتخاب کاربر باز می‌شود.
+    بدون پشتیبان، همان سیستم تیکت قبلی نمایش داده می‌شود.
+  </p>
+
+  {% if not support_contacts %}
+  <p class="muted">هنوز پشتیبانی تعریف نشده.</p>
+  {% else %}
+  <div class="support-list">
+    {% for c in support_contacts %}
+    <form method="post" action="/supports/save" class="support-row">
+      <input type="hidden" name="id" value="{{ c.id }}" />
+      <div class="support-fields">
+        <label>عنوان
+          <input name="title" value="{{ c.title }}" required maxlength="80" placeholder="مثلاً پشتیبان ربات" />
+        </label>
+        <label>آیدی / یوزرنیم تلگرام
+          <input name="telegram" value="{{ c.telegram }}" required dir="ltr" placeholder="@username یا 123456789" />
+        </label>
+        <label>ترتیب
+          <input name="sort" type="number" value="{{ c.sort }}" dir="ltr" />
+        </label>
+        <label class="support-enabled">
+          <input type="checkbox" name="enabled" value="1" {% if c.enabled %}checked{% endif %} />
+          فعال
+        </label>
+      </div>
+      <div class="support-actions">
+        <button class="btn" type="submit">ذخیره</button>
+        <button class="btn btn-ghost" type="submit" formaction="/supports/delete" formmethod="post"
+                onclick="return confirm('این پشتیبان حذف شود؟')">حذف</button>
+      </div>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="card settings-card">
+  <h2>افزودن پشتیبان</h2>
+  <form method="post" action="/supports/save" class="settings-form">
+    <div class="settings-grid">
+      <div class="setting-item">
+        <label>عنوان
+          <small class="muted">مثلاً پشتیبان ربات، پشتیبان سرور</small>
+          <input name="title" required maxlength="80" placeholder="پشتیبان ربات" />
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>آیدی یا یوزرنیم تلگرام
+          <small class="muted">@username یا آیدی عددی</small>
+          <input name="telegram" required dir="ltr" placeholder="@support" />
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>ترتیب نمایش
+          <input name="sort" type="number" value="0" dir="ltr" />
+        </label>
+      </div>
+      <div class="setting-item">
+        <label class="support-enabled" style="margin-top:1.4rem">
+          <input type="checkbox" name="enabled" value="1" checked />
+          فعال باشد
+        </label>
+      </div>
+    </div>
+    <div class="actions sticky-actions">
+      <button class="btn" type="submit">افزودن پشتیبان</button>
+    </div>
+  </form>
+</div>
