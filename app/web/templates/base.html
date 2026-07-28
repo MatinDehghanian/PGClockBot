@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="dark" />
-  <title>{% block title %}پنل مدیریت{% endblock %} · کلاک بات</title>
+  <title>{% block title %}پنل مدیریت{% endblock %} · MrClockBot</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/panel.css?v=kebab-overlay-179" />
-  <link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/panel.css?v=logo-mrclock-180" />
+  <link rel="icon" href="/static/logo-64.png" type="image/png" />
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -23,20 +23,20 @@
   {% set has_pg = is_admin or (pg_nav|length > 0) %}
   <div class="shell">
     <header class="topbar mobile-only">
+      <div class="topbar-brand">
+        <span class="brand-logo" aria-hidden="true"><img src="/static/logo.png" alt="" /></span>
+        <strong dir="ltr">MrClockBot</strong>
+      </div>
       <button type="button" class="menu-toggle" id="menu-toggle" aria-label="منو" aria-expanded="false" aria-controls="sidebar">
         <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span>
       </button>
-      <div class="topbar-brand">
-        <img src="/static/logo.svg" alt="" />
-        <strong>کلاک بات</strong>
-      </div>
     </header>
 
     <aside class="side" id="sidebar" aria-label="منوی اصلی">
       <div class="brand desk-only">
-        <img src="/static/logo.svg" alt="" />
+        <span class="brand-logo" aria-hidden="true"><img src="/static/logo.png" alt="" /></span>
         <div>
-          <strong>کلاک بات</strong>
+          <strong dir="ltr">MrClockBot</strong>
           <small class="brand-meta">
             <span>{{ staff.username }}</span>
             {% if is_admin %}
@@ -194,7 +194,7 @@
         {% block content %}{% endblock %}
       </div>
       <footer class="site-footer desk-only">
-        <span class="muted">© ۲۰۲۶ کلاک بات</span>
+        <span class="muted">© ۲۰۲۶ MrClockBot</span>
         <a class="link-quiet" href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener">GitHub</a>
       </footer>
     </main>
