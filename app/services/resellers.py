@@ -46,14 +46,25 @@ SETUP_TOKEN_HOURS = 48
 
 
 async def get_reseller_panel_base_url(session: AsyncSession) -> str:
-    """Admin-configured reseller panel URL, else PUBLIC_BASE_URL."""
-    from app.config import get_settings
+    """Custom reseller URL → PUBLIC_BASE_URL → http://{server_ip}:{WEB_PORT}."""
+    from app.services.setup_wizard import default_panel_base_url
     from app.services.users import get_setting
 
     custom = (await get_setting(session, "reseller_panel_base_url") or "").strip().rstrip("/")
     if custom:
         return custom
-    return (get_settings().public_base_url or "").strip().rstrip("/")
+    return default_panel_base_url()
+
+
+async def get_reseller_pg_panel_base_url(session: AsyncSession) -> str:
+    """Custom PG panel URL for resellers → else PG_BASE_URL (admin panel)."""
+    from app.config import get_settings
+    from app.services.users import get_setting
+
+    custom = (await get_setting(session, "reseller_pg_panel_base_url") or "").strip().rstrip("/")
+    if custom:
+        return custom
+    return (get_settings().pg_base_url or "").strip().rstrip("/")
 
 
 def parse_perms(raw: str | None) -> list[str]:
@@ -453,12 +464,17 @@ async def provision_reseller(
     )
 
     base = (panel_base_url or "").rstrip("/")
+    if not base:
+        base = await get_reseller_panel_base_url(session)
     setup_url = f"{base}/rsetup/{profile.setup_token}" if base and profile.setup_token else ""
+
+    pg_panel = await get_reseller_pg_panel_base_url(session)
 
     return {
         "profile": profile,
         "pg_username": pg_username,
         "pg_password": pg_password,
+        "pg_panel_url": pg_panel,
         "setup_url": setup_url,
         "setup_token": profile.setup_token,
         "panel_url": base,
@@ -468,40 +484,58 @@ async def provision_reseller(
 
 
 def format_credentials_message(creds: dict) -> str:
-    """Notify reseller after approval — setup link only (no web passwords)."""
+    """Notify reseller after approval — bot panel + PasarGuard panel URLs."""
     lines = [
         "✅ <b>درخواست نمایندگی تأیید شد</b>",
         "",
         f"کمیسیون شما: <b>{creds.get('commission_percent', 0)}٪</b>",
-        "",
-        "برای امنیت، یوزر و رمز وب‌پنل را خودتان می‌سازید.",
     ]
+
+    panel = (creds.get("panel_url") or "").rstrip("/")
+    lines += [
+        "",
+        "🌐 <b>وب‌پنل ربات (نماینده)</b>",
+    ]
+    if panel:
+        lines += [
+            f"آدرس پنل: {panel}",
+            f"آدرس ورود: {panel}/login",
+        ]
+    else:
+        lines.append("آدرس پنل هنوز تنظیم نشده — از ادمین بپرسید.")
+
     if creds.get("setup_url"):
         lines += [
             "",
             "🔗 <b>لینک راه‌اندازی (یک‌بارمصرف، ۴۸ ساعت)</b>",
             creds["setup_url"],
             "",
-            "در این صفحه:",
-            "۱) نام کاربری و رمز وب‌پنل خود را بسازید",
-            "۲) توکن ربات اختصاصی‌تان از @BotFather را وارد کنید",
+            "در این صفحه یوزر/رمز وب و توکن ربات اختصاصی‌تان را می‌سازید.",
+            "برای امنیت، یوزر و رمز را خودتان انتخاب کنید.",
         ]
-        panel = (creds.get("panel_url") or "").rstrip("/")
-        if panel:
-            lines += ["", f"ورود بعدی به پنل: {panel}/login"]
     else:
         lines += [
             "",
-            "از ادمین بخواهید لینک راه‌اندازی را برایتان بفرستد.",
+            "لینک راه‌اندازی ساخته نشد — از ادمین لینک بخواهید.",
         ]
+
+    pg_panel = (creds.get("pg_panel_url") or "").rstrip("/")
+    lines += [
+        "",
+        "🛡 <b>پنل پاسارگارد</b>",
+    ]
+    if pg_panel:
+        lines.append(f"آدرس پنل: {pg_panel}")
+    else:
+        lines.append("آدرس پاسارگارد هنوز تنظیم نشده — از ادمین بپرسید.")
+
     if creds.get("pg_username") and creds.get("pg_password"):
         lines += [
-            "",
-            "🛡 <b>اکانت پاسارگارد (اختیاری — توسط ادمین ساخته شد)</b>",
             f"نام کاربری: <code>{creds['pg_username']}</code>",
             f"رمز: <code>{creds['pg_password']}</code>",
             "رمز را عوض کنید و در جای امن نگه دارید.",
         ]
+
     lines += [
         "",
         "⚠️ لینک راه‌اندازی را با کسی به اشتراک نگذارید.",
@@ -615,3 +649,92 @@ async def reject_application(
     if admin_note:
         app.admin_note = admin_note
     await session.commit()
+
+
+async def revoke_reseller(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    delete_pg_admin: bool = True,
+    commit: bool = True,
+    reason: str | None = None,
+) -> dict:
+    """Remove reseller profile, unlink customers, demote role to user.
+
+    Does not delete the BotUser row. Optional PasarGuard admin cleanup.
+    """
+    from sqlalchemy import update
+
+    from app.services.pasarguard import get_pg
+
+    user = await session.get(BotUser, user_id)
+    if not user:
+        raise ValueError("کاربر یافت نشد")
+    profile = await get_reseller_profile(session, user_id)
+    if not profile:
+        raise ValueError("این کاربر نماینده نیست")
+
+    pg_username = (profile.pg_admin_username or "").strip() or None
+    pg_deleted = False
+    if delete_pg_admin and pg_username:
+        try:
+            await get_pg().delete_admin(pg_username)
+            pg_deleted = True
+        except Exception:
+            pg_deleted = False
+
+    await session.execute(
+        update(BotUser).where(BotUser.reseller_id == user_id).values(reseller_id=None)
+    )
+    await session.execute(
+        update(Order).where(Order.reseller_id == user_id).values(reseller_id=None)
+    )
+
+    await session.delete(profile)
+    if user.role == Role.RESELLER.value:
+        user.role = Role.USER.value
+
+    if commit:
+        await session.commit()
+        await session.refresh(user)
+
+    return {
+        "user_id": user_id,
+        "telegram_id": user.telegram_id,
+        "pg_admin_username": pg_username,
+        "pg_admin_deleted": pg_deleted,
+        "reason": (reason or "").strip() or None,
+    }
+
+
+def format_revoke_message(reason: str) -> str:
+    """Notify former reseller that their agency access was removed."""
+    reason = (reason or "").strip()
+    lines = [
+        "❌ <b>نمایندگی شما حذف شد</b>",
+        "",
+        "دسترسی پنل نماینده و ادمین پاسارگارد مرتبط لغو شده است.",
+    ]
+    if reason:
+        lines += ["", f"علت: {reason}"]
+    lines += ["", "در صورت نیاز با پشتیبانی در ارتباط باشید."]
+    return "\n".join(lines)
+
+
+async def notify_reseller_revoked(telegram_id: int, reason: str) -> bool:
+    """Best-effort Telegram notice after revoke. Returns True if sent."""
+    try:
+        from app.bot import create_bot
+
+        bot = create_bot()
+        try:
+            await bot.send_message(
+                telegram_id,
+                format_revoke_message(reason),
+                parse_mode="HTML",
+            )
+            return True
+        finally:
+            await bot.session.close()
+    except Exception:
+        return False

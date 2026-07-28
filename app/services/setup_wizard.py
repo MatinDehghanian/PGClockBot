@@ -249,8 +249,54 @@ def parse_admin_ids(raw: str) -> list[int]:
     return ids
 
 
-def panel_url_hint(public_base: str = "", web_port: str = "9000") -> str:
-    base = (public_base or "").rstrip("/")
+def detect_server_ip() -> str:
+    """Best-effort public/LAN IP for panel links shown to resellers."""
+    import socket
+    import urllib.request
+
+    for url in ("https://api.ipify.org", "https://ifconfig.me/ip"):
+        try:
+            with urllib.request.urlopen(url, timeout=3) as resp:
+                ip = (resp.read() or b"").decode("utf-8", errors="ignore").strip()
+            if ip and " " not in ip and len(ip) < 64 and not ip.lower().startswith("<"):
+                return ip
+        except Exception:
+            continue
+    try:
+        hostname = socket.gethostname()
+        ip = socket.gethostbyname(hostname)
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception:
+        pass
+    try:
+        # Outbound UDP trick — no packets sent; reveals preferred local IP
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            if ip:
+                return ip
+    except Exception:
+        pass
+    return "127.0.0.1"
+
+
+def default_panel_base_url(*, public_base: str | None = None, web_port: int | str | None = None) -> str:
+    """PUBLIC_BASE_URL if set, else http://{server_ip}:{WEB_PORT} (default 9000)."""
+    from app.config import get_settings
+
+    settings = get_settings()
+    base = (public_base if public_base is not None else settings.public_base_url or "").strip().rstrip("/")
     if base:
-        return base + "/"
-    return f"http://127.0.0.1:{web_port or '9000'}/"
+        return base
+    port = web_port if web_port is not None else settings.web_port
+    try:
+        port_s = str(int(port or 9000))
+    except (TypeError, ValueError):
+        port_s = "9000"
+    return f"http://{detect_server_ip()}:{port_s}"
+
+
+def panel_url_hint(public_base: str = "", web_port: str = "9000") -> str:
+    base = default_panel_base_url(public_base=public_base, web_port=web_port)
+    return base.rstrip("/") + "/"

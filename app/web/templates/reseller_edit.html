@@ -60,4 +60,59 @@
     </div>
   </form>
 </div>
+
+<div class="card">
+  <h2>تغییر نقش کاربر</h2>
+  <p class="muted">نقش فعلی: <b>{% if user.role=='admin' %}مدیر{% elif user.role=='reseller' %}نماینده{% else %}کاربر{% endif %}</b></p>
+  <form method="post" action="/resellers/{{ user.id }}/role" class="form-stack"
+        onsubmit="
+          if (this.role.value === 'user') {
+            var r = this.reason.value.trim();
+            if (r.length < 3) { alert('برای تغییر به کاربر عادی، علت الزامی است'); return false; }
+          }
+          return true;
+        ">
+    <div class="form-row">
+      <div>
+        <label class="form-field">نقش جدید
+          <select name="role">
+            <option value="user" {% if user.role=='user' %}selected{% endif %}>کاربر</option>
+            <option value="reseller" {% if user.role=='reseller' %}selected{% endif %}>نماینده</option>
+            <option value="admin" {% if user.role=='admin' %}selected{% endif %}>مدیر</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <label class="form-field">علت (برای تغییر به کاربر عادی)
+      <small class="muted">در صورت انتخاب نقش کاربر، برای نماینده ارسال می‌شود</small>
+      <textarea name="reason" rows="2" placeholder="مثال: تغییر نقش توسط ادمین"></textarea>
+    </label>
+    <button class="btn" type="submit">اعمال نقش</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>حذف نمایندگی</h2>
+  <p class="muted">پروفایل نماینده و در صورت وجود ادمین پاسارگارد حذف می‌شود. علت برای کاربر در ربات ارسال می‌شود و نقشش به «کاربر» برمی‌گردد.</p>
+  <form method="post" action="/resellers/{{ user.id }}/delete" class="form-stack"
+        onsubmit="return confirm('نمایندگی حذف شود و علت برای کاربر ارسال شود؟')">
+    <label class="form-field">علت حذف
+      <small class="muted">برای نماینده ارسال می‌شود — حداقل ۳ کاراکتر</small>
+      <textarea name="reason" required minlength="3" rows="3" placeholder="مثال: نقض قوانین / عدم فعالیت / درخواست خود کاربر"></textarea>
+    </label>
+    <button class="btn btn-danger" type="submit">حذف نمایندگی</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>حذف کامل کاربر</h2>
+  <p class="muted">کاربر بات و تمام سفارش‌ها، سرویس‌ها و تیکت‌های مرتبط حذف می‌شوند. برگشت‌ناپذیر است.</p>
+  <form method="post" action="/resellers/{{ user.id }}/delete-user" class="form-stack"
+        onsubmit="return confirm('کاربر کامل حذف شود؟ این عمل برگشت‌ناپذیر است.')">
+    <label class="form-field">علت حذف
+      <textarea name="reason" required minlength="3" rows="2"></textarea>
+    </label>
+    <button class="btn btn-danger" type="submit">حذف کامل کاربر</button>
+  </form>
+</div>
 {% endblock %}

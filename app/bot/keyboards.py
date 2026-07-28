@@ -506,15 +506,52 @@ def admin_users_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def admin_user_actions(user_id: int, *, is_blocked: bool) -> InlineKeyboardMarkup:
+def admin_user_actions(
+    user_id: int,
+    *,
+    is_blocked: bool,
+    role: str | None = None,
+    confirm_delete: bool = False,
+) -> InlineKeyboardMarkup:
     block_label = "🔓 رفع مسدودی" if is_blocked else "🚫 مسدود کردن"
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=block_label, callback_data=f"adm:users:block:{user_id}")],
-            [InlineKeyboardButton(text="🔎 جستجوی دیگر", callback_data="adm:users:search")],
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:users")],
-        ]
-    )
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text=block_label, callback_data=f"adm:users:block:{user_id}")],
+    ]
+    if role == "reseller":
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🤝 حذف نمایندگی",
+                    callback_data=f"adm:users:unres:{user_id}",
+                )
+            ]
+        )
+    if confirm_delete:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="⚠️ تأیید حذف کامل کاربر",
+                    callback_data=f"adm:users:del:{user_id}",
+                )
+            ]
+        )
+        rows.append(
+            [InlineKeyboardButton(text="⬅️ انصراف", callback_data=f"adm:users:view:{user_id}")]
+        )
+    else:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🗑 حذف کامل کاربر",
+                    callback_data=f"adm:users:delask:{user_id}",
+                )
+            ]
+        )
+        rows.append(
+            [InlineKeyboardButton(text="🔎 جستجوی دیگر", callback_data="adm:users:search")]
+        )
+        rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:users")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def order_review(order_id: int) -> InlineKeyboardMarkup:

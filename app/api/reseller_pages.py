@@ -19,14 +19,17 @@ from app.services.resellers import (
     format_credentials_message,
     get_application,
     get_reseller_panel_base_url,
+    get_reseller_pg_panel_base_url,
     join_perms,
     list_applications,
     list_reseller_plans,
     make_reseller,
     normalize_feature_perms,
+    notify_reseller_revoked,
     parse_perms,
     provision_reseller,
     reject_application,
+    revoke_reseller,
 )
 from app.services.web_auth import hash_password
 
@@ -58,6 +61,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         session: AsyncSession = Depends(get_db),
     ):
         from app.config import get_settings
+        from app.services.setup_wizard import default_panel_base_url
         from app.services.users import get_setting
 
         result = await session.execute(
@@ -73,7 +77,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
             roles = []
         panel_url = await get_reseller_panel_base_url(session)
         custom_url = (await get_setting(session, "reseller_panel_base_url") or "").strip()
-        default_url = (get_settings().public_base_url or "").rstrip("/")
+        default_url = default_panel_base_url()
+        pg_panel_url = await get_reseller_pg_panel_base_url(session)
+        custom_pg_url = (await get_setting(session, "reseller_pg_panel_base_url") or "").strip()
+        default_pg_url = (get_settings().pg_base_url or "").rstrip("/")
         return render(
             request,
             "resellers.html",
@@ -87,6 +94,11 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
                 "panel_url": panel_url,
                 "custom_panel_url": custom_url,
                 "default_panel_url": default_url,
+                "using_custom_panel_url": bool(custom_url),
+                "pg_panel_url": pg_panel_url,
+                "custom_pg_panel_url": custom_pg_url,
+                "default_pg_panel_url": default_pg_url,
+                "using_custom_pg_panel_url": bool(custom_pg_url),
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -101,10 +113,12 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         from app.services.users import set_setting
 
         form = await request.form()
-        url = str(form.get("reseller_panel_base_url") or "").strip().rstrip("/")
-        await set_setting(session, "reseller_panel_base_url", url)
+        bot_url = str(form.get("reseller_panel_base_url") or "").strip().rstrip("/")
+        pg_url = str(form.get("reseller_pg_panel_base_url") or "").strip().rstrip("/")
+        await set_setting(session, "reseller_panel_base_url", bot_url)
+        await set_setting(session, "reseller_pg_panel_base_url", pg_url)
         return RedirectResponse(
-            f"/resellers?ok={_q('آدرس وب‌پنل نماینده ذخیره شد')}",
+            f"/resellers?ok={_q('آدرس‌های پنل نماینده ذخیره شد')}",
             status_code=303,
         )
 
@@ -247,6 +261,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
                             user.telegram_id,
                             "🔗 لینک جدید راه‌اندازی پنل نماینده:\n"
                             f"{base}/rsetup/{token}\n\n"
+                            f"آدرس پنل: {base}\n"
+                            f"ورود: {base}/login\n\n"
                             "۴۸ ساعت اعتبار دارد. یوزر/رمز را خودتان می‌سازید.",
                         )
                     finally:
@@ -256,6 +272,129 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         user.role = Role.RESELLER.value if profile.is_active else Role.USER.value
         await session.commit()
         return RedirectResponse(f"/resellers/{user_id}/edit?ok={_q('ذخیره شد')}", status_code=303)
+
+    @app.post("/resellers/{user_id}/delete")
+    async def reseller_delete(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        form = await request.form()
+        reason = str(form.get("reason") or "").strip()
+        if len(reason) < 3:
+            return RedirectResponse(
+                f"/resellers?err={_q('علت حذف نمایندگی الزامی است (حداقل ۳ کاراکتر)')}",
+                status_code=303,
+            )
+        try:
+            info = await revoke_reseller(
+                session, user_id, delete_pg_admin=True, reason=reason
+            )
+        except ValueError as e:
+            return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
+        except Exception as e:
+            return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
+        notified = await notify_reseller_revoked(int(info["telegram_id"]), reason)
+        label = info.get("telegram_id") or user_id
+        note = " — پیام علت ارسال شد" if notified else " — پیام تلگرام ارسال نشد"
+        return RedirectResponse(
+            f"/resellers?ok={_q(f'نمایندگی {label} حذف شد{note}')}",
+            status_code=303,
+        )
+
+    @app.post("/resellers/{user_id}/role")
+    async def reseller_set_role(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        form = await request.form()
+        role = str(form.get("role") or "").strip()
+        user = await session.get(BotUser, user_id)
+        profile = (
+            await session.execute(select(ResellerProfile).where(ResellerProfile.user_id == user_id))
+        ).scalar_one_or_none()
+        if not user or not profile:
+            return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
+        if role not in {Role.USER.value, Role.RESELLER.value, Role.ADMIN.value}:
+            return RedirectResponse(f"/resellers?err={_q('نقش نامعتبر')}", status_code=303)
+
+        if role == Role.USER.value:
+            reason = str(form.get("reason") or "").strip() or "تغییر نقش توسط ادمین"
+            try:
+                info = await revoke_reseller(
+                    session, user_id, delete_pg_admin=True, reason=reason
+                )
+            except ValueError as e:
+                return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
+            await notify_reseller_revoked(int(info["telegram_id"]), reason)
+            return RedirectResponse(
+                f"/resellers?ok={_q('نقش به کاربر عادی تغییر کرد و اطلاع داده شد')}",
+                status_code=303,
+            )
+
+        if role == Role.ADMIN.value:
+            profile.is_active = False
+            user.role = Role.ADMIN.value
+            await session.commit()
+            return RedirectResponse(
+                f"/resellers?ok={_q('نقش به مدیر تغییر کرد (پروفایل نماینده غیرفعال شد)')}",
+                status_code=303,
+            )
+
+        # reseller
+        profile.is_active = True
+        user.role = Role.RESELLER.value
+        await session.commit()
+        return RedirectResponse(f"/resellers?ok={_q('نقش نماینده فعال شد')}", status_code=303)
+
+    @app.post("/resellers/{user_id}/delete-user")
+    async def reseller_delete_user(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Full bot-user delete from resellers tab (same cascade as /users delete)."""
+        form = await request.form()
+        reason = str(form.get("reason") or "").strip()
+        if len(reason) < 3:
+            return RedirectResponse(
+                f"/resellers?err={_q('علت حذف کاربر الزامی است')}",
+                status_code=303,
+            )
+        from app.services.users import delete_bot_user
+
+        # Notify before delete while telegram_id still available
+        user = await session.get(BotUser, user_id)
+        if not user:
+            return RedirectResponse(f"/resellers?err={_q('کاربر یافت نشد')}", status_code=303)
+        tg_id = user.telegram_id
+        try:
+            # If still reseller, notify revoke-style first
+            profile = (
+                await session.execute(
+                    select(ResellerProfile).where(ResellerProfile.user_id == user_id)
+                )
+            ).scalar_one_or_none()
+            if profile:
+                await notify_reseller_revoked(tg_id, reason)
+            info = await delete_bot_user(
+                session,
+                user_id,
+                actor_user_id=staff.get("bot_user_id"),
+            )
+        except ValueError as e:
+            return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
+        except Exception as e:
+            return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
+        label = info.get("name") or info.get("telegram_id")
+        return RedirectResponse(
+            f"/resellers?ok={_q(f'کاربر {label} کامل حذف شد')}",
+            status_code=303,
+        )
 
     # ---- plans ----
     @app.get("/resellers/plans", response_class=HTMLResponse)

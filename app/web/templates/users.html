@@ -49,6 +49,12 @@
                 {% if u.is_blocked %}رفع مسدودی{% else %}مسدود{% endif %}
               </button>
             </form>
+            {% if u.role != 'admin' %}
+            <form method="post" action="/users/{{ u.id }}/delete"
+                  onsubmit="return confirm('کاربر و تمام سفارش‌ها/سرویس‌ها/تیکت‌های مرتبط حذف شوند؟ این عمل برگشت‌ناپذیر است.')">
+              <button class="btn btn-sm btn-danger" type="submit">حذف</button>
+            </form>
+            {% endif %}
           </div>
         </td>
       </tr>

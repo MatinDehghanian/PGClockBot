@@ -5,7 +5,7 @@
 <div class="page-head">
   <div>
     <h1>نمایندگان</h1>
-    <p>سطح دسترسی وب و بات یکسان است. یوزر/رمز را نماینده خودش در لینک راه‌اندازی می‌سازد.</p>
+    <p>آدرس پنل، افزودن، تغییر نقش و حذف نمایندگان</p>
   </div>
 </div>
 
@@ -16,24 +16,61 @@
 </div>
 
 <div class="card">
-  <h2>آدرس وب‌پنل نماینده</h2>
-  <p class="muted">لینک راه‌اندازی بعد از تأیید روی این آدرس ساخته می‌شود. اگر خالی بگذارید، آدرس پیش‌فرض پنل استفاده می‌شود.</p>
-  <form method="post" action="/resellers/panel-url" class="form-stack">
-    <label class="form-field">آدرس پایه
-      <small class="muted">پیش‌فرض فعلی: <code dir="ltr">{{ default_panel_url or '— تنظیم نشده —' }}</code>
-        {% if panel_url %} · در حال استفاده: <code dir="ltr">{{ panel_url }}</code>{% endif %}
+  <h2>آدرس پنل‌ها برای نماینده</h2>
+  <p class="muted">
+    این آدرس‌ها در پیام تأیید نمایندگی ارسال می‌شوند.
+    اگر خالی بگذارید، پیش‌فرض سیستم استفاده می‌شود.
+  </p>
+  <form method="post" action="/resellers/panel-url" class="form-stack" id="reseller-urls-form">
+    <label class="form-field">آدرس وب‌پنل ربات (نماینده)
+      <small class="muted">
+        پیش‌فرض: <code dir="ltr">{{ default_panel_url }}</code>
+        · در حال استفاده: <code dir="ltr">{{ panel_url }}</code>
+        {% if using_custom_panel_url %}
+        · <span class="badge approved">اختصاصی</span>
+        {% else %}
+        · <span class="badge pending">پیش‌فرض</span>
+        {% endif %}
       </small>
-      <input name="reseller_panel_base_url" value="{{ custom_panel_url or '' }}" placeholder="https://panel.example.com" dir="ltr" />
+      <input name="reseller_panel_base_url"
+             value="{{ custom_panel_url or '' }}"
+             placeholder="{{ default_panel_url }}"
+             dir="ltr" />
+    </label>
+    <label class="form-field">آدرس پنل پاسارگارد
+      <small class="muted">
+        پیش‌فرض (پنل ادمین): <code dir="ltr">{{ default_pg_panel_url or '— تنظیم نشده —' }}</code>
+        · در حال استفاده: <code dir="ltr">{{ pg_panel_url or '—' }}</code>
+        {% if using_custom_pg_panel_url %}
+        · <span class="badge approved">اختصاصی</span>
+        {% else %}
+        · <span class="badge pending">پیش‌فرض</span>
+        {% endif %}
+      </small>
+      <input name="reseller_pg_panel_base_url"
+             value="{{ custom_pg_panel_url or '' }}"
+             placeholder="{{ default_pg_panel_url }}"
+             dir="ltr" />
     </label>
     <div class="actions">
-      <button class="btn" type="submit">ذخیره آدرس</button>
+      <button class="btn" type="submit">ذخیره آدرس‌ها</button>
+      {% if custom_panel_url or custom_pg_panel_url %}
+      <button class="btn btn-ghost" type="button"
+              onclick="
+                this.form.reseller_panel_base_url.value='';
+                this.form.reseller_pg_panel_base_url.value='';
+                this.form.submit();
+              ">
+        بازگشت هر دو به پیش‌فرض
+      </button>
+      {% endif %}
     </div>
   </form>
 </div>
 
 <div class="card">
   <h2>افزودن نماینده</h2>
-  <p class="muted">پس از ثبت، لینک راه‌اندازی یک‌بارمصرف برای ساخت یوزر وب و ثبت توکن ربات خودش ارسال می‌شود. به ربات اصلی ادمین وصل نمی‌شود.</p>
+  <p class="muted">پس از ثبت، آدرس پنل و لینک راه‌اندازی برای ساخت یوزر وب و ثبت توکن ربات ارسال می‌شود.</p>
   <form method="post" action="/resellers" class="form-stack">
     <div class="form-row">
       <div>
@@ -75,7 +112,7 @@
     </div>
 
     <div class="actions">
-      <button class="btn" type="submit">فعال‌سازی و ارسال لینک راه‌اندازی</button>
+      <button class="btn" type="submit">فعال‌سازی و ارسال اطلاعات ورود</button>
     </div>
   </form>
 </div>
@@ -86,7 +123,7 @@
   <table>
     <thead>
       <tr>
-        <th>کاربر</th><th>تلگرام</th><th>کمیسیون</th><th>وب</th><th>ربات</th><th>راه‌اندازی</th><th></th>
+        <th>کاربر</th><th>تلگرام</th><th>نقش</th><th>کمیسیون</th><th>وب</th><th>ربات</th><th>راه‌اندازی</th><th>عملیات</th>
       </tr>
     </thead>
     <tbody>
@@ -94,14 +131,57 @@
       <tr>
         <td>{{ u.full_name or u.username or '—' }}</td>
         <td class="mono">{{ u.telegram_id }}</td>
+        <td>
+          <form method="post" action="/resellers/{{ u.id }}/role" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"
+                onsubmit="
+                  if (this.role.value === 'user') {
+                    var r = prompt('علت تغییر نقش به کاربر عادی (برای نماینده ارسال می‌شود):');
+                    if (!r || r.trim().length < 3) { alert('علت الزامی است'); return false; }
+                    this.reason.value = r.trim();
+                  }
+                  return true;
+                ">
+            <input type="hidden" name="reason" value="" />
+            <select name="role" class="select-sm">
+              <option value="user" {% if u.role=='user' %}selected{% endif %}>کاربر</option>
+              <option value="reseller" {% if u.role=='reseller' %}selected{% endif %}>نماینده</option>
+              <option value="admin" {% if u.role=='admin' %}selected{% endif %}>مدیر</option>
+            </select>
+            <button class="btn btn-sm" type="submit">اعمال نقش</button>
+          </form>
+        </td>
         <td class="mono">{{ p.commission_percent }}%</td>
         <td class="mono">{{ p.web_username or '—' }}</td>
         <td class="mono">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
         <td>{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.setup_token %}<span class="badge pending">منتظر</span>{% else %}—{% endif %}</td>
-        <td><a class="btn btn-ghost" href="/resellers/{{ u.id }}/edit">ویرایش</a></td>
+        <td>
+          <div class="actions" style="margin:0;flex-wrap:wrap">
+            <a class="btn btn-ghost" href="/resellers/{{ u.id }}/edit">ویرایش</a>
+            <form method="post" action="/resellers/{{ u.id }}/delete"
+                  onsubmit="
+                    var r = prompt('علت حذف نمایندگی را بنویسید:');
+                    if (!r || r.trim().length < 3) { alert('علت الزامی است (حداقل ۳ کاراکتر)'); return false; }
+                    this.reason.value = r.trim();
+                    return confirm('نمایندگی حذف شود و علت برای کاربر ارسال شود؟');
+                  ">
+              <input type="hidden" name="reason" value="" />
+              <button class="btn btn-sm btn-danger" type="submit">حذف نمایندگی</button>
+            </form>
+            <form method="post" action="/resellers/{{ u.id }}/delete-user"
+                  onsubmit="
+                    var r = prompt('علت حذف کامل کاربر را بنویسید:');
+                    if (!r || r.trim().length < 3) { alert('علت الزامی است'); return false; }
+                    this.reason.value = r.trim();
+                    return confirm('کاربر و تمام داده‌های مرتبط کامل حذف شوند؟ برگشت‌ناپذیر است.');
+                  ">
+              <input type="hidden" name="reason" value="" />
+              <button class="btn btn-sm btn-danger" type="submit">حذف کاربر</button>
+            </form>
+          </div>
+        </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">نماینده‌ای نیست</td></tr>
+      <tr><td colspan="8" class="muted">نماینده‌ای نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>
