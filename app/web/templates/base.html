@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/panel.css?v=login-pw-eye-172" />
+  <link rel="stylesheet" href="/static/panel.css?v=pg-dash-mobile-176" />
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
   {% block head %}{% endblock %}
 </head>
@@ -214,7 +214,7 @@
       el.classList.toggle('is-scrollable', can);
     }
     function refreshHScroll(){
-      document.querySelectorAll('.table-wrap, .section-tabs, td .actions').forEach(markScrollable);
+      document.querySelectorAll('.table-wrap, .section-tabs').forEach(markScrollable);
     }
     refreshHScroll();
     window.addEventListener('resize', refreshHScroll);
@@ -222,6 +222,34 @@
       const ro = new ResizeObserver(refreshHScroll);
       document.querySelectorAll('.table-wrap, .section-tabs').forEach(el => ro.observe(el));
     }
+
+    /* Mobile row action menus (three-dot) */
+    document.addEventListener('click', (e) => {
+      const toggle = e.target.closest('.row-actions-toggle');
+      if (toggle) {
+        e.preventDefault();
+        e.stopPropagation();
+        const wrap = toggle.closest('.row-actions');
+        const open = wrap && wrap.classList.contains('open');
+        document.querySelectorAll('.row-actions.open').forEach(el => {
+          el.classList.remove('open');
+          const btn = el.querySelector('.row-actions-toggle');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        });
+        if (wrap && !open) {
+          wrap.classList.add('open');
+          toggle.setAttribute('aria-expanded', 'true');
+        }
+        return;
+      }
+      if (!e.target.closest('.row-actions')) {
+        document.querySelectorAll('.row-actions.open').forEach(el => {
+          el.classList.remove('open');
+          const btn = el.querySelector('.row-actions-toggle');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        });
+      }
+    });
 
     /* Lightweight modals */
     function closeModal(el){

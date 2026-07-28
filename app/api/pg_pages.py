@@ -116,27 +116,34 @@ def register_pg_pages(
 ):
     @app.get("/pg", response_class=HTMLResponse)
     async def pg_home(request: Request, staff: dict = Depends(require_pg_perm("pg_overview"))):
+        from app.services.pg_overview import build_reseller_pg_overview, is_server_stat_key
+
         err = None
         stats_rows: list[tuple[str, str]] = []
         nodes = []
         counts = {"templates": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0}
+        reseller_overview = None
         try:
             pg = get_pg()
-            raw = await pg.get_system_stats()
-            if isinstance(raw, dict):
-                for key, val in raw.items():
-                    if isinstance(val, (dict, list)):
-                        continue
-                    stats_rows.append(format_stat_row(str(key), val))
-            if _is_admin(staff) or staff_has_pg(staff, "pg_nodes"):
+            if _is_admin(staff):
+                raw = await pg.get_system_stats()
+                if isinstance(raw, dict):
+                    for key, val in raw.items():
+                        if isinstance(val, (dict, list)):
+                            continue
+                        if is_server_stat_key(str(key)):
+                            continue
+                        stats_rows.append(format_stat_row(str(key), val))
                 nodes = await pg.get_nodes_simple()
                 counts["nodes"] = len(nodes)
-            if _is_admin(staff) or staff_has_pg(staff, "pg_templates"):
                 counts["templates"] = len(await pg.get_user_templates_simple())
-            if _is_admin(staff) or staff_has_pg(staff, "pg_groups"):
                 counts["groups"] = len(await pg.get_groups_simple())
-            if _is_admin(staff) or staff_has_pg(staff, "pg_hosts"):
                 counts["hosts"] = len(await pg.get_hosts())
+            else:
+                # Reseller: only own users/usage/limits — never server/hardware stats
+                reseller_overview = await build_reseller_pg_overview(staff)
+                if reseller_overview.get("error") and not reseller_overview.get("ready"):
+                    err = reseller_overview.get("error")
         except Exception as e:
             err = str(e)
         return render(
@@ -145,8 +152,9 @@ def register_pg_pages(
             _pg_ctx(
                 staff,
                 stats_rows=stats_rows,
-                nodes=nodes,
+                nodes=nodes if _is_admin(staff) else [],
                 counts=counts,
+                reseller_overview=reseller_overview,
                 flash_err=err,
                 active="pg",
             ),

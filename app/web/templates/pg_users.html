@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import pg_tabs %}
+{% from "macros.html" import pg_tabs, row_actions %}
 {% block title %}کاربران VPN{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -29,15 +29,15 @@
   <p class="muted">کاربری یافت نشد.</p>
   {% else %}
   <div class="table-wrap">
-  <table>
+  <table class="table-compact">
     <thead>
       <tr>
         <th>نام کاربری</th>
         <th>وضعیت</th>
         <th>حجم</th>
-        <th>انقضا</th>
-        {% if is_admin %}<th>مالک</th>{% endif %}
-        <th></th>
+        <th class="col-hide-sm">انقضا</th>
+        {% if is_admin %}<th class="col-hide-sm">مالک</th>{% endif %}
+        <th class="col-actions"></th>
       </tr>
     </thead>
     <tbody>
@@ -53,39 +53,39 @@
           <span class="badge active">{{ u.get('status') or 'فعال' }}</span>
           {% endif %}
         </td>
-        <td class="mono">
+        <td class="mono cell-tight">
           {% if u.get('used_traffic') is not none %}{{ u.get('used_traffic') | bytes }}{% else %}—{% endif %}
-          /
+          <span class="muted">/</span>
           {% if u.get('data_limit') %}{{ u.get('data_limit') | bytes }}{% else %}∞{% endif %}
         </td>
-        <td class="mono muted">
+        <td class="mono muted col-hide-sm">
           {% if u.get('expire') %}{{ u.get('expire') }}{% elif u.get('expire_date') %}{{ u.get('expire_date') }}{% else %}—{% endif %}
         </td>
         {% if is_admin %}
-        <td class="mono muted">
+        <td class="mono muted col-hide-sm">
           {% set adm = u.get('admin') %}
           {% if adm is mapping %}{{ adm.get('username') or '—' }}
           {% else %}{{ adm or u.get('owner_username') or '—' }}{% endif %}
         </td>
         {% endif %}
-        <td>
-          <div class="actions">
+        <td class="col-actions">
+          {% call row_actions() %}
             {% if can_disable and not disabled and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/disable"><button class="btn btn-ghost" type="submit">غیرفعال</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/disable"><button class="btn btn-ghost btn-sm" type="submit">غیرفعال</button></form>
             {% endif %}
             {% if can_enable and disabled and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/enable"><button class="btn btn-ghost" type="submit">فعال</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/enable"><button class="btn btn-ghost btn-sm" type="submit">فعال</button></form>
             {% endif %}
             {% if can_reset and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/reset" onsubmit="return confirm('ریست مصرف؟')"><button class="btn btn-ghost" type="submit">ریست</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/reset" onsubmit="return confirm('ریست مصرف؟')"><button class="btn btn-ghost btn-sm" type="submit">ریست</button></form>
             {% endif %}
             {% if can_revoke and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/revoke" onsubmit="return confirm('ابطال سابسکرایب؟')"><button class="btn btn-ghost" type="submit">ابطال ساب</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/revoke" onsubmit="return confirm('ابطال سابسکرایب؟')"><button class="btn btn-ghost btn-sm" type="submit">ابطال ساب</button></form>
             {% endif %}
             {% if can_delete and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/delete" onsubmit="return confirm('حذف کاربر؟')"><button class="icon-btn icon-remove" type="submit" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></form>
+            <form method="post" action="/pg/users/{{ uid }}/delete" onsubmit="return confirm('حذف کاربر؟')"><button class="btn btn-ghost btn-sm" type="submit">حذف</button></form>
             {% endif %}
-          </div>
+          {% endcall %}
         </td>
       </tr>
     {% endfor %}

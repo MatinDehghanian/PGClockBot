@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import ord_status %}
+{% from "macros.html" import ord_status, row_actions %}
 {% block title %}سفارش‌ها{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -10,10 +10,10 @@
 </div>
 <div class="card card-flush">
   <div class="table-wrap">
-  <table>
+  <table class="table-compact">
     <thead>
       <tr>
-        <th>#</th><th>کاربر</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th>روش</th><th>زمان</th><th>عملیات</th>
+        <th>#</th><th>کاربر</th><th class="col-hide-sm">پلن</th><th>مبلغ</th><th>وضعیت</th><th class="col-hide-sm">روش</th><th class="col-hide-sm">زمان</th><th class="col-actions"></th>
       </tr>
     </thead>
     <tbody>
@@ -21,36 +21,36 @@
       {% set pay = payments_by_order.get(o.id) %}
       <tr>
         <td class="mono">{{ o.id }}</td>
-        <td>{% if o.user %}{{ o.user.full_name or o.user.username or o.user_id }}{% else %}{{ o.user_id }}{% endif %}</td>
-        <td>{% if o.plan %}{{ o.plan.name }}{% else %}{{ o.plan_id or "—" }}{% endif %}</td>
-        <td>{{ o.amount | num }}</td>
+        <td>{{ (o.user.full_name or o.user.username or o.user_id) if o.user else o.user_id }}</td>
+        <td class="col-hide-sm">{% if o.plan %}{{ o.plan.name }}{% else %}{{ o.plan_id or "—" }}{% endif %}</td>
+        <td class="mono">{{ o.amount | num }}</td>
         <td>
           <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}pending{% elif o.status in ['rejected','cancelled','failed'] %}rejected{% else %}neutral{% endif %}">
             {{ ord_status(o.status) }}
           </span>
         </td>
-        <td>{% if o.payment_method=='card' %}کارت{% elif o.payment_method=='wallet' %}کیف پول{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
-        <td class="muted">{{ o.created_at }}</td>
-        <td>
+        <td class="col-hide-sm">{% if o.payment_method=='card' %}کارت{% elif o.payment_method=='wallet' %}کیف پول{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
+        <td class="muted col-hide-sm">{{ o.created_at }}</td>
+        <td class="col-actions">
           {% if o.status == 'delivered' %}
-            <span class="muted">تحویل شده</span>
+            <span class="muted">تحویل</span>
           {% elif o.status in ['rejected','cancelled'] %}
             <span class="muted">—</span>
           {% elif pay and pay.status == 'pending' %}
-            <div class="actions" style="margin:0">
+            {% call row_actions() %}
               <form method="post" action="/orders/{{ o.id }}/approve">
                 <button class="btn btn-ok btn-sm" type="submit">تأیید</button>
               </form>
               <form method="post" action="/orders/{{ o.id }}/reject">
                 <button class="btn btn-danger btn-sm" type="submit">رد</button>
               </form>
-            </div>
+            {% endcall %}
           {% elif o.status in ['paid','awaiting_approval'] %}
-            <div class="actions" style="margin:0">
+            {% call row_actions() %}
               <form method="post" action="/orders/{{ o.id }}/approve">
                 <button class="btn btn-ok btn-sm" type="submit">تأیید و تحویل</button>
               </form>
-            </div>
+            {% endcall %}
           {% else %}
             <span class="muted">منتظر رسید</span>
           {% endif %}

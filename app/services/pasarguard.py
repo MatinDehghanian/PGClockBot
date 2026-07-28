@@ -308,6 +308,29 @@ class PasarGuardClient:
         data = await self.request("GET", "/api/admins/simple")
         return as_list(data, "admins")
 
+    async def get_admin(self, username: str) -> dict | None:
+        """Fetch one admin (with usage metrics) by username."""
+        username = (username or "").strip()
+        if not username:
+            return None
+        try:
+            data = await self.request("GET", "/api/admins", params={"username": username, "limit": 20})
+            admins = as_list(data, "admins")
+            for a in admins:
+                if str(a.get("username") or "").lower() == username.lower():
+                    return a
+            if len(admins) == 1:
+                return admins[0]
+        except Exception:
+            pass
+        try:
+            for a in await self.get_admins():
+                if str(a.get("username") or "").lower() == username.lower():
+                    return a
+        except Exception:
+            pass
+        return None
+
     async def get_admin_roles(self) -> list[dict]:
         """Pasarguard admin roles (owner-defined access levels)."""
         try:

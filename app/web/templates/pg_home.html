@@ -5,7 +5,7 @@
 <div class="page-head">
   <div>
     <h1>پنل پاسارگارد</h1>
-    <p>داده‌ها زنده از پاسارگارد — بدون ورود جدا به پنل اصلی</p>
+    <p>{% if is_admin %}آمار کاربران و منابع پنل{% else %}مصرف و محدودیت حساب پاسارگارد شما{% endif %}</p>
   </div>
   <a class="btn btn-ghost" href="/pg">بروزرسانی</a>
 </div>
@@ -14,6 +14,54 @@
 
 {% if flash_err %}
 {# shown in base #}
+{% else %}
+
+{% if not is_admin %}
+  {% set ov = reseller_overview or {} %}
+  {% if ov.ready %}
+  <div class="stats-grid pg-reseller-stats">
+    {% if ov.users %}
+    <div class="stat">
+      <span>کاربران VPN</span>
+      <strong>{{ ov.users.used_text }}{% if ov.users.has_limit %} / {{ ov.users.limit_text }}{% endif %}</strong>
+      {% if ov.users.has_limit %}
+      <small class="muted">باقی‌مانده: {{ ov.users.remain_text }}</small>
+      <div class="meter" aria-hidden="true"><i style="width:{{ '%.1f'|format(ov.users.pct or 0) }}%"></i></div>
+      {% else %}
+      <small class="muted">بدون سقف کاربر</small>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if ov.traffic %}
+    <div class="stat">
+      <span>حجم</span>
+      <strong>{{ ov.traffic.used_text }}{% if ov.traffic.has_limit %} / {{ ov.traffic.limit_text }}{% endif %}</strong>
+      {% if ov.traffic.has_limit %}
+      <small class="muted">باقی‌مانده: {{ ov.traffic.remain_text }}</small>
+      <div class="meter" aria-hidden="true"><i style="width:{{ '%.1f'|format(ov.traffic.pct or 0) }}%"></i></div>
+      {% else %}
+      <small class="muted">بدون سقف حجم{% if ov.lifetime_text %} · lifetime: {{ ov.lifetime_text }}{% endif %}</small>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if ov.time and ov.time.has_limit %}
+    <div class="stat">
+      <span>زمان</span>
+      <strong>{% if ov.time.used_sec is not none %}{{ ov.time.used_text }} / {% endif %}تا {{ ov.time.expire_text }}</strong>
+      <small class="muted">باقی‌مانده: {{ ov.time.remain_text }}</small>
+      {% if ov.time.pct is not none %}
+      <div class="meter" aria-hidden="true"><i style="width:{{ '%.1f'|format(ov.time.pct or 0) }}%"></i></div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% if ov.username %}
+  <p class="muted" style="margin-top:-6px;margin-bottom:14px">ادمین پاسارگارد: <code dir="ltr">{{ ov.username }}</code>{% if ov.status %} · وضعیت: {{ ov.status }}{% endif %}</p>
+  {% endif %}
+  {% elif ov.error %}
+  <div class="flash warn">{{ ov.error }}</div>
+  {% endif %}
+
 {% else %}
 <div class="stats-grid" style="grid-template-columns: repeat(4, minmax(0, 1fr))">
   <div class="stat"><span>تمپلیت‌ها</span><strong>{{ counts.templates }}</strong></div>
@@ -24,7 +72,7 @@
 
 {% if stats_rows %}
 <div class="card">
-  <h2>آمار سیستم</h2>
+  <h2>آمار پنل</h2>
   <div class="stats-grid" style="margin:0">
     {% for key, val in stats_rows %}
     <div class="stat"><span>{{ key }}</span><strong>{{ val }}</strong></div>
@@ -33,14 +81,14 @@
 </div>
 {% endif %}
 
-{% if nodes is defined and (is_admin or 'pg_nodes' in pg_perms) %}
+{% if nodes is defined %}
 <div class="card">
   <h2>نودها</h2>
   {% if not nodes %}
   <p class="muted">نودی نیست.</p>
   {% else %}
   <div class="table-wrap">
-  <table>
+  <table class="table-compact">
     <thead><tr><th>شناسه</th><th>نام</th><th>وضعیت</th></tr></thead>
     <tbody>
     {% for n in nodes %}
@@ -61,5 +109,7 @@
   {% endif %}
 </div>
 {% endif %}
+{% endif %}
+
 {% endif %}
 {% endblock %}

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import pay_status %}
+{% from "macros.html" import pay_status, row_actions %}
 {% block title %}پرداخت‌ها{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -7,31 +7,33 @@
     <h1>پرداخت‌ها</h1>
     <p>تأیید یا رد دستی — اگر «تأیید خودکار» در تنظیمات روشن باشد، رسیدها خودکار تأیید می‌شوند</p>
   </div>
+  {% if staff.role == 'admin' %}
   <a class="btn btn-ghost" href="/settings">تنظیمات پرداخت</a>
+  {% endif %}
 </div>
 <div class="card card-flush">
   <div class="table-wrap">
-  <table>
-    <thead><tr><th>#</th><th>کاربر</th><th>مبلغ</th><th>نوع</th><th>وضعیت</th><th>سفارش</th><th>عملیات</th></tr></thead>
+  <table class="table-compact">
+    <thead><tr><th>#</th><th>کاربر</th><th>مبلغ</th><th class="col-hide-sm">نوع</th><th>وضعیت</th><th class="col-hide-sm">سفارش</th><th class="col-actions"></th></tr></thead>
     <tbody>
     {% for p in payments %}
       <tr>
         <td class="mono">{{ p.id }}</td>
         <td>{{ p.user_id }}</td>
-        <td>{{ "{:,}".format(p.amount).replace(",", "٬") }}</td>
-        <td>{{ "شارژ کیف" if p.is_wallet_topup else "خرید" }}</td>
+        <td class="mono">{{ "{:,}".format(p.amount).replace(",", "٬") }}</td>
+        <td class="col-hide-sm">{{ "شارژ کیف" if p.is_wallet_topup else "خرید" }}</td>
         <td>
           <span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}approved{% else %}rejected{% endif %}">
             {{ pay_status(p.status) }}
           </span>
         </td>
-        <td>{{ p.order_id or "—" }}</td>
-        <td>
+        <td class="col-hide-sm">{{ p.order_id or "—" }}</td>
+        <td class="col-actions">
           {% if p.status == 'pending' %}
-          <div class="actions" style="margin:0">
+          {% call row_actions() %}
             <form method="post" action="/payments/{{ p.id }}/approve"><button class="btn btn-ok btn-sm" type="submit">تأیید</button></form>
             <form method="post" action="/payments/{{ p.id }}/reject"><button class="btn btn-danger btn-sm" type="submit">رد</button></form>
-          </div>
+          {% endcall %}
           {% else %}
           <span class="muted">—</span>
           {% endif %}
