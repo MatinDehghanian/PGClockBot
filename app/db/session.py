@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
-
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import get_settings
@@ -27,8 +25,3 @@ def _migrate_sqlite(sync_conn) -> None:
     cols = {c["name"] for c in insp.get_columns("plans")}
     if "pg_group_ids" not in cols:
         sync_conn.execute(text("ALTER TABLE plans ADD COLUMN pg_group_ids VARCHAR(255)"))
-
-
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    async with SessionLocal() as session:
-        yield session

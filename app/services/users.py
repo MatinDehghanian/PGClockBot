@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import secrets
 import string
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,13 +69,6 @@ async def get_or_create_user(
     return user
 
 
-async def get_user_by_tg(session: AsyncSession, telegram_id: int) -> Optional[BotUser]:
-    result = await session.execute(
-        select(BotUser).where(BotUser.telegram_id == telegram_id)
-    )
-    return result.scalar_one_or_none()
-
-
 async def get_setting(session: AsyncSession, key: str, default: str = "") -> str:
     result = await session.execute(select(Setting).where(Setting.key == key))
     row = result.scalar_one_or_none()
@@ -141,7 +133,7 @@ DEFAULT_SETTINGS = {
     "qr_caption": "📱 QR اشتراک\nبا دوربین گوشی اسکن کنید یا در کلاینت Import کنید.",
     "qr_background": "",
     "show_sub_link_in_text": "1",
-    # Admin Telegram notification toggles (also managed on /notifications)
+    # Admin Telegram notification toggles (settings → اعلان‌ها)
     "notify_new_subscription": "1",
     "notify_pending_approval": "1",
     "notify_new_order": "0",

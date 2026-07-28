@@ -45,7 +45,7 @@ async def render_home(
         text = format_message(f"✨ {title}", body)
         has = await _has_services(session, db_user.id)
         markup = kb.main_menu(db_user.role, has_services=has, ui=ui)
-    if edit and isinstance(message, Message):
+    if edit:
         try:
             await message.edit_text(text, reply_markup=markup)
             return

@@ -289,11 +289,6 @@ def get_pg() -> PasarGuardClient:
     return _pg
 
 
-def reset_pg() -> None:
-    global _pg
-    _pg = None
-
-
 def extract_sub_token(subscription_url: str | None) -> str | None:
     if not subscription_url:
         return None

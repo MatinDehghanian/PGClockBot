@@ -18,6 +18,7 @@ from app.services.orders import (
     create_order,
     get_plan,
     list_active_plans,
+    mark_order_free_paid,
     pay_with_wallet,
     stars_amount_for_toman,
     start_card_payment,
@@ -307,6 +308,22 @@ async def custom_confirm(callback: CallbackQuery, session: AsyncSession, state: 
         )
 
 
+async def _notify_new_order(bot, session, order, db_user, plan_name: str | None):
+    try:
+        from app.services.notifications import notify_new_order
+
+        await notify_new_order(
+            bot,
+            session,
+            order=order,
+            user_tg_id=db_user.telegram_id,
+            user_name=db_user.full_name or db_user.username,
+            plan_name=plan_name,
+        )
+    except Exception:
+        pass
+
+
 @router.callback_query(F.data == "shop:custom:buy")
 async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     ui = await get_all_settings(session)
@@ -314,9 +331,15 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
         return
     data = await state.get_data()
-    min_gb, _, min_days, _, _, _ = _custom_bounds(ui)
+    min_gb, _, min_days, _, price_gb, price_day = _custom_bounds(ui)
     gb = float(data.get("custom_gb") or min_gb)
     days = int(data.get("custom_days") or min_days)
+    expected = calc_custom_plan_price(
+        gb=gb, days=days, price_per_gb=price_gb, price_per_day=price_day
+    )
+    if expected > 0 and not kb.any_checkout_method_enabled(ui):
+        await callback.answer("هیچ روش پرداختی فعال نیست", show_alert=True)
+        return
     try:
         order = await create_custom_order(
             session,
@@ -330,6 +353,28 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         return
     await state.clear()
     await callback.answer()
+
+    if order.amount <= 0:
+        from app.services.orders import deliver_order
+
+        await mark_order_free_paid(session, order, db_user.id)
+        try:
+            order = await deliver_order(session, order)
+        except Exception as e:
+            if callback.message:
+                await callback.message.edit_text(
+                    format_message("❌ خطا در تحویل", str(e)),
+                    reply_markup=kb.back_home(ui),
+                )
+            return
+        if callback.message:
+            await callback.message.edit_text(
+                format_message("✅ فعال شد", f"سفارش #{order.id} تحویل شد."),
+                reply_markup=kb.back_home(ui),
+            )
+        await send_delivery_to_user(callback.bot, db_user.telegram_id, session, None, order)
+        return
+
     text = format_message(
         f"🧾 سفارش #{order.id}",
         f"پلن دلخواه — {gb:g} گیگ / {days} روز\n"
@@ -338,19 +383,7 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     )
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.pay_methods(order.id, ui))
-    try:
-        from app.services.notifications import notify_new_order
-
-        await notify_new_order(
-            callback.bot,
-            session,
-            order=order,
-            user_tg_id=db_user.telegram_id,
-            user_name=db_user.full_name or db_user.username,
-            plan_name="پلن دلخواه",
-        )
-    except Exception:
-        pass
+    await _notify_new_order(callback.bot, session, order, db_user, "پلن دلخواه")
 
 
 @router.callback_query(F.data.startswith("shop:plan:"))
@@ -383,12 +416,54 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     await callback.answer()
     ui = await get_all_settings(session)
     plan_id = int(callback.data.split(":")[-1])
+    plan = await get_plan(session, plan_id)
+    if not plan:
+        if callback.message:
+            await callback.message.edit_text(
+                format_message("⚠️ خطا", "پلن پیدا نشد."),
+                reply_markup=kb.back_home(ui),
+            )
+        return
+    if plan.price > 0 and not kb.any_checkout_method_enabled(ui):
+        if callback.message:
+            await callback.message.edit_text(
+                format_message(
+                    "⚠️ پرداخت غیرفعال",
+                    "در حال حاضر هیچ روش پرداختی فعال نیست. با پشتیبانی تماس بگیرید.",
+                ),
+                reply_markup=kb.back_home(ui),
+            )
+        return
+
     order = await create_order(
         session,
         user_id=db_user.id,
         plan_id=plan_id,
         reseller_id=db_user.reseller_id,
     )
+
+    # Free / trial: deliver immediately
+    if order.amount <= 0:
+        from app.services.orders import deliver_order
+
+        await mark_order_free_paid(session, order, db_user.id)
+        try:
+            order = await deliver_order(session, order)
+        except Exception as e:
+            if callback.message:
+                await callback.message.edit_text(
+                    format_message("❌ خطا در تحویل", str(e)),
+                    reply_markup=kb.back_home(ui),
+                )
+            return
+        if callback.message:
+            await callback.message.edit_text(
+                format_message("✅ فعال شد", f"سفارش #{order.id} تحویل شد."),
+                reply_markup=kb.back_home(ui),
+            )
+        await send_delivery_to_user(callback.bot, db_user.telegram_id, session, None, order)
+        return
+
     text = format_message(
         f"🧾 سفارش #{order.id}",
         f"مبلغ قابل پرداخت:\n<b>{format_toman(order.amount, get_settings().currency)}</b>\n\n"
@@ -396,20 +471,7 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     )
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.pay_methods(order.id, ui))
-    try:
-        from app.services.notifications import notify_new_order
-
-        plan = await get_plan(session, plan_id)
-        await notify_new_order(
-            callback.bot,
-            session,
-            order=order,
-            user_tg_id=db_user.telegram_id,
-            user_name=db_user.full_name or db_user.username,
-            plan_name=plan.name if plan else None,
-        )
-    except Exception:
-        pass
+    await _notify_new_order(callback.bot, session, order, db_user, plan.name if plan else None)
 
 
 @router.callback_query(F.data.startswith("pay:discount:"))

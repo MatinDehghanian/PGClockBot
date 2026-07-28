@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.config import get_settings
 from app.db.models import BotUser, UserService
-from app.services.formatting import format_toman, service_card
+from app.services.formatting import format_message, format_toman, service_card
 from app.services.orders import get_plan, list_active_plans
 from app.services.pasarguard import get_pg
 from app.services.users import get_all_settings
@@ -50,8 +50,6 @@ async def svc_view(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         await callback.answer("یافت نشد", show_alert=True)
         return
     await callback.answer()
-    from app.services.formatting import format_message
-
     text = format_message("📦 سرویس", f"🔹 <b>{svc.pg_username}</b>")
     if svc.subscription_token:
         try:
@@ -66,7 +64,6 @@ async def svc_view(callback: CallbackQuery, session: AsyncSession, db_user: BotU
 @router.callback_query(F.data.startswith("svc:link:"))
 async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     from app.services.delivery import send_subscription_qr_photo
-    from app.services.formatting import format_message
     from app.services.users import on
 
     ui = await get_all_settings(session)
@@ -159,39 +156,45 @@ async def svc_renew_pay(callback: CallbackQuery, session: AsyncSession, db_user:
     if not svc or not plan or svc.bot_user_id != db_user.id:
         await callback.answer("نامعتبر", show_alert=True)
         return
+    if plan.price > 0 and not kb.any_checkout_method_enabled(ui):
+        await callback.answer("هیچ روش پرداختی فعال نیست", show_alert=True)
+        return
+
     from app.services.orders import renew_service_with_plan
 
-    pay_wallet = db_user.wallet_balance >= plan.price
     try:
         order = await renew_service_with_plan(
             session,
             user_id=db_user.id,
             service=svc,
             plan=plan,
-            pay_wallet=pay_wallet,
-            user=db_user,
         )
     except Exception as e:
         await callback.answer(str(e), show_alert=True)
         return
 
     await callback.answer()
-    if pay_wallet:
-        text = f"✅ تمدید با کیف پول انجام شد.\nسفارش #{order.id}"
+
+    if order.amount <= 0:
+        from app.services.orders import apply_renewal, mark_order_free_paid
+
+        await mark_order_free_paid(session, order, db_user.id)
+        try:
+            order = await apply_renewal(session, order, svc, plan)
+        except Exception as e:
+            if callback.message:
+                await callback.message.edit_text(f"❌ {e}", reply_markup=kb.service_actions(svc.id, ui))
+            return
         if callback.message:
             await callback.message.edit_text(
-                text, reply_markup=kb.service_actions(svc.id, ui)
+                format_message("✅ تمدید رایگان", f"سفارش #{order.id}"),
+                reply_markup=kb.service_actions(svc.id, ui),
             )
         return
 
-    amount = format_toman(order.amount, get_settings().currency)
-    try:
-        text = ui["card_pay_text"].format(
-            amount=amount,
-            card=ui.get("card_number") or "—",
-            holder=ui.get("card_holder") or "—",
-        )
-    except Exception:
-        text = f"💳 مبلغ تمدید: {amount}\nعکس رسید را ارسال کنید."
+    text = format_message(
+        f"🔄 تمدید — سفارش #{order.id}",
+        f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>\nروش پرداخت را انتخاب کنید:",
+    )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.back_home(ui))
+        await callback.message.edit_text(text, reply_markup=kb.pay_methods(order.id, ui))
