@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/panel.css?v=pg-ux-178" />
+  <link rel="stylesheet" href="/static/panel.css?v=kebab-overlay-179" />
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
   {% block head %}{% endblock %}
 </head>
@@ -235,7 +235,54 @@
       document.querySelectorAll('.table-wrap, .section-tabs').forEach(el => ro.observe(el));
     }
 
-    /* Mobile row action menus (three-dot) */
+    /* Mobile row action menus (three-dot) — fixed overlay above cards/tables */
+    function closeRowActions(){
+      document.querySelectorAll('.row-actions.open').forEach(el => {
+        el.classList.remove('open');
+        const btn = el.querySelector('.row-actions-toggle');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+        const menu = el.querySelector('.row-actions-menu');
+        if (menu) {
+          menu.style.top = '';
+          menu.style.left = '';
+          menu.style.right = '';
+          menu.style.bottom = '';
+        }
+      });
+    }
+    function placeRowMenu(wrap){
+      if (!wrap) return;
+      const btn = wrap.querySelector('.row-actions-toggle');
+      const menu = wrap.querySelector('.row-actions-menu');
+      if (!btn || !menu) return;
+      const gap = 6;
+      const pad = 8;
+      const rect = btn.getBoundingClientRect();
+      /* measure after display:flex */
+      menu.style.top = '0px';
+      menu.style.left = '0px';
+      menu.style.right = 'auto';
+      menu.style.bottom = 'auto';
+      const mw = menu.offsetWidth || 176;
+      const mh = menu.offsetHeight || 120;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      let left = rect.right - mw;
+      if (left < pad) left = pad;
+      if (left + mw > vw - pad) left = Math.max(pad, vw - pad - mw);
+      const spaceBelow = vh - rect.bottom - gap - pad;
+      const spaceAbove = rect.top - gap - pad;
+      let top;
+      if (spaceBelow >= Math.min(mh, 160) || spaceBelow >= spaceAbove) {
+        top = Math.min(rect.bottom + gap, vh - pad - Math.min(mh, vh - 2 * pad));
+      } else {
+        top = Math.max(pad, rect.top - gap - mh);
+      }
+      menu.style.top = Math.round(top) + 'px';
+      menu.style.left = Math.round(left) + 'px';
+      menu.style.right = 'auto';
+      menu.style.bottom = 'auto';
+    }
     document.addEventListener('click', (e) => {
       const toggle = e.target.closest('.row-actions-toggle');
       if (toggle) {
@@ -243,25 +290,25 @@
         e.stopPropagation();
         const wrap = toggle.closest('.row-actions');
         const open = wrap && wrap.classList.contains('open');
-        document.querySelectorAll('.row-actions.open').forEach(el => {
-          el.classList.remove('open');
-          const btn = el.querySelector('.row-actions-toggle');
-          if (btn) btn.setAttribute('aria-expanded', 'false');
-        });
+        closeRowActions();
         if (wrap && !open) {
           wrap.classList.add('open');
           toggle.setAttribute('aria-expanded', 'true');
+          requestAnimationFrame(() => placeRowMenu(wrap));
         }
         return;
       }
       if (!e.target.closest('.row-actions')) {
-        document.querySelectorAll('.row-actions.open').forEach(el => {
-          el.classList.remove('open');
-          const btn = el.querySelector('.row-actions-toggle');
-          if (btn) btn.setAttribute('aria-expanded', 'false');
-        });
+        closeRowActions();
       }
     });
+    window.addEventListener('resize', closeRowActions);
+    window.addEventListener('scroll', (e) => {
+      if (!document.querySelector('.row-actions.open')) return;
+      /* ignore scrolls inside the open menu itself */
+      if (e.target && e.target.closest && e.target.closest('.row-actions-menu')) return;
+      closeRowActions();
+    }, true);
 
     /* Lightweight modals */
     function closeModal(el){

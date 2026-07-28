@@ -1940,19 +1940,21 @@ body.modal-open { overflow: hidden; }
   .row-actions-toggle { display: inline-flex; }
   .row-actions-menu {
     display: none;
-    position: absolute;
-    inset-inline-end: 0;
-    top: calc(100% + 6px);
-    z-index: 30;
-    min-width: 168px;
+    position: fixed;
+    z-index: 1200;
+    min-width: 176px;
+    max-width: min(280px, calc(100vw - 16px));
+    max-height: min(70vh, 360px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     flex-direction: column;
     align-items: stretch;
     gap: 6px;
     padding: 8px;
     border-radius: 12px;
     border: 1px solid var(--border);
-    background: var(--bg-card);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+    background: var(--bg-elevated, var(--bg-card));
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
   }
   .row-actions.open .row-actions-menu { display: flex; }
   .row-actions-menu .btn,
@@ -1962,6 +1964,11 @@ body.modal-open { overflow: hidden; }
   }
   td .actions {
     max-width: none;
+    overflow: visible;
+  }
+  /* While a kebab is open, don't let the table clip the overlay */
+  .table-wrap:has(.row-actions.open),
+  .card:has(.row-actions.open) {
     overflow: visible;
   }
 }
