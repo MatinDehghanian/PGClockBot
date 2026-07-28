@@ -95,6 +95,10 @@ class Plan(Base):
     data_limit_gb: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     pg_template_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     pg_group_ids: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # NULL = platform (admin) catalog; set for reseller-owned shop plans
+    owner_reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_trial: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)

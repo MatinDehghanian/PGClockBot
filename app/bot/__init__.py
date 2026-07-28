@@ -46,6 +46,7 @@ def create_dispatcher() -> Dispatcher:
         admin_settings,
         payments,
         reseller,
+        reseller_plans,
         reseller_settings,
         shop,
         start,
@@ -61,6 +62,7 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(support.router)
     dp.include_router(payments.router)
     dp.include_router(reseller.router)
+    dp.include_router(reseller_plans.router)
     dp.include_router(reseller_settings.router)
     dp.include_router(admin_settings.router)
     dp.include_router(admin_backup.router)

@@ -590,6 +590,8 @@ def reseller_home(profile=None) -> InlineKeyboardMarkup:
         rows.append([InlineKeyboardButton(text="🏠 خانه نماینده", callback_data="res:dash")])
     if profile is None or has_bot_perm(profile, "stats"):
         rows.append([InlineKeyboardButton(text="📊 آمار و کمیسیون", callback_data="res:stats")])
+    if profile is not None and has_bot_perm(profile, "plans"):
+        rows.append([InlineKeyboardButton(text="💎 پلن‌های فروش", callback_data="res:plans")])
     if profile is not None and has_bot_perm(profile, "orders"):
         rows.append([InlineKeyboardButton(text="🛒 سفارش‌های مشتریان", callback_data="res:orders")])
     if profile is not None and has_bot_perm(profile, "payments"):
