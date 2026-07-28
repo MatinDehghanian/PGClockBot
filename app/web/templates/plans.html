@@ -5,7 +5,7 @@
 <div class="page-head">
   <div>
     <h1>پلن‌های فروش</h1>
-    <p>پلن تست، پلن دلخواه، و پلن‌های ثابت فروشگاه</p>
+    <p>{% if staff.role == 'reseller' %}پلن‌های فروشگاه ربات خودتان — فقط با گروه‌ها/تمپلیت‌های مجاز پاسارگارد{% else %}پلن تست، پلن دلخواه، و پلن‌های ثابت فروشگاه{% endif %}</p>
   </div>
 </div>
 
@@ -172,7 +172,9 @@
         </div>
       </div>
       <div class="ui-switch-list">
+        {% if can_create_template is not defined or can_create_template %}
         {{ switch('also_create_template', 'همزمان تمپلیت مشابه در پاسارگارد هم ساخته شود') }}
+        {% endif %}
       </div>
     </div>
 

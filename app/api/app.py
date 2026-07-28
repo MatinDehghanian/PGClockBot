@@ -177,6 +177,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         user = get_session_user(request)
         if not user or user.get("role") not in {"admin", "reseller"}:
             raise NotAuthenticated()
+        if user.get("role") == "reseller":
+            # Keep session soft-upgraded for newly added core perms (plans, shop_settings)
+            user = dict(user)
+            user["permissions"] = with_shop_settings(list(user.get("permissions") or []))
         return user
 
     def require_admin(request: Request) -> dict:
@@ -290,6 +294,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             perms = user.get("permissions") or []
             for path, key in (
                 ("/dashboard", "dashboard"),
+                ("/plans", "plans"),
                 ("/orders", "orders"),
                 ("/payments", "payments"),
                 ("/tickets", "tickets"),
@@ -632,9 +637,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             home = ""
             for path, key in (
                 ("/dashboard", "dashboard"),
+                ("/plans", "plans"),
                 ("/orders", "orders"),
                 ("/payments", "payments"),
                 ("/tickets", "tickets"),
+                ("/shop-settings", "shop_settings"),
             ):
                 if key in permissions:
                     home = path
@@ -701,9 +708,12 @@ def create_api_app(lifespan=None) -> FastAPI:
         pending_payments = await session.scalar(pending_q) or 0
         services_count = await session.scalar(services_q) or 0
         revenue = await session.scalar(revenue_q) or 0
-        plans_count = await session.scalar(
-            select(func.count()).select_from(Plan).where(Plan.is_active.is_(True))
-        ) or 0
+        plans_q = select(func.count()).select_from(Plan).where(Plan.is_active.is_(True))
+        if rid:
+            plans_q = plans_q.where(Plan.owner_reseller_id == rid)
+        else:
+            plans_q = plans_q.where(Plan.owner_reseller_id.is_(None))
+        plans_count = await session.scalar(plans_q) or 0
         tickets_q = select(func.count()).select_from(Ticket).where(Ticket.status == "open")
         if rid:
             tickets_q = tickets_q.join(BotUser, BotUser.id == Ticket.user_id).where(
@@ -747,30 +757,17 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.get("/plans", response_class=HTMLResponse)
     async def plans_page(
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
-        result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
-        plans = list(result.scalars().all())
+        from app.services.plans_catalog import catalog_owner_id, list_catalog_plans, load_pg_plan_options
+
+        plans = await list_catalog_plans(session, staff, include_trial=True)
         trial = next((p for p in plans if p.is_trial), None)
         sale_plans = [p for p in plans if not p.is_trial]
-        templates: list = []
-        groups: list = []
-        pg_error = None
-        try:
-            pg = get_pg()
-            templates = await pg.get_user_templates_simple()
-            full = await pg.get_user_templates()
-            from app.services.pasarguard import as_list
-
-            if isinstance(full, list) and full:
-                templates = full
-            else:
-                templates = as_list(full, "templates") or templates
-            groups = await pg.get_groups_simple()
-        except Exception as e:
-            pg_error = str(e)
-        values = await get_all_settings(session)
+        templates, groups, pg_error = await load_pg_plan_options(staff)
+        rid = catalog_owner_id(staff)
+        values = await get_all_settings(session, reseller_id=rid)
         trial_group_ids = set()
         if trial and trial.pg_group_ids:
             trial_group_ids = {x.strip() for x in trial.pg_group_ids.split(",") if x.strip()}
@@ -792,6 +789,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "templates": templates,
                 "groups": groups,
                 "pg_error": pg_error,
+                "can_create_template": staff.get("role") == "admin"
+                or bool((staff.get("pg_writes") or {}).get("templates")),
                 "flash_err": request.query_params.get("err"),
                 "flash_ok": request.query_params.get("ok"),
             },
@@ -808,15 +807,24 @@ def create_api_app(lifespan=None) -> FastAPI:
         description: str = Form(""),
         mode: str = Form("custom"),
         also_create_template: str = Form(""),
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
         from urllib.parse import quote
+
+        from app.services.plans_catalog import (
+            catalog_owner_id,
+            groups_allowed_for_staff,
+            parse_group_ids_from_form,
+            staff_can_create_pg_template,
+            template_allowed_for_staff,
+        )
 
         form = await request.form()
         gb = float(data_limit_gb) if str(data_limit_gb).strip() else None
         tpl = None
         group_csv = None
+        owner_id = catalog_owner_id(staff)
 
         if mode == "template":
             tpl = int(pg_template_id) if str(pg_template_id).strip() else None
@@ -825,19 +833,30 @@ def create_api_app(lifespan=None) -> FastAPI:
                     f"/plans?err={quote('تمپلیت پاسارگارد را انتخاب کنید')}",
                     status_code=303,
                 )
+            if not template_allowed_for_staff(staff, tpl):
+                return RedirectResponse(
+                    f"/plans?err={quote('به این تمپلیت دسترسی ندارید')}",
+                    status_code=303,
+                )
         else:
-            ids = [
-                int(v)
-                for k, v in form.items()
-                if str(k).startswith("group_") and str(v).isdigit()
-            ]
+            ids = parse_group_ids_from_form(form)
             if not ids:
                 return RedirectResponse(
                     f"/plans?err={quote('حداقل یک گروه پاسارگارد انتخاب کنید')}",
                     status_code=303,
                 )
+            if not groups_allowed_for_staff(staff, ids):
+                return RedirectResponse(
+                    f"/plans?err={quote('به یکی از گروه‌های انتخاب‌شده دسترسی ندارید')}",
+                    status_code=303,
+                )
             group_csv = ",".join(str(i) for i in ids)
             if also_create_template:
+                if not staff_can_create_pg_template(staff):
+                    return RedirectResponse(
+                        f"/plans?err={quote('اجازه ساخت تمپلیت در پاسارگارد را ندارید')}",
+                        status_code=303,
+                    )
                 try:
                     created = await get_pg().create_user_template(
                         {
@@ -864,6 +883,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 data_limit_gb=gb,
                 pg_template_id=tpl,
                 pg_group_ids=group_csv,
+                owner_reseller_id=owner_id,
                 description=description or None,
                 is_active=True,
             )
@@ -877,14 +897,22 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.post("/plans/trial")
     async def plans_trial_save(
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
         from urllib.parse import quote
 
+        from app.services.plans_catalog import (
+            catalog_owner_id,
+            groups_allowed_for_staff,
+            parse_group_ids_from_form,
+            template_allowed_for_staff,
+        )
+
         form = await request.form()
+        owner_id = catalog_owner_id(staff)
         enabled = str(form.get("trial_enabled") or "") in {"1", "on", "true", "yes"}
-        await set_setting(session, "trial_enabled", "1" if enabled else "0")
+        await set_setting(session, "trial_enabled", "1" if enabled else "0", reseller_id=owner_id)
         name = str(form.get("name") or "تست رایگان").strip() or "تست رایگان"
         try:
             days = max(1, int(str(form.get("duration_days") or "1")))
@@ -903,20 +931,31 @@ def create_api_app(lifespan=None) -> FastAPI:
                     f"/plans?err={quote('برای پلن تست، تمپلیت را انتخاب کنید')}",
                     status_code=303,
                 )
+            if tpl and not template_allowed_for_staff(staff, tpl):
+                return RedirectResponse(
+                    f"/plans?err={quote('به این تمپلیت دسترسی ندارید')}",
+                    status_code=303,
+                )
         else:
-            ids = [
-                int(v)
-                for k, v in form.items()
-                if str(k).startswith("group_") and str(v).isdigit()
-            ]
+            ids = parse_group_ids_from_form(form)
             if enabled and not ids:
                 return RedirectResponse(
                     f"/plans?err={quote('برای پلن تست حداقل یک گروه انتخاب کنید')}",
                     status_code=303,
                 )
+            if ids and not groups_allowed_for_staff(staff, ids):
+                return RedirectResponse(
+                    f"/plans?err={quote('به یکی از گروه‌های انتخاب‌شده دسترسی ندارید')}",
+                    status_code=303,
+                )
             group_csv = ",".join(str(i) for i in ids) if ids else None
 
-        result = await session.execute(select(Plan).where(Plan.is_trial.is_(True)))
+        q = select(Plan).where(Plan.is_trial.is_(True))
+        if owner_id:
+            q = q.where(Plan.owner_reseller_id == owner_id)
+        else:
+            q = q.where(Plan.owner_reseller_id.is_(None))
+        result = await session.execute(q)
         trial = result.scalar_one_or_none()
         if not trial:
             trial = Plan(
@@ -926,6 +965,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 data_limit_gb=gb,
                 pg_template_id=tpl,
                 pg_group_ids=group_csv,
+                owner_reseller_id=owner_id,
                 is_trial=True,
                 is_active=enabled,
                 description="پلن تست رایگان",
@@ -948,14 +988,24 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.post("/plans/custom")
     async def plans_custom_save(
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
         from urllib.parse import quote
 
+        from app.services.plans_catalog import (
+            catalog_owner_id,
+            groups_allowed_for_staff,
+            parse_group_ids_from_form,
+            template_allowed_for_staff,
+        )
+
         form = await request.form()
+        owner_id = catalog_owner_id(staff)
         enabled = str(form.get("custom_plan_enabled") or "") in {"1", "on", "true", "yes"}
-        await set_setting(session, "custom_plan_enabled", "1" if enabled else "0")
+        await set_setting(
+            session, "custom_plan_enabled", "1" if enabled else "0", reseller_id=owner_id
+        )
         for key in (
             "custom_plan_price_per_gb",
             "custom_plan_price_per_day",
@@ -966,44 +1016,41 @@ def create_api_app(lifespan=None) -> FastAPI:
         ):
             raw = str(form.get(key) or "").strip()
             if raw:
-                await set_setting(session, key, raw)
+                await set_setting(session, key, raw, reseller_id=owner_id)
         mode = str(form.get("mode") or "custom")
         if mode == "template":
             tpl = str(form.get("custom_plan_template_id") or "").strip()
-            await set_setting(session, "custom_plan_template_id", tpl)
-            await set_setting(session, "custom_plan_group_ids", "")
+            if tpl and tpl.isdigit() and not template_allowed_for_staff(staff, int(tpl)):
+                return RedirectResponse(
+                    f"/plans?err={quote('به این تمپلیت دسترسی ندارید')}",
+                    status_code=303,
+                )
+            await set_setting(session, "custom_plan_template_id", tpl, reseller_id=owner_id)
+            await set_setting(session, "custom_plan_group_ids", "", reseller_id=owner_id)
         else:
-            ids = [
-                str(v)
-                for k, v in form.items()
-                if str(k).startswith("group_") and str(v).isdigit()
-            ]
-            await set_setting(session, "custom_plan_group_ids", ",".join(ids))
-            await set_setting(session, "custom_plan_template_id", "")
+            ids = parse_group_ids_from_form(form)
+            if ids and not groups_allowed_for_staff(staff, ids):
+                return RedirectResponse(
+                    f"/plans?err={quote('به یکی از گروه‌های انتخاب‌شده دسترسی ندارید')}",
+                    status_code=303,
+                )
+            await set_setting(
+                session,
+                "custom_plan_group_ids",
+                ",".join(str(i) for i in ids),
+                reseller_id=owner_id,
+            )
+            await set_setting(session, "custom_plan_template_id", "", reseller_id=owner_id)
         return RedirectResponse(
             f"/plans?ok={quote('تنظیمات پلن دلخواه ذخیره شد')}",
             status_code=303,
         )
 
     async def _plans_context(session: AsyncSession, request: Request, staff: dict, extra: dict | None = None):
-        result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
-        plans = list(result.scalars().all())
-        templates: list = []
-        groups: list = []
-        pg_error = None
-        try:
-            pg = get_pg()
-            templates = await pg.get_user_templates_simple()
-            full = await pg.get_user_templates()
-            from app.services.pasarguard import as_list
+        from app.services.plans_catalog import list_catalog_plans, load_pg_plan_options
 
-            if isinstance(full, list) and full:
-                templates = full
-            else:
-                templates = as_list(full, "templates") or templates
-            groups = await pg.get_groups_simple()
-        except Exception as e:
-            pg_error = str(e)
+        plans = await list_catalog_plans(session, staff, include_trial=True)
+        templates, groups, pg_error = await load_pg_plan_options(staff)
         ctx = {
             "staff": staff,
             "plans": plans,
@@ -1021,10 +1068,12 @@ def create_api_app(lifespan=None) -> FastAPI:
     async def plans_edit_page(
         plan_id: int,
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
-        plan = await session.get(Plan, plan_id)
+        from app.services.plans_catalog import get_owned_plan
+
+        plan = await get_owned_plan(session, plan_id, staff)
         if not plan:
             return RedirectResponse("/plans?err=" + quote("پلن یافت نشد"), status_code=303)
         ctx = await _plans_context(session, request, staff, {"plan": plan})
@@ -1042,10 +1091,17 @@ def create_api_app(lifespan=None) -> FastAPI:
         description: str = Form(""),
         mode: str = Form("custom"),
         sort_order: int = Form(0),
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
-        plan = await session.get(Plan, plan_id)
+        from app.services.plans_catalog import (
+            get_owned_plan,
+            groups_allowed_for_staff,
+            parse_group_ids_from_form,
+            template_allowed_for_staff,
+        )
+
+        plan = await get_owned_plan(session, plan_id, staff)
         if not plan:
             return RedirectResponse("/plans?err=" + quote("پلن یافت نشد"), status_code=303)
 
@@ -1061,15 +1117,21 @@ def create_api_app(lifespan=None) -> FastAPI:
                     f"/plans/{plan_id}/edit?err={quote('تمپلیت پاسارگارد را انتخاب کنید')}",
                     status_code=303,
                 )
+            if not template_allowed_for_staff(staff, tpl):
+                return RedirectResponse(
+                    f"/plans/{plan_id}/edit?err={quote('به این تمپلیت دسترسی ندارید')}",
+                    status_code=303,
+                )
         else:
-            ids = [
-                int(v)
-                for k, v in form.items()
-                if str(k).startswith("group_") and str(v).isdigit()
-            ]
+            ids = parse_group_ids_from_form(form)
             if not ids:
                 return RedirectResponse(
                     f"/plans/{plan_id}/edit?err={quote('حداقل یک گروه پاسارگارد انتخاب کنید')}",
+                    status_code=303,
+                )
+            if not groups_allowed_for_staff(staff, ids):
+                return RedirectResponse(
+                    f"/plans/{plan_id}/edit?err={quote('به یکی از گروه‌های انتخاب‌شده دسترسی ندارید')}",
                     status_code=303,
                 )
             group_csv = ",".join(str(i) for i in ids)
@@ -1091,10 +1153,12 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.post("/plans/{plan_id}/toggle")
     async def plans_toggle(
         plan_id: int,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
-        plan = await session.get(Plan, plan_id)
+        from app.services.plans_catalog import get_owned_plan
+
+        plan = await get_owned_plan(session, plan_id, staff)
         if plan:
             plan.is_active = not plan.is_active
             await session.commit()
@@ -1103,11 +1167,13 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.post("/plans/{plan_id}/delete")
     async def plans_delete(
         plan_id: int,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
-        plan = await session.get(Plan, plan_id)
-        if plan:
+        from app.services.plans_catalog import get_owned_plan
+
+        plan = await get_owned_plan(session, plan_id, staff)
+        if plan and not plan.is_trial:
             await session.delete(plan)
             await session.commit()
         return RedirectResponse("/plans", status_code=303)

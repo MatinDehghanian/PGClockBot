@@ -79,8 +79,26 @@ async def generate_pg_username(
     )
 
 
-async def list_active_plans(session: AsyncSession, *, include_trial: bool = True) -> list[Plan]:
-    q = select(Plan).where(Plan.is_active.is_(True)).order_by(Plan.sort_order, Plan.id)
+async def list_active_plans(
+    session: AsyncSession,
+    *,
+    include_trial: bool = True,
+    reseller_id: int | None = None,
+) -> list[Plan]:
+    """Active shop catalog.
+
+    On a reseller-owned bot (or when reseller_id is passed), only that reseller's
+    plans are returned. On the platform bot, only admin/platform plans.
+    """
+    from app.services.users import current_shop_reseller_id
+
+    rid = reseller_id if reseller_id is not None else current_shop_reseller_id()
+    q = select(Plan).where(Plan.is_active.is_(True))
+    if rid:
+        q = q.where(Plan.owner_reseller_id == rid)
+    else:
+        q = q.where(Plan.owner_reseller_id.is_(None))
+    q = q.order_by(Plan.sort_order, Plan.id)
     result = await session.execute(q)
     plans = list(result.scalars().all())
     if not include_trial:
@@ -115,9 +133,17 @@ async def create_order(
     reseller_id: int | None = None,
     discount_code: str | None = None,
 ) -> Order:
+    from app.services.users import current_shop_reseller_id
+
     plan = await get_plan(session, plan_id)
     if not plan or not plan.is_active:
         raise ValueError("پلن یافت نشد")
+    shop_rid = current_shop_reseller_id()
+    if shop_rid:
+        if int(plan.owner_reseller_id or 0) != int(shop_rid):
+            raise ValueError("این پلن در این فروشگاه موجود نیست")
+    elif plan.owner_reseller_id is not None:
+        raise ValueError("این پلن در این فروشگاه موجود نیست")
     discount, used_code = await apply_discount(session, discount_code, plan.price)
     order = Order(
         user_id=user_id,
@@ -154,7 +180,7 @@ async def create_custom_order(
     discount_code: str | None = None,
 ) -> Order:
     """Create an order for a user-chosen GB/days combo via an inactive temp Plan."""
-    from app.services.users import get_all_settings, on
+    from app.services.users import current_shop_reseller_id, get_all_settings, on
 
     ui = await get_all_settings(session)
     if not on(ui.get("custom_plan_enabled")):
@@ -187,6 +213,7 @@ async def create_custom_order(
     tpl_raw = (ui.get("custom_plan_template_id") or "").strip()
     tpl_id = int(tpl_raw) if tpl_raw.isdigit() else None
     group_ids = (ui.get("custom_plan_group_ids") or "").strip() or None
+    shop_rid = current_shop_reseller_id()
 
     plan = Plan(
         name="پلن دلخواه",
@@ -196,6 +223,7 @@ async def create_custom_order(
         data_limit_gb=gb,
         pg_template_id=tpl_id,
         pg_group_ids=group_ids,
+        owner_reseller_id=shop_rid,
         is_active=False,
         is_trial=False,
         sort_order=9999,

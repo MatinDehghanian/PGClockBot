@@ -25,6 +25,8 @@ def _migrate_sqlite(sync_conn) -> None:
     cols = {c["name"] for c in insp.get_columns("plans")}
     if "pg_group_ids" not in cols:
         sync_conn.execute(text("ALTER TABLE plans ADD COLUMN pg_group_ids VARCHAR(255)"))
+    if "owner_reseller_id" not in cols:
+        sync_conn.execute(text("ALTER TABLE plans ADD COLUMN owner_reseller_id INTEGER"))
 
     if insp.has_table("reseller_profiles"):
         rcols = {c["name"] for c in insp.get_columns("reseller_profiles")}
@@ -57,12 +59,12 @@ def _migrate_sqlite(sync_conn) -> None:
                 text("ALTER TABLE reseller_plans ADD COLUMN share_pg_panel_url BOOLEAN DEFAULT 0")
             )
 
-    # Ensure shop_settings exists on legacy reseller profiles / plans (1.7+)
-    _ensure_shop_settings_perm_column(sync_conn, "reseller_profiles")
-    _ensure_shop_settings_perm_column(sync_conn, "reseller_plans")
+    # Ensure core shop perms exist on legacy reseller profiles / plans (1.7+)
+    _ensure_core_reseller_perms(sync_conn, "reseller_profiles")
+    _ensure_core_reseller_perms(sync_conn, "reseller_plans")
 
 
-def _ensure_shop_settings_perm_column(sync_conn, table: str) -> None:
+def _ensure_core_reseller_perms(sync_conn, table: str) -> None:
     from sqlalchemy import text
 
     try:
@@ -73,8 +75,8 @@ def _ensure_shop_settings_perm_column(sync_conn, table: str) -> None:
         return
     for row in rows:
         rid, web, bot = row[0], row[1], row[2]
-        new_web = _append_shop_settings_csv(web)
-        new_bot = _append_shop_settings_csv(bot if bot is not None else web)
+        new_web = _append_core_reseller_perms_csv(web)
+        new_bot = _append_core_reseller_perms_csv(bot if bot is not None else web)
         if new_web != (web or "") or new_bot != (bot or ""):
             sync_conn.execute(
                 text(
@@ -84,13 +86,14 @@ def _ensure_shop_settings_perm_column(sync_conn, table: str) -> None:
             )
 
 
-def _append_shop_settings_csv(raw: str | None) -> str:
+def _append_core_reseller_perms_csv(raw: str | None) -> str:
     raw = (raw or "").strip()
     if not raw:
-        return "dashboard,orders,payments,shop_settings,stats,tickets"
+        return "dashboard,orders,payments,plans,shop_settings,stats,tickets"
     parts = [p.strip() for p in raw.replace(";", ",").split(",") if p.strip()]
-    if "shop_settings" not in parts:
-        parts.append("shop_settings")
+    for key in ("shop_settings", "plans"):
+        if key not in parts:
+            parts.append(key)
     # stable unique order
     seen: list[str] = []
     for p in parts:

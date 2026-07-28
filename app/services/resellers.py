@@ -25,6 +25,7 @@ from app.db.models import (
 # Single permission set for BOTH web panel and bot (must stay identical).
 FEATURE_PERMS: list[tuple[str, str]] = [
     ("dashboard", "خانه / داشبورد"),
+    ("plans", "پلن‌های فروش"),
     ("orders", "سفارش‌ها"),
     ("payments", "پرداخت‌ها و تأیید رسید"),
     ("tickets", "تیکت‌ها"),
@@ -39,7 +40,7 @@ BOT_PERM_OPTIONS = [
     ("payments", "تأیید رسید مشتریان"),
 ]
 
-DEFAULT_FEATURE_PERMS = "dashboard,orders,payments,tickets,stats,shop_settings"
+DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings"
 DEFAULT_WEB_PERMS = DEFAULT_FEATURE_PERMS
 DEFAULT_BOT_PERMS = DEFAULT_FEATURE_PERMS
 
@@ -104,10 +105,11 @@ def parse_perms(raw: str | None) -> list[str]:
 
 
 def with_shop_settings(perms: list[str] | None) -> list[str]:
-    """Ensure shop_settings is present (core reseller shop capability)."""
+    """Ensure core shop capabilities are present for resellers."""
     out = list(perms or [])
-    if "shop_settings" not in out:
-        out.append("shop_settings")
+    for key in ("shop_settings", "plans"):
+        if key not in out:
+            out.append(key)
     return out
 
 

@@ -55,19 +55,15 @@ def _filter_owned_users(users: list[dict], staff: dict) -> list[dict]:
 
 
 def _filter_templates(items: list[dict], staff: dict) -> list[dict]:
-    if _is_admin(staff):
-        return items
-    access = staff.get("pg_access") or {}
-    allowed = access.get("allowed_template_ids")
-    if allowed is None:
-        return items
-    try:
-        allowed_ids = {int(x) for x in allowed}
-    except (TypeError, ValueError):
-        return items
-    if not allowed_ids:
-        return []
-    return [t for t in items if int(t.get("id") or 0) in allowed_ids]
+    from app.services.plans_catalog import filter_templates_for_staff
+
+    return filter_templates_for_staff(items, staff)
+
+
+def _filter_groups(items: list[dict], staff: dict) -> list[dict]:
+    from app.services.plans_catalog import filter_groups_for_staff
+
+    return filter_groups_for_staff(items, staff)
 
 
 async def _assert_owned_user(staff: dict, user_id: int) -> dict | None:
@@ -330,7 +326,7 @@ def register_pg_pages(
             elif isinstance(full, dict):
                 templates = as_list(full, "templates") or templates
             templates = _filter_templates(templates, staff)
-            groups = await pg.get_groups_simple()
+            groups = _filter_groups(await pg.get_groups_simple(), staff)
         except Exception as e:
             err = str(e)
         return render(
@@ -401,6 +397,7 @@ def register_pg_pages(
             groups = full if isinstance(full, list) else as_list(full, "groups")
             if not groups:
                 groups = await pg.get_groups_simple()
+            groups = _filter_groups([g for g in groups if isinstance(g, dict)], staff)
             inbound_tags = _inbound_tags(await pg.get_inbounds())
             if edit_id and str(edit_id).isdigit():
                 edit_group = await pg.get_group(int(edit_id))

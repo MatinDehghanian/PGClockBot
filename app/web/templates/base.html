@@ -54,7 +54,7 @@
             <span>خانه</span>
           </a>
           {% endif %}
-          {% if is_admin %}
+          {% if is_admin or 'plans' in perms %}
           <a href="/plans" class="nav-item nav-item-bot {% if path.startswith('/plans') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/><path d="M18 15v4M16 17h4"/></svg>
             <span>پلن‌ها</span>

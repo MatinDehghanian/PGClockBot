@@ -41,8 +41,10 @@
     <a href="/payments">پرداخت‌ها{% if stats.pending %} ({{ stats.pending }}){% endif %}</a>
     <a href="/orders">سفارش‌ها</a>
     <a href="/tickets">تیکت‌ها{% if stats.tickets %} ({{ stats.tickets }}){% endif %}</a>
-    {% if staff.role == 'admin' %}
+    {% if staff.role == 'admin' or 'plans' in (staff.get('permissions') or []) %}
     <a class="desk-only" href="/plans">پلن‌ها</a>
+    {% endif %}
+    {% if staff.role == 'admin' %}
     <a href="/settings?tab=update">آپدیت</a>
     <a class="desk-only" href="/settings">تنظیمات</a>
     <a href="/security">امنیت</a>
