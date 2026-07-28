@@ -6,15 +6,23 @@
 set -euo pipefail
 set +H
 
-# curl|bash leaves stdin as a dead pipe — always read from the real terminal
+# curl|bash leaves stdin as a dead pipe. For interactive menus, attach to TTY.
+# `install` / `update` / `status` / `help` can run without a TTY.
+_CMD="${1:-}"
 if [[ ! -t 0 ]]; then
-  if [[ -r /dev/tty ]]; then
-    exec </dev/tty
-  else
-    echo "  x No interactive terminal (TTY). Run: bash pgclock.sh" >&2
-    exit 1
-  fi
+  case "${_CMD}" in
+    install|i|update|u|status|s|help|h|-h|--help) ;;
+    *)
+      if [[ -r /dev/tty ]]; then
+        exec </dev/tty
+      else
+        echo "  x No interactive terminal (TTY). Run: bash pgclock.sh install" >&2
+        exit 1
+      fi
+      ;;
+  esac
 fi
+unset _CMD
 
 R=$'\033[0;31m'; G=$'\033[0;32m'; C=$'\033[0;36m'
 Y=$'\033[1;33m'; B=$'\033[1;37m'; D=$'\033[2m'; N=$'\033[0m'
@@ -395,20 +403,9 @@ cmd_install() {
   ensure_apt_packages || return 1
   ensure_python || return 1
 
-  if [[ -f .env ]]; then
-    warn ".env already exists."
-    if ! ask_yn "Overwrite existing install?" "N"; then
-      info "Cancelled. Use Update or Edit .env instead."
-      return 0
-    fi
-    cp -a .env ".env.bak.$(date +%Y%m%d%H%M%S)"
-    ok ".env backup created"
-  fi
-
-  step "1/5  Web panel port"
-  WEB_PORT="$(ask "Web panel port" "9000")"
+  # Defaults — all bot/admin/PasarGuard config is done in the web wizard (/setup)
+  WEB_PORT="${WEB_PORT:-9000}"
   WEB_SECRET="$(gen_secret)"
-  # Scaffold only — full config (bot, admin, PasarGuard) is done in the web wizard
   BOT_TOKEN=""
   BOT_USERNAME=""
   ADMIN_IDS=""
@@ -420,51 +417,67 @@ cmd_install() {
   PUBLIC_BASE_URL=""
   CURRENCY="تومان"
 
-  step "2/5  Python packages"
+  local fresh=0
+  if [[ -f .env ]]; then
+    warn ".env already exists — keeping it (no overwrite)."
+    WEB_PORT="$(env_get WEB_PORT "${WEB_PORT}")"
+    ok "Using existing config · port=${WEB_PORT}"
+  else
+    fresh=1
+    step "Scaffold configuration"
+    write_env_file
+    mkdir -p data
+    rm -f data/web_admin.json data/setup_complete.flag data/setup_in_progress.flag 2>/dev/null || true
+    ok ".env scaffold written · finish setup in the browser"
+  fi
+
+  step "Python packages"
   ensure_venv || return 1
-
-  step "3/5  Scaffold configuration"
-  write_env_file
   mkdir -p data
-  # Remove any leftover web_admin so first-run wizard is required
-  rm -f data/web_admin.json data/setup_complete.flag data/setup_in_progress.flag 2>/dev/null || true
-  ok ".env scaffold written · first-run wizard at /setup"
 
-  step "4/5  systemd"
-  if ask_yn "Enable systemd service now?" "Y"; then
-    local service_user
-    service_user="$(ask "System user" "$(whoami)")"
-    install_systemd "$service_user"
-  fi
-
-  if ask_yn "Start / keep panel running now?" "Y"; then
-    if service_installed; then
-      sudo_wrap systemctl enable --now "$SERVICE_NAME" || true
-      if service_active; then
-        ok "Service is running"
-      else
-        warn "Service installed but not active — check: journalctl -u ${SERVICE_NAME} -n 50"
-      fi
+  step "systemd service"
+  install_systemd "$(whoami)" || true
+  if service_installed; then
+    sudo_wrap systemctl enable --now "$SERVICE_NAME" || true
+    if service_active; then
+      ok "Service is running"
     else
-      warn "No systemd unit. Use menu -> Service -> Install systemd unit"
-      warn "Or run manually: source .venv/bin/activate && python run.py"
+      warn "Service installed but not active — check: journalctl -u ${SERVICE_NAME} -n 50"
     fi
+  else
+    warn "systemd unit missing — starting panel in background"
+    nohup "${SCRIPT_DIR}/.venv/bin/python" "${SCRIPT_DIR}/run.py" \
+      >/tmp/pgclock-panel.log 2>&1 &
+    ok "Panel started (pid $!) · log: /tmp/pgclock-panel.log"
   fi
 
-  step "5/5  Firewall"
+  step "Firewall"
   if command -v ufw >/dev/null 2>&1; then
-    if ask_yn "Allow web panel port ${WEB_PORT}/tcp in UFW?" "Y"; then
-      sudo_wrap ufw allow "${WEB_PORT}/tcp" >/dev/null 2>&1 || true
-      ok "UFW rule added for ${WEB_PORT}/tcp"
-    fi
+    sudo_wrap ufw allow "${WEB_PORT}/tcp" >/dev/null 2>&1 || true
+    ok "UFW: allowed ${WEB_PORT}/tcp (if UFW is active)"
+  else
+    info "UFW not installed — open port ${WEB_PORT} manually if needed"
   fi
 
-  print_success "Install complete — finish setup in the browser" \
-    "Open:       http://SERVER_IP:${WEB_PORT}/setup" \
-    "Wizard:     admin user/pass → bot → PasarGuard → done" \
-    "Password:   set in the web wizard (8+ chars, upper/lower/special)" \
-    "Manage:     bash pgclock.sh" \
-    "Logs:       journalctl -u ${SERVICE_NAME} -f"
+  local ip setup_url login_url
+  ip="$(detect_server_ip)"
+  setup_url="http://${ip}:${WEB_PORT}/setup"
+  login_url="http://${ip}:${WEB_PORT}/login"
+
+  if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
+    print_success "Install complete — open the web wizard" \
+      "Setup:      ${setup_url}" \
+      "Login:      ${login_url}" \
+      "Wizard:     welcome → admin → bot → PasarGuard → done" \
+      "No more terminal questions — configure everything in the browser" \
+      "Manage:     bash pgclock.sh" \
+      "Logs:       journalctl -u ${SERVICE_NAME} -f"
+  else
+    print_success "Install/refresh complete" \
+      "Panel:      ${login_url}" \
+      "Manage:     bash pgclock.sh" \
+      "Logs:       journalctl -u ${SERVICE_NAME} -f"
+  fi
   return 0
 }
 
@@ -782,7 +795,7 @@ cmd_help() {
 
   Usage:
     bash pgclock.sh                 Interactive menu
-    bash pgclock.sh install         Fresh install
+    bash pgclock.sh install         Silent install (config via /setup wizard)
     bash pgclock.sh update          Update code + deps
     bash pgclock.sh env             Edit .env
     bash pgclock.sh web             Web panel tools
@@ -831,7 +844,7 @@ show_menu() {
   clear > /dev/tty 2>/dev/null || printf '\033c' > /dev/tty
   banner
   {
-    printf '  %s1)%s Install        Fresh setup (bot + web panel)\n' "$B" "$N"
+    printf '  %s1)%s Install        Silent install → finish in /setup wizard\n' "$B" "$N"
     printf '  %s2)%s Update         Pull latest code (keep .env)\n' "$B" "$N"
     printf '  %s3)%s Edit .env      Change tokens / panel / ports\n' "$B" "$N"
     printf '  %s4)%s Web panel      URL, password reset, health\n' "$B" "$N"
