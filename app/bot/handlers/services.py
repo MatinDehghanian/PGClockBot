@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, UserService
 from app.services.formatting import format_message, format_toman, service_card
@@ -28,14 +29,14 @@ async def svc_list(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     services = list(result.scalars().all())
     if not services:
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 ui.get("empty_services_text")
                 or "هنوز سرویسی ندارید.\nاز بخش «خرید سرویس» شروع کنید.",
                 reply_markup=kb.main_menu(db_user.role, has_services=False, ui=ui),
             )
         return
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             "📦 <b>سرویس‌های شما</b>",
             reply_markup=kb.services_keyboard(services, ui),
         )
@@ -58,7 +59,7 @@ async def svc_view(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         except Exception as e:
             text = format_message("📦 سرویس", f"🔹 <b>{svc.pg_username}</b>\n\nخطا در دریافت وضعیت: {e}")
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.service_actions(svc.id, ui))
+        await safe_edit_text(callback.message, text, reply_markup=kb.service_actions(svc.id, ui))
 
 
 @router.callback_query(F.data.startswith("svc:link:"))
@@ -96,7 +97,7 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     text = format_message("📱 اشتراک", "\n\n".join(parts))
     if callback.message:
         try:
-            await callback.message.edit_text(text, reply_markup=kb.service_actions(svc.id, ui))
+            await safe_edit_text(callback.message, text, reply_markup=kb.service_actions(svc.id, ui))
         except Exception:
             await callback.message.answer(text, reply_markup=kb.service_actions(svc.id, ui))
     if url:
@@ -141,7 +142,7 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         ]
     )
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             "پلن تمدید را انتخاب کنید:",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
@@ -183,10 +184,10 @@ async def svc_renew_pay(callback: CallbackQuery, session: AsyncSession, db_user:
             order = await apply_renewal(session, order, svc, plan)
         except Exception as e:
             if callback.message:
-                await callback.message.edit_text(f"❌ {e}", reply_markup=kb.service_actions(svc.id, ui))
+                await safe_edit_text(callback.message, f"❌ {e}", reply_markup=kb.service_actions(svc.id, ui))
             return
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 format_message("✅ تمدید رایگان", f"سفارش #{order.id}"),
                 reply_markup=kb.service_actions(svc.id, ui),
             )
@@ -197,4 +198,4 @@ async def svc_renew_pay(callback: CallbackQuery, session: AsyncSession, db_user:
         f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>\nروش پرداخت را انتخاب کنید:",
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.pay_methods(order.id, ui))
+        await safe_edit_text(callback.message, text, reply_markup=kb.pay_methods(order.id, ui))

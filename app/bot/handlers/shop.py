@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, PaymentMethod, UserService
 from app.services.delivery import send_delivery_to_user
@@ -87,10 +88,10 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
             or "در حال حاضر پلنی برای فروش فعال نیست.",
         )
         if callback.message:
-            await callback.message.edit_text(text, reply_markup=kb.back_home(ui))
+            await safe_edit_text(callback.message, text, reply_markup=kb.back_home(ui))
         return
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             format_message("🛒 انتخاب پلن", "یکی از پلن‌ها را انتخاب کنید:"),
             reply_markup=kb.plans_keyboard(plans, ui, custom_enabled=custom_on),
         )
@@ -122,7 +123,7 @@ async def custom_start(callback: CallbackQuery, session: AsyncSession, state: FS
         f"فعلی: <b>{gb}</b> گیگ",
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.custom_gb_keyboard(gb, ui))
+        await safe_edit_text(callback.message, text, reply_markup=kb.custom_gb_keyboard(gb, ui))
 
 
 @router.callback_query(F.data.in_({"shop:custom:gb:+", "shop:custom:gb:-"}))
@@ -146,7 +147,7 @@ async def custom_gb_step(callback: CallbackQuery, session: AsyncSession, state: 
         f"فعلی: <b>{gb}</b> گیگ",
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.custom_gb_keyboard(gb, ui))
+        await safe_edit_text(callback.message, text, reply_markup=kb.custom_gb_keyboard(gb, ui))
 
 
 @router.callback_query(F.data == "shop:custom:gb:input")
@@ -212,7 +213,7 @@ async def custom_days_start(callback: CallbackQuery, session: AsyncSession, stat
         f"فعلی: <b>{days}</b> روز",
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.custom_days_keyboard(days, ui))
+        await safe_edit_text(callback.message, text, reply_markup=kb.custom_days_keyboard(days, ui))
 
 
 @router.callback_query(F.data.in_({"shop:custom:days:+", "shop:custom:days:-"}))
@@ -238,7 +239,7 @@ async def custom_days_step(callback: CallbackQuery, session: AsyncSession, state
         f"فعلی: <b>{days}</b> روز",
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.custom_days_keyboard(days, ui))
+        await safe_edit_text(callback.message, text, reply_markup=kb.custom_days_keyboard(days, ui))
 
 
 @router.callback_query(F.data == "shop:custom:days:input")
@@ -311,7 +312,7 @@ async def custom_confirm(callback: CallbackQuery, session: AsyncSession, state: 
         ]
     )
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             format_message("✨ تأیید پلن دلخواه", body),
             reply_markup=kb.custom_confirm_keyboard(ui),
         )
@@ -371,17 +372,20 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
             order = await deliver_order(session, order)
         except Exception as e:
             if callback.message:
-                await callback.message.edit_text(
+                await safe_edit_text(callback.message, 
                     format_message("❌ خطا در تحویل", str(e)),
                     reply_markup=kb.back_home(ui),
                 )
             return
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 format_message("✅ فعال شد", f"سفارش #{order.id} تحویل شد."),
                 reply_markup=kb.back_home(ui),
             )
-        await send_delivery_to_user(callback.bot, db_user.telegram_id, session, None, order)
+        try:
+            await send_delivery_to_user(callback.bot, db_user.telegram_id, session, None, order)
+        except Exception:
+            pass
         return
 
     text = format_message(
@@ -391,7 +395,7 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         "روش پرداخت را انتخاب کنید:",
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.pay_methods(order.id, ui))
+        await safe_edit_text(callback.message, text, reply_markup=kb.pay_methods(order.id, ui))
     await _notify_new_order(callback.bot, session, order, db_user, "پلن دلخواه")
 
 
@@ -417,7 +421,7 @@ async def shop_plan(callback: CallbackQuery, session: AsyncSession):
     )
     text = format_message(f"💎 {plan.name}", body)
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.plan_actions(plan.id, ui))
+        await safe_edit_text(callback.message, text, reply_markup=kb.plan_actions(plan.id, ui))
 
 
 @router.callback_query(F.data.startswith("shop:buy:"))
@@ -428,14 +432,14 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     plan = await get_plan(session, plan_id)
     if not plan:
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 format_message("⚠️ خطا", "پلن پیدا نشد."),
                 reply_markup=kb.back_home(ui),
             )
         return
     if plan.price > 0 and not kb.any_checkout_method_enabled(ui):
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 format_message(
                     "⚠️ پرداخت غیرفعال",
                     "در حال حاضر هیچ روش پرداختی فعال نیست. با پشتیبانی تماس بگیرید.",
@@ -460,17 +464,20 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
             order = await deliver_order(session, order)
         except Exception as e:
             if callback.message:
-                await callback.message.edit_text(
+                await safe_edit_text(callback.message, 
                     format_message("❌ خطا در تحویل", str(e)),
                     reply_markup=kb.back_home(ui),
                 )
             return
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 format_message("✅ فعال شد", f"سفارش #{order.id} تحویل شد."),
                 reply_markup=kb.back_home(ui),
             )
-        await send_delivery_to_user(callback.bot, db_user.telegram_id, session, None, order)
+        try:
+            await send_delivery_to_user(callback.bot, db_user.telegram_id, session, None, order)
+        except Exception:
+            pass
         return
 
     text = format_message(
@@ -479,7 +486,7 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         "روش پرداخت را انتخاب کنید:",
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.pay_methods(order.id, ui))
+        await safe_edit_text(callback.message, text, reply_markup=kb.pay_methods(order.id, ui))
     await _notify_new_order(callback.bot, session, order, db_user, plan.name if plan else None)
 
 
@@ -557,7 +564,7 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
     await callback.answer()
     if order.note and str(order.note).startswith("reseller_app:"):
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 format_message(
                     "✅ پرداخت ثبت شد",
                     "هزینه نمایندگی پرداخت شد.\nدرخواست شما برای تأیید ادمین ارسال شد.",
@@ -582,15 +589,18 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
 
     if callback.message:
         try:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 format_message("✅ خرید موفق", "سرویس در حال تحویل است…"),
                 reply_markup=kb.back_home(ui),
             )
         except Exception:
             pass
-    await send_delivery_to_user(
-        callback.bot, db_user.telegram_id, session, None, order
-    )
+    try:
+        await send_delivery_to_user(
+            callback.bot, db_user.telegram_id, session, None, order
+        )
+    except Exception:
+        pass
     try:
         from app.services.notifications import notify_new_subscription
 
@@ -632,7 +642,7 @@ async def pay_card_cb(callback: CallbackQuery, session: AsyncSession, db_user: B
         body = f"مبلغ {amount} را کارت به کارت کنید و رسید بفرستید."
     body += f"\n\n(پرداخت #{payment.id})"
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             format_message("💳 کارت به کارت", body),
             reply_markup=kb.back_home(ui),
         )
@@ -675,7 +685,7 @@ async def pay_gateway_cb(callback: CallbackQuery, session: AsyncSession, db_user
         rows.append([InlineKeyboardButton(text=f"🌐 ورود به {name}", url=link)])
     rows.append([InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="menu:home")])
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             format_message(f"🌐 {name}", body),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
@@ -716,7 +726,7 @@ async def pay_crypto_cb(callback: CallbackQuery, session: AsyncSession, db_user:
         )
     body += f"\n\n(پرداخت #{payment.id})"
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             format_message("💎 رمزارز", body),
             reply_markup=kb.back_home(ui),
         )
@@ -757,7 +767,7 @@ async def pay_stars_cb(callback: CallbackQuery, session: AsyncSession, db_user: 
             provider_token="",
         )
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 format_message(
                     "⭐ استارز تلگرام",
                     f"فاکتور {stars} استارز برای سفارش #{order.id} ارسال شد.\n"

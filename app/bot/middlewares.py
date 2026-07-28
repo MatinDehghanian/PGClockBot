@@ -34,8 +34,25 @@ def _reply_message(event: TelegramObject) -> Message | None:
     if isinstance(event, CallbackQuery) and event.message and isinstance(event.message, Message):
         return event.message
     if isinstance(event, Update):
-        return event.message or event.edited_message
+        if event.message:
+            return event.message
+        if event.edited_message:
+            return event.edited_message
+        cq = event.callback_query
+        if cq and cq.message and isinstance(cq.message, Message):
+            return cq.message
     return None
+
+
+def _is_benign_telegram_error(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return (
+        "message is not modified" in text
+        or "query is too old" in text
+        or "query id is invalid" in text
+        or "message to delete not found" in text
+        or "message can't be deleted" in text
+    )
 
 
 def _extract_start_payload(event: TelegramObject) -> str | None:
@@ -103,9 +120,12 @@ class UserMiddleware(BaseMiddleware):
                         await msg.answer("دسترسی شما مسدود شده است.")
                     except Exception:
                         pass
-                if isinstance(event, CallbackQuery):
+                cq = event.callback_query if isinstance(event, Update) else (
+                    event if isinstance(event, CallbackQuery) else None
+                )
+                if cq is not None:
                     try:
-                        await event.answer("دسترسی شما مسدود شده است.", show_alert=True)
+                        await cq.answer("دسترسی شما مسدود شده است.", show_alert=True)
                     except Exception:
                         pass
                 return None
@@ -121,7 +141,10 @@ class ErrorLogMiddleware(BaseMiddleware):
     ) -> Any:
         try:
             return await handler(event, data)
-        except Exception:
+        except Exception as e:
+            if _is_benign_telegram_error(e):
+                logger.debug("Ignored benign Telegram error: %s", e)
+                return None
             logger.exception("Unhandled bot error")
             msg = _reply_message(event)
             if msg:

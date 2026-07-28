@@ -23,13 +23,10 @@ from app.services.resellers import (
     has_bot_perm,
     list_active_reseller_plans,
 )
+from app.bot.tg_utils import safe_edit_text
 from app.services.users import get_all_settings, on
 
 router = Router(name="reseller")
-
-
-def _notify_admins_markup(app_id: int) -> InlineKeyboardMarkup:
-    return kb.reseller_app_review(app_id)
 
 
 @router.callback_query(F.data == "res:home")
@@ -40,8 +37,9 @@ async def res_home(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     profile = await get_reseller_profile(session, db_user.id)
     await callback.answer()
     if callback.message:
-        await callback.message.edit_text(
-            "🤝 <b>پنل نماینده</b>\nدسترسی‌ها با وب‌پنل یکسان است.",
+        await safe_edit_text(
+            callback.message,
+            format_message("🤝 پنل نماینده", "دسترسی‌ها با وب‌پنل یکسان است."),
             reply_markup=kb.reseller_home(profile),
         )
 
@@ -90,7 +88,7 @@ async def res_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         f"💼 کمیسیون: {profile.commission_percent}٪"
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.reseller_home(profile))
+        await safe_edit_text(callback.message, text, reply_markup=kb.reseller_home(profile))
 
 
 @router.callback_query(F.data == "res:stats")
@@ -113,7 +111,7 @@ async def res_stats(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         f"ادمین PG: <code>{profile.pg_admin_username or '—'}</code>"
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.reseller_home(profile))
+        await safe_edit_text(callback.message, text, reply_markup=kb.reseller_home(profile))
 
 
 @router.callback_query(F.data == "res:orders")
@@ -135,7 +133,7 @@ async def res_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     orders = list(result.scalars().all())
     if not orders:
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 "سفارشی برای مشتریان شما ثبت نشده.",
                 reply_markup=kb.reseller_home(profile),
             )
@@ -147,7 +145,7 @@ async def res_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
             f"{order_status_fa(o.status)}"
         )
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             "\n".join(lines),
             reply_markup=kb.reseller_home(profile),
         )
@@ -176,7 +174,7 @@ async def res_tickets(callback: CallbackQuery, session: AsyncSession, db_user: B
     rows = result.all()
     if not rows:
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 "تیکت بازی از مشتریان نیست.",
                 reply_markup=kb.reseller_home(profile),
             )
@@ -186,7 +184,7 @@ async def res_tickets(callback: CallbackQuery, session: AsyncSession, db_user: B
         lines.append(f"#{t.id} — {t.subject[:40]} — {u.full_name or u.telegram_id}")
     lines.append("\nپاسخ کامل از وب‌پنل نماینده.")
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             "\n".join(lines),
             reply_markup=kb.reseller_home(profile),
         )
@@ -216,7 +214,7 @@ async def res_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
     rows = result.all()
     if not rows:
         if callback.message:
-            await callback.message.edit_text("رسید معلقی نیست.", reply_markup=kb.reseller_home(profile))
+            await safe_edit_text(callback.message, "رسید معلقی نیست.", reply_markup=kb.reseller_home(profile))
         return
     for payment, user in rows:
         caption = (
@@ -240,7 +238,7 @@ async def res_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
         except Exception:
             pass
     if callback.message:
-        await callback.message.edit_text("رسیدهای باز ارسال شد.", reply_markup=kb.reseller_home(profile))
+        await safe_edit_text(callback.message, "رسیدهای باز ارسال شد.", reply_markup=kb.reseller_home(profile))
 
 
 @router.callback_query(F.data == "resapply:home")
@@ -259,7 +257,7 @@ async def resapply_home(callback: CallbackQuery, session: AsyncSession, db_user:
     await callback.answer()
     if not plans:
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 format_message(
                     "🤝 نمایندگی",
                     "در حال حاضر پلن نمایندگی فعالی تعریف نشده است.\nبعداً دوباره بررسی کنید.",
@@ -280,7 +278,7 @@ async def resapply_home(callback: CallbackQuery, session: AsyncSession, db_user:
         )
     rows.append([InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="menu:home")])
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             format_message(
                 "🤝 درخواست نمایندگی",
                 "یکی از پلن‌های زیر را انتخاب کنید. پس از پرداخت (در صورت نیاز) ادمین درخواست را بررسی می‌کند.",
@@ -310,7 +308,7 @@ async def resapply_plan(callback: CallbackQuery, session: AsyncSession, db_user:
     ]
     await callback.answer()
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             format_message(f"🤝 {plan.name}", body),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
@@ -334,7 +332,7 @@ async def resapply_buy(callback: CallbackQuery, session: AsyncSession, db_user: 
     await callback.answer()
     if order is None:
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 format_message(
                     "✅ درخواست ثبت شد",
                     f"درخواست #{app.id} برای پلن «{plan.name}» ثبت شد.\n"
@@ -360,7 +358,7 @@ async def resapply_buy(callback: CallbackQuery, session: AsyncSession, db_user: 
 
     if not kb.any_checkout_method_enabled(ui):
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 format_message("⚠️ پرداخت غیرفعال", "روش پرداختی فعال نیست. با پشتیبانی تماس بگیرید."),
                 reply_markup=kb.back_home(ui),
             )
@@ -372,4 +370,4 @@ async def resapply_buy(callback: CallbackQuery, session: AsyncSession, db_user: 
         "روش پرداخت را انتخاب کنید:",
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.pay_methods(order.id, ui))
+        await safe_edit_text(callback.message, text, reply_markup=kb.pay_methods(order.id, ui))

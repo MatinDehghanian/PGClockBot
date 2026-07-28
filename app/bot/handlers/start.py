@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.tg_utils import safe_edit_text, seed_persistent_reply_kb
 from app.config import get_settings
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
@@ -52,9 +53,14 @@ async def render_home(
         has = await _has_services(session, db_user.id)
         markup = kb.main_menu(db_user.role, has_services=has, ui=ui)
     if edit:
+        from aiogram.exceptions import TelegramBadRequest
+
         try:
             await message.edit_text(text, reply_markup=markup)
             return
+        except TelegramBadRequest as e:
+            if "message is not modified" in str(e).lower():
+                return
         except Exception:
             pass
 
@@ -62,12 +68,7 @@ async def render_home(
     await message.answer(text, reply_markup=markup)
 
     if seed_reply_kb:
-        # Keep «شروع مجدد» on the reply keyboard without a second visible home message
-        tip = await message.answer("\u200c", reply_markup=kb.persistent_reply_keyboard())
-        try:
-            await tip.delete()
-        except Exception:
-            pass
+        await seed_persistent_reply_kb(message)
 
 
 @router.message(F.text.func(kb.is_restart_text))
@@ -147,7 +148,8 @@ async def help_guide(callback: CallbackQuery, session: AsyncSession):
     await callback.answer()
     ui = await get_all_settings(session)
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(
+            callback.message,
             format_message("📘 راهنما", ui.get("guide_text") or ""),
             reply_markup=kb.back_home(ui),
         )
@@ -160,7 +162,8 @@ async def help_faq(callback: CallbackQuery, session: AsyncSession):
     await callback.answer()
     ui = await get_all_settings(session)
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(
+            callback.message,
             format_message("❓ سوالات متداول", ui.get("faq_text") or ""),
             reply_markup=kb.back_home(ui),
         )
@@ -180,7 +183,8 @@ async def referral_home(callback: CallbackQuery, session: AsyncSession, db_user:
     except Exception:
         body = f"کد: {db_user.referral_code}\n{link}"
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(
+            callback.message,
             format_message("🎁 دعوت دوستان", body),
             reply_markup=kb.back_home(ui),
         )

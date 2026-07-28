@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus
 from app.services.formatting import format_message, format_toman, kv_line
@@ -48,7 +49,7 @@ async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: B
         ),
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.wallet_keyboard(ui))
+        await safe_edit_text(callback.message, text, reply_markup=kb.wallet_keyboard(ui))
 
 
 @router.callback_query(F.data == "wallet:tx")
@@ -67,7 +68,7 @@ async def wallet_tx(callback: CallbackQuery, session: AsyncSession, db_user: Bot
             )
         body = "\n".join(lines)
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             format_message("📜 تراکنش‌ها", body),
             reply_markup=kb.wallet_keyboard(ui),
         )
@@ -189,7 +190,7 @@ async def wtop_choose_method(
     await state.set_state(WalletStates.waiting_receipt)
     await state.update_data(payment_id=payment.id, topup_amount=None)
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=markup)
+        await safe_edit_text(callback.message, text, reply_markup=markup)
 
 
 @router.message(WalletStates.waiting_receipt, F.photo)

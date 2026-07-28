@@ -66,7 +66,13 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
         format_message("✅ پرداخت استارز", "پرداخت با موفقیت انجام شد."),
         reply_markup=kb.back_home(ui),
     )
-    await send_delivery_to_user(message.bot, db_user.telegram_id, session, payment, order)
+    try:
+        await send_delivery_to_user(message.bot, db_user.telegram_id, session, payment, order)
+    except Exception:
+        try:
+            await message.answer("پرداخت شد ولی ارسال جزئیات سرویس ناموفق بود — از «سرویس‌های من» بررسی کنید.")
+        except Exception:
+            pass
     try:
         from app.db.models import Plan
         from app.services.notifications import notify_new_subscription

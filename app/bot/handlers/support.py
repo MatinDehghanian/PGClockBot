@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Ticket
 from app.services.formatting import format_message, ticket_status_fa
 from app.services.support_contacts import (
@@ -48,7 +49,7 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
             f"برای ارتباط مستقیم روی دکمه زیر بزنید:\n<b>{title}</b>",
         )
         if callback.message:
-            await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+            await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
         return
     if len(contacts) > 1:
         text = format_message(
@@ -56,7 +57,7 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
             "یکی از پشتیبان‌ها را انتخاب کنید:",
         )
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_text(callback.message, 
                 text,
                 reply_markup=kb.support_contacts_keyboard(contacts, ui),
             )
@@ -64,7 +65,7 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
     # No contacts → classic ticket UI
     text = ui.get("support_text") or await get_setting(session, "support_text")
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             format_message("🎧 پشتیبانی", text),
             reply_markup=kb.support_keyboard(ui),
         )
@@ -76,7 +77,7 @@ async def support_tickets_home(callback: CallbackQuery, session: AsyncSession):
     ui = await get_all_settings(session)
     text = ui.get("support_text") or await get_setting(session, "support_text")
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             format_message("🎧 پشتیبانی — تیکت", text),
             reply_markup=kb.support_keyboard(ui),
         )
@@ -155,7 +156,7 @@ async def support_list(callback: CallbackQuery, session: AsyncSession, db_user: 
         text = "📋 تیکت‌های شما:"
         markup = InlineKeyboardMarkup(inline_keyboard=rows)
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=markup)
+        await safe_edit_text(callback.message, text, reply_markup=markup)
 
 
 @router.callback_query(F.data.startswith("support:view:"))
@@ -177,7 +178,7 @@ async def support_view(callback: CallbackQuery, session: AsyncSession, db_user: 
     await state.set_state(SupportStates.reply)
     await state.update_data(ticket_id=ticket.id)
     if callback.message:
-        await callback.message.edit_text("\n".join(lines))
+        await safe_edit_text(callback.message, "\n".join(lines))
         await callback.message.answer("برای پاسخ، پیام بفرستید یا انصراف بزنید:", reply_markup=kb.cancel_reply())
 
 
