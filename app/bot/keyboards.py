@@ -45,6 +45,18 @@ def _menu_order(ui: dict | None) -> list[str]:
     # shop always present
     if "shop" not in ordered:
         ordered.insert(0, "shop")
+    # Older saved menu_order may omit newly added keys — inject before miniapp/end
+    for key in DEFAULT_MENU_ORDER:
+        if key in ordered or key == "shop":
+            continue
+        if key == "reseller_apply" and not on(_t(ui, "show_reseller_apply")):
+            continue
+        if key == "miniapp" and not on(_t(ui, "show_miniapp")):
+            continue
+        if "miniapp" in ordered:
+            ordered.insert(ordered.index("miniapp"), key)
+        else:
+            ordered.append(key)
     return ordered
 
 
@@ -471,6 +483,7 @@ def admin_home() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="👥 کاربران", callback_data="adm:users"),
                 InlineKeyboardButton(text="🤝 نمایندگان", callback_data="adm:resellers"),
             ],
+            [InlineKeyboardButton(text="📢 پیام گروهی", callback_data="adm:broadcast")],
             [InlineKeyboardButton(text="🖥 پاسارگارد", callback_data="adm:pg")],
             [InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="adm:settings")],
             [InlineKeyboardButton(text="⬅️ منوی اصلی", callback_data="menu:home")],

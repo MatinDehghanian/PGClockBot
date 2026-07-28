@@ -159,6 +159,10 @@ async def create_custom_order(
     ui = await get_all_settings(session)
     if not on(ui.get("custom_plan_enabled")):
         raise ValueError("پلن دلخواه فعال نیست")
+    # Require at least one active catalog plan (non-trial)
+    catalog = await list_active_plans(session, include_trial=False)
+    if not catalog:
+        raise ValueError("پلن دلخواه بدون پلن فعال در فروشگاه در دسترس نیست")
 
     min_gb = int(float(ui.get("custom_plan_min_gb") or 1))
     max_gb = int(float(ui.get("custom_plan_max_gb") or 500))

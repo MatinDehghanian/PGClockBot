@@ -9,13 +9,14 @@ from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus, Role
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
 from app.services.orders import approve_payment, reject_payment
+from app.services.resellers import reseller_can_review_payment
 from app.services.users import get_all_settings
 
 router = Router(name="payments")
 
 
-def _can_review(user: BotUser) -> bool:
-    return user.role in {Role.ADMIN.value, Role.RESELLER.value}
+async def _can_review_payment(session: AsyncSession, user: BotUser, payment: Payment) -> bool:
+    return await reseller_can_review_payment(session, user, payment)
 
 
 @router.pre_checkout_query()
@@ -87,13 +88,13 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
 
 @router.callback_query(F.data.startswith("payrev:ok:"))
 async def pay_approve(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if not _can_review(db_user):
-        await callback.answer("دسترسی ندارید", show_alert=True)
-        return
     payment_id = int(callback.data.split(":")[-1])
     payment = await session.get(Payment, payment_id)
     if not payment:
         await callback.answer("یافت نشد", show_alert=True)
+        return
+    if not await _can_review_payment(session, db_user, payment):
+        await callback.answer("دسترسی ندارید", show_alert=True)
         return
     try:
         order = await approve_payment(session, payment, db_user.telegram_id)
@@ -142,13 +143,13 @@ async def pay_approve(callback: CallbackQuery, session: AsyncSession, db_user: B
 
 @router.callback_query(F.data.startswith("payrev:no:"))
 async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if not _can_review(db_user):
-        await callback.answer("دسترسی ندارید", show_alert=True)
-        return
     payment_id = int(callback.data.split(":")[-1])
     payment = await session.get(Payment, payment_id)
     if not payment:
         await callback.answer("یافت نشد", show_alert=True)
+        return
+    if not await _can_review_payment(session, db_user, payment):
+        await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await reject_payment(session, payment, db_user.telegram_id, "rejected")
     await callback.answer("رد شد")

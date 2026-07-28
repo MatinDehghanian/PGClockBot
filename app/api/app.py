@@ -34,7 +34,15 @@ from app.db.models import (
 from app.db.session import SessionLocal
 from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.pasarguard import get_pg
-from app.services.resellers import get_reseller_profile, has_web_perm, make_reseller, parse_perms, DEFAULT_WEB_PERMS
+from app.services.resellers import (
+    get_reseller_profile,
+    has_web_perm,
+    make_reseller,
+    parse_perms,
+    setup_is_complete,
+    DEFAULT_FEATURE_PERMS,
+    DEFAULT_WEB_PERMS,
+)
 from app.services.setup_wizard import (
     begin_setup,
     current_setup_values,
@@ -198,11 +206,12 @@ def create_api_app(lifespan=None) -> FastAPI:
                 return RedirectResponse("/", status_code=303)
             return await call_next(request)
 
-        # First-run: only wizard + static/health. Everything else → /
+        # First-run: only wizard + static/health + reseller setup. Everything else → /
         allowed = (
             path == "/"
             or path == "/setup"
             or path.startswith("/setup/")
+            or path.startswith("/rsetup/")
             or path.startswith("/static")
             or path == "/health"
         )
@@ -244,8 +253,10 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     register_pg_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     from app.api.reseller_pages import register_reseller_pages
+    from app.api.reseller_setup import register_reseller_setup
 
     register_reseller_pages(app, render=render, require_admin=require_admin, get_db=get_db)
+    register_reseller_setup(app, render=render, get_db=get_db)
 
     @app.get("/health")
     async def health():
@@ -463,12 +474,12 @@ def create_api_app(lifespan=None) -> FastAPI:
             role = "admin"
             display = load_web_admin()["username"]
         else:
-            # Reseller web credentials (auto-provisioned)
+            # Reseller web credentials (self-serve wizard only — no referral-code login)
             result = await session.execute(
                 select(BotUser, ResellerProfile)
                 .join(ResellerProfile, ResellerProfile.user_id == BotUser.id)
                 .where(
-                    ResellerProfile.web_username == u,
+                    ResellerProfile.web_username == u.strip().lower(),
                     ResellerProfile.is_active.is_(True),
                     BotUser.role == Role.RESELLER.value,
                 )
@@ -476,34 +487,24 @@ def create_api_app(lifespan=None) -> FastAPI:
             row = result.first()
             if row:
                 ru, profile = row
+                if not setup_is_complete(profile):
+                    _login_fail(ip)
+                    return render(
+                        request,
+                        "login.html",
+                        {
+                            "error": "راه‌اندازی پنل هنوز کامل نشده. از لینک تلگرام استفاده کنید.",
+                            "hint_user": load_web_admin().get("username") or "admin",
+                        },
+                        status_code=400,
+                    )
                 if verify_password_hash(p, profile.web_password_hash):
                     role = "reseller"
                     display = profile.web_username or ru.full_name or str(ru.telegram_id)
-                    permissions = parse_perms(profile.web_permissions) or parse_perms(DEFAULT_WEB_PERMS)
-                    bot_user_id = ru.id
-            if not role:
-                try:
-                    tg_id = int(u)
-                except ValueError:
-                    tg_id = None
-                if tg_id is not None:
-                    result = await session.execute(
-                        select(BotUser).where(
-                            BotUser.telegram_id == tg_id,
-                            BotUser.role == Role.RESELLER.value,
-                        )
+                    permissions = parse_perms(profile.web_permissions) or parse_perms(
+                        DEFAULT_FEATURE_PERMS
                     )
-                    ru = result.scalar_one_or_none()
-                    if ru and p == (ru.referral_code or ""):
-                        role = "reseller"
-                        display = ru.full_name or str(tg_id)
-                        bot_user_id = ru.id
-                        profile = await get_reseller_profile(session, ru.id)
-                        permissions = (
-                            parse_perms(profile.web_permissions)
-                            if profile
-                            else parse_perms(DEFAULT_WEB_PERMS)
-                        ) or parse_perms(DEFAULT_WEB_PERMS)
+                    bot_user_id = ru.id
 
         if not role:
             _login_fail(ip)
@@ -518,10 +519,23 @@ def create_api_app(lifespan=None) -> FastAPI:
             )
 
         _login_success(ip)
-        resp = RedirectResponse("/dashboard", status_code=303)
         payload = {"role": role, "username": display, "permissions": permissions}
         if bot_user_id is not None:
             payload["bot_user_id"] = bot_user_id
+        home = "/dashboard"
+        if role == "reseller":
+            for path, key in (
+                ("/dashboard", "dashboard"),
+                ("/orders", "orders"),
+                ("/payments", "payments"),
+                ("/tickets", "tickets"),
+            ):
+                if key in permissions:
+                    home = path
+                    break
+            else:
+                home = "/logout"
+        resp = RedirectResponse(home, status_code=303)
         resp.set_cookie(
             "session",
             get_signer().dumps(payload),
@@ -542,40 +556,61 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.get("/dashboard", response_class=HTMLResponse)
     async def dashboard(
         request: Request,
-        staff: dict = Depends(require_staff),
+        staff: dict = Depends(require_perm("dashboard")),
         session: AsyncSession = Depends(get_db),
     ):
-        users_count = await session.scalar(select(func.count()).select_from(BotUser)) or 0
-        orders_count = await session.scalar(select(func.count()).select_from(Order)) or 0
-        pending_payments = await session.scalar(
-            select(func.count()).select_from(Payment).where(
+        rid = staff.get("bot_user_id") if staff.get("role") == "reseller" else None
+        users_q = select(func.count()).select_from(BotUser)
+        orders_q = select(func.count()).select_from(Order)
+        pending_q = (
+            select(func.count())
+            .select_from(Payment)
+            .where(
                 Payment.status == PaymentStatus.PENDING.value,
                 Payment.receipt_file_id.is_not(None),
             )
-        ) or 0
-        services_count = await session.scalar(select(func.count()).select_from(UserService)) or 0
-        revenue = await session.scalar(
-            select(func.coalesce(func.sum(Order.amount), 0)).where(Order.status == "delivered")
-        ) or 0
+        )
+        services_q = select(func.count()).select_from(UserService)
+        revenue_q = select(func.coalesce(func.sum(Order.amount), 0)).where(Order.status == "delivered")
+        if rid:
+            users_q = users_q.where(BotUser.reseller_id == rid)
+            orders_q = orders_q.where(Order.reseller_id == rid)
+            pending_q = pending_q.join(BotUser, BotUser.id == Payment.user_id).where(
+                BotUser.reseller_id == rid
+            )
+            services_q = services_q.join(BotUser, BotUser.id == UserService.bot_user_id).where(
+                BotUser.reseller_id == rid
+            )
+            revenue_q = revenue_q.where(Order.reseller_id == rid)
+
+        users_count = await session.scalar(users_q) or 0
+        orders_count = await session.scalar(orders_q) or 0
+        pending_payments = await session.scalar(pending_q) or 0
+        services_count = await session.scalar(services_q) or 0
+        revenue = await session.scalar(revenue_q) or 0
         plans_count = await session.scalar(
             select(func.count()).select_from(Plan).where(Plan.is_active.is_(True))
         ) or 0
-        open_tickets = await session.scalar(
-            select(func.count()).select_from(Ticket).where(Ticket.status == "open")
-        ) or 0
-        recent_payments = list(
-            (
-                await session.execute(
-                    select(Payment).order_by(Payment.id.desc()).limit(6)
-                )
-            ).scalars().all()
-        )
-        recent_orders = list(
-            (
-                await session.execute(select(Order).order_by(Order.id.desc()).limit(6))
-            ).scalars().all()
-        )
-        update = await check_github_update()
+        tickets_q = select(func.count()).select_from(Ticket).where(Ticket.status == "open")
+        if rid:
+            tickets_q = tickets_q.join(BotUser, BotUser.id == Ticket.user_id).where(
+                BotUser.reseller_id == rid
+            )
+        open_tickets = await session.scalar(tickets_q) or 0
+        pay_q = select(Payment).order_by(Payment.id.desc()).limit(6)
+        ord_q = select(Order).order_by(Order.id.desc()).limit(6)
+        if rid:
+            pay_q = (
+                select(Payment)
+                .join(BotUser, BotUser.id == Payment.user_id)
+                .where(BotUser.reseller_id == rid)
+                .order_by(Payment.id.desc())
+                .limit(6)
+            )
+            ord_q = ord_q.where(Order.reseller_id == rid)
+        recent_payments = list((await session.execute(pay_q)).scalars().all())
+        recent_orders = list((await session.execute(ord_q)).scalars().all())
+        update = await check_github_update() if staff.get("role") == "admin" else None
         return render(
             request,
             "dashboard.html",
@@ -967,10 +1002,10 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.get("/orders", response_class=HTMLResponse)
     async def orders_page(
         request: Request,
-        staff: dict = Depends(require_staff),
+        staff: dict = Depends(require_perm("orders")),
         session: AsyncSession = Depends(get_db),
     ):
-        result = await session.execute(
+        q = (
             select(Order)
             .options(
                 selectinload(Order.plan),
@@ -979,6 +1014,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             .order_by(Order.id.desc())
             .limit(100)
         )
+        if staff.get("role") == "reseller":
+            q = q.where(Order.reseller_id == staff.get("bot_user_id"))
+        result = await session.execute(q)
         orders = list(result.scalars().all())
         payments_by_order: dict[int, Payment] = {}
         if orders:
@@ -1041,12 +1079,14 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.post("/orders/{order_id}/approve")
     async def order_approve(
         order_id: int,
-        staff: dict = Depends(require_staff),
+        staff: dict = Depends(require_perm("orders")),
         session: AsyncSession = Depends(get_db),
     ):
         order = await session.get(Order, order_id)
         if not order:
             return _redirect_msg("/orders", err="سفارش یافت نشد")
+        if staff.get("role") == "reseller" and order.reseller_id != staff.get("bot_user_id"):
+            return _redirect_msg("/orders", err="دسترسی به این سفارش ندارید")
         if order.status == OrderStatus.DELIVERED.value:
             return _redirect_msg("/orders", ok="قبلاً تحویل شده")
 
@@ -1077,12 +1117,14 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.post("/orders/{order_id}/reject")
     async def order_reject(
         order_id: int,
-        staff: dict = Depends(require_staff),
+        staff: dict = Depends(require_perm("orders")),
         session: AsyncSession = Depends(get_db),
     ):
         order = await session.get(Order, order_id)
         if not order:
             return _redirect_msg("/orders", err="سفارش یافت نشد")
+        if staff.get("role") == "reseller" and order.reseller_id != staff.get("bot_user_id"):
+            return _redirect_msg("/orders", err="دسترسی به این سفارش ندارید")
         result = await session.execute(
             select(Payment)
             .where(Payment.order_id == order_id)
@@ -1117,10 +1159,19 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.get("/payments", response_class=HTMLResponse)
     async def payments_page(
         request: Request,
-        staff: dict = Depends(require_staff),
+        staff: dict = Depends(require_perm("payments")),
         session: AsyncSession = Depends(get_db),
     ):
-        result = await session.execute(select(Payment).order_by(Payment.id.desc()).limit(100))
+        q = select(Payment).order_by(Payment.id.desc()).limit(100)
+        if staff.get("role") == "reseller":
+            q = (
+                select(Payment)
+                .join(BotUser, BotUser.id == Payment.user_id)
+                .where(BotUser.reseller_id == staff.get("bot_user_id"))
+                .order_by(Payment.id.desc())
+                .limit(100)
+            )
+        result = await session.execute(q)
         payments = list(result.scalars().all())
         return render(
             request,
@@ -1140,12 +1191,17 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.post("/payments/{payment_id}/approve")
     async def payment_approve(
         payment_id: int,
-        staff: dict = Depends(require_staff),
+        staff: dict = Depends(require_perm("payments")),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.services.resellers import reseller_owns_user
+
         payment = await session.get(Payment, payment_id)
         if not payment:
             return _redirect_msg("/payments", err="پرداخت یافت نشد")
+        if staff.get("role") == "reseller":
+            if not await reseller_owns_user(session, int(staff.get("bot_user_id") or 0), payment.user_id):
+                return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
         if payment.status != PaymentStatus.PENDING.value:
             return _redirect_msg("/payments", err="این پرداخت قابل تأیید نیست")
         try:
@@ -1187,12 +1243,17 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.post("/payments/{payment_id}/reject")
     async def payment_reject(
         payment_id: int,
-        staff: dict = Depends(require_staff),
+        staff: dict = Depends(require_perm("payments")),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.services.resellers import reseller_owns_user
+
         payment = await session.get(Payment, payment_id)
         if not payment:
             return _redirect_msg("/payments", err="پرداخت یافت نشد")
+        if staff.get("role") == "reseller":
+            if not await reseller_owns_user(session, int(staff.get("bot_user_id") or 0), payment.user_id):
+                return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
         try:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
         except Exception as e:
@@ -1254,7 +1315,34 @@ def create_api_app(lifespan=None) -> FastAPI:
         if role not in {Role.USER.value, Role.RESELLER.value, Role.ADMIN.value}:
             return RedirectResponse(f"/users?err={quote('نقش نامعتبر')}", status_code=303)
         if role == Role.RESELLER.value:
-            await make_reseller(session, user, commission_percent=10, can_approve_receipts=False)
+            from app.services.resellers import format_credentials_message, provision_reseller
+
+            try:
+                creds = await provision_reseller(
+                    session,
+                    user=user,
+                    commission_percent=10,
+                    web_permissions=DEFAULT_FEATURE_PERMS,
+                    bot_permissions=DEFAULT_FEATURE_PERMS,
+                    create_pg_admin=False,
+                    panel_base_url=str(get_settings().public_base_url or ""),
+                )
+            except Exception as e:
+                return RedirectResponse(f"/users?err={quote(str(e))}", status_code=303)
+            try:
+                from app.bot import create_bot
+
+                bot = create_bot()
+                try:
+                    await bot.send_message(
+                        user.telegram_id,
+                        format_credentials_message(creds),
+                        parse_mode="HTML",
+                    )
+                finally:
+                    await bot.session.close()
+            except Exception:
+                pass
         else:
             user.role = role
             await session.commit()
@@ -1661,15 +1749,65 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.get("/tickets", response_class=HTMLResponse)
     async def tickets_page(
         request: Request,
-        staff: dict = Depends(require_staff),
+        staff: dict = Depends(require_perm("tickets")),
         session: AsyncSession = Depends(get_db),
     ):
-        result = await session.execute(select(Ticket).order_by(Ticket.id.desc()).limit(100))
+        q = select(Ticket).order_by(Ticket.id.desc()).limit(100)
+        if staff.get("role") == "reseller":
+            q = (
+                select(Ticket)
+                .join(BotUser, BotUser.id == Ticket.user_id)
+                .where(BotUser.reseller_id == staff.get("bot_user_id"))
+                .order_by(Ticket.id.desc())
+                .limit(100)
+            )
+        result = await session.execute(q)
         tickets = list(result.scalars().all())
-        return render(request, "tickets.html", {"staff": staff, "tickets": tickets},
+        return render(request, "tickets.html", {"staff": staff, "tickets": tickets})
+
+    @app.get("/broadcast", response_class=HTMLResponse)
+    async def broadcast_page(
+        request: Request,
+        staff: dict = Depends(require_admin),
+    ):
+        return render(
+            request,
+            "broadcast.html",
+            {
+                "staff": staff,
+                "flash_ok": request.query_params.get("ok"),
+                "flash_err": request.query_params.get("err"),
+            },
         )
 
+    @app.post("/broadcast")
+    async def broadcast_send(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+        text: str = Form(...),
+        audience: str = Form("all"),
+    ):
+        from app.bot import create_bot
+        from app.services.broadcast import send_broadcast
+
+        audience = (audience or "all").strip()
+        if audience not in {"all", "users", "resellers", "admins"}:
+            audience = "all"
+        bot = create_bot()
+        try:
+            result = await send_broadcast(bot, session, text=text, audience=audience)
+        except ValueError as e:
+            return _redirect_msg("/broadcast", err=str(e))
+        except Exception as e:
+            return _redirect_msg("/broadcast", err=f"خطا در ارسال: {e}")
+        finally:
+            await bot.session.close()
+        msg = f"ارسال شد: {result['ok']} موفق از {result['total']} (ناموفق: {result['fail']})"
+        return _redirect_msg("/broadcast", ok=msg)
+
     # -------- Mini App pages & API --------
+
     @app.get("/miniapp/", response_class=HTMLResponse)
     async def miniapp_index(request: Request):
         return render(request, "miniapp.html", {})

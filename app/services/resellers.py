@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import secrets
 import string
+from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
 from sqlalchemy import select
@@ -13,6 +14,7 @@ from app.db.models import (
     BotUser,
     Order,
     OrderStatus,
+    Payment,
     ResellerApplication,
     ResellerApplicationStatus,
     ResellerPlan,
@@ -20,22 +22,27 @@ from app.db.models import (
     Role,
 )
 
-# Web panel sections a reseller may be granted
-WEB_PERM_OPTIONS: list[tuple[str, str]] = [
+# Single permission set for BOTH web panel and bot (must stay identical).
+FEATURE_PERMS: list[tuple[str, str]] = [
     ("dashboard", "خانه / داشبورد"),
     ("orders", "سفارش‌ها"),
-    ("payments", "پرداخت‌ها"),
+    ("payments", "پرداخت‌ها و تأیید رسید"),
     ("tickets", "تیکت‌ها"),
+    ("stats", "آمار نماینده"),
 ]
 
-# Bot capabilities for resellers
-BOT_PERM_OPTIONS: list[tuple[str, str]] = [
-    ("stats", "مشاهده آمار نماینده"),
-    ("approve_receipts", "تأیید رسید مشتریان"),
+# Back-compat aliases used by older templates
+WEB_PERM_OPTIONS = FEATURE_PERMS
+BOT_PERM_OPTIONS = [
+    ("stats", "آمار نماینده"),
+    ("payments", "تأیید رسید مشتریان"),
 ]
 
-DEFAULT_WEB_PERMS = "dashboard,orders,payments,tickets"
-DEFAULT_BOT_PERMS = "stats"
+DEFAULT_FEATURE_PERMS = "dashboard,orders,payments,tickets,stats"
+DEFAULT_WEB_PERMS = DEFAULT_FEATURE_PERMS
+DEFAULT_BOT_PERMS = DEFAULT_FEATURE_PERMS
+
+SETUP_TOKEN_HOURS = 48
 
 
 def parse_perms(raw: str | None) -> list[str]:
@@ -49,36 +56,77 @@ def parse_perms(raw: str | None) -> list[str]:
                 return [str(x).strip() for x in data if str(x).strip()]
         except Exception:
             pass
-    return [p.strip() for p in raw.replace(";", ",").split(",") if p.strip()]
+    allowed = {k for k, _ in FEATURE_PERMS}
+    # Map legacy bot-only keys
+    legacy = {"approve_receipts": "payments"}
+    out: list[str] = []
+    for p in raw.replace(";", ",").split(","):
+        key = legacy.get(p.strip(), p.strip())
+        if key in allowed and key not in out:
+            out.append(key)
+    return out
 
 
 def join_perms(items: Iterable[str] | None) -> str:
-    return ",".join(sorted({str(x).strip() for x in (items or []) if str(x).strip()}))
+    allowed = {k for k, _ in FEATURE_PERMS}
+    return ",".join(sorted({str(x).strip() for x in (items or []) if str(x).strip() in allowed}))
 
 
-def has_web_perm(profile: ResellerProfile | None, key: str, *, role: str | None = None) -> bool:
+def normalize_feature_perms(raw: str | None) -> str:
+    perms = parse_perms(raw)
+    return join_perms(perms) if perms else DEFAULT_FEATURE_PERMS
+
+
+def has_perm(profile: ResellerProfile | None, key: str, *, role: str | None = None) -> bool:
+    """Unified permission check for web + bot."""
     if role == Role.ADMIN.value:
         return True
     if not profile or not profile.is_active:
         return False
-    perms = parse_perms(profile.web_permissions) or parse_perms(DEFAULT_WEB_PERMS)
+    perms = parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
     return key in perms
+
+
+def has_web_perm(profile: ResellerProfile | None, key: str, *, role: str | None = None) -> bool:
+    return has_perm(profile, key, role=role)
 
 
 def has_bot_perm(profile: ResellerProfile | None, key: str) -> bool:
+    if key == "approve_receipts":
+        key = "payments"
+    return has_perm(profile, key)
+
+
+def setup_is_complete(profile: ResellerProfile | None) -> bool:
+    """Reseller may log into web only after self-serve wizard finishes."""
     if not profile or not profile.is_active:
         return False
-    if key == "approve_receipts":
-        return bool(profile.can_approve_receipts) or "approve_receipts" in parse_perms(
-            profile.bot_permissions
-        )
-    perms = parse_perms(profile.bot_permissions) or parse_perms(DEFAULT_BOT_PERMS)
-    return key in perms
+    return bool(profile.setup_completed_at and profile.web_username and profile.web_password_hash)
+
+
+async def reseller_owns_user(session: AsyncSession, reseller_user_id: int, customer_user_id: int) -> bool:
+    customer = await session.get(BotUser, customer_user_id)
+    return bool(customer and customer.reseller_id == reseller_user_id)
+
+
+async def reseller_can_review_payment(
+    session: AsyncSession,
+    reviewer: BotUser,
+    payment: Payment,
+) -> bool:
+    """Admins: yes. Resellers: payments perm + customer must belong to them."""
+    if reviewer.role == Role.ADMIN.value:
+        return True
+    if reviewer.role != Role.RESELLER.value:
+        return False
+    profile = await get_reseller_profile(session, reviewer.id)
+    if not has_bot_perm(profile, "payments"):
+        return False
+    return await reseller_owns_user(session, reviewer.id, payment.user_id)
 
 
 def _rand_password(length: int = 12) -> str:
     alphabet = string.ascii_letters + string.digits + "!@#$%"
-    # Ensure complexity for panel rules
     chars = [
         secrets.choice(string.ascii_uppercase),
         secrets.choice(string.ascii_lowercase),
@@ -94,11 +142,34 @@ def _rand_username(prefix: str = "res") -> str:
     return f"{prefix}_{secrets.token_hex(3)}"
 
 
+def new_setup_token() -> tuple[str, datetime]:
+    token = secrets.token_urlsafe(32)
+    expires = datetime.now(timezone.utc) + timedelta(hours=SETUP_TOKEN_HOURS)
+    return token, expires
+
+
 async def get_reseller_profile(session: AsyncSession, user_id: int) -> ResellerProfile | None:
     result = await session.execute(
         select(ResellerProfile).where(ResellerProfile.user_id == user_id)
     )
     return result.scalar_one_or_none()
+
+
+async def get_profile_by_setup_token(session: AsyncSession, token: str) -> ResellerProfile | None:
+    if not token or len(token) < 16:
+        return None
+    result = await session.execute(
+        select(ResellerProfile).where(ResellerProfile.setup_token == token)
+    )
+    profile = result.scalar_one_or_none()
+    if not profile or not profile.setup_token_expires:
+        return None
+    exp = profile.setup_token_expires
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    if exp < datetime.now(timezone.utc):
+        return None
+    return profile
 
 
 async def list_active_reseller_plans(session: AsyncSession) -> list[ResellerPlan]:
@@ -130,43 +201,55 @@ async def make_reseller(
     web_permissions: str | None = None,
     bot_permissions: str | None = None,
     plan_id: int | None = None,
+    issue_setup_token: bool = False,
 ) -> ResellerProfile:
     user.role = Role.RESELLER.value
     result = await session.execute(
         select(ResellerProfile).where(ResellerProfile.user_id == user.id)
     )
     profile = result.scalar_one_or_none()
-    web_perms = web_permissions if web_permissions is not None else DEFAULT_WEB_PERMS
-    bot_perms = bot_permissions if bot_permissions is not None else DEFAULT_BOT_PERMS
-    if can_approve_receipts and "approve_receipts" not in parse_perms(bot_perms):
-        bot_perms = join_perms(parse_perms(bot_perms) + ["approve_receipts"])
+    # Force web/bot permissions identical
+    perms = normalize_feature_perms(web_permissions or bot_permissions)
+    if can_approve_receipts and "payments" not in parse_perms(perms):
+        perms = join_perms(parse_perms(perms) + ["payments"])
+    approve = "payments" in parse_perms(perms)
+
     if profile:
         profile.commission_percent = commission_percent
-        profile.can_approve_receipts = can_approve_receipts
-        profile.pg_admin_username = pg_admin_username
-        profile.pg_role_id = pg_role_id
+        profile.can_approve_receipts = approve
+        if pg_admin_username is not None:
+            profile.pg_admin_username = pg_admin_username
+        if pg_role_id is not None:
+            profile.pg_role_id = pg_role_id
         if web_username:
             profile.web_username = web_username
         if web_password_hash:
             profile.web_password_hash = web_password_hash
-        profile.web_permissions = web_perms
-        profile.bot_permissions = bot_perms
+        profile.web_permissions = perms
+        profile.bot_permissions = perms
         profile.plan_id = plan_id
         profile.is_active = True
     else:
         profile = ResellerProfile(
             user_id=user.id,
             commission_percent=commission_percent,
-            can_approve_receipts=can_approve_receipts,
+            can_approve_receipts=approve,
             pg_admin_username=pg_admin_username,
             pg_role_id=pg_role_id,
             web_username=web_username,
             web_password_hash=web_password_hash,
-            web_permissions=web_perms,
-            bot_permissions=bot_perms,
+            web_permissions=perms,
+            bot_permissions=perms,
             plan_id=plan_id,
         )
         session.add(profile)
+
+    if issue_setup_token:
+        token, expires = new_setup_token()
+        profile.setup_token = token
+        profile.setup_token_expires = expires
+        profile.setup_completed_at = None
+
     await session.commit()
     await session.refresh(profile)
     return profile
@@ -179,7 +262,6 @@ async def create_application(
     plan: ResellerPlan,
     note: str | None = None,
 ) -> tuple[ResellerApplication, Order | None]:
-    """Create application; if plan has price, also create a pending order."""
     if user.role == Role.RESELLER.value:
         raise ValueError("شما هم‌اکنون نماینده هستید")
     if user.role == Role.ADMIN.value:
@@ -263,7 +345,6 @@ async def list_applications(
 
 
 async def mark_application_paid(session: AsyncSession, order: Order) -> ResellerApplication | None:
-    """When a reseller_app order is paid, move application to awaiting_approval."""
     note = order.note or ""
     if not note.startswith("reseller_app:"):
         return None
@@ -295,31 +376,27 @@ async def provision_reseller(
     pg_role_id: int | None = None,
     panel_base_url: str = "",
 ) -> dict:
-    """Create PG admin + web credentials + reseller profile. Returns plaintext secrets once."""
+    """Activate reseller with permissions + one-time setup link (no web passwords sent)."""
+    del create_web_access  # credentials are self-serve via wizard
     from app.services.pasarguard import get_pg
-    from app.services.web_auth import hash_password
 
     commission = (
         commission_percent
         if commission_percent is not None
         else (plan.commission_percent if plan else 10)
     )
-    approve = (
-        can_approve_receipts
-        if can_approve_receipts is not None
-        else (plan.can_approve_receipts if plan else False)
+    perms = normalize_feature_perms(
+        web_permissions
+        or bot_permissions
+        or (plan.web_permissions if plan else None)
+        or (plan.bot_permissions if plan else None)
     )
-    web_perms = web_permissions if web_permissions is not None else (
-        plan.web_permissions if plan and plan.web_permissions else DEFAULT_WEB_PERMS
-    )
-    bot_perms = bot_permissions if bot_permissions is not None else (
-        plan.bot_permissions if plan and plan.bot_permissions else DEFAULT_BOT_PERMS
-    )
+    if can_approve_receipts and "payments" not in parse_perms(perms):
+        perms = join_perms(parse_perms(perms) + ["payments"])
+    approve = "payments" in parse_perms(perms)
+
     do_pg = create_pg_admin if create_pg_admin is not None else (
-        plan.create_pg_admin if plan else True
-    )
-    do_web = create_web_access if create_web_access is not None else (
-        plan.create_web_access if plan else True
+        plan.create_pg_admin if plan else False
     )
     role_id = pg_role_id if pg_role_id is not None else (plan.pg_role_id if plan else None)
 
@@ -337,12 +414,10 @@ async def provision_reseller(
         if role_id:
             payload["role_id"] = int(role_id)
         else:
-            # Older Pasarguard panels
             payload["is_sudo"] = False
         try:
             await get_pg().create_admin(payload)
         except Exception as e:
-            # Retry without role_id / with is_sudo only
             if "role_id" in payload:
                 payload.pop("role_id", None)
                 payload["is_sudo"] = False
@@ -353,14 +428,6 @@ async def provision_reseller(
             else:
                 raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {e}") from e
 
-    web_username = None
-    web_password = None
-    web_hash = None
-    if do_web:
-        web_username = _rand_username("web")
-        web_password = _rand_password(12)
-        web_hash = hash_password(web_password)
-
     profile = await make_reseller(
         session,
         user,
@@ -368,54 +435,119 @@ async def provision_reseller(
         can_approve_receipts=approve,
         pg_admin_username=pg_username,
         pg_role_id=role_id,
-        web_username=web_username,
-        web_password_hash=web_hash,
-        web_permissions=web_perms,
-        bot_permissions=bot_perms,
+        web_permissions=perms,
+        bot_permissions=perms,
         plan_id=plan.id if plan else None,
+        issue_setup_token=True,
     )
+
+    base = (panel_base_url or "").rstrip("/")
+    setup_url = f"{base}/rsetup/{profile.setup_token}" if base and profile.setup_token else ""
 
     return {
         "profile": profile,
         "pg_username": pg_username,
         "pg_password": pg_password,
-        "web_username": web_username,
-        "web_password": web_password,
-        "panel_url": panel_base_url.rstrip("/") if panel_base_url else "",
+        "setup_url": setup_url,
+        "setup_token": profile.setup_token,
+        "panel_url": base,
         "commission_percent": commission,
+        "permissions": perms,
     }
 
 
 def format_credentials_message(creds: dict) -> str:
+    """Notify reseller after approval — setup link only (no web passwords)."""
     lines = [
         "✅ <b>درخواست نمایندگی تأیید شد</b>",
         "",
         f"کمیسیون شما: <b>{creds.get('commission_percent', 0)}٪</b>",
+        "",
+        "برای امنیت، یوزر و رمز وب‌پنل را خودتان می‌سازید.",
     ]
-    if creds.get("web_username") and creds.get("web_password"):
+    if creds.get("setup_url"):
         lines += [
             "",
-            "🌐 <b>ورود به وب‌پنل</b>",
+            "🔗 <b>لینک راه‌اندازی (یک‌بارمصرف، ۴۸ ساعت)</b>",
+            creds["setup_url"],
+            "",
+            "در این صفحه:",
+            "۱) نام کاربری و رمز وب‌پنل خود را بسازید",
+            "۲) توکن ربات اختصاصی‌تان از @BotFather را وارد کنید",
         ]
-        if creds.get("panel_url"):
-            lines.append(f"آدرس: {creds['panel_url']}")
+    else:
         lines += [
-            f"نام کاربری: <code>{creds['web_username']}</code>",
-            f"رمز عبور: <code>{creds['web_password']}</code>",
+            "",
+            "از ادمین بخواهید لینک راه‌اندازی را برایتان بفرستد.",
         ]
     if creds.get("pg_username") and creds.get("pg_password"):
         lines += [
             "",
-            "🛡 <b>پنل پاسارگارد</b>",
+            "🛡 <b>اکانت پاسارگارد (اختیاری — توسط ادمین ساخته شد)</b>",
             f"نام کاربری: <code>{creds['pg_username']}</code>",
-            f"رمز عبور: <code>{creds['pg_password']}</code>",
+            f"رمز: <code>{creds['pg_password']}</code>",
+            "رمز را عوض کنید و در جای امن نگه دارید.",
         ]
     lines += [
         "",
-        "این اطلاعات را در جای امن نگه دارید.",
-        "از منوی ربات می‌توانید به «پنل نماینده» دسترسی داشته باشید.",
+        "⚠️ لینک راه‌اندازی را با کسی به اشتراک نگذارید.",
+        "از منوی ربات فقط به امکانات مجاز «پنل نماینده» دسترسی دارید.",
     ]
     return "\n".join(lines)
+
+
+async def complete_reseller_setup(
+    session: AsyncSession,
+    profile: ResellerProfile,
+    *,
+    web_username: str,
+    password_hash: str,
+    bot_token: str | None = None,
+    bot_username: str | None = None,
+) -> ResellerProfile:
+    """Finalize self-serve wizard. Clears setup token."""
+    uname = (web_username or "").strip().lower()
+    if len(uname) < 3:
+        raise ValueError("نام کاربری حداقل ۳ کاراکتر باشد")
+    # Unique username
+    clash = await session.execute(
+        select(ResellerProfile).where(
+            ResellerProfile.web_username == uname,
+            ResellerProfile.id != profile.id,
+        )
+    )
+    if clash.scalar_one_or_none():
+        raise ValueError("این نام کاربری قبلاً گرفته شده")
+
+    profile.web_username = uname
+    profile.web_password_hash = password_hash
+    if bot_token:
+        token = bot_token.strip()
+        from app.config import get_settings
+
+        main_token = (get_settings().bot_token or "").strip()
+        if main_token and token == main_token:
+            raise ValueError("نمی‌توانید توکن ربات اصلی ادمین را ثبت کنید — ربات اختصاصی بسازید")
+        clash_bot = await session.execute(
+            select(ResellerProfile).where(
+                ResellerProfile.bot_token == token,
+                ResellerProfile.id != profile.id,
+            )
+        )
+        if clash_bot.scalar_one_or_none():
+            raise ValueError("این توکن ربات قبلاً برای نماینده دیگری ثبت شده")
+        profile.bot_token = token
+        profile.bot_username = (bot_username or "").lstrip("@") or None
+    profile.setup_token = None
+    profile.setup_token_expires = None
+    profile.setup_completed_at = datetime.now(timezone.utc)
+    # Keep mirrored permissions
+    profile.web_permissions = normalize_feature_perms(profile.web_permissions)
+    profile.bot_permissions = profile.web_permissions
+    profile.can_approve_receipts = "payments" in parse_perms(profile.web_permissions)
+    await session.commit()
+    await session.refresh(profile)
+    return profile
 
 
 async def approve_application(

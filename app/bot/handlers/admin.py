@@ -183,6 +183,8 @@ class AdminStates(StatesGroup):
     make_reseller = State()
     ticket_reply = State()
     user_search = State()
+    broadcast_text = State()
+    broadcast_audience = State()
 
 
 def _is_admin(user: BotUser) -> bool:
@@ -1242,10 +1244,38 @@ async def make_res(message: Message, state: FSMContext, session: AsyncSession):
     if not user:
         await message.answer("کاربر باید حداقل یک بار ربات را استارت کرده باشد.")
         return
-    await make_reseller(session, user, commission_percent=commission, can_approve_receipts=can_approve)
-    await state.clear()
-    await message.answer(f"کاربر {tg_id} نماینده شد ✅", reply_markup=kb.admin_home())
+    from app.services.resellers import format_credentials_message, provision_reseller
 
+    perms = "dashboard,orders,tickets,stats"
+    if can_approve:
+        perms = "dashboard,orders,payments,tickets,stats"
+    try:
+        creds = await provision_reseller(
+            session,
+            user=user,
+            commission_percent=commission,
+            can_approve_receipts=can_approve,
+            web_permissions=perms,
+            bot_permissions=perms,
+            create_pg_admin=False,
+            panel_base_url=str(get_settings().public_base_url or ""),
+        )
+    except Exception as e:
+        await message.answer(f"خطا: {e}")
+        return
+    await state.clear()
+    try:
+        await message.bot.send_message(
+            user.telegram_id,
+            format_credentials_message(creds),
+            parse_mode="HTML",
+        )
+    except Exception:
+        pass
+    await message.answer(
+        f"کاربر {tg_id} نماینده شد ✅ — لینک راه‌اندازی ارسال شد",
+        reply_markup=kb.admin_home(),
+    )
 
 @router.callback_query(F.data == "adm:tickets")
 async def adm_tickets(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -1314,6 +1344,80 @@ async def adm_ticket_reply(message: Message, state: FSMContext, session: AsyncSe
         except Exception:
             pass
     await message.answer("ارسال شد ✅", reply_markup=kb.admin_home())
+
+
+@router.callback_query(F.data == "adm:broadcast")
+async def adm_broadcast_start(callback: CallbackQuery, db_user: BotUser, state: FSMContext):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await callback.answer()
+    await state.set_state(AdminStates.broadcast_audience)
+    rows = [
+        [InlineKeyboardButton(text="همه", callback_data="adm:broadcast:aud:all")],
+        [InlineKeyboardButton(text="کاربران عادی", callback_data="adm:broadcast:aud:users")],
+        [InlineKeyboardButton(text="نمایندگان", callback_data="adm:broadcast:aud:resellers")],
+        [InlineKeyboardButton(text="ادمین‌ها", callback_data="adm:broadcast:aud:admins")],
+        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
+    ]
+    if callback.message:
+        await callback.message.edit_text(
+            "📢 <b>پیام گروهی</b>\nمخاطبان را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:broadcast:aud:"))
+async def adm_broadcast_audience(callback: CallbackQuery, db_user: BotUser, state: FSMContext):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    audience = callback.data.rsplit(":", 1)[-1]
+    if audience not in {"all", "users", "resellers", "admins"}:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    await callback.answer()
+    await state.set_state(AdminStates.broadcast_text)
+    await state.update_data(broadcast_audience=audience)
+    if callback.message:
+        await callback.message.edit_text(
+            f"📢 مخاطب: <b>{audience}</b>\nمتن پیام را بفرستید (HTML ساده).\nبرای لغو: انصراف"
+        )
+        await callback.message.answer("متن پیام:", reply_markup=kb.cancel_reply())
+
+
+@router.message(AdminStates.broadcast_text)
+async def adm_broadcast_send(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await state.clear()
+        return
+    if (message.text or "").strip() == "انصراف":
+        await state.clear()
+        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        return
+    data = await state.get_data()
+    audience = data.get("broadcast_audience") or "all"
+    await state.clear()
+    from app.services.broadcast import send_broadcast
+
+    await message.answer("در حال ارسال…")
+    try:
+        result = await send_broadcast(
+            message.bot,
+            session,
+            text=message.text or "",
+            audience=audience,
+        )
+    except ValueError as e:
+        await message.answer(str(e), reply_markup=kb.admin_home())
+        return
+    except Exception as e:
+        await message.answer(f"خطا: {e}", reply_markup=kb.admin_home())
+        return
+    await message.answer(
+        f"✅ ارسال شد\nموفق: {result['ok']} / {result['total']}\nناموفق: {result['fail']}",
+        reply_markup=kb.admin_home(),
+    )
 
 
 @router.callback_query(F.data == "adm:pg")

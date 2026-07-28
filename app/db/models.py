@@ -219,9 +219,15 @@ class ResellerProfile(Base):
     pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     web_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, unique=True)
     web_password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Unified feature permissions (web + bot must stay identical)
     web_permissions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV
-    bot_permissions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV
+    bot_permissions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV — mirrored
     plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reseller_plans.id"), nullable=True)
+    setup_token: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True, index=True)
+    setup_token_expires: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    setup_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    bot_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    bot_username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>نمایندگان</h1>
-    <p>ساخت نماینده، سطح دسترسی وب/بات، و اتصال به نقش پاسارگارد</p>
+    <p>سطح دسترسی وب و بات یکسان است. یوزر/رمز را نماینده خودش در لینک راه‌اندازی می‌سازد.</p>
   </div>
 </div>
 
@@ -16,7 +16,7 @@
 
 <div class="card">
   <h2>افزودن نماینده</h2>
-  <p class="muted">کاربر باید قبلاً ربات را استارت کرده باشد. یوزر/پس وب‌پنل و پاسارگارد در صورت انتخاب، خودکار ساخته و در تلگرام ارسال می‌شود.</p>
+  <p class="muted">پس از ثبت، لینک راه‌اندازی یک‌بارمصرف برای ساخت یوزر وب و ثبت توکن ربات خودش ارسال می‌شود. به ربات اصلی ادمین وصل نمی‌شود.</p>
   <form method="post" action="/resellers">
     <div class="form-row">
       <div>
@@ -27,42 +27,31 @@
       </div>
       <div>
         <label class="form-field">کمیسیون ٪
-          <small class="muted">درصد سهم نماینده از فروش</small>
           <input name="commission_percent" type="number" value="10" />
         </label>
       </div>
       <div>
-        <label class="form-field">نقش پاسارگارد
-          <small class="muted">خالی = ادمین معمولی بدون sudo</small>
+        <label class="form-field">نقش پاسارگارد (اختیاری)
+          <small class="muted">فقط اگر ساخت ادمین PG را بزنید</small>
           <select name="pg_role_id">
-            <option value="">— پیش‌فرض —</option>
+            <option value="">—</option>
             {% for r in pg_roles %}
-            <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}{% if r.get('is_owner') %} (owner){% endif %}</option>
+            <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}</option>
             {% endfor %}
           </select>
         </label>
       </div>
     </div>
 
-    <div class="form-row">
-      <div>
-        <strong style="display:block;margin-bottom:8px;font-size:13px">دسترسی وب‌پنل</strong>
-        {% for key, label in web_perm_options %}
-        <label class="checks"><input type="checkbox" name="web_{{ key }}" value="1" checked /> {{ label }}</label>
-        {% endfor %}
-        <label class="checks"><input type="checkbox" name="create_web_access" value="1" checked /> ساخت خودکار یوزر وب‌پنل</label>
-      </div>
-      <div>
-        <strong style="display:block;margin-bottom:8px;font-size:13px">دسترسی بات</strong>
-        {% for key, label in bot_perm_options %}
-        <label class="checks"><input type="checkbox" name="bot_{{ key }}" value="1" {% if key == 'stats' %}checked{% endif %} /> {{ label }}</label>
-        {% endfor %}
-        <label class="checks"><input type="checkbox" name="create_pg_admin" value="1" checked /> ساخت ادمین در پاسارگارد</label>
-      </div>
-    </div>
+    <strong style="display:block;margin-bottom:8px;font-size:13px">سطح دسترسی (وب = بات)</strong>
+    <p class="muted" style="margin-top:0">هر دسترسی اینجا برای هر دو محیط اعمال می‌شود؛ نماینده از ربات بیشتر از وب نمی‌تواند.</p>
+    {% for key, label in feature_perms %}
+    <label class="checks"><input type="checkbox" name="perm_{{ key }}" value="1" {% if key != 'stats' %}checked{% else %}checked{% endif %} /> {{ label }}</label>
+    {% endfor %}
+    <label class="checks"><input type="checkbox" name="create_pg_admin" value="1" /> ساخت ادمین پاسارگارد (اختیاری)</label>
 
     <div class="actions">
-      <button class="btn" type="submit">ثبت و ارسال اطلاعات</button>
+      <button class="btn" type="submit">فعال‌سازی و ارسال لینک راه‌اندازی</button>
     </div>
   </form>
 </div>
@@ -73,7 +62,7 @@
   <table>
     <thead>
       <tr>
-        <th>کاربر</th><th>تلگرام</th><th>کمیسیون</th><th>وب</th><th>PG</th><th>وضعیت</th><th></th>
+        <th>کاربر</th><th>تلگرام</th><th>کمیسیون</th><th>وب</th><th>ربات</th><th>راه‌اندازی</th><th></th>
       </tr>
     </thead>
     <tbody>
@@ -83,8 +72,8 @@
         <td class="mono">{{ u.telegram_id }}</td>
         <td class="mono">{{ p.commission_percent }}%</td>
         <td class="mono">{{ p.web_username or '—' }}</td>
-        <td class="mono">{{ p.pg_admin_username or '—' }}</td>
-        <td>{% if p.is_active %}<span class="badge approved">فعال</span>{% else %}<span class="badge">غیرفعال</span>{% endif %}</td>
+        <td class="mono">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
+        <td>{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.setup_token %}<span class="badge pending">منتظر</span>{% else %}—{% endif %}</td>
         <td><a class="btn btn-ghost" href="/resellers/{{ u.id }}/edit">ویرایش</a></td>
       </tr>
     {% else %}

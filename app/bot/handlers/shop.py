@@ -51,13 +51,23 @@ def _custom_has_pg_link(ui: dict) -> bool:
     return bool(tpl or groups)
 
 
+async def _custom_available_for_users(session: AsyncSession, ui: dict) -> bool:
+    """Custom plan only when enabled, linked, AND at least one catalog plan exists."""
+    if not on(ui.get("custom_plan_enabled")):
+        return False
+    if not _custom_has_pg_link(ui):
+        return False
+    plans = await list_active_plans(session, include_trial=True)
+    catalog = [p for p in plans if not p.is_trial]
+    return bool(catalog)
+
+
 @router.callback_query(F.data == "shop:list")
 async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     await callback.answer()
     await state.clear()
     ui = await get_all_settings(session)
     trial_on = on(ui.get("trial_enabled"))
-    custom_on = on(ui.get("custom_plan_enabled"))
     plans = await list_active_plans(session, include_trial=True)
     if not trial_on:
         plans = [p for p in plans if not p.is_trial]
@@ -68,6 +78,8 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     ).scalar_one_or_none()
     if has_svc:
         plans = [p for p in plans if not p.is_trial]
+    # Custom plan only when catalog plans exist (and setting/link OK)
+    custom_on = await _custom_available_for_users(session, ui)
     if not plans and not custom_on:
         text = format_message(
             "🛒 فروشگاه",
@@ -92,12 +104,9 @@ async def custom_noop(callback: CallbackQuery):
 @router.callback_query(F.data == "shop:custom")
 async def custom_start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
-    if not on(ui.get("custom_plan_enabled")):
-        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
-        return
-    if not _custom_has_pg_link(ui):
+    if not await _custom_available_for_users(session, ui):
         await callback.answer(
-            "پلن دلخواه هنوز به تمپلیت/گروه پاسارگارد وصل نشده. به ادمین اطلاع دهید.",
+            "پلن دلخواه در دسترس نیست (پلنی تعریف نشده یا غیرفعال است).",
             show_alert=True,
         )
         return
@@ -119,8 +128,8 @@ async def custom_start(callback: CallbackQuery, session: AsyncSession, state: FS
 @router.callback_query(F.data.in_({"shop:custom:gb:+", "shop:custom:gb:-"}))
 async def custom_gb_step(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
-    if not on(ui.get("custom_plan_enabled")):
-        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+    if not await _custom_available_for_users(session, ui):
+        await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     min_gb, max_gb, _, _, _, _ = _custom_bounds(ui)
     data = await state.get_data()
@@ -143,8 +152,8 @@ async def custom_gb_step(callback: CallbackQuery, session: AsyncSession, state: 
 @router.callback_query(F.data == "shop:custom:gb:input")
 async def custom_gb_ask(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
-    if not on(ui.get("custom_plan_enabled")):
-        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+    if not await _custom_available_for_users(session, ui):
+        await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     await callback.answer()
     min_gb, max_gb, _, _, _, _ = _custom_bounds(ui)
@@ -186,8 +195,8 @@ async def custom_gb_entered(message: Message, state: FSMContext, session: AsyncS
 @router.callback_query(F.data == "shop:custom:gb:next")
 async def custom_days_start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
-    if not on(ui.get("custom_plan_enabled")):
-        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+    if not await _custom_available_for_users(session, ui):
+        await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     await callback.answer()
     _, _, min_days, max_days, _, _ = _custom_bounds(ui)
@@ -209,8 +218,8 @@ async def custom_days_start(callback: CallbackQuery, session: AsyncSession, stat
 @router.callback_query(F.data.in_({"shop:custom:days:+", "shop:custom:days:-"}))
 async def custom_days_step(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
-    if not on(ui.get("custom_plan_enabled")):
-        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+    if not await _custom_available_for_users(session, ui):
+        await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     _, _, min_days, max_days, _, _ = _custom_bounds(ui)
     data = await state.get_data()
@@ -235,8 +244,8 @@ async def custom_days_step(callback: CallbackQuery, session: AsyncSession, state
 @router.callback_query(F.data == "shop:custom:days:input")
 async def custom_days_ask(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
-    if not on(ui.get("custom_plan_enabled")):
-        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+    if not await _custom_available_for_users(session, ui):
+        await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     await callback.answer()
     _, _, min_days, max_days, _, _ = _custom_bounds(ui)
@@ -280,8 +289,8 @@ async def custom_days_entered(message: Message, state: FSMContext, session: Asyn
 @router.callback_query(F.data == "shop:custom:confirm")
 async def custom_confirm(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
-    if not on(ui.get("custom_plan_enabled")):
-        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+    if not await _custom_available_for_users(session, ui):
+        await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     data = await state.get_data()
     min_gb, _, min_days, _, price_gb, price_day = _custom_bounds(ui)
@@ -327,8 +336,8 @@ async def _notify_new_order(bot, session, order, db_user, plan_name: str | None)
 @router.callback_query(F.data == "shop:custom:buy")
 async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     ui = await get_all_settings(session)
-    if not on(ui.get("custom_plan_enabled")):
-        await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+    if not await _custom_available_for_users(session, ui):
+        await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     data = await state.get_data()
     min_gb, _, min_days, _, price_gb, price_day = _custom_bounds(ui)

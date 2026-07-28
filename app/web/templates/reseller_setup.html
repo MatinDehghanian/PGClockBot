@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}راه‌اندازی نماینده{% endblock %}
+{% block auth %}
+<div class="auth-wrap">
+  <div class="auth-panel" style="max-width:440px">
+    <div class="auth-brand">
+      <img src="/static/logo.svg" alt="" />
+      <h1>راه‌اندازی نماینده</h1>
+      <p>یوزر وب‌پنل و ربات خودتان را بسازید</p>
+    </div>
+    {% if invalid %}
+    <div class="error">{{ error }}</div>
+    <a class="btn" href="/login" style="margin-top:16px;display:inline-flex">ورود</a>
+    {% else %}
+    <form class="auth-form" method="post" action="/rsetup/{{ token }}" autocomplete="off">
+      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+      <label>نام کاربری وب‌پنل
+        <small class="muted">حداقل ۳ کاراکتر انگلیسی</small>
+        <input name="username" required minlength="3" maxlength="64" pattern="[A-Za-z0-9_\.\-]+" autocomplete="off" autofocus />
+      </label>
+      <label>رمز عبور
+        <small class="muted">۸+ کاراکتر، حرف بزرگ/کوچک و کاراکتر خاص</small>
+        <input name="password" type="password" required autocomplete="new-password" />
+      </label>
+      <label>تکرار رمز
+        <input name="password2" type="password" required autocomplete="new-password" />
+      </label>
+      <label>توکن ربات (@BotFather)
+        <small class="muted">ربات اختصاصی خودتان — به ربات ادمین وصل نمی‌شوید</small>
+        <input name="bot_token" required autocomplete="off" placeholder="123456:ABC..." dir="ltr" />
+      </label>
+      <button class="btn" type="submit">تکمیل راه‌اندازی</button>
+    </form>
+    {% endif %}
+    <div class="auth-foot">لینک یک‌بارمصرف · ۴۸ ساعت اعتبار</div>
+  </div>
+</div>
+{% endblock %}

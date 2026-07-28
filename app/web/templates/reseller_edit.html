@@ -19,7 +19,6 @@
       </div>
       <div>
         <label class="form-field">یوزرنیم پاسارگارد
-          <small class="muted">اگر از قبل ساخته شده، همین نام را وارد کنید</small>
           <input name="pg_admin_username" value="{{ profile.pg_admin_username or '' }}" />
         </label>
       </div>
@@ -37,27 +36,16 @@
       </div>
     </div>
 
-    <div class="form-row">
-      <div>
-        <strong style="display:block;margin-bottom:8px;font-size:13px">دسترسی وب‌پنل</strong>
-        <p class="muted" style="margin-top:0">یوزر فعلی: <code>{{ profile.web_username or '—' }}</code></p>
-        {% for key, label in web_perm_options %}
-        <label class="checks"><input type="checkbox" name="web_{{ key }}" value="1" {% if key in web_perms %}checked{% endif %} /> {{ label }}</label>
-        {% endfor %}
-        <label class="form-field">رمز جدید وب‌پنل
-          <small class="muted">خالی = بدون تغییر</small>
-          <input name="web_password" type="password" autocomplete="new-password" />
-        </label>
-        <label class="checks"><input type="checkbox" name="ensure_web" value="1" /> اگر یوزر وب ندارد، بساز و بفرست</label>
-      </div>
-      <div>
-        <strong style="display:block;margin-bottom:8px;font-size:13px">دسترسی بات</strong>
-        {% for key, label in bot_perm_options %}
-        <label class="checks"><input type="checkbox" name="bot_{{ key }}" value="1" {% if key in bot_perms %}checked{% endif %} /> {{ label }}</label>
-        {% endfor %}
-        <label class="checks"><input type="checkbox" name="is_active" value="1" {% if profile.is_active %}checked{% endif %} /> نماینده فعال</label>
-      </div>
-    </div>
+    <strong style="display:block;margin-bottom:8px;font-size:13px">سطح دسترسی (وب = بات)</strong>
+    {% for key, label in feature_perms %}
+    <label class="checks"><input type="checkbox" name="perm_{{ key }}" value="1" {% if key in selected_perms %}checked{% endif %} /> {{ label }}</label>
+    {% endfor %}
+
+    <p class="muted">وب: <code>{{ profile.web_username or 'هنوز ساخته نشده' }}</code>
+      · ربات: <code>{% if profile.bot_username %}@{{ profile.bot_username }}{% else %}—{% endif %}</code></p>
+
+    <label class="checks"><input type="checkbox" name="is_active" value="1" {% if profile.is_active %}checked{% endif %} /> نماینده فعال</label>
+    <label class="checks"><input type="checkbox" name="reissue_setup" value="1" /> صدور مجدد لینک راه‌اندازی و ارسال به تلگرام</label>
 
     <div class="actions">
       <button class="btn" type="submit">ذخیره</button>

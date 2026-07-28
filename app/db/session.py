@@ -36,6 +36,11 @@ def _migrate_sqlite(sync_conn) -> None:
             "bot_permissions": "TEXT",
             "plan_id": "INTEGER",
             "created_at": "DATETIME",
+            "setup_token": "VARCHAR(64)",
+            "setup_token_expires": "DATETIME",
+            "setup_completed_at": "DATETIME",
+            "bot_token": "TEXT",
+            "bot_username": "VARCHAR(64)",
         }
         for col, typ in alters.items():
             if col not in rcols:

@@ -205,7 +205,8 @@ async def resapply_buy(callback: CallbackQuery, session: AsyncSession, db_user: 
             await callback.message.edit_text(
                 format_message(
                     "✅ درخواست ثبت شد",
-                    f"درخواست #{app.id} برای پلن «{plan.name}» ثبت شد.\nپس از تأیید ادمین، اطلاعات ورود برایتان ارسال می‌شود.",
+                    f"درخواست #{app.id} برای پلن «{plan.name}» ثبت شد.\n"
+                    "پس از تأیید ادمین، لینک راه‌اندازی وب‌پنل و ثبت ربات اختصاصی برایتان ارسال می‌شود.",
                 ),
                 reply_markup=kb.back_home(ui),
             )

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}پیام گروهی{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>پیام گروهی</h1>
+    <p>ارسال پیام از ربات اصلی به کاربران (فقط ادمین)</p>
+  </div>
+</div>
+
+<div class="card">
+  <form method="post" action="/broadcast">
+    <label class="form-field">مخاطبان
+      <select name="audience">
+        <option value="all">همه کاربران فعال</option>
+        <option value="users">فقط کاربران عادی</option>
+        <option value="resellers">فقط نمایندگان</option>
+        <option value="admins">فقط ادمین‌ها</option>
+      </select>
+    </label>
+    <label class="form-field">متن پیام (HTML ساده تلگرام مجاز است)
+      <textarea name="text" rows="8" required maxlength="4000" placeholder="متن پیام…"></textarea>
+    </label>
+    <p class="muted">ارسال ممکن است چند دقیقه طول بکشد. از اسپم خودداری کنید.</p>
+    <div class="actions">
+      <button class="btn" type="submit">ارسال پیام</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
