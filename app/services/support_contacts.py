@@ -1,0 +1,197 @@
+"""Multi-support contacts stored as JSON in settings.support_contacts."""
+
+from __future__ import annotations
+
+import json
+import re
+import uuid
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.services.users import get_setting, set_setting
+
+SETTING_KEY = "support_contacts"
+
+_USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$")
+
+
+def _new_id() -> str:
+    return uuid.uuid4().hex[:12]
+
+
+def normalize_telegram_handle(raw: str) -> str:
+    """Normalize to @username, numeric id, or keep absolute URL."""
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    if s.startswith(("http://", "https://", "tg://")):
+        return s
+    lower = s.lower()
+    for prefix in ("https://t.me/", "http://t.me/", "t.me/"):
+        if lower.startswith(prefix):
+            rest = s.split("/", 2)[-1] if "://" in s else s[len("t.me/") :]
+            rest = rest.split("?")[0].split("/")[0].lstrip("@")
+            return f"@{rest}" if rest and not rest.isdigit() else rest
+    s = s.lstrip("@").strip()
+    if s.isdigit():
+        return s
+    return f"@{s}" if s else ""
+
+
+def support_chat_url(raw: str) -> str | None:
+    """Build a Telegram deep-link / t.me URL for url buttons."""
+    s = normalize_telegram_handle(raw)
+    if not s:
+        return None
+    if s.startswith(("http://", "https://", "tg://")):
+        return s
+    if s.isdigit():
+        return f"tg://user?id={s}"
+    uname = s.lstrip("@")
+    if not uname:
+        return None
+    return f"https://t.me/{uname}"
+
+
+def validate_telegram(raw: str) -> str | None:
+    """Return error message or None if ok."""
+    s = normalize_telegram_handle(raw)
+    if not s:
+        return "آیدی یا یوزرنیم تلگرام الزامی است"
+    if s.startswith(("http://", "https://", "tg://")):
+        return None
+    if s.isdigit():
+        if len(s) < 5:
+            return "آیدی عددی نامعتبر است"
+        return None
+    uname = s.lstrip("@")
+    if not _USERNAME_RE.match(uname):
+        return "یوزرنیم نامعتبر است (مثال: @support_bot)"
+    return None
+
+
+def parse_support_contacts(raw: str | None) -> list[dict[str, Any]]:
+    if not (raw or "").strip():
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for i, item in enumerate(data):
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        telegram = normalize_telegram_handle(str(item.get("telegram") or ""))
+        if not title or not telegram:
+            continue
+        cid = str(item.get("id") or _new_id())
+        try:
+            sort = int(item.get("sort", i))
+        except (TypeError, ValueError):
+            sort = i
+        enabled = item.get("enabled", True)
+        if isinstance(enabled, str):
+            enabled = enabled.strip().lower() in {"1", "true", "yes", "on"}
+        out.append(
+            {
+                "id": cid,
+                "title": title[:80],
+                "telegram": telegram,
+                "sort": sort,
+                "enabled": bool(enabled),
+            }
+        )
+    out.sort(key=lambda x: (x["sort"], x["title"]))
+    return out
+
+
+def dump_support_contacts(contacts: list[dict[str, Any]]) -> str:
+    clean = []
+    for i, c in enumerate(contacts):
+        title = str(c.get("title") or "").strip()[:80]
+        telegram = normalize_telegram_handle(str(c.get("telegram") or ""))
+        if not title or not telegram:
+            continue
+        try:
+            sort_val = int(c.get("sort", i))
+        except (TypeError, ValueError):
+            sort_val = i
+        clean.append(
+            {
+                "id": str(c.get("id") or _new_id()),
+                "title": title,
+                "telegram": telegram,
+                "sort": sort_val,
+                "enabled": bool(c.get("enabled", True)),
+            }
+        )
+    clean.sort(key=lambda x: (x["sort"], x["title"]))
+    return json.dumps(clean, ensure_ascii=False)
+
+
+def active_support_contacts(contacts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [c for c in contacts if c.get("enabled", True) and support_chat_url(c.get("telegram") or "")]
+
+
+async def get_support_contacts(session: AsyncSession) -> list[dict[str, Any]]:
+    raw = await get_setting(session, SETTING_KEY)
+    return parse_support_contacts(raw)
+
+
+async def save_support_contacts(session: AsyncSession, contacts: list[dict[str, Any]]) -> None:
+    await set_setting(session, SETTING_KEY, dump_support_contacts(contacts))
+
+
+async def upsert_support_contact(
+    session: AsyncSession,
+    *,
+    contact_id: str | None,
+    title: str,
+    telegram: str,
+    sort: int = 0,
+    enabled: bool = True,
+) -> tuple[dict[str, Any] | None, str | None]:
+    err = validate_telegram(telegram)
+    title = (title or "").strip()
+    if not title:
+        return None, "عنوان الزامی است"
+    if err:
+        return None, err
+    contacts = await get_support_contacts(session)
+    if contact_id:
+        found = None
+        for c in contacts:
+            if c["id"] == contact_id:
+                found = c
+                break
+        if not found:
+            return None, "پشتیبان یافت نشد"
+        found["title"] = title[:80]
+        found["telegram"] = normalize_telegram_handle(telegram)
+        found["sort"] = sort
+        found["enabled"] = enabled
+        await save_support_contacts(session, contacts)
+        return found, None
+    item = {
+        "id": _new_id(),
+        "title": title[:80],
+        "telegram": normalize_telegram_handle(telegram),
+        "sort": sort if sort else (max((c["sort"] for c in contacts), default=-1) + 1),
+        "enabled": enabled,
+    }
+    contacts.append(item)
+    await save_support_contacts(session, contacts)
+    return item, None
+
+
+async def delete_support_contact(session: AsyncSession, contact_id: str) -> bool:
+    contacts = await get_support_contacts(session)
+    new = [c for c in contacts if c["id"] != contact_id]
+    if len(new) == len(contacts):
+        return False
+    await save_support_contacts(session, new)
+    return True

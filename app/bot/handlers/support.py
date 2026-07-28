@@ -3,12 +3,17 @@ from __future__ import annotations
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.db.models import BotUser, Ticket
 from app.services.formatting import format_message, ticket_status_fa
+from app.services.support_contacts import (
+    active_support_contacts,
+    get_support_contacts,
+    support_chat_url,
+)
 from app.services.tickets import create_ticket, get_ticket, list_user_tickets, reply_ticket
 from app.services.users import get_all_settings, get_setting
 
@@ -21,14 +26,58 @@ class SupportStates(StatesGroup):
     reply = State()
 
 
+async def _active_contacts(session: AsyncSession) -> list[dict]:
+    return active_support_contacts(await get_support_contacts(session))
+
+
 @router.callback_query(F.data == "support:home")
 async def support_home(callback: CallbackQuery, session: AsyncSession):
+    await callback.answer()
+    ui = await get_all_settings(session)
+    contacts = await _active_contacts(session)
+    if len(contacts) == 1:
+        url = support_chat_url(contacts[0].get("telegram") or "")
+        title = contacts[0].get("title") or "پشتیبان"
+        rows: list[list[InlineKeyboardButton]] = []
+        if url:
+            rows.append([InlineKeyboardButton(text=f"💬 گفتگو با {title}", url=url)])
+        rows.append([InlineKeyboardButton(text="🟣✉️ تیکت پشتیبانی", callback_data="support:tickets")])
+        rows.append([InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="menu:home")])
+        text = format_message(
+            "🎧 پشتیبانی",
+            f"برای ارتباط مستقیم روی دکمه زیر بزنید:\n<b>{title}</b>",
+        )
+        if callback.message:
+            await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+        return
+    if len(contacts) > 1:
+        text = format_message(
+            "🎧 پشتیبانی",
+            "یکی از پشتیبان‌ها را انتخاب کنید:",
+        )
+        if callback.message:
+            await callback.message.edit_text(
+                text,
+                reply_markup=kb.support_contacts_keyboard(contacts, ui),
+            )
+        return
+    # No contacts → classic ticket UI
+    text = ui.get("support_text") or await get_setting(session, "support_text")
+    if callback.message:
+        await callback.message.edit_text(
+            format_message("🎧 پشتیبانی", text),
+            reply_markup=kb.support_keyboard(ui),
+        )
+
+
+@router.callback_query(F.data == "support:tickets")
+async def support_tickets_home(callback: CallbackQuery, session: AsyncSession):
     await callback.answer()
     ui = await get_all_settings(session)
     text = ui.get("support_text") or await get_setting(session, "support_text")
     if callback.message:
         await callback.message.edit_text(
-            format_message("🎧 پشتیبانی", text),
+            format_message("🎧 پشتیبانی — تیکت", text),
             reply_markup=kb.support_keyboard(ui),
         )
 
@@ -93,8 +142,6 @@ async def support_list(callback: CallbackQuery, session: AsyncSession, db_user: 
         text = "تیکتی ندارید."
         markup = kb.support_keyboard()
     else:
-        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
         rows = [
             [
                 InlineKeyboardButton(
@@ -104,7 +151,7 @@ async def support_list(callback: CallbackQuery, session: AsyncSession, db_user: 
             ]
             for t in tickets[:20]
         ]
-        rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="support:home")])
+        rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="support:tickets")])
         text = "📋 تیکت‌های شما:"
         markup = InlineKeyboardMarkup(inline_keyboard=rows)
     if callback.message:
