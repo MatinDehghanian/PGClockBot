@@ -25,8 +25,8 @@ from app.services.users import (
 )
 
 
-def register_shop_settings(app, *, render, require_perm, get_db):
-    allowed_tabs = {t[0] for t in RESELLER_SETTINGS_TABS}
+def register_shop_settings(app, *, render, require_staff, get_db):
+    allowed_tabs = {t[0] for t in RESELLER_SETTINGS_TABS if t[0] != "security"}
 
     def _menu_tab_context(values: dict) -> dict:
         from app.bot.keyboards import DEFAULT_MENU_ORDER
@@ -108,11 +108,13 @@ def register_shop_settings(app, *, render, require_perm, get_db):
     @app.get("/shop-settings", response_class=HTMLResponse)
     async def shop_settings_page(
         request: Request,
-        staff: dict = Depends(require_perm("shop_settings")),
+        staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        if staff.get("role") != "reseller":
+        if staff.get("role") == "admin":
             return RedirectResponse("/settings", status_code=303)
+        if staff.get("role") != "reseller":
+            return RedirectResponse("/login", status_code=303)
 
         tab = (request.query_params.get("tab") or "welcome").strip()
         if tab == "security":
@@ -162,7 +164,7 @@ def register_shop_settings(app, *, render, require_perm, get_db):
     @app.post("/shop-settings")
     async def shop_settings_save(
         request: Request,
-        staff: dict = Depends(require_perm("shop_settings")),
+        staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") != "reseller":
@@ -266,7 +268,7 @@ def register_shop_settings(app, *, render, require_perm, get_db):
     @app.post("/shop-settings/menu-layout")
     async def shop_menu_layout_save(
         request: Request,
-        staff: dict = Depends(require_perm("shop_settings")),
+        staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") != "reseller":
@@ -291,7 +293,7 @@ def register_shop_settings(app, *, render, require_perm, get_db):
     @app.post("/shop-supports/save")
     async def shop_supports_save(
         request: Request,
-        staff: dict = Depends(require_perm("shop_settings")),
+        staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") != "reseller":
@@ -329,7 +331,7 @@ def register_shop_settings(app, *, render, require_perm, get_db):
     @app.post("/shop-supports/delete")
     async def shop_supports_delete(
         request: Request,
-        staff: dict = Depends(require_perm("shop_settings")),
+        staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") != "reseller":

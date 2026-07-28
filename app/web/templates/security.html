@@ -32,7 +32,12 @@
       </div>
       <div class="setting-item full">
         <label>رمز فعلی (برای تأیید)
-          <input name="current_password" type="password" required autocomplete="current-password" />
+          <div class="pw-field">
+            <input id="sec-user-pass" name="current_password" type="password" required autocomplete="current-password" />
+            <button type="button" class="pw-toggle" data-pw-for="sec-user-pass" aria-label="نمایش رمز" aria-pressed="false">
+              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
         </label>
       </div>
     </div>
@@ -49,17 +54,32 @@
     <div class="settings-grid">
       <div class="setting-item full">
         <label>رمز فعلی
-          <input name="current_password" type="password" required autocomplete="current-password" />
+          <div class="pw-field">
+            <input id="sec-cur-pass" name="current_password" type="password" required autocomplete="current-password" />
+            <button type="button" class="pw-toggle" data-pw-for="sec-cur-pass" aria-label="نمایش رمز" aria-pressed="false">
+              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
         </label>
       </div>
       <div class="setting-item">
         <label>رمز جدید
-          <input name="new_password" type="password" required minlength="8" autocomplete="new-password" />
+          <div class="pw-field">
+            <input id="sec-new-pass" name="new_password" type="password" required minlength="8" autocomplete="new-password" />
+            <button type="button" class="pw-toggle" data-pw-for="sec-new-pass" aria-label="نمایش رمز" aria-pressed="false">
+              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
         </label>
       </div>
       <div class="setting-item">
         <label>تکرار رمز جدید
-          <input name="new_password2" type="password" required minlength="8" autocomplete="new-password" />
+          <div class="pw-field">
+            <input id="sec-new-pass2" name="new_password2" type="password" required minlength="8" autocomplete="new-password" />
+            <button type="button" class="pw-toggle" data-pw-for="sec-new-pass2" aria-label="نمایش رمز" aria-pressed="false">
+              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
         </label>
       </div>
     </div>
@@ -68,4 +88,19 @@
     </div>
   </form>
 </div>
+<script>
+(function(){
+  document.querySelectorAll('.pw-toggle[data-pw-for]').forEach((btn) => {
+    const input = document.getElementById(btn.getAttribute('data-pw-for'));
+    if (!input) return;
+    btn.addEventListener('click', () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.classList.toggle('is-visible', show);
+      btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+      btn.setAttribute('aria-label', show ? 'مخفی کردن رمز' : 'نمایش رمز');
+    });
+  });
+})();
+</script>
 {% endblock %}

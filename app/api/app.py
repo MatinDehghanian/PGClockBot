@@ -40,6 +40,7 @@ from app.services.resellers import (
     make_reseller,
     parse_perms,
     setup_is_complete,
+    with_shop_settings,
     DEFAULT_FEATURE_PERMS,
     DEFAULT_WEB_PERMS,
 )
@@ -314,7 +315,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     register_reseller_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     register_reseller_setup(app, render=render, get_db=get_db)
-    register_shop_settings(app, render=render, require_perm=require_perm, get_db=get_db)
+    register_shop_settings(app, render=render, require_staff=require_staff, get_db=get_db)
     register_security_pages(
         app,
         render=render,
@@ -578,13 +579,17 @@ def create_api_app(lifespan=None) -> FastAPI:
 
                     role = "reseller"
                     display = profile.web_username or ru.full_name or str(ru.telegram_id)
-                    permissions = parse_perms(profile.web_permissions) or parse_perms(
-                        DEFAULT_FEATURE_PERMS
+                    permissions = with_shop_settings(
+                        parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
                     )
-                    # Pre-1.7 classic full set → include shop_settings in session
-                    classic = {"dashboard", "orders", "payments", "tickets", "stats"}
-                    if classic.issubset(set(permissions)) and "shop_settings" not in permissions:
-                        permissions = list(permissions) + ["shop_settings"]
+                    # Persist shop_settings onto legacy profiles so nav/API stay in sync
+                    joined = ",".join(sorted(permissions))
+                    if (profile.web_permissions or "") != joined or (
+                        profile.bot_permissions or ""
+                    ) != joined:
+                        profile.web_permissions = joined
+                        profile.bot_permissions = joined
+                        await session.commit()
                     bot_user_id = ru.id
                     pg_admin_username = profile.pg_admin_username
                     pg_permissions, pg_role = await resolve_reseller_pg_features(profile.pg_role_id)

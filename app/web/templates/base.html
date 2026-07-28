@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/panel.css?v=login-pw-eye-171" />
+  <link rel="stylesheet" href="/static/panel.css?v=login-pw-eye-172" />
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
   {% block head %}{% endblock %}
 </head>
@@ -18,7 +18,8 @@
   {% set perms = staff.get('permissions') or [] %}
   {% set pg_nav = staff.get('pg_permissions') or [] %}
   {% set is_admin = staff.role == 'admin' %}
-  {% set has_bot = is_admin or (perms|length > 0) %}
+  {% set is_reseller = staff.role == 'reseller' %}
+  {% set has_bot = is_admin or (perms|length > 0) or is_reseller %}
   {% set has_pg = is_admin or (pg_nav|length > 0) %}
   <div class="shell">
     <header class="topbar mobile-only">
@@ -77,7 +78,7 @@
             <span>تیکت‌ها</span>
           </a>
           {% endif %}
-          {% if is_admin or 'shop_settings' in perms %}
+          {% if is_admin or 'shop_settings' in perms or is_reseller %}
           <a href="{% if is_admin %}/settings{% else %}/shop-settings{% endif %}" class="nav-item nav-item-bot {% if path.startswith('/settings') or path.startswith('/shop-settings') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M4.9 7.1l1.6 1.6M17.5 15.3l1.6 1.6M3.5 12h2.2M18.3 12h2.2M4.9 16.9l1.6-1.6M17.5 8.7l1.6-1.6"/></svg>
             <span>تنظیمات ربات</span>

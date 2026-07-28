@@ -103,6 +103,14 @@ def parse_perms(raw: str | None) -> list[str]:
     return out
 
 
+def with_shop_settings(perms: list[str] | None) -> list[str]:
+    """Ensure shop_settings is present (core reseller shop capability)."""
+    out = list(perms or [])
+    if "shop_settings" not in out:
+        out.append("shop_settings")
+    return out
+
+
 def join_perms(items: Iterable[str] | None) -> str:
     allowed = {k for k, _ in FEATURE_PERMS}
     return ",".join(sorted({str(x).strip() for x in (items or []) if str(x).strip() in allowed}))
@@ -110,7 +118,9 @@ def join_perms(items: Iterable[str] | None) -> str:
 
 def normalize_feature_perms(raw: str | None) -> str:
     perms = parse_perms(raw)
-    return join_perms(perms) if perms else DEFAULT_FEATURE_PERMS
+    if not perms:
+        perms = parse_perms(DEFAULT_FEATURE_PERMS)
+    return join_perms(with_shop_settings(perms))
 
 
 def has_perm(profile: ResellerProfile | None, key: str, *, role: str | None = None) -> bool:
@@ -119,15 +129,8 @@ def has_perm(profile: ResellerProfile | None, key: str, *, role: str | None = No
         return True
     if not profile or not profile.is_active:
         return False
-    perms = parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
-    if key in perms:
-        return True
-    # Pre-1.7 profiles with the classic full set also get shop settings
-    if key == "shop_settings":
-        classic = {"dashboard", "orders", "payments", "tickets", "stats"}
-        if classic.issubset(set(perms)):
-            return True
-    return False
+    perms = with_shop_settings(parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS))
+    return key in perms
 
 
 def has_web_perm(profile: ResellerProfile | None, key: str, *, role: str | None = None) -> bool:

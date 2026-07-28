@@ -30,6 +30,7 @@ from app.services.resellers import (
     provision_reseller,
     reject_application,
     revoke_reseller,
+    with_shop_settings,
 )
 
 
@@ -200,7 +201,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
             roles = await get_pg().get_admin_roles()
         except Exception:
             roles = []
-        perms = parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
+        perms = with_shop_settings(
+            parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
+        )
         return render(
             request,
             "reseller_edit.html",

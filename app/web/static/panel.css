@@ -895,6 +895,16 @@ tr:last-child td { border-bottom: 0; }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+.pw-toggle.is-visible::after {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 1.8px;
+  background: currentColor;
+  border-radius: 1px;
+  transform: rotate(-40deg);
+  pointer-events: none;
+}
 .auth-foot { text-align: center; color: var(--muted-fg); font-size: 12px; }
 
 .setup-panel { width: min(440px, 100%); }

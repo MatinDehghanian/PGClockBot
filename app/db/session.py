@@ -56,3 +56,44 @@ def _migrate_sqlite(sync_conn) -> None:
             sync_conn.execute(
                 text("ALTER TABLE reseller_plans ADD COLUMN share_pg_panel_url BOOLEAN DEFAULT 0")
             )
+
+    # Ensure shop_settings exists on legacy reseller profiles / plans (1.7+)
+    _ensure_shop_settings_perm_column(sync_conn, "reseller_profiles")
+    _ensure_shop_settings_perm_column(sync_conn, "reseller_plans")
+
+
+def _ensure_shop_settings_perm_column(sync_conn, table: str) -> None:
+    from sqlalchemy import text
+
+    try:
+        rows = sync_conn.execute(
+            text(f"SELECT id, web_permissions, bot_permissions FROM {table}")
+        ).fetchall()
+    except Exception:
+        return
+    for row in rows:
+        rid, web, bot = row[0], row[1], row[2]
+        new_web = _append_shop_settings_csv(web)
+        new_bot = _append_shop_settings_csv(bot if bot is not None else web)
+        if new_web != (web or "") or new_bot != (bot or ""):
+            sync_conn.execute(
+                text(
+                    f"UPDATE {table} SET web_permissions = :w, bot_permissions = :b WHERE id = :id"
+                ),
+                {"w": new_web or None, "b": new_bot or None, "id": rid},
+            )
+
+
+def _append_shop_settings_csv(raw: str | None) -> str:
+    raw = (raw or "").strip()
+    if not raw:
+        return "dashboard,orders,payments,shop_settings,stats,tickets"
+    parts = [p.strip() for p in raw.replace(";", ",").split(",") if p.strip()]
+    if "shop_settings" not in parts:
+        parts.append("shop_settings")
+    # stable unique order
+    seen: list[str] = []
+    for p in parts:
+        if p not in seen:
+            seen.append(p)
+    return ",".join(seen)
