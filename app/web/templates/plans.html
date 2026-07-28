@@ -101,7 +101,7 @@
               <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
             </form>
             <form method="post" action="/plans/{{ p.id }}/delete" onsubmit="return confirm('حذف پلن از فروشگاه؟')">
-              <button class="icon-btn icon-remove" type="submit" title="حذف" aria-label="حذف">×</button>
+              <button class="icon-btn icon-remove" type="submit" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
             </form>
           </div>
         </td>

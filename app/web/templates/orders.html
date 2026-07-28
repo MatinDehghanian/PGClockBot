@@ -39,7 +39,7 @@
           {% elif pay and pay.status == 'pending' %}
             <div class="actions" style="margin:0">
               <form method="post" action="/orders/{{ o.id }}/approve">
-                <button class="btn btn-sm" type="submit">تأیید</button>
+                <button class="btn btn-ok btn-sm" type="submit">تأیید</button>
               </form>
               <form method="post" action="/orders/{{ o.id }}/reject">
                 <button class="btn btn-danger btn-sm" type="submit">رد</button>
@@ -48,7 +48,7 @@
           {% elif o.status in ['paid','awaiting_approval'] %}
             <div class="actions" style="margin:0">
               <form method="post" action="/orders/{{ o.id }}/approve">
-                <button class="btn btn-sm" type="submit">تأیید و تحویل</button>
+                <button class="btn btn-ok btn-sm" type="submit">تأیید و تحویل</button>
               </form>
             </div>
           {% else %}
