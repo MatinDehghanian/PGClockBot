@@ -1264,8 +1264,10 @@ tr:last-child td { border-bottom: 0; }
     border-left: 0;
     border-right: 0;
   }
+  /* Do not mask the wrap — it clipped the hint border to ~half width */
   .table-wrap.is-scrollable {
-    mask-image: linear-gradient(to left, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
+    mask-image: none;
+    -webkit-mask-image: none;
   }
   .card > .table-wrap,
   .card.card-flush > .table-wrap {
@@ -1273,8 +1275,13 @@ tr:last-child td { border-bottom: 0; }
     width: 100%;
   }
   .table-wrap.is-scrollable::after {
-    content: "← برای دیدن بقیه، افقی بکشید →";
+    content: "برای مشاهده بیشتر اسکرول کنید";
     display: block;
+    position: sticky;
+    inset-inline-start: 0;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
     text-align: center;
     font-size: 11px;
     color: var(--muted-fg);
