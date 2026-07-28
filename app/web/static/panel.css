@@ -1726,18 +1726,42 @@ tr:last-child td { border-bottom: 0; }
 }
 
 /* ── Panel split: Bot vs PasarGuard ── */
-.nav-section-bot { margin-top: 4px; }
+.nav-section-bot,
 .nav-section-pg {
   margin-top: 14px;
   padding: 10px 6px 6px;
   border-radius: var(--radius);
+}
+.nav-section-bot:first-child { margin-top: 4px; }
+.nav-section-bot {
+  border: 1px solid color-mix(in srgb, #e08a3c 38%, var(--border));
+  background: linear-gradient(180deg, color-mix(in srgb, #e08a3c 14%, transparent), transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, #e08a3c 8%, transparent),
+              0 6px 18px color-mix(in srgb, #e08a3c 12%, transparent);
+}
+.nav-section-pg {
   border: 1px solid color-mix(in srgb, #3d8fd1 35%, var(--border));
   background: linear-gradient(180deg, color-mix(in srgb, #3d8fd1 12%, transparent), transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, #3d8fd1 8%, transparent),
+              0 6px 18px color-mix(in srgb, #3d8fd1 12%, transparent);
+}
+.nav-label-bot {
+  color: #f0b27a;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 .nav-label-pg {
   color: #8ec5ef;
   font-weight: 600;
   letter-spacing: 0.04em;
+}
+.nav-item-bot.active {
+  background: color-mix(in srgb, #e08a3c 22%, var(--muted));
+  border-color: color-mix(in srgb, #e08a3c 40%, transparent);
+  color: #fff2e6;
+}
+.nav-item-bot:hover {
+  color: #ffd7b0;
 }
 .nav-item-pg.active {
   background: color-mix(in srgb, #3d8fd1 22%, var(--muted));
