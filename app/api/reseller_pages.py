@@ -144,6 +144,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
             commission = 10
         perms = _feature_perms_from_form(form)
         create_pg = bool(form.get("create_pg_admin"))
+        share_pg = bool(form.get("share_pg_panel_url"))
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
         panel_url = await get_reseller_panel_base_url(session)
@@ -155,6 +156,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
                 web_permissions=perms,
                 bot_permissions=perms,
                 create_pg_admin=create_pg,
+                share_pg_panel_url=share_pg,
                 pg_role_id=pg_role_id,
                 panel_base_url=panel_url,
             )
@@ -237,6 +239,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         profile.bot_permissions = perms  # must stay identical
         profile.can_approve_receipts = "payments" in parse_perms(perms)
         profile.is_active = bool(form.get("is_active"))
+        profile.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         profile.pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
         pg_user = str(form.get("pg_admin_username") or "").strip()
@@ -254,7 +257,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
             else:
                 profile.setup_completed_at = None
             base = await get_reseller_panel_base_url(session)
-            pg_panel = await get_reseller_pg_panel_base_url(session)
+            pg_panel = await get_reseller_pg_panel_base_url(session) if profile.share_pg_panel_url else ""
             if base:
                 try:
                     from app.bot import create_bot
@@ -472,6 +475,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
             bot_permissions=perms,
             create_pg_admin=bool(form.get("create_pg_admin")),
             create_web_access=True,
+            share_pg_panel_url=bool(form.get("share_pg_panel_url")),
             pg_role_id=int(pg_role_raw) if pg_role_raw.isdigit() else None,
             is_active=bool(form.get("is_active", "1")),
             sort_order=int(str(form.get("sort_order") or "0") or "0"),
@@ -544,6 +548,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         plan.bot_permissions = perms
         plan.can_approve_receipts = "payments" in parse_perms(perms)
         plan.create_pg_admin = bool(form.get("create_pg_admin"))
+        plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
         plan.is_active = bool(form.get("is_active"))
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         plan.pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None

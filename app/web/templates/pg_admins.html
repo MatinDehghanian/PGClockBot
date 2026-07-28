@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch %}
+{% from "macros.html" import switch, pg_tabs %}
 {% block title %}ادمین‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -7,56 +7,9 @@
     <h1>ادمین‌های پنل</h1>
     <p>ادمین‌های خودِ پاسارگارد — نقش‌ها را از پنل پاسارگارد تعریف کنید و اینجا نسبت دهید</p>
   </div>
+  <button type="button" class="btn" data-modal-open="modal-pg-admin-create">ساخت ادمین</button>
 </div>
-<div class="section-tabs">
-  <a href="/pg">نمای کلی</a>
-  <a href="/pg/templates">تمپلیت</a>
-  <a href="/pg/groups">گروه‌ها</a>
-  <a href="/pg/hosts">هاست‌ها</a>
-  <a href="/pg/inbounds">اینباندها</a>
-  <a href="/pg/nodes">نودها</a>
-  <a class="active" href="/pg/admins">ادمین‌ها</a>
-</div>
-
-<div class="card">
-  <h2>ساخت ادمین پنل</h2>
-  <form method="post" action="/pg/admins">
-    <div class="form-row">
-      <div>
-        <label class="form-field">نام کاربری
-          <input name="username" required autocomplete="off" />
-        </label>
-      </div>
-      <div>
-        <label class="form-field">رمز عبور
-          <small class="muted">حداقل ۸ کاراکتر با حرف بزرگ/کوچک و کاراکتر خاص</small>
-          <input name="password" type="password" required autocomplete="new-password" />
-        </label>
-      </div>
-      <div>
-        <label class="form-field">نقش پاسارگارد
-          <small class="muted">سطح دسترسی — از نقش‌های تعریف‌شده owner</small>
-          <select name="role_id">
-            <option value="">— بدون نقش (سازگاری قدیم) —</option>
-            {% for r in pg_roles or [] %}
-            <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}{% if r.get('is_owner') %} (owner){% endif %}</option>
-            {% endfor %}
-          </select>
-        </label>
-      </div>
-    </div>
-    <label class="form-field">یادداشت
-      <small class="muted">اختیاری — فقط در پاسارگارد ذخیره می‌شود</small>
-      <input name="note" placeholder="نماینده فروش" />
-    </label>
-    <div class="ui-switch-list">
-      {{ switch('is_sudo', 'دسترسی sudo', help='فقط پنل‌های قدیمی؛ در نسخه‌های جدید از نقش استفاده کنید') }}
-    </div>
-    <div class="actions">
-      <button class="btn" type="submit">ساخت در پاسارگارد</button>
-    </div>
-  </form>
-</div>
+{{ pg_tabs('pg_admins') }}
 
 <div class="card">
   <h2>لیست ادمین‌ها</h2>
@@ -90,5 +43,52 @@
   </table>
   </div>
   {% endif %}
+</div>
+
+<div class="ui-modal" id="modal-pg-admin-create" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true">
+    <div class="ui-modal-head">
+      <h2>ساخت ادمین پنل</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن">×</button>
+    </div>
+    <form method="post" action="/pg/admins" class="form-stack">
+      <div class="form-row">
+        <div>
+          <label class="form-field">نام کاربری
+            <input name="username" required autocomplete="off" />
+          </label>
+        </div>
+        <div>
+          <label class="form-field">رمز عبور
+            <small class="muted">حداقل ۸ کاراکتر با حرف بزرگ/کوچک و کاراکتر خاص</small>
+            <input name="password" type="password" required autocomplete="new-password" />
+          </label>
+        </div>
+        <div>
+          <label class="form-field">نقش پاسارگارد
+            <small class="muted">سطح دسترسی — از نقش‌های تعریف‌شده owner</small>
+            <select name="role_id">
+              <option value="">— بدون نقش (سازگاری قدیم) —</option>
+              {% for r in pg_roles or [] %}
+              <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}{% if r.get('is_owner') %} (owner){% endif %}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+      </div>
+      <label class="form-field">یادداشت
+        <small class="muted">اختیاری — فقط در پاسارگارد ذخیره می‌شود</small>
+        <input name="note" placeholder="نماینده فروش" />
+      </label>
+      <div class="ui-switch-list">
+        {{ switch('is_sudo', 'دسترسی sudo', help='فقط پنل‌های قدیمی؛ در نسخه‌های جدید از نقش استفاده کنید') }}
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit">ساخت در پاسارگارد</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
 </div>
 {% endblock %}

@@ -1,5 +1,5 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch_chip %}
+{% from "macros.html" import switch_chip, pg_tabs %}
 {% block title %}تمپلیت‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -7,47 +7,11 @@
     <h1>تمپلیت‌های کاربر</h1>
     <p>ساخت و مدیریت تمپلیت مستقیم روی پاسارگارد</p>
   </div>
+  {% if can_write %}
+  <button type="button" class="btn" data-modal-open="modal-pg-template-create">ساخت تمپلیت</button>
+  {% endif %}
 </div>
-<div class="section-tabs">
-  <a href="/pg">نمای کلی</a>
-  <a class="active" href="/pg/templates">تمپلیت</a>
-  <a href="/pg/groups">گروه‌ها</a>
-  <a href="/pg/hosts">هاست‌ها</a>
-  <a href="/pg/inbounds">اینباندها</a>
-  <a href="/pg/nodes">نودها</a>
-  <a href="/pg/admins">ادمین‌ها</a>
-</div>
-
-<div class="card">
-  <h2>ساخت تمپلیت جدید</h2>
-  <form method="post" action="/pg/templates">
-    <div class="form-row">
-      <div>
-        <label>نام تمپلیت</label>
-        <input name="name" required placeholder="مثلاً ماهانه ۳۰ گیگ" />
-      </div>
-      <div>
-        <label>حجم (گیگابایت) — خالی = نامحدود</label>
-        <input name="data_limit_gb" type="number" step="0.1" min="0" placeholder="30" />
-      </div>
-      <div>
-        <label>مدت (روز)</label>
-        <input name="expire_days" type="number" min="1" value="30" required />
-      </div>
-    </div>
-    <label>گروه‌های پاسارگارد</label>
-    <div class="ui-switch-grid">
-      {% for g in groups %}
-      {{ switch_chip('g_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
-      {% else %}
-      <span class="muted">گروهی یافت نشد — ابتدا در بخش گروه‌ها بسازید.</span>
-      {% endfor %}
-    </div>
-    <div class="actions">
-      <button class="btn" type="submit">ساخت در پاسارگارد</button>
-    </div>
-  </form>
-</div>
+{{ pg_tabs('pg_templates') }}
 
 <div class="card">
   <h2>تمپلیت‌های موجود</h2>
@@ -76,9 +40,11 @@
         </td>
         <td class="mono">{{ t.get('group_ids') or '—' }}</td>
         <td>
+          {% if can_write %}
           <form method="post" action="/pg/templates/{{ t.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
             <button class="icon-btn icon-remove" type="submit" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
           </form>
+          {% endif %}
         </td>
       </tr>
     {% endfor %}
@@ -87,4 +53,47 @@
   </div>
   {% endif %}
 </div>
+
+{% if can_write %}
+<div class="ui-modal" id="modal-pg-template-create" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true">
+    <div class="ui-modal-head">
+      <h2>ساخت تمپلیت جدید</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن">×</button>
+    </div>
+    <form method="post" action="/pg/templates" class="form-stack">
+      <div class="form-row">
+        <div>
+          <label>نام تمپلیت
+            <input name="name" required placeholder="مثلاً ماهانه ۳۰ گیگ" />
+          </label>
+        </div>
+        <div>
+          <label>حجم (گیگابایت) — خالی = نامحدود
+            <input name="data_limit_gb" type="number" step="0.1" min="0" placeholder="30" />
+          </label>
+        </div>
+        <div>
+          <label>مدت (روز)
+            <input name="expire_days" type="number" min="1" value="30" required />
+          </label>
+        </div>
+      </div>
+      <label>گروه‌های پاسارگارد</label>
+      <div class="ui-switch-grid">
+        {% for g in groups %}
+        {{ switch_chip('g_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
+        {% else %}
+        <span class="muted">گروهی یافت نشد — ابتدا در بخش گروه‌ها بسازید.</span>
+        {% endfor %}
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit">ساخت در پاسارگارد</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

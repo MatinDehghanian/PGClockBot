@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""PasarGuard manager pages — categorized CRUD wired to live API."""
+"""PasarGuard manager pages — admin + reseller (permission-gated)."""
 
 from urllib.parse import quote
 
@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services.formatting import format_stat_row
 from app.services.pasarguard import as_list, get_pg
+from app.services.pg_access import staff_has_pg, staff_pg_writes, staff_user_actions
 
 
 def _q(msg: str) -> str:
@@ -29,13 +30,100 @@ def _addr_set(raw: str) -> list[str]:
     return [p.strip() for p in (raw or "").replace("؛", ",").split(",") if p.strip()]
 
 
-def register_pg_pages(app, *, render, require_admin, get_db):
+def _is_admin(staff: dict) -> bool:
+    return staff.get("role") == "admin"
+
+
+def _pg_owner(staff: dict) -> str:
+    return str(staff.get("pg_admin_username") or "").strip()
+
+
+def _owner_of(user: dict) -> str:
+    admin = user.get("admin") or user.get("owner_username") or ""
+    if isinstance(admin, dict):
+        admin = admin.get("username") or ""
+    return str(admin or "").strip().lower()
+
+
+def _filter_owned_users(users: list[dict], staff: dict) -> list[dict]:
+    if _is_admin(staff):
+        return users
+    mine = _pg_owner(staff).lower()
+    if not mine:
+        return []
+    return [u for u in users if isinstance(u, dict) and _owner_of(u) == mine]
+
+
+def _filter_templates(items: list[dict], staff: dict) -> list[dict]:
+    if _is_admin(staff):
+        return items
+    access = staff.get("pg_access") or {}
+    allowed = access.get("allowed_template_ids")
+    if allowed is None:
+        return items
+    try:
+        allowed_ids = {int(x) for x in allowed}
+    except (TypeError, ValueError):
+        return items
+    if not allowed_ids:
+        return []
+    return [t for t in items if int(t.get("id") or 0) in allowed_ids]
+
+
+async def _assert_owned_user(staff: dict, user_id: int) -> dict | None:
+    info = await get_pg().get_user_by_id(user_id)
+    if not isinstance(info, dict):
+        return None
+    if _is_admin(staff):
+        return info
+    mine = _pg_owner(staff).lower()
+    if not mine or _owner_of(info) != mine:
+        return None
+    return info
+
+
+def _pg_ctx(staff: dict, **extra) -> dict:
+    writes = staff_pg_writes(staff)
+    actions = staff_user_actions(staff)
+    pg_perms = list(staff.get("pg_permissions") or [])
+    if _is_admin(staff):
+        pg_perms = [
+            "pg_overview",
+            "pg_users",
+            "pg_templates",
+            "pg_groups",
+            "pg_hosts",
+            "pg_inbounds",
+            "pg_nodes",
+            "pg_admins",
+        ]
+    ctx = {
+        "staff": staff,
+        "is_admin": _is_admin(staff),
+        "pg_perms": pg_perms,
+        "pg_writes": writes,
+        "pg_user_actions": actions,
+        "pg_access": staff.get("pg_access") or {},
+    }
+    ctx.update(extra)
+    return ctx
+
+
+def register_pg_pages(
+    app,
+    *,
+    render,
+    require_admin,
+    require_pg_perm,
+    require_pg_any,
+    get_db,
+):
     @app.get("/pg", response_class=HTMLResponse)
-    async def pg_home(request: Request, staff: dict = Depends(require_admin)):
+    async def pg_home(request: Request, staff: dict = Depends(require_pg_perm("pg_overview"))):
         err = None
         stats_rows: list[tuple[str, str]] = []
         nodes = []
-        counts = {"templates": 0, "groups": 0, "hosts": 0, "nodes": 0}
+        counts = {"templates": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0}
         try:
             pg = get_pg()
             raw = await pg.get_system_stats()
@@ -44,28 +132,192 @@ def register_pg_pages(app, *, render, require_admin, get_db):
                     if isinstance(val, (dict, list)):
                         continue
                     stats_rows.append(format_stat_row(str(key), val))
-            nodes = await pg.get_nodes_simple()
-            counts["nodes"] = len(nodes)
-            counts["templates"] = len(await pg.get_user_templates_simple())
-            counts["groups"] = len(await pg.get_groups_simple())
-            counts["hosts"] = len(await pg.get_hosts())
+            if _is_admin(staff) or staff_has_pg(staff, "pg_nodes"):
+                nodes = await pg.get_nodes_simple()
+                counts["nodes"] = len(nodes)
+            if _is_admin(staff) or staff_has_pg(staff, "pg_templates"):
+                counts["templates"] = len(await pg.get_user_templates_simple())
+            if _is_admin(staff) or staff_has_pg(staff, "pg_groups"):
+                counts["groups"] = len(await pg.get_groups_simple())
+            if _is_admin(staff) or staff_has_pg(staff, "pg_hosts"):
+                counts["hosts"] = len(await pg.get_hosts())
         except Exception as e:
             err = str(e)
         return render(
             request,
             "pg_home.html",
-            {
-                "staff": staff,
-                "stats_rows": stats_rows,
-                "nodes": nodes,
-                "counts": counts,
-                "flash_err": err,
-            },
+            _pg_ctx(
+                staff,
+                stats_rows=stats_rows,
+                nodes=nodes,
+                counts=counts,
+                flash_err=err,
+                active="pg",
+            ),
         )
+
+    # ---- VPN users ----
+    @app.get("/pg/users", response_class=HTMLResponse)
+    async def pg_users(request: Request, staff: dict = Depends(require_pg_perm("pg_users"))):
+        err = request.query_params.get("err")
+        ok = request.query_params.get("ok")
+        q = (request.query_params.get("q") or "").strip()
+        users: list[dict] = []
+        templates: list[dict] = []
+        try:
+            pg = get_pg()
+            params: dict = {"offset": 0, "limit": 200}
+            if q:
+                params["username"] = q
+            owner = _pg_owner(staff)
+            if not _is_admin(staff) and owner:
+                params["admin"] = owner
+            data = await pg.get_users(**params)
+            if isinstance(data, dict):
+                users = as_list(data, "users") or []
+            elif isinstance(data, list):
+                users = data
+            users = _filter_owned_users(users, staff)
+            templates = await pg.get_user_templates_simple()
+            full = await pg.get_user_templates()
+            if isinstance(full, list) and full:
+                templates = full
+            elif isinstance(full, dict):
+                templates = as_list(full, "templates") or templates
+            templates = _filter_templates(templates, staff)
+        except Exception as e:
+            err = str(e)
+        actions = staff_user_actions(staff)
+        return render(
+            request,
+            "pg_users.html",
+            _pg_ctx(
+                staff,
+                users=users,
+                templates=templates,
+                q=q,
+                flash_err=err,
+                flash_ok=ok,
+                can_create=actions["create"],
+                can_modify=actions["update"],
+                can_delete=actions["delete"],
+                can_reset=actions["reset_usage"] or actions["update"],
+                can_revoke=actions["revoke_sub"] or actions["update"],
+                can_disable=actions["disable"],
+                can_enable=actions["enable"],
+                active="pg_users",
+            ),
+        )
+
+    @app.post("/pg/users")
+    async def pg_users_create(
+        request: Request,
+        username: str = Form(...),
+        template_id: str = Form(...),
+        staff: dict = Depends(require_pg_perm("pg_users")),
+    ):
+        actions = staff_user_actions(staff)
+        if not actions["create"]:
+            return RedirectResponse(f"/pg/users?err={_q('اجازه ساخت کاربر ندارید')}", status_code=303)
+        uname = username.strip()
+        if not uname:
+            return RedirectResponse(f"/pg/users?err={_q('نام کاربری الزامی است')}", status_code=303)
+        if not str(template_id).strip().isdigit():
+            return RedirectResponse(f"/pg/users?err={_q('تمپلیت نامعتبر')}", status_code=303)
+        tid = int(template_id)
+        access = staff.get("pg_access") or {}
+        allowed = access.get("allowed_template_ids")
+        if not _is_admin(staff) and allowed is not None:
+            try:
+                if int(tid) not in {int(x) for x in allowed}:
+                    return RedirectResponse(f"/pg/users?err={_q('این تمپلیت مجاز نیست')}", status_code=303)
+            except (TypeError, ValueError):
+                return RedirectResponse(f"/pg/users?err={_q('این تمپلیت مجاز نیست')}", status_code=303)
+        try:
+            created = await get_pg().create_user_from_template(
+                {
+                    "username": uname,
+                    "user_template_id": tid,
+                    "note": f"web panel · {staff.get('username') or 'staff'}",
+                }
+            )
+            if not _is_admin(staff):
+                owner = _pg_owner(staff)
+                uid = created.get("id") if isinstance(created, dict) else None
+                if owner and uid:
+                    try:
+                        await get_pg().set_owner_by_id(int(uid), owner)
+                    except Exception:
+                        pass
+        except Exception as e:
+            return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
+        return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ساخته شد')}", status_code=303)
+
+    @app.post("/pg/users/{user_id}/disable")
+    async def pg_users_disable(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
+        if not staff_user_actions(staff)["disable"]:
+            return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
+        try:
+            if await _assert_owned_user(staff, user_id) is None:
+                return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
+            await get_pg().set_disabled_by_id(user_id, True)
+        except Exception as e:
+            return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
+        return RedirectResponse(f"/pg/users?ok={_q('کاربر غیرفعال شد')}", status_code=303)
+
+    @app.post("/pg/users/{user_id}/enable")
+    async def pg_users_enable(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
+        if not staff_user_actions(staff)["enable"]:
+            return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
+        try:
+            if await _assert_owned_user(staff, user_id) is None:
+                return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
+            await get_pg().set_disabled_by_id(user_id, False)
+        except Exception as e:
+            return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
+        return RedirectResponse(f"/pg/users?ok={_q('کاربر فعال شد')}", status_code=303)
+
+    @app.post("/pg/users/{user_id}/reset")
+    async def pg_users_reset(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
+        acts = staff_user_actions(staff)
+        if not (acts["reset_usage"] or acts["update"]):
+            return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
+        try:
+            if await _assert_owned_user(staff, user_id) is None:
+                return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
+            await get_pg().reset_user_by_id(user_id)
+        except Exception as e:
+            return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
+        return RedirectResponse(f"/pg/users?ok={_q('مصرف ریست شد')}", status_code=303)
+
+    @app.post("/pg/users/{user_id}/revoke")
+    async def pg_users_revoke(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
+        acts = staff_user_actions(staff)
+        if not (acts["revoke_sub"] or acts["update"]):
+            return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
+        try:
+            if await _assert_owned_user(staff, user_id) is None:
+                return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
+            await get_pg().revoke_sub_by_id(user_id)
+        except Exception as e:
+            return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
+        return RedirectResponse(f"/pg/users?ok={_q('سابسکرایب ابطال شد')}", status_code=303)
+
+    @app.post("/pg/users/{user_id}/delete")
+    async def pg_users_delete(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
+        if not staff_user_actions(staff)["delete"]:
+            return RedirectResponse(f"/pg/users?err={_q('اجازه حذف ندارید')}", status_code=303)
+        try:
+            if await _assert_owned_user(staff, user_id) is None:
+                return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
+            await get_pg().delete_user_by_id(user_id)
+        except Exception as e:
+            return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
+        return RedirectResponse(f"/pg/users?ok={_q('کاربر حذف شد')}", status_code=303)
 
     # ---- templates ----
     @app.get("/pg/templates", response_class=HTMLResponse)
-    async def pg_templates(request: Request, staff: dict = Depends(require_admin)):
+    async def pg_templates(request: Request, staff: dict = Depends(require_pg_perm("pg_templates"))):
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         templates, groups = [], []
@@ -77,19 +329,22 @@ def register_pg_pages(app, *, render, require_admin, get_db):
                 templates = full
             elif isinstance(full, dict):
                 templates = as_list(full, "templates") or templates
+            templates = _filter_templates(templates, staff)
             groups = await pg.get_groups_simple()
         except Exception as e:
             err = str(e)
         return render(
             request,
             "pg_templates.html",
-            {
-                "staff": staff,
-                "templates": templates,
-                "groups": groups,
-                "flash_err": err,
-                "flash_ok": ok,
-            },
+            _pg_ctx(
+                staff,
+                templates=templates,
+                groups=groups,
+                flash_err=err,
+                flash_ok=ok,
+                can_write=staff_pg_writes(staff)["templates"],
+                active="pg_templates",
+            ),
         )
 
     @app.post("/pg/templates")
@@ -98,8 +353,10 @@ def register_pg_pages(app, *, render, require_admin, get_db):
         name: str = Form(...),
         data_limit_gb: str = Form(""),
         expire_days: str = Form("30"),
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_pg_perm("pg_templates")),
     ):
+        if not staff_pg_writes(staff)["templates"]:
+            return RedirectResponse(f"/pg/templates?err={_q('اجازه ساخت ندارید')}", status_code=303)
         form = await request.form()
         group_ids = [int(v) for k, v in form.items() if str(k).startswith("g_") and str(v).isdigit()]
         if not group_ids:
@@ -121,7 +378,9 @@ def register_pg_pages(app, *, render, require_admin, get_db):
         return RedirectResponse(f"/pg/templates?ok={_q('تمپلیت ساخته شد')}", status_code=303)
 
     @app.post("/pg/templates/{template_id}/delete")
-    async def pg_templates_delete(template_id: int, staff: dict = Depends(require_admin)):
+    async def pg_templates_delete(template_id: int, staff: dict = Depends(require_pg_perm("pg_templates"))):
+        if not staff_pg_writes(staff)["templates"]:
+            return RedirectResponse(f"/pg/templates?err={_q('اجازه حذف ندارید')}", status_code=303)
         try:
             await get_pg().delete_user_template(template_id)
         except Exception as e:
@@ -130,7 +389,7 @@ def register_pg_pages(app, *, render, require_admin, get_db):
 
     # ---- groups ----
     @app.get("/pg/groups", response_class=HTMLResponse)
-    async def pg_groups(request: Request, staff: dict = Depends(require_admin)):
+    async def pg_groups(request: Request, staff: dict = Depends(require_pg_perm("pg_groups"))):
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         groups, inbound_tags = [], []
@@ -150,22 +409,26 @@ def register_pg_pages(app, *, render, require_admin, get_db):
         return render(
             request,
             "pg_groups.html",
-            {
-                "staff": staff,
-                "groups": groups,
-                "inbound_tags": inbound_tags,
-                "edit_group": edit_group,
-                "flash_err": err,
-                "flash_ok": ok,
-            },
+            _pg_ctx(
+                staff,
+                groups=groups,
+                inbound_tags=inbound_tags,
+                edit_group=edit_group,
+                flash_err=err,
+                flash_ok=ok,
+                can_write=staff_pg_writes(staff)["groups"],
+                active="pg_groups",
+            ),
         )
 
     @app.post("/pg/groups")
     async def pg_groups_create(
         request: Request,
         name: str = Form(...),
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_pg_perm("pg_groups")),
     ):
+        if not staff_pg_writes(staff)["groups"]:
+            return RedirectResponse(f"/pg/groups?err={_q('اجازه ساخت ندارید')}", status_code=303)
         form = await request.form()
         tags = [str(v) for k, v in form.items() if str(k).startswith("tag_")]
         if not tags:
@@ -181,8 +444,10 @@ def register_pg_pages(app, *, render, require_admin, get_db):
         request: Request,
         group_id: int,
         name: str = Form(...),
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_pg_perm("pg_groups")),
     ):
+        if not staff_pg_writes(staff)["groups"]:
+            return RedirectResponse(f"/pg/groups?err={_q('اجازه ویرایش ندارید')}", status_code=303)
         form = await request.form()
         tags = [str(v) for k, v in form.items() if str(k).startswith("tag_")]
         disabled = bool(form.get("is_disabled"))
@@ -196,7 +461,9 @@ def register_pg_pages(app, *, render, require_admin, get_db):
         return RedirectResponse(f"/pg/groups?ok={_q('گروه به‌روز شد')}", status_code=303)
 
     @app.post("/pg/groups/{group_id}/delete")
-    async def pg_groups_delete(group_id: int, staff: dict = Depends(require_admin)):
+    async def pg_groups_delete(group_id: int, staff: dict = Depends(require_pg_perm("pg_groups"))):
+        if not staff_pg_writes(staff)["groups"]:
+            return RedirectResponse(f"/pg/groups?err={_q('اجازه حذف ندارید')}", status_code=303)
         try:
             await get_pg().delete_group(group_id)
         except Exception as e:
@@ -205,7 +472,7 @@ def register_pg_pages(app, *, render, require_admin, get_db):
 
     # ---- hosts ----
     @app.get("/pg/hosts", response_class=HTMLResponse)
-    async def pg_hosts(request: Request, staff: dict = Depends(require_admin)):
+    async def pg_hosts(request: Request, staff: dict = Depends(require_pg_perm("pg_hosts"))):
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         hosts, inbound_tags = [], []
@@ -218,13 +485,15 @@ def register_pg_pages(app, *, render, require_admin, get_db):
         return render(
             request,
             "pg_hosts.html",
-            {
-                "staff": staff,
-                "hosts": hosts,
-                "inbound_tags": inbound_tags,
-                "flash_err": err,
-                "flash_ok": ok,
-            },
+            _pg_ctx(
+                staff,
+                hosts=hosts,
+                inbound_tags=inbound_tags,
+                flash_err=err,
+                flash_ok=ok,
+                can_write=staff_pg_writes(staff)["hosts"],
+                active="pg_hosts",
+            ),
         )
 
     @app.post("/pg/hosts")
@@ -234,8 +503,10 @@ def register_pg_pages(app, *, render, require_admin, get_db):
         port: str = Form(""),
         inbound_tag: str = Form(...),
         priority: int = Form(0),
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_pg_perm("pg_hosts")),
     ):
+        if not staff_pg_writes(staff)["hosts"]:
+            return RedirectResponse(f"/pg/hosts?err={_q('اجازه ساخت ندارید')}", status_code=303)
         addrs = _addr_set(address)
         if not addrs:
             return RedirectResponse(f"/pg/hosts?err={_q('آدرس هاست الزامی است')}", status_code=303)
@@ -255,7 +526,9 @@ def register_pg_pages(app, *, render, require_admin, get_db):
         return RedirectResponse(f"/pg/hosts?ok={_q('هاست ساخته شد')}", status_code=303)
 
     @app.post("/pg/hosts/{host_id}/toggle")
-    async def pg_hosts_toggle(host_id: int, staff: dict = Depends(require_admin)):
+    async def pg_hosts_toggle(host_id: int, staff: dict = Depends(require_pg_perm("pg_hosts"))):
+        if not staff_pg_writes(staff)["hosts"]:
+            return RedirectResponse(f"/pg/hosts?err={_q('اجازه ندارید')}", status_code=303)
         try:
             host = await get_pg().get_host(host_id)
             disabled = bool(host.get("is_disabled"))
@@ -265,7 +538,9 @@ def register_pg_pages(app, *, render, require_admin, get_db):
         return RedirectResponse(f"/pg/hosts?ok={_q('وضعیت هاست تغییر کرد')}", status_code=303)
 
     @app.post("/pg/hosts/{host_id}/delete")
-    async def pg_hosts_delete(host_id: int, staff: dict = Depends(require_admin)):
+    async def pg_hosts_delete(host_id: int, staff: dict = Depends(require_pg_perm("pg_hosts"))):
+        if not staff_pg_writes(staff)["hosts"]:
+            return RedirectResponse(f"/pg/hosts?err={_q('اجازه حذف ندارید')}", status_code=303)
         try:
             await get_pg().delete_host(host_id)
         except Exception as e:
@@ -274,17 +549,29 @@ def register_pg_pages(app, *, render, require_admin, get_db):
 
     # ---- nodes / inbounds / admins ----
     @app.get("/pg/nodes", response_class=HTMLResponse)
-    async def pg_nodes(request: Request, staff: dict = Depends(require_admin)):
+    async def pg_nodes(request: Request, staff: dict = Depends(require_pg_perm("pg_nodes"))):
         err = request.query_params.get("err")
         nodes = []
         try:
             nodes = await get_pg().get_nodes()
         except Exception as e:
             err = str(e)
-        return render(request, "pg_nodes.html", {"staff": staff, "nodes": nodes, "flash_err": err})
+        return render(
+            request,
+            "pg_nodes.html",
+            _pg_ctx(
+                staff,
+                nodes=nodes,
+                flash_err=err,
+                can_write=staff_pg_writes(staff)["nodes"],
+                active="pg_nodes",
+            ),
+        )
 
     @app.post("/pg/nodes/{node_id}/reconnect")
-    async def pg_node_reconnect(node_id: int, staff: dict = Depends(require_admin)):
+    async def pg_node_reconnect(node_id: int, staff: dict = Depends(require_pg_perm("pg_nodes"))):
+        if not staff_pg_writes(staff)["nodes"]:
+            return RedirectResponse(f"/pg/nodes?err={_q('اجازه ندارید')}", status_code=303)
         try:
             await get_pg().reconnect_node(node_id)
         except Exception as e:
@@ -292,7 +579,7 @@ def register_pg_pages(app, *, render, require_admin, get_db):
         return RedirectResponse("/pg/nodes", status_code=303)
 
     @app.get("/pg/inbounds", response_class=HTMLResponse)
-    async def pg_inbounds(request: Request, staff: dict = Depends(require_admin)):
+    async def pg_inbounds(request: Request, staff: dict = Depends(require_pg_perm("pg_inbounds"))):
         err = request.query_params.get("err")
         inbounds, details = [], None
         try:
@@ -304,7 +591,7 @@ def register_pg_pages(app, *, render, require_admin, get_db):
         return render(
             request,
             "pg_inbounds.html",
-            {"staff": staff, "inbounds": inbounds, "details": details, "flash_err": err},
+            _pg_ctx(staff, inbounds=inbounds, details=details, flash_err=err, active="pg_inbounds"),
         )
 
     @app.get("/pg/admins", response_class=HTMLResponse)
@@ -324,13 +611,7 @@ def register_pg_pages(app, *, render, require_admin, get_db):
         return render(
             request,
             "pg_admins.html",
-            {
-                "staff": staff,
-                "admins": admins,
-                "pg_roles": roles,
-                "flash_err": err,
-                "flash_ok": ok,
-            },
+            _pg_ctx(staff, admins=admins, pg_roles=roles, flash_err=err, flash_ok=ok, active="pg_admins"),
         )
 
     @app.post("/pg/admins")
@@ -355,7 +636,6 @@ def register_pg_pages(app, *, render, require_admin, get_db):
         try:
             await get_pg().create_admin(payload)
         except Exception as e:
-            # Fallback for older panels without role_id
             if "role_id" in payload:
                 payload.pop("role_id", None)
                 payload["is_sudo"] = False

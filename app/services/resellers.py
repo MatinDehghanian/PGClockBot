@@ -413,6 +413,7 @@ async def provision_reseller(
     bot_permissions: str | None = None,
     create_pg_admin: bool | None = None,
     create_web_access: bool | None = None,
+    share_pg_panel_url: bool | None = None,
     pg_role_id: int | None = None,
     panel_base_url: str = "",
 ) -> dict:
@@ -444,6 +445,12 @@ async def provision_reseller(
         do_pg = True
 
     do_web = True if create_web_access is None else bool(create_web_access)
+    if share_pg_panel_url is not None:
+        share_pg = bool(share_pg_panel_url)
+    elif plan is not None:
+        share_pg = bool(getattr(plan, "share_pg_panel_url", False))
+    else:
+        share_pg = False
 
     pg_username = None
     pg_password = None
@@ -495,18 +502,22 @@ async def provision_reseller(
         plan_id=plan.id if plan else None,
         issue_setup_token=True,
     )
+    profile.share_pg_panel_url = share_pg
+    await session.commit()
+    await session.refresh(profile)
 
     base = (panel_base_url or "").rstrip("/")
     if not base:
         base = await get_reseller_panel_base_url(session)
     setup_url = f"{base}/rsetup/{profile.setup_token}" if base and profile.setup_token else ""
-    pg_panel = await get_reseller_pg_panel_base_url(session)
+    pg_panel = await get_reseller_pg_panel_base_url(session) if share_pg else ""
 
     return {
         "profile": profile,
-        "pg_username": pg_username,
-        "pg_password": pg_password,
+        "pg_username": pg_username if share_pg else None,
+        "pg_password": pg_password if share_pg else None,
         "pg_panel_url": pg_panel,
+        "share_pg_panel_url": share_pg,
         "web_username": web_username,
         "web_password": web_password,
         "setup_url": setup_url,
@@ -526,19 +537,24 @@ def format_credentials_message(creds: dict) -> str:
     ]
 
     pg_panel = (creds.get("pg_panel_url") or "").strip().rstrip("/")
-    lines += ["", "🛡 <b>پنل پاسارگارد</b>"]
-    if pg_panel:
-        lines.append(f"آدرس پنل: {pg_panel}")
+    share_pg = bool(creds.get("share_pg_panel_url")) or bool(pg_panel and creds.get("pg_username"))
+    if share_pg or creds.get("pg_username"):
+        lines += ["", "🛡 <b>پنل پاسارگارد</b>"]
+        if pg_panel:
+            lines.append(f"آدرس پنل: {pg_panel}")
+        if creds.get("pg_username") and creds.get("pg_password"):
+            lines += [
+                f"نام کاربری: <code>{creds['pg_username']}</code>",
+                f"رمز: <code>{creds['pg_password']}</code>",
+                "رمز را عوض کنید و در جای امن نگه دارید.",
+            ]
+        elif not pg_panel:
+            lines.append("ادمین پاسارگارد برای این پلن ساخته نشد.")
     else:
-        lines.append("آدرس پاسارگارد هنوز تنظیم نشده — از ادمین بپرسید.")
-    if creds.get("pg_username") and creds.get("pg_password"):
         lines += [
-            f"نام کاربری: <code>{creds['pg_username']}</code>",
-            f"رمز: <code>{creds['pg_password']}</code>",
-            "رمز را عوض کنید و در جای امن نگه دارید.",
+            "",
+            "🛡 مدیریت VPN از طریق همین وب‌پنل ربات انجام می‌شود (لینک پنل پاسارگارد ارسال نشده).",
         ]
-    else:
-        lines.append("ادمین پاسارگارد برای این پلن ساخته نشد (غیرفعال در تنظیمات پلن).")
 
     panel = (creds.get("panel_url") or "").strip().rstrip("/")
     lines += ["", "🌐 <b>وب‌پنل ربات (نماینده)</b>"]

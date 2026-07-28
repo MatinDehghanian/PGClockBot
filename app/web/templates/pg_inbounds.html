@@ -1,21 +1,14 @@
 {% extends "base.html" %}
+{% from "macros.html" import pg_tabs %}
 {% block title %}اینباندهای پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>اینباندها</h1>
-    <p>خواندن زنده از پنل — ساخت اینباند از طریق Core/نود در پاسارگارد انجام می‌شود</p>
+    <p>فقط مشاهده — ساخت/ویرایش کانفیگ اینباند در Core پاسارگارد انجام می‌شود</p>
   </div>
 </div>
-<div class="section-tabs">
-  <a href="/pg">نمای کلی</a>
-  <a href="/pg/templates">تمپلیت</a>
-  <a href="/pg/groups">گروه‌ها</a>
-  <a href="/pg/hosts">هاست‌ها</a>
-  <a class="active" href="/pg/inbounds">اینباندها</a>
-  <a href="/pg/nodes">نودها</a>
-  <a href="/pg/admins">ادمین‌ها</a>
-</div>
+{{ pg_tabs('pg_inbounds') }}
 
 <div class="card">
   <h2>تگ‌های اینباند</h2>
@@ -29,7 +22,7 @@
   </div>
   {% endif %}
   <p class="muted" style="margin-top:16px;font-size:12px">
-    برای ساخت گروه و هاست از همین تگ‌ها استفاده کنید. ویرایش کانفیگ اینباند در پنل اصلی پاسارگارد (Core) است.
+    برای ساخت گروه و هاست از همین تگ‌ها استفاده کنید.
   </p>
 </div>
 

@@ -196,6 +196,30 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         return _dep
 
+    def require_pg_perm(perm: str):
+        """Admin always; reseller needs mapped PG feature from their role."""
+
+        def _dep(request: Request) -> dict:
+            user = require_staff(request)
+            if user.get("role") == "admin":
+                return user
+            if perm not in (user.get("pg_permissions") or []):
+                raise NotAdmin()
+            return user
+
+        return _dep
+
+    def require_pg_any():
+        def _dep(request: Request) -> dict:
+            user = require_staff(request)
+            if user.get("role") == "admin":
+                return user
+            if user.get("pg_permissions"):
+                return user
+            raise NotAdmin()
+
+        return _dep
+
     @app.middleware("http")
     async def setup_gate(request: Request, call_next):
         path = request.url.path
@@ -249,9 +273,39 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.exception_handler(NotAdmin)
     async def _not_admin(request: Request, exc: NotAdmin):
+        user = None
+        try:
+            cookie = request.cookies.get("session")
+            if cookie:
+                user = get_signer().loads(cookie)
+        except Exception:
+            user = None
+        if user and user.get("role") == "reseller":
+            pg = user.get("pg_permissions") or []
+            if "pg_users" in pg:
+                return RedirectResponse("/pg/users", status_code=303)
+            if pg:
+                return RedirectResponse("/pg", status_code=303)
+            perms = user.get("permissions") or []
+            for path, key in (
+                ("/dashboard", "dashboard"),
+                ("/orders", "orders"),
+                ("/payments", "payments"),
+                ("/tickets", "tickets"),
+            ):
+                if key in perms:
+                    return RedirectResponse(path, status_code=303)
+            return RedirectResponse("/logout", status_code=303)
         return RedirectResponse("/dashboard", status_code=303)
 
-    register_pg_pages(app, render=render, require_admin=require_admin, get_db=get_db)
+    register_pg_pages(
+        app,
+        render=render,
+        require_admin=require_admin,
+        require_pg_perm=require_pg_perm,
+        require_pg_any=require_pg_any,
+        get_db=get_db,
+    )
     from app.api.reseller_pages import register_reseller_pages
     from app.api.reseller_setup import register_reseller_setup
 
@@ -468,6 +522,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         u = display
         p = password or ""
         permissions: list[str] = []
+        pg_permissions: list[str] = []
+        pg_user_actions: dict = {}
+        pg_access: dict = {}
+        pg_writes: dict = {}
+        pg_admin_username = None
         bot_user_id = None
 
         if verify_web_admin(u, p):
@@ -499,12 +558,24 @@ def create_api_app(lifespan=None) -> FastAPI:
                         status_code=400,
                     )
                 if verify_password_hash(p, profile.web_password_hash):
+                    from app.services.pg_access import (
+                        map_pg_role_writes,
+                        resolve_reseller_pg_features,
+                        role_access_limits,
+                        role_user_actions,
+                    )
+
                     role = "reseller"
                     display = profile.web_username or ru.full_name or str(ru.telegram_id)
                     permissions = parse_perms(profile.web_permissions) or parse_perms(
                         DEFAULT_FEATURE_PERMS
                     )
                     bot_user_id = ru.id
+                    pg_admin_username = profile.pg_admin_username
+                    pg_permissions, pg_role = await resolve_reseller_pg_features(profile.pg_role_id)
+                    pg_user_actions = role_user_actions(pg_role)
+                    pg_access = role_access_limits(pg_role)
+                    pg_writes = map_pg_role_writes(pg_role)
 
         if not role:
             _login_fail(ip)
@@ -519,11 +590,23 @@ def create_api_app(lifespan=None) -> FastAPI:
             )
 
         _login_success(ip)
-        payload = {"role": role, "username": display, "permissions": permissions}
+        payload = {
+            "role": role,
+            "username": display,
+            "permissions": permissions,
+            "pg_permissions": pg_permissions,
+        }
         if bot_user_id is not None:
             payload["bot_user_id"] = bot_user_id
+        if pg_admin_username:
+            payload["pg_admin_username"] = pg_admin_username
+        if role == "reseller":
+            payload["pg_user_actions"] = pg_user_actions
+            payload["pg_access"] = pg_access
+            payload["pg_writes"] = pg_writes
         home = "/dashboard"
         if role == "reseller":
+            home = ""
             for path, key in (
                 ("/dashboard", "dashboard"),
                 ("/orders", "orders"),
@@ -533,8 +616,15 @@ def create_api_app(lifespan=None) -> FastAPI:
                 if key in permissions:
                     home = path
                     break
-            else:
-                home = "/logout"
+            if not home:
+                if "pg_users" in pg_permissions:
+                    home = "/pg/users"
+                elif "pg_overview" in pg_permissions:
+                    home = "/pg"
+                elif pg_permissions:
+                    home = "/pg"
+                else:
+                    home = "/logout"
         resp = RedirectResponse(home, status_code=303)
         resp.set_cookie(
             "session",

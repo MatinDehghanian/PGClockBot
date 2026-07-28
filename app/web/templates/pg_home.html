@@ -1,23 +1,16 @@
 {% extends "base.html" %}
+{% from "macros.html" import pg_tabs %}
 {% block title %}مدیر پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>مدیر پاسارگارد</h1>
-    <p>داده‌ها زنده از پنل اصلی — حجم‌ها با واحد استاندارد (KB / MB / GB / TB)</p>
+    <h1>پنل پاسارگارد</h1>
+    <p>داده‌ها زنده از پاسارگارد — بدون ورود جدا به پنل اصلی</p>
   </div>
   <a class="btn btn-ghost" href="/pg">بروزرسانی</a>
 </div>
 
-<div class="section-tabs">
-  <a class="active" href="/pg">نمای کلی</a>
-  <a href="/pg/templates">تمپلیت</a>
-  <a href="/pg/groups">گروه‌ها</a>
-  <a href="/pg/hosts">هاست‌ها</a>
-  <a href="/pg/inbounds">اینباندها</a>
-  <a href="/pg/nodes">نودها</a>
-  <a href="/pg/admins">ادمین‌ها</a>
-</div>
+{{ pg_tabs('pg') }}
 
 {% if flash_err %}
 {# shown in base #}
@@ -40,6 +33,7 @@
 </div>
 {% endif %}
 
+{% if nodes is defined and (is_admin or 'pg_nodes' in pg_perms) %}
 <div class="card">
   <h2>نودها</h2>
   {% if not nodes %}
@@ -66,5 +60,6 @@
   </div>
   {% endif %}
 </div>
+{% endif %}
 {% endif %}
 {% endblock %}

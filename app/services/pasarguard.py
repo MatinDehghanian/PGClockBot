@@ -242,6 +242,11 @@ class PasarGuardClient:
         except Exception:
             return []
 
+    async def get_admin_role(self, role_id: int) -> dict:
+        """Full role including permissions / limits / access."""
+        data = await self.request("GET", f"/api/admin-role/{int(role_id)}")
+        return data if isinstance(data, dict) else {}
+
     async def create_admin(self, payload: dict) -> dict:
         return await self.request("POST", "/api/admin", json=payload)
 

@@ -41,9 +41,17 @@ def _migrate_sqlite(sync_conn) -> None:
             "setup_completed_at": "DATETIME",
             "bot_token": "TEXT",
             "bot_username": "VARCHAR(64)",
+            "share_pg_panel_url": "BOOLEAN DEFAULT 0",
         }
         for col, typ in alters.items():
             if col not in rcols:
                 sync_conn.execute(
                     text(f"ALTER TABLE reseller_profiles ADD COLUMN {col} {typ}")
                 )
+
+    if insp.has_table("reseller_plans"):
+        pcols = {c["name"] for c in insp.get_columns("reseller_plans")}
+        if "share_pg_panel_url" not in pcols:
+            sync_conn.execute(
+                text("ALTER TABLE reseller_plans ADD COLUMN share_pg_panel_url BOOLEAN DEFAULT 0")
+            )

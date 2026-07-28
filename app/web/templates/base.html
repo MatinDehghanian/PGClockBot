@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/panel.css?v=reseller-admin-163" />
+  <link rel="stylesheet" href="/static/panel.css?v=pg-split-167" />
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
   {% block head %}{% endblock %}
 </head>
@@ -16,7 +16,10 @@
   {% if staff is defined and staff %}
   {% set path = request.url.path %}
   {% set perms = staff.get('permissions') or [] %}
+  {% set pg_nav = staff.get('pg_permissions') or [] %}
   {% set is_admin = staff.role == 'admin' %}
+  {% set has_bot = is_admin or (perms|length > 0) %}
+  {% set has_pg = is_admin or (pg_nav|length > 0) %}
   <div class="shell">
     <header class="topbar mobile-only">
       <button type="button" class="menu-toggle" id="menu-toggle" aria-label="منو" aria-expanded="false" aria-controls="sidebar">
@@ -41,15 +44,15 @@
       </div>
 
       <nav class="side-nav">
-        {% if is_admin or 'dashboard' in perms %}
-        <a href="/dashboard" class="nav-item {% if path=='/dashboard' %}active{% endif %}">
-          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
-          <span>خانه</span>
-        </a>
-        {% endif %}
-
-        <div class="nav-section">
-          <span class="nav-label">فروش</span>
+        {% if has_bot %}
+        <div class="nav-section nav-section-bot">
+          <span class="nav-label">پنل ربات</span>
+          {% if is_admin or 'dashboard' in perms %}
+          <a href="/dashboard" class="nav-item {% if path=='/dashboard' %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
+            <span>خانه</span>
+          </a>
+          {% endif %}
           {% if is_admin %}
           <a href="/plans" class="nav-item {% if path.startswith('/plans') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/><path d="M18 15v4M16 17h4"/></svg>
@@ -74,14 +77,10 @@
             <span>تیکت‌ها</span>
           </a>
           {% endif %}
-        </div>
-
-        {% if is_admin %}
-        <div class="nav-section">
-          <span class="nav-label">افراد</span>
+          {% if is_admin %}
           <a href="/users" class="nav-item {% if path.startswith('/users') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
-            <span>کاربران</span>
+            <span>کاربران ربات</span>
           </a>
           <a href="/resellers" class="nav-item {% if path.startswith('/resellers') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
@@ -91,18 +90,65 @@
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M18.8 6.2a8.5 8.5 0 0 1 0 11.6"/></svg>
             <span>پیام گروهی</span>
           </a>
-        </div>
-
-        <div class="nav-section">
-          <span class="nav-label">سیستم</span>
-          <a href="/pg" class="nav-item {% if path.startswith('/pg') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-            <span>پاسارگارد</span>
-          </a>
           <a href="/settings" class="nav-item {% if path.startswith('/settings') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M4.9 7.1l1.6 1.6M17.5 15.3l1.6 1.6M3.5 12h2.2M18.3 12h2.2M4.9 16.9l1.6-1.6M17.5 8.7l1.6-1.6"/></svg>
-            <span>تنظیمات</span>
+            <span>تنظیمات ربات</span>
           </a>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% if has_pg %}
+        <div class="nav-section nav-section-pg">
+          <span class="nav-label nav-label-pg">پنل پاسارگارد</span>
+          {% if is_admin or 'pg_overview' in pg_nav %}
+          <a href="/pg" class="nav-item nav-item-pg {% if path=='/pg' %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+            <span>نمای کلی</span>
+          </a>
+          {% endif %}
+          {% if is_admin or 'pg_users' in pg_nav %}
+          <a href="/pg/users" class="nav-item nav-item-pg {% if path.startswith('/pg/users') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/></svg>
+            <span>کاربران VPN</span>
+          </a>
+          {% endif %}
+          {% if is_admin or 'pg_templates' in pg_nav %}
+          <a href="/pg/templates" class="nav-item nav-item-pg {% if path.startswith('/pg/templates') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
+            <span>تمپلیت‌ها</span>
+          </a>
+          {% endif %}
+          {% if is_admin or 'pg_groups' in pg_nav %}
+          <a href="/pg/groups" class="nav-item nav-item-pg {% if path.startswith('/pg/groups') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v10H4z"/><path d="M8 7V5h8v2"/></svg>
+            <span>گروه‌ها</span>
+          </a>
+          {% endif %}
+          {% if is_admin or 'pg_hosts' in pg_nav %}
+          <a href="/pg/hosts" class="nav-item nav-item-pg {% if path.startswith('/pg/hosts') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/></svg>
+            <span>هاست‌ها</span>
+          </a>
+          {% endif %}
+          {% if is_admin or 'pg_inbounds' in pg_nav %}
+          <a href="/pg/inbounds" class="nav-item nav-item-pg {% if path.startswith('/pg/inbounds') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16M12 4v16"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>اینباندها</span>
+          </a>
+          {% endif %}
+          {% if is_admin or 'pg_nodes' in pg_nav %}
+          <a href="/pg/nodes" class="nav-item nav-item-pg {% if path.startswith('/pg/nodes') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
+            <span>نودها</span>
+          </a>
+          {% endif %}
+          {% if is_admin %}
+          <a href="/pg/admins" class="nav-item nav-item-pg {% if path.startswith('/pg/admins') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.2 2.8 7.2 7 8.5 4.2-1.3 7-4.3 7-8.5V6l-7-3z"/></svg>
+            <span>ادمین‌های PG</span>
+          </a>
+          {% endif %}
         </div>
         {% endif %}
       </nav>
@@ -165,6 +211,41 @@
       const ro = new ResizeObserver(refreshHScroll);
       document.querySelectorAll('.table-wrap, .section-tabs').forEach(el => ro.observe(el));
     }
+
+    /* Lightweight modals */
+    function closeModal(el){
+      if (!el) return;
+      el.hidden = true;
+      el.classList.remove('open');
+      document.body.classList.remove('modal-open');
+    }
+    function openModal(id){
+      const el = document.getElementById(id);
+      if (!el) return;
+      document.querySelectorAll('.ui-modal.open').forEach(closeModal);
+      el.hidden = false;
+      el.classList.add('open');
+      document.body.classList.add('modal-open');
+      const focus = el.querySelector('input, select, textarea, button');
+      if (focus) setTimeout(() => focus.focus(), 30);
+    }
+    document.addEventListener('click', (e) => {
+      const openBtn = e.target.closest('[data-modal-open]');
+      if (openBtn) {
+        e.preventDefault();
+        openModal(openBtn.getAttribute('data-modal-open'));
+        return;
+      }
+      const closer = e.target.closest('[data-modal-close]');
+      if (closer) {
+        closeModal(closer.closest('.ui-modal'));
+      }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.ui-modal.open').forEach(closeModal);
+      }
+    });
   })();
   </script>
   {% else %}

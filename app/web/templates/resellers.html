@@ -7,6 +7,7 @@
     <h1>نمایندگان</h1>
     <p>آدرس پنل، افزودن، تغییر نقش و حذف نمایندگان</p>
   </div>
+  <button type="button" class="btn" data-modal-open="modal-reseller-create">افزودن نماینده</button>
 </div>
 
 <div class="section-tabs">
@@ -65,55 +66,6 @@
         بازگشت هر دو به پیش‌فرض
       </button>
       {% endif %}
-    </div>
-  </form>
-</div>
-
-<div class="card">
-  <h2>افزودن نماینده</h2>
-  <p class="muted">پس از ثبت، آدرس پنل‌ها و یوزر/رمز ساخته‌شده در تلگرام ارسال می‌شود.</p>
-  <form method="post" action="/resellers" class="form-stack">
-    <div class="form-row">
-      <div>
-        <label class="form-field">آیدی عددی تلگرام
-          <small class="muted">مثال: 123456789</small>
-          <input name="telegram_id" type="number" required />
-        </label>
-      </div>
-      <div>
-        <label class="form-field">کمیسیون ٪
-          <input name="commission_percent" type="number" value="10" />
-        </label>
-      </div>
-      <div>
-        <label class="form-field">نقش پاسارگارد (اختیاری)
-          <small class="muted">فقط اگر ساخت ادمین PG را بزنید</small>
-          <select name="pg_role_id">
-            <option value="">—</option>
-            {% for r in pg_roles %}
-            <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}</option>
-            {% endfor %}
-          </select>
-        </label>
-      </div>
-    </div>
-
-    <div class="ui-switch-section">
-      <span class="ui-switch-section-title">سطح دسترسی — فعال / غیرفعال (وب = بات)</span>
-      <p class="ui-switch-section-hint">هر سوییچ هم‌زمان برای وب‌پنل و ربات اعمال می‌شود.</p>
-      <div class="ui-switch-list">
-        {% for key, label in feature_perms %}
-        {{ switch('perm_' ~ key, label, checked=true) }}
-        {% endfor %}
-      </div>
-    </div>
-
-    <div class="ui-switch-list">
-      {{ switch('create_pg_admin', 'ساخت ادمین پاسارگارد', checked=true, help='یوزر/رمز خودکار ساخته و در ربات به نماینده ارسال می‌شود') }}
-    </div>
-
-    <div class="actions">
-      <button class="btn" type="submit">فعال‌سازی و ارسال اطلاعات ورود</button>
     </div>
   </form>
 </div>
@@ -186,6 +138,63 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
+</div>
+
+<div class="ui-modal" id="modal-reseller-create" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
+    <div class="ui-modal-head">
+      <h2>افزودن نماینده</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن">×</button>
+    </div>
+    <p class="muted" style="margin-top:0">پس از ثبت، اطلاعات ورود در تلگرام ارسال می‌شود. دسترسی‌های پاسارگارد از نقش انتخاب‌شده می‌آید.</p>
+    <form method="post" action="/resellers" class="form-stack">
+      <div class="form-row">
+        <div>
+          <label class="form-field">آیدی عددی تلگرام
+            <small class="muted">مثال: 123456789</small>
+            <input name="telegram_id" type="number" required />
+          </label>
+        </div>
+        <div>
+          <label class="form-field">کمیسیون ٪
+            <input name="commission_percent" type="number" value="10" />
+          </label>
+        </div>
+        <div>
+          <label class="form-field">نقش پاسارگارد
+            <small class="muted">دسترسی‌های VPN در وب‌پنل از این نقش می‌آید</small>
+            <select name="pg_role_id">
+              <option value="">—</option>
+              {% for r in pg_roles %}
+              <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="ui-switch-section">
+        <span class="ui-switch-section-title">سطح دسترسی پنل ربات (وب = بات)</span>
+        <p class="ui-switch-section-hint">هر سوییچ هم‌زمان برای وب‌پنل و ربات اعمال می‌شود.</p>
+        <div class="ui-switch-list">
+          {% for key, label in feature_perms %}
+          {{ switch('perm_' ~ key, label, checked=true) }}
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="ui-switch-list">
+        {{ switch('create_pg_admin', 'ساخت ادمین پاسارگارد', checked=true, help='برای مالکیت کاربران VPN لازم است — حتی اگر لینک پنل ارسال نشود') }}
+        {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=false, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات VPN را مدیریت می‌کند') }}
+      </div>
+
+      <div class="actions">
+        <button class="btn" type="submit">فعال‌سازی و ارسال اطلاعات ورود</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
   </div>
 </div>
 {% endblock %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros.html" import pg_tabs %}
 {% block title %}نودهای پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -7,15 +8,7 @@
     <p>وضعیت زنده و اتصال مجدد نودهای پاسارگارد</p>
   </div>
 </div>
-<div class="section-tabs">
-  <a href="/pg">نمای کلی</a>
-  <a href="/pg/templates">تمپلیت</a>
-  <a href="/pg/groups">گروه‌ها</a>
-  <a href="/pg/hosts">هاست‌ها</a>
-  <a href="/pg/inbounds">اینباندها</a>
-  <a class="active" href="/pg/nodes">نودها</a>
-  <a href="/pg/admins">ادمین‌ها</a>
-</div>
+{{ pg_tabs('pg_nodes') }}
 <div class="card">
   {% if not nodes %}
   <p class="muted">نودی یافت نشد.</p>
@@ -36,7 +29,7 @@
           </span>
         </td>
         <td>
-          {% if n.get('id') %}
+          {% if can_write and n.get('id') %}
           <form method="post" action="/pg/nodes/{{ n.get('id') }}/reconnect">
             <button class="btn btn-ghost btn-sm" type="submit">اتصال مجدد</button>
           </form>

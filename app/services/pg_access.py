@@ -1,0 +1,234 @@
+from __future__ import annotations
+
+"""Map PasarGuard admin-role permissions → lightweight web-panel feature keys.
+
+Resellers never get PG settings / admin_roles / cores / api_keys in our UI.
+"""
+
+from typing import Any
+
+# Our panel feature keys (shown in sidebar under «پاسارگارد»)
+PG_FEATURE_KEYS = (
+    "pg_overview",
+    "pg_users",
+    "pg_templates",
+    "pg_groups",
+    "pg_hosts",
+    "pg_inbounds",
+    "pg_nodes",
+)
+
+# Admin-only PG areas (never for resellers)
+PG_ADMIN_ONLY = ("pg_admins",)
+
+PG_FEATURE_LABELS: dict[str, str] = {
+    "pg_overview": "نمای کلی",
+    "pg_users": "کاربران VPN",
+    "pg_templates": "تمپلیت‌ها",
+    "pg_groups": "گروه‌ها",
+    "pg_hosts": "هاست‌ها",
+    "pg_inbounds": "اینباندها",
+    "pg_nodes": "نودها",
+    "pg_admins": "ادمین‌ها",
+}
+
+
+def _action_allowed(value: Any) -> bool:
+    """PasarGuard action: True | {scope: N>0} → allowed; else denied."""
+    if value is True:
+        return True
+    if isinstance(value, dict):
+        try:
+            return int(value.get("scope") or 0) > 0
+        except (TypeError, ValueError):
+            return False
+    return False
+
+
+def _resource_allows(perms: dict | None, resource: str, *actions: str) -> bool:
+    if not isinstance(perms, dict):
+        return False
+    block = perms.get(resource)
+    if not isinstance(block, dict):
+        return False
+    for action in actions:
+        if _action_allowed(block.get(action)):
+            return True
+    return False
+
+
+def map_pg_role_to_features(role: dict | None) -> list[str]:
+    """Convert a PasarGuard AdminRoleResponse (or similar) into our feature keys."""
+    if not role:
+        return []
+    if role.get("is_owner"):
+        return list(PG_FEATURE_KEYS)
+
+    raw = role.get("permissions") or {}
+    if hasattr(raw, "model_dump"):
+        raw = raw.model_dump()
+    if not isinstance(raw, dict):
+        return []
+
+    out: list[str] = []
+    if _resource_allows(raw, "system", "read"):
+        out.append("pg_overview")
+    if _resource_allows(raw, "users", "read", "read_simple", "create", "update", "delete"):
+        out.append("pg_users")
+    if _resource_allows(raw, "templates", "read", "read_simple", "create", "update", "delete"):
+        out.append("pg_templates")
+    if _resource_allows(raw, "groups", "read", "read_simple", "create", "update", "delete"):
+        out.append("pg_groups")
+    if _resource_allows(raw, "hosts", "read", "create", "update"):
+        out.append("pg_hosts")
+    # Inbounds are typically needed when managing groups — expose with groups or hosts read
+    if "pg_groups" in out or "pg_hosts" in out or _resource_allows(raw, "groups", "read_simple"):
+        out.append("pg_inbounds")
+    if _resource_allows(raw, "nodes", "read", "read_simple", "reconnect", "stats"):
+        out.append("pg_nodes")
+    # de-dupe preserve order
+    seen: set[str] = set()
+    ordered = []
+    for k in out:
+        if k not in seen and k in PG_FEATURE_KEYS:
+            seen.add(k)
+            ordered.append(k)
+    return ordered
+
+
+def role_user_actions(role: dict | None) -> dict[str, bool]:
+    """Fine-grained user actions for the VPN users UI."""
+    empty = {
+        "create": False,
+        "read": False,
+        "update": False,
+        "delete": False,
+        "reset_usage": False,
+        "revoke_sub": False,
+        "disable": False,
+        "enable": False,
+    }
+    if not role:
+        return empty
+    if role.get("is_owner"):
+        return {k: True for k in empty}
+
+    raw = role.get("permissions") or {}
+    if hasattr(raw, "model_dump"):
+        raw = raw.model_dump()
+    if not isinstance(raw, dict):
+        return empty
+    users = raw.get("users") if isinstance(raw.get("users"), dict) else {}
+    can_update = _action_allowed(users.get("update"))
+    return {
+        "create": _action_allowed(users.get("create")),
+        "read": _action_allowed(users.get("read")) or _action_allowed(users.get("read_simple")),
+        "update": can_update,
+        "delete": _action_allowed(users.get("delete")),
+        "reset_usage": _action_allowed(users.get("reset_usage")),
+        "revoke_sub": _action_allowed(users.get("revoke_sub")),
+        "disable": can_update,
+        "enable": can_update,
+    }
+
+
+def map_pg_role_writes(role: dict | None) -> dict[str, bool]:
+    """Which PG resources the role may mutate (create/update/delete)."""
+    keys = ("users", "templates", "groups", "hosts", "nodes")
+    empty = {k: False for k in keys}
+    if not role:
+        return empty
+    if role.get("is_owner"):
+        return {k: True for k in keys}
+    raw = role.get("permissions") or {}
+    if hasattr(raw, "model_dump"):
+        raw = raw.model_dump()
+    if not isinstance(raw, dict):
+        return empty
+    return {
+        "users": _resource_allows(raw, "users", "create", "update", "delete"),
+        "templates": _resource_allows(raw, "templates", "create", "update", "delete"),
+        "groups": _resource_allows(raw, "groups", "create", "update", "delete"),
+        "hosts": _resource_allows(raw, "hosts", "create", "update"),
+        "nodes": _resource_allows(raw, "nodes", "reconnect", "create", "update"),
+    }
+
+
+def role_access_limits(role: dict | None) -> dict:
+    """Template/group allow-lists from role.access."""
+    if not role:
+        return {"require_template": False, "allowed_template_ids": None, "allowed_group_ids": None}
+    access = role.get("access") or {}
+    if hasattr(access, "model_dump"):
+        access = access.model_dump()
+    if not isinstance(access, dict):
+        access = {}
+    return {
+        "require_template": bool(access.get("require_template")),
+        "allowed_template_ids": access.get("allowed_template_ids"),
+        "allowed_group_ids": access.get("allowed_group_ids"),
+    }
+
+
+async def resolve_reseller_pg_features(pg_role_id: int | None) -> tuple[list[str], dict | None]:
+    """Fetch role from PasarGuard and return (feature_keys, raw_role)."""
+    if not pg_role_id:
+        return [], None
+    from app.services.pasarguard import get_pg
+
+    try:
+        role = await get_pg().get_admin_role(int(pg_role_id))
+    except Exception:
+        # Fallback: try list and find by id
+        try:
+            roles = await get_pg().get_admin_roles()
+            role = next((r for r in roles if int(r.get("id") or 0) == int(pg_role_id)), None)
+        except Exception:
+            return [], None
+    if not isinstance(role, dict):
+        return [], None
+    return map_pg_role_to_features(role), role
+
+
+def staff_has_pg(staff: dict, key: str) -> bool:
+    if staff.get("role") == "admin":
+        return True
+    return key in (staff.get("pg_permissions") or [])
+
+
+def staff_pg_writes(staff: dict) -> dict[str, bool]:
+    if staff.get("role") == "admin":
+        return {k: True for k in ("users", "templates", "groups", "hosts", "nodes")}
+    raw = staff.get("pg_writes") or {}
+    return {
+        "users": bool(raw.get("users")),
+        "templates": bool(raw.get("templates")),
+        "groups": bool(raw.get("groups")),
+        "hosts": bool(raw.get("hosts")),
+        "nodes": bool(raw.get("nodes")),
+    }
+
+
+def staff_user_actions(staff: dict) -> dict[str, bool]:
+    if staff.get("role") == "admin":
+        return {
+            "create": True,
+            "read": True,
+            "update": True,
+            "delete": True,
+            "reset_usage": True,
+            "revoke_sub": True,
+            "disable": True,
+            "enable": True,
+        }
+    raw = staff.get("pg_user_actions") or {}
+    return {
+        "create": bool(raw.get("create")),
+        "read": bool(raw.get("read")),
+        "update": bool(raw.get("update")),
+        "delete": bool(raw.get("delete")),
+        "reset_usage": bool(raw.get("reset_usage")),
+        "revoke_sub": bool(raw.get("revoke_sub")),
+        "disable": bool(raw.get("disable") or raw.get("update")),
+        "enable": bool(raw.get("enable") or raw.get("update")),
+    }
