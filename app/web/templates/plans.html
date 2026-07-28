@@ -1,5 +1,6 @@
 ﻿{% extends "base.html" %}
 {% from "macros.html" import switch, switch_chip %}
+{% from "macros.html" import row_actions %}
 {% block title %}پلن‌های فروش{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -200,33 +201,33 @@
 <div class="card card-flush">
   <h2>پلن‌های ثابت فروشگاه</h2>
   <div class="table-wrap">
-  <table>
+  <table class="table-compact">
     <thead>
-      <tr><th>نام</th><th>قیمت</th><th>مدت</th><th>حجم</th><th>منبع پاسارگارد</th><th>وضعیت</th><th></th></tr>
+      <tr><th>نام</th><th>قیمت</th><th class="col-hide-sm">مدت</th><th>حجم</th><th class="col-hide-sm">منبع پاسارگارد</th><th>وضعیت</th><th class="col-actions"></th></tr>
     </thead>
     <tbody>
     {% for p in plans %}
       <tr>
         <td>{{ p.name }}</td>
-        <td>{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
-        <td>{{ p.duration_days }} روز</td>
+        <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
+        <td class="col-hide-sm">{{ p.duration_days }} روز</td>
         <td>{% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}</td>
-        <td class="mono">
+        <td class="mono col-hide-sm">
           {% if p.pg_template_id %}تمپلیت #{{ p.pg_template_id }}
           {% elif p.pg_group_ids %}گروه {{ p.pg_group_ids }}
           {% else %}—{% endif %}
         </td>
         <td>{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
-        <td>
-          <div class="actions" style="margin:0">
+        <td class="col-actions">
+          {% call row_actions() %}
             <a class="btn btn-sm" href="/plans/{{ p.id }}/edit">ویرایش</a>
             <form method="post" action="/plans/{{ p.id }}/toggle">
               <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
             </form>
             <form method="post" action="/plans/{{ p.id }}/delete" onsubmit="return confirm('حذف پلن از فروشگاه؟')">
-              <button class="icon-btn icon-remove" type="submit" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+              <button class="btn btn-ghost btn-sm" type="submit">حذف</button>
             </form>
-          </div>
+          {% endcall %}
         </td>
       </tr>
     {% else %}

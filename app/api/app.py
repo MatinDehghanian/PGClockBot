@@ -548,6 +548,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         pg_writes: dict = {}
         pg_admin_username = None
         bot_user_id = None
+        pg_role_id = None
 
         if verify_web_admin(u, p):
             role = "admin"
@@ -604,6 +605,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     pg_user_actions = role_user_actions(pg_role)
                     pg_access = role_access_limits(pg_role)
                     pg_writes = map_pg_role_writes(pg_role)
+                    pg_role_id = profile.pg_role_id
 
         if not role:
             _login_fail(ip)
@@ -632,6 +634,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             payload["pg_user_actions"] = pg_user_actions
             payload["pg_access"] = pg_access
             payload["pg_writes"] = pg_writes
+            if pg_role_id:
+                payload["pg_role_id"] = int(pg_role_id)
         home = "/dashboard"
         if role == "reseller":
             home = ""

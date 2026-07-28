@@ -55,6 +55,18 @@
 </label>
 {%- endmacro %}
 
+{# Table row actions: inline on desktop, kebab menu on mobile #}
+{% macro row_actions() -%}
+<div class="row-actions">
+  <button type="button" class="row-actions-toggle" aria-label="عملیات" aria-expanded="false" aria-haspopup="true">
+    <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="3.2" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="8" cy="12.8" r="1.3"/></svg>
+  </button>
+  <div class="row-actions-menu">
+    {{ caller() }}
+  </div>
+</div>
+{%- endmacro %}
+
 {# PasarGuard sub-nav — respects pg_perms / is_admin #}
 {% macro pg_tabs(active='') -%}
 {% set perms = pg_perms if pg_perms is defined else [] %}
