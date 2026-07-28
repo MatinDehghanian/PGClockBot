@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, Message, PreCheckoutQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
-from app.db.models import BotUser, Payment, Role
+from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus, Role
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
 from app.services.orders import approve_payment, reject_payment
@@ -16,6 +16,73 @@ router = Router(name="payments")
 
 def _can_review(user: BotUser) -> bool:
     return user.role in {Role.ADMIN.value, Role.RESELLER.value}
+
+
+@router.pre_checkout_query()
+async def stars_pre_checkout(query: PreCheckoutQuery):
+    # Accept Telegram Stars invoices created by this bot
+    payload = query.invoice_payload or ""
+    if payload.startswith("stars:"):
+        await query.answer(ok=True)
+    else:
+        await query.answer(ok=False, error_message="پرداخت نامعتبر")
+
+
+@router.message(F.successful_payment)
+async def stars_successful_payment(message: Message, session: AsyncSession, db_user: BotUser):
+    sp = message.successful_payment
+    if not sp or sp.currency != "XTR":
+        return
+    payload = sp.invoice_payload or ""
+    if not payload.startswith("stars:"):
+        return
+    parts = payload.split(":")
+    if len(parts) < 2:
+        return
+    try:
+        payment_id = int(parts[1])
+    except ValueError:
+        return
+    payment = await session.get(Payment, payment_id)
+    if not payment or payment.user_id != db_user.id:
+        await message.answer("پرداخت یافت نشد.")
+        return
+    if payment.method != PaymentMethod.STARS.value:
+        return
+    if payment.status == PaymentStatus.APPROVED.value:
+        await message.answer("این پرداخت قبلاً تأیید شده.")
+        return
+    payment.receipt_file_id = payment.receipt_file_id or f"stars:{sp.telegram_payment_charge_id}"
+    payment.status = PaymentStatus.PENDING.value
+    await session.commit()
+    try:
+        order = await approve_payment(session, payment, reviewer_tg=0)
+    except Exception as e:
+        await message.answer(f"پرداخت استارز دریافت شد ولی تحویل ناموفق بود: {e}")
+        return
+    ui = await get_all_settings(session)
+    await message.answer(
+        format_message("✅ پرداخت استارز", "پرداخت با موفقیت انجام شد."),
+        reply_markup=kb.back_home(ui),
+    )
+    await send_delivery_to_user(message.bot, db_user.telegram_id, session, payment, order)
+    try:
+        from app.db.models import Plan
+        from app.services.notifications import notify_new_subscription
+
+        if order:
+            plan = await session.get(Plan, order.plan_id) if order.plan_id else None
+            await notify_new_subscription(
+                message.bot,
+                session,
+                order=order,
+                user_tg_id=db_user.telegram_id,
+                user_name=db_user.full_name or db_user.username,
+                plan_name=plan.name if plan else None,
+                needs_approval=False,
+            )
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data.startswith("payrev:ok:"))

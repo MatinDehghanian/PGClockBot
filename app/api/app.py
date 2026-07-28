@@ -558,6 +558,8 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
         plans = list(result.scalars().all())
+        trial = next((p for p in plans if p.is_trial), None)
+        sale_plans = [p for p in plans if not p.is_trial]
         templates: list = []
         groups: list = []
         pg_error = None
@@ -574,12 +576,25 @@ def create_api_app(lifespan=None) -> FastAPI:
             groups = await pg.get_groups_simple()
         except Exception as e:
             pg_error = str(e)
+        values = await get_all_settings(session)
+        trial_group_ids = set()
+        if trial and trial.pg_group_ids:
+            trial_group_ids = {x.strip() for x in trial.pg_group_ids.split(",") if x.strip()}
+        custom_group_ids = {
+            x.strip()
+            for x in (values.get("custom_plan_group_ids") or "").split(",")
+            if x.strip()
+        }
         return render(
             request,
             "plans.html",
             {
                 "staff": staff,
-                "plans": plans,
+                "plans": sale_plans,
+                "trial": trial,
+                "trial_group_ids": trial_group_ids,
+                "custom_group_ids": custom_group_ids,
+                "values": values,
                 "templates": templates,
                 "groups": groups,
                 "pg_error": pg_error,
@@ -662,6 +677,117 @@ def create_api_app(lifespan=None) -> FastAPI:
         await session.commit()
         return RedirectResponse(
             f"/plans?ok={quote('پلن ذخیره شد')}",
+            status_code=303,
+        )
+
+    @app.post("/plans/trial")
+    async def plans_trial_save(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from urllib.parse import quote
+
+        form = await request.form()
+        enabled = str(form.get("trial_enabled") or "") in {"1", "on", "true", "yes"}
+        await set_setting(session, "trial_enabled", "1" if enabled else "0")
+        name = str(form.get("name") or "تست رایگان").strip() or "تست رایگان"
+        try:
+            days = max(1, int(str(form.get("duration_days") or "1")))
+        except ValueError:
+            days = 1
+        gb_raw = str(form.get("data_limit_gb") or "").strip()
+        gb = float(gb_raw) if gb_raw else None
+        mode = str(form.get("mode") or "custom")
+        tpl = None
+        group_csv = None
+        if mode == "template":
+            tpl_raw = str(form.get("pg_template_id") or "").strip()
+            tpl = int(tpl_raw) if tpl_raw.isdigit() else None
+            if enabled and not tpl:
+                return RedirectResponse(
+                    f"/plans?err={quote('برای پلن تست، تمپلیت را انتخاب کنید')}",
+                    status_code=303,
+                )
+        else:
+            ids = [
+                int(v)
+                for k, v in form.items()
+                if str(k).startswith("group_") and str(v).isdigit()
+            ]
+            if enabled and not ids:
+                return RedirectResponse(
+                    f"/plans?err={quote('برای پلن تست حداقل یک گروه انتخاب کنید')}",
+                    status_code=303,
+                )
+            group_csv = ",".join(str(i) for i in ids) if ids else None
+
+        result = await session.execute(select(Plan).where(Plan.is_trial.is_(True)))
+        trial = result.scalar_one_or_none()
+        if not trial:
+            trial = Plan(
+                name=name,
+                price=0,
+                duration_days=days,
+                data_limit_gb=gb,
+                pg_template_id=tpl,
+                pg_group_ids=group_csv,
+                is_trial=True,
+                is_active=enabled,
+                description="پلن تست رایگان",
+            )
+            session.add(trial)
+        else:
+            trial.name = name
+            trial.price = 0
+            trial.duration_days = days
+            trial.data_limit_gb = gb
+            trial.pg_template_id = tpl
+            trial.pg_group_ids = group_csv
+            trial.is_active = enabled
+        await session.commit()
+        return RedirectResponse(
+            f"/plans?ok={quote('تنظیمات پلن تست ذخیره شد')}",
+            status_code=303,
+        )
+
+    @app.post("/plans/custom")
+    async def plans_custom_save(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from urllib.parse import quote
+
+        form = await request.form()
+        enabled = str(form.get("custom_plan_enabled") or "") in {"1", "on", "true", "yes"}
+        await set_setting(session, "custom_plan_enabled", "1" if enabled else "0")
+        for key in (
+            "custom_plan_price_per_gb",
+            "custom_plan_price_per_day",
+            "custom_plan_min_gb",
+            "custom_plan_max_gb",
+            "custom_plan_min_days",
+            "custom_plan_max_days",
+        ):
+            raw = str(form.get(key) or "").strip()
+            if raw:
+                await set_setting(session, key, raw)
+        mode = str(form.get("mode") or "custom")
+        if mode == "template":
+            tpl = str(form.get("custom_plan_template_id") or "").strip()
+            await set_setting(session, "custom_plan_template_id", tpl)
+            await set_setting(session, "custom_plan_group_ids", "")
+        else:
+            ids = [
+                str(v)
+                for k, v in form.items()
+                if str(k).startswith("group_") and str(v).isdigit()
+            ]
+            await set_setting(session, "custom_plan_group_ids", ",".join(ids))
+            await set_setting(session, "custom_plan_template_id", "")
+        return RedirectResponse(
+            f"/plans?ok={quote('تنظیمات پلن دلخواه ذخیره شد')}",
             status_code=303,
         )
 
@@ -1345,8 +1471,10 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         tab = (request.query_params.get("tab") or "welcome").strip()
         valid = {t[0] for t in SETTINGS_TABS}
+        if tab == "users":
+            return RedirectResponse("/settings?tab=naming", status_code=303)
         if tab not in valid:
-            tab = "menu"
+            tab = "welcome"
 
         values = await get_all_settings(session)
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
@@ -1419,7 +1547,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         from starlette.datastructures import UploadFile
 
-        from app.services.users import TOGGLE_KEYS
+        from app.services.users import IMAGE_KEYS, TOGGLE_KEYS, keys_for_tab
 
         tab = (request.query_params.get("tab") or "welcome").strip()
         form = await request.form()
@@ -1483,7 +1611,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 status_code=303,
             )
 
-        known = {item[0] for fields in SETTING_GROUPS.values() for item in fields}
+        known = keys_for_tab(tab)
+        if tab == "menu":
+            known = known | {"menu_order"}
+
         for key in TOGGLE_KEYS:
             if key in known:
                 await set_setting(session, key, "1" if form.get(f"s_{key}") else "0")

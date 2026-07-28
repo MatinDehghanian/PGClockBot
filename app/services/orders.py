@@ -244,13 +244,22 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
 
 
 async def start_card_payment(session: AsyncSession, order: Order, user_id: int) -> Payment:
-    order.payment_method = PaymentMethod.CARD.value
+    return await start_method_payment(session, order, user_id, PaymentMethod.CARD.value)
+
+
+async def start_method_payment(
+    session: AsyncSession,
+    order: Order,
+    user_id: int,
+    method: str,
+) -> Payment:
+    order.payment_method = method
     order.status = OrderStatus.AWAITING_RECEIPT.value
     payment = Payment(
         order_id=order.id,
         user_id=user_id,
         amount=order.amount,
-        method=PaymentMethod.CARD.value,
+        method=method,
         status=PaymentStatus.PENDING.value,
     )
     session.add(payment)
@@ -258,6 +267,10 @@ async def start_card_payment(session: AsyncSession, order: Order, user_id: int) 
     await session.refresh(payment)
     return payment
 
+
+def stars_amount_for_toman(amount_toman: int, toman_per_star: int) -> int:
+    rate = max(1, int(toman_per_star or 1))
+    return max(1, (int(amount_toman) + rate - 1) // rate)
 
 async def attach_receipt(session: AsyncSession, payment: Payment, file_id: str) -> Payment:
     payment.receipt_file_id = file_id

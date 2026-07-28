@@ -901,6 +901,16 @@ tr:last-child td { border-bottom: 0; }
   .support-actions .btn { flex: 1; }
 }
 
+.naming-preview {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--border);
+  background: var(--muted);
+  font-size: 0.95rem;
+}
+.naming-preview .mono { letter-spacing: 0.02em; }
+
 .sticky-actions {
   position: sticky;
   bottom: 12px;
