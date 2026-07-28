@@ -320,6 +320,10 @@ env_get() {
 }
 
 write_env_file() {
+  local py="${PY:-}"
+  if [[ -z "$py" || ! -x "$py" ]]; then
+    py="${SYSTEM_PY:-python3}"
+  fi
   WEB_ADMIN_PASSWORD="$WEB_ADMIN_PASSWORD" \
   BOT_TOKEN="$BOT_TOKEN" \
   BOT_USERNAME="$BOT_USERNAME" \
@@ -332,7 +336,7 @@ write_env_file() {
   WEB_ADMIN_USER="$WEB_ADMIN_USER" \
   PUBLIC_BASE_URL="$PUBLIC_BASE_URL" \
   CURRENCY="$CURRENCY" \
-  "$PY" - <<'PY'
+  "$py" - <<'PY'
 import json, os, subprocess, sys
 from pathlib import Path
 payload = {
@@ -433,16 +437,18 @@ cmd_install() {
     ok "Using existing config · port=${WEB_PORT}"
   else
     fresh=1
-    step "Scaffold configuration"
-    write_env_file
-    mkdir -p data
-    rm -f data/web_admin.json data/setup_complete.flag data/setup_in_progress.flag 2>/dev/null || true
-    ok ".env scaffold written · finish setup in the browser"
   fi
 
   step "Python packages"
   ensure_venv || return 1
   mkdir -p data
+
+  if [[ "$fresh" -eq 1 ]]; then
+    step "Scaffold configuration"
+    write_env_file
+    rm -f data/web_admin.json data/setup_complete.flag data/setup_in_progress.flag 2>/dev/null || true
+    ok ".env scaffold written · finish setup in the browser"
+  fi
 
   step "systemd service"
   install_systemd "$(whoami)" || true
