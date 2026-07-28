@@ -1,6 +1,12 @@
-{% macro settings_tabs(active) -%}
+{% macro settings_tabs(active, tabs=none) -%}
 <nav class="section-tabs settings-tabs" aria-label="تب‌های تنظیمات">
+  {% if tabs %}
+    {% for key, label in tabs %}
+    <a href="/settings?tab={{ key }}" class="{% if active==key %}active{% endif %}">{{ label }}</a>
+    {% endfor %}
+  {% else %}
   <a href="/settings?tab=welcome" class="{% if active=='welcome' %}active{% endif %}">خوش‌آمد و هویت</a>
+  <a href="/settings?tab=appearance" class="{% if active=='appearance' %}active{% endif %}">ظاهر ربات</a>
   <a href="/settings?tab=messages" class="{% if active=='messages' %}active{% endif %}">متن پیام‌ها</a>
   <a href="/settings?tab=buttons" class="{% if active=='buttons' %}active{% endif %}">متن دکمه‌ها</a>
   <a href="/settings?tab=menu" class="{% if active=='menu' %}active{% endif %}">منوی بات</a>
@@ -14,5 +20,6 @@
   <a href="/settings?tab=backup" class="{% if active=='backup' %}active{% endif %}">بکاپ</a>
   <a href="/settings?tab=update" class="{% if active=='update' %}active{% endif %}">آپدیت</a>
   <a href="/settings?tab=bot" class="{% if active=='bot' %}active{% endif %}">ربات و اتصال</a>
+  {% endif %}
 </nav>
 {%- endmacro %}
