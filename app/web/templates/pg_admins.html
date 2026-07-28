@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>ادمین‌های پنل</h1>
-    <p>ادمین‌های خودِ پاسارگارد (جدا از کاربران بات)</p>
+    <p>ادمین‌های خودِ پاسارگارد — نقش‌ها را از پنل پاسارگارد تعریف کنید و اینجا نسبت دهید</p>
   </div>
 </div>
 <div class="section-tabs">
@@ -22,19 +22,35 @@
   <form method="post" action="/pg/admins">
     <div class="form-row">
       <div>
-        <label>نام کاربری
+        <label class="form-field">نام کاربری
           <input name="username" required autocomplete="off" />
         </label>
       </div>
       <div>
-        <label>رمز عبور
+        <label class="form-field">رمز عبور
+          <small class="muted">حداقل ۸ کاراکتر با حرف بزرگ/کوچک و کاراکتر خاص</small>
           <input name="password" type="password" required autocomplete="new-password" />
         </label>
       </div>
+      <div>
+        <label class="form-field">نقش پاسارگارد
+          <small class="muted">سطح دسترسی — از نقش‌های تعریف‌شده owner</small>
+          <select name="role_id">
+            <option value="">— بدون نقش (سازگاری قدیم) —</option>
+            {% for r in pg_roles or [] %}
+            <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}{% if r.get('is_owner') %} (owner){% endif %}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
     </div>
+    <label class="form-field">یادداشت
+      <small class="muted">اختیاری — فقط در پاسارگارد ذخیره می‌شود</small>
+      <input name="note" placeholder="نماینده فروش" />
+    </label>
     <label class="checks">
       <input type="checkbox" name="is_sudo" value="1" />
-      دسترسی sudo
+      دسترسی sudo (فقط پنل‌های قدیمی؛ در نسخه‌های جدید از نقش استفاده کنید)
     </label>
     <div class="actions">
       <button class="btn" type="submit">ساخت در پاسارگارد</button>
@@ -49,15 +65,24 @@
   {% else %}
   <div class="table-wrap">
   <table>
-    <thead><tr><th>شناسه</th><th>نام کاربری</th><th>جزئیات</th></tr></thead>
+    <thead><tr><th>شناسه</th><th>نام کاربری</th><th>نقش / جزئیات</th><th></th></tr></thead>
     <tbody>
     {% for a in admins %}
       <tr>
         <td class="mono">{{ a.get('id') or '—' }}</td>
         <td>{{ a.get('username') or '—' }}</td>
         <td class="mono muted">
+          {% if a.get('role') and a.get('role').get('name') %}{{ a.get('role').get('name') }} · {% endif %}
           {% if a.get('is_sudo') %}sudo · {% endif %}
           {% if a.get('status') %}{{ a.get('status') }}{% endif %}
+          {% if a.get('note') %}<br><small class="muted">{{ a.get('note') }}</small>{% endif %}
+        </td>
+        <td>
+          {% if a.get('username') %}
+          <form method="post" action="/pg/admins/{{ a.get('username') }}/delete" onsubmit="return confirm('حذف شود؟')">
+            <button class="btn btn-ghost" type="submit">حذف</button>
+          </form>
+          {% endif %}
         </td>
       </tr>
     {% endfor %}

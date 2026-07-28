@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}ویرایش نماینده{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>ویرایش نماینده</h1>
+    <p>{{ user.full_name or user.username or user.telegram_id }}</p>
+  </div>
+  <a class="btn btn-ghost" href="/resellers">بازگشت</a>
+</div>
+
+<div class="card">
+  <form method="post" action="/resellers/{{ user.id }}/edit">
+    <div class="form-row">
+      <div>
+        <label class="form-field">کمیسیون ٪
+          <input name="commission_percent" type="number" value="{{ profile.commission_percent }}" />
+        </label>
+      </div>
+      <div>
+        <label class="form-field">یوزرنیم پاسارگارد
+          <small class="muted">اگر از قبل ساخته شده، همین نام را وارد کنید</small>
+          <input name="pg_admin_username" value="{{ profile.pg_admin_username or '' }}" />
+        </label>
+      </div>
+      <div>
+        <label class="form-field">نقش پاسارگارد
+          <select name="pg_role_id">
+            <option value="">—</option>
+            {% for r in pg_roles %}
+            <option value="{{ r.get('id') }}" {% if profile.pg_role_id == r.get('id') %}selected{% endif %}>
+              {{ r.get('name') or r.get('id') }}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div>
+        <strong style="display:block;margin-bottom:8px;font-size:13px">دسترسی وب‌پنل</strong>
+        <p class="muted" style="margin-top:0">یوزر فعلی: <code>{{ profile.web_username or '—' }}</code></p>
+        {% for key, label in web_perm_options %}
+        <label class="checks"><input type="checkbox" name="web_{{ key }}" value="1" {% if key in web_perms %}checked{% endif %} /> {{ label }}</label>
+        {% endfor %}
+        <label class="form-field">رمز جدید وب‌پنل
+          <small class="muted">خالی = بدون تغییر</small>
+          <input name="web_password" type="password" autocomplete="new-password" />
+        </label>
+        <label class="checks"><input type="checkbox" name="ensure_web" value="1" /> اگر یوزر وب ندارد، بساز و بفرست</label>
+      </div>
+      <div>
+        <strong style="display:block;margin-bottom:8px;font-size:13px">دسترسی بات</strong>
+        {% for key, label in bot_perm_options %}
+        <label class="checks"><input type="checkbox" name="bot_{{ key }}" value="1" {% if key in bot_perms %}checked{% endif %} /> {{ label }}</label>
+        {% endfor %}
+        <label class="checks"><input type="checkbox" name="is_active" value="1" {% if profile.is_active %}checked{% endif %} /> نماینده فعال</label>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn" type="submit">ذخیره</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -129,6 +129,15 @@ def verify_web_admin(username: str, password: str) -> bool:
     return pass_ok
 
 
+def verify_password_hash(password: str, password_hash: str | None) -> bool:
+    if not password or not password_hash:
+        return False
+    try:
+        return pwd_context.verify(password, password_hash)
+    except (ValueError, TypeError):
+        return False
+
+
 def repair_web_admin_from_env() -> dict[str, str]:
     """Force-refresh web_admin.json from cleaned .env values."""
     from app.config import get_settings

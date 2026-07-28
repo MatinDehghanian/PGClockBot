@@ -312,32 +312,68 @@ def register_pg_pages(app, *, render, require_admin, get_db):
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         admins = []
+        roles = []
         try:
-            admins = await get_pg().get_admins()
+            pg = get_pg()
+            admins = await pg.get_admins()
             if not admins:
-                admins = await get_pg().get_admins_simple()
+                admins = await pg.get_admins_simple()
+            roles = await pg.get_admin_roles()
         except Exception as e:
             err = str(e)
         return render(
             request,
             "pg_admins.html",
-            {"staff": staff, "admins": admins, "flash_err": err, "flash_ok": ok},
+            {
+                "staff": staff,
+                "admins": admins,
+                "pg_roles": roles,
+                "flash_err": err,
+                "flash_ok": ok,
+            },
         )
 
     @app.post("/pg/admins")
     async def pg_admins_create(
+        request: Request,
         username: str = Form(...),
         password: str = Form(...),
-        is_sudo: str = Form(""),
+        staff: dict = Depends(require_admin),
+    ):
+        form = await request.form()
+        role_raw = str(form.get("role_id") or "").strip()
+        note = str(form.get("note") or "").strip()
+        payload: dict = {
+            "username": username.strip(),
+            "password": password,
+            "note": note or "created from PGClockBot",
+        }
+        if role_raw.isdigit():
+            payload["role_id"] = int(role_raw)
+        else:
+            payload["is_sudo"] = bool(form.get("is_sudo"))
+        try:
+            await get_pg().create_admin(payload)
+        except Exception as e:
+            # Fallback for older panels without role_id
+            if "role_id" in payload:
+                payload.pop("role_id", None)
+                payload["is_sudo"] = False
+                try:
+                    await get_pg().create_admin(payload)
+                except Exception as e2:
+                    return RedirectResponse(f"/pg/admins?err={_q(e2)}", status_code=303)
+            else:
+                return RedirectResponse(f"/pg/admins?err={_q(e)}", status_code=303)
+        return RedirectResponse(f"/pg/admins?ok={_q('ادمین پنل ساخته شد')}", status_code=303)
+
+    @app.post("/pg/admins/{username}/delete")
+    async def pg_admins_delete(
+        username: str,
         staff: dict = Depends(require_admin),
     ):
         try:
-            payload = {
-                "username": username.strip(),
-                "password": password,
-                "is_sudo": bool(is_sudo),
-            }
-            await get_pg().create_admin(payload)
+            await get_pg().delete_admin(username)
         except Exception as e:
             return RedirectResponse(f"/pg/admins?err={_q(e)}", status_code=303)
-        return RedirectResponse(f"/pg/admins?ok={_q('ادمین پنل ساخته شد')}", status_code=303)
+        return RedirectResponse(f"/pg/admins?ok={_q('حذف شد')}", status_code=303)

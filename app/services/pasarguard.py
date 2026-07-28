@@ -232,8 +232,29 @@ class PasarGuardClient:
         data = await self.request("GET", "/api/admins/simple")
         return as_list(data, "admins")
 
+    async def get_admin_roles(self) -> list[dict]:
+        """Pasarguard admin roles (owner-defined access levels)."""
+        try:
+            data = await self.request("GET", "/api/admin-roles/simple")
+            roles = as_list(data, "roles", "items")
+            if roles:
+                return roles
+        except Exception:
+            pass
+        try:
+            data = await self.request("GET", "/api/admin-roles")
+            return as_list(data, "roles", "items")
+        except Exception:
+            return []
+
     async def create_admin(self, payload: dict) -> dict:
         return await self.request("POST", "/api/admin", json=payload)
+
+    async def modify_admin(self, username: str, payload: dict) -> dict:
+        return await self.request("PUT", f"/api/admin/{username}", json=payload)
+
+    async def delete_admin(self, username: str) -> Any:
+        return await self.request("DELETE", f"/api/admin/{username}")
 
     async def get_system_stats(self) -> dict:
         data = await self.request("GET", "/api/system")

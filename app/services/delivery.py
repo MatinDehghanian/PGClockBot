@@ -134,6 +134,16 @@ async def send_delivery_to_user(
     also send QR as a photo. Returns the HTML text that was sent.
     """
     ui = await get_all_settings(session)
+    if order and order.note and str(order.note).startswith("reseller_app:"):
+        text = (
+            "✅ هزینه نمایندگی پرداخت شد.\n"
+            "درخواست شما ثبت شد و پس از تأیید ادمین، اطلاعات ورود برایتان ارسال می‌شود."
+        )
+        try:
+            await bot.send_message(chat_id, text, parse_mode="HTML")
+        except Exception:
+            pass
+        return text
     # Peek whether QR can carry the details (subscription only).
     sub_url_peek = None
     if order and order.service_id:

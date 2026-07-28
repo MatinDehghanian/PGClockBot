@@ -546,6 +546,26 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
         return
 
     await callback.answer()
+    if order.note and str(order.note).startswith("reseller_app:"):
+        if callback.message:
+            await callback.message.edit_text(
+                format_message(
+                    "✅ پرداخت ثبت شد",
+                    "هزینه نمایندگی پرداخت شد.\nدرخواست شما برای تأیید ادمین ارسال شد.",
+                ),
+                reply_markup=kb.back_home(ui),
+            )
+        for aid in get_settings().admin_ids:
+            try:
+                await callback.bot.send_message(
+                    aid,
+                    f"🤝 درخواست نمایندگی پرداخت‌شده — سفارش #{order.id}\n"
+                    f"کاربر: {db_user.full_name or db_user.telegram_id}",
+                )
+            except Exception:
+                pass
+        return
+
     if callback.message:
         try:
             await callback.message.edit_text(
