@@ -76,7 +76,7 @@
   <table>
     <thead>
       <tr>
-        <th>کاربر</th><th class="col-hide-sm">تلگرام</th><th class="col-hide-sm">نقش</th><th class="col-hide-sm">کمیسیون</th><th class="col-hide-sm">وب</th><th class="col-hide-sm">ربات</th><th>راه‌اندازی</th><th class="col-actions"></th>
+        <th>کاربر</th><th class="col-hide-sm">تلگرام</th><th>نقش</th><th class="col-hide-sm">کمیسیون</th><th class="col-hide-sm">وب</th><th class="col-hide-sm">ربات</th><th>راه‌اندازی</th><th class="col-actions"></th>
       </tr>
     </thead>
     <tbody>
@@ -84,24 +84,10 @@
       <tr>
         <td>{{ u.full_name or u.username or '—' }}</td>
         <td class="mono col-hide-sm">{{ u.telegram_id }}</td>
-        <td class="col-hide-sm">
-          <form method="post" action="/resellers/{{ u.id }}/role" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"
-                onsubmit="
-                  if (this.role.value === 'user') {
-                    var r = prompt('علت تغییر نقش به کاربر عادی (برای نماینده ارسال می‌شود):');
-                    if (!r || r.trim().length < 3) { alert('علت الزامی است'); return false; }
-                    this.reason.value = r.trim();
-                  }
-                  return true;
-                ">
-            <input type="hidden" name="reason" value="" />
-            <select name="role" class="select-sm">
-              <option value="user" {% if u.role=='user' %}selected{% endif %}>کاربر</option>
-              <option value="reseller" {% if u.role=='reseller' %}selected{% endif %}>نماینده</option>
-              <option value="admin" {% if u.role=='admin' %}selected{% endif %}>مدیر</option>
-            </select>
-            <button class="btn btn-sm" type="submit">اعمال نقش</button>
-          </form>
+        <td>
+          <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
+            {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
+          </span>
         </td>
         <td class="mono col-hide-sm">{{ p.commission_percent }}%</td>
         <td class="mono col-hide-sm">{{ p.web_username or '—' }}</td>
@@ -109,6 +95,23 @@
         <td>{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.setup_token %}<span class="badge pending">منتظر</span>{% else %}—{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
+            <form method="post" action="/resellers/{{ u.id }}/role" class="row-actions-stack"
+                  onsubmit="
+                    if (this.role.value === 'user') {
+                      var r = prompt('علت تغییر نقش به کاربر عادی (برای نماینده ارسال می‌شود):');
+                      if (!r || r.trim().length < 3) { alert('علت الزامی است'); return false; }
+                      this.reason.value = r.trim();
+                    }
+                    return true;
+                  ">
+              <input type="hidden" name="reason" value="" />
+              <select name="role" class="select-sm">
+                <option value="user" {% if u.role=='user' %}selected{% endif %}>کاربر</option>
+                <option value="reseller" {% if u.role=='reseller' %}selected{% endif %}>نماینده</option>
+                <option value="admin" {% if u.role=='admin' %}selected{% endif %}>مدیر</option>
+              </select>
+              <button class="btn btn-sm" type="submit">اعمال نقش</button>
+            </form>
             <a class="btn btn-ghost btn-sm" href="/resellers/{{ u.id }}/edit">ویرایش</a>
             <form method="post" action="/resellers/{{ u.id }}/delete"
                   onsubmit="

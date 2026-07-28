@@ -84,3 +84,25 @@ async def load_reseller_actor(
     if not profile or not profile.is_active:
         return None, None
     return owner_id, profile
+
+
+async def effective_menu_role(
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> str:
+    """Role used for Telegram main menus on the current bot."""
+    owner_id, profile = await load_reseller_actor(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if owner_id and profile:
+        return Role.RESELLER.value
+    # Dedicated shop bot: platform staff still shop as customers
+    if is_reseller_bot and db_user.role in (Role.ADMIN.value, Role.RESELLER.value):
+        return Role.USER.value
+    return db_user.role

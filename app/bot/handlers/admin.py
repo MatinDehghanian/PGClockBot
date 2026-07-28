@@ -383,9 +383,6 @@ async def _approve_order_bot(session: AsyncSession, order: Order, bot) -> str:
 
 @router.callback_query(F.data.startswith("ordrev:ok:"))
 async def order_approve_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if not _is_admin(db_user) and db_user.role != Role.RESELLER.value:
-        await callback.answer("دسترسی ندارید", show_alert=True)
-        return
     if not _is_admin(db_user):
         await callback.answer("فقط ادمین", show_alert=True)
         return

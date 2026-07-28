@@ -1867,7 +1867,7 @@ body.modal-open { overflow: hidden; }
 }
 
 /* —— Reseller PG meters —— */
-.pg-reseller-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pg-reseller-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .stat small { display: block; margin-top: 6px; font-size: 11px; line-height: 1.35; }
 .meter {
   margin-top: 10px;
@@ -1907,7 +1907,7 @@ body.modal-open { overflow: hidden; }
   color: var(--foreground);
   cursor: pointer;
 }
-.row-actions-toggle .ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.row-actions-toggle .ico { width: 16px; height: 16px; fill: currentColor; stroke: none; }
 .row-actions-menu {
   display: inline-flex;
   flex-wrap: wrap;
@@ -2014,9 +2014,6 @@ body.modal-open { overflow: hidden; }
   font-weight: 700;
 }
 .pg-users-line { margin: -4px 0 14px; }
-.pg-reseller-stats {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
 .row-actions-stack {
   display: flex;
   flex-direction: column;
