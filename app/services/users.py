@@ -307,7 +307,7 @@ SETTING_GROUPS = {
             "reseller_pg_panel_base_url",
             "آدرس پنل پاسارگارد برای نماینده",
             "text",
-            "اختیاری. خالی = همان آدرس پنل پاسارگارد ادمین (PG_BASE_URL).",
+            "اختیاری. خالی = دقیقاً همان PG_BASE_URL تنظیم‌شده در اتصال بات (با path کامل).",
         ),
     ],
     "هشدار سرویس کاربر": [
@@ -522,6 +522,7 @@ async def delete_bot_user(
     await session.execute(
         update(BotUser).where(BotUser.referred_by_id == user_id).values(referred_by_id=None)
     )
+    # reseller_id / order.reseller_id already cleared by revoke_reseller when applicable
     await session.execute(
         update(BotUser).where(BotUser.reseller_id == user_id).values(reseller_id=None)
     )

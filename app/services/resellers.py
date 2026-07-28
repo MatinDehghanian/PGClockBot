@@ -57,14 +57,14 @@ async def get_reseller_panel_base_url(session: AsyncSession) -> str:
 
 
 async def get_reseller_pg_panel_base_url(session: AsyncSession) -> str:
-    """Custom PG panel URL for resellers → else PG_BASE_URL (admin panel)."""
-    from app.config import get_settings
+    """Custom PG panel URL for resellers → else exact PG_BASE_URL from settings."""
+    from app.config import get_settings, normalize_pg_base_url
     from app.services.users import get_setting
 
-    custom = (await get_setting(session, "reseller_pg_panel_base_url") or "").strip().rstrip("/")
+    custom = (await get_setting(session, "reseller_pg_panel_base_url") or "").strip()
     if custom:
-        return custom
-    return (get_settings().pg_base_url or "").strip().rstrip("/")
+        return normalize_pg_base_url(custom)
+    return normalize_pg_base_url(get_settings().pg_base_url or "")
 
 
 def parse_perms(raw: str | None) -> list[str]:
@@ -284,7 +284,11 @@ async def make_reseller(
         token, expires = new_setup_token()
         profile.setup_token = token
         profile.setup_token_expires = expires
-        profile.setup_completed_at = None
+        # Web creds already provisioned → keep login unlocked; token is for bot only
+        if web_username and web_password_hash:
+            profile.setup_completed_at = datetime.now(timezone.utc)
+        else:
+            profile.setup_completed_at = None
 
     await session.commit()
     await session.refresh(profile)
@@ -491,13 +495,6 @@ async def provision_reseller(
         plan_id=plan.id if plan else None,
         issue_setup_token=True,
     )
-    # Web login ready immediately; setup token remains for optional bot-token wizard
-    if do_web and web_username and web_hash:
-        profile.web_username = web_username
-        profile.web_password_hash = web_hash
-        profile.setup_completed_at = datetime.now(timezone.utc)
-        await session.commit()
-        await session.refresh(profile)
 
     base = (panel_base_url or "").rstrip("/")
     if not base:
@@ -528,11 +525,8 @@ def format_credentials_message(creds: dict) -> str:
         f"کمیسیون شما: <b>{creds.get('commission_percent', 0)}٪</b>",
     ]
 
-    pg_panel = (creds.get("pg_panel_url") or "").rstrip("/")
-    lines += [
-        "",
-        "🛡 <b>پنل پاسارگارد</b>",
-    ]
+    pg_panel = (creds.get("pg_panel_url") or "").strip().rstrip("/")
+    lines += ["", "🛡 <b>پنل پاسارگارد</b>"]
     if pg_panel:
         lines.append(f"آدرس پنل: {pg_panel}")
     else:
@@ -546,16 +540,10 @@ def format_credentials_message(creds: dict) -> str:
     else:
         lines.append("ادمین پاسارگارد برای این پلن ساخته نشد (غیرفعال در تنظیمات پلن).")
 
-    panel = (creds.get("panel_url") or "").rstrip("/")
-    lines += [
-        "",
-        "🌐 <b>وب‌پنل ربات (نماینده)</b>",
-    ]
+    panel = (creds.get("panel_url") or "").strip().rstrip("/")
+    lines += ["", "🌐 <b>وب‌پنل ربات (نماینده)</b>"]
     if panel:
-        lines += [
-            f"آدرس پنل: {panel}",
-            f"آدرس ورود: {panel}/login",
-        ]
+        lines += [f"آدرس پنل: {panel}", f"آدرس ورود: {panel}/login"]
     else:
         lines.append("آدرس پنل هنوز تنظیم نشده — از ادمین بپرسید.")
     if creds.get("web_username") and creds.get("web_password"):
@@ -573,10 +561,7 @@ def format_credentials_message(creds: dict) -> str:
             "لینک یک‌بارمصرف است — با کسی به اشتراک نگذارید.",
         ]
 
-    lines += [
-        "",
-        "از منوی ربات به امکانات مجاز «پنل نماینده» دسترسی دارید.",
-    ]
+    lines += ["", "از منوی ربات به امکانات مجاز «پنل نماینده» دسترسی دارید."]
     return "\n".join(lines)
 
 

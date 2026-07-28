@@ -74,7 +74,8 @@
     <form class="auth-form setup-step" data-step="3" method="post" action="/setup/other" hidden novalidate>
       <h2 class="setup-title">۳ · پاسارگارد و وب</h2>
       <label>آدرس پاسارگارد (PG_BASE_URL)
-        <input name="pg_base_url" value="{{ values.PG_BASE_URL or '' }}" required dir="ltr" placeholder="https://panel.example.com" />
+        <small class="muted">آدرس کامل پنل — path هم حفظ می‌شود</small>
+        <input name="pg_base_url" value="{{ values.PG_BASE_URL or '' }}" required dir="ltr" placeholder="https://panel.example.com/path" />
       </label>
       <label>نام کاربری پاسارگارد
         <input name="pg_username" value="{{ values.PG_USERNAME or '' }}" required dir="ltr" />
