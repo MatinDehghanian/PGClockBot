@@ -122,29 +122,38 @@ def _has_admin_ids() -> bool:
 
 
 def is_setup_complete() -> bool:
-    """True when setup flag exists, or required config is present.
+    """True when first-run wizard is done and required config exists.
 
     Existing installs that already have a bot token and web password are
     auto-flagged on first check so the wizard never traps them — unless a
     setup session is in progress (partial wizard saves).
     """
-    if SETUP_FLAG.exists():
-        return True
-
-    has_pw = _has_web_password()
-    has_token = _has_bot_token()
-    has_admins = _has_admin_ids()
-
     # Wizard mid-flight: do not treat partial credentials as "done"
     if SETUP_IN_PROGRESS.exists():
         return False
 
-    # Existing installs: token + web password → never trap behind wizard
-    if has_pw and has_token:
-        mark_setup_complete()
-        return True
+    has_pw = _has_web_password()
+    has_token = _has_bot_token()
+    has_admins = _has_admin_ids()
+    ready = has_pw and has_token
 
-    return has_pw and has_token and has_admins
+    if SETUP_FLAG.exists():
+        # Stale flag after wipe / incomplete scaffold → force wizard again
+        if ready:
+            return True
+        try:
+            SETUP_FLAG.unlink()
+        except OSError:
+            pass
+        return False
+
+    if ready:
+        # Prefer also having admin ids, but don't trap old installs without them
+        if has_admins or has_pw:
+            mark_setup_complete()
+            return True
+
+    return False
 
 
 def _escape_env_value(val: str) -> str:
@@ -243,5 +252,5 @@ def parse_admin_ids(raw: str) -> list[int]:
 def panel_url_hint(public_base: str = "", web_port: str = "9000") -> str:
     base = (public_base or "").rstrip("/")
     if base:
-        return base + "/login"
-    return f"http://127.0.0.1:{web_port or '9000'}/login"
+        return base + "/"
+    return f"http://127.0.0.1:{web_port or '9000'}/"

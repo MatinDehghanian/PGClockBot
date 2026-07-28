@@ -183,19 +183,20 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         if complete:
             if path == "/setup" or path.startswith("/setup/"):
-                return RedirectResponse("/login", status_code=303)
+                return RedirectResponse("/", status_code=303)
             return await call_next(request)
 
+        # First-run: only wizard + static/health. Everything else → /
         allowed = (
-            path == "/setup"
+            path == "/"
+            or path == "/setup"
             or path.startswith("/setup/")
             or path.startswith("/static")
             or path == "/health"
-            or (path == "/login" and request.method == "GET")
         )
         if allowed:
             return await call_next(request)
-        return RedirectResponse("/setup", status_code=303)
+        return RedirectResponse("/", status_code=303)
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -210,8 +211,10 @@ def create_api_app(lifespan=None) -> FastAPI:
             response.headers.setdefault(
                 "Content-Security-Policy",
                 "default-src 'self'; img-src 'self' data: blob:; "
-                "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
-                "font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "script-src 'self' 'unsafe-inline'; "
+                "font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; "
+                "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
             )
         if _cookie_secure(request):
             response.headers.setdefault(
@@ -261,7 +264,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.get("/setup", response_class=HTMLResponse)
     async def setup_page(request: Request):
         if is_setup_complete():
-            return RedirectResponse("/login", status_code=303)
+            return RedirectResponse("/", status_code=303)
         step = 0
         try:
             step = int(request.query_params.get("step") or "0")
@@ -278,7 +281,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         password_confirm: str = Form(...),
     ):
         if is_setup_complete():
-            return RedirectResponse("/login", status_code=303)
+            return RedirectResponse("/", status_code=303)
         begin_setup()
         user = (username or "").strip() or "admin"
         p1 = password or ""
@@ -367,10 +370,19 @@ def create_api_app(lifespan=None) -> FastAPI:
     async def setup_finish():
         mark_setup_complete()
         ensure_web_secret()
-        return RedirectResponse("/login", status_code=303)
+        return RedirectResponse("/", status_code=303)
 
     @app.get("/", response_class=HTMLResponse)
     async def root(request: Request):
+        """Single entry URL: first-run → setup wizard, otherwise login/dashboard."""
+        if not is_setup_complete():
+            step = 0
+            try:
+                step = int(request.query_params.get("step") or "0")
+            except ValueError:
+                step = 0
+            show_done = step >= 4
+            return _setup_page(request, step=step if step < 4 else 4, show_done=show_done)
         user = get_session_user(request)
         if not user:
             return RedirectResponse("/login", status_code=303)
@@ -378,6 +390,8 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.get("/login", response_class=HTMLResponse)
     async def login_page(request: Request):
+        if not is_setup_complete():
+            return RedirectResponse("/", status_code=303)
         if get_session_user(request):
             return RedirectResponse("/dashboard", status_code=303)
         creds = load_web_admin()
@@ -392,7 +406,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         if not is_setup_complete():
-            return RedirectResponse("/setup", status_code=303)
+            return RedirectResponse("/", status_code=303)
 
         ip = _client_ip(request)
         if _login_blocked(ip):

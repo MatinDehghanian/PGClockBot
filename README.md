@@ -95,15 +95,14 @@ Legacy wrappers still work: `./install.sh` → install, `./update.sh` → update
 
 ## Web panel
 
-After Install, open the **first-run wizard** (no terminal questions):
+After Install, open a single URL:
 
-`http://SERVER_IP:9000/setup`
+`http://SERVER_IP:9000/`
 
-Steps: welcome → admin user/password → bot token → PasarGuard → done.
+- **First time** → setup wizard automatically  
+- **Later** → login page  
 
-Then use `http://SERVER_IP:9000/login`.
-
-Configure texts, buttons, card number, and plans from **Settings**.
+Then configure texts, buttons, card number, and plans from **Settings**.
 
 ### Login / health issues
 

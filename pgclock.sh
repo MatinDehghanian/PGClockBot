@@ -197,26 +197,21 @@ print_success() {
   # print_success "Title" [extra lines...]
   local title="$1"
   shift || true
-  local port ip user panel_path
+  local port ip user
   port="$(env_get WEB_PORT "${WEB_PORT:-9000}")"
   ip="$(detect_server_ip)"
   user="$(web_username)"
-  if [[ -f data/setup_complete.flag ]]; then
-    panel_path="/login"
-  else
-    panel_path="/setup"
-  fi
   {
     echo ""
     printf '%s==========================================%s\n' "$G" "$N"
     printf '%s  SUCCESS · %s%s\n' "$G" "$title" "$N"
     printf '%s==========================================%s\n' "$G" "$N"
-    printf '  Web panel:  %shttp://%s:%s%s%s\n' "$B" "$ip" "$port" "$panel_path" "$N"
+    printf '  Web panel:  %shttp://%s:%s/%s\n' "$B" "$ip" "$port" "$N"
     printf '  Health:     %shttp://127.0.0.1:%s/health%s\n' "$B" "$port" "$N"
     if [[ -f data/setup_complete.flag ]]; then
       printf '  Username:   %s%s%s\n' "$B" "$user" "$N"
     else
-      printf '  Next step:  %sopen the URL above and finish the wizard%s\n' "$B" "$N"
+      printf '  Next step:  %sopen the URL above (first time = setup wizard)%s\n' "$B" "$N"
     fi
     if [[ $# -gt 0 ]]; then
       echo ""
@@ -474,22 +469,19 @@ cmd_install() {
     info "UFW not installed — open port ${WEB_PORT} manually if needed"
   fi
 
-  local ip setup_url login_url
+  local ip panel_url
   ip="$(detect_server_ip)"
-  setup_url="http://${ip}:${WEB_PORT}/setup"
-  login_url="http://${ip}:${WEB_PORT}/login"
+  panel_url="http://${ip}:${WEB_PORT}/"
 
   if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
-    print_success "Install complete — open the web wizard" \
-      "Setup:      ${setup_url}" \
-      "Login:      ${login_url}" \
-      "Wizard:     welcome → admin → bot → PasarGuard → done" \
-      "No more terminal questions — configure everything in the browser" \
+    print_success "Install complete — open the web panel" \
+      "Panel:      ${panel_url}" \
+      "First open: setup wizard · later: login" \
       "Manage:     bash pgclock.sh" \
       "Logs:       journalctl -u ${SERVICE_NAME} -f"
   else
     print_success "Install/refresh complete" \
-      "Panel:      ${login_url}" \
+      "Panel:      ${panel_url}" \
       "Manage:     bash pgclock.sh" \
       "Logs:       journalctl -u ${SERVICE_NAME} -f"
   fi

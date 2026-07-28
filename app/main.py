@@ -62,82 +62,98 @@ def main() -> None:
     # Always reload settings from project .env
     get_settings.cache_clear()
     settings = get_settings()
-    setup_pending = not bool((settings.bot_token or "").strip())
+    has_token = bool((settings.bot_token or "").strip())
     bot = None
     dp = None
-    if not setup_pending:
-        bot = create_bot()
-        dp = create_dispatcher()
+    if has_token:
+        try:
+            bot = create_bot()
+            dp = create_dispatcher()
+        except Exception:
+            logger.exception("Bot init failed — starting web panel only")
+            bot = None
+            dp = None
 
     @asynccontextmanager
     async def lifespan(app):
         await init_db()
-        await seed_demo_plan()
+        try:
+            await seed_demo_plan()
+        except Exception:
+            logger.exception("Demo plan seed failed — continuing")
+
         poll_task = None
+        panel_only = bot is None or dp is None
 
-        if setup_pending or bot is None or dp is None:
+        if panel_only:
             logger.warning(
-                "BOT_TOKEN missing — web panel only. Open /setup to finish first-run wizard."
+                "Web panel only mode (no bot yet). Open http://%s:%s/ to finish setup.",
+                settings.web_host,
+                settings.web_port,
             )
-            try:
-                yield
-            finally:
-                try:
-                    await get_pg().close()
-                except Exception:
-                    pass
-            return
-
-        start_scheduler(bot)
-
-        try:
-            me = await bot.get_me()
-            logger.info(
-                "Bot online as @%s (id=%s) · admins=%s",
-                me.username,
-                me.id,
-                settings.admin_ids,
-            )
-        except Exception:
-            logger.exception(
-                "Cannot connect to Telegram. Check BOT_TOKEN in .env / setup wizard"
-            )
-            raise
-
-        try:
-            await get_pg().ensure_token()
-            logger.info("PasarGuard panel login OK · %s", get_settings().pg_base_url)
-        except Exception:
-            logger.exception(
-                "PasarGuard login FAILED — fix PG_BASE_URL / PG_USERNAME / PG_PASSWORD "
-                "(use https://host only, no path)"
-            )
-
-        if settings.webhook_url.strip():
-            url = settings.webhook_url.rstrip("/") + settings.webhook_path
-            await bot.set_webhook(url, drop_pending_updates=True)
-            logger.info("Webhook set: %s", url)
         else:
-            await bot.delete_webhook(drop_pending_updates=True)
+            try:
+                start_scheduler(bot)
+            except Exception:
+                logger.exception("Scheduler failed to start")
 
-            async def _poll():
-                logger.info("Starting long-polling…")
+            try:
+                me = await bot.get_me()
+                logger.info(
+                    "Bot online as @%s (id=%s) · admins=%s",
+                    me.username,
+                    me.id,
+                    settings.admin_ids,
+                )
+            except Exception:
+                logger.exception(
+                    "Cannot connect to Telegram — web panel stays up. "
+                    "Fix BOT_TOKEN in /setup or .env and restart."
+                )
+                # Do not raise — panel must remain reachable
+                panel_only = True
+
+            if not panel_only:
                 try:
-                    await dp.start_polling(bot)
+                    await get_pg().ensure_token()
+                    logger.info("PasarGuard panel login OK · %s", get_settings().pg_base_url)
                 except Exception:
-                    logger.exception("Polling crashed")
-                    raise
+                    logger.exception(
+                        "PasarGuard login FAILED — fix PG_BASE_URL / PG_USERNAME / PG_PASSWORD "
+                        "(use https://host only, no path)"
+                    )
 
-            poll_task = asyncio.create_task(_poll())
+                if settings.webhook_url.strip():
+                    url = settings.webhook_url.rstrip("/") + settings.webhook_path
+                    try:
+                        await bot.set_webhook(url, drop_pending_updates=True)
+                        logger.info("Webhook set: %s", url)
+                    except Exception:
+                        logger.exception("set_webhook failed")
+                else:
+                    try:
+                        await bot.delete_webhook(drop_pending_updates=True)
+                    except Exception:
+                        logger.exception("delete_webhook failed")
 
-            def _on_done(task: asyncio.Task) -> None:
-                if task.cancelled():
-                    return
-                exc = task.exception()
-                if exc:
-                    logger.error("Polling task failed: %s", exc)
+                    async def _poll():
+                        logger.info("Starting long-polling…")
+                        try:
+                            await dp.start_polling(bot)
+                        except Exception:
+                            logger.exception("Polling crashed")
+                            raise
 
-            poll_task.add_done_callback(_on_done)
+                    poll_task = asyncio.create_task(_poll())
+
+                    def _on_done(task: asyncio.Task) -> None:
+                        if task.cancelled():
+                            return
+                        exc = task.exception()
+                        if exc:
+                            logger.error("Polling task failed: %s", exc)
+
+                    poll_task.add_done_callback(_on_done)
 
         try:
             yield
@@ -148,14 +164,24 @@ def main() -> None:
                     await poll_task
                 except asyncio.CancelledError:
                     pass
-            if settings.webhook_url.strip():
-                await bot.delete_webhook(drop_pending_updates=False)
-            await get_pg().close()
-            await bot.session.close()
+            if bot is not None and settings.webhook_url.strip():
+                try:
+                    await bot.delete_webhook(drop_pending_updates=False)
+                except Exception:
+                    pass
+            try:
+                await get_pg().close()
+            except Exception:
+                pass
+            if bot is not None:
+                try:
+                    await bot.session.close()
+                except Exception:
+                    pass
 
     api = create_api_app(lifespan=lifespan)
 
-    if not setup_pending and bot is not None and dp is not None and settings.webhook_url.strip():
+    if bot is not None and dp is not None and settings.webhook_url.strip():
 
         @api.post(settings.webhook_path)
         async def telegram_webhook(request: Request):
@@ -164,8 +190,6 @@ def main() -> None:
             await dp.feed_update(bot, update)
             return {"ok": True}
 
-    # Ensure web panel credentials exist (migrate/repair from .env if needed)
-    # Skip forcing repair during first-run wizard (no password yet).
     from app.services.setup_wizard import is_setup_complete
     from app.services.web_auth import repair_web_admin_from_env
 
@@ -177,18 +201,14 @@ def main() -> None:
     else:
         creds = load_web_admin()
 
-    if not creds.get("password"):
-        logger.warning(
-            "Web panel not configured yet — open http://%s:%s/setup",
-            settings.web_host,
-            settings.web_port,
-        )
+    entry = f"http://{settings.web_host}:{settings.web_port}/"
+    if not creds.get("password") or not is_setup_complete():
+        logger.warning("First-run wizard pending — open %s", entry)
     else:
         logger.info(
-            "Web panel login ready · user=%s · http://%s:%s/login · /health",
-            creds["username"],
-            settings.web_host,
-            settings.web_port,
+            "Web panel ready · user=%s · %s",
+            creds.get("username") or "admin",
+            entry,
         )
 
     uvicorn.run(api, host=settings.web_host, port=settings.web_port, log_level="info")
