@@ -2,11 +2,19 @@
 {% block title %}راه‌اندازی اولیه{% endblock %}
 {% block auth %}
 <div class="auth-wrap">
-  <div class="auth-panel" style="width:min(440px,100%)">
+  <div class="auth-panel setup-panel">
     <div class="auth-brand">
       <img src="/static/logo.svg" alt="" />
       <h1>کلاک بات</h1>
       <p id="step-caption">راه‌اندازی اولیه پنل</p>
+    </div>
+
+    <div class="setup-progress" id="setup-progress" aria-hidden="true">
+      <span data-dot="0"></span>
+      <span data-dot="1"></span>
+      <span data-dot="2"></span>
+      <span data-dot="3"></span>
+      <span data-dot="4"></span>
     </div>
 
     {% if flash_err %}<div class="flash err" id="flash-err">{{ flash_err }}</div>{% endif %}
@@ -14,20 +22,20 @@
     <div class="flash err" id="client-err" hidden></div>
 
     {# —— Step 0: Welcome —— #}
-    <div class="auth-form setup-step" data-step="0">
-      <h2 style="margin:0;font-size:1.15rem;text-align:center">خوش آمدید</h2>
-      <p class="muted" style="margin:0;text-align:center;font-size:13px;line-height:1.7">
+    <div class="auth-form setup-step" data-step="0" hidden>
+      <h2 class="setup-title">خوش آمدید</h2>
+      <p class="muted setup-lead">
         چند مرحله کوتاه برای تنظیم مدیر، ربات و اتصال پاسارگارد.
-        مقادیر فعلی در صورت وجود از قبل پر می‌شوند.
+        فقط با تکمیل هر مرحله می‌توانید ادامه دهید.
       </p>
       <button type="button" class="btn" data-next="1">شروع</button>
     </div>
 
     {# —— Step 1: Admin —— #}
-    <form class="auth-form setup-step" data-step="1" method="post" action="/setup/admin" hidden>
-      <h2 style="margin:0;font-size:1.05rem">۱ · مدیر پنل</h2>
-      <p class="muted" style="margin:0;font-size:12px;line-height:1.6">
-        رمز باید حداقل ۸ کاراکتر، شامل حرف بزرگ، حرف کوچک و یک کاراکتر خاص باشد.
+    <form class="auth-form setup-step" data-step="1" method="post" action="/setup/admin" hidden novalidate>
+      <h2 class="setup-title">۱ · مدیر پنل</h2>
+      <p class="muted setup-hint">
+        رمز حداقل ۸ کاراکتر، با حرف بزرگ، حرف کوچک و یک کاراکتر خاص.
       </p>
       <label>نام کاربری
         <input name="username" value="{{ values.username or 'admin' }}" required autocomplete="username" />
@@ -38,41 +46,41 @@
       <label>تکرار رمز عبور
         <input name="password_confirm" type="password" required autocomplete="new-password" minlength="8" />
       </label>
-      <div style="display:flex;gap:8px">
+      <div class="setup-actions">
         <button type="button" class="btn btn-ghost" data-prev="0">قبلی</button>
-        <button class="btn" type="submit" style="flex:1">ادامه</button>
+        <button class="btn" type="submit">ادامه</button>
       </div>
     </form>
 
     {# —— Step 2: Bot —— #}
-    <form class="auth-form setup-step" data-step="2" method="post" action="/setup/bot" hidden>
-      <h2 style="margin:0;font-size:1.05rem">۲ · ربات تلگرام</h2>
+    <form class="auth-form setup-step" data-step="2" method="post" action="/setup/bot" hidden novalidate>
+      <h2 class="setup-title">۲ · ربات تلگرام</h2>
       <label>توکن ربات (BOT_TOKEN)
         <input name="bot_token" value="{{ values.BOT_TOKEN or '' }}" required autocomplete="off" dir="ltr" />
       </label>
       <label>نام کاربری ربات (بدون @)
-        <input name="bot_username" value="{{ values.BOT_USERNAME or '' }}" autocomplete="off" dir="ltr" />
+        <input name="bot_username" value="{{ values.BOT_USERNAME or '' }}" required autocomplete="off" dir="ltr" placeholder="MyShopBot" />
       </label>
       <label>آیدی ادمین‌ها (با کاما جدا کنید)
         <input name="admin_ids" value="{{ values.ADMIN_IDS or '' }}" required placeholder="123456789" dir="ltr" />
       </label>
-      <div style="display:flex;gap:8px">
+      <div class="setup-actions">
         <button type="button" class="btn btn-ghost" data-prev="1">قبلی</button>
-        <button class="btn" type="submit" style="flex:1">ادامه</button>
+        <button class="btn" type="submit">ادامه</button>
       </div>
     </form>
 
     {# —— Step 3: Other —— #}
-    <form class="auth-form setup-step" data-step="3" method="post" action="/setup/other" hidden>
-      <h2 style="margin:0;font-size:1.05rem">۳ · پاسارگارد و وب</h2>
+    <form class="auth-form setup-step" data-step="3" method="post" action="/setup/other" hidden novalidate>
+      <h2 class="setup-title">۳ · پاسارگارد و وب</h2>
       <label>آدرس پاسارگارد (PG_BASE_URL)
-        <input name="pg_base_url" value="{{ values.PG_BASE_URL or '' }}" required dir="ltr" />
+        <input name="pg_base_url" value="{{ values.PG_BASE_URL or '' }}" required dir="ltr" placeholder="https://panel.example.com" />
       </label>
       <label>نام کاربری پاسارگارد
-        <input name="pg_username" value="{{ values.PG_USERNAME or '' }}" dir="ltr" />
+        <input name="pg_username" value="{{ values.PG_USERNAME or '' }}" required dir="ltr" />
       </label>
       <label>رمز پاسارگارد
-        <input name="pg_password" type="password" value="{{ values.PG_PASSWORD or '' }}" autocomplete="off" />
+        <input name="pg_password" type="password" value="{{ values.PG_PASSWORD or '' }}" required autocomplete="off" />
       </label>
       <label>پورت وب‌پنل (WEB_PORT)
         <input name="web_port" value="{{ values.WEB_PORT or '9000' }}" required dir="ltr" />
@@ -81,36 +89,32 @@
         <input name="public_base_url" value="{{ values.PUBLIC_BASE_URL or '' }}" placeholder="https://bot.example.com" dir="ltr" />
       </label>
       <label>واحد پول (CURRENCY)
-        <input name="currency" value="{{ values.CURRENCY or 'تومان' }}" />
+        <input name="currency" value="{{ values.CURRENCY or 'تومان' }}" required />
       </label>
-      <div style="display:flex;gap:8px">
+      <div class="setup-actions">
         <button type="button" class="btn btn-ghost" data-prev="2">قبلی</button>
-        <button class="btn" type="submit" style="flex:1">ادامه</button>
+        <button class="btn" type="submit">ادامه</button>
       </div>
     </form>
 
     {# —— Step 4: Done —— #}
-    <div class="auth-form setup-step" data-step="4" {% if not show_done %}hidden{% endif %}>
-      <h2 style="margin:0;font-size:1.05rem;text-align:center">۴ · تمام شد</h2>
-      <p class="muted" style="margin:0;font-size:13px;text-align:center">راه‌اندازی ذخیره شد. خلاصه:</p>
-      <div class="card" style="margin:0;padding:12px;display:flex;flex-direction:column;gap:10px">
-        <div>
+    <div class="auth-form setup-step" data-step="4" hidden>
+      <h2 class="setup-title" style="text-align:center">۴ · تمام شد</h2>
+      <p class="muted setup-lead">راه‌اندازی ذخیره شد. خلاصه:</p>
+      <div class="setup-summary">
+        <div class="setup-copy-block">
           <small class="muted">آدرس پنل</small>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-            <code id="panel-url" dir="ltr" style="flex:1;font-size:12px;word-break:break-all">{{ panel_url }}</code>
-            <button type="button" class="btn btn-ghost btn-sm" data-copy="panel-url">کپی</button>
-          </div>
+          <code id="panel-url" dir="ltr">{{ panel_url }}</code>
+          <button type="button" class="btn btn-ghost btn-sm setup-copy-btn" data-copy="panel-url">کپی آدرس پنل</button>
         </div>
-        <div>
+        <div class="setup-copy-block">
           <small class="muted">ربات</small>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-            <code id="bot-user" dir="ltr" style="flex:1;font-size:12px">@{{ bot_username or '—' }}</code>
-            <button type="button" class="btn btn-ghost btn-sm" data-copy="bot-user">کپی</button>
-          </div>
+          <code id="bot-user" dir="ltr">@{{ bot_username or '—' }}</code>
+          <button type="button" class="btn btn-ghost btn-sm setup-copy-btn" data-copy="bot-user">کپی آدرس ربات</button>
         </div>
       </div>
       <div class="flash warn" style="margin:0">
-        فایل <code>.env</code> را امن نگه دارید. اگر سرویس از قبل اجراست، یک‌بار ری‌استارت کنید تا تنظیمات جدید اعمال شود.
+        فایل <code>.env</code> را امن نگه دارید. یک‌بار سرویس را ری‌استارت کنید تا ربات با تنظیمات جدید بالا بیاید.
       </div>
       <form method="post" action="/setup/finish">
         <button class="btn" type="submit" style="width:100%">ورود به پنل</button>
@@ -126,6 +130,7 @@
   let step = parseInt(params.get('step') || '{{ initial_step|default(0) }}', 10);
   if (isNaN(step) || step < 0) step = 0;
   if ({{ 'true' if show_done else 'false' }}) step = 4;
+  if (step > 4) step = 4;
 
   const captions = {
     0: 'راه‌اندازی اولیه پنل',
@@ -141,13 +146,21 @@
     if (!msg) { el.hidden = true; el.textContent = ''; return; }
     el.hidden = false;
     el.textContent = msg;
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   function showStep(n){
     step = n;
     document.querySelectorAll('.setup-step').forEach(el => {
       const s = parseInt(el.getAttribute('data-step'), 10);
-      el.hidden = s !== n;
+      const on = s === n;
+      el.hidden = !on;
+      el.classList.toggle('is-active', on);
+    });
+    document.querySelectorAll('#setup-progress [data-dot]').forEach(dot => {
+      const d = parseInt(dot.getAttribute('data-dot'), 10);
+      dot.classList.toggle('done', d < n);
+      dot.classList.toggle('current', d === n);
     });
     const cap = document.getElementById('step-caption');
     if (cap) cap.textContent = captions[n] || '';
@@ -157,18 +170,32 @@
     history.replaceState(null, '', url);
   }
 
+  function filled(el){
+    return !!(el && String(el.value || '').trim());
+  }
+
   document.querySelectorAll('[data-next]').forEach(btn => {
-    btn.addEventListener('click', () => showStep(parseInt(btn.getAttribute('data-next'), 10)));
+    btn.addEventListener('click', () => {
+      showStep(parseInt(btn.getAttribute('data-next'), 10));
+    });
   });
   document.querySelectorAll('[data-prev]').forEach(btn => {
-    btn.addEventListener('click', () => showStep(parseInt(btn.getAttribute('data-prev'), 10)));
+    btn.addEventListener('click', () => {
+      showStep(parseInt(btn.getAttribute('data-prev'), 10));
+    });
   });
 
   const adminForm = document.querySelector('form[data-step="1"]');
   if (adminForm) {
     adminForm.addEventListener('submit', (e) => {
+      const user = (adminForm.username.value || '').trim();
       const p1 = adminForm.password.value || '';
       const p2 = adminForm.password_confirm.value || '';
+      if (!user) {
+        e.preventDefault();
+        showErr('نام کاربری را وارد کنید.');
+        return;
+      }
       if (p1 !== p2) {
         e.preventDefault();
         showErr('رمز عبور و تکرار آن یکسان نیستند.');
@@ -186,6 +213,63 @@
     });
   }
 
+  const botForm = document.querySelector('form[data-step="2"]');
+  if (botForm) {
+    botForm.addEventListener('submit', (e) => {
+      if (!filled(botForm.bot_token)) {
+        e.preventDefault();
+        showErr('توکن ربات الزامی است.');
+        return;
+      }
+      if (!filled(botForm.bot_username)) {
+        e.preventDefault();
+        showErr('نام کاربری ربات را وارد کنید.');
+        return;
+      }
+      if (!filled(botForm.admin_ids)) {
+        e.preventDefault();
+        showErr('حداقل یک آیدی ادمین وارد کنید.');
+        return;
+      }
+      const ids = String(botForm.admin_ids.value).split(',').map(s => s.trim()).filter(Boolean);
+      if (!ids.length || ids.some(x => !/^\d+$/.test(x))) {
+        e.preventDefault();
+        showErr('آیدی ادمین‌ها باید عدد باشد (با کاما جدا کنید).');
+      }
+    });
+  }
+
+  const otherForm = document.querySelector('form[data-step="3"]');
+  if (otherForm) {
+    otherForm.addEventListener('submit', (e) => {
+      if (!filled(otherForm.pg_base_url)) {
+        e.preventDefault();
+        showErr('آدرس پاسارگارد الزامی است.');
+        return;
+      }
+      if (!filled(otherForm.pg_username)) {
+        e.preventDefault();
+        showErr('نام کاربری پاسارگارد را وارد کنید.');
+        return;
+      }
+      if (!filled(otherForm.pg_password)) {
+        e.preventDefault();
+        showErr('رمز پاسارگارد را وارد کنید.');
+        return;
+      }
+      if (!filled(otherForm.web_port)) {
+        e.preventDefault();
+        showErr('پورت وب‌پنل را وارد کنید.');
+        return;
+      }
+      const port = parseInt(otherForm.web_port.value, 10);
+      if (!port || port < 1 || port > 65535) {
+        e.preventDefault();
+        showErr('پورت وب نامعتبر است.');
+      }
+    });
+  }
+
   document.querySelectorAll('[data-copy]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.getAttribute('data-copy');
@@ -193,9 +277,12 @@
       if (!el) return;
       try {
         await navigator.clipboard.writeText(el.textContent.trim());
+        const prev = btn.textContent;
         btn.textContent = 'کپی شد';
-        setTimeout(() => { btn.textContent = 'کپی'; }, 1200);
-      } catch (_) {}
+        setTimeout(() => { btn.textContent = prev; }, 1200);
+      } catch (_) {
+        showErr('کپی انجام نشد — دستی انتخاب کنید.');
+      }
     });
   });
 

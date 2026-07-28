@@ -307,13 +307,15 @@ def create_api_app(lifespan=None) -> FastAPI:
         admin_ids: str = Form(...),
     ):
         if is_setup_complete():
-            return RedirectResponse("/login", status_code=303)
+            return RedirectResponse("/", status_code=303)
         begin_setup()
         token = (bot_token or "").strip()
         uname = (bot_username or "").strip().lstrip("@")
         ids_raw = (admin_ids or "").strip()
         if not token:
             return _setup_page(request, step=2, err="توکن ربات الزامی است.")
+        if not uname:
+            return _setup_page(request, step=2, err="نام کاربری ربات الزامی است.")
         try:
             ids = parse_admin_ids(ids_raw)
         except ValueError:
@@ -341,11 +343,15 @@ def create_api_app(lifespan=None) -> FastAPI:
         currency: str = Form("تومان"),
     ):
         if is_setup_complete():
-            return RedirectResponse("/login", status_code=303)
+            return RedirectResponse("/", status_code=303)
         begin_setup()
         base = (pg_base_url or "").strip()
         if not base:
             return _setup_page(request, step=3, err="آدرس پاسارگارد الزامی است.")
+        if not (pg_username or "").strip():
+            return _setup_page(request, step=3, err="نام کاربری پاسارگارد الزامی است.")
+        if not (pg_password or "").strip():
+            return _setup_page(request, step=3, err="رمز پاسارگارد الزامی است.")
         port = (web_port or "9000").strip()
         try:
             port_n = int(port)
