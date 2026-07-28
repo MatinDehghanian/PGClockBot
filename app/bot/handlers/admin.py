@@ -173,8 +173,6 @@ class AdminStates(StatesGroup):
     add_plan_days = State()
     add_plan_gb = State()
     add_plan_link = State()  # waiting for mode after basics
-    set_card = State()
-    set_card_holder = State()
     pg_search = State()
     make_reseller = State()
     ticket_reply = State()
@@ -1074,48 +1072,6 @@ async def adm_custom_grp_done(callback: CallbackQuery, session: AsyncSession, st
     text, markup = await _custom_link_summary(session)
     if callback.message:
         await callback.message.edit_text(text, reply_markup=markup)
-
-
-@router.callback_query(F.data == "adm:settings")
-async def adm_settings(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    await callback.answer()
-    card = await get_setting(session, "card_number")
-    holder = await get_setting(session, "card_holder")
-    text = f"⚙️ تنظیمات\nکارت: <code>{card or '—'}</code>\nصاحب: {holder or '—'}"
-    rows = [
-        [InlineKeyboardButton(text="💳 تنظیم کارت", callback_data="adm:set:card")],
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
-    ]
-    if callback.message:
-        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
-
-
-@router.callback_query(F.data == "adm:set:card")
-async def set_card(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    await callback.answer()
-    await state.set_state(AdminStates.set_card)
-    if callback.message:
-        await callback.message.answer("شماره کارت را بفرستید:")
-
-
-@router.message(AdminStates.set_card)
-async def save_card(message: Message, state: FSMContext, session: AsyncSession):
-    await set_setting(session, "card_number", (message.text or "").strip())
-    await state.set_state(AdminStates.set_card_holder)
-    await message.answer("نام صاحب کارت:")
-
-
-@router.message(AdminStates.set_card_holder)
-async def save_card_holder(message: Message, state: FSMContext, session: AsyncSession):
-    await set_setting(session, "card_holder", (message.text or "").strip())
-    await state.clear()
-    await message.answer("ذخیره شد ✅", reply_markup=kb.admin_home())
 
 
 @router.callback_query(F.data == "adm:users")
