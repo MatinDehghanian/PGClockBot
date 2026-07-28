@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.config import get_settings
-from app.db.models import BotUser, Order, UserService
+from app.db.models import BotUser, Order, PaymentMethod, UserService
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message, format_toman
 from app.services.orders import (
@@ -19,7 +19,9 @@ from app.services.orders import (
     get_plan,
     list_active_plans,
     pay_with_wallet,
+    stars_amount_for_toman,
     start_card_payment,
+    start_method_payment,
 )
 from app.services.users import get_all_settings, on
 
@@ -399,7 +401,11 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
 
 
 @router.callback_query(F.data.startswith("pay:discount:"))
-async def ask_discount(callback: CallbackQuery, state: FSMContext):
+async def ask_discount(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    ui = await get_all_settings(session)
+    if not on(ui.get("pay_discount_enabled")):
+        await callback.answer("کد تخفیف غیرفعال است", show_alert=True)
+        return
     await callback.answer()
     order_id = int(callback.data.split(":")[-1])
     await state.set_state(ShopStates.discount)
@@ -448,6 +454,9 @@ async def apply_discount_msg(
 @router.callback_query(F.data.startswith("pay:wallet:"))
 async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     ui = await get_all_settings(session)
+    if not on(ui.get("pay_wallet_enabled")):
+        await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
+        return
     order_id = int(callback.data.split(":")[-1])
     order = await session.get(Order, order_id)
     if not order or order.user_id != db_user.id:
@@ -494,6 +503,9 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
 @router.callback_query(F.data.startswith("pay:card:"))
 async def pay_card_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     ui = await get_all_settings(session)
+    if not on(ui.get("pay_card_enabled")):
+        await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
+        return
     order_id = int(callback.data.split(":")[-1])
     order = await session.get(Order, order_id)
     if not order or order.user_id != db_user.id:
@@ -516,3 +528,134 @@ async def pay_card_cb(callback: CallbackQuery, session: AsyncSession, db_user: B
             format_message("💳 کارت به کارت", body),
             reply_markup=kb.back_home(ui),
         )
+
+
+@router.callback_query(F.data.startswith("pay:gateway:"))
+async def pay_gateway_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    ui = await get_all_settings(session)
+    if not on(ui.get("pay_gateway_enabled")):
+        await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
+        return
+    order_id = int(callback.data.split(":")[-1])
+    order = await session.get(Order, order_id)
+    if not order or order.user_id != db_user.id:
+        await callback.answer("سفارش نامعتبر", show_alert=True)
+        return
+    await callback.answer()
+    payment = await start_method_payment(
+        session, order, db_user.id, PaymentMethod.GATEWAY.value
+    )
+    amount = format_toman(order.amount, get_settings().currency)
+    name = ui.get("gateway_name") or "درگاه پرداخت"
+    link = (ui.get("gateway_link") or "").strip()
+    if link:
+        try:
+            link = link.format(amount=order.amount, order_id=order.id, payment_id=payment.id)
+        except Exception:
+            pass
+    try:
+        body = (ui.get("gateway_pay_text") or "").format(
+            amount=amount, order_id=order.id, name=name
+        )
+    except Exception:
+        body = f"مبلغ {amount} را از طریق {name} پرداخت کنید و رسید بفرستید."
+    body += f"\n\n(پرداخت #{payment.id})"
+    rows: list[list[InlineKeyboardButton]] = []
+    if link.startswith("http://") or link.startswith("https://"):
+        rows.append([InlineKeyboardButton(text=f"🌐 ورود به {name}", url=link)])
+    rows.append([InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="menu:home")])
+    if callback.message:
+        await callback.message.edit_text(
+            format_message(f"🌐 {name}", body),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
+@router.callback_query(F.data.startswith("pay:crypto:"))
+async def pay_crypto_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    ui = await get_all_settings(session)
+    if not on(ui.get("pay_crypto_enabled")):
+        await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
+        return
+    order_id = int(callback.data.split(":")[-1])
+    order = await session.get(Order, order_id)
+    if not order or order.user_id != db_user.id:
+        await callback.answer("سفارش نامعتبر", show_alert=True)
+        return
+    address = (ui.get("crypto_address") or "").strip()
+    if not address:
+        await callback.answer("آدرس ولت تنظیم نشده — به ادمین اطلاع دهید", show_alert=True)
+        return
+    await callback.answer()
+    payment = await start_method_payment(
+        session, order, db_user.id, PaymentMethod.CRYPTO.value
+    )
+    amount = format_toman(order.amount, get_settings().currency)
+    try:
+        body = (ui.get("crypto_pay_text") or "").format(
+            amount=amount,
+            asset=ui.get("crypto_asset") or "USDT",
+            network=ui.get("crypto_network") or "—",
+            address=address,
+        )
+    except Exception:
+        body = (
+            f"مبلغ {amount}\n"
+            f"{ui.get('crypto_asset') or 'USDT'} ({ui.get('crypto_network') or '—'})\n"
+            f"<code>{address}</code>\n\nرسید را بفرستید."
+        )
+    body += f"\n\n(پرداخت #{payment.id})"
+    if callback.message:
+        await callback.message.edit_text(
+            format_message("💎 رمزارز", body),
+            reply_markup=kb.back_home(ui),
+        )
+
+
+@router.callback_query(F.data.startswith("pay:stars:"))
+async def pay_stars_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    from aiogram.types import LabeledPrice
+
+    ui = await get_all_settings(session)
+    if not on(ui.get("pay_stars_enabled")):
+        await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
+        return
+    order_id = int(callback.data.split(":")[-1])
+    order = await session.get(Order, order_id)
+    if not order or order.user_id != db_user.id:
+        await callback.answer("سفارش نامعتبر", show_alert=True)
+        return
+    await callback.answer()
+    payment = await start_method_payment(
+        session, order, db_user.id, PaymentMethod.STARS.value
+    )
+    try:
+        rate = int(float(ui.get("stars_toman_per_star") or 500))
+    except ValueError:
+        rate = 500
+    stars = stars_amount_for_toman(order.amount, rate)
+    title = (ui.get("stars_title") or "خرید سرویس")[:32]
+    desc = (ui.get("stars_description") or f"سفارش #{order.id}")[:255]
+    try:
+        await callback.bot.send_invoice(
+            chat_id=db_user.telegram_id,
+            title=title,
+            description=desc,
+            payload=f"stars:{payment.id}:{order.id}",
+            currency="XTR",
+            prices=[LabeledPrice(label=title, amount=stars)],
+            provider_token="",
+        )
+        if callback.message:
+            await callback.message.edit_text(
+                format_message(
+                    "⭐ استارز تلگرام",
+                    f"فاکتور {stars} استارز برای سفارش #{order.id} ارسال شد.\n"
+                    f"(معادل تقریبی {format_toman(order.amount, get_settings().currency)})",
+                ),
+                reply_markup=kb.back_home(ui),
+            )
+    except Exception as e:
+        await callback.message.answer(f"خطا در ساخت فاکتور استارز: {e}")

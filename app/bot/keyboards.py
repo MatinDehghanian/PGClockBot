@@ -228,34 +228,70 @@ def plan_actions(plan_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
 
 
 def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+    rows: list[list[InlineKeyboardButton]] = []
+    if on(_t(ui, "pay_wallet_enabled")):
+        rows.append(
             [
                 InlineKeyboardButton(
                     text=_t(ui, "btn_pay_wallet"),
                     callback_data=f"pay:wallet:{order_id}",
                 )
-            ],
+            ]
+        )
+    if on(_t(ui, "pay_card_enabled")):
+        rows.append(
             [
                 InlineKeyboardButton(
                     text=_t(ui, "btn_pay_card"),
                     callback_data=f"pay:card:{order_id}",
                 )
-            ],
+            ]
+        )
+    if on(_t(ui, "pay_gateway_enabled")):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_t(ui, "btn_pay_gateway"),
+                    callback_data=f"pay:gateway:{order_id}",
+                )
+            ]
+        )
+    if on(_t(ui, "pay_crypto_enabled")):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_t(ui, "btn_pay_crypto"),
+                    callback_data=f"pay:crypto:{order_id}",
+                )
+            ]
+        )
+    if on(_t(ui, "pay_stars_enabled")):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_t(ui, "btn_pay_stars"),
+                    callback_data=f"pay:stars:{order_id}",
+                )
+            ]
+        )
+    if on(_t(ui, "pay_discount_enabled")):
+        rows.append(
             [
                 InlineKeyboardButton(
                     text=_t(ui, "btn_pay_discount"),
                     callback_data=f"pay:discount:{order_id}",
                 )
-            ],
-            [
-                InlineKeyboardButton(
-                    text=_t(ui, "btn_cancel"),
-                    callback_data="menu:home",
-                )
-            ],
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=_t(ui, "btn_cancel"),
+                callback_data="menu:home",
+            )
         ]
     )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def services_keyboard(services: list, ui: dict | None = None) -> InlineKeyboardMarkup:

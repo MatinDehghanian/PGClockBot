@@ -40,6 +40,9 @@ class OrderStatus(str, Enum):
 class PaymentMethod(str, Enum):
     WALLET = "wallet"
     CARD = "card"
+    GATEWAY = "gateway"
+    CRYPTO = "crypto"
+    STARS = "stars"
 
 
 class PaymentStatus(str, Enum):

@@ -161,6 +161,9 @@ DEFAULT_SETTINGS = {
     "btn_back": "⬅️ بازگشت",
     "btn_pay_wallet": "🟢👛 پرداخت از کیف پول",
     "btn_pay_card": "🔵💳 کارت به کارت",
+    "btn_pay_gateway": "🟢🌐 درگاه پرداخت",
+    "btn_pay_crypto": "🟡💎 رمزارز",
+    "btn_pay_stars": "⭐ استارز تلگرام",
     "btn_pay_discount": "🏷 کد تخفیف",
     "btn_cancel": "❌ انصراف",
     "btn_renew": "🔄 تمدید",
@@ -185,6 +188,32 @@ DEFAULT_SETTINGS = {
     "custom_plan_max_days": "365",
     "custom_plan_template_id": "",
     "custom_plan_group_ids": "",
+    # Payment methods
+    "pay_wallet_enabled": "1",
+    "pay_card_enabled": "1",
+    "pay_gateway_enabled": "0",
+    "pay_crypto_enabled": "0",
+    "pay_stars_enabled": "0",
+    "pay_discount_enabled": "1",
+    "gateway_name": "درگاه پرداخت",
+    "gateway_link": "",
+    "gateway_pay_text": (
+        "مبلغ قابل پرداخت: <b>{amount}</b>\n"
+        "از دکمه زیر وارد درگاه شوید و پرداخت را انجام دهید.\n"
+        "سپس عکس رسید را در همین گفتگو بفرستید."
+    ),
+    "crypto_asset": "USDT",
+    "crypto_network": "TRC20",
+    "crypto_address": "",
+    "crypto_pay_text": (
+        "مبلغ تقریبی سفارش: <b>{amount}</b>\n"
+        "رمزارز: <b>{asset}</b> ({network})\n"
+        "آدرس ولت:\n<code>{address}</code>\n\n"
+        "پس از واریز، عکس رسید/هش تراکنش را در همین گفتگو بفرستید."
+    ),
+    "stars_toman_per_star": "500",
+    "stars_title": "خرید سرویس",
+    "stars_description": "پرداخت سفارش با استارز تلگرام",
 }
 
 # field kinds: text | textarea | toggle | select | number | image
@@ -197,10 +226,10 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("menu", "منوی بات"),
     ("qr", "QR اشتراک"),
     ("payment", "پرداخت"),
+    ("naming", "نام‌گذاری سرویس"),
     ("forcejoin", "کانال اجباری"),
     ("notifications", "نوتیفیکیشن"),
     ("update", "آپدیت"),
-    ("users", "کاربر و پلن"),
     ("bot", "ربات و اتصال"),
 ]
 
@@ -213,7 +242,6 @@ SETTING_GROUPS = {
             "textarea",
             "اولین پیامی که کاربر بعد از استارت می‌بیند. متغیر: {name}",
         ),
-        ("trial_enabled", "نمایش پلن تست رایگان", "toggle", "اگر پلن تست ساخته‌اید، در فروشگاه دیده شود"),
     ],
     "متن پیام‌ها": [
         ("guide_text", "متن راهنما", "textarea", "دکمه راهنما در منوی کاربر"),
@@ -225,7 +253,6 @@ SETTING_GROUPS = {
         ("delivery_title", "عنوان پیام تحویل سرویس", "text", "مثلاً: ✅ سرویس آماده است"),
         ("purchase_success_text", "متن موفقیت خرید", "textarea", "متغیر: {order_id} — پیام کوتاه موفقیت (جزئیات روی QR است)"),
         ("wallet_success_text", "متن موفقیت شارژ کیف پول", "textarea", "متغیر: {amount}"),
-        ("payment_reject_text", "متن رد پرداخت", "textarea", "وقتی ادمین رسید را رد می‌کند"),
     ],
     "متن دکمه‌های منو": [
         ("btn_shop", "دکمه خرید", "text", ""),
@@ -239,9 +266,6 @@ SETTING_GROUPS = {
         ("btn_reseller", "دکمه نماینده", "text", ""),
         ("btn_admin", "دکمه ادمین", "text", ""),
         ("btn_back", "دکمه بازگشت", "text", ""),
-        ("btn_pay_wallet", "پرداخت با کیف پول", "text", ""),
-        ("btn_pay_card", "پرداخت کارت‌به‌کارت", "text", ""),
-        ("btn_pay_discount", "کد تخفیف", "text", ""),
         ("btn_cancel", "انصراف", "text", ""),
         ("btn_renew", "تمدید", "text", ""),
         ("btn_sub_link", "لینک و QR", "text", ""),
@@ -267,31 +291,60 @@ SETTING_GROUPS = {
         ("qr_caption", "کپشن عکس QR", "textarea", "جزئیات لینک/حجم/زمان خودکار اضافه می‌شود. متغیر: {url}"),
         ("qr_background", "عکس پس‌زمینه QR", "image", "اختیاری — PNG/JPG"),
     ],
-    "پرداخت": [
+    "روش‌های پرداخت": [
+        ("pay_wallet_enabled", "کیف پول داخلی", "toggle", "پرداخت از موجودی کیف پول کاربر"),
+        ("pay_card_enabled", "کارت به کارت", "toggle", ""),
+        ("pay_gateway_enabled", "درگاه پرداخت", "toggle", "لینک درگاه خارجی + ارسال رسید"),
+        ("pay_crypto_enabled", "رمزارز", "toggle", ""),
+        ("pay_stars_enabled", "استارز تلگرام", "toggle", "پرداخت درون‌برنامه‌ای با ⭐"),
+        ("pay_discount_enabled", "کد تخفیف", "toggle", "نمایش دکمه کد تخفیف هنگام پرداخت"),
         ("auto_approve_payments", "تأیید خودکار رسید", "toggle", "روشن = بلافاصله بعد از رسید، سرویس تحویل می‌شود"),
-        ("card_number", "شماره کارت", "text", "۱۶ رقم — برای کارت‌به‌کارت"),
+        ("referral_bonus", "پاداش دعوت (تومان)", "number", "هدیه به معرف بعد از خرید موفق دعوت‌شده"),
+        ("payment_reject_text", "متن رد پرداخت", "textarea", "وقتی ادمین رسید را رد می‌کند"),
+    ],
+    "کارت به کارت": [
+        ("card_number", "شماره کارت", "text", "۱۶ رقم"),
         ("card_holder", "نام صاحب کارت", "text", ""),
         ("card_pay_text", "راهنمای کارت‌به‌کارت", "textarea", "متغیرها: {amount} {card} {holder}"),
-        ("referral_bonus", "پاداش دعوت (تومان)", "number", "هدیه به معرف بعد از خرید موفق دعوت‌شده"),
+        ("btn_pay_card", "متن دکمه کارت به کارت", "text", ""),
     ],
-    "کاربر و پلن دلخواه": [
-        ("pg_username_prefix", "پیشوند یوزرنیم سرویس", "text", "مثلاً clk"),
-        ("pg_username_suffix", "پسوند یوزرنیم سرویس", "text", "اختیاری"),
+    "درگاه پرداخت": [
+        ("gateway_name", "نام درگاه", "text", "مثلاً زرین‌پال"),
+        ("gateway_link", "لینک درگاه / صفحه پرداخت", "text", "می‌تواند شامل {amount} یا {order_id} باشد"),
+        ("gateway_pay_text", "راهنمای درگاه", "textarea", "متغیرها: {amount} {order_id} {name}"),
+        ("btn_pay_gateway", "متن دکمه درگاه", "text", ""),
+    ],
+    "رمزارز": [
+        ("crypto_asset", "رمزارز", "text", "مثلاً USDT"),
+        ("crypto_network", "شبکه", "text", "مثلاً TRC20"),
+        ("crypto_address", "آدرس ولت", "text", ""),
+        ("crypto_pay_text", "راهنمای رمزارز", "textarea", "متغیرها: {amount} {asset} {network} {address}"),
+        ("btn_pay_crypto", "متن دکمه رمزارز", "text", ""),
+    ],
+    "استارز تلگرام": [
+        (
+            "stars_toman_per_star",
+            "هر استارز چند تومان؟",
+            "number",
+            "مثال: اگر ۵۰۰ باشد، سفارش ۱۰۰٬۰۰۰ تومانی = ۲۰۰ استارز",
+        ),
+        ("stars_title", "عنوان فاکتور", "text", ""),
+        ("stars_description", "توضیح فاکتور", "text", ""),
+        ("btn_pay_stars", "متن دکمه استارز", "text", ""),
+    ],
+    "متن دکمه‌های پرداخت": [
+        ("btn_pay_wallet", "پرداخت با کیف پول", "text", ""),
+        ("btn_pay_discount", "کد تخفیف", "text", ""),
+    ],
+    "نام‌گذاری سرویس در پاسارگارد": [
+        ("pg_username_prefix", "پیشوند ثابت", "text", "مثلاً clk — اول نام کاربر ساخته‌شده"),
+        ("pg_username_suffix", "پسوند ثابت", "text", "اختیاری — ته نام"),
         (
             "pg_username_pattern",
-            "الگوی یوزرنیم",
+            "الگوی نام",
             "text",
-            "متغیرها: {prefix} {random} {suffix} {id} — مثال: {prefix}_{random}{suffix}",
+            "متغیرها: {prefix} {random} {suffix} {id} — پیش‌فرض: {prefix}_{random}{suffix}",
         ),
-        ("custom_plan_enabled", "فعال‌سازی پلن دلخواه کاربر", "toggle", "کاربر می‌تواند حجم و روز دلخواه بسازد"),
-        ("custom_plan_price_per_gb", "قیمت هر گیگ (تومان)", "number", ""),
-        ("custom_plan_price_per_day", "قیمت هر روز (تومان)", "number", ""),
-        ("custom_plan_min_gb", "حداقل گیگ", "number", ""),
-        ("custom_plan_max_gb", "حداکثر گیگ", "number", ""),
-        ("custom_plan_min_days", "حداقل روز", "number", ""),
-        ("custom_plan_max_days", "حداکثر روز", "number", ""),
-        ("custom_plan_template_id", "تمپلیت پاسارگارد (اختیاری)", "text", "شناسه تمپلیت؛ خالی = ساخت سفارشی"),
-        ("custom_plan_group_ids", "گروه‌های اینباند", "text", "شناسه‌ها با کاما"),
     ],
     "کانال اجباری": [
         ("force_join_enabled", "عضویت اجباری کانال", "toggle", "قبل از استفاده از ربات"),
@@ -299,18 +352,25 @@ SETTING_GROUPS = {
     ],
 }
 
-# Map tab id → which SETTING_GROUPS cards to show (menu/notifications/update are special)
+# Map tab id → which SETTING_GROUPS cards to show (menu/notifications/update/naming special)
 TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "menu": ["نمایش منو"],
     "welcome": ["خوش‌آمد و هویت"],
     "messages": ["متن پیام‌ها"],
     "buttons": ["متن دکمه‌های منو"],
     "qr": ["QR اشتراک"],
-    "payment": ["پرداخت"],
+    "payment": [
+        "روش‌های پرداخت",
+        "کارت به کارت",
+        "درگاه پرداخت",
+        "رمزارز",
+        "استارز تلگرام",
+        "متن دکمه‌های پرداخت",
+    ],
+    "naming": ["نام‌گذاری سرویس در پاسارگارد"],
     "forcejoin": ["کانال اجباری"],
     "notifications": [],
     "update": [],
-    "users": ["کاربر و پلن دلخواه"],
     "bot": [],
 }
 
@@ -327,6 +387,16 @@ IMAGE_KEYS = {
     for item in fields
     if len(item) >= 3 and item[2] == "image"
 }
+
+
+def keys_for_tab(tab: str) -> set[str]:
+    """Setting keys that belong to a settings tab (prevents wiping other tabs on save)."""
+    names = TAB_SETTING_GROUPS.get(tab) or []
+    keys: set[str] = set()
+    for name in names:
+        for item in SETTING_GROUPS.get(name, []):
+            keys.add(item[0])
+    return keys
 
 
 async def ensure_default_settings(session: AsyncSession) -> None:

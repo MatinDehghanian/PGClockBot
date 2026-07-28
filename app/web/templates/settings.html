@@ -5,7 +5,7 @@
 <div class="page-head">
   <div>
     <h1>تنظیمات</h1>
-    <p>متن‌ها، منو، پرداخت، نوتیفیکیشن و آپدیت — با پیش‌نمایش زنده شبیه تلگرام.</p>
+    <p>متن‌ها، منو، پرداخت، نام‌گذاری سرویس و آپدیت — با پیش‌نمایش زنده شبیه تلگرام.</p>
   </div>
 </div>
 
@@ -38,6 +38,24 @@
       {% endfor %}
       <div class="actions sticky-actions">
         <button class="btn" type="submit">ذخیره تنظیمات</button>
+      </div>
+    </form>
+  {% elif tab == 'naming' %}
+    {% include "_settings_naming.html" %}
+    <form method="post" action="/settings?tab=naming" enctype="multipart/form-data" class="settings-form" id="settings-form">
+      {% for group_name in tab_groups %}
+      {% set fields = groups[group_name] %}
+      <div class="card settings-card">
+        <h2>{{ group_name }}</h2>
+        <div class="settings-grid">
+        {% for field in fields %}
+          {% include "_settings_field.html" %}
+        {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      <div class="actions sticky-actions">
+        <button class="btn" type="submit">ذخیره نام‌گذاری</button>
       </div>
     </form>
   {% else %}
@@ -234,6 +252,35 @@
   if (active && window.MutationObserver) {
     new MutationObserver(render).observe(active, {childList:true, subtree:true});
   }
+})();
+</script>
+{% endif %}
+{% if tab == 'naming' %}
+<script>
+(function(){
+  const form = document.getElementById('settings-form');
+  const sample = document.getElementById('naming-sample');
+  if (!form || !sample) return;
+  function rnd(){ return Math.random().toString(36).slice(2,10); }
+  function render(){
+    const prefix = (form.querySelector('[name="s_pg_username_prefix"]')||{}).value || 'clk';
+    const suffix = (form.querySelector('[name="s_pg_username_suffix"]')||{}).value || '';
+    const pattern = (form.querySelector('[name="s_pg_username_pattern"]')||{}).value || '{prefix}_{random}{suffix}';
+    let out;
+    try {
+      out = pattern
+        .replaceAll('{prefix}', prefix)
+        .replaceAll('{suffix}', suffix)
+        .replaceAll('{random}', rnd())
+        .replaceAll('{id}', '42');
+    } catch (e) {
+      out = prefix + '_' + rnd() + suffix;
+    }
+    sample.textContent = out;
+  }
+  form.addEventListener('input', render);
+  form.addEventListener('change', render);
+  render();
 })();
 </script>
 {% endif %}
