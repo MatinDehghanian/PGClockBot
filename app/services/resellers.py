@@ -46,14 +46,14 @@ SETUP_TOKEN_HOURS = 48
 
 
 async def get_reseller_panel_base_url(session: AsyncSession) -> str:
-    """Admin-configured reseller panel URL, else PUBLIC_BASE_URL."""
-    from app.config import get_settings
+    """Custom reseller URL → PUBLIC_BASE_URL → http://{server_ip}:{WEB_PORT}."""
+    from app.services.setup_wizard import default_panel_base_url
     from app.services.users import get_setting
 
     custom = (await get_setting(session, "reseller_panel_base_url") or "").strip().rstrip("/")
     if custom:
         return custom
-    return (get_settings().public_base_url or "").strip().rstrip("/")
+    return default_panel_base_url()
 
 
 def parse_perms(raw: str | None) -> list[str]:
@@ -453,12 +453,19 @@ async def provision_reseller(
     )
 
     base = (panel_base_url or "").rstrip("/")
+    if not base:
+        base = await get_reseller_panel_base_url(session)
     setup_url = f"{base}/rsetup/{profile.setup_token}" if base and profile.setup_token else ""
+
+    from app.config import get_settings
+
+    pg_panel = (get_settings().pg_base_url or "").rstrip("/")
 
     return {
         "profile": profile,
         "pg_username": pg_username,
         "pg_password": pg_password,
+        "pg_panel_url": pg_panel,
         "setup_url": setup_url,
         "setup_token": profile.setup_token,
         "panel_url": base,
@@ -468,40 +475,52 @@ async def provision_reseller(
 
 
 def format_credentials_message(creds: dict) -> str:
-    """Notify reseller after approval — setup link only (no web passwords)."""
+    """Notify reseller after approval — always include web panel URL."""
     lines = [
         "✅ <b>درخواست نمایندگی تأیید شد</b>",
         "",
         f"کمیسیون شما: <b>{creds.get('commission_percent', 0)}٪</b>",
-        "",
-        "برای امنیت، یوزر و رمز وب‌پنل را خودتان می‌سازید.",
     ]
+
+    panel = (creds.get("panel_url") or "").rstrip("/")
+    lines += [
+        "",
+        "🌐 <b>وب‌پنل ربات (نماینده)</b>",
+    ]
+    if panel:
+        lines += [
+            f"آدرس پنل: {panel}",
+            f"آدرس ورود: {panel}/login",
+        ]
+    else:
+        lines.append("آدرس پنل هنوز تنظیم نشده — از ادمین بپرسید.")
+
     if creds.get("setup_url"):
         lines += [
             "",
             "🔗 <b>لینک راه‌اندازی (یک‌بارمصرف، ۴۸ ساعت)</b>",
             creds["setup_url"],
             "",
-            "در این صفحه:",
-            "۱) نام کاربری و رمز وب‌پنل خود را بسازید",
-            "۲) توکن ربات اختصاصی‌تان از @BotFather را وارد کنید",
+            "در این صفحه یوزر/رمز وب و توکن ربات اختصاصی‌تان را می‌سازید.",
+            "برای امنیت، یوزر و رمز را خودتان انتخاب کنید.",
         ]
-        panel = (creds.get("panel_url") or "").rstrip("/")
-        if panel:
-            lines += ["", f"ورود بعدی به پنل: {panel}/login"]
     else:
         lines += [
             "",
-            "از ادمین بخواهید لینک راه‌اندازی را برایتان بفرستد.",
+            "لینک راه‌اندازی ساخته نشد — از ادمین لینک بخواهید.",
         ]
+
     if creds.get("pg_username") and creds.get("pg_password"):
         lines += [
             "",
-            "🛡 <b>اکانت پاسارگارد (اختیاری — توسط ادمین ساخته شد)</b>",
+            "🛡 <b>اکانت پاسارگارد</b>",
             f"نام کاربری: <code>{creds['pg_username']}</code>",
             f"رمز: <code>{creds['pg_password']}</code>",
             "رمز را عوض کنید و در جای امن نگه دارید.",
         ]
+    if creds.get("pg_panel_url"):
+        lines += [f"آدرس پاسارگارد: {creds['pg_panel_url']}"]
+
     lines += [
         "",
         "⚠️ لینک راه‌اندازی را با کسی به اشتراک نگذارید.",
