@@ -227,11 +227,3 @@ async def send_subscription_qr_photo(
         return True
     except Exception:
         return False
-
-
-# Back-compat for callers that only need text+markup
-async def build_approved_user_text(
-    session: AsyncSession, payment: Payment, order
-) -> tuple[str, Any]:
-    payload = await build_delivery_content(session, payment, order)
-    return payload["text"], payload["markup"]

@@ -252,6 +252,20 @@ def plan_actions(plan_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
     )
 
 
+def any_checkout_method_enabled(ui: dict | None = None) -> bool:
+    """True if at least one real checkout method (not just discount) is on."""
+    return any(
+        on(_t(ui, k))
+        for k in (
+            "pay_wallet_enabled",
+            "pay_card_enabled",
+            "pay_gateway_enabled",
+            "pay_crypto_enabled",
+            "pay_stars_enabled",
+        )
+    )
+
+
 def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if on(_t(ui, "pay_wallet_enabled")):
@@ -315,6 +329,37 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                 callback_data="menu:home",
             )
         ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def topup_pay_methods(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Payment methods for wallet top-up (no wallet method). Amount lives in FSM."""
+    rows: list[list[InlineKeyboardButton]] = []
+    if on(_t(ui, "pay_card_enabled")):
+        rows.append(
+            [InlineKeyboardButton(text=_t(ui, "btn_pay_card"), callback_data="wtop:card")]
+        )
+    if on(_t(ui, "pay_gateway_enabled")):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_t(ui, "btn_pay_gateway"),
+                    callback_data="wtop:gateway",
+                )
+            ]
+        )
+    if on(_t(ui, "pay_crypto_enabled")):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_t(ui, "btn_pay_crypto"),
+                    callback_data="wtop:crypto",
+                )
+            ]
+        )
+    rows.append(
+        [InlineKeyboardButton(text=_t(ui, "btn_cancel"), callback_data="wallet:home")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

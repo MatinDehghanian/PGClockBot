@@ -234,6 +234,11 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     await session.commit()
     await session.refresh(order)
     try:
+        if order.note and order.note.startswith("renew:") and order.service_id and order.plan_id:
+            service = await session.get(UserService, order.service_id)
+            plan = await session.get(Plan, order.plan_id)
+            if service and plan:
+                return await apply_renewal(session, order, service, plan)
         return await deliver_order(session, order)
     except Exception:
         if order.amount > 0:
@@ -241,6 +246,24 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
         order.status = OrderStatus.PENDING.value
         await session.commit()
         raise
+
+
+async def mark_order_free_paid(session: AsyncSession, order: Order, user_id: int) -> Order:
+    """Mark a zero-amount order as paid with an approved payment row."""
+    order.status = OrderStatus.PAID.value
+    order.payment_method = PaymentMethod.WALLET.value
+    session.add(
+        Payment(
+            order_id=order.id,
+            user_id=user_id,
+            amount=0,
+            method=PaymentMethod.WALLET.value,
+            status=PaymentStatus.APPROVED.value,
+        )
+    )
+    await session.commit()
+    await session.refresh(order)
+    return order
 
 
 async def start_card_payment(session: AsyncSession, order: Order, user_id: int) -> Payment:
@@ -425,11 +448,17 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
     return order
 
 
-async def create_wallet_topup(session: AsyncSession, user_id: int, amount: int) -> Payment:
+async def create_wallet_topup(
+    session: AsyncSession,
+    user_id: int,
+    amount: int,
+    *,
+    method: str = PaymentMethod.CARD.value,
+) -> Payment:
     payment = Payment(
         user_id=user_id,
         amount=amount,
-        method=PaymentMethod.CARD.value,
+        method=method,
         status=PaymentStatus.PENDING.value,
         is_wallet_topup=True,
     )
@@ -445,9 +474,8 @@ async def renew_service_with_plan(
     user_id: int,
     service: UserService,
     plan: Plan,
-    pay_wallet: bool,
-    user,
 ) -> Order:
+    """Create a pending renewal order. Caller shows pay_methods (or uses pay_with_wallet)."""
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
@@ -458,33 +486,6 @@ async def renew_service_with_plan(
     )
     session.add(order)
     await session.commit()
-    await session.refresh(order)
-
-    if pay_wallet:
-        try:
-            if order.amount > 0:
-                await debit_wallet(session, user, order.amount, f"تمدید سفارش #{order.id}")
-            order.payment_method = PaymentMethod.WALLET.value
-            order.status = OrderStatus.PAID.value
-            session.add(
-                Payment(
-                    order_id=order.id,
-                    user_id=user_id,
-                    amount=order.amount,
-                    method=PaymentMethod.WALLET.value,
-                    status=PaymentStatus.APPROVED.value,
-                )
-            )
-            await session.commit()
-            return await apply_renewal(session, order, service, plan)
-        except Exception:
-            if order.amount > 0 and order.status == OrderStatus.PAID.value:
-                await credit_wallet(session, user, order.amount, f"برگشت تمدید ناموفق #{order.id}")
-            order.status = OrderStatus.PENDING.value
-            await session.commit()
-            raise
-
-    await start_card_payment(session, order, user_id)
     await session.refresh(order)
     return order
 

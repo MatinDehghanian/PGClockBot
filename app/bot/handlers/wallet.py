@@ -3,24 +3,31 @@ from __future__ import annotations
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.config import get_settings
-from app.db.models import BotUser, Payment, PaymentStatus
-from app.services.formatting import format_message, format_toman
+from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus
+from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import attach_receipt, create_wallet_topup
 from app.services.receipts import process_receipt
-from app.services.users import get_all_settings, get_setting
+from app.services.users import get_all_settings, on
 from app.services.wallet import list_transactions
 
 router = Router(name="wallet")
 
+_TOPUP_METHODS = {
+    "card": ("pay_card_enabled", PaymentMethod.CARD.value),
+    "gateway": ("pay_gateway_enabled", PaymentMethod.GATEWAY.value),
+    "crypto": ("pay_crypto_enabled", PaymentMethod.CRYPTO.value),
+}
+
 
 class WalletStates(StatesGroup):
     topup_amount = State()
+    choose_method = State()
     waiting_receipt = State()
 
 
@@ -28,14 +35,15 @@ class WalletStates(StatesGroup):
 async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
     ui = await get_all_settings(session)
-    from app.services.formatting import info_block, kv_line
-
     text = format_message(
         "👛 کیف پول",
-        info_block(
+        "\n".join(
             [
-                kv_line("💵", "موجودی", f"<b>{format_toman(db_user.wallet_balance, get_settings().currency)}</b>"),
-                "<i>می‌توانید شارژ کنید یا از موجودی برای خرید استفاده کنید.</i>",
+                kv_line(
+                    "💵",
+                    "موجودی",
+                    f"<b>{format_toman(db_user.wallet_balance, get_settings().currency)}</b>",
+                ),
             ]
         ),
     )
@@ -46,16 +54,18 @@ async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: B
 @router.callback_query(F.data == "wallet:tx")
 async def wallet_tx(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
-    txs = await list_transactions(session, db_user.id)
+    ui = await get_all_settings(session)
+    txs = await list_transactions(session, db_user.id, limit=15)
     if not txs:
-        body = "تراکنشی ثبت نشده است."
+        body = "تراکنشی نیست."
     else:
         lines = []
         for t in txs:
-            sign = "+" if t.amount > 0 else ""
-            lines.append(f"{sign}{t.amount:,} — {t.reason}".replace(",", "٬"))
+            sign = "+" if t.amount >= 0 else ""
+            lines.append(
+                f"{sign}{format_toman(t.amount, get_settings().currency)} — {t.reason}"
+            )
         body = "\n".join(lines)
-    ui = await get_all_settings(session)
     if callback.message:
         await callback.message.edit_text(
             format_message("📜 تراکنش‌ها", body),
@@ -64,7 +74,15 @@ async def wallet_tx(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 
 
 @router.callback_query(F.data == "wallet:topup")
-async def wallet_topup(callback: CallbackQuery, state: FSMContext):
+async def wallet_topup(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    ui = await get_all_settings(session)
+    can_topup = any(
+        on(ui.get(k))
+        for k in ("pay_card_enabled", "pay_gateway_enabled", "pay_crypto_enabled")
+    )
+    if not can_topup:
+        await callback.answer("روش شارژ فعالی تنظیم نشده", show_alert=True)
+        return
     await callback.answer()
     await state.set_state(WalletStates.topup_amount)
     if callback.message:
@@ -76,9 +94,10 @@ async def wallet_topup(callback: CallbackQuery, state: FSMContext):
 
 @router.message(WalletStates.topup_amount)
 async def wallet_topup_amount(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
+    ui = await get_all_settings(session)
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer(format_message("لغو شد", "عملیات لغو شد."), reply_markup=kb.back_home())
+        await message.answer(format_message("لغو شد", "عملیات لغو شد."), reply_markup=kb.back_home(ui))
         return
     try:
         amount = int((message.text or "").replace(",", "").replace("٬", "").strip())
@@ -87,19 +106,90 @@ async def wallet_topup_amount(message: Message, state: FSMContext, session: Asyn
     except ValueError:
         await message.answer(format_message("⚠️ خطا", "مبلغ معتبر وارد کنید (حداقل ۱۰۰۰)."))
         return
-    payment = await create_wallet_topup(session, db_user.id, amount)
-    await state.set_state(WalletStates.waiting_receipt)
-    await state.update_data(payment_id=payment.id)
-    card = await get_setting(session, "card_number")
-    holder = await get_setting(session, "card_holder")
+    await state.set_state(WalletStates.choose_method)
+    await state.update_data(topup_amount=amount)
     await message.answer(
         format_message(
-            "💳 واریز",
-            f"مبلغ {format_toman(amount, get_settings().currency)} را به کارت زیر واریز کنید:\n"
-            f"<code>{card or '—'}</code>\n{holder or ''}\n\nسپس عکس رسید را بفرستید.",
+            "➕ شارژ کیف پول",
+            f"مبلغ: <b>{format_toman(amount, get_settings().currency)}</b>\nروش واریز را انتخاب کنید:",
         ),
-        reply_markup=kb.cancel_reply(),
+        reply_markup=kb.topup_pay_methods(ui),
     )
+
+
+async def _topup_instructions(session: AsyncSession, payment: Payment, method: str) -> tuple[str, InlineKeyboardMarkup]:
+    ui = await get_all_settings(session)
+    amount = format_toman(payment.amount, get_settings().currency)
+    rows: list[list[InlineKeyboardButton]] = []
+    if method == PaymentMethod.CARD.value:
+        try:
+            body = ui["card_pay_text"].format(
+                amount=amount,
+                card=ui.get("card_number") or "—",
+                holder=ui.get("card_holder") or "—",
+            )
+        except Exception:
+            body = (
+                f"مبلغ {amount} را کارت به کارت کنید:\n"
+                f"<code>{ui.get('card_number') or '—'}</code>\n{ui.get('card_holder') or ''}"
+            )
+        title = "💳 کارت به کارت"
+    elif method == PaymentMethod.GATEWAY.value:
+        name = ui.get("gateway_name") or "درگاه"
+        link = (ui.get("gateway_link") or "").strip()
+        if link:
+            try:
+                link = link.format(amount=payment.amount, order_id=0, payment_id=payment.id)
+            except Exception:
+                pass
+        try:
+            body = (ui.get("gateway_pay_text") or "").format(
+                amount=amount, order_id=0, name=name
+            )
+        except Exception:
+            body = f"مبلغ {amount} را از طریق {name} پرداخت کنید."
+        if link.startswith("http://") or link.startswith("https://"):
+            rows.append([InlineKeyboardButton(text=f"ورود به {name}", url=link)])
+        title = f"🌐 {name}"
+    else:
+        address = (ui.get("crypto_address") or "").strip() or "—"
+        try:
+            body = (ui.get("crypto_pay_text") or "").format(
+                amount=amount,
+                asset=ui.get("crypto_asset") or "USDT",
+                network=ui.get("crypto_network") or "—",
+                address=address,
+            )
+        except Exception:
+            body = f"{ui.get('crypto_asset') or 'USDT'}: <code>{address}</code>\nمبلغ تقریبی {amount}"
+        title = "💎 رمزارز"
+    body += f"\n\nسپس عکس رسید را بفرستید.\n(پرداخت #{payment.id})"
+    rows.append([InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="wallet:home")])
+    return format_message(title, body), InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@router.callback_query(F.data.in_({"wtop:card", "wtop:gateway", "wtop:crypto"}))
+async def wtop_choose_method(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser
+):
+    ui = await get_all_settings(session)
+    key = (callback.data or "").split(":")[-1]
+    flag, method = _TOPUP_METHODS[key]
+    if not on(ui.get(flag)):
+        await callback.answer("غیرفعال است", show_alert=True)
+        return
+    data = await state.get_data()
+    amount = int(data.get("topup_amount") or 0)
+    if amount < 1000:
+        await callback.answer("ابتدا مبلغ شارژ را وارد کنید", show_alert=True)
+        return
+    payment = await create_wallet_topup(session, db_user.id, amount, method=method)
+    await callback.answer()
+    text, markup = await _topup_instructions(session, payment, method)
+    await state.set_state(WalletStates.waiting_receipt)
+    await state.update_data(payment_id=payment.id, topup_amount=None)
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=markup)
 
 
 @router.message(WalletStates.waiting_receipt, F.photo)
@@ -126,7 +216,7 @@ async def wallet_receipt_photo(message: Message, state: FSMContext, session: Asy
 
 @router.message(F.photo)
 async def generic_receipt(message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext):
-    """Attach photo to latest awaiting card payment for this user."""
+    """Attach photo to latest awaiting payment for this user."""
     current = await state.get_state()
     if current:
         return

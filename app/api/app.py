@@ -33,7 +33,7 @@ from app.db.models import (
 )
 from app.db.session import SessionLocal
 from app.services.orders import approve_payment, deliver_order, reject_payment
-from app.services.pasarguard import get_pg, parse_group_ids
+from app.services.pasarguard import get_pg
 from app.services.resellers import make_reseller
 from app.services.setup_wizard import (
     begin_setup,
@@ -47,7 +47,6 @@ from app.services.setup_wizard import (
 )
 from app.services.updates import check_github_update, local_version
 from app.services.users import (
-    IMAGE_KEYS,
     SETTING_GROUPS,
     SETTINGS_TABS,
     TAB_SETTING_GROUPS,

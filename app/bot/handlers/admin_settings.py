@@ -775,8 +775,6 @@ async def support_toggle(callback: CallbackQuery, session: AsyncSession, db_user
         enabled=not c.get("enabled", True),
     )
     await callback.answer("ذخیره شد")
-    callback.data = f"adm:st:sup:v:{cid}"
-    # avoid double answer
     c2 = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
     if not c2 or not callback.message:
         return

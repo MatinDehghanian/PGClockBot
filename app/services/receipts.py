@@ -18,22 +18,6 @@ from app.services.orders import approve_payment
 from app.services.users import get_setting, on
 
 
-async def notify_admins_receipt(
-    bot: Bot,
-    payment: Payment,
-    user_tg_id: int | None,
-    session: AsyncSession | None = None,
-) -> None:
-    """Notify admins of a receipt awaiting approval (respects prefs)."""
-    if session is not None:
-        await notify_pending_approval(bot, session, payment, user_tg_id)
-        return
-    from app.db.session import SessionLocal
-
-    async with SessionLocal() as s:
-        await notify_pending_approval(bot, s, payment, user_tg_id)
-
-
 async def process_receipt(
     session: AsyncSession,
     payment: Payment,
