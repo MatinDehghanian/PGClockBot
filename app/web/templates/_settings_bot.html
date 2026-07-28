@@ -1,0 +1,83 @@
+<form method="post" action="/settings?tab=bot" class="settings-form" id="bot-env-form">
+  <div class="card settings-card">
+    <h2>ربات تلگرام</h2>
+    <p class="muted update-card-caption">بعد از ذخیره، سرویس برای اعمال توکن به‌صورت خودکار ری‌استارت می‌شود.</p>
+    <div class="settings-grid">
+      <div class="setting-item full">
+        <label>توکن ربات (BOT_TOKEN)
+          <small class="muted">از @BotFather — فقط برای ادمین پنل قابل مشاهده است</small>
+          <input name="BOT_TOKEN" type="text" value="{{ env_values.get('BOT_TOKEN','') }}" dir="ltr" autocomplete="off" required />
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>نام کاربری ربات (بدون @)
+          <input name="BOT_USERNAME" value="{{ env_values.get('BOT_USERNAME','') }}" dir="ltr" required />
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>آیدی ادمین‌ها
+          <small class="muted">با کاما جدا کنید</small>
+          <input name="ADMIN_IDS" value="{{ env_values.get('ADMIN_IDS','') }}" dir="ltr" required placeholder="123456789" />
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="card settings-card">
+    <h2>پاسارگارد</h2>
+    <div class="settings-grid">
+      <div class="setting-item full">
+        <label>آدرس پنل (PG_BASE_URL)
+          <input name="PG_BASE_URL" value="{{ env_values.get('PG_BASE_URL','') }}" dir="ltr" required placeholder="https://panel.example.com" />
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>نام کاربری پاسارگارد
+          <input name="PG_USERNAME" value="{{ env_values.get('PG_USERNAME','') }}" dir="ltr" required />
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>رمز پاسارگارد
+          <input name="PG_PASSWORD" type="password" value="{{ env_values.get('PG_PASSWORD','') }}" autocomplete="off" required />
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="card settings-card">
+    <h2>وب و عمومی</h2>
+    <div class="settings-grid">
+      <div class="setting-item">
+        <label>پورت وب‌پنل (WEB_PORT)
+          <input name="WEB_PORT" value="{{ env_values.get('WEB_PORT','9000') }}" dir="ltr" required />
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>واحد پول (CURRENCY)
+          <input name="CURRENCY" value="{{ env_values.get('CURRENCY','تومان') }}" required />
+        </label>
+      </div>
+      <div class="setting-item full">
+        <label>آدرس عمومی (PUBLIC_BASE_URL) — اختیاری
+          <small class="muted">برای مینی‌اپ؛ مثال https://bot.example.com</small>
+          <input name="PUBLIC_BASE_URL" value="{{ env_values.get('PUBLIC_BASE_URL','') }}" dir="ltr" placeholder="https://bot.example.com" />
+        </label>
+      </div>
+    </div>
+  </div>
+
+  {% if bot_status %}
+  <div class="flash {{ 'ok' if bot_status.ok else 'warn' }}" style="margin:0 0 12px">
+    وضعیت ربات:
+    {% if bot_status.ok %}
+      آنلاین · @{{ bot_status.username or '—' }} (id={{ bot_status.id or '—' }})
+    {% else %}
+      {{ bot_status.error or 'آفلاین / در انتظار ری‌استارت' }}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="actions sticky-actions">
+    <button class="btn" type="submit">ذخیره و ری‌استارت ربات</button>
+  </div>
+</form>

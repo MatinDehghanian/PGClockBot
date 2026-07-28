@@ -9,7 +9,8 @@
   </div>
 </div>
 
-{% if saved %}<div class="flash ok">ذخیره شد.</div>{% endif %}
+{% if saved %}<div class="flash ok">{{ saved_msg or 'ذخیره شد.' }}</div>{% endif %}
+{% if request.query_params.get('err') %}<div class="flash err">{{ request.query_params.get('err') }}</div>{% endif %}
 {{ settings_tabs(tab) }}
 
 <div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr'] %}has-preview{% endif %}">
@@ -19,6 +20,8 @@
     {% include "_settings_update.html" %}
   {% elif tab == 'notifications' %}
     {% include "_settings_notifications.html" %}
+  {% elif tab == 'bot' %}
+    {% include "_settings_bot.html" %}
   {% elif tab == 'menu' %}
     {% include "_settings_menu.html" %}
     <form method="post" action="/settings?tab=menu" enctype="multipart/form-data" class="settings-form" id="settings-form">

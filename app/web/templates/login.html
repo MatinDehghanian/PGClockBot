@@ -10,6 +10,7 @@
     </div>
     <form class="auth-form" method="post" action="/login" autocomplete="on">
       {% if error %}<div class="error" style="margin:0">{{ error }}</div>{% endif %}
+    {% if flash_ok %}<div class="flash ok" style="margin:0">{{ flash_ok }}</div>{% endif %}
       <label>نام کاربری
         <input name="username" value="{{ hint_user or 'admin' }}" required autocomplete="username" autofocus inputmode="text" />
       </label>

@@ -197,10 +197,11 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("buttons", "متن دکمه‌ها"),
     ("qr", "QR اشتراک"),
     ("payment", "پرداخت"),
-    ("users", "کاربر و پلن"),
     ("forcejoin", "کانال اجباری"),
     ("notifications", "نوتیفیکیشن"),
     ("update", "آپدیت"),
+    ("users", "کاربر و پلن"),
+    ("bot", "ربات و اتصال"),
 ]
 
 SETTING_GROUPS = {
@@ -306,10 +307,11 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "buttons": ["متن دکمه‌های منو"],
     "qr": ["QR اشتراک"],
     "payment": ["پرداخت"],
-    "users": ["کاربر و پلن دلخواه"],
     "forcejoin": ["کانال اجباری"],
     "notifications": [],
     "update": [],
+    "users": ["کاربر و پلن دلخواه"],
+    "bot": [],
 }
 
 TOGGLE_KEYS = {

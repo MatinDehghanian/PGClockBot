@@ -376,7 +376,10 @@ def create_api_app(lifespan=None) -> FastAPI:
     async def setup_finish():
         mark_setup_complete()
         ensure_web_secret()
-        return RedirectResponse("/", status_code=303)
+        from app.services.service_control import schedule_panel_restart
+
+        schedule_panel_restart(reason="setup wizard finished")
+        return RedirectResponse("/login?ok=" + quote("راه‌اندازی انجام شد. ربات در حال راه‌اندازی مجدد…"), status_code=303)
 
     @app.get("/", response_class=HTMLResponse)
     async def root(request: Request):
@@ -402,7 +405,15 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse("/dashboard", status_code=303)
         creds = load_web_admin()
         hint = creds.get("username") or "admin"
-        return render(request, "login.html", {"error": None, "hint_user": hint})
+        return render(
+            request,
+            "login.html",
+            {
+                "error": None,
+                "hint_user": hint,
+                "flash_ok": request.query_params.get("ok"),
+            },
+        )
 
     @app.post("/login")
     async def login_submit(
@@ -1298,6 +1309,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             "tabs": SETTINGS_TABS,
             "tab": tab,
             "saved": request.query_params.get("saved") == "1",
+            "saved_msg": request.query_params.get("msg") or "",
         }
 
         if tab == "menu":
@@ -1311,8 +1323,36 @@ def create_api_app(lifespan=None) -> FastAPI:
                 clear_update_cache()
                 await check_github_update(force=True)
             ctx.update(await update_page_context())
+        elif tab == "bot":
+            from app.services.setup_wizard import current_setup_values
+
+            env_values = current_setup_values()
+            ctx["env_values"] = env_values
+            ctx["bot_status"] = await _bot_token_status(env_values.get("BOT_TOKEN") or "")
 
         return render(request, "settings.html", ctx)
+
+    async def _bot_token_status(token: str) -> dict:
+        token = (token or "").strip()
+        if not token:
+            return {"ok": False, "error": "توکن تنظیم نشده"}
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get(f"https://api.telegram.org/bot{token}/getMe")
+                data = resp.json()
+            if data.get("ok") and isinstance(data.get("result"), dict):
+                me = data["result"]
+                return {
+                    "ok": True,
+                    "username": me.get("username"),
+                    "id": me.get("id"),
+                    "name": me.get("first_name"),
+                }
+            return {"ok": False, "error": data.get("description") or "توکن نامعتبر"}
+        except Exception as exc:
+            return {"ok": False, "error": f"عدم اتصال به تلگرام: {exc}"}
 
     @app.post("/settings")
     async def settings_save(
@@ -1328,6 +1368,67 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         tab = (request.query_params.get("tab") or "welcome").strip()
         form = await request.form()
+
+        if tab == "bot":
+            from app.services.service_control import schedule_panel_restart
+            from app.services.setup_wizard import parse_admin_ids
+
+            token = str(form.get("BOT_TOKEN") or "").strip()
+            uname = str(form.get("BOT_USERNAME") or "").strip().lstrip("@")
+            ids_raw = str(form.get("ADMIN_IDS") or "").strip()
+            pg_base = str(form.get("PG_BASE_URL") or "").strip()
+            pg_user = str(form.get("PG_USERNAME") or "").strip()
+            pg_pass = str(form.get("PG_PASSWORD") or "").strip()
+            web_port = str(form.get("WEB_PORT") or "9000").strip()
+            public_base = str(form.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+            currency = str(form.get("CURRENCY") or "").strip() or "تومان"
+            if not token or not uname or not ids_raw or not pg_base or not pg_user or not pg_pass:
+                return RedirectResponse(
+                    "/settings?tab=bot&err=" + quote("همه فیلدهای الزامی را پر کنید"),
+                    status_code=303,
+                )
+            try:
+                ids = parse_admin_ids(ids_raw)
+            except ValueError:
+                return RedirectResponse(
+                    "/settings?tab=bot&err=" + quote("آیدی ادمین‌ها نامعتبر است"),
+                    status_code=303,
+                )
+            if not ids:
+                return RedirectResponse(
+                    "/settings?tab=bot&err=" + quote("حداقل یک آیدی ادمین لازم است"),
+                    status_code=303,
+                )
+            try:
+                port_n = int(web_port)
+                if port_n < 1 or port_n > 65535:
+                    raise ValueError
+            except ValueError:
+                return RedirectResponse(
+                    "/settings?tab=bot&err=" + quote("پورت نامعتبر است"),
+                    status_code=303,
+                )
+            update_env_keys(
+                {
+                    "BOT_TOKEN": token,
+                    "BOT_USERNAME": uname,
+                    "ADMIN_IDS": ",".join(str(i) for i in ids),
+                    "PG_BASE_URL": pg_base,
+                    "PG_USERNAME": pg_user,
+                    "PG_PASSWORD": pg_pass,
+                    "WEB_PORT": str(port_n),
+                    "PUBLIC_BASE_URL": public_base,
+                    "CURRENCY": currency,
+                }
+            )
+            ensure_web_secret()
+            schedule_panel_restart(reason="bot settings saved")
+            return RedirectResponse(
+                "/settings?tab=bot&saved=1&msg="
+                + quote("ذخیره شد — ربات در حال ری‌استارت است (چند ثانیه)…"),
+                status_code=303,
+            )
+
         known = {item[0] for fields in SETTING_GROUPS.values() for item in fields}
         for key in TOGGLE_KEYS:
             if key in known:
