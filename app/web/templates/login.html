@@ -15,16 +15,39 @@
         راه‌اندازی ذخیره شد — در حال ری‌استارت سرویس…
       </div>
       <label>نام کاربری
-        <input name="username" value="{{ hint_user or 'admin' }}" required autocomplete="username" autofocus inputmode="text" />
+        <input name="username" value="{{ username or '' }}" required autocomplete="username" autofocus inputmode="text" placeholder="نام کاربری" />
       </label>
       <label>رمز عبور
-        <input name="password" type="password" required autocomplete="current-password" />
+        <div class="pw-field">
+          <input id="login-password" name="password" type="password" required autocomplete="current-password" placeholder="رمز عبور" />
+          <button type="button" class="pw-toggle" id="pw-toggle" aria-label="نمایش رمز" aria-pressed="false" title="نمایش / مخفی کردن رمز">
+            <svg class="pw-ico pw-ico-show" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="pw-ico pw-ico-hide" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M3 3l18 18"/><path d="M10.6 10.6a3 3 0 0 0 4.2 4.2"/><path d="M9.9 5.2A11 11 0 0 1 12 5c6.5 0 10 7 10 7a18 18 0 0 1-3.2 3.9"/><path d="M6.1 6.1A18 18 0 0 0 2 12s3.5 7 10 7a11 11 0 0 0 4.1-.8"/></svg>
+          </button>
+        </div>
       </label>
       <button class="btn" type="submit">ورود به پنل</button>
     </form>
     <div class="auth-foot">© ۲۰۲۶ کلاک بات</div>
   </div>
 </div>
+<script>
+(function(){
+  const input = document.getElementById('login-password');
+  const btn = document.getElementById('pw-toggle');
+  if (!input || !btn) return;
+  const showIco = btn.querySelector('.pw-ico-show');
+  const hideIco = btn.querySelector('.pw-ico-hide');
+  btn.addEventListener('click', () => {
+    const visible = input.type === 'text';
+    input.type = visible ? 'password' : 'text';
+    btn.setAttribute('aria-pressed', visible ? 'false' : 'true');
+    btn.setAttribute('aria-label', visible ? 'نمایش رمز' : 'مخفی کردن رمز');
+    if (showIco) showIco.hidden = !visible;
+    if (hideIco) hideIco.hidden = visible;
+  });
+})();
+</script>
 {% if request.query_params.get('restarting') %}
 <script>
 (function(){

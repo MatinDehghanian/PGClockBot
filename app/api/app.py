@@ -495,14 +495,12 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse("/", status_code=303)
         if get_session_user(request):
             return RedirectResponse("/dashboard", status_code=303)
-        creds = load_web_admin()
-        hint = creds.get("username") or "admin"
         return render(
             request,
             "login.html",
             {
                 "error": None,
-                "hint_user": hint,
+                "username": "",
                 "flash_ok": request.query_params.get("ok"),
             },
         )
@@ -518,13 +516,14 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse("/", status_code=303)
 
         ip = _client_ip(request)
+        typed_user = (username or "").strip()
         if _login_blocked(ip):
             return render(
                 request,
                 "login.html",
                 {
                     "error": "تعداد تلاش‌های ناموفق زیاد است. ۱۵ دقیقه دیگر دوباره تلاش کنید.",
-                    "hint_user": load_web_admin().get("username") or "admin",
+                    "username": typed_user,
                 },
                 status_code=429,
             )
@@ -565,7 +564,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                         "login.html",
                         {
                             "error": "راه‌اندازی پنل هنوز کامل نشده. از لینک تلگرام استفاده کنید.",
-                            "hint_user": load_web_admin().get("username") or "admin",
+                            "username": typed_user,
                         },
                         status_code=400,
                     )
