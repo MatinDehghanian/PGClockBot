@@ -316,6 +316,9 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_reseller_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     register_reseller_setup(app, render=render, get_db=get_db)
     register_shop_settings(app, render=render, require_staff=require_staff, get_db=get_db)
+    from app.api.backup_pages import register_backup_pages
+
+    register_backup_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     register_security_pages(
         app,
         render=render,
@@ -1732,6 +1735,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             info = await check_github_update()
             ctx["update_info"] = info
             ctx["local_version"] = local_version()
+        elif tab == "backup":
+            from app.services.backup import list_backups, read_restore_status, sqlite_db_path
+
+            ctx["backups"] = list_backups()
+            ctx["restore_status"] = read_restore_status()
+            ctx["local_version"] = local_version()
+            ctx["db_path"] = str(sqlite_db_path())
         elif tab == "bot":
             from app.services.setup_wizard import current_setup_values
 
