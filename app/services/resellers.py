@@ -623,6 +623,7 @@ async def revoke_reseller(
     *,
     delete_pg_admin: bool = True,
     commit: bool = True,
+    reason: str | None = None,
 ) -> dict:
     """Remove reseller profile, unlink customers, demote role to user.
 
@@ -668,4 +669,38 @@ async def revoke_reseller(
         "telegram_id": user.telegram_id,
         "pg_admin_username": pg_username,
         "pg_admin_deleted": pg_deleted,
+        "reason": (reason or "").strip() or None,
     }
+
+
+def format_revoke_message(reason: str) -> str:
+    """Notify former reseller that their agency access was removed."""
+    reason = (reason or "").strip()
+    lines = [
+        "❌ <b>نمایندگی شما حذف شد</b>",
+        "",
+        "دسترسی پنل نماینده و ادمین پاسارگارد مرتبط لغو شده است.",
+    ]
+    if reason:
+        lines += ["", f"علت: {reason}"]
+    lines += ["", "در صورت نیاز با پشتیبانی در ارتباط باشید."]
+    return "\n".join(lines)
+
+
+async def notify_reseller_revoked(telegram_id: int, reason: str) -> bool:
+    """Best-effort Telegram notice after revoke. Returns True if sent."""
+    try:
+        from app.bot import create_bot
+
+        bot = create_bot()
+        try:
+            await bot.send_message(
+                telegram_id,
+                format_revoke_message(reason),
+                parse_mode="HTML",
+            )
+            return True
+        finally:
+            await bot.session.close()
+    except Exception:
+        return False

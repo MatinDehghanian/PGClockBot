@@ -102,7 +102,13 @@
           <div class="actions" style="margin:0">
             <a class="btn btn-ghost" href="/resellers/{{ u.id }}/edit">ویرایش</a>
             <form method="post" action="/resellers/{{ u.id }}/delete"
-                  onsubmit="return confirm('نمایندگی حذف شود؟ پروفایل و ادمین پاسارگارد پاک می‌شود و کاربر به نقش عادی برمی‌گردد.')">
+                  onsubmit="
+                    var r = prompt('علت حذف نمایندگی را بنویسید:');
+                    if (!r || r.trim().length < 3) { alert('علت الزامی است (حداقل ۳ کاراکتر)'); return false; }
+                    this.reason.value = r.trim();
+                    return confirm('نمایندگی حذف شود و علت برای کاربر ارسال شود؟');
+                  ">
+              <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف نمایندگی</button>
             </form>
           </div>

@@ -24,6 +24,7 @@ from app.services.resellers import (
     list_reseller_plans,
     make_reseller,
     normalize_feature_perms,
+    notify_reseller_revoked,
     parse_perms,
     provision_reseller,
     reject_application,
@@ -261,18 +262,30 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
     @app.post("/resellers/{user_id}/delete")
     async def reseller_delete(
         user_id: int,
+        request: Request,
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        form = await request.form()
+        reason = str(form.get("reason") or "").strip()
+        if len(reason) < 3:
+            return RedirectResponse(
+                f"/resellers?err={_q('علت حذف نمایندگی الزامی است (حداقل ۳ کاراکتر)')}",
+                status_code=303,
+            )
         try:
-            info = await revoke_reseller(session, user_id, delete_pg_admin=True)
+            info = await revoke_reseller(
+                session, user_id, delete_pg_admin=True, reason=reason
+            )
         except ValueError as e:
             return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
         except Exception as e:
             return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
+        notified = await notify_reseller_revoked(int(info["telegram_id"]), reason)
         label = info.get("telegram_id") or user_id
+        note = " — پیام علت ارسال شد" if notified else " — پیام تلگرام ارسال نشد"
         return RedirectResponse(
-            f"/resellers?ok={_q(f'نمایندگی {label} حذف شد — کاربر به نقش عادی برگشت')}",
+            f"/resellers?ok={_q(f'نمایندگی {label} حذف شد{note}')}",
             status_code=303,
         )
 

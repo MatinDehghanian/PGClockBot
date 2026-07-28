@@ -63,9 +63,13 @@
 
 <div class="card">
   <h2>حذف نمایندگی</h2>
-  <p class="muted">پروفایل نماینده و در صورت وجود ادمین پاسارگارد حذف می‌شود. خود کاربر بات باقی می‌ماند و نقشش به «کاربر» برمی‌گردد.</p>
-  <form method="post" action="/resellers/{{ user.id }}/delete"
-        onsubmit="return confirm('نمایندگی این کاربر حذف شود؟')">
+  <p class="muted">پروفایل نماینده و در صورت وجود ادمین پاسارگارد حذف می‌شود. علت برای کاربر در ربات ارسال می‌شود و نقشش به «کاربر» برمی‌گردد.</p>
+  <form method="post" action="/resellers/{{ user.id }}/delete" class="form-stack"
+        onsubmit="return confirm('نمایندگی حذف شود و علت برای کاربر ارسال شود؟')">
+    <label class="form-field">علت حذف
+      <small class="muted">برای نماینده ارسال می‌شود — حداقل ۳ کاراکتر</small>
+      <textarea name="reason" required minlength="3" rows="3" placeholder="مثال: نقض قوانین / عدم فعالیت / درخواست خود کاربر"></textarea>
+    </label>
     <button class="btn btn-danger" type="submit">حذف نمایندگی</button>
   </form>
 </div>

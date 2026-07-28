@@ -183,6 +183,7 @@ class AdminStates(StatesGroup):
     make_reseller = State()
     ticket_reply = State()
     user_search = State()
+    revoke_reseller_reason = State()
     broadcast_text = State()
     broadcast_audience = State()
 
@@ -1294,25 +1295,77 @@ async def adm_users_delete(callback: CallbackQuery, session: AsyncSession, db_us
 
 
 @router.callback_query(F.data.startswith("adm:users:unres:"))
-async def adm_users_unreseller(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def adm_users_unreseller_ask(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     user_id = int(callback.data.split(":")[-1])
-    from app.services.resellers import revoke_reseller
+    user = await session.get(BotUser, user_id)
+    if not user:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    from app.services.resellers import get_reseller_profile
+
+    if not await get_reseller_profile(session, user_id):
+        await callback.answer("این کاربر نماینده نیست", show_alert=True)
+        return
+    await callback.answer()
+    await state.set_state(AdminStates.revoke_reseller_reason)
+    await state.update_data(revoke_user_id=user_id)
+    if callback.message:
+        await callback.message.answer(
+            f"علت حذف نمایندگی کاربر <code>{user.telegram_id}</code> را بنویسید "
+            "(برای خود کاربر ارسال می‌شود):\n\nبرای لغو: انصراف",
+            reply_markup=kb.cancel_reply(),
+        )
+
+
+@router.message(AdminStates.revoke_reseller_reason)
+async def adm_users_unreseller_reason(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        return
+    if (message.text or "").strip() == "انصراف":
+        await state.clear()
+        await message.answer("لغو شد.", reply_markup=kb.admin_users_keyboard())
+        return
+    reason = (message.text or "").strip()
+    if len(reason) < 3:
+        await message.answer("علت حداقل ۳ کاراکتر باشد. دوباره بنویسید یا انصراف بزنید:")
+        return
+    data = await state.get_data()
+    user_id = int(data.get("revoke_user_id") or 0)
+    await state.clear()
+    if not user_id:
+        await message.answer("نشست منقضی شد. دوباره از کارت کاربر اقدام کنید.")
+        return
+
+    from app.services.resellers import notify_reseller_revoked, revoke_reseller
 
     try:
-        await revoke_reseller(session, user_id, delete_pg_admin=True)
+        info = await revoke_reseller(
+            session, user_id, delete_pg_admin=True, reason=reason
+        )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await message.answer(f"خطا: {e}", reply_markup=kb.admin_users_keyboard())
         return
     except Exception as e:
-        await callback.answer(f"خطا: {e}", show_alert=True)
+        await message.answer(f"خطا: {e}", reply_markup=kb.admin_users_keyboard())
         return
+
+    notified = await notify_reseller_revoked(int(info["telegram_id"]), reason)
+    note = "پیام علت ارسال شد ✅" if notified else "پیام تلگرام ارسال نشد ⚠️"
     user = await session.get(BotUser, user_id)
-    await callback.answer("نمایندگی حذف شد", show_alert=True)
-    if callback.message and user:
-        await _render_user_card(callback.message, session, user, edit=True)
+    await message.answer(
+        f"🤝 نمایندگی حذف شد.\nعلت: {reason}\n{note}",
+        reply_markup=kb.admin_users_keyboard(),
+    )
+    if user:
+        await _render_user_card(message, session, user)
 
 
 @router.callback_query(F.data == "adm:resellers")
