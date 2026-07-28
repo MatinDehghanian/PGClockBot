@@ -605,9 +605,36 @@ def back_home(ui: dict | None = None) -> InlineKeyboardMarkup:
     )
 
 
+BTN_CANCEL = "انصراف"
+BTN_RESTART = "🏠 شروع مجدد"
+
+
 def cancel_reply() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="انصراف")]],
+        keyboard=[
+            [KeyboardButton(text=BTN_CANCEL)],
+            [KeyboardButton(text=BTN_RESTART)],
+        ],
         resize_keyboard=True,
-        one_time_keyboard=True,
+        one_time_keyboard=False,
+        is_persistent=True,
     )
+
+
+def persistent_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Always-on reply keyboard so users can restart the bot flow anytime."""
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=BTN_RESTART)]],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        is_persistent=True,
+    )
+
+
+def is_cancel_text(text: str | None) -> bool:
+    return (text or "").strip() in {BTN_CANCEL, "لغو", "cancel", "/cancel"}
+
+
+def is_restart_text(text: str | None) -> bool:
+    t = (text or "").strip()
+    return t in {BTN_RESTART, "شروع مجدد", "restart"}

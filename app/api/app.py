@@ -1328,7 +1328,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     commission_percent=10,
                     web_permissions=DEFAULT_FEATURE_PERMS,
                     bot_permissions=DEFAULT_FEATURE_PERMS,
-                    create_pg_admin=False,
+                    create_pg_admin=True,
                     panel_base_url=await get_reseller_panel_base_url(session),
                 )
             except Exception as e:

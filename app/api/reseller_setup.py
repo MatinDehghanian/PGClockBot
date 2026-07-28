@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Reseller self-serve setup wizard + secure credential creation."""
+"""Reseller setup wizard — bot token registration (web creds may already be provisioned)."""
 
 from urllib.parse import quote
 
@@ -17,7 +17,6 @@ def _q(msg: str) -> str:
 
 
 async def _validate_bot_token(token: str) -> str:
-    """Return bot username if token is valid."""
     from aiogram import Bot
 
     bot = Bot(token=token)
@@ -44,14 +43,18 @@ def register_reseller_setup(app, *, render, get_db):
                     "invalid": True,
                     "error": "لینک نامعتبر یا منقضی شده است. از ادمین لینک جدید بخواهید.",
                     "token": token,
+                    "bot_only": False,
                 },
             )
+        bot_only = bool(profile.web_username and profile.web_password_hash)
         return render(
             request,
             "reseller_setup.html",
             {
                 "invalid": False,
                 "token": token,
+                "bot_only": bot_only,
+                "web_username": profile.web_username,
                 "error": request.query_params.get("err"),
                 "flash_ok": request.query_params.get("ok"),
             },
@@ -61,9 +64,9 @@ def register_reseller_setup(app, *, render, get_db):
     async def reseller_setup_submit(
         token: str,
         request: Request,
-        username: str = Form(...),
-        password: str = Form(...),
-        password2: str = Form(...),
+        username: str = Form(""),
+        password: str = Form(""),
+        password2: str = Form(""),
         bot_token: str = Form(""),
         session: AsyncSession = Depends(get_db),
     ):
@@ -73,17 +76,9 @@ def register_reseller_setup(app, *, render, get_db):
                 f"/rsetup/{token}?err={_q('لینک نامعتبر یا منقضی')}",
                 status_code=303,
             )
-        if password != password2:
-            return RedirectResponse(
-                f"/rsetup/{token}?err={_q('تکرار رمز مطابقت ندارد')}",
-                status_code=303,
-            )
-        ok, err = validate_password_strength(password)
-        if not ok:
-            return RedirectResponse(f"/rsetup/{token}?err={_q(err)}", status_code=303)
 
+        bot_only = bool(profile.web_username and profile.web_password_hash)
         bot_token = (bot_token or "").strip()
-        bot_username = None
         if not bot_token:
             return RedirectResponse(
                 f"/rsetup/{token}?err={_q('توکن ربات الزامی است — از @BotFather یک ربات بسازید')}",
@@ -98,14 +93,31 @@ def register_reseller_setup(app, *, render, get_db):
             )
 
         try:
-            await complete_reseller_setup(
-                session,
-                profile,
-                web_username=username.strip(),
-                password_hash=hash_password(password),
-                bot_token=bot_token,
-                bot_username=bot_username,
-            )
+            if bot_only:
+                await complete_reseller_setup(
+                    session,
+                    profile,
+                    bot_token=bot_token,
+                    bot_username=bot_username,
+                    bot_only=True,
+                )
+            else:
+                if password != password2:
+                    return RedirectResponse(
+                        f"/rsetup/{token}?err={_q('تکرار رمز مطابقت ندارد')}",
+                        status_code=303,
+                    )
+                ok, err = validate_password_strength(password)
+                if not ok:
+                    return RedirectResponse(f"/rsetup/{token}?err={_q(err)}", status_code=303)
+                await complete_reseller_setup(
+                    session,
+                    profile,
+                    web_username=username.strip(),
+                    password_hash=hash_password(password),
+                    bot_token=bot_token,
+                    bot_username=bot_username,
+                )
         except ValueError as e:
             return RedirectResponse(f"/rsetup/{token}?err={_q(str(e))}", status_code=303)
 

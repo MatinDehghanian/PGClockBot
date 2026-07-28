@@ -5,8 +5,8 @@
   <div class="auth-panel" style="max-width:440px">
     <div class="auth-brand">
       <img src="/static/logo.svg" alt="" />
-      <h1>راه‌اندازی نماینده</h1>
-      <p>یوزر وب‌پنل و ربات خودتان را بسازید</p>
+      <h1>{% if bot_only %}ثبت ربات اختصاصی{% else %}راه‌اندازی نماینده{% endif %}</h1>
+      <p>{% if bot_only %}توکن ربات خودتان را از @BotFather وارد کنید{% else %}یوزر وب‌پنل و ربات خودتان را بسازید{% endif %}</p>
     </div>
     {% if invalid %}
     <div class="error">{{ error }}</div>
@@ -14,6 +14,9 @@
     {% else %}
     <form class="auth-form" method="post" action="/rsetup/{{ token }}" autocomplete="off">
       {% if error %}<div class="error">{{ error }}</div>{% endif %}
+      {% if bot_only %}
+      <p class="muted" style="margin:0 0 12px">یوزر وب‌پنل شما از قبل ساخته شده: <code>{{ web_username }}</code></p>
+      {% else %}
       <label>نام کاربری وب‌پنل
         <small class="muted">حداقل ۳ کاراکتر انگلیسی</small>
         <input name="username" required minlength="3" maxlength="64" pattern="[A-Za-z0-9_\.\-]+" autocomplete="off" autofocus />
@@ -25,9 +28,10 @@
       <label>تکرار رمز
         <input name="password2" type="password" required autocomplete="new-password" />
       </label>
+      {% endif %}
       <label>توکن ربات (@BotFather)
         <small class="muted">ربات اختصاصی خودتان — به ربات ادمین وصل نمی‌شوید</small>
-        <input name="bot_token" required autocomplete="off" placeholder="123456:ABC..." dir="ltr" />
+        <input name="bot_token" required autocomplete="off" placeholder="123456:ABC..." dir="ltr" {% if bot_only %}autofocus{% endif %} />
       </label>
       <button class="btn" type="submit">تکمیل راه‌اندازی</button>
     </form>

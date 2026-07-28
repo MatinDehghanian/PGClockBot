@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +25,12 @@ async def _has_services(session: AsyncSession, user_id: int) -> bool:
 
 
 async def render_home(
-    message: Message, session: AsyncSession, db_user: BotUser, *, edit: bool = False
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    edit: bool = False,
+    seed_reply_kb: bool = False,
 ):
     from app.services.formatting import format_message
 
@@ -51,7 +57,23 @@ async def render_home(
             return
         except Exception:
             pass
-    await message.answer(text, reply_markup=markup)
+    if seed_reply_kb:
+        # Reply keyboard cannot share a message with inline menu — seed it on the welcome text.
+        await message.answer(text, reply_markup=kb.persistent_reply_keyboard())
+        await message.answer("از منوی زیر انتخاب کنید:", reply_markup=markup)
+    else:
+        await message.answer(text, reply_markup=markup)
+
+
+@router.message(F.text.func(kb.is_restart_text))
+async def cmd_restart(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+):
+    await state.clear()
+    await render_home(message, session, db_user, seed_reply_kb=True)
 
 
 @router.message(CommandStart())
@@ -60,7 +82,9 @@ async def cmd_start(
     command: CommandObject,
     session: AsyncSession,
     db_user: BotUser,
+    state: FSMContext,
 ):
+    await state.clear()
     args = (command.args or "").strip()
     if args.startswith("ref_"):
         await message.answer(
@@ -74,10 +98,11 @@ async def cmd_start(
     enabled = await get_setting(session, "force_join_enabled")
     if on(enabled) and channel and db_user.role == "user":
         await message.answer(
-            f"برای استفاده، ابتدا در کانال {channel} عضو شوید سپس دوباره /start بزنید."
+            f"برای استفاده، ابتدا در کانال {channel} عضو شوید سپس دوباره /start بزنید.",
+            reply_markup=kb.persistent_reply_keyboard(),
         )
         return
-    await render_home(message, session, db_user)
+    await render_home(message, session, db_user, seed_reply_kb=True)
 
 
 @router.callback_query(F.data == "menu:home")
@@ -105,8 +130,9 @@ async def cb_home_as_user(callback: CallbackQuery, session: AsyncSession, db_use
 
 
 @router.message(Command("menu"))
-async def cmd_menu(message: Message, session: AsyncSession, db_user: BotUser):
-    await render_home(message, session, db_user)
+async def cmd_menu(message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext):
+    await state.clear()
+    await render_home(message, session, db_user, seed_reply_kb=True)
 
 
 @router.callback_query(F.data == "help:guide")
