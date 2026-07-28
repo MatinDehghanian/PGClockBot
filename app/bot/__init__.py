@@ -23,7 +23,17 @@ def create_dispatcher() -> Dispatcher:
     dp.update.middleware(DbSessionMiddleware())
     dp.update.middleware(UserMiddleware())
 
-    from app.bot.handlers import admin, payments, reseller, shop, start, support, services, wallet
+    from app.bot.handlers import (
+        admin,
+        admin_settings,
+        payments,
+        reseller,
+        shop,
+        start,
+        support,
+        services,
+        wallet,
+    )
 
     dp.include_router(start.router)
     dp.include_router(shop.router)
@@ -32,5 +42,6 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(support.router)
     dp.include_router(payments.router)
     dp.include_router(reseller.router)
+    dp.include_router(admin_settings.router)
     dp.include_router(admin.router)
     return dp
