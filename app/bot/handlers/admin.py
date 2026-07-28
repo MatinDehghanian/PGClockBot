@@ -197,7 +197,7 @@ async def adm_home(callback: CallbackQuery, db_user: BotUser):
     await callback.answer()
     if callback.message:
         await callback.message.edit_text(
-            f"🛠 <b>پنل ادمین</b>\nنسخه: <code>{local_version()}</code>",
+            f"🛠 <b>پنل ادمین</b>\n<code>{local_version()}</code>",
             reply_markup=kb.admin_home(),
         )
 
