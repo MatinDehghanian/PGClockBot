@@ -2,12 +2,35 @@ from __future__ import annotations
 
 import secrets
 import string
+from contextvars import ContextVar
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.models import BotUser, Role, Setting
+
+# When handling updates on a reseller-owned bot, settings read/write overlay
+# that reseller's shop settings automatically.
+_shop_reseller_id: ContextVar[int | None] = ContextVar("shop_reseller_id", default=None)
+
+
+def set_shop_reseller_id(reseller_user_id: int | None):
+    return _shop_reseller_id.set(reseller_user_id)
+
+
+def reset_shop_reseller_id(token) -> None:
+    _shop_reseller_id.reset(token)
+
+
+def current_shop_reseller_id() -> int | None:
+    return _shop_reseller_id.get()
+
+
+def _effective_reseller_id(reseller_id: int | None) -> int | None:
+    if reseller_id is not None:
+        return reseller_id
+    return _shop_reseller_id.get()
 
 
 def _referral_code() -> str:
@@ -22,6 +45,7 @@ async def get_or_create_user(
     username: str | None = None,
     full_name: str | None = None,
     referred_by_code: str | None = None,
+    reseller_owner_id: int | None = None,
 ) -> BotUser:
     result = await session.execute(
         select(BotUser).where(BotUser.telegram_id == telegram_id)
@@ -41,6 +65,15 @@ async def get_or_create_user(
         if is_admin and user.role != Role.ADMIN.value:
             user.role = Role.ADMIN.value
             changed = True
+        # Sticky first-touch attribution for reseller shop bots
+        if (
+            reseller_owner_id
+            and user.reseller_id is None
+            and user.id != reseller_owner_id
+            and user.role == Role.USER.value
+        ):
+            user.reseller_id = reseller_owner_id
+            changed = True
         if changed:
             await session.commit()
             await session.refresh(user)
@@ -55,6 +88,10 @@ async def get_or_create_user(
         if referrer and referrer.telegram_id != telegram_id:
             referred_by_id = referrer.id
 
+    assign_reseller = None
+    if reseller_owner_id and not is_admin:
+        assign_reseller = reseller_owner_id
+
     user = BotUser(
         telegram_id=telegram_id,
         username=username,
@@ -62,20 +99,72 @@ async def get_or_create_user(
         role=Role.ADMIN.value if is_admin else Role.USER.value,
         referral_code=_referral_code(),
         referred_by_id=referred_by_id,
+        reseller_id=assign_reseller,
     )
     session.add(user)
     await session.commit()
     await session.refresh(user)
+    # Don't attribute the reseller owner to themselves
+    if assign_reseller and user.id == assign_reseller:
+        user.reseller_id = None
+        await session.commit()
+        await session.refresh(user)
     return user
 
 
-async def get_setting(session: AsyncSession, key: str, default: str = "") -> str:
+async def get_setting(
+    session: AsyncSession,
+    key: str,
+    default: str = "",
+    *,
+    reseller_id: int | None = None,
+) -> str:
+    rid = _effective_reseller_id(reseller_id)
+    if rid:
+        from app.db.models import ResellerSetting
+
+        result = await session.execute(
+            select(ResellerSetting).where(
+                ResellerSetting.reseller_user_id == rid,
+                ResellerSetting.key == key,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is not None:
+            return row.value
     result = await session.execute(select(Setting).where(Setting.key == key))
     row = result.scalar_one_or_none()
-    return row.value if row else default
+    if row:
+        return row.value
+    return DEFAULT_SETTINGS.get(key, default) if rid else default
 
 
-async def set_setting(session: AsyncSession, key: str, value: str) -> None:
+async def set_setting(
+    session: AsyncSession,
+    key: str,
+    value: str,
+    *,
+    reseller_id: int | None = None,
+) -> None:
+    rid = _effective_reseller_id(reseller_id)
+    if rid:
+        from app.db.models import ResellerSetting
+
+        result = await session.execute(
+            select(ResellerSetting).where(
+                ResellerSetting.reseller_user_id == rid,
+                ResellerSetting.key == key,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row:
+            row.value = value
+        else:
+            session.add(
+                ResellerSetting(reseller_user_id=rid, key=key, value=value)
+            )
+        await session.commit()
+        return
     result = await session.execute(select(Setting).where(Setting.key == key))
     row = result.scalar_one_or_none()
     if row:
@@ -454,11 +543,29 @@ async def ensure_default_settings(session: AsyncSession) -> None:
     await session.commit()
 
 
-async def get_all_settings(session: AsyncSession) -> dict[str, str]:
+async def get_all_settings(
+    session: AsyncSession,
+    *,
+    reseller_id: int | None = None,
+) -> dict[str, str]:
     await ensure_default_settings(session)
+    data = dict(DEFAULT_SETTINGS)
+    rid = _effective_reseller_id(reseller_id)
+    if rid:
+        from app.db.models import ResellerSetting
+
+        # Start from global (fallback), overlay reseller overrides
+        result = await session.execute(select(Setting))
+        data.update({r.key: r.value for r in result.scalars().all()})
+        r_result = await session.execute(
+            select(ResellerSetting).where(ResellerSetting.reseller_user_id == rid)
+        )
+        data.update({r.key: r.value for r in r_result.scalars().all()})
+        # Reseller bots never show platform apply / admin buttons
+        data["show_reseller_apply"] = "0"
+        return data
     result = await session.execute(select(Setting))
     rows = result.scalars().all()
-    data = dict(DEFAULT_SETTINGS)
     data.update({r.key: r.value for r in rows})
     return data
 

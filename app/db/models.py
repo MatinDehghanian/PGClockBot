@@ -242,8 +242,21 @@ class ResellerProfile(Base):
     setup_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     bot_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     bot_username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    bot_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ResellerSetting(Base):
+    """Per-reseller shop bot settings (welcome, menus, payments, …)."""
+
+    __tablename__ = "reseller_settings"
+    __table_args__ = (UniqueConstraint("reseller_user_id", "key", name="uq_reseller_setting"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reseller_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    key: Mapped[str] = mapped_column(String(128), index=True)
+    value: Mapped[str] = mapped_column(Text, default="")
 
 
 class ResellerPlan(Base):

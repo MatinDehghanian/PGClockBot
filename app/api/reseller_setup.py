@@ -16,13 +16,13 @@ def _q(msg: str) -> str:
     return quote(str(msg), safe="")
 
 
-async def _validate_bot_token(token: str) -> str:
+async def _validate_bot_token(token: str) -> tuple[str, int]:
     from aiogram import Bot
 
     bot = Bot(token=token)
     try:
         me = await bot.get_me()
-        return me.username or str(me.id)
+        return (me.username or str(me.id), int(me.id))
     finally:
         await bot.session.close()
 
@@ -85,7 +85,7 @@ def register_reseller_setup(app, *, render, get_db):
                 status_code=303,
             )
         try:
-            bot_username = await _validate_bot_token(bot_token)
+            bot_username, bot_telegram_id = await _validate_bot_token(bot_token)
         except Exception:
             return RedirectResponse(
                 f"/rsetup/{token}?err={_q('توکن ربات نامعتبر است')}",
@@ -94,11 +94,12 @@ def register_reseller_setup(app, *, render, get_db):
 
         try:
             if bot_only:
-                await complete_reseller_setup(
+                profile = await complete_reseller_setup(
                     session,
                     profile,
                     bot_token=bot_token,
                     bot_username=bot_username,
+                    bot_telegram_id=bot_telegram_id,
                     bot_only=True,
                 )
             else:
@@ -110,16 +111,25 @@ def register_reseller_setup(app, *, render, get_db):
                 ok, err = validate_password_strength(password)
                 if not ok:
                     return RedirectResponse(f"/rsetup/{token}?err={_q(err)}", status_code=303)
-                await complete_reseller_setup(
+                profile = await complete_reseller_setup(
                     session,
                     profile,
                     web_username=username.strip(),
                     password_hash=hash_password(password),
                     bot_token=bot_token,
                     bot_username=bot_username,
+                    bot_telegram_id=bot_telegram_id,
                 )
         except ValueError as e:
             return RedirectResponse(f"/rsetup/{token}?err={_q(str(e))}", status_code=303)
+
+        # Hot-start the reseller bot without requiring a full process restart
+        try:
+            from app.services.reseller_bots import start_reseller_bot_for_profile
+
+            await start_reseller_bot_for_profile(profile.id)
+        except Exception:
+            pass
 
         return RedirectResponse(
             f"/login?ok={_q('راه‌اندازی کامل شد — با یوزر خود وارد شوید')}",

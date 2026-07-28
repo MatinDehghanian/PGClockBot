@@ -292,6 +292,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 ("/orders", "orders"),
                 ("/payments", "payments"),
                 ("/tickets", "tickets"),
+                ("/shop-settings", "shop_settings"),
             ):
                 if key in perms:
                     return RedirectResponse(path, status_code=303)
@@ -311,6 +312,9 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     register_reseller_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     register_reseller_setup(app, render=render, get_db=get_db)
+    from app.api.shop_settings import register_shop_settings
+
+    register_shop_settings(app, render=render, require_perm=require_perm, get_db=get_db)
 
     @app.get("/health")
     async def health():
@@ -570,6 +574,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     permissions = parse_perms(profile.web_permissions) or parse_perms(
                         DEFAULT_FEATURE_PERMS
                     )
+                    # Pre-1.7 classic full set → include shop_settings in session
+                    classic = {"dashboard", "orders", "payments", "tickets", "stats"}
+                    if classic.issubset(set(permissions)) and "shop_settings" not in permissions:
+                        permissions = list(permissions) + ["shop_settings"]
                     bot_user_id = ru.id
                     pg_admin_username = profile.pg_admin_username
                     pg_permissions, pg_role = await resolve_reseller_pg_features(profile.pg_role_id)

@@ -137,13 +137,22 @@ def active_support_contacts(contacts: list[dict[str, Any]]) -> list[dict[str, An
     return [c for c in contacts if c.get("enabled", True) and support_chat_url(c.get("telegram") or "")]
 
 
-async def get_support_contacts(session: AsyncSession) -> list[dict[str, Any]]:
-    raw = await get_setting(session, SETTING_KEY)
+async def get_support_contacts(
+    session: AsyncSession,
+    *,
+    reseller_id: int | None = None,
+) -> list[dict[str, Any]]:
+    raw = await get_setting(session, SETTING_KEY, reseller_id=reseller_id)
     return parse_support_contacts(raw)
 
 
-async def save_support_contacts(session: AsyncSession, contacts: list[dict[str, Any]]) -> None:
-    await set_setting(session, SETTING_KEY, dump_support_contacts(contacts))
+async def save_support_contacts(
+    session: AsyncSession,
+    contacts: list[dict[str, Any]],
+    *,
+    reseller_id: int | None = None,
+) -> None:
+    await set_setting(session, SETTING_KEY, dump_support_contacts(contacts), reseller_id=reseller_id)
 
 
 async def upsert_support_contact(
@@ -154,6 +163,7 @@ async def upsert_support_contact(
     telegram: str,
     sort: int = 0,
     enabled: bool = True,
+    reseller_id: int | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     err = validate_telegram(telegram)
     title = (title or "").strip()
@@ -161,7 +171,7 @@ async def upsert_support_contact(
         return None, "عنوان الزامی است"
     if err:
         return None, err
-    contacts = await get_support_contacts(session)
+    contacts = await get_support_contacts(session, reseller_id=reseller_id)
     if contact_id:
         found = None
         for c in contacts:
@@ -174,7 +184,7 @@ async def upsert_support_contact(
         found["telegram"] = normalize_telegram_handle(telegram)
         found["sort"] = sort
         found["enabled"] = enabled
-        await save_support_contacts(session, contacts)
+        await save_support_contacts(session, contacts, reseller_id=reseller_id)
         return found, None
     item = {
         "id": _new_id(),
@@ -184,14 +194,19 @@ async def upsert_support_contact(
         "enabled": enabled,
     }
     contacts.append(item)
-    await save_support_contacts(session, contacts)
+    await save_support_contacts(session, contacts, reseller_id=reseller_id)
     return item, None
 
 
-async def delete_support_contact(session: AsyncSession, contact_id: str) -> bool:
-    contacts = await get_support_contacts(session)
+async def delete_support_contact(
+    session: AsyncSession,
+    contact_id: str,
+    *,
+    reseller_id: int | None = None,
+) -> bool:
+    contacts = await get_support_contacts(session, reseller_id=reseller_id)
     new = [c for c in contacts if c["id"] != contact_id]
     if len(new) == len(contacts):
         return False
-    await save_support_contacts(session, new)
+    await save_support_contacts(session, new, reseller_id=reseller_id)
     return True

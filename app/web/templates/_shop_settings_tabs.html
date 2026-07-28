@@ -1,0 +1,7 @@
+{% macro shop_settings_tabs(active, base="/shop-settings") -%}
+<nav class="section-tabs settings-tabs" aria-label="تب‌های تنظیمات فروشگاه">
+  {% for key, label in tabs %}
+  <a href="{{ base }}?tab={{ key }}" class="{% if active==key %}active{% endif %}">{{ label }}</a>
+  {% endfor %}
+</nav>
+{%- endmacro %}

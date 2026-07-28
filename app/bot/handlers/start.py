@@ -32,16 +32,26 @@ async def render_home(
     *,
     edit: bool = False,
     seed_reply_kb: bool = False,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     from app.services.formatting import format_message
 
     ui = await get_all_settings(session)
-    if db_user.role == "admin":
+    # On a reseller-owned bot, platform admins see the shop — not the main admin panel.
+    effective_role = db_user.role
+    if is_reseller_bot:
+        if reseller_owner_id and db_user.id == reseller_owner_id:
+            effective_role = "reseller"
+        elif db_user.role == "admin":
+            effective_role = "user"
+
+    if effective_role == "admin":
         text = format_message(
             f"🛠 {ui.get('shop_title', 'کلاک')}",
             "پنل مدیریت فروشگاه\nاز گزینه‌های زیر استفاده کنید.",
         )
-        markup = kb.main_menu(db_user.role, has_services=False, ui=ui)
+        markup = kb.main_menu(effective_role, has_services=False, ui=ui)
     else:
         welcome = ui.get("welcome_text", "")
         title = ui.get("shop_title", "")
@@ -51,7 +61,7 @@ async def render_home(
             body = welcome
         text = format_message(f"✨ {title}", body)
         has = await _has_services(session, db_user.id)
-        markup = kb.main_menu(db_user.role, has_services=has, ui=ui)
+        markup = kb.main_menu(effective_role, has_services=has, ui=ui)
     if edit:
         from aiogram.exceptions import TelegramBadRequest
 
@@ -77,9 +87,18 @@ async def cmd_restart(
     state: FSMContext,
     session: AsyncSession,
     db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     await state.clear()
-    await render_home(message, session, db_user, seed_reply_kb=True)
+    await render_home(
+        message,
+        session,
+        db_user,
+        seed_reply_kb=True,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
 
 
 @router.message(CommandStart())
@@ -89,6 +108,8 @@ async def cmd_start(
     session: AsyncSession,
     db_user: BotUser,
     state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     await state.clear()
     args = (command.args or "").strip()
@@ -102,20 +123,43 @@ async def cmd_start(
         return
     channel = await get_setting(session, "force_join_channel")
     enabled = await get_setting(session, "force_join_enabled")
-    if on(enabled) and channel and db_user.role == "user":
+    role_for_force = db_user.role
+    if is_reseller_bot and role_for_force == "admin":
+        role_for_force = "user"
+    if on(enabled) and channel and role_for_force == "user":
         await message.answer(
             f"برای استفاده، ابتدا در کانال {channel} عضو شوید سپس دوباره /start بزنید.",
             reply_markup=kb.persistent_reply_keyboard(),
         )
         return
-    await render_home(message, session, db_user, seed_reply_kb=True)
+    await render_home(
+        message,
+        session,
+        db_user,
+        seed_reply_kb=True,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
 
 
 @router.callback_query(F.data == "menu:home")
-async def cb_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def cb_home(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     await callback.answer()
     if callback.message:
-        await render_home(callback.message, session, db_user, edit=True)
+        await render_home(
+            callback.message,
+            session,
+            db_user,
+            edit=True,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
 
 
 @router.callback_query(F.data == "menu:as_user")
@@ -136,9 +180,23 @@ async def cb_home_as_user(callback: CallbackQuery, session: AsyncSession, db_use
 
 
 @router.message(Command("menu"))
-async def cmd_menu(message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext):
+async def cmd_menu(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     await state.clear()
-    await render_home(message, session, db_user, seed_reply_kb=True)
+    await render_home(
+        message,
+        session,
+        db_user,
+        seed_reply_kb=True,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
 
 
 @router.callback_query(F.data == "help:guide")

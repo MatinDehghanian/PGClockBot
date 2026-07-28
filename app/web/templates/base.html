@@ -77,6 +77,12 @@
             <span>تیکت‌ها</span>
           </a>
           {% endif %}
+          {% if is_admin or 'shop_settings' in perms %}
+          <a href="{% if is_admin %}/settings{% else %}/shop-settings{% endif %}" class="nav-item nav-item-bot {% if path.startswith('/settings') or path.startswith('/shop-settings') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M4.9 7.1l1.6 1.6M17.5 15.3l1.6 1.6M3.5 12h2.2M18.3 12h2.2M4.9 16.9l1.6-1.6M17.5 8.7l1.6-1.6"/></svg>
+            <span>تنظیمات ربات</span>
+          </a>
+          {% endif %}
           {% if is_admin %}
           <a href="/users" class="nav-item nav-item-bot {% if path.startswith('/users') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
@@ -89,10 +95,6 @@
           <a href="/broadcast" class="nav-item nav-item-bot {% if path.startswith('/broadcast') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M18.8 6.2a8.5 8.5 0 0 1 0 11.6"/></svg>
             <span>پیام گروهی</span>
-          </a>
-          <a href="/settings" class="nav-item nav-item-bot {% if path.startswith('/settings') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M4.9 7.1l1.6 1.6M17.5 15.3l1.6 1.6M3.5 12h2.2M18.3 12h2.2M4.9 16.9l1.6-1.6M17.5 8.7l1.6-1.6"/></svg>
-            <span>تنظیمات ربات</span>
           </a>
           {% endif %}
         </div>

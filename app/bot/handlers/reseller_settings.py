@@ -1,0 +1,582 @@
+"""Reseller shop settings in Telegram — subset of admin settings, scoped to their bot."""
+
+from __future__ import annotations
+
+from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.bot import keyboards as kb
+from app.bot.tg_utils import safe_edit_text
+from app.db.models import BotUser, Role
+from app.services.resellers import get_reseller_profile, has_bot_perm
+from app.services.support_contacts import (
+    delete_support_contact,
+    get_support_contacts,
+    upsert_support_contact,
+)
+from app.services.users import (
+    get_setting,
+    on,
+    reset_shop_reseller_id,
+    set_setting,
+    set_shop_reseller_id,
+)
+
+router = Router(name="reseller_settings")
+
+Field = tuple[str, str, str]
+
+SECTIONS: dict[str, dict] = {
+    "shop": {
+        "title": "فروشگاه و متون",
+        "subs": [
+            ("identity", "نام و خوش‌آمد", [
+                ("shop_title", "نام فروشگاه", "text"),
+                ("welcome_text", "پیام /start", "textarea"),
+            ]),
+            ("help_texts", "راهنما و دعوت", [
+                ("guide_text", "راهنما", "textarea"),
+                ("faq_text", "سوالات متداول", "textarea"),
+                ("support_text", "متن پشتیبانی", "textarea"),
+                ("referral_text", "متن دعوت", "textarea"),
+            ]),
+            ("sys_texts", "پیام‌های سیستم", [
+                ("empty_services_text", "بدون سرویس", "textarea"),
+                ("shop_empty_text", "فروشگاه خالی", "textarea"),
+                ("delivery_title", "عنوان تحویل", "text"),
+                ("purchase_success_text", "موفقیت خرید", "textarea"),
+                ("wallet_success_text", "موفقیت شارژ", "textarea"),
+                ("payment_reject_text", "رد پرداخت", "textarea"),
+            ]),
+            ("btn_labels", "متن دکمه‌های منو", [
+                ("btn_shop", "خرید", "text"),
+                ("btn_services", "سرویس‌ها", "text"),
+                ("btn_wallet", "کیف پول", "text"),
+                ("btn_support", "پشتیبانی", "text"),
+                ("btn_guide", "راهنما", "text"),
+                ("btn_faq", "سوالات", "text"),
+                ("btn_referral", "دعوت", "text"),
+                ("btn_back", "بازگشت", "text"),
+                ("btn_cancel", "انصراف", "text"),
+                ("btn_renew", "تمدید", "text"),
+                ("btn_sub_link", "لینک/QR", "text"),
+            ]),
+        ],
+    },
+    "menu": {
+        "title": "منوی کاربر",
+        "subs": [
+            ("vis", "نمایش آیتم‌ها", [
+                ("show_wallet", "کیف پول", "toggle"),
+                ("show_support", "پشتیبانی", "toggle"),
+                ("show_guide", "راهنما", "toggle"),
+                ("show_faq", "سوالات", "toggle"),
+                ("show_referral", "دعوت", "toggle"),
+                ("show_miniapp", "مینی‌اپ", "toggle"),
+            ]),
+            ("layout", "چیدمان", [
+                ("menu_layout", "چیدمان منو", "text"),
+            ]),
+        ],
+    },
+    "pay": {
+        "title": "پرداخت",
+        "subs": [
+            ("methods", "روش‌های فعال", [
+                ("pay_wallet_enabled", "کیف پول", "toggle"),
+                ("pay_card_enabled", "کارت به کارت", "toggle"),
+                ("pay_gateway_enabled", "درگاه", "toggle"),
+                ("pay_crypto_enabled", "رمزارز", "toggle"),
+                ("pay_stars_enabled", "استارز", "toggle"),
+                ("pay_discount_enabled", "کد تخفیف", "toggle"),
+                ("auto_approve_payments", "تأیید خودکار رسید", "toggle"),
+            ]),
+            ("card", "کارت به کارت", [
+                ("card_number", "شماره کارت", "text"),
+                ("card_holder", "صاحب کارت", "text"),
+                ("card_pay_text", "راهنمای پرداخت", "textarea"),
+                ("btn_pay_card", "متن دکمه", "text"),
+            ]),
+            ("gateway", "درگاه", [
+                ("gateway_name", "نام درگاه", "text"),
+                ("gateway_link", "لینک", "text"),
+                ("gateway_pay_text", "راهنما", "textarea"),
+                ("btn_pay_gateway", "متن دکمه", "text"),
+            ]),
+            ("crypto", "رمزارز", [
+                ("crypto_asset", "رمزارز", "text"),
+                ("crypto_network", "شبکه", "text"),
+                ("crypto_address", "آدرس ولت", "text"),
+                ("crypto_pay_text", "راهنما", "textarea"),
+                ("btn_pay_crypto", "متن دکمه", "text"),
+            ]),
+        ],
+    },
+    "support": {
+        "title": "پشتیبان‌ها",
+        "kind": "supports",
+    },
+    "access": {
+        "title": "دسترسی و QR",
+        "subs": [
+            ("qr", "QR اشتراک", [
+                ("qr_enabled", "ارسال خودکار QR", "toggle"),
+                ("show_sub_link_in_text", "لینک در کپشن", "toggle"),
+                ("qr_caption", "کپشن QR", "textarea"),
+            ]),
+            ("force", "کانال اجباری", [
+                ("force_join_enabled", "فعال", "toggle"),
+                ("force_join_channel", "آدرس کانال", "text"),
+            ]),
+        ],
+    },
+    "bot": {
+        "title": "ربات اختصاصی",
+        "kind": "bot",
+    },
+}
+
+HUB_ORDER = ["shop", "menu", "pay", "support", "access", "bot"]
+
+
+class ResellerSettingsStates(StatesGroup):
+    edit_value = State()
+    support_title = State()
+    support_telegram = State()
+    bot_token = State()
+
+
+def _field_lookup() -> dict[str, Field]:
+    out: dict[str, Field] = {}
+    for sec in SECTIONS.values():
+        for sub in sec.get("subs") or []:
+            if isinstance(sub[2], list):
+                for f in sub[2]:
+                    out[f[0]] = f
+    return out
+
+
+FIELDS = _field_lookup()
+
+
+def _preview(value: str | None, *, limit: int = 120) -> str:
+    text = (value or "").strip()
+    if not text:
+        return "—"
+    if len(text) > limit:
+        return text[: limit - 1] + "…"
+    return text
+
+
+def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _gate(session: AsyncSession, db_user: BotUser):
+    if db_user.role != Role.RESELLER.value:
+        return None, "فقط نمایندگان"
+    profile = await get_reseller_profile(session, db_user.id)
+    if not profile or not has_bot_perm(profile, "shop_settings"):
+        return None, "دسترسی تنظیمات فروشگاه ندارید"
+    return profile, None
+
+
+class _Scoped:
+    """Temporarily force reseller setting scope even on the main bot."""
+
+    def __init__(self, reseller_user_id: int):
+        self.reseller_user_id = reseller_user_id
+        self._token = None
+
+    def __enter__(self):
+        self._token = set_shop_reseller_id(self.reseller_user_id)
+        return self
+
+    def __exit__(self, *args):
+        if self._token is not None:
+            reset_shop_reseller_id(self._token)
+
+
+async def _render_hub(callback: CallbackQuery, profile):
+    rows = [
+        [InlineKeyboardButton(text=SECTIONS[sid]["title"], callback_data=f"res:st:sec:{sid}")]
+        for sid in HUB_ORDER
+    ]
+    rows.append([InlineKeyboardButton(text="⬅️ پنل نماینده", callback_data="res:home")])
+    bot_line = f"@{profile.bot_username}" if profile.bot_username else "توکن ثبت نشده"
+    text = (
+        "⚙️ <b>تنظیمات فروشگاه</b>\n\n"
+        f"ربات: <code>{bot_line}</code>\n"
+        "فقط تنظیمات مجاز فروشگاه شما — بدون تنظیمات پلتفرم."
+    )
+    if callback.message:
+        await safe_edit_text(callback.message, text, reply_markup=_kb(rows))
+
+
+async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id: str, reseller_id: int):
+    sec = SECTIONS.get(sec_id)
+    if not sec:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    with _Scoped(reseller_id):
+        if sec.get("kind") == "supports":
+            contacts = await get_support_contacts(session, reseller_id=reseller_id)
+            rows = []
+            for c in contacts:
+                mark = "✅" if c.get("enabled") else "⏸"
+                rows.append(
+                    [
+                        InlineKeyboardButton(
+                            text=f"{mark} {c['title']}",
+                            callback_data=f"res:st:sup:del:{c['id']}",
+                        )
+                    ]
+                )
+            rows.append(
+                [InlineKeyboardButton(text="➕ پشتیبان جدید", callback_data="res:st:sup:add")]
+            )
+            rows.append([InlineKeyboardButton(text="⬅️ تنظیمات", callback_data="res:st:hub")])
+            body = "پشتیبان فعال نیست." if not contacts else "برای حذف روی مورد بزنید."
+            if callback.message:
+                await safe_edit_text(
+                    callback.message,
+                    f"💬 <b>پشتیبان‌ها</b>\n\n{body}",
+                    reply_markup=_kb(rows),
+                )
+            return
+
+        if sec.get("kind") == "bot":
+            profile = await get_reseller_profile(session, reseller_id)
+            uname = f"@{profile.bot_username}" if profile and profile.bot_username else "—"
+            rows = [
+                [InlineKeyboardButton(text="🔄 تغییر توکن ربات", callback_data="res:st:bot:token")],
+                [InlineKeyboardButton(text="⬅️ تنظیمات", callback_data="res:st:hub")],
+            ]
+            text = (
+                "🤖 <b>ربات اختصاصی</b>\n\n"
+                f"یوزرنیم: <code>{uname}</code>\n"
+                "توکن را فقط از @BotFather بگیرید. پس از تغییر، ربات ظرف چند ثانیه وصل می‌شود."
+            )
+            if callback.message:
+                await safe_edit_text(callback.message, text, reply_markup=_kb(rows))
+            return
+
+        rows = []
+        for sub_id, label, _fields in sec.get("subs") or []:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=label,
+                        callback_data=f"res:st:sub:{sec_id}:{sub_id}",
+                    )
+                ]
+            )
+        rows.append([InlineKeyboardButton(text="⬅️ تنظیمات", callback_data="res:st:hub")])
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                f"⚙️ <b>{sec['title']}</b>",
+                reply_markup=_kb(rows),
+            )
+
+
+async def _render_sub(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    sec_id: str,
+    sub_id: str,
+    reseller_id: int,
+):
+    sec = SECTIONS.get(sec_id) or {}
+    fields = None
+    title = sub_id
+    for sid, label, payload in sec.get("subs") or []:
+        if sid == sub_id:
+            title = label
+            fields = payload
+            break
+    if not isinstance(fields, list):
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    with _Scoped(reseller_id):
+        rows = []
+        for key, label, kind in fields:
+            cur = await get_setting(session, key, reseller_id=reseller_id)
+            if kind == "toggle":
+                mark = "✅" if on(cur) else "❌"
+                rows.append(
+                    [
+                        InlineKeyboardButton(
+                            text=f"{mark} {label}",
+                            callback_data=f"res:st:tog:{key}",
+                        )
+                    ]
+                )
+            else:
+                rows.append(
+                    [
+                        InlineKeyboardButton(
+                            text=f"✏️ {label}: {_preview(cur, limit=28)}",
+                            callback_data=f"res:st:edit:{key}",
+                        )
+                    ]
+                )
+        rows.append(
+            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data=f"res:st:sec:{sec_id}")]
+        )
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                f"⚙️ <b>{title}</b>",
+                reply_markup=_kb(rows),
+            )
+
+
+def _owner_screen_for_key(key: str) -> tuple[str, str] | None:
+    for sec_id, sec in SECTIONS.items():
+        for sub_id, _label, payload in sec.get("subs") or []:
+            if isinstance(payload, list):
+                for f in payload:
+                    if f[0] == key:
+                        return sec_id, sub_id
+    return None
+
+
+@router.callback_query(F.data == "res:st:hub")
+async def settings_hub(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
+    profile, err = await _gate(session, db_user)
+    if err:
+        await callback.answer(err, show_alert=True)
+        return
+    await state.clear()
+    await callback.answer()
+    await _render_hub(callback, profile)
+
+
+@router.callback_query(F.data.startswith("res:st:sec:"))
+async def settings_section(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    profile, err = await _gate(session, db_user)
+    if err:
+        await callback.answer(err, show_alert=True)
+        return
+    sec_id = callback.data.split(":")[-1]
+    await callback.answer()
+    await _render_section(callback, session, sec_id, profile.user_id)
+
+
+@router.callback_query(F.data.startswith("res:st:sub:"))
+async def settings_sub(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    profile, err = await _gate(session, db_user)
+    if err:
+        await callback.answer(err, show_alert=True)
+        return
+    parts = callback.data.split(":")
+    sec_id, sub_id = parts[3], parts[4]
+    await callback.answer()
+    await _render_sub(callback, session, sec_id, sub_id, profile.user_id)
+
+
+@router.callback_query(F.data.startswith("res:st:tog:"))
+async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    profile, err = await _gate(session, db_user)
+    if err:
+        await callback.answer(err, show_alert=True)
+        return
+    key = callback.data.split(":", 3)[-1]
+    if key not in FIELDS:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    with _Scoped(profile.user_id):
+        cur = await get_setting(session, key, reseller_id=profile.user_id)
+        new_val = "0" if on(cur) else "1"
+        await set_setting(session, key, new_val, reseller_id=profile.user_id)
+    await callback.answer("ذخیره شد")
+    loc = _owner_screen_for_key(key)
+    if loc:
+        await _render_sub(callback, session, loc[0], loc[1], profile.user_id)
+
+
+@router.callback_query(F.data.startswith("res:st:edit:"))
+async def settings_edit_ask(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    profile, err = await _gate(session, db_user)
+    if err:
+        await callback.answer(err, show_alert=True)
+        return
+    key = callback.data.split(":", 3)[-1]
+    meta = FIELDS.get(key)
+    if not meta:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    with _Scoped(profile.user_id):
+        cur = await get_setting(session, key, reseller_id=profile.user_id)
+    await callback.answer()
+    await state.set_state(ResellerSettingsStates.edit_value)
+    await state.update_data(edit_key=key, reseller_id=profile.user_id)
+    if callback.message:
+        await callback.message.answer(
+            f"<b>{meta[1]}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\nمتن جدید را بفرستید.\nبرای انصراف: انصراف",
+            reply_markup=kb.cancel_reply(),
+        )
+
+
+@router.message(ResellerSettingsStates.edit_value)
+async def settings_edit_save(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
+    profile, err = await _gate(session, db_user)
+    if err:
+        await state.clear()
+        await message.answer(err)
+        return
+    data = await state.get_data()
+    key = data.get("edit_key")
+    text = (message.text or "").strip()
+    if text == "انصراف" or not key:
+        await state.clear()
+        await message.answer(
+            "لغو شد.",
+            reply_markup=_kb([[InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="res:st:hub")]]),
+        )
+        return
+    await set_setting(session, key, text, reseller_id=profile.user_id)
+    await state.clear()
+    await message.answer(
+        "✅ ذخیره شد.",
+        reply_markup=_kb([[InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="res:st:hub")]]),
+    )
+
+
+@router.callback_query(F.data == "res:st:sup:add")
+async def support_add(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser):
+    profile, err = await _gate(session, db_user)
+    if err:
+        await callback.answer(err, show_alert=True)
+        return
+    await callback.answer()
+    await state.set_state(ResellerSettingsStates.support_title)
+    await state.update_data(reseller_id=profile.user_id)
+    if callback.message:
+        await callback.message.answer("عنوان پشتیبان را بفرستید:", reply_markup=kb.cancel_reply())
+
+
+@router.message(ResellerSettingsStates.support_title)
+async def support_title_save(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
+    profile, err = await _gate(session, db_user)
+    if err:
+        await state.clear()
+        return
+    text = (message.text or "").strip()
+    if text == "انصراف":
+        await state.clear()
+        await message.answer("لغو شد.")
+        return
+    await state.update_data(support_title=text)
+    await state.set_state(ResellerSettingsStates.support_telegram)
+    await message.answer("یوزرنیم یا آیدی عددی تلگرام را بفرستید:", reply_markup=kb.cancel_reply())
+
+
+@router.message(ResellerSettingsStates.support_telegram)
+async def support_telegram_save(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
+    profile, err = await _gate(session, db_user)
+    if err:
+        await state.clear()
+        return
+    text = (message.text or "").strip()
+    if text == "انصراف":
+        await state.clear()
+        await message.answer("لغو شد.")
+        return
+    data = await state.get_data()
+    title = data.get("support_title") or "پشتیبانی"
+    _, err2 = await upsert_support_contact(
+        session,
+        contact_id=None,
+        title=title,
+        telegram=text,
+        reseller_id=profile.user_id,
+    )
+    await state.clear()
+    if err2:
+        await message.answer(f"❌ {err2}")
+        return
+    await message.answer(
+        "✅ پشتیبان اضافه شد.",
+        reply_markup=_kb([[InlineKeyboardButton(text="💬 پشتیبان‌ها", callback_data="res:st:sec:support")]]),
+    )
+
+
+@router.callback_query(F.data.startswith("res:st:sup:del:"))
+async def support_del(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    profile, err = await _gate(session, db_user)
+    if err:
+        await callback.answer(err, show_alert=True)
+        return
+    cid = callback.data.split(":")[-1]
+    await delete_support_contact(session, cid, reseller_id=profile.user_id)
+    await callback.answer("حذف شد")
+    await _render_section(callback, session, "support", profile.user_id)
+
+
+@router.callback_query(F.data == "res:st:bot:token")
+async def bot_token_ask(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser):
+    profile, err = await _gate(session, db_user)
+    if err:
+        await callback.answer(err, show_alert=True)
+        return
+    await callback.answer()
+    await state.set_state(ResellerSettingsStates.bot_token)
+    await state.update_data(reseller_id=profile.user_id)
+    if callback.message:
+        await callback.message.answer(
+            "توکن جدید ربات را از @BotFather بفرستید:\nبرای انصراف: انصراف",
+            reply_markup=kb.cancel_reply(),
+        )
+
+
+@router.message(ResellerSettingsStates.bot_token)
+async def bot_token_save(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
+    profile, err = await _gate(session, db_user)
+    if err:
+        await state.clear()
+        return
+    text = (message.text or "").strip()
+    if text == "انصراف":
+        await state.clear()
+        await message.answer("لغو شد.")
+        return
+    from app.services.resellers import complete_reseller_setup
+    from app.services.reseller_bots import start_reseller_bot_for_profile
+
+    try:
+        from aiogram import Bot as TgBot
+
+        bot = TgBot(token=text)
+        try:
+            me = await bot.get_me()
+            uname = me.username or str(me.id)
+            tg_id = int(me.id)
+        finally:
+            await bot.session.close()
+        await complete_reseller_setup(
+            session,
+            profile,
+            bot_token=text,
+            bot_username=uname,
+            bot_telegram_id=tg_id,
+            bot_only=True,
+        )
+        await start_reseller_bot_for_profile(profile.id)
+    except ValueError as e:
+        await message.answer(f"❌ {e}")
+        return
+    except Exception:
+        await message.answer("❌ توکن نامعتبر است")
+        return
+    await state.clear()
+    await message.answer(
+        f"✅ ربات @{uname} ثبت و راه‌اندازی شد.",
+        reply_markup=_kb([[InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="res:st:hub")]]),
+    )

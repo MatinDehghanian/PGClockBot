@@ -3,12 +3,18 @@ from __future__ import annotations
 import logging
 from typing import Any, Awaitable, Callable, Dict
 
-from aiogram import BaseMiddleware
+from aiogram import BaseMiddleware, Bot
 from aiogram.types import CallbackQuery, Message, TelegramObject, Update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.db.session import SessionLocal
-from app.services.users import get_or_create_user
+from app.services.reseller_bots import lookup_reseller_by_bot_token
+from app.services.users import (
+    get_or_create_user,
+    reset_shop_reseller_id,
+    set_shop_reseller_id,
+)
 
 logger = logging.getLogger("pgclock.bot")
 
@@ -89,47 +95,70 @@ class UserMiddleware(BaseMiddleware):
         data: Dict[str, Any],
     ) -> Any:
         session: AsyncSession = data["session"]
-        tg_user = _extract_from_user(event)
-        if tg_user:
-            referred_by_code = None
-            payload = _extract_start_payload(event)
-            if payload and payload.startswith("ref_"):
-                referred_by_code = payload[4:].strip()
-            try:
-                user = await get_or_create_user(
-                    session,
-                    tg_user.id,
-                    username=tg_user.username,
-                    full_name=tg_user.full_name,
-                    referred_by_code=referred_by_code,
-                )
-            except Exception:
-                logger.exception("Failed to load/create bot user tg_id=%s", tg_user.id)
-                msg = _reply_message(event)
-                if msg:
-                    try:
-                        await msg.answer("خطای موقت. چند ثانیه بعد دوباره /start بزنید.")
-                    except Exception:
-                        pass
-                return None
-            data["db_user"] = user
-            if user.is_blocked:
-                msg = _reply_message(event)
-                if msg:
-                    try:
-                        await msg.answer("دسترسی شما مسدود شده است.")
-                    except Exception:
-                        pass
-                cq = event.callback_query if isinstance(event, Update) else (
-                    event if isinstance(event, CallbackQuery) else None
-                )
-                if cq is not None:
-                    try:
-                        await cq.answer("دسترسی شما مسدود شده است.", show_alert=True)
-                    except Exception:
-                        pass
-                return None
-        return await handler(event, data)
+        bot: Bot | None = data.get("bot")
+        reseller_owner_id: int | None = None
+        reseller_profile_id: int | None = None
+        is_reseller_bot = False
+
+        token = getattr(bot, "token", None) if bot else None
+        main_token = (get_settings().bot_token or "").strip()
+        if token and main_token and token != main_token:
+            info = await lookup_reseller_by_bot_token(session, token)
+            if info:
+                reseller_owner_id = int(info["user_id"])
+                reseller_profile_id = int(info["profile_id"])
+                is_reseller_bot = True
+
+        data["reseller_owner_id"] = reseller_owner_id
+        data["reseller_profile_id"] = reseller_profile_id
+        data["is_reseller_bot"] = is_reseller_bot
+
+        ctx_token = set_shop_reseller_id(reseller_owner_id)
+        try:
+            tg_user = _extract_from_user(event)
+            if tg_user:
+                referred_by_code = None
+                payload = _extract_start_payload(event)
+                if payload and payload.startswith("ref_"):
+                    referred_by_code = payload[4:].strip()
+                try:
+                    user = await get_or_create_user(
+                        session,
+                        tg_user.id,
+                        username=tg_user.username,
+                        full_name=tg_user.full_name,
+                        referred_by_code=referred_by_code,
+                        reseller_owner_id=reseller_owner_id,
+                    )
+                except Exception:
+                    logger.exception("Failed to load/create bot user tg_id=%s", tg_user.id)
+                    msg = _reply_message(event)
+                    if msg:
+                        try:
+                            await msg.answer("خطای موقت. چند ثانیه بعد دوباره /start بزنید.")
+                        except Exception:
+                            pass
+                    return None
+                data["db_user"] = user
+                if user.is_blocked:
+                    msg = _reply_message(event)
+                    if msg:
+                        try:
+                            await msg.answer("دسترسی شما مسدود شده است.")
+                        except Exception:
+                            pass
+                    cq = event.callback_query if isinstance(event, Update) else (
+                        event if isinstance(event, CallbackQuery) else None
+                    )
+                    if cq is not None:
+                        try:
+                            await cq.answer("دسترسی شما مسدود شده است.", show_alert=True)
+                        except Exception:
+                            pass
+                    return None
+            return await handler(event, data)
+        finally:
+            reset_shop_reseller_id(ctx_token)
 
 
 class ErrorLogMiddleware(BaseMiddleware):

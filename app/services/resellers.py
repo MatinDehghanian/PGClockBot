@@ -29,6 +29,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("payments", "پرداخت‌ها و تأیید رسید"),
     ("tickets", "تیکت‌ها"),
     ("stats", "آمار و کمیسیون"),
+    ("shop_settings", "تنظیمات ربات فروشگاه"),
 ]
 
 # Back-compat aliases used by older templates
@@ -38,10 +39,22 @@ BOT_PERM_OPTIONS = [
     ("payments", "تأیید رسید مشتریان"),
 ]
 
-DEFAULT_FEATURE_PERMS = "dashboard,orders,payments,tickets,stats"
+DEFAULT_FEATURE_PERMS = "dashboard,orders,payments,tickets,stats,shop_settings"
 DEFAULT_WEB_PERMS = DEFAULT_FEATURE_PERMS
 DEFAULT_BOT_PERMS = DEFAULT_FEATURE_PERMS
 
+# Tabs a reseller may edit for their own shop bot
+RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
+    ("welcome", "خوش‌آمد و هویت"),
+    ("messages", "متن پیام‌ها"),
+    ("buttons", "متن دکمه‌ها"),
+    ("menu", "منوی بات"),
+    ("qr", "QR اشتراک"),
+    ("payment", "پرداخت"),
+    ("supports", "پشتیبان‌ها"),
+    ("forcejoin", "کانال اجباری"),
+    ("bot", "ربات اختصاصی"),
+]
 SETUP_TOKEN_HOURS = 48
 
 
@@ -106,7 +119,14 @@ def has_perm(profile: ResellerProfile | None, key: str, *, role: str | None = No
     if not profile or not profile.is_active:
         return False
     perms = parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
-    return key in perms
+    if key in perms:
+        return True
+    # Pre-1.7 profiles with the classic full set also get shop settings
+    if key == "shop_settings":
+        classic = {"dashboard", "orders", "payments", "tickets", "stats"}
+        if classic.issubset(set(perms)):
+            return True
+    return False
 
 
 def has_web_perm(profile: ResellerProfile | None, key: str, *, role: str | None = None) -> bool:
@@ -589,6 +609,7 @@ async def complete_reseller_setup(
     password_hash: str | None = None,
     bot_token: str | None = None,
     bot_username: str | None = None,
+    bot_telegram_id: int | None = None,
     bot_only: bool = False,
 ) -> ResellerProfile:
     """Finalize setup wizard. bot_only=True updates bot token when web creds already exist."""
@@ -626,6 +647,8 @@ async def complete_reseller_setup(
             raise ValueError("این توکن ربات قبلاً برای نماینده دیگری ثبت شده")
         profile.bot_token = token
         profile.bot_username = (bot_username or "").lstrip("@") or None
+        if bot_telegram_id:
+            profile.bot_telegram_id = int(bot_telegram_id)
     elif not bot_only:
         raise ValueError("توکن ربات الزامی است")
 
@@ -717,6 +740,7 @@ async def revoke_reseller(
         raise ValueError("این کاربر نماینده نیست")
 
     pg_username = (profile.pg_admin_username or "").strip() or None
+    profile_id = profile.id
     pg_deleted = False
     if delete_pg_admin and pg_username:
         try:
@@ -739,6 +763,15 @@ async def revoke_reseller(
     if commit:
         await session.commit()
         await session.refresh(user)
+
+    try:
+        from app.services.reseller_bots import get_reseller_bot_manager
+
+        mgr = get_reseller_bot_manager()
+        if mgr:
+            await mgr.stop_reseller(profile_id)
+    except Exception:
+        pass
 
     return {
         "user_id": user_id,

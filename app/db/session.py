@@ -41,6 +41,7 @@ def _migrate_sqlite(sync_conn) -> None:
             "setup_completed_at": "DATETIME",
             "bot_token": "TEXT",
             "bot_username": "VARCHAR(64)",
+            "bot_telegram_id": "BIGINT",
             "share_pg_panel_url": "BOOLEAN DEFAULT 0",
         }
         for col, typ in alters.items():

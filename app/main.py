@@ -83,6 +83,7 @@ def main() -> None:
             logger.exception("Demo plan seed failed — continuing")
 
         poll_task = None
+        reseller_mgr = None
         panel_only = bot is None or dp is None
 
         if panel_only:
@@ -155,9 +156,23 @@ def main() -> None:
 
                     poll_task.add_done_callback(_on_done)
 
+                # Reseller-owned bots always use getUpdates (independent of main webhook)
+                try:
+                    from app.services.reseller_bots import init_reseller_bot_manager
+
+                    reseller_mgr = init_reseller_bot_manager(dp)
+                    await reseller_mgr.start_all()
+                except Exception:
+                    logger.exception("Reseller bots failed to start")
+
         try:
             yield
         finally:
+            if reseller_mgr is not None:
+                try:
+                    await reseller_mgr.stop_all()
+                except Exception:
+                    logger.exception("Reseller bots shutdown failed")
             if poll_task:
                 poll_task.cancel()
                 try:

@@ -597,6 +597,10 @@ def reseller_home(profile=None) -> InlineKeyboardMarkup:
         )
     if profile is not None and has_bot_perm(profile, "tickets"):
         rows.append([InlineKeyboardButton(text="🎫 تیکت‌های مشتریان", callback_data="res:tickets")])
+    if profile is not None and has_bot_perm(profile, "shop_settings"):
+        rows.append(
+            [InlineKeyboardButton(text="⚙️ تنظیمات فروشگاه", callback_data="res:st:hub")]
+        )
     rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="menu:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
