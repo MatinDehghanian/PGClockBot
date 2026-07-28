@@ -284,22 +284,23 @@ a:hover { opacity: 0.8; }
 
 label {
   display: block;
-  margin: 0 0 14px;
+  margin: 0 0 16px;
   color: var(--muted-fg);
   font-size: 12px;
   font-weight: 500;
 }
 label > small.muted, .hint {
   display: block;
-  margin-top: 4px;
-  margin-bottom: 8px;
+  margin-top: 6px;
+  margin-bottom: 10px;
   font-size: 12px;
   color: var(--muted-fg);
   font-weight: 400;
+  line-height: 1.6;
 }
 input, select, textarea {
   width: 100%;
-  margin-top: 6px;
+  margin-top: 8px;
   background: #09090b;
   color: var(--foreground);
   border: 1px solid var(--input);
@@ -349,10 +350,32 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .form-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px;
-  margin-bottom: 10px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
-.checks { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; }
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+.form-field > label,
+.form-row label {
+  margin: 0;
+}
+.form-field input,
+.form-field select,
+.form-field textarea,
+.form-row input,
+.form-row select {
+  margin-top: 0;
+}
+.checks { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 4px; }
 .checks label {
   display: inline-flex; align-items: center; gap: 8px; margin: 0;
   color: var(--foreground); font-weight: 500; font-size: 13px;
@@ -741,10 +764,27 @@ tr:last-child td { border-bottom: 0; }
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 .setting-item.full { grid-column: 1 / -1; }
-.settings-card { margin-bottom: 14px; scroll-margin-top: 16px; }
+.settings-card { margin-bottom: 16px; scroll-margin-top: 16px; }
+.settings-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.settings-main > .card,
+.settings-main > form,
+.settings-main > .flash {
+  margin-bottom: 0;
+}
+.menu-layout-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.menu-layout-intro { margin-bottom: 0; }
+.dnd-card { margin: 0; }
 .settings-jump {
   display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;
 }
@@ -812,24 +852,26 @@ tr:last-child td { border-bottom: 0; }
   position: sticky;
   bottom: 12px;
   background: var(--bg-card);
-  padding: 10px;
+  padding: 12px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
+  margin: 4px 0 8px;
+  z-index: 5;
 }
 .dnd-cols {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 16px;
   width: 100%;
 }
 .dnd-list {
   list-style: none;
   margin: 0;
-  padding: 8px;
+  padding: 10px;
   min-height: 120px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   border: 1px dashed var(--border);
   border-radius: var(--radius);
   background: var(--muted);
@@ -837,12 +879,43 @@ tr:last-child td { border-bottom: 0; }
 .dnd-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 10px 12px;
-  min-height: 52px;
+  padding: 12px 14px;
+  min-height: 56px;
+}
+.dnd-item .meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dnd-item .meta strong {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.dnd-item .meta .muted {
+  font-size: 12px;
+  line-height: 1.4;
+}
+.dnd-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  padding-inline-start: 8px;
+}
+.pool-empty {
+  padding: 14px 10px;
+  text-align: center;
+  color: var(--muted-fg);
+  font-size: 12px;
 }
 
 .section-tabs {

@@ -378,8 +378,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         ensure_web_secret()
         from app.services.service_control import schedule_panel_restart
 
-        schedule_panel_restart(reason="setup wizard finished")
-        return RedirectResponse("/login?ok=" + quote("راه‌اندازی انجام شد. ربات در حال راه‌اندازی مجدد…"), status_code=303)
+        schedule_panel_restart(delay_sec=2.5, reason="setup wizard finished")
+        return RedirectResponse("/login?restarting=1", status_code=303)
 
     @app.get("/", response_class=HTMLResponse)
     async def root(request: Request):
@@ -1292,7 +1292,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.panel_update import update_page_context
         from app.services.updates import check_github_update, clear_update_cache
 
-        tab = (request.query_params.get("tab") or "menu").strip()
+        tab = (request.query_params.get("tab") or "welcome").strip()
         valid = {t[0] for t in SETTINGS_TABS}
         if tab not in valid:
             tab = "menu"
@@ -1422,10 +1422,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 }
             )
             ensure_web_secret()
-            schedule_panel_restart(reason="bot settings saved")
+            schedule_panel_restart(delay_sec=2.5, reason="bot settings saved")
             return RedirectResponse(
-                "/settings?tab=bot&saved=1&msg="
-                + quote("ذخیره شد — ربات در حال ری‌استارت است (چند ثانیه)…"),
+                "/settings?tab=bot&restarting=1",
                 status_code=303,
             )
 

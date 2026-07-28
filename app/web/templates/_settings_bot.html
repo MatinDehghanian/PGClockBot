@@ -1,7 +1,13 @@
 <form method="post" action="/settings?tab=bot" class="settings-form" id="bot-env-form">
+  <div id="bot-restart-banner" class="flash warn" {% if request.query_params.get('restarting') != '1' %}hidden{% endif %}>
+    در حال اعمال تنظیمات و ری‌استارت سرویس… لطفاً چند ثانیه صبر کنید.
+  </div>
+  <div id="bot-restart-ok" class="flash ok" hidden>تنظیمات اعمال شد و سرویس برگشت.</div>
+  <div id="bot-restart-err" class="flash err" hidden></div>
+
   <div class="card settings-card">
     <h2>ربات تلگرام</h2>
-    <p class="muted update-card-caption">بعد از ذخیره، سرویس برای اعمال توکن به‌صورت خودکار ری‌استارت می‌شود.</p>
+    <p class="muted update-card-caption">پس از ذخیره، سرویس یک‌بار ری‌استارت می‌شود تا توکن جدید اعمال شود.</p>
     <div class="settings-grid">
       <div class="setting-item full">
         <label>توکن ربات (BOT_TOKEN)
@@ -78,6 +84,57 @@
   {% endif %}
 
   <div class="actions sticky-actions">
-    <button class="btn" type="submit">ذخیره و ری‌استارت ربات</button>
+    <button class="btn" type="submit" id="bot-save-btn">ذخیره و ری‌استارت ربات</button>
   </div>
 </form>
+<script>
+(function(){
+  const params = new URLSearchParams(location.search);
+  if (params.get('restarting') !== '1') return;
+  const banner = document.getElementById('bot-restart-banner');
+  const okEl = document.getElementById('bot-restart-ok');
+  const errEl = document.getElementById('bot-restart-err');
+  const btn = document.getElementById('bot-save-btn');
+  if (btn) btn.disabled = true;
+  let tries = 0;
+  const maxTries = 45;
+  let sawDown = false;
+  const started = Date.now();
+  function doneOk(){
+    if (banner) banner.hidden = true;
+    if (okEl) okEl.hidden = false;
+    if (btn) btn.disabled = false;
+    const url = new URL(location.href);
+    url.searchParams.delete('restarting');
+    url.searchParams.set('saved', '1');
+    history.replaceState(null, '', url);
+  }
+  function doneErr(msg){
+    if (banner) banner.hidden = true;
+    if (errEl) {
+      errEl.hidden = false;
+      errEl.textContent = msg || 'ری‌استارت خودکار انجام نشد. دستی اجرا کنید: sudo systemctl restart pgclockbot';
+    }
+    if (btn) btn.disabled = false;
+  }
+  const timer = setInterval(async () => {
+    tries += 1;
+    try {
+      const r = await fetch('/health', { cache: 'no-store' });
+      if (!r.ok) {
+        sawDown = true;
+      } else if (sawDown || (Date.now() - started) > 4000) {
+        clearInterval(timer);
+        doneOk();
+        return;
+      }
+    } catch (_) {
+      sawDown = true;
+    }
+    if (tries >= maxTries) {
+      clearInterval(timer);
+      doneErr();
+    }
+  }, 800);
+})();
+</script>

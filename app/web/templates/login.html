@@ -10,7 +10,10 @@
     </div>
     <form class="auth-form" method="post" action="/login" autocomplete="on">
       {% if error %}<div class="error" style="margin:0">{{ error }}</div>{% endif %}
-    {% if flash_ok %}<div class="flash ok" style="margin:0">{{ flash_ok }}</div>{% endif %}
+      {% if flash_ok %}<div class="flash ok" style="margin:0">{{ flash_ok }}</div>{% endif %}
+      <div id="login-restart" class="flash warn" style="margin:0" {% if not request.query_params.get('restarting') %}hidden{% endif %}>
+        راه‌اندازی ذخیره شد — در حال ری‌استارت سرویس…
+      </div>
       <label>نام کاربری
         <input name="username" value="{{ hint_user or 'admin' }}" required autocomplete="username" autofocus inputmode="text" />
       </label>
@@ -22,4 +25,30 @@
     <div class="auth-foot">© ۲۰۲۶ کلاک بات</div>
   </div>
 </div>
+{% if request.query_params.get('restarting') %}
+<script>
+(function(){
+  const el = document.getElementById('login-restart');
+  let tries = 0, sawDown = false, started = Date.now();
+  const t = setInterval(async () => {
+    tries++;
+    try {
+      const r = await fetch('/health', { cache: 'no-store' });
+      if (!r.ok) sawDown = true;
+      else if (sawDown || Date.now() - started > 4000) {
+        clearInterval(t);
+        if (el) { el.className = 'flash ok'; el.textContent = 'سرویس آماده است — وارد شوید.'; }
+        const url = new URL(location.href);
+        url.searchParams.delete('restarting');
+        history.replaceState(null, '', url);
+      }
+    } catch (_) { sawDown = true; }
+    if (tries > 45) {
+      clearInterval(t);
+      if (el) { el.className = 'flash err'; el.textContent = 'ری‌استارت طول کشید — در صورت نیاز: sudo systemctl restart pgclockbot'; }
+    }
+  }, 800);
+})();
+</script>
+{% endif %}
 {% endblock %}

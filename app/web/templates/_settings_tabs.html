@@ -1,9 +1,9 @@
 {% macro settings_tabs(active) -%}
 <nav class="section-tabs settings-tabs" aria-label="تب‌های تنظیمات">
-  <a href="/settings?tab=menu" class="{% if active=='menu' %}active{% endif %}">منوی بات</a>
   <a href="/settings?tab=welcome" class="{% if active=='welcome' %}active{% endif %}">خوش‌آمد و هویت</a>
   <a href="/settings?tab=messages" class="{% if active=='messages' %}active{% endif %}">متن پیام‌ها</a>
   <a href="/settings?tab=buttons" class="{% if active=='buttons' %}active{% endif %}">متن دکمه‌ها</a>
+  <a href="/settings?tab=menu" class="{% if active=='menu' %}active{% endif %}">منوی بات</a>
   <a href="/settings?tab=qr" class="{% if active=='qr' %}active{% endif %}">QR اشتراک</a>
   <a href="/settings?tab=payment" class="{% if active=='payment' %}active{% endif %}">پرداخت</a>
   <a href="/settings?tab=forcejoin" class="{% if active=='forcejoin' %}active{% endif %}">کانال اجباری</a>

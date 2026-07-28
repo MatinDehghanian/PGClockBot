@@ -275,13 +275,33 @@
       const id = btn.getAttribute('data-copy');
       const el = document.getElementById(id);
       if (!el) return;
+      const text = (el.textContent || '').trim();
+      let ok = false;
       try {
-        await navigator.clipboard.writeText(el.textContent.trim());
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          ok = true;
+        }
+      } catch (_) {}
+      if (!ok) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+        } catch (_) { ok = false; }
+      }
+      if (ok) {
         const prev = btn.textContent;
         btn.textContent = 'کپی شد';
         setTimeout(() => { btn.textContent = prev; }, 1200);
-      } catch (_) {
-        showErr('کپی انجام نشد — دستی انتخاب کنید.');
+      } else {
+        showErr('کپی انجام نشد — متن را دستی انتخاب کنید.');
       }
     });
   });

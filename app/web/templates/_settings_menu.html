@@ -1,12 +1,12 @@
-<div class="card" style="margin-bottom:14px">
+<div class="card menu-layout-intro">
   <h2>چیدمان دکمه‌های منو</h2>
   <p class="muted update-card-caption">با دکمه‌های بالا/پایین جابه‌جا کنید. نمایش روشن/خاموش و حالت ردیف‌ها را پایین‌تر ذخیره کنید.</p>
 </div>
-<form method="post" action="/menu-layout" id="menu-form">
+<form method="post" action="/menu-layout" id="menu-form" class="menu-layout-form">
   <input type="hidden" name="menu_order" id="menu_order" value="{{ order_csv }}" />
   <input type="hidden" name="menu_layout" id="menu_layout" value="{{ values.get('menu_layout', 'classic') }}" />
   <div class="dnd-cols">
-    <div class="card" style="margin:0">
+    <div class="card dnd-card">
       <h2>منوی فعال</h2>
       <ul class="dnd-list" id="active-list" data-zone="active">
         {% for item in items %}
@@ -28,7 +28,7 @@
         {% endfor %}
       </ul>
     </div>
-    <div class="card" style="margin:0">
+    <div class="card dnd-card">
       <h2>مخزن</h2>
       <ul class="dnd-list" id="pool-list" data-zone="pool">
         {% for item in pool %}

@@ -191,10 +191,10 @@ DEFAULT_SETTINGS = {
 # (key, label, kind, help?, options?)
 # Tabs for /settings?tab=... (order matches product IA)
 SETTINGS_TABS: list[tuple[str, str]] = [
-    ("menu", "منوی بات"),
     ("welcome", "خوش‌آمد و هویت"),
     ("messages", "متن پیام‌ها"),
     ("buttons", "متن دکمه‌ها"),
+    ("menu", "منوی بات"),
     ("qr", "QR اشتراک"),
     ("payment", "پرداخت"),
     ("forcejoin", "کانال اجباری"),
