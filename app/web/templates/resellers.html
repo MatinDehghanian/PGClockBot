@@ -98,7 +98,15 @@
         <td class="mono">{{ p.web_username or '—' }}</td>
         <td class="mono">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
         <td>{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.setup_token %}<span class="badge pending">منتظر</span>{% else %}—{% endif %}</td>
-        <td><a class="btn btn-ghost" href="/resellers/{{ u.id }}/edit">ویرایش</a></td>
+        <td>
+          <div class="actions" style="margin:0">
+            <a class="btn btn-ghost" href="/resellers/{{ u.id }}/edit">ویرایش</a>
+            <form method="post" action="/resellers/{{ u.id }}/delete"
+                  onsubmit="return confirm('نمایندگی حذف شود؟ پروفایل و ادمین پاسارگارد پاک می‌شود و کاربر به نقش عادی برمی‌گردد.')">
+              <button class="btn btn-sm btn-danger" type="submit">حذف نمایندگی</button>
+            </form>
+          </div>
+        </td>
       </tr>
     {% else %}
       <tr><td colspan="7" class="muted">نماینده‌ای نیست</td></tr>

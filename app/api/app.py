@@ -1360,11 +1360,57 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         from urllib.parse import quote
 
+        from app.services.users import is_protected_admin
+
         user = await session.get(BotUser, user_id)
-        if user:
-            user.is_blocked = not user.is_blocked
-            await session.commit()
+        if not user:
+            return RedirectResponse(f"/users?err={quote('کاربر یافت نشد')}", status_code=303)
+        if is_protected_admin(user):
+            return RedirectResponse(f"/users?err={quote('مسدود کردن ادمین مجاز نیست')}", status_code=303)
+        user.is_blocked = not user.is_blocked
+        await session.commit()
         return RedirectResponse(f"/users?ok={quote('وضعیت مسدودی تغییر کرد')}", status_code=303)
+
+    @app.post("/users/{user_id}/delete")
+    async def users_delete(
+        user_id: int,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from urllib.parse import quote
+
+        from app.services.users import delete_bot_user
+
+        actor_id = None
+        try:
+            actor_id = int(staff.get("user_id") or 0) or None
+        except (TypeError, ValueError):
+            actor_id = None
+        # Prefer matching by telegram if panel session stores it
+        if not actor_id and staff.get("telegram_id"):
+            try:
+                tg = int(staff["telegram_id"])
+                actor = (
+                    await session.execute(select(BotUser).where(BotUser.telegram_id == tg))
+                ).scalar_one_or_none()
+                actor_id = actor.id if actor else None
+            except Exception:
+                actor_id = None
+        try:
+            info = await delete_bot_user(
+                session,
+                user_id,
+                actor_user_id=actor_id,
+            )
+        except ValueError as e:
+            return RedirectResponse(f"/users?err={quote(str(e))}", status_code=303)
+        except Exception as e:
+            return RedirectResponse(f"/users?err={quote(str(e))}", status_code=303)
+        label = info.get("name") or info.get("telegram_id")
+        return RedirectResponse(
+            f"/users?ok={quote(f'کاربر {label} حذف شد')}",
+            status_code=303,
+        )
 
     @app.get("/menu-layout", response_class=HTMLResponse)
     async def menu_layout_page(staff: dict = Depends(require_admin)):

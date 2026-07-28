@@ -60,4 +60,13 @@
     </div>
   </form>
 </div>
+
+<div class="card">
+  <h2>حذف نمایندگی</h2>
+  <p class="muted">پروفایل نماینده و در صورت وجود ادمین پاسارگارد حذف می‌شود. خود کاربر بات باقی می‌ماند و نقشش به «کاربر» برمی‌گردد.</p>
+  <form method="post" action="/resellers/{{ user.id }}/delete"
+        onsubmit="return confirm('نمایندگی این کاربر حذف شود؟')">
+    <button class="btn btn-danger" type="submit">حذف نمایندگی</button>
+  </form>
+</div>
 {% endblock %}

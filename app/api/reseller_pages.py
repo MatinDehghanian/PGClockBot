@@ -27,6 +27,7 @@ from app.services.resellers import (
     parse_perms,
     provision_reseller,
     reject_application,
+    revoke_reseller,
 )
 from app.services.web_auth import hash_password
 
@@ -256,6 +257,24 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         user.role = Role.RESELLER.value if profile.is_active else Role.USER.value
         await session.commit()
         return RedirectResponse(f"/resellers/{user_id}/edit?ok={_q('ذخیره شد')}", status_code=303)
+
+    @app.post("/resellers/{user_id}/delete")
+    async def reseller_delete(
+        user_id: int,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        try:
+            info = await revoke_reseller(session, user_id, delete_pg_admin=True)
+        except ValueError as e:
+            return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
+        except Exception as e:
+            return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
+        label = info.get("telegram_id") or user_id
+        return RedirectResponse(
+            f"/resellers?ok={_q(f'نمایندگی {label} حذف شد — کاربر به نقش عادی برگشت')}",
+            status_code=303,
+        )
 
     # ---- plans ----
     @app.get("/resellers/plans", response_class=HTMLResponse)

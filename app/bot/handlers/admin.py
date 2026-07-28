@@ -1098,7 +1098,7 @@ async def adm_users(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         f"کل: {total}\n"
         f"مسدود: {blocked}\n"
         f"سفارش‌ها: {orders}\n\n"
-        "<i>مدیریت کامل (CRUD) در وب‌پنل → کاربران در دسترس است.</i>"
+        "<i>حذف کاربر و نمایندگی از همینجا (جستجو) یا وب‌پنل → کاربران / نمایندگان.</i>"
     )
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.admin_users_keyboard())
@@ -1164,26 +1164,20 @@ async def adm_users_search(message: Message, state: FSMContext, session: AsyncSe
     )
     await message.answer(
         text,
-        reply_markup=kb.admin_user_actions(user.id, is_blocked=user.is_blocked),
+        reply_markup=kb.admin_user_actions(
+            user.id, is_blocked=user.is_blocked, role=user.role
+        ),
     )
 
 
-@router.callback_query(F.data.startswith("adm:users:block:"))
-async def adm_users_block(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    user_id = int(callback.data.split(":")[-1])
-    user = await session.get(BotUser, user_id)
-    if not user:
-        await callback.answer("یافت نشد", show_alert=True)
-        return
-    if user.telegram_id in get_settings().admin_ids or user.role == Role.ADMIN.value:
-        await callback.answer("مسدود کردن ادمین مجاز نیست", show_alert=True)
-        return
-    user.is_blocked = not user.is_blocked
-    await session.commit()
-    await callback.answer("رفع مسدودی شد ✅" if not user.is_blocked else "مسدود شد 🚫", show_alert=True)
+async def _render_user_card(
+    message: Message,
+    session: AsyncSession,
+    user: BotUser,
+    *,
+    confirm_delete: bool = False,
+    edit: bool = False,
+) -> None:
     svc_count = await session.scalar(
         select(func.count()).select_from(UserService).where(UserService.bot_user_id == user.id)
     ) or 0
@@ -1197,11 +1191,128 @@ async def adm_users_block(callback: CallbackQuery, session: AsyncSession, db_use
         f"سرویس‌ها: {svc_count}\n"
         f"مسدود: {blocked}"
     )
+    if confirm_delete:
+        text += "\n\n⚠️ <b>حذف کامل برگشت‌ناپذیر است</b> (سفارش‌ها، سرویس‌ها، تیکت‌ها)."
+    markup = kb.admin_user_actions(
+        user.id,
+        is_blocked=user.is_blocked,
+        role=user.role,
+        confirm_delete=confirm_delete,
+    )
+    if edit:
+        try:
+            await message.edit_text(text, reply_markup=markup)
+            return
+        except Exception:
+            pass
+    await message.answer(text, reply_markup=markup)
+
+
+@router.callback_query(F.data.startswith("adm:users:view:"))
+async def adm_users_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    user = await session.get(BotUser, int(callback.data.split(":")[-1]))
+    if not user:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        await _render_user_card(callback.message, session, user, edit=True)
+
+
+@router.callback_query(F.data.startswith("adm:users:block:"))
+async def adm_users_block(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    user_id = int(callback.data.split(":")[-1])
+    user = await session.get(BotUser, user_id)
+    if not user:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    from app.services.users import is_protected_admin
+
+    if is_protected_admin(user):
+        await callback.answer("مسدود کردن ادمین مجاز نیست", show_alert=True)
+        return
+    user.is_blocked = not user.is_blocked
+    await session.commit()
+    await callback.answer("رفع مسدودی شد ✅" if not user.is_blocked else "مسدود شد 🚫", show_alert=True)
+    if callback.message:
+        await _render_user_card(callback.message, session, user, edit=True)
+
+
+@router.callback_query(F.data.startswith("adm:users:delask:"))
+async def adm_users_delask(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    user = await session.get(BotUser, int(callback.data.split(":")[-1]))
+    if not user:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    from app.services.users import is_protected_admin
+
+    if is_protected_admin(user):
+        await callback.answer("حذف ادمین مجاز نیست", show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        await _render_user_card(
+            callback.message, session, user, confirm_delete=True, edit=True
+        )
+
+
+@router.callback_query(F.data.startswith("adm:users:del:"))
+async def adm_users_delete(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    user_id = int(callback.data.split(":")[-1])
+    from app.services.users import delete_bot_user
+
+    try:
+        info = await delete_bot_user(
+            session,
+            user_id,
+            actor_user_id=db_user.id,
+        )
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
+    except Exception as e:
+        await callback.answer(f"خطا: {e}", show_alert=True)
+        return
+    await callback.answer("حذف شد", show_alert=True)
     if callback.message:
         await callback.message.edit_text(
-            text,
-            reply_markup=kb.admin_user_actions(user.id, is_blocked=user.is_blocked),
+            f"🗑 کاربر <code>{info.get('telegram_id')}</code> ({info.get('name')}) حذف شد.",
+            reply_markup=kb.admin_users_keyboard(),
         )
+
+
+@router.callback_query(F.data.startswith("adm:users:unres:"))
+async def adm_users_unreseller(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    user_id = int(callback.data.split(":")[-1])
+    from app.services.resellers import revoke_reseller
+
+    try:
+        await revoke_reseller(session, user_id, delete_pg_admin=True)
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
+    except Exception as e:
+        await callback.answer(f"خطا: {e}", show_alert=True)
+        return
+    user = await session.get(BotUser, user_id)
+    await callback.answer("نمایندگی حذف شد", show_alert=True)
+    if callback.message and user:
+        await _render_user_card(callback.message, session, user, edit=True)
 
 
 @router.callback_query(F.data == "adm:resellers")

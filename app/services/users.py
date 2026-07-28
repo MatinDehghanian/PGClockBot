@@ -458,3 +458,140 @@ async def get_all_settings(session: AsyncSession) -> dict[str, str]:
 
 def on(value: str | None) -> bool:
     return (value or "").strip() in {"1", "true", "yes", "on", "True"}
+
+
+def is_protected_admin(user: BotUser) -> bool:
+    """True for panel/bot admins that must not be blocked or deleted."""
+    if user.role == Role.ADMIN.value:
+        return True
+    return user.telegram_id in get_settings().admin_ids
+
+
+async def delete_bot_user(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    delete_pg_services: bool = True,
+    delete_pg_admin: bool = True,
+    actor_user_id: int | None = None,
+) -> dict:
+    """Hard-delete a bot user and related rows. Refuses protected admins."""
+    from sqlalchemy import delete, update
+
+    from app.db.models import (
+        Order,
+        Payment,
+        ResellerApplication,
+        Ticket,
+        TicketMessage,
+        UserService,
+        WalletTransaction,
+    )
+    from app.services.pasarguard import get_pg
+
+    user = await session.get(BotUser, user_id)
+    if not user:
+        raise ValueError("کاربر یافت نشد")
+    if actor_user_id is not None and user.id == actor_user_id:
+        raise ValueError("نمی‌توانید خودتان را حذف کنید")
+    if is_protected_admin(user):
+        raise ValueError("حذف ادمین مجاز نیست")
+
+    telegram_id = user.telegram_id
+    name = user.full_name or user.username or str(telegram_id)
+
+    # Revoke reseller first (profile + PG admin + unlink customers)
+    from app.services.resellers import get_reseller_profile, revoke_reseller
+
+    if await get_reseller_profile(session, user_id):
+        await revoke_reseller(
+            session,
+            user_id,
+            delete_pg_admin=delete_pg_admin,
+            commit=False,
+        )
+
+    # Clear self-references pointing at this user
+    await session.execute(
+        update(BotUser).where(BotUser.referred_by_id == user_id).values(referred_by_id=None)
+    )
+    await session.execute(
+        update(BotUser).where(BotUser.reseller_id == user_id).values(reseller_id=None)
+    )
+    await session.execute(
+        update(Order).where(Order.reseller_id == user_id).values(reseller_id=None)
+    )
+
+    services = list(
+        (
+            await session.execute(select(UserService).where(UserService.bot_user_id == user_id))
+        ).scalars().all()
+    )
+    svc_ids = [s.id for s in services]
+    pg_services_deleted = 0
+    if delete_pg_services:
+        for svc in services:
+            if not svc.pg_user_id:
+                continue
+            try:
+                await get_pg().delete_user_by_id(int(svc.pg_user_id))
+                pg_services_deleted += 1
+            except Exception:
+                try:
+                    await get_pg().set_disabled_by_id(int(svc.pg_user_id), True)
+                except Exception:
+                    pass
+
+    # Break orders ↔ services cycle
+    await session.execute(
+        update(Order).where(Order.user_id == user_id).values(service_id=None)
+    )
+    if svc_ids:
+        await session.execute(
+            update(Order).where(Order.service_id.in_(svc_ids)).values(service_id=None)
+        )
+
+    # Reseller applications (null order_id then delete)
+    apps = list(
+        (
+            await session.execute(
+                select(ResellerApplication).where(ResellerApplication.user_id == user_id)
+            )
+        ).scalars().all()
+    )
+    for app in apps:
+        app.order_id = None
+    await session.flush()
+    await session.execute(
+        delete(ResellerApplication).where(ResellerApplication.user_id == user_id)
+    )
+
+    await session.execute(delete(Payment).where(Payment.user_id == user_id))
+    await session.execute(delete(Order).where(Order.user_id == user_id))
+    await session.execute(delete(UserService).where(UserService.bot_user_id == user_id))
+
+    ticket_ids = list(
+        (
+            await session.execute(select(Ticket.id).where(Ticket.user_id == user_id))
+        ).scalars().all()
+    )
+    if ticket_ids:
+        await session.execute(
+            delete(TicketMessage).where(TicketMessage.ticket_id.in_(ticket_ids))
+        )
+        await session.execute(delete(Ticket).where(Ticket.id.in_(ticket_ids)))
+
+    await session.execute(
+        delete(WalletTransaction).where(WalletTransaction.user_id == user_id)
+    )
+
+    await session.delete(user)
+    await session.commit()
+
+    return {
+        "user_id": user_id,
+        "telegram_id": telegram_id,
+        "name": name,
+        "services_removed": len(svc_ids),
+        "pg_services_deleted": pg_services_deleted,
+    }

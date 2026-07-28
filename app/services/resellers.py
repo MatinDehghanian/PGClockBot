@@ -615,3 +615,57 @@ async def reject_application(
     if admin_note:
         app.admin_note = admin_note
     await session.commit()
+
+
+async def revoke_reseller(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    delete_pg_admin: bool = True,
+    commit: bool = True,
+) -> dict:
+    """Remove reseller profile, unlink customers, demote role to user.
+
+    Does not delete the BotUser row. Optional PasarGuard admin cleanup.
+    """
+    from sqlalchemy import update
+
+    from app.services.pasarguard import get_pg
+
+    user = await session.get(BotUser, user_id)
+    if not user:
+        raise ValueError("کاربر یافت نشد")
+    profile = await get_reseller_profile(session, user_id)
+    if not profile:
+        raise ValueError("این کاربر نماینده نیست")
+
+    pg_username = (profile.pg_admin_username or "").strip() or None
+    pg_deleted = False
+    if delete_pg_admin and pg_username:
+        try:
+            await get_pg().delete_admin(pg_username)
+            pg_deleted = True
+        except Exception:
+            pg_deleted = False
+
+    await session.execute(
+        update(BotUser).where(BotUser.reseller_id == user_id).values(reseller_id=None)
+    )
+    await session.execute(
+        update(Order).where(Order.reseller_id == user_id).values(reseller_id=None)
+    )
+
+    await session.delete(profile)
+    if user.role == Role.RESELLER.value:
+        user.role = Role.USER.value
+
+    if commit:
+        await session.commit()
+        await session.refresh(user)
+
+    return {
+        "user_id": user_id,
+        "telegram_id": user.telegram_id,
+        "pg_admin_username": pg_username,
+        "pg_admin_deleted": pg_deleted,
+    }
