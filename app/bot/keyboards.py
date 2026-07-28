@@ -26,6 +26,7 @@ DEFAULT_MENU_ORDER = [
     "guide",
     "faq",
     "referral",
+    "reseller_apply",
     "miniapp",
 ]
 
@@ -120,6 +121,17 @@ def main_menu(
             add_mid(InlineKeyboardButton(text=_t(ui, "btn_faq"), callback_data="help:faq"))
         elif key == "referral" and on(_t(ui, "show_referral")):
             add_full(InlineKeyboardButton(text=_t(ui, "btn_referral"), callback_data="ref:home"))
+        elif (
+            key == "reseller_apply"
+            and on(_t(ui, "show_reseller_apply"))
+            and role == Role.USER.value
+        ):
+            add_full(
+                InlineKeyboardButton(
+                    text=_t(ui, "btn_reseller_apply"),
+                    callback_data="resapply:home",
+                )
+            )
         elif key == "miniapp" and settings.miniapp_enabled and on(_t(ui, "show_miniapp")):
             add_full(
                 InlineKeyboardButton(
@@ -519,14 +531,18 @@ def pg_admin_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def reseller_home() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📊 وضعیت نماینده", callback_data="res:stats")],
-            [InlineKeyboardButton(text="🧾 رسیدهای در انتظار", callback_data="res:payments")],
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="menu:home")],
-        ]
-    )
+def reseller_home(profile=None) -> InlineKeyboardMarkup:
+    from app.services.resellers import has_bot_perm
+
+    rows: list[list[InlineKeyboardButton]] = []
+    if profile is None or has_bot_perm(profile, "stats"):
+        rows.append([InlineKeyboardButton(text="📊 وضعیت نماینده", callback_data="res:stats")])
+    if profile is not None and has_bot_perm(profile, "approve_receipts"):
+        rows.append(
+            [InlineKeyboardButton(text="🧾 رسیدهای در انتظار", callback_data="res:payments")]
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="menu:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def payment_review(payment_id: int) -> InlineKeyboardMarkup:

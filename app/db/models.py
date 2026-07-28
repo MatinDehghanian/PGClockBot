@@ -216,7 +216,65 @@ class ResellerProfile(Base):
     balance: Mapped[int] = mapped_column(Integer, default=0)
     can_approve_receipts: Mapped[bool] = mapped_column(Boolean, default=False)
     pg_admin_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    web_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, unique=True)
+    web_password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    web_permissions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV
+    bot_permissions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV
+    plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reseller_plans.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ResellerPlan(Base):
+    """Sellable reseller packages (price + default permissions / PG role)."""
+
+    __tablename__ = "reseller_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    price: Mapped[int] = mapped_column(Integer, default=0)  # toman; 0 = free apply
+    commission_percent: Mapped[int] = mapped_column(Integer, default=10)
+    can_approve_receipts: Mapped[bool] = mapped_column(Boolean, default=False)
+    web_permissions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    bot_permissions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    create_pg_admin: Mapped[bool] = mapped_column(Boolean, default=True)
+    create_web_access: Mapped[bool] = mapped_column(Boolean, default=True)
+    pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ResellerApplicationStatus(str, Enum):
+    PENDING_PAYMENT = "pending_payment"
+    AWAITING_APPROVAL = "awaiting_approval"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+
+
+class ResellerApplication(Base):
+    __tablename__ = "reseller_applications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("reseller_plans.id"), index=True)
+    status: Mapped[str] = mapped_column(
+        String(32), default=ResellerApplicationStatus.AWAITING_APPROVAL.value, index=True
+    )
+    order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    admin_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped["BotUser"] = relationship(foreign_keys=[user_id])
+    plan: Mapped["ResellerPlan"] = relationship()
 
 
 class Setting(Base):

@@ -34,7 +34,7 @@ from app.db.models import (
 from app.db.session import SessionLocal
 from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.pasarguard import get_pg
-from app.services.resellers import make_reseller
+from app.services.resellers import get_reseller_profile, has_web_perm, make_reseller, parse_perms, DEFAULT_WEB_PERMS
 from app.services.setup_wizard import (
     begin_setup,
     current_setup_values,
@@ -57,6 +57,7 @@ from app.services.web_auth import (
     load_web_admin,
     save_web_admin,
     validate_password_strength,
+    verify_password_hash,
     verify_web_admin,
 )
 from app.api.pg_pages import register_pg_pages
@@ -175,6 +176,18 @@ def create_api_app(lifespan=None) -> FastAPI:
             raise NotAdmin()
         return user
 
+    def require_perm(perm: str):
+        def _dep(request: Request) -> dict:
+            user = require_staff(request)
+            if user.get("role") == "admin":
+                return user
+            perms = user.get("permissions") or []
+            if perm not in perms:
+                raise NotAdmin()
+            return user
+
+        return _dep
+
     @app.middleware("http")
     async def setup_gate(request: Request, call_next):
         path = request.url.path
@@ -230,6 +243,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         return RedirectResponse("/dashboard", status_code=303)
 
     register_pg_pages(app, render=render, require_admin=require_admin, get_db=get_db)
+    from app.api.reseller_pages import register_reseller_pages
+
+    register_reseller_pages(app, render=render, require_admin=require_admin, get_db=get_db)
 
     @app.get("/health")
     async def health():
@@ -440,26 +456,54 @@ def create_api_app(lifespan=None) -> FastAPI:
         display = (username or "").strip()
         u = display
         p = password or ""
+        permissions: list[str] = []
+        bot_user_id = None
 
         if verify_web_admin(u, p):
             role = "admin"
             display = load_web_admin()["username"]
         else:
-            try:
-                tg_id = int(u)
-            except ValueError:
-                tg_id = None
-            if tg_id is not None:
-                result = await session.execute(
-                    select(BotUser).where(
-                        BotUser.telegram_id == tg_id,
-                        BotUser.role == Role.RESELLER.value,
-                    )
+            # Reseller web credentials (auto-provisioned)
+            result = await session.execute(
+                select(BotUser, ResellerProfile)
+                .join(ResellerProfile, ResellerProfile.user_id == BotUser.id)
+                .where(
+                    ResellerProfile.web_username == u,
+                    ResellerProfile.is_active.is_(True),
+                    BotUser.role == Role.RESELLER.value,
                 )
-                ru = result.scalar_one_or_none()
-                if ru and p == (ru.referral_code or ""):
+            )
+            row = result.first()
+            if row:
+                ru, profile = row
+                if verify_password_hash(p, profile.web_password_hash):
                     role = "reseller"
-                    display = ru.full_name or str(tg_id)
+                    display = profile.web_username or ru.full_name or str(ru.telegram_id)
+                    permissions = parse_perms(profile.web_permissions) or parse_perms(DEFAULT_WEB_PERMS)
+                    bot_user_id = ru.id
+            if not role:
+                try:
+                    tg_id = int(u)
+                except ValueError:
+                    tg_id = None
+                if tg_id is not None:
+                    result = await session.execute(
+                        select(BotUser).where(
+                            BotUser.telegram_id == tg_id,
+                            BotUser.role == Role.RESELLER.value,
+                        )
+                    )
+                    ru = result.scalar_one_or_none()
+                    if ru and p == (ru.referral_code or ""):
+                        role = "reseller"
+                        display = ru.full_name or str(tg_id)
+                        bot_user_id = ru.id
+                        profile = await get_reseller_profile(session, ru.id)
+                        permissions = (
+                            parse_perms(profile.web_permissions)
+                            if profile
+                            else parse_perms(DEFAULT_WEB_PERMS)
+                        ) or parse_perms(DEFAULT_WEB_PERMS)
 
         if not role:
             _login_fail(ip)
@@ -475,9 +519,12 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         _login_success(ip)
         resp = RedirectResponse("/dashboard", status_code=303)
+        payload = {"role": role, "username": display, "permissions": permissions}
+        if bot_user_id is not None:
+            payload["bot_user_id"] = bot_user_id
         resp.set_cookie(
             "session",
-            get_signer().dumps({"role": role, "username": display}),
+            get_signer().dumps(payload),
             httponly=True,
             samesite="lax",
             secure=_cookie_secure(request),
@@ -1227,41 +1274,6 @@ def create_api_app(lifespan=None) -> FastAPI:
             await session.commit()
         return RedirectResponse(f"/users?ok={quote('وضعیت مسدودی تغییر کرد')}", status_code=303)
 
-    @app.get("/resellers", response_class=HTMLResponse)
-    async def resellers_page(
-        request: Request,
-        staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
-    ):
-        result = await session.execute(
-            select(BotUser, ResellerProfile)
-            .join(ResellerProfile, ResellerProfile.user_id == BotUser.id)
-        )
-        rows = result.all()
-        return render(request, "resellers.html", {"staff": staff, "rows": rows},
-        )
-
-    @app.post("/resellers")
-    async def reseller_create(
-        telegram_id: int = Form(...),
-        commission_percent: int = Form(10),
-        can_approve: str = Form(""),
-        pg_admin_username: str = Form(""),
-        staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
-    ):
-        result = await session.execute(select(BotUser).where(BotUser.telegram_id == telegram_id))
-        user = result.scalar_one_or_none()
-        if user:
-            await make_reseller(
-                session,
-                user,
-                commission_percent=commission_percent,
-                can_approve_receipts=bool(can_approve),
-                pg_admin_username=(pg_admin_username.strip() or None),
-            )
-        return RedirectResponse("/resellers", status_code=303)
-
     @app.get("/menu-layout", response_class=HTMLResponse)
     async def menu_layout_page(staff: dict = Depends(require_admin)):
         return RedirectResponse("/settings?tab=menu", status_code=303)
@@ -1283,7 +1295,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         await set_setting(session, "menu_order", ",".join(order))
         if layout in {"classic", "compact"}:
             await set_setting(session, "menu_layout", layout)
-        for key in ("wallet", "support", "guide", "faq", "referral", "miniapp", "services"):
+        for key in ("wallet", "support", "guide", "faq", "referral", "reseller_apply", "miniapp", "services"):
             await set_setting(session, f"show_{key}", "1" if key in order else "0")
         return RedirectResponse("/settings?tab=menu&saved=1", status_code=303)
 
@@ -1431,6 +1443,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             "guide": {"label": "راهنما", "required": False},
             "faq": {"label": "سوالات متداول", "required": False},
             "referral": {"label": "دعوت دوستان", "required": False},
+            "reseller_apply": {"label": "درخواست نمایندگی", "required": False},
             "miniapp": {"label": "مینی‌اپ", "required": False},
         }
         items = []

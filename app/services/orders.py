@@ -234,6 +234,14 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     await session.commit()
     await session.refresh(order)
     try:
+        if order.note and order.note.startswith("reseller_app:"):
+            from app.services.resellers import mark_application_paid
+
+            await mark_application_paid(session, order)
+            order.status = OrderStatus.DELIVERED.value
+            await session.commit()
+            await session.refresh(order)
+            return order
         if order.note and order.note.startswith("renew:") and order.service_id and order.plan_id:
             service = await session.get(UserService, order.service_id)
             plan = await session.get(Plan, order.plan_id)
@@ -334,6 +342,15 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
         return order
     order.status = OrderStatus.PAID.value
     await session.commit()
+    # Reseller application fee — no VPN delivery; move application to review queue.
+    if order.note and order.note.startswith("reseller_app:"):
+        from app.services.resellers import mark_application_paid
+
+        await mark_application_paid(session, order)
+        order.status = OrderStatus.DELIVERED.value
+        await session.commit()
+        await session.refresh(order)
+        return order
     # Renewal orders extend existing service instead of creating a new panel user.
     if order.note and order.note.startswith("renew:") and order.service_id and order.plan_id:
         service = await session.get(UserService, order.service_id)

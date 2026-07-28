@@ -4,36 +4,65 @@
 <div class="page-head">
   <div>
     <h1>نمایندگان</h1>
-    <p>ساخت نماینده، کمیسیون و اتصال به ادمین پاسارگارد</p>
+    <p>ساخت نماینده، سطح دسترسی وب/بات، و اتصال به نقش پاسارگارد</p>
   </div>
+</div>
+
+<div class="section-tabs">
+  {% for t in tabs %}
+  <a href="{{ t.href }}" class="{% if tab == t.id %}active{% endif %}">{{ t.label }}</a>
+  {% endfor %}
 </div>
 
 <div class="card">
   <h2>افزودن نماینده</h2>
+  <p class="muted">کاربر باید قبلاً ربات را استارت کرده باشد. یوزر/پس وب‌پنل و پاسارگارد در صورت انتخاب، خودکار ساخته و در تلگرام ارسال می‌شود.</p>
   <form method="post" action="/resellers">
     <div class="form-row">
       <div>
-        <label>آیدی عددی تلگرام
+        <label class="form-field">آیدی عددی تلگرام
+          <small class="muted">مثال: 123456789</small>
           <input name="telegram_id" type="number" required />
         </label>
       </div>
       <div>
-        <label>کمیسیون ٪
+        <label class="form-field">کمیسیون ٪
+          <small class="muted">درصد سهم نماینده از فروش</small>
           <input name="commission_percent" type="number" value="10" />
         </label>
       </div>
       <div>
-        <label>یوزرنیم ادمین پاسارگارد (اختیاری)
-          <input name="pg_admin_username" placeholder="reseller1" />
+        <label class="form-field">نقش پاسارگارد
+          <small class="muted">خالی = ادمین معمولی بدون sudo</small>
+          <select name="pg_role_id">
+            <option value="">— پیش‌فرض —</option>
+            {% for r in pg_roles %}
+            <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}{% if r.get('is_owner') %} (owner){% endif %}</option>
+            {% endfor %}
+          </select>
         </label>
       </div>
     </div>
-    <label class="checks">
-      <input name="can_approve" type="checkbox" value="1" />
-      اجازه تأیید رسید
-    </label>
+
+    <div class="form-row">
+      <div>
+        <strong style="display:block;margin-bottom:8px;font-size:13px">دسترسی وب‌پنل</strong>
+        {% for key, label in web_perm_options %}
+        <label class="checks"><input type="checkbox" name="web_{{ key }}" value="1" checked /> {{ label }}</label>
+        {% endfor %}
+        <label class="checks"><input type="checkbox" name="create_web_access" value="1" checked /> ساخت خودکار یوزر وب‌پنل</label>
+      </div>
+      <div>
+        <strong style="display:block;margin-bottom:8px;font-size:13px">دسترسی بات</strong>
+        {% for key, label in bot_perm_options %}
+        <label class="checks"><input type="checkbox" name="bot_{{ key }}" value="1" {% if key == 'stats' %}checked{% endif %} /> {{ label }}</label>
+        {% endfor %}
+        <label class="checks"><input type="checkbox" name="create_pg_admin" value="1" checked /> ساخت ادمین در پاسارگارد</label>
+      </div>
+    </div>
+
     <div class="actions">
-      <button class="btn" type="submit">ثبت نماینده</button>
+      <button class="btn" type="submit">ثبت و ارسال اطلاعات</button>
     </div>
   </form>
 </div>
@@ -43,7 +72,9 @@
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>کاربر</th><th>تلگرام</th><th>کمیسیون</th><th>موجودی</th><th>تأیید رسید</th><th>ادمین PG</th><th>کد</th></tr>
+      <tr>
+        <th>کاربر</th><th>تلگرام</th><th>کمیسیون</th><th>وب</th><th>PG</th><th>وضعیت</th><th></th>
+      </tr>
     </thead>
     <tbody>
     {% for u, p in rows %}
@@ -51,10 +82,10 @@
         <td>{{ u.full_name or u.username or '—' }}</td>
         <td class="mono">{{ u.telegram_id }}</td>
         <td class="mono">{{ p.commission_percent }}%</td>
-        <td class="mono">{{ p.balance | num }}</td>
-        <td>{{ "بله" if p.can_approve_receipts else "خیر" }}</td>
+        <td class="mono">{{ p.web_username or '—' }}</td>
         <td class="mono">{{ p.pg_admin_username or '—' }}</td>
-        <td class="mono">{{ u.referral_code }}</td>
+        <td>{% if p.is_active %}<span class="badge approved">فعال</span>{% else %}<span class="badge">غیرفعال</span>{% endif %}</td>
+        <td><a class="btn btn-ghost" href="/resellers/{{ u.id }}/edit">ویرایش</a></td>
       </tr>
     {% else %}
       <tr><td colspan="7" class="muted">نماینده‌ای نیست</td></tr>
