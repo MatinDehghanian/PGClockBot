@@ -599,7 +599,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "login.html",
                 {
                     "error": "نام کاربری یا رمز عبور اشتباه است. اگر تازه نصب کرده‌اید: python scripts/set_web_password.py",
-                    "hint_user": load_web_admin().get("username") or "admin",
+                    "username": typed_user,
                 },
                 status_code=400,
             )
