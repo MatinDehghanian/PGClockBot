@@ -57,12 +57,17 @@ async def render_home(
             return
         except Exception:
             pass
+
+    # One message: welcome + inline menu (Telegram cannot mix reply+inline markups)
+    await message.answer(text, reply_markup=markup)
+
     if seed_reply_kb:
-        # Reply keyboard cannot share a message with inline menu — seed it on the welcome text.
-        await message.answer(text, reply_markup=kb.persistent_reply_keyboard())
-        await message.answer("از منوی زیر انتخاب کنید:", reply_markup=markup)
-    else:
-        await message.answer(text, reply_markup=markup)
+        # Keep «شروع مجدد» on the reply keyboard without a second visible home message
+        tip = await message.answer("\u200c", reply_markup=kb.persistent_reply_keyboard())
+        try:
+            await tip.delete()
+        except Exception:
+            pass
 
 
 @router.message(F.text.func(kb.is_restart_text))
