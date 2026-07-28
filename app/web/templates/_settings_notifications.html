@@ -1,3 +1,4 @@
+{# Admin Telegram prefs + user low-usage alerts #}
 <form method="post" action="/notifications" class="card notify-form">
   <h2>نوتیفیکیشن ادمین</h2>
   <p class="muted update-card-caption">برای کدام رویدادها در تلگرام پیام بگیرید. موارد نیازمند تأیید، دکمه تأیید/رد دارند.</p>
@@ -16,6 +17,32 @@
   {% endfor %}
   </div>
   <div class="actions sticky-actions">
-    <button class="btn" type="submit">ذخیره نوتیفیکیشن‌ها</button>
+    <button class="btn" type="submit">ذخیره نوتیفیکیشن‌های ادمین</button>
+  </div>
+</form>
+
+<form method="post" action="/settings?tab=notifications" enctype="multipart/form-data" class="settings-form" id="settings-form-user-alerts">
+  {% for group_name in tab_groups %}
+  {% set fields = groups[group_name] %}
+  <div class="card settings-card">
+    <h2>{{ group_name }}</h2>
+    <p class="muted update-card-caption">
+      هشدار خودکار برای مشتری‌ها وقتی حجم یا زمان سرویس‌شان رو به اتمام است.
+      درصد را طوری تنظیم کنید که قبل از قطع سرویس به کاربر یادآوری شود.
+    </p>
+    <div class="settings-grid">
+    {% for field in fields %}
+      {% include "_settings_field.html" %}
+    {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div class="card settings-card">
+    <h2>هشدار سرویس کاربر</h2>
+    <p class="muted">گروه تنظیمات یافت نشد.</p>
+  </div>
+  {% endfor %}
+  <div class="actions sticky-actions">
+    <button class="btn" type="submit">ذخیره هشدار کمبود</button>
   </div>
 </form>

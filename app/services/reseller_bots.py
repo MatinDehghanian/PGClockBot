@@ -177,10 +177,14 @@ class ResellerBotManager:
                 pass
 
     def bot_for_token(self, token: str) -> Bot | None:
-        for bot in self._bots.values():
-            if bot.token == token:
-                return bot
+        token = (token or "").strip()
+        for b in self._bots.values():
+            if getattr(b, "token", None) == token:
+                return b
         return None
+
+    def bot_for_profile_id(self, reseller_profile_id: int) -> Bot | None:
+        return self._bots.get(int(reseller_profile_id))
 
     def profile_id_for_bot(self, bot: Bot) -> int | None:
         for rid, b in self._bots.items():

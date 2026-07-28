@@ -54,6 +54,7 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("payment", "پرداخت"),
     ("supports", "پشتیبان‌ها"),
     ("forcejoin", "کانال اجباری"),
+    ("notifications", "نوتیفیکیشن"),
     ("bot", "ربات اختصاصی"),
 ]
 SETUP_TOKEN_HOURS = 48

@@ -403,21 +403,21 @@ SETTING_GROUPS = {
     "هشدار سرویس کاربر": [
         (
             "user_alert_low_enabled",
-            "ارسال خودکار هشدار کمبود",
+            "ارسال خودکار هشدار کمبود به کاربر",
             "toggle",
-            "وقتی حجم یا زمان باقی‌مانده کمتر از حد تعیین‌شده باشد، به کاربر پیام می‌رود",
+            "وقتی حجم یا زمان باقی‌مانده سرویس کمتر از درصد تعیین‌شده شود، در تلگرام به کاربر پیام می‌رود",
         ),
         (
             "user_alert_low_traffic_pct",
-            "آستانه حجم باقی‌مانده (٪)",
+            "کمتر از چند درصد حجم؟",
             "number",
-            "مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ حجم مانده پیام بفرست",
+            "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ حجم مانده پیام برود",
         ),
         (
             "user_alert_low_time_pct",
-            "آستانه زمان باقی‌مانده (٪)",
+            "کمتر از چند درصد زمان؟",
             "number",
-            "مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ از مدت سرویس مانده پیام بفرست",
+            "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ از مدت سرویس مانده پیام برود",
         ),
     ],
     "QR اشتراک": [
@@ -505,8 +505,8 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "supports": [],
     "naming": ["نام‌گذاری سرویس در پاسارگارد"],
     "forcejoin": ["کانال اجباری"],
-    "reseller": ["نمایندگی", "هشدار سرویس کاربر"],
-    "notifications": [],
+    "reseller": ["نمایندگی"],
+    "notifications": ["هشدار سرویس کاربر"],
     "backup": [],
     "update": [],
     "bot": [],
@@ -574,6 +574,15 @@ async def get_all_settings(
 
 def on(value: str | None) -> bool:
     return (value or "").strip() in {"1", "true", "yes", "on", "True"}
+
+
+def clamp_alert_percent(raw: str | None, default: int = 20) -> str:
+    """Keep user-alert thresholds in 1..99."""
+    try:
+        n = int(float(str(raw).strip()))
+    except Exception:
+        n = default
+    return str(max(1, min(99, n)))
 
 
 def is_protected_admin(user: BotUser) -> bool:

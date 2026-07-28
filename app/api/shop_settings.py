@@ -238,7 +238,12 @@ def register_shop_settings(app, *, render, require_staff, get_db):
                 continue
             raw = form.get(f"s_{key}")
             if raw is not None and not isinstance(raw, UploadFile):
-                await set_setting(session, key, str(raw), reseller_id=rid)
+                val = str(raw)
+                if key in ("user_alert_low_traffic_pct", "user_alert_low_time_pct"):
+                    from app.services.users import clamp_alert_percent
+
+                    val = clamp_alert_percent(val)
+                await set_setting(session, key, val, reseller_id=rid)
 
         uploads = DATA_DIR / "uploads"
         uploads.mkdir(parents=True, exist_ok=True)
