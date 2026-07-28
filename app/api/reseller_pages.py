@@ -509,7 +509,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
                 "staff": staff,
                 "plan": plan,
                 "feature_perms": FEATURE_PERMS,
-                "selected_perms": parse_perms(plan.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS),
+                "selected_perms": with_shop_settings(
+                    parse_perms(plan.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
+                ),
                 "pg_roles": roles,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
