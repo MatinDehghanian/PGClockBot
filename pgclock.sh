@@ -405,104 +405,39 @@ cmd_install() {
     ok ".env backup created"
   fi
 
-  step "1/7  Telegram"
-  BOT_TOKEN="$(ask "Bot token (from @BotFather)")"
-  BOT_USERNAME="$(ask "Bot username without @" "PGClockBot")"
-  ADMIN_IDS="$(ask "Your Telegram numeric ID (admin)")"
-  ADMIN_IDS="$(echo "$ADMIN_IDS" | tr -d '[:space:]')"
-
-  step "2/7  PasarGuard panel"
-    PG_BASE_URL="$(ask "PasarGuard panel URL" "https://dev.mrclock.website")"
-  # Keep only origin (strip accidental path like /panel)
-  PG_BASE_URL="$("$SYSTEM_PY" - <<PY
-from urllib.parse import urlparse, urlunparse
-s = """${PG_BASE_URL}""".strip().rstrip("/")
-if "://" not in s:
-    s = "https://" + s
-p = urlparse(s)
-print(urlunparse((p.scheme, p.netloc, "", "", "", "")).rstrip("/") or s)
-PY
-)"
-  ok "Using panel URL: ${PG_BASE_URL}"
-  PG_USERNAME="$(ask "PasarGuard admin username")"
-  PG_PASSWORD="$(ask_secret "PasarGuard admin password")"
-
-  # Quick login check before continuing
-  info "Testing PasarGuard login..."
-  if PG_BASE_URL="$PG_BASE_URL" PG_USERNAME="$PG_USERNAME" PG_PASSWORD="$PG_PASSWORD" "$SYSTEM_PY" - <<'PY'
-import os, urllib.parse, urllib.request
-base = os.environ["PG_BASE_URL"].rstrip("/")
-data = urllib.parse.urlencode({
-    "username": os.environ["PG_USERNAME"],
-    "password": os.environ["PG_PASSWORD"],
-}).encode()
-req = urllib.request.Request(base + "/api/admin/token", data=data, method="POST")
-try:
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        body = resp.read().decode()
-        assert "access_token" in body
-        print("OK")
-except Exception as e:
-    print("FAIL", e)
-    raise SystemExit(1)
-PY
-  then
-    ok "PasarGuard login OK"
-  else
-    err "PasarGuard login failed — check URL / username / password"
-    return 1
-  fi
-
-  step "3/7  Web panel"
+  step "1/5  Web panel port"
   WEB_PORT="$(ask "Web panel port" "9000")"
-  WEB_ADMIN_USER="$(ask "Web panel username" "admin")"
-  WEB_ADMIN_PASSWORD="$(ask_password "Web panel password")"
   WEB_SECRET="$(gen_secret)"
+  # Scaffold only — full config (bot, admin, PasarGuard) is done in the web wizard
+  BOT_TOKEN=""
+  BOT_USERNAME=""
+  ADMIN_IDS=""
+  PG_BASE_URL=""
+  PG_USERNAME=""
+  PG_PASSWORD=""
+  WEB_ADMIN_USER="admin"
+  WEB_ADMIN_PASSWORD=""
+  PUBLIC_BASE_URL=""
+  CURRENCY="تومان"
 
-  step "4/7  Optional"
-  PUBLIC_BASE_URL="$(ask_optional "Public HTTPS URL for Mini App")"
-  CURRENCY="$(ask "Currency label" "Toman")"
-
-  step "5/7  Python packages"
+  step "2/5  Python packages"
   ensure_venv || return 1
 
-  step "6/7  Configuration"
+  step "3/5  Scaffold configuration"
   write_env_file
   mkdir -p data
-  WEB_ADMIN_USER="$WEB_ADMIN_USER" WEB_ADMIN_PASSWORD="$WEB_ADMIN_PASSWORD" "$PY" - <<'PY'
-import os, sys
-from pathlib import Path
-sys.path.insert(0, str(Path.cwd()))
-from app.services.web_auth import save_web_admin
-print(save_web_admin(os.environ["WEB_ADMIN_USER"], os.environ["WEB_ADMIN_PASSWORD"]))
-PY
-  ok ".env + data/web_admin.json written"
+  # Remove any leftover web_admin so first-run wizard is required
+  rm -f data/web_admin.json data/setup_complete.flag data/setup_in_progress.flag 2>/dev/null || true
+  ok ".env scaffold written · first-run wizard at /setup"
 
-  CHECK="$(
-    WEB_ADMIN_USER="$WEB_ADMIN_USER" WEB_ADMIN_PASSWORD="$WEB_ADMIN_PASSWORD" "$PY" - <<'PY'
-from app.services.web_auth import load_web_admin, verify_web_admin
-import os
-creds = load_web_admin()
-ok = verify_web_admin(os.environ["WEB_ADMIN_USER"], os.environ["WEB_ADMIN_PASSWORD"])
-print(creds["username"])
-print("OK" if ok else "FAIL")
-PY
-  )"
-  mapfile -t CHECK_LINES <<< "$CHECK"
-  if [[ "${CHECK_LINES[1]:-}" != "OK" ]]; then
-    err "Web login self-check failed."
-    return 1
-  fi
-  ok "Web login OK · username=${CHECK_LINES[0]}"
-
-  step "7/7  systemd"
+  step "4/5  systemd"
   if ask_yn "Enable systemd service now?" "Y"; then
     local service_user
     service_user="$(ask "System user" "$(whoami)")"
     install_systemd "$service_user"
   fi
 
-  if ask_yn "Start / keep bot running now?" "Y"; then
+  if ask_yn "Start / keep panel running now?" "Y"; then
     if service_installed; then
       sudo_wrap systemctl enable --now "$SERVICE_NAME" || true
       if service_active; then
@@ -516,6 +451,7 @@ PY
     fi
   fi
 
+  step "5/5  Firewall"
   if command -v ufw >/dev/null 2>&1; then
     if ask_yn "Allow web panel port ${WEB_PORT}/tcp in UFW?" "Y"; then
       sudo_wrap ufw allow "${WEB_PORT}/tcp" >/dev/null 2>&1 || true
@@ -523,8 +459,10 @@ PY
     fi
   fi
 
-  print_success "Install complete" \
-    "Password:   (the one you entered during setup)" \
+  print_success "Install complete — finish setup in the browser" \
+    "Open:       http://SERVER_IP:${WEB_PORT}/setup" \
+    "Wizard:     admin user/pass → bot → PasarGuard → done" \
+    "Password:   set in the web wizard (8+ chars, upper/lower/special)" \
     "Manage:     bash pgclock.sh" \
     "Logs:       journalctl -u ${SERVICE_NAME} -f"
   return 0

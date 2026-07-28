@@ -1,95 +1,237 @@
 {% extends "base.html" %}
-{% block title %}متن‌ها و تنظیمات{% endblock %}
+{% from "_settings_tabs.html" import settings_tabs %}
+{% block title %}تنظیمات{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>متن‌ها و تنظیمات</h1>
-    <p>پیام‌ها، پرداخت، QR و نمایش منو. برای نوتیف‌های ادمین به بخش نوتیفیکیشن بروید.</p>
-  </div>
-  <div class="actions" style="margin:0">
-    <a class="btn btn-ghost" href="/notifications">نوتیفیکیشن</a>
-    <a class="btn btn-ghost" href="/menu-layout">منوی بات</a>
+    <h1>تنظیمات</h1>
+    <p>متن‌ها، منو، پرداخت، نوتیفیکیشن و آپدیت — با پیش‌نمایش زنده شبیه تلگرام.</p>
   </div>
 </div>
 
 {% if saved %}<div class="flash ok">ذخیره شد.</div>{% endif %}
+{{ settings_tabs(tab) }}
 
-<nav class="settings-jump" aria-label="بخش‌های تنظیمات">
-{% for group, fields in groups.items() %}
-  <a href="#set-{{ loop.index }}">{{ group }}</a>
-{% endfor %}
-</nav>
+<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr'] %}has-preview{% endif %}">
+  <div class="settings-main">
 
-<form method="post" action="/settings" enctype="multipart/form-data" class="settings-form">
-{% for group, fields in groups.items() %}
-<div class="card settings-card" id="set-{{ loop.index }}">
-  <h2>{{ group }}</h2>
-  <div class="settings-grid">
-  {% for field in fields %}
-    {% set key = field[0] %}
-    {% set label = field[1] %}
-    {% set kind = field[2] if field|length > 2 else 'text' %}
-    {% set help = field[3] if field|length > 3 else '' %}
-    {% set options = field[4] if field|length > 4 else [] %}
-    {% set val = values.get(key, '') %}
-    <div class="setting-item {% if kind in ['textarea', 'image'] %}full{% endif %}">
-      {% if kind == 'toggle' %}
-      <label class="toggle-row">
-        <span>
-          <strong>{{ label }}</strong>
-          {% if help %}<small class="muted">{{ help }}</small>{% endif %}
-        </span>
-        <input type="checkbox" name="s_{{ key }}" value="1" {% if val in ['1','true','yes','on'] %}checked{% endif %} />
-      </label>
-      {% elif kind == 'select' %}
-      <label>{{ label }}
-        {% if help %}<small class="muted">{{ help }}</small>{% endif %}
-        <select name="s_{{ key }}">
-          {% for opt_val, opt_label in options %}
-          <option value="{{ opt_val }}" {% if val == opt_val %}selected{% endif %}>{{ opt_label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      {% elif kind == 'textarea' %}
-      <label>{{ label }}
-        {% if help %}<small class="muted">{{ help }}</small>{% endif %}
-        <textarea name="s_{{ key }}" rows="5">{{ val }}</textarea>
-      </label>
-      {% elif kind == 'number' %}
-      <label>{{ label }}
-        {% if help %}<small class="muted">{{ help }}</small>{% endif %}
-        <input name="s_{{ key }}" type="number" value="{{ val }}" />
-      </label>
-      {% elif kind == 'image' %}
-      <div class="image-setting">
-        <strong>{{ label }}</strong>
-        {% if help %}<small class="muted">{{ help }}</small>{% endif %}
-        {% if val %}
-        <div class="image-preview">
-          <img src="/media/{{ val }}" alt="پیش‌نمایش" />
-          <label class="clear-img">
-            <input type="checkbox" name="s_{{ key }}_clear" value="1" />
-            حذف عکس فعلی
-          </label>
+  {% if tab == 'update' %}
+    {% include "_settings_update.html" %}
+  {% elif tab == 'notifications' %}
+    {% include "_settings_notifications.html" %}
+  {% elif tab == 'menu' %}
+    {% include "_settings_menu.html" %}
+    <form method="post" action="/settings?tab=menu" enctype="multipart/form-data" class="settings-form" id="settings-form">
+      {% for group_name in tab_groups %}
+      {% set fields = groups[group_name] %}
+      <div class="card settings-card">
+        <h2>{{ group_name }}</h2>
+        <div class="settings-grid">
+        {% for field in fields %}
+          {% include "_settings_field.html" %}
+        {% endfor %}
         </div>
-        {% endif %}
-        <label class="file-label">آپلود عکس جدید
-          <input name="s_{{ key }}" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
-        </label>
       </div>
-      {% else %}
-      <label>{{ label }}
-        {% if help %}<small class="muted">{{ help }}</small>{% endif %}
-        <input name="s_{{ key }}" value="{{ val }}" />
-      </label>
-      {% endif %}
-    </div>
-  {% endfor %}
+      {% endfor %}
+      <div class="actions sticky-actions">
+        <button class="btn" type="submit">ذخیره تنظیمات</button>
+      </div>
+    </form>
+  {% else %}
+    <form method="post" action="/settings?tab={{ tab }}" enctype="multipart/form-data" class="settings-form" id="settings-form">
+      {% for group_name in tab_groups %}
+      {% set fields = groups[group_name] %}
+      <div class="card settings-card">
+        <h2>{{ group_name }}</h2>
+        <div class="settings-grid">
+        {% for field in fields %}
+          {% include "_settings_field.html" %}
+        {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      <div class="actions sticky-actions">
+        <button class="btn" type="submit">ذخیره تنظیمات</button>
+      </div>
+    </form>
+  {% endif %}
+
   </div>
+
+  {% if tab in ['menu','welcome','messages','buttons','qr'] %}
+  <aside class="tg-preview-wrap" aria-label="پیش‌نمایش تلگرام">
+    <div class="tg-preview">
+      <div class="tg-top">
+        <div class="tg-avatar">ک</div>
+        <div>
+          <strong id="pv-title">{{ values.get('shop_title','کلاک بات') }}</strong>
+          <small>ربات · آنلاین</small>
+        </div>
+      </div>
+      <div class="tg-chat" id="pv-chat">
+        <div class="tg-bubble bot" id="pv-bubble">
+          <div id="pv-text">پیش‌نمایش پیام…</div>
+        </div>
+        <div class="tg-qr-card" id="pv-qr" hidden>
+          <div class="tg-qr-box">QR</div>
+          <div class="tg-qr-cap" id="pv-qr-cap"></div>
+        </div>
+        <div class="tg-keys" id="pv-keys"></div>
+      </div>
+      <div class="tg-composer"><span>پیام…</span></div>
+    </div>
+    <p class="muted tg-preview-hint">پیش‌نمایش زنده — با تغییر فیلدها به‌روز می‌شود (ذخیره لازم نیست).</p>
+  </aside>
+  {% endif %}
 </div>
-{% endfor %}
-<div class="actions sticky-actions">
-  <button class="btn" type="submit">ذخیره تنظیمات</button>
-</div>
-</form>
+
+{% if tab in ['menu','welcome','messages','buttons','qr'] %}
+<script>
+(function(){
+  const form = document.getElementById('settings-form');
+  const tab = {{ tab|tojson }};
+  const values = {{ values|tojson }};
+  const titleEl = document.getElementById('pv-title');
+  const textEl = document.getElementById('pv-text');
+  const keysEl = document.getElementById('pv-keys');
+  const qrCard = document.getElementById('pv-qr');
+  const qrCap = document.getElementById('pv-qr-cap');
+  let focusKey = null;
+
+  function val(name, fallback){
+    if (!form) return (values[name] || fallback || '');
+    const el = form.querySelector('[name="s_'+name+'"]');
+    if (!el) return (values[name] || fallback || '');
+    if (el.type === 'checkbox') return el.checked ? '1' : '0';
+    return el.value;
+  }
+  function esc(s){
+    return String(s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  }
+  function btn(label){
+    return '<button type="button" class="tg-key">'+esc(label)+'</button>';
+  }
+  function menuOrder(){
+    const mo = document.getElementById('menu_order');
+    if (mo && mo.value) return mo.value.split(',').map(s => s.trim()).filter(Boolean);
+    return String(values.menu_order || 'shop,services,wallet,support,guide,faq,referral,miniapp')
+      .split(',').map(s => s.trim()).filter(Boolean);
+  }
+  function menuLayout(){
+    const sel = document.getElementById('menu_layout_select')
+      || (form && form.querySelector('[name="s_menu_layout"]'))
+      || document.getElementById('menu_layout');
+    if (sel && sel.value) return sel.value;
+    return values.menu_layout || 'classic';
+  }
+  function fillVars(text){
+    return String(text||'')
+      .replaceAll('{name}','کاربر')
+      .replaceAll('{order_id}','1024')
+      .replaceAll('{amount}','۵۰٬۰۰۰ تومان')
+      .replaceAll('{code}','CLK42')
+      .replaceAll('{link}','https://t.me/example_bot?start=CLK42')
+      .replaceAll('{card}','6037-****-****-1234')
+      .replaceAll('{holder}','نام دارنده')
+      .replaceAll('{url}','https://example.com/sub/demo');
+  }
+  function render(){
+    const shop = val('shop_title','کلاک بات');
+    if (titleEl) titleEl.textContent = shop || 'کلاک بات';
+    let text = '';
+    let showQr = false;
+    if (tab === 'welcome') {
+      text = fillVars(val('welcome_text','سلام {name} 👋'));
+    } else if (tab === 'messages') {
+      const map = {
+        s_guide_text: 'guide_text',
+        s_faq_text: 'faq_text',
+        s_support_text: 'support_text',
+        s_referral_text: 'referral_text',
+        s_empty_services_text: 'empty_services_text',
+        s_shop_empty_text: 'shop_empty_text',
+        s_delivery_title: 'delivery_title',
+        s_purchase_success_text: 'purchase_success_text',
+        s_wallet_success_text: 'wallet_success_text',
+        s_payment_reject_text: 'payment_reject_text',
+      };
+      const key = map[focusKey] || 'purchase_success_text';
+      if (key === 'delivery_title') {
+        text = fillVars(val('delivery_title','✅ سرویس آماده است')) + '\n\n' +
+          fillVars(val('purchase_success_text','پرداخت تأیید شد'));
+      } else {
+        text = fillVars(val(key, values[key] || 'متن پیام…'));
+      }
+    } else if (tab === 'buttons' || tab === 'menu') {
+      text = fillVars(val('welcome_text','سلام {name} 👋'));
+      const order = menuOrder();
+      const map = {
+        shop: val('btn_shop','خرید سرویس'),
+        services: val('btn_services','سرویس‌های من'),
+        wallet: val('show_wallet','1')==='1' ? val('btn_wallet','کیف پول') : '',
+        support: val('show_support','1')==='1' ? val('btn_support','پشتیبانی') : '',
+        guide: val('show_guide','1')==='1' ? val('btn_guide','راهنما') : '',
+        faq: val('show_faq','1')==='1' ? val('btn_faq','سوالات') : '',
+        referral: val('show_referral','1')==='1' ? val('btn_referral','دعوت') : '',
+        miniapp: val('show_miniapp','1')==='1' ? val('btn_miniapp','مینی‌اپ') : '',
+      };
+      // On menu tab, visibility follows active list (order), not only toggles
+      if (tab === 'menu') {
+        map.wallet = order.includes('wallet') ? val('btn_wallet','کیف پول') : '';
+        map.support = order.includes('support') ? val('btn_support','پشتیبانی') : '';
+        map.guide = order.includes('guide') ? val('btn_guide','راهنما') : '';
+        map.faq = order.includes('faq') ? val('btn_faq','سوالات') : '';
+        map.referral = order.includes('referral') ? val('btn_referral','دعوت') : '';
+        map.miniapp = order.includes('miniapp') ? val('btn_miniapp','مینی‌اپ') : '';
+        map.services = order.includes('services') ? val('btn_services','سرویس‌های من') : '';
+      }
+      const compact = menuLayout() === 'compact';
+      const labels = order.map(k => map[k]).filter(Boolean);
+      if (compact) {
+        let html = '';
+        for (let i=0;i<labels.length;i+=2){
+          html += '<div class="tg-key-row">'+btn(labels[i])+(labels[i+1]?btn(labels[i+1]):'')+'</div>';
+        }
+        keysEl.innerHTML = html;
+      } else {
+        keysEl.innerHTML = labels.map(l => '<div class="tg-key-row">'+btn(l)+'</div>').join('');
+      }
+    } else if (keysEl) {
+      keysEl.innerHTML = '';
+    }
+    if (tab === 'qr') {
+      text = fillVars(val('purchase_success_text','سرویس فعال شد.'));
+      showQr = val('qr_enabled','1') === '1';
+      let cap = fillVars(val('qr_caption','QR اشتراک'));
+      if (val('show_sub_link_in_text','1')==='1') {
+        cap += '\n\n🔗 https://example.com/sub/demo\n📦 ۱۰ گیگ · 📅 ۳۰ روز';
+      }
+      if (qrCap) qrCap.textContent = cap;
+    }
+    if (textEl) textEl.innerHTML = esc(text).replace(/\n/g,'<br>');
+    if (qrCard) qrCard.hidden = !showQr;
+  }
+  if (form) {
+    form.addEventListener('input', render);
+    form.addEventListener('change', render);
+    form.addEventListener('focusin', (e) => {
+      const t = e.target;
+      if (t && t.name) {
+        focusKey = t.name;
+        render();
+      }
+    });
+  }
+  const mo = document.getElementById('menu_order');
+  if (mo) mo.addEventListener('change', render);
+  const ml = document.getElementById('menu_layout') || document.getElementById('menu_layout_select');
+  if (ml) ml.addEventListener('change', render);
+  render();
+  const active = document.getElementById('active-list');
+  if (active && window.MutationObserver) {
+    new MutationObserver(render).observe(active, {childList:true, subtree:true});
+  }
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -142,7 +142,12 @@ def admin_main_menu(ui: dict | None = None) -> InlineKeyboardMarkup:
     )
 
 
-def plans_keyboard(plans: list[Plan], ui: dict | None = None) -> InlineKeyboardMarkup:
+def plans_keyboard(
+    plans: list[Plan],
+    ui: dict | None = None,
+    *,
+    custom_enabled: bool = False,
+) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
@@ -152,10 +157,65 @@ def plans_keyboard(plans: list[Plan], ui: dict | None = None) -> InlineKeyboardM
         ]
         for p in plans
     ]
+    if custom_enabled:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="✨ پلن دلخواه",
+                    callback_data="shop:custom",
+                )
+            ]
+        )
     rows.append(
         [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="menu:home")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def custom_gb_keyboard(
+    gb: int,
+    ui: dict | None = None,
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(text="➖", callback_data="shop:custom:gb:-"),
+            InlineKeyboardButton(text=f"{gb} گیگ", callback_data="shop:custom:noop"),
+            InlineKeyboardButton(text="➕", callback_data="shop:custom:gb:+"),
+        ],
+        [InlineKeyboardButton(text="✏️ ورود دستی حجم", callback_data="shop:custom:gb:input")],
+        [InlineKeyboardButton(text="ادامه ← روزها", callback_data="shop:custom:gb:next")],
+        [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:list")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def custom_days_keyboard(
+    days: int,
+    ui: dict | None = None,
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="➖", callback_data="shop:custom:days:-"),
+                InlineKeyboardButton(text=f"{days} روز", callback_data="shop:custom:noop"),
+                InlineKeyboardButton(text="➕", callback_data="shop:custom:days:+"),
+            ],
+            [InlineKeyboardButton(text="✏️ ورود دستی روز", callback_data="shop:custom:days:input")],
+            [InlineKeyboardButton(text="✅ مشاهده قیمت و تأیید", callback_data="shop:custom:confirm")],
+            [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:custom")],
+        ]
+    )
+
+
+def custom_confirm_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🟢✅ ادامه خرید", callback_data="shop:custom:buy")],
+            [InlineKeyboardButton(text="✏️ تغییر روز", callback_data="shop:custom:gb:next")],
+            [InlineKeyboardButton(text="✏️ تغییر حجم", callback_data="shop:custom")],
+            [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:list")],
+        ]
+    )
 
 
 def plan_actions(plan_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
@@ -290,6 +350,32 @@ def admin_home() -> InlineKeyboardMarkup:
     )
 
 
+def admin_users_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔎 جستجو با آیدی تلگرام", callback_data="adm:users:search")],
+            [
+                InlineKeyboardButton(
+                    text="🌐 مدیریت کامل در وب‌پنل",
+                    callback_data="adm:users:webhint",
+                )
+            ],
+            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
+        ]
+    )
+
+
+def admin_user_actions(user_id: int, *, is_blocked: bool) -> InlineKeyboardMarkup:
+    block_label = "🔓 رفع مسدودی" if is_blocked else "🚫 مسدود کردن"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=block_label, callback_data=f"adm:users:block:{user_id}")],
+            [InlineKeyboardButton(text="🔎 جستجوی دیگر", callback_data="adm:users:search")],
+            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:users")],
+        ]
+    )
+
+
 def order_review(order_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -308,6 +394,10 @@ def pg_admin_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="🔎 جستجوی یوزر", callback_data="adm:pg:search")],
             [InlineKeyboardButton(text="📊 آمار سیستم", callback_data="adm:pg:stats")],
             [InlineKeyboardButton(text="🕸 نودها", callback_data="adm:pg:nodes")],
+            [
+                InlineKeyboardButton(text="📁 ساخت گروه", callback_data="adm:pg:group"),
+                InlineKeyboardButton(text="📋 ساخت تمپلیت", callback_data="adm:pg:template"),
+            ],
             [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
         ]
     )

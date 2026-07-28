@@ -47,6 +47,7 @@ class AdminStates(StatesGroup):
     pg_search = State()
     make_reseller = State()
     ticket_reply = State()
+    user_search = State()
 
 
 def _is_admin(user: BotUser) -> bool:
@@ -545,10 +546,119 @@ async def adm_users(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         return
     await callback.answer()
     total = await session.scalar(select(func.count()).select_from(BotUser))
+    blocked = await session.scalar(
+        select(func.count()).select_from(BotUser).where(BotUser.is_blocked.is_(True))
+    ) or 0
     orders = await session.scalar(select(func.count()).select_from(Order))
-    text = f"👥 کاربران بات: {total}\n🧾 سفارش‌ها: {orders}"
+    text = (
+        "👥 <b>کاربران بات</b>\n\n"
+        f"کل: {total}\n"
+        f"مسدود: {blocked}\n"
+        f"سفارش‌ها: {orders}\n\n"
+        "<i>مدیریت کامل (CRUD) در وب‌پنل → کاربران در دسترس است.</i>"
+    )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.admin_home())
+        await callback.message.edit_text(text, reply_markup=kb.admin_users_keyboard())
+
+
+@router.callback_query(F.data == "adm:users:webhint")
+async def adm_users_webhint(callback: CallbackQuery, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await callback.answer(
+        "از وب‌پنل مسیر /users برای ایجاد، ویرایش و مدیریت کامل کاربران استفاده کنید.",
+        show_alert=True,
+    )
+
+
+@router.callback_query(F.data == "adm:users:search")
+async def adm_users_search_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await callback.answer()
+    await state.set_state(AdminStates.user_search)
+    if callback.message:
+        await callback.message.answer(
+            "آیدی عددی تلگرام کاربر را بفرستید:",
+            reply_markup=kb.cancel_reply(),
+        )
+
+
+@router.message(AdminStates.user_search)
+async def adm_users_search(message: Message, state: FSMContext, session: AsyncSession):
+    if (message.text or "").strip() == "انصراف":
+        await state.clear()
+        await message.answer("لغو شد.", reply_markup=kb.admin_users_keyboard())
+        return
+    try:
+        tg_id = int((message.text or "").strip())
+    except ValueError:
+        await message.answer("آیدی عددی معتبر بفرستید")
+        return
+    result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))
+    user = result.scalar_one_or_none()
+    await state.clear()
+    if not user:
+        await message.answer(
+            "کاربری با این آیدی یافت نشد.",
+            reply_markup=kb.admin_users_keyboard(),
+        )
+        return
+    svc_count = await session.scalar(
+        select(func.count()).select_from(UserService).where(UserService.bot_user_id == user.id)
+    ) or 0
+    blocked = "بله 🚫" if user.is_blocked else "خیر"
+    text = (
+        f"👤 <b>{user.full_name or user.username or '—'}</b>\n\n"
+        f"آیدی تلگرام: <code>{user.telegram_id}</code>\n"
+        f"یوزرنیم: @{user.username or '—'}\n"
+        f"نقش: {user.role}\n"
+        f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
+        f"سرویس‌ها: {svc_count}\n"
+        f"مسدود: {blocked}"
+    )
+    await message.answer(
+        text,
+        reply_markup=kb.admin_user_actions(user.id, is_blocked=user.is_blocked),
+    )
+
+
+@router.callback_query(F.data.startswith("adm:users:block:"))
+async def adm_users_block(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    user_id = int(callback.data.split(":")[-1])
+    user = await session.get(BotUser, user_id)
+    if not user:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    if user.telegram_id in get_settings().admin_ids or user.role == Role.ADMIN.value:
+        await callback.answer("مسدود کردن ادمین مجاز نیست", show_alert=True)
+        return
+    user.is_blocked = not user.is_blocked
+    await session.commit()
+    await callback.answer("رفع مسدودی شد ✅" if not user.is_blocked else "مسدود شد 🚫", show_alert=True)
+    svc_count = await session.scalar(
+        select(func.count()).select_from(UserService).where(UserService.bot_user_id == user.id)
+    ) or 0
+    blocked = "بله 🚫" if user.is_blocked else "خیر"
+    text = (
+        f"👤 <b>{user.full_name or user.username or '—'}</b>\n\n"
+        f"آیدی تلگرام: <code>{user.telegram_id}</code>\n"
+        f"یوزرنیم: @{user.username or '—'}\n"
+        f"نقش: {user.role}\n"
+        f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
+        f"سرویس‌ها: {svc_count}\n"
+        f"مسدود: {blocked}"
+    )
+    if callback.message:
+        await callback.message.edit_text(
+            text,
+            reply_markup=kb.admin_user_actions(user.id, is_blocked=user.is_blocked),
+        )
 
 
 @router.callback_query(F.data == "adm:resellers")
@@ -673,6 +783,36 @@ async def adm_pg(callback: CallbackQuery, db_user: BotUser):
     await callback.answer()
     if callback.message:
         await callback.message.edit_text("🖥 عملیات پاسارگارد", reply_markup=kb.pg_admin_keyboard())
+
+
+@router.callback_query(F.data == "adm:pg:group")
+async def adm_pg_group_hint(callback: CallbackQuery, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await callback.answer()
+    text = (
+        "📁 <b>ساخت گروه پاسارگارد</b>\n\n"
+        "ساخت گروه نیاز به انتخاب اینباندها دارد و در ربات پیچیده است.\n"
+        "از وب‌پنل مسیر <code>/pg/groups</code> استفاده کنید."
+    )
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=kb.pg_admin_keyboard())
+
+
+@router.callback_query(F.data == "adm:pg:template")
+async def adm_pg_template_hint(callback: CallbackQuery, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await callback.answer()
+    text = (
+        "📋 <b>ساخت تمپلیت پاسارگارد</b>\n\n"
+        "ساخت تمپلیت از ربات پشتیبانی کامل ندارد.\n"
+        "از وب‌پنل مسیر <code>/pg/templates</code> استفاده کنید."
+    )
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=kb.pg_admin_keyboard())
 
 
 @router.callback_query(F.data == "adm:pg:stats")

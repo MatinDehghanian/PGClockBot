@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qsl, quote
@@ -34,14 +35,31 @@ from app.db.session import SessionLocal
 from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.pasarguard import get_pg, parse_group_ids
 from app.services.resellers import make_reseller
+from app.services.setup_wizard import (
+    begin_setup,
+    current_setup_values,
+    ensure_web_secret,
+    is_setup_complete,
+    mark_setup_complete,
+    panel_url_hint,
+    parse_admin_ids,
+    update_env_keys,
+)
 from app.services.updates import check_github_update, local_version
 from app.services.users import (
     IMAGE_KEYS,
     SETTING_GROUPS,
+    SETTINGS_TABS,
+    TAB_SETTING_GROUPS,
     get_all_settings,
     set_setting,
 )
-from app.services.web_auth import load_web_admin, verify_web_admin
+from app.services.web_auth import (
+    load_web_admin,
+    save_web_admin,
+    validate_password_strength,
+    verify_web_admin,
+)
 from app.api.pg_pages import register_pg_pages
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -57,6 +75,11 @@ templates.env.filters["ticket_status"] = ticket_status_fa
 templates.env.globals["app_version"] = local_version()
 templates.env.globals["order_status_fa"] = order_status_fa
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
+
+# Login brute-force tracking: ip -> list of failure timestamps
+_LOGIN_FAILURES: dict[str, list[float]] = defaultdict(list)
+_LOGIN_WINDOW_SEC = 15 * 60
+_LOGIN_MAX_FAILURES = 8
 
 
 class NotAuthenticated(Exception):
@@ -83,6 +106,38 @@ def _redirect_msg(path: str, *, ok: str | None = None, err: str | None = None) -
         q.append(f"err={quote(err)}")
     url = path if not q else f"{path}?{'&'.join(q)}"
     return RedirectResponse(url, status_code=303)
+
+
+def _client_ip(request: Request) -> str:
+    fwd = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if fwd:
+        return fwd
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _login_blocked(ip: str) -> bool:
+    now = time.time()
+    stamps = [t for t in _LOGIN_FAILURES.get(ip, []) if now - t < _LOGIN_WINDOW_SEC]
+    _LOGIN_FAILURES[ip] = stamps
+    return len(stamps) >= _LOGIN_MAX_FAILURES
+
+
+def _login_fail(ip: str) -> None:
+    now = time.time()
+    stamps = [t for t in _LOGIN_FAILURES.get(ip, []) if now - t < _LOGIN_WINDOW_SEC]
+    stamps.append(now)
+    _LOGIN_FAILURES[ip] = stamps
+
+
+def _login_success(ip: str) -> None:
+    _LOGIN_FAILURES.pop(ip, None)
+
+
+def _cookie_secure(request: Request) -> bool:
+    fwd = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    return request.url.scheme == "https" or fwd == "https"
 
 
 def create_api_app(lifespan=None) -> FastAPI:
@@ -121,6 +176,49 @@ def create_api_app(lifespan=None) -> FastAPI:
             raise NotAdmin()
         return user
 
+    @app.middleware("http")
+    async def setup_gate(request: Request, call_next):
+        path = request.url.path
+        complete = is_setup_complete()
+
+        if complete:
+            if path == "/setup" or path.startswith("/setup/"):
+                return RedirectResponse("/login", status_code=303)
+            return await call_next(request)
+
+        allowed = (
+            path == "/setup"
+            or path.startswith("/setup/")
+            or path.startswith("/static")
+            or path == "/health"
+            or (path == "/login" and request.method == "GET")
+        )
+        if allowed:
+            return await call_next(request)
+        return RedirectResponse("/setup", status_code=303)
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        # Panel pages only; keep CSP moderate so inline preview/scripts still work
+        if not request.url.path.startswith("/static") and not request.url.path.startswith("/media"):
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'self'; img-src 'self' data: blob:; "
+                "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+                "font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+            )
+        if _cookie_secure(request):
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return response
+
     @app.exception_handler(NotAuthenticated)
     async def _unauth(request: Request, exc: NotAuthenticated):
         return RedirectResponse("/login", status_code=303)
@@ -139,7 +237,137 @@ def create_api_app(lifespan=None) -> FastAPI:
             "web_panel": True,
             "admin_user_configured": bool(creds.get("username") and creds.get("password")),
             "admin_username": creds.get("username") or None,
+            "setup_complete": is_setup_complete(),
         }
+
+    # -------- Setup wizard --------
+    def _setup_page(request: Request, *, step: int = 0, err: str | None = None, ok: str | None = None, show_done: bool = False):
+        begin_setup()
+        values = current_setup_values()
+        return render(
+            request,
+            "setup.html",
+            {
+                "values": values,
+                "initial_step": step,
+                "show_done": show_done,
+                "flash_err": err or request.query_params.get("err"),
+                "flash_ok": ok or request.query_params.get("ok"),
+                "panel_url": panel_url_hint(values.get("PUBLIC_BASE_URL", ""), values.get("WEB_PORT", "9000")),
+                "bot_username": (values.get("BOT_USERNAME") or "").lstrip("@"),
+            },
+        )
+
+    @app.get("/setup", response_class=HTMLResponse)
+    async def setup_page(request: Request):
+        if is_setup_complete():
+            return RedirectResponse("/login", status_code=303)
+        step = 0
+        try:
+            step = int(request.query_params.get("step") or "0")
+        except ValueError:
+            step = 0
+        show_done = step >= 4
+        return _setup_page(request, step=step if step < 4 else 4, show_done=show_done)
+
+    @app.post("/setup/admin")
+    async def setup_admin(
+        request: Request,
+        username: str = Form(...),
+        password: str = Form(...),
+        password_confirm: str = Form(...),
+    ):
+        if is_setup_complete():
+            return RedirectResponse("/login", status_code=303)
+        begin_setup()
+        user = (username or "").strip() or "admin"
+        p1 = password or ""
+        p2 = password_confirm or ""
+        if p1 != p2:
+            return _setup_page(request, step=1, err="رمز عبور و تکرار آن یکسان نیستند.")
+        ok, msg = validate_password_strength(p1)
+        if not ok:
+            return _setup_page(request, step=1, err=msg)
+        try:
+            save_web_admin(user, p1)
+        except ValueError as e:
+            return _setup_page(request, step=1, err=str(e))
+        ensure_web_secret()
+        update_env_keys({"WEB_ADMIN_USER": user})
+        return RedirectResponse("/setup?step=2", status_code=303)
+
+    @app.post("/setup/bot")
+    async def setup_bot(
+        request: Request,
+        bot_token: str = Form(...),
+        bot_username: str = Form(""),
+        admin_ids: str = Form(...),
+    ):
+        if is_setup_complete():
+            return RedirectResponse("/login", status_code=303)
+        begin_setup()
+        token = (bot_token or "").strip()
+        uname = (bot_username or "").strip().lstrip("@")
+        ids_raw = (admin_ids or "").strip()
+        if not token:
+            return _setup_page(request, step=2, err="توکن ربات الزامی است.")
+        try:
+            ids = parse_admin_ids(ids_raw)
+        except ValueError:
+            return _setup_page(request, step=2, err="آیدی ادمین‌ها باید عدد باشد (با کاما جدا کنید).")
+        if not ids:
+            return _setup_page(request, step=2, err="حداقل یک آیدی ادمین وارد کنید.")
+        update_env_keys(
+            {
+                "BOT_TOKEN": token,
+                "BOT_USERNAME": uname,
+                "ADMIN_IDS": ",".join(str(i) for i in ids),
+            }
+        )
+        ensure_web_secret()
+        return RedirectResponse("/setup?step=3", status_code=303)
+
+    @app.post("/setup/other")
+    async def setup_other(
+        request: Request,
+        pg_base_url: str = Form(...),
+        pg_username: str = Form(""),
+        pg_password: str = Form(""),
+        web_port: str = Form("9000"),
+        public_base_url: str = Form(""),
+        currency: str = Form("تومان"),
+    ):
+        if is_setup_complete():
+            return RedirectResponse("/login", status_code=303)
+        begin_setup()
+        base = (pg_base_url or "").strip()
+        if not base:
+            return _setup_page(request, step=3, err="آدرس پاسارگارد الزامی است.")
+        port = (web_port or "9000").strip()
+        try:
+            port_n = int(port)
+            if port_n < 1 or port_n > 65535:
+                raise ValueError
+        except ValueError:
+            return _setup_page(request, step=3, err="پورت وب نامعتبر است.")
+        ensure_web_secret()
+        update_env_keys(
+            {
+                "PG_BASE_URL": base,
+                "PG_USERNAME": (pg_username or "").strip(),
+                "PG_PASSWORD": (pg_password or "").strip(),
+                "WEB_PORT": str(port_n),
+                "PUBLIC_BASE_URL": (public_base_url or "").strip().rstrip("/"),
+                "CURRENCY": (currency or "").strip() or "تومان",
+            }
+        )
+        return RedirectResponse("/setup?step=4", status_code=303)
+
+    @app.post("/setup/finish")
+    async def setup_finish():
+        mark_setup_complete()
+        ensure_web_secret()
+        return RedirectResponse("/login", status_code=303)
 
     @app.get("/", response_class=HTMLResponse)
     async def root(request: Request):
@@ -163,6 +391,21 @@ def create_api_app(lifespan=None) -> FastAPI:
         password: str = Form(...),
         session: AsyncSession = Depends(get_db),
     ):
+        if not is_setup_complete():
+            return RedirectResponse("/setup", status_code=303)
+
+        ip = _client_ip(request)
+        if _login_blocked(ip):
+            return render(
+                request,
+                "login.html",
+                {
+                    "error": "تعداد تلاش‌های ناموفق زیاد است. ۱۵ دقیقه دیگر دوباره تلاش کنید.",
+                    "hint_user": load_web_admin().get("username") or "admin",
+                },
+                status_code=429,
+            )
+
         role = None
         display = (username or "").strip()
         u = display
@@ -189,6 +432,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     display = ru.full_name or str(tg_id)
 
         if not role:
+            _login_fail(ip)
             return render(
                 request,
                 "login.html",
@@ -199,12 +443,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                 status_code=400,
             )
 
+        _login_success(ip)
         resp = RedirectResponse("/dashboard", status_code=303)
         resp.set_cookie(
             "session",
             get_signer().dumps({"role": role, "username": display}),
             httponly=True,
             samesite="lax",
+            secure=_cookie_secure(request),
             max_age=60 * 60 * 24 * 7,
             path="/",
         )
@@ -861,72 +1107,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         return RedirectResponse("/resellers", status_code=303)
 
     @app.get("/menu-layout", response_class=HTMLResponse)
-    async def menu_layout_page(
-        request: Request,
-        staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
-    ):
-        from app.bot.keyboards import DEFAULT_MENU_ORDER
-
-        values = await get_all_settings(session)
-        order_raw = values.get("menu_order") or ",".join(DEFAULT_MENU_ORDER)
-        order = [p.strip() for p in order_raw.split(",") if p.strip()]
-        order = [k for k in order if k in DEFAULT_MENU_ORDER]
-        if "shop" not in order:
-            order.insert(0, "shop")
-
-        catalog_meta = {
-            "shop": {"label": "خرید سرویس", "required": True},
-            "services": {"label": "سرویس‌های من", "required": False},
-            "wallet": {"label": "کیف پول", "required": False},
-            "support": {"label": "پشتیبانی", "required": False},
-            "guide": {"label": "راهنما", "required": False},
-            "faq": {"label": "سوالات متداول", "required": False},
-            "referral": {"label": "دعوت دوستان", "required": False},
-            "miniapp": {"label": "مینی‌اپ", "required": False},
-        }
-        catalog = {}
-        for key, meta in catalog_meta.items():
-            catalog[key] = {
-                "label": meta["label"],
-                "btn": values.get(f"btn_{key}", meta["label"]),
-                "required": meta["required"],
-            }
-
-        items = []
-        for key in order:
-            items.append(
-                {
-                    "key": key,
-                    "label": catalog[key]["label"],
-                    "btn": catalog[key]["btn"],
-                    "required": catalog[key]["required"],
-                }
-            )
-        pool = []
-        for key in DEFAULT_MENU_ORDER:
-            if key not in order and key != "shop":
-                pool.append(
-                    {
-                        "key": key,
-                        "label": catalog[key]["label"],
-                        "btn": catalog[key]["btn"],
-                        "required": False,
-                    }
-                )
-        return render(
-            request,
-            "menu_layout.html",
-            {
-                "staff": staff,
-                "values": values,
-                "items": items,
-                "pool": pool,
-                "catalog": catalog,
-                "order_csv": ",".join(order),
-                "saved": request.query_params.get("saved") == "1",
-            },
-        )
+    async def menu_layout_page(staff: dict = Depends(require_admin)):
+        return RedirectResponse("/settings?tab=menu", status_code=303)
 
     @app.post("/menu-layout")
     async def menu_layout_save(
@@ -945,31 +1127,19 @@ def create_api_app(lifespan=None) -> FastAPI:
         await set_setting(session, "menu_order", ",".join(order))
         if layout in {"classic", "compact"}:
             await set_setting(session, "menu_layout", layout)
-        # visibility follows presence in active menu
         for key in ("wallet", "support", "guide", "faq", "referral", "miniapp", "services"):
             await set_setting(session, f"show_{key}", "1" if key in order else "0")
-        return RedirectResponse("/menu-layout?saved=1", status_code=303)
+        return RedirectResponse("/settings?tab=menu&saved=1", status_code=303)
 
     @app.get("/update", response_class=HTMLResponse)
     async def update_page(
         request: Request,
         staff: dict = Depends(require_admin),
     ):
-        from app.services.panel_update import update_page_context
-        from app.services.updates import check_github_update, clear_update_cache
-
+        q = "tab=update"
         if request.query_params.get("force") == "1":
-            clear_update_cache()
-            await check_github_update(force=True)
-        ctx = await update_page_context()
-        return render(
-            request,
-            "update.html",
-            {
-                "staff": staff,
-                **ctx,
-            },
-        )
+            q += "&force=1"
+        return RedirectResponse(f"/settings?{q}", status_code=303)
 
     @app.get("/update/status")
     async def update_status(staff: dict = Depends(require_admin)):
@@ -1023,24 +1193,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         return start_rollback(snapshot_id)
 
     @app.get("/notifications", response_class=HTMLResponse)
-    async def notifications_page(
-        request: Request,
-        staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
-    ):
-        from app.services.notifications import NOTIFY_PREFS, get_notify_prefs
-
-        prefs = await get_notify_prefs(session)
-        return render(
-            request,
-            "notifications.html",
-            {
-                "staff": staff,
-                "prefs": prefs,
-                "items": NOTIFY_PREFS,
-                "flash_ok": "ذخیره شد." if request.query_params.get("saved") == "1" else None,
-            },
-        )
+    async def notifications_page(staff: dict = Depends(require_admin)):
+        return RedirectResponse("/settings?tab=notifications", status_code=303)
 
     @app.post("/notifications")
     async def notifications_save(
@@ -1052,7 +1206,50 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         form = await request.form()
         await save_notify_prefs(session, dict(form))
-        return RedirectResponse("/notifications?saved=1", status_code=303)
+        return RedirectResponse("/settings?tab=notifications&saved=1", status_code=303)
+
+    def _menu_tab_context(values: dict) -> dict:
+        from app.bot.keyboards import DEFAULT_MENU_ORDER
+
+        order_raw = values.get("menu_order") or ",".join(DEFAULT_MENU_ORDER)
+        order = [p.strip() for p in order_raw.split(",") if p.strip()]
+        order = [k for k in order if k in DEFAULT_MENU_ORDER]
+        if "shop" not in order:
+            order.insert(0, "shop")
+        catalog_meta = {
+            "shop": {"label": "خرید سرویس", "required": True},
+            "services": {"label": "سرویس‌های من", "required": False},
+            "wallet": {"label": "کیف پول", "required": False},
+            "support": {"label": "پشتیبانی", "required": False},
+            "guide": {"label": "راهنما", "required": False},
+            "faq": {"label": "سوالات متداول", "required": False},
+            "referral": {"label": "دعوت دوستان", "required": False},
+            "miniapp": {"label": "مینی‌اپ", "required": False},
+        }
+        items = []
+        for key in order:
+            meta = catalog_meta[key]
+            items.append(
+                {
+                    "key": key,
+                    "label": meta["label"],
+                    "btn": values.get(f"btn_{key}", meta["label"]),
+                    "required": meta["required"],
+                }
+            )
+        pool = []
+        for key in DEFAULT_MENU_ORDER:
+            if key not in order and key != "shop":
+                meta = catalog_meta[key]
+                pool.append(
+                    {
+                        "key": key,
+                        "label": meta["label"],
+                        "btn": values.get(f"btn_{key}", meta["label"]),
+                        "required": False,
+                    }
+                )
+        return {"items": items, "pool": pool, "order_csv": ",".join(order)}
 
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(
@@ -1060,17 +1257,42 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.services.notifications import NOTIFY_PREFS, get_notify_prefs
+        from app.services.panel_update import update_page_context
+        from app.services.updates import check_github_update, clear_update_cache
+
+        tab = (request.query_params.get("tab") or "menu").strip()
+        valid = {t[0] for t in SETTINGS_TABS}
+        if tab not in valid:
+            tab = "menu"
+
         values = await get_all_settings(session)
-        return render(
-            request,
-            "settings.html",
-            {
-                "staff": staff,
-                "values": values,
-                "groups": SETTING_GROUPS,
-                "saved": request.query_params.get("saved") == "1",
-            },
-        )
+        tab_groups = TAB_SETTING_GROUPS.get(tab, [])
+        groups = {name: SETTING_GROUPS[name] for name in tab_groups if name in SETTING_GROUPS}
+
+        ctx: dict = {
+            "staff": staff,
+            "values": values,
+            "groups": groups,
+            "tab_groups": tab_groups,
+            "tabs": SETTINGS_TABS,
+            "tab": tab,
+            "saved": request.query_params.get("saved") == "1",
+        }
+
+        if tab == "menu":
+            ctx.update(_menu_tab_context(values))
+        elif tab == "notifications":
+            prefs = await get_notify_prefs(session)
+            ctx["notify_prefs"] = prefs
+            ctx["notify_items"] = NOTIFY_PREFS
+        elif tab == "update":
+            if request.query_params.get("force") == "1":
+                clear_update_cache()
+                await check_github_update(force=True)
+            ctx.update(await update_page_context())
+
+        return render(request, "settings.html", ctx)
 
     @app.post("/settings")
     async def settings_save(
@@ -1084,6 +1306,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         from app.services.users import TOGGLE_KEYS
 
+        tab = (request.query_params.get("tab") or "welcome").strip()
         form = await request.form()
         known = {item[0] for fields in SETTING_GROUPS.values() for item in fields}
         for key in TOGGLE_KEYS:
@@ -1115,7 +1338,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 if content:
                     dest.write_bytes(content)
                     await set_setting(session, key, f"uploads/{dest_name}")
-        return RedirectResponse("/settings?saved=1", status_code=303)
+        return RedirectResponse(f"/settings?tab={tab}&saved=1", status_code=303)
 
     @app.get("/tickets", response_class=HTMLResponse)
     async def tickets_page(
