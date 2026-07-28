@@ -142,8 +142,7 @@ def register_pg_pages(
             else:
                 # Reseller: only own users/usage/limits — never server/hardware stats
                 reseller_overview = await build_reseller_pg_overview(staff)
-                if reseller_overview.get("error") and not reseller_overview.get("ready"):
-                    err = reseller_overview.get("error")
+                # Keep overview.error in template; don't blank the page via flash_err
         except Exception as e:
             err = str(e)
         return render(

@@ -12,10 +12,6 @@
 
 {{ pg_tabs('pg') }}
 
-{% if flash_err %}
-{# shown in base #}
-{% else %}
-
 {% if not is_admin %}
   {% set ov = reseller_overview or {} %}
   {% if ov.ready %}
@@ -46,12 +42,15 @@
       <small class="muted">مصرف‌شده: {{ ov.traffic.used_text }}</small>
       {% endif %}
     </div>
+    {% else %}
+    <div class="stat"><span>حجم کل</span><strong>—</strong></div>
+    <div class="stat"><span>حجم باقیمانده</span><strong>—</strong></div>
     {% endif %}
     {% if ov.time and ov.time.has_limit %}
     <div class="stat">
       <span>زمان کل</span>
       <strong>{{ ov.time.total_text or ov.time.expire_text }}</strong>
-      {% if ov.time.expire_text and ov.time.total_text %}
+      {% if ov.time.expire_text and ov.time.total_text and ov.time.total_text != ov.time.expire_text %}
       <small class="muted">انقضا: {{ ov.time.expire_text }}</small>
       {% endif %}
     </div>
@@ -63,14 +62,8 @@
       {% endif %}
     </div>
     {% else %}
-    <div class="stat">
-      <span>زمان کل</span>
-      <strong>نامحدود</strong>
-    </div>
-    <div class="stat">
-      <span>زمان باقیمانده</span>
-      <strong>—</strong>
-    </div>
+    <div class="stat"><span>زمان کل</span><strong>نامحدود</strong></div>
+    <div class="stat"><span>زمان باقیمانده</span><strong>—</strong></div>
     {% endif %}
   </div>
   {% if ov.users %}
@@ -85,7 +78,7 @@
   {% endif %}
 
 {% else %}
-<div class="stats-grid" style="grid-template-columns: repeat(4, minmax(0, 1fr))">
+<div class="stats-grid">
   <div class="stat"><span>تمپلیت‌ها</span><strong>{{ counts.templates }}</strong></div>
   <div class="stat"><span>گروه‌ها</span><strong>{{ counts.groups }}</strong></div>
   <div class="stat"><span>هاست‌ها</span><strong>{{ counts.hosts }}</strong></div>
@@ -131,7 +124,5 @@
   {% endif %}
 </div>
 {% endif %}
-{% endif %}
-
 {% endif %}
 {% endblock %}

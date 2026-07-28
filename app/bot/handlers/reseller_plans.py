@@ -126,7 +126,7 @@ async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if not owner_id or not profile:
         await callback.answer("نماینده نیستید", show_alert=True)
         return
-    if not profile or not has_bot_perm(profile, "plans"):
+    if not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی پلن ندارید", show_alert=True)
         return
     await callback.answer()
@@ -141,7 +141,10 @@ async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 
 
 @router.callback_query(F.data == "res:plan:webhint")
-async def res_plan_webhint(callback: CallbackQuery, db_user: BotUser,
+async def res_plan_webhint(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
@@ -170,7 +173,7 @@ async def res_plan_view(callback: CallbackQuery, session: AsyncSession, db_user:
     if not owner_id or not profile:
         await callback.answer("نماینده نیستید", show_alert=True)
         return
-    if not profile or not has_bot_perm(profile, "plans"):
+    if not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     plan = await session.get(Plan, int(callback.data.split(":")[-1]))
@@ -193,7 +196,7 @@ async def res_plan_toggle(callback: CallbackQuery, session: AsyncSession, db_use
     if not owner_id or not profile:
         await callback.answer("نماینده نیستید", show_alert=True)
         return
-    if not profile or not has_bot_perm(profile, "plans"):
+    if not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     plan = await session.get(Plan, int(callback.data.split(":")[-1]))
@@ -218,7 +221,7 @@ async def res_plan_delete(callback: CallbackQuery, session: AsyncSession, db_use
     if not owner_id or not profile:
         await callback.answer("نماینده نیستید", show_alert=True)
         return
-    if not profile or not has_bot_perm(profile, "plans"):
+    if not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     plan = await session.get(Plan, int(callback.data.split(":")[-1]))
@@ -248,7 +251,7 @@ async def res_plan_add(callback: CallbackQuery, state: FSMContext, session: Asyn
     if not owner_id or not profile:
         await callback.answer("نماینده نیستید", show_alert=True)
         return
-    if not profile or not has_bot_perm(profile, "plans"):
+    if not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
@@ -427,7 +430,7 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
     if not owner_id or not profile:
         await callback.answer("نماینده نیستید", show_alert=True)
         return
-    if not profile or not has_bot_perm(profile, "plans"):
+    if not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     data = await state.get_data()
@@ -491,7 +494,7 @@ async def res_plan_save_tpl(callback: CallbackQuery, state: FSMContext, session:
     if not owner_id or not profile:
         await callback.answer("نماینده نیستید", show_alert=True)
         return
-    if not profile or not has_bot_perm(profile, "plans"):
+    if not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     tid = int(callback.data.split(":")[-1])

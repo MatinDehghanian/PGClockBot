@@ -309,12 +309,21 @@ async def res_payments(
 
 
 @router.callback_query(F.data == "resapply:home")
-async def resapply_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def resapply_home(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     ui = await get_all_settings(session)
     if not on(ui.get("show_reseller_apply", "1")):
         await callback.answer("درخواست نمایندگی غیرفعال است", show_alert=True)
         return
-    if db_user.role == Role.RESELLER.value:
+    owner_id, _profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if owner_id or db_user.role == Role.RESELLER.value:
         await callback.answer("شما هم‌اکنون نماینده هستید", show_alert=True)
         return
     if db_user.role == Role.ADMIN.value:
@@ -355,7 +364,19 @@ async def resapply_home(callback: CallbackQuery, session: AsyncSession, db_user:
 
 
 @router.callback_query(F.data.startswith("resapply:plan:"))
-async def resapply_plan(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def resapply_plan(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, _profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if owner_id or db_user.role in (Role.RESELLER.value, Role.ADMIN.value):
+        await callback.answer("اجازه درخواست نمایندگی ندارید", show_alert=True)
+        return
     ui = await get_all_settings(session)
     plan_id = int(callback.data.split(":")[-1])
     plans = {p.id: p for p in await list_active_reseller_plans(session)}
@@ -382,7 +403,19 @@ async def resapply_plan(callback: CallbackQuery, session: AsyncSession, db_user:
 
 
 @router.callback_query(F.data.startswith("resapply:buy:"))
-async def resapply_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def resapply_buy(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, _profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if owner_id or db_user.role in (Role.RESELLER.value, Role.ADMIN.value):
+        await callback.answer("اجازه درخواست نمایندگی ندارید", show_alert=True)
+        return
     ui = await get_all_settings(session)
     plan_id = int(callback.data.split(":")[-1])
     plans = {p.id: p for p in await list_active_reseller_plans(session)}
@@ -417,7 +450,7 @@ async def resapply_buy(callback: CallbackQuery, session: AsyncSession, db_user: 
                 await callback.bot.send_message(
                     aid,
                     notify,
-                    reply_markup=_notify_admins_markup(app.id),
+                    reply_markup=kb.reseller_app_review(app.id),
                 )
             except Exception:
                 pass

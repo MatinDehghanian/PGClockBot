@@ -204,10 +204,8 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
 
         role_id = staff.get("pg_role_id")
         # Prefer embedded role on admin payload
-        embedded = admin.get("role") if isinstance(admin.get("role"), dict) else None
-        if embedded:
-            role = embedded
-        elif role_id:
+        role = admin.get("role") if isinstance(admin.get("role"), dict) else None
+        if not role and role_id:
             try:
                 role = await pg.get_admin_role(int(role_id))
             except Exception:

@@ -36,24 +36,18 @@ async def render_home(
     reseller_owner_id: int | None = None,
 ):
     from app.services.formatting import format_message
-    from app.services.reseller_access import resolve_reseller_owner_id
+    from app.services.reseller_access import effective_menu_role
 
     ui = await get_all_settings(session)
-    # On a reseller-owned bot: owner + bot_admin_ids → reseller panel;
-    # platform admins and everyone else → shop user menu.
-    # On the main bot: bot_admin_ids stay as normal users.
-    owner_for_panel = await resolve_reseller_owner_id(
+    # Dedicated reseller bot: owner + bot_admin_ids → reseller panel;
+    # platform admins/other resellers → shop user menu.
+    # Main bot: bot_admin_ids stay normal users.
+    effective_role = await effective_menu_role(
         session,
         db_user,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
-    if owner_for_panel:
-        effective_role = "reseller"
-    elif is_reseller_bot and db_user.role in ("admin", "reseller"):
-        effective_role = "user"
-    else:
-        effective_role = db_user.role
 
     if effective_role == "admin":
         text = format_message(
@@ -128,22 +122,25 @@ async def cmd_start(
         )
     elif args.startswith("sub_"):
         token = args[4:].strip()
-        await _link_subscription(message, session, db_user, token)
+        await _link_subscription(
+            message,
+            session,
+            db_user,
+            token,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     channel = await get_setting(session, "force_join_channel")
     enabled = await get_setting(session, "force_join_enabled")
-    from app.services.reseller_access import resolve_reseller_owner_id
+    from app.services.reseller_access import effective_menu_role
 
-    role_for_force = db_user.role
-    if await resolve_reseller_owner_id(
+    role_for_force = await effective_menu_role(
         session,
         db_user,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
-    ):
-        role_for_force = "reseller"
-    elif is_reseller_bot and role_for_force in ("admin", "reseller"):
-        role_for_force = "user"
+    )
     if on(enabled) and channel and role_for_force == "user":
         await message.answer(
             f"برای استفاده، ابتدا در کانال {channel} عضو شوید سپس دوباره /start بزنید.",
@@ -267,7 +264,13 @@ async def referral_home(callback: CallbackQuery, session: AsyncSession, db_user:
 
 
 async def _link_subscription(
-    message: Message, session: AsyncSession, db_user: BotUser, token: str
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    token: str,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     from app.services.formatting import format_message
 
@@ -277,7 +280,13 @@ async def _link_subscription(
         info = await pg.subscription_info(token)
     except Exception:
         await message.answer("لینک نامعتبر است یا سرویس پیدا نشد.")
-        await render_home(message, session, db_user)
+        await render_home(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
 
     existing = await session.execute(

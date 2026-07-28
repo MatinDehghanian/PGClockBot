@@ -26,7 +26,7 @@ from app.services.users import (
 
 
 def register_shop_settings(app, *, render, require_staff, get_db):
-    allowed_tabs = {t[0] for t in RESELLER_SETTINGS_TABS if t[0] != "security"}
+    allowed_tabs = {t[0] for t in RESELLER_SETTINGS_TABS}
 
     def _menu_tab_context(values: dict) -> dict:
         from app.bot.keyboards import DEFAULT_MENU_ORDER
