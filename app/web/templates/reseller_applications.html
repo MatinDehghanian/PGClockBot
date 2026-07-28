@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros.html" import row_actions %}
 {% block title %}درخواست‌های نمایندگی{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -16,9 +17,9 @@
 
 <div class="card">
   <div class="table-wrap">
-  <table>
+  <table class="table-compact">
     <thead>
-      <tr><th>#</th><th>کاربر</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th></th></tr>
+      <tr><th>#</th><th>کاربر</th><th class="col-hide-sm">پلن</th><th>مبلغ</th><th>وضعیت</th><th class="col-actions"></th></tr>
     </thead>
     <tbody>
     {% for a in apps %}
@@ -28,7 +29,7 @@
           {{ a.user.full_name or a.user.username or '—' if a.user else '—' }}
           <br><small class="muted mono">{{ a.user.telegram_id if a.user else '' }}</small>
         </td>
-        <td>{{ a.plan.name if a.plan else '—' }}</td>
+        <td class="col-hide-sm">{{ a.plan.name if a.plan else '—' }}</td>
         <td class="mono">{{ (a.plan.price if a.plan else 0) | num }}</td>
         <td>
           {% if a.status == 'awaiting_approval' %}<span class="badge pending">منتظر تأیید</span>
@@ -37,10 +38,14 @@
           {% elif a.status == 'rejected' %}<span class="badge rejected">رد شده</span>
           {% else %}<span class="badge">{{ a.status }}</span>{% endif %}
         </td>
-        <td class="actions">
+        <td class="col-actions">
           {% if a.status == 'awaiting_approval' %}
-          <form method="post" action="/resellers/applications/{{ a.id }}/approve"><button class="btn" type="submit">تأیید</button></form>
-          <form method="post" action="/resellers/applications/{{ a.id }}/reject"><button class="btn btn-ghost" type="submit">رد</button></form>
+          {% call row_actions() %}
+          <form method="post" action="/resellers/applications/{{ a.id }}/approve"><button class="btn btn-sm" type="submit">تأیید</button></form>
+          <form method="post" action="/resellers/applications/{{ a.id }}/reject"><button class="btn btn-ghost btn-sm" type="submit">رد</button></form>
+          {% endcall %}
+          {% else %}
+          <span class="muted">—</span>
           {% endif %}
         </td>
       </tr>

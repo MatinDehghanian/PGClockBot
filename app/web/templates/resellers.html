@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch %}
+{% from "macros.html" import switch, row_actions %}
 {% block title %}نمایندگان{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -76,15 +76,15 @@
   <table>
     <thead>
       <tr>
-        <th>کاربر</th><th>تلگرام</th><th>نقش</th><th>کمیسیون</th><th>وب</th><th>ربات</th><th>راه‌اندازی</th><th>عملیات</th>
+        <th>کاربر</th><th class="col-hide-sm">تلگرام</th><th class="col-hide-sm">نقش</th><th class="col-hide-sm">کمیسیون</th><th class="col-hide-sm">وب</th><th class="col-hide-sm">ربات</th><th>راه‌اندازی</th><th class="col-actions"></th>
       </tr>
     </thead>
     <tbody>
     {% for u, p in rows %}
       <tr>
         <td>{{ u.full_name or u.username or '—' }}</td>
-        <td class="mono">{{ u.telegram_id }}</td>
-        <td>
+        <td class="mono col-hide-sm">{{ u.telegram_id }}</td>
+        <td class="col-hide-sm">
           <form method="post" action="/resellers/{{ u.id }}/role" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"
                 onsubmit="
                   if (this.role.value === 'user') {
@@ -103,13 +103,13 @@
             <button class="btn btn-sm" type="submit">اعمال نقش</button>
           </form>
         </td>
-        <td class="mono">{{ p.commission_percent }}%</td>
-        <td class="mono">{{ p.web_username or '—' }}</td>
-        <td class="mono">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
+        <td class="mono col-hide-sm">{{ p.commission_percent }}%</td>
+        <td class="mono col-hide-sm">{{ p.web_username or '—' }}</td>
+        <td class="mono col-hide-sm">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
         <td>{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.setup_token %}<span class="badge pending">منتظر</span>{% else %}—{% endif %}</td>
-        <td>
-          <div class="actions" style="margin:0;flex-wrap:wrap">
-            <a class="btn btn-ghost" href="/resellers/{{ u.id }}/edit">ویرایش</a>
+        <td class="col-actions">
+          {% call row_actions() %}
+            <a class="btn btn-ghost btn-sm" href="/resellers/{{ u.id }}/edit">ویرایش</a>
             <form method="post" action="/resellers/{{ u.id }}/delete"
                   onsubmit="
                     var r = prompt('علت حذف نمایندگی را بنویسید:');
@@ -130,7 +130,7 @@
               <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف کاربر</button>
             </form>
-          </div>
+          {% endcall %}
         </td>
       </tr>
     {% else %}

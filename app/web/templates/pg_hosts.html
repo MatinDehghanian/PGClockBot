@@ -1,5 +1,5 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import pg_tabs %}
+{% from "macros.html" import pg_tabs, row_actions %}
 {% block title %}هاست‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -19,32 +19,32 @@
   <p class="muted">هاستی نیست.</p>
   {% else %}
   <div class="table-wrap">
-  <table>
-    <thead><tr><th>شناسه</th><th>عنوان</th><th>آدرس</th><th>پورت</th><th>اینباند</th><th>وضعیت</th><th></th></tr></thead>
+  <table class="table-compact">
+    <thead><tr><th>شناسه</th><th>عنوان</th><th class="col-hide-sm">آدرس</th><th class="col-hide-sm">پورت</th><th class="col-hide-sm">اینباند</th><th>وضعیت</th><th class="col-actions"></th></tr></thead>
     <tbody>
     {% for h in hosts %}
       <tr>
         <td class="mono">{{ h.get('id') or '—' }}</td>
         <td>{{ h.get('remark') or h.get('name') or '—' }}</td>
-        <td class="mono">
+        <td class="mono col-hide-sm">
           {% set addr = h.get('address') %}
           {% if addr is string %}{{ addr }}
           {% elif addr is iterable %}{{ addr | join(', ') }}
           {% else %}—{% endif %}
         </td>
-        <td class="mono">{{ h.get('port') or '—' }}</td>
-        <td class="mono">{{ h.get('inbound_tag') or '—' }}</td>
+        <td class="mono col-hide-sm">{{ h.get('port') or '—' }}</td>
+        <td class="mono col-hide-sm">{{ h.get('inbound_tag') or '—' }}</td>
         <td>{% if h.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
-        <td>
+        <td class="col-actions">
           {% if can_write and h.get('id') %}
-          <div class="actions" style="margin:0">
+          {% call row_actions() %}
             <form method="post" action="/pg/hosts/{{ h.get('id') }}/toggle">
               <button class="btn btn-ghost btn-sm" type="submit">{% if h.get('is_disabled') %}فعال{% else %}خاموش{% endif %}</button>
             </form>
             <form method="post" action="/pg/hosts/{{ h.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
-              <button class="icon-btn icon-remove" type="submit" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+              <button class="btn btn-sm btn-danger" type="submit">حذف</button>
             </form>
-          </div>
+          {% endcall %}
           {% endif %}
         </td>
       </tr>

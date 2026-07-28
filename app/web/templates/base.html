@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/panel.css?v=pg-dash-mobile-176" />
+  <link rel="stylesheet" href="/static/panel.css?v=pg-ux-177" />
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
   {% block head %}{% endblock %}
 </head>
@@ -37,11 +37,23 @@
         <img src="/static/logo.svg" alt="" />
         <div>
           <strong>کلاک بات</strong>
-          <small>{{ staff.username }} · {% if staff.role == 'admin' %}مدیر{% elif staff.role == 'reseller' %}نماینده{% else %}{{ staff.role }}{% endif %}</small>
+          <small class="brand-meta">
+            <span>{{ staff.username }}</span>
+            {% if is_admin %}
+            <span class="role-tag role-tag-admin">ادمین</span>
+            {% elif is_reseller %}
+            <span class="role-tag role-tag-reseller">نماینده</span>
+            {% endif %}
+          </small>
         </div>
       </div>
       <div class="side-user mobile-only">
-        <span>{{ staff.username }} · {% if staff.role == 'admin' %}مدیر{% elif staff.role == 'reseller' %}نماینده{% else %}{{ staff.role }}{% endif %}</span>
+        <span>{{ staff.username }}</span>
+        {% if is_admin %}
+        <span class="role-tag role-tag-admin">ادمین</span>
+        {% elif is_reseller %}
+        <span class="role-tag role-tag-reseller">نماینده</span>
+        {% endif %}
       </div>
 
       <nav class="side-nav">

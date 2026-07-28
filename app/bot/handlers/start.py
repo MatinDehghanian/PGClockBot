@@ -36,15 +36,24 @@ async def render_home(
     reseller_owner_id: int | None = None,
 ):
     from app.services.formatting import format_message
+    from app.services.reseller_access import resolve_reseller_owner_id
 
     ui = await get_all_settings(session)
-    # On a reseller-owned bot, platform admins see the shop — not the main admin panel.
-    effective_role = db_user.role
-    if is_reseller_bot:
-        if reseller_owner_id and db_user.id == reseller_owner_id:
-            effective_role = "reseller"
-        elif db_user.role == "admin":
-            effective_role = "user"
+    # On a reseller-owned bot: owner + bot_admin_ids → reseller panel;
+    # platform admins and everyone else → shop user menu.
+    # On the main bot: bot_admin_ids stay as normal users.
+    owner_for_panel = await resolve_reseller_owner_id(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if owner_for_panel:
+        effective_role = "reseller"
+    elif is_reseller_bot and db_user.role in ("admin", "reseller"):
+        effective_role = "user"
+    else:
+        effective_role = db_user.role
 
     if effective_role == "admin":
         text = format_message(
@@ -123,8 +132,17 @@ async def cmd_start(
         return
     channel = await get_setting(session, "force_join_channel")
     enabled = await get_setting(session, "force_join_enabled")
+    from app.services.reseller_access import resolve_reseller_owner_id
+
     role_for_force = db_user.role
-    if is_reseller_bot and role_for_force == "admin":
+    if await resolve_reseller_owner_id(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    ):
+        role_for_force = "reseller"
+    elif is_reseller_bot and role_for_force in ("admin", "reseller"):
         role_for_force = "user"
     if on(enabled) and channel and role_for_force == "user":
         await message.answer(

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch %}
+{% from "macros.html" import switch, row_actions %}
 {% block title %}پلن‌های نمایندگی{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -19,19 +19,21 @@
 <div class="card">
   <h2>پلن‌های موجود</h2>
   <div class="table-wrap">
-  <table>
-    <thead><tr><th>نام</th><th>قیمت</th><th>کمیسیون</th><th>وضعیت</th><th></th></tr></thead>
+  <table class="table-compact">
+    <thead><tr><th>نام</th><th>قیمت</th><th class="col-hide-sm">کمیسیون</th><th>وضعیت</th><th class="col-actions"></th></tr></thead>
     <tbody>
     {% for p in plans %}
       <tr>
         <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
         <td class="mono">{{ p.price | num }}</td>
-        <td class="mono">{{ p.commission_percent }}%</td>
+        <td class="mono col-hide-sm">{{ p.commission_percent }}%</td>
         <td>{{ "فعال" if p.is_active else "خاموش" }}</td>
-        <td class="actions">
-          <a class="btn btn-ghost" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>
-          <form method="post" action="/resellers/plans/{{ p.id }}/toggle"><button class="btn btn-ghost" type="submit">روشن/خاموش</button></form>
-          <form method="post" action="/resellers/plans/{{ p.id }}/delete" onsubmit="return confirm('حذف شود؟')"><button class="btn btn-ghost" type="submit">حذف</button></form>
+        <td class="col-actions">
+          {% call row_actions() %}
+          <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>
+          <form method="post" action="/resellers/plans/{{ p.id }}/toggle"><button class="btn btn-ghost btn-sm" type="submit">روشن/خاموش</button></form>
+          <form method="post" action="/resellers/plans/{{ p.id }}/delete" onsubmit="return confirm('حذف شود؟')"><button class="btn btn-ghost btn-sm" type="submit">حذف</button></form>
+          {% endcall %}
         </td>
       </tr>
     {% else %}

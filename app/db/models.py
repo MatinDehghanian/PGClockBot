@@ -247,6 +247,8 @@ class ResellerProfile(Base):
     bot_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     bot_username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     bot_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)
+    # Extra Telegram IDs that get reseller panel on THIS shop's dedicated bot only
+    bot_admin_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

@@ -45,6 +45,7 @@ def _migrate_sqlite(sync_conn) -> None:
             "bot_username": "VARCHAR(64)",
             "bot_telegram_id": "BIGINT",
             "share_pg_panel_url": "BOOLEAN DEFAULT 0",
+            "bot_admin_ids": "TEXT",
         }
         for col, typ in alters.items():
             if col not in rcols:

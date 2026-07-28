@@ -55,7 +55,6 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("supports", "پشتیبان‌ها"),
     ("forcejoin", "کانال اجباری"),
     ("bot", "ربات اختصاصی"),
-    ("security", "امنیت"),
 ]
 SETUP_TOKEN_HOURS = 48
 
@@ -162,15 +161,26 @@ async def reseller_can_review_payment(
     reviewer: BotUser,
     payment: Payment,
 ) -> bool:
-    """Admins: yes. Resellers: payments perm + customer must belong to them."""
-    if reviewer.role == Role.ADMIN.value:
+    """Admins (main bot): yes. Shop owner / dedicated-bot admins: payments perm + ownership."""
+    from app.services.reseller_access import resolve_reseller_owner_id
+    from app.services.users import current_shop_reseller_id
+
+    shop_rid = current_shop_reseller_id()
+    if reviewer.role == Role.ADMIN.value and shop_rid is None:
         return True
-    if reviewer.role != Role.RESELLER.value:
+
+    owner_id = await resolve_reseller_owner_id(
+        session,
+        reviewer,
+        is_reseller_bot=shop_rid is not None,
+        reseller_owner_id=shop_rid,
+    )
+    if not owner_id:
         return False
-    profile = await get_reseller_profile(session, reviewer.id)
+    profile = await get_reseller_profile(session, owner_id)
     if not has_bot_perm(profile, "payments"):
         return False
-    return await reseller_owns_user(session, reviewer.id, payment.user_id)
+    return await reseller_owns_user(session, owner_id, payment.user_id)
 
 
 def _rand_password(length: int = 14) -> str:

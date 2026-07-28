@@ -247,6 +247,11 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         profile.pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
         pg_user = str(form.get("pg_admin_username") or "").strip()
         profile.pg_admin_username = pg_user or None
+        from app.services.reseller_access import normalize_telegram_ids_csv
+
+        profile.bot_admin_ids = normalize_telegram_ids_csv(
+            str(form.get("bot_admin_ids") or "").strip() or None
+        )
         if bool(form.get("reissue_setup")):
             from app.services.resellers import new_setup_token
 
