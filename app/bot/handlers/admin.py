@@ -1498,7 +1498,7 @@ async def adm_resapp_ok(callback: CallbackQuery, session: AsyncSession, db_user:
     await callback.answer("تأیید شد ✅", show_alert=True)
     if callback.message:
         await callback.message.edit_text(
-            f"✅ درخواست #{app.id} تأیید شد — لینک راه‌اندازی ارسال شد.",
+            f"✅ درخواست #{app.id} تأیید شد — اطلاعات ورود ارسال شد.",
             reply_markup=kb.admin_resellers_menu(),
         )
 
@@ -1574,7 +1574,7 @@ async def make_res(message: Message, state: FSMContext, session: AsyncSession):
             can_approve_receipts=can_approve,
             web_permissions=perms,
             bot_permissions=perms,
-            create_pg_admin=False,
+            create_pg_admin=True,
             panel_base_url=await get_reseller_panel_base_url(session),
         )
     except Exception as e:
@@ -1590,7 +1590,7 @@ async def make_res(message: Message, state: FSMContext, session: AsyncSession):
     except Exception:
         pass
     await message.answer(
-        f"کاربر {tg_id} نماینده شد ✅ — لینک راه‌اندازی ارسال شد",
+        f"کاربر {tg_id} نماینده شد ✅ — اطلاعات ورود ارسال شد",
         reply_markup=kb.admin_home(),
     )
 

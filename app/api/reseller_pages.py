@@ -178,7 +178,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         except Exception:
             pass
         return RedirectResponse(
-            f"/resellers?ok={_q('نماینده فعال شد — لینک راه‌اندازی ارسال شد')}",
+            f"/resellers?ok={_q('نماینده فعال شد — اطلاعات ورود (پاسارگارد + وب‌پنل) ارسال شد')}",
             status_code=303,
         )
 
@@ -613,7 +613,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
                 f"/resellers/applications?err={_q(str(e))}", status_code=303
             )
         return RedirectResponse(
-            f"/resellers/applications?ok={_q('تأیید شد — لینک راه‌اندازی ارسال شد')}",
+            f"/resellers/applications?ok={_q('تأیید شد — اطلاعات ورود ارسال شد')}",
             status_code=303,
         )
 
