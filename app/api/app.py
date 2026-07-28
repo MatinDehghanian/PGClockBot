@@ -1936,7 +1936,12 @@ def create_api_app(lifespan=None) -> FastAPI:
                 continue
             raw = form.get(f"s_{key}")
             if raw is not None and not isinstance(raw, UploadFile):
-                await set_setting(session, key, str(raw))
+                val = str(raw)
+                if key in ("user_alert_low_traffic_pct", "user_alert_low_time_pct"):
+                    from app.services.users import clamp_alert_percent
+
+                    val = clamp_alert_percent(val)
+                await set_setting(session, key, val)
         uploads = DATA_DIR / "uploads"
         uploads.mkdir(parents=True, exist_ok=True)
         for key in IMAGE_KEYS:

@@ -33,7 +33,15 @@
   {% elif kind == 'number' %}
   <label>{{ label }}
     {% if help %}<small class="muted">{{ help }}</small>{% endif %}
-    <input name="s_{{ key }}" type="number" value="{{ val }}" />
+    <input
+      name="s_{{ key }}"
+      type="number"
+      value="{{ val }}"
+      dir="ltr"
+      {% if key in ['user_alert_low_traffic_pct', 'user_alert_low_time_pct'] %}
+      min="1" max="99" step="1" inputmode="numeric"
+      {% endif %}
+    />
   </label>
   {% elif kind == 'image' %}
   <div class="image-setting">
