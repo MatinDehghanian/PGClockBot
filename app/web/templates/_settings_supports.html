@@ -24,8 +24,11 @@
           <input name="sort" type="number" value="{{ c.sort }}" dir="ltr" />
         </label>
         <label class="support-enabled">
-          <input type="checkbox" name="enabled" value="1" {% if c.enabled %}checked{% endif %} />
-          فعال
+          <span>فعال</span>
+          <span class="ui-switch">
+            <input type="checkbox" name="enabled" value="1" {% if c.enabled %}checked{% endif %} />
+            <span class="ui-switch-track" aria-hidden="true"></span>
+          </span>
         </label>
       </div>
       <div class="support-actions">
@@ -62,8 +65,11 @@
       </div>
       <div class="setting-item">
         <label class="support-enabled" style="margin-top:1.4rem">
-          <input type="checkbox" name="enabled" value="1" checked />
-          فعال باشد
+          <span>فعال باشد</span>
+          <span class="ui-switch">
+            <input type="checkbox" name="enabled" value="1" checked />
+            <span class="ui-switch-track" aria-hidden="true"></span>
+          </span>
         </label>
       </div>
     </div>

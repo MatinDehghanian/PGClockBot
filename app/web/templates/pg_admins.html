@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros.html" import switch %}
 {% block title %}ادمین‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -48,10 +49,9 @@
       <small class="muted">اختیاری — فقط در پاسارگارد ذخیره می‌شود</small>
       <input name="note" placeholder="نماینده فروش" />
     </label>
-    <label class="checks">
-      <input type="checkbox" name="is_sudo" value="1" />
-      دسترسی sudo (فقط پنل‌های قدیمی؛ در نسخه‌های جدید از نقش استفاده کنید)
-    </label>
+    <div class="ui-switch-list">
+      {{ switch('is_sudo', 'دسترسی sudo', help='فقط پنل‌های قدیمی؛ در نسخه‌های جدید از نقش استفاده کنید') }}
+    </div>
     <div class="actions">
       <button class="btn" type="submit">ساخت در پاسارگارد</button>
     </div>

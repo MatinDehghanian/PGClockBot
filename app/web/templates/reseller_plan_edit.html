@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros.html" import switch %}
 {% block title %}ویرایش پلن نمایندگی{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -10,7 +11,7 @@
 </div>
 
 <div class="card">
-  <form method="post" action="/resellers/plans/{{ plan.id }}/edit">
+  <form method="post" action="/resellers/plans/{{ plan.id }}/edit" class="form-stack">
     <div class="form-row">
       <div>
         <label class="form-field">نام
@@ -36,11 +37,22 @@
     <label class="form-field">توضیح
       <textarea name="description" rows="2">{{ plan.description or '' }}</textarea>
     </label>
-    <strong style="display:block;margin-bottom:8px;font-size:13px">دسترسی (وب = بات)</strong>
-    {% for key, label in feature_perms %}
-    <label class="checks"><input type="checkbox" name="perm_{{ key }}" value="1" {% if key in selected_perms %}checked{% endif %} /> {{ label }}</label>
-    {% endfor %}
-    <label class="checks"><input type="checkbox" name="create_pg_admin" value="1" {% if plan.create_pg_admin %}checked{% endif %} /> ساخت ادمین پاسارگارد هنگام تأیید</label>
+
+    <div class="ui-switch-section">
+      <span class="ui-switch-section-title">دسترسی (وب = بات)</span>
+      <p class="ui-switch-section-hint">این سطح برای وب‌پنل و ربات نماینده یکسان است.</p>
+      <div class="ui-switch-list">
+        {% for key, label in feature_perms %}
+        {{ switch('perm_' ~ key, label, checked=(key in selected_perms)) }}
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="ui-switch-list">
+      {{ switch('create_pg_admin', 'ساخت ادمین پاسارگارد هنگام تأیید', checked=plan.create_pg_admin) }}
+      {{ switch('is_active', 'پلن فعال', checked=plan.is_active) }}
+    </div>
+
     <label class="form-field">نقش پاسارگارد
       <select name="pg_role_id">
         <option value="">—</option>
@@ -49,7 +61,6 @@
         {% endfor %}
       </select>
     </label>
-    <label class="checks"><input type="checkbox" name="is_active" value="1" {% if plan.is_active %}checked{% endif %} /> فعال</label>
     <div class="actions"><button class="btn" type="submit">ذخیره</button></div>
   </form>
 </div>

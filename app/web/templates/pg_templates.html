@@ -1,4 +1,5 @@
 ﻿{% extends "base.html" %}
+{% from "macros.html" import switch_chip %}
 {% block title %}تمپلیت‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -35,9 +36,9 @@
       </div>
     </div>
     <label>گروه‌های پاسارگارد</label>
-    <div class="checks">
+    <div class="ui-switch-grid">
       {% for g in groups %}
-      <label><input type="checkbox" name="g_{{ g.get('id') }}" value="{{ g.get('id') }}" /> {{ g.get('name') or g.get('id') }}</label>
+      {{ switch_chip('g_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
       {% else %}
       <span class="muted">گروهی یافت نشد — ابتدا در بخش گروه‌ها بسازید.</span>
       {% endfor %}

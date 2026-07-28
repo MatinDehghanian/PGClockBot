@@ -1,4 +1,5 @@
 ﻿{% extends "base.html" %}
+{% from "macros.html" import switch, switch_chip %}
 {% block title %}پلن‌های فروش{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -16,10 +17,9 @@
   <h2>پلن تست رایگان</h2>
   <p class="muted update-card-caption">حجم، مدت و اتصال پاسارگارد برای تست — از فروشگاه فقط یک‌بار به کاربر نشان داده می‌شود.</p>
   <form method="post" action="/plans/trial" class="form-stack">
-    <label class="checks">
-      <input type="checkbox" name="trial_enabled" value="1" {% if values.get('trial_enabled') in ['1','true','yes','on'] %}checked{% endif %} />
-      نمایش پلن تست در فروشگاه
-    </label>
+    <div class="ui-switch-list">
+      {{ switch('trial_enabled', 'نمایش پلن تست در فروشگاه', checked=(values.get('trial_enabled') in ['1','true','yes','on'])) }}
+    </div>
     <div class="form-row">
       <label class="form-field">نام
         <input name="name" value="{{ trial.name if trial else 'تست رایگان' }}" required />
@@ -41,10 +41,10 @@
     <div id="trial-mode-custom" class="form-stack">
       <div class="form-field">
         <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد</span>
-        <div class="checks">
+        <div class="ui-switch-grid">
           {% for g in groups %}
           {% set gid = g.get('id')|string %}
-          <label><input type="checkbox" name="group_{{ g.get('id') }}" value="{{ g.get('id') }}" {% if gid in trial_group_ids %}checked{% endif %} /> {{ g.get('name') or g.get('id') }}</label>
+          {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), checked=(gid in trial_group_ids), value=g.get('id')) }}
           {% else %}
           <span class="muted">گروهی نیست.</span>
           {% endfor %}
@@ -71,10 +71,9 @@
   <h2>پلن دلخواه کاربر</h2>
   <p class="muted update-card-caption">کاربر در بات حجم و روز دلخواه می‌چیند؛ قیمت از روی هر گیگ/روز حساب می‌شود.</p>
   <form method="post" action="/plans/custom" class="form-stack">
-    <label class="checks">
-      <input type="checkbox" name="custom_plan_enabled" value="1" {% if values.get('custom_plan_enabled') in ['1','true','yes','on'] %}checked{% endif %} />
-      فعال‌سازی پلن دلخواه در فروشگاه
-    </label>
+    <div class="ui-switch-list">
+      {{ switch('custom_plan_enabled', 'فعال‌سازی پلن دلخواه در فروشگاه', checked=(values.get('custom_plan_enabled') in ['1','true','yes','on'])) }}
+    </div>
     <div class="form-row">
       <label class="form-field">قیمت هر گیگ (تومان)
         <input name="custom_plan_price_per_gb" type="number" min="0" value="{{ values.get('custom_plan_price_per_gb','1000') }}" />
@@ -104,10 +103,10 @@
     <div id="custom-mode-groups" class="form-stack">
       <div class="form-field">
         <span class="muted" style="font-size:12px;font-weight:500">گروه‌ها</span>
-        <div class="checks">
+        <div class="ui-switch-grid">
           {% for g in groups %}
           {% set gid = g.get('id')|string %}
-          <label><input type="checkbox" name="group_{{ g.get('id') }}" value="{{ g.get('id') }}" {% if gid in custom_group_ids %}checked{% endif %} /> {{ g.get('name') or g.get('id') }}</label>
+          {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), checked=(gid in custom_group_ids), value=g.get('id')) }}
           {% else %}
           <span class="muted">گروهی نیست.</span>
           {% endfor %}
@@ -164,18 +163,17 @@
     <div id="mode-custom" class="form-stack">
       <div class="form-field">
         <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد (حداقل یکی)</span>
-        <div class="checks">
+        <div class="ui-switch-grid">
           {% for g in groups %}
-          <label><input type="checkbox" name="group_{{ g.get('id') }}" value="{{ g.get('id') }}" /> {{ g.get('name') or g.get('id') }}</label>
+          {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
           {% else %}
           <span class="muted">گروهی نیست — از منوی پاسارگارد → گروه‌ها بسازید.</span>
           {% endfor %}
         </div>
       </div>
-      <label class="checks">
-        <input type="checkbox" name="also_create_template" value="1" />
-        همزمان تمپلیت مشابه در پاسارگارد هم ساخته شود
-      </label>
+      <div class="ui-switch-list">
+        {{ switch('also_create_template', 'همزمان تمپلیت مشابه در پاسارگارد هم ساخته شود') }}
+      </div>
     </div>
 
     <div id="mode-template" class="form-stack" style="display:none">

@@ -30,3 +30,27 @@
 {%- else -%}نامشخص
 {%- endif -%}
 {%- endmacro %}
+
+{# iOS / shadcn-style switch — prefer over raw checkboxes #}
+{% macro switch(name, label, checked=false, value='1', help='', id=None, class_name='') -%}
+<label class="ui-switch-row {{ class_name }}">
+  <span class="ui-switch-copy">
+    <strong>{{ label }}</strong>
+    {% if help %}<small>{{ help }}</small>{% endif %}
+  </span>
+  <span class="ui-switch">
+    <input type="checkbox" name="{{ name }}" value="{{ value }}"{% if id %} id="{{ id }}"{% endif %}{% if checked %} checked{% endif %} />
+    <span class="ui-switch-track" aria-hidden="true"></span>
+  </span>
+</label>
+{%- endmacro %}
+
+{% macro switch_chip(name, label, checked=false, value='1') -%}
+<label class="ui-switch-chip">
+  <span class="ui-switch-copy"><strong>{{ label }}</strong></span>
+  <span class="ui-switch ui-switch-sm">
+    <input type="checkbox" name="{{ name }}" value="{{ value }}"{% if checked %} checked{% endif %} />
+    <span class="ui-switch-track" aria-hidden="true"></span>
+  </span>
+</label>
+{%- endmacro %}

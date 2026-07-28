@@ -1,4 +1,5 @@
 ﻿{% extends "base.html" %}
+{% from "macros.html" import switch, switch_chip %}
 {% block title %}گروه‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -25,16 +26,15 @@
       <input name="name" required value="{{ edit_group.get('name') or '' }}" />
     </label>
     <label>اینباندها</label>
-    <div class="checks">
+    <div class="ui-switch-grid">
       {% set selected = edit_group.get('inbound_tags') or [] %}
       {% for tag in inbound_tags %}
-      <label><input type="checkbox" name="tag_{{ loop.index }}" value="{{ tag }}" {% if tag in selected %}checked{% endif %} /> {{ tag }}</label>
+      {{ switch_chip('tag_' ~ loop.index, tag, checked=(tag in selected), value=tag) }}
       {% endfor %}
     </div>
-    <label class="checks" style="margin-top:12px">
-      <input type="checkbox" name="is_disabled" value="1" {% if edit_group.get('is_disabled') %}checked{% endif %} />
-      غیرفعال
-    </label>
+    <div class="ui-switch-list" style="margin-top:14px">
+      {{ switch('is_disabled', 'غیرفعال', checked=edit_group.get('is_disabled')) }}
+    </div>
     <div class="actions">
       <button class="btn" type="submit">ذخیره تغییرات</button>
       <a class="btn btn-ghost" href="/pg/groups">انصراف</a>
@@ -49,9 +49,9 @@
       <input name="name" required placeholder="مثلاً default" />
     </label>
     <label>اینباندها</label>
-    <div class="checks">
+    <div class="ui-switch-grid">
       {% for tag in inbound_tags %}
-      <label><input type="checkbox" name="tag_{{ loop.index }}" value="{{ tag }}" /> {{ tag }}</label>
+      {{ switch_chip('tag_' ~ loop.index, tag, value=tag) }}
       {% else %}
       <span class="muted">اینباندی یافت نشد.</span>
       {% endfor %}

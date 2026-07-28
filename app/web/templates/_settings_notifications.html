@@ -1,14 +1,17 @@
 <form method="post" action="/notifications" class="card notify-form">
   <h2>نوتیفیکیشن ادمین</h2>
   <p class="muted update-card-caption">برای کدام رویدادها در تلگرام پیام بگیرید. موارد نیازمند تأیید، دکمه تأیید/رد دارند.</p>
-  <div class="notify-list">
+  <div class="notify-list ui-switch-list">
   {% for key, title, help, default in notify_items %}
-    <label class="notify-row">
-      <span class="notify-meta">
+    <label class="notify-row ui-switch-row">
+      <span class="notify-meta ui-switch-copy">
         <strong>{{ title }}</strong>
         <small>{{ help }}</small>
       </span>
-      <input type="checkbox" name="s_{{ key }}" value="1" {% if notify_prefs.get(key) %}checked{% endif %} />
+      <span class="ui-switch">
+        <input type="checkbox" name="s_{{ key }}" value="1" {% if notify_prefs.get(key) %}checked{% endif %} />
+        <span class="ui-switch-track" aria-hidden="true"></span>
+      </span>
     </label>
   {% endfor %}
   </div>
