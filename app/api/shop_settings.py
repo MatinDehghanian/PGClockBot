@@ -115,6 +115,8 @@ def register_shop_settings(app, *, render, require_perm, get_db):
             return RedirectResponse("/settings", status_code=303)
 
         tab = (request.query_params.get("tab") or "welcome").strip()
+        if tab == "security":
+            return RedirectResponse("/security", status_code=303)
         if tab not in allowed_tabs:
             tab = "welcome"
 

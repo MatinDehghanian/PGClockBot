@@ -322,6 +322,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("forcejoin", "کانال اجباری"),
     ("reseller", "نمایندگی"),
     ("notifications", "نوتیفیکیشن"),
+    ("security", "امنیت"),
     ("update", "آپدیت"),
     ("bot", "ربات و اتصال"),
 ]
@@ -506,6 +507,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "forcejoin": ["کانال اجباری"],
     "reseller": ["نمایندگی", "هشدار سرویس کاربر"],
     "notifications": [],
+    "security": [],
     "update": [],
     "bot": [],
 }

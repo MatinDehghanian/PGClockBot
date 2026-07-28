@@ -138,6 +138,44 @@ def verify_password_hash(password: str, password_hash: str | None) -> bool:
         return False
 
 
+def change_web_admin_username(new_username: str) -> str:
+    """Rename panel admin; keeps existing password hash. Returns cleaned username."""
+    creds = load_web_admin()
+    password = creds.get("password") or ""
+    if not password:
+        raise ValueError("رمز ادمین تنظیم نشده؛ ابتدا از ویزارد یا ترمینال رمز بگذارید")
+    username = _clean_secret(new_username)
+    if len(username) < 3:
+        raise ValueError("نام کاربری حداقل ۳ کاراکتر باشد")
+    save_web_admin(username, password)
+    return username
+
+
+def change_web_admin_password(new_password: str) -> None:
+    creds = load_web_admin()
+    username = creds.get("username") or "admin"
+    ok, err = validate_password_strength(new_password)
+    if not ok:
+        raise ValueError(err)
+    save_web_admin(username, new_password)
+
+
+def validate_web_username(username: str, *, lowercase: bool = False) -> tuple[str, str | None]:
+    """Return (cleaned_username, error_or_None)."""
+    import re
+
+    u = _clean_secret(username)
+    if lowercase:
+        u = u.lower()
+    if len(u) < 3:
+        return u, "نام کاربری حداقل ۳ کاراکتر باشد"
+    if len(u) > 64:
+        return u, "نام کاربری حداکثر ۶۴ کاراکتر باشد"
+    if not re.fullmatch(r"[A-Za-z0-9_]+", u):
+        return u, "فقط حروف انگلیسی، عدد و خط زیر (_)"
+    return u, None
+
+
 def repair_web_admin_from_env() -> dict[str, str]:
     """Force-refresh web_admin.json from cleaned .env values."""
     from app.config import get_settings

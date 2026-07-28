@@ -8,18 +8,22 @@
     <p class="desk-only">خلاصه فروش و دسترسی سریع</p>
   </div>
   <div class="version-box">
+    {% if update %}
     <span class="ver-num">v{{ update.version }}</span>
     <span class="ver-badge {{ update.tone }}">{{ update.label }}</span>
+    {% endif %}
   </div>
 </div>
 
-{% if update.update_available %}
-<div class="flash err" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
-  <div>
+{% if update and update.update_available %}
+<div class="flash err">
+  <div style="margin-bottom:10px">
     <strong>آپدیت جدید</strong>
     <span class="muted"> {{ update.version }} → {{ update.remote_version }}</span>
   </div>
-  <a class="btn btn-sm" href="/update">آپدیت</a>
+  <p class="muted" style="margin:0 0 8px">آپدیت از پنل غیرفعال است. در ترمینال سرور:</p>
+  <pre class="update-log" style="display:block;margin:0 0 10px" dir="ltr">bash pgclock.sh update</pre>
+  <a class="btn btn-sm btn-ghost" href="/settings?tab=update">راهنمای آپدیت</a>
 </div>
 {% endif %}
 
@@ -39,8 +43,11 @@
     <a href="/tickets">تیکت‌ها{% if stats.tickets %} ({{ stats.tickets }}){% endif %}</a>
     {% if staff.role == 'admin' %}
     <a class="desk-only" href="/plans">پلن‌ها</a>
-    <a href="/update">آپدیت</a>
+    <a href="/settings?tab=update">آپدیت</a>
     <a class="desk-only" href="/settings">تنظیمات</a>
+    <a href="/security">امنیت</a>
+    {% else %}
+    <a href="/security">امنیت</a>
     {% endif %}
   </div>
 </div>

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}امنیت{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>امنیت حساب</h1>
+    <p>تغییر نام کاربری و رمز ورود وب‌پنل{% if staff.role == 'reseller' %} نماینده{% endif %}.</p>
+  </div>
+</div>
+
+{% if ok %}<div class="flash ok">{{ ok }}</div>{% endif %}
+{% if err %}<div class="flash err">{{ err }}</div>{% endif %}
+
+<div class="card settings-card">
+  <h2>نام کاربری وب‌پنل</h2>
+  <p class="muted update-card-caption">
+    همین نام را در صفحه ورود استفاده می‌کنید.
+    {% if staff.role == 'reseller' %}برای نماینده فقط حروف کوچک انگلیسی، عدد و _ مجاز است.{% endif %}
+  </p>
+  <form method="post" action="/security/username" class="settings-form" autocomplete="off">
+    <div class="settings-grid">
+      <div class="setting-item">
+        <label>نام کاربری فعلی
+          <input type="text" value="{{ current_username }}" dir="ltr" disabled />
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>نام کاربری جدید
+          <input name="new_username" required minlength="3" maxlength="64" dir="ltr"
+                 placeholder="{{ current_username }}" autocomplete="off" />
+        </label>
+      </div>
+      <div class="setting-item full">
+        <label>رمز فعلی (برای تأیید)
+          <input name="current_password" type="password" required autocomplete="current-password" />
+        </label>
+      </div>
+    </div>
+    <div class="actions sticky-actions">
+      <button class="btn" type="submit">ذخیره نام کاربری</button>
+    </div>
+  </form>
+</div>
+
+<div class="card settings-card">
+  <h2>رمز عبور</h2>
+  <p class="muted update-card-caption">حداقل ۸ کاراکتر، حرف بزرگ و کوچک انگلیسی و یک کاراکتر خاص.</p>
+  <form method="post" action="/security/password" class="settings-form" autocomplete="off">
+    <div class="settings-grid">
+      <div class="setting-item full">
+        <label>رمز فعلی
+          <input name="current_password" type="password" required autocomplete="current-password" />
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>رمز جدید
+          <input name="new_password" type="password" required minlength="8" autocomplete="new-password" />
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>تکرار رمز جدید
+          <input name="new_password2" type="password" required minlength="8" autocomplete="new-password" />
+        </label>
+      </div>
+    </div>
+    <div class="actions sticky-actions">
+      <button class="btn" type="submit">تغییر رمز عبور</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

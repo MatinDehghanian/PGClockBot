@@ -309,12 +309,20 @@ def create_api_app(lifespan=None) -> FastAPI:
     )
     from app.api.reseller_pages import register_reseller_pages
     from app.api.reseller_setup import register_reseller_setup
+    from app.api.security import register_security_pages
+    from app.api.shop_settings import register_shop_settings
 
     register_reseller_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     register_reseller_setup(app, render=render, get_db=get_db)
-    from app.api.shop_settings import register_shop_settings
-
     register_shop_settings(app, render=render, require_perm=require_perm, get_db=get_db)
+    register_security_pages(
+        app,
+        render=render,
+        require_staff=require_staff,
+        get_db=get_db,
+        get_signer=get_signer,
+        cookie_secure=_cookie_secure,
+    )
 
     @app.get("/health")
     async def health():
@@ -1547,54 +1555,21 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.get("/update/status")
     async def update_status(staff: dict = Depends(require_admin)):
-        from app.services.panel_update import read_status
-        from app.services.updates import local_version
-
-        st = read_status()
-        st["current_version"] = local_version()
-        return st
+        return {"ok": False, "error": "آپدیت از پنل غیرفعال است — از ترمینال: bash pgclock.sh update"}
 
     @app.post("/update/start")
-    async def update_start(
-        request: Request,
-        staff: dict = Depends(require_admin),
-    ):
-        from app.services.panel_update import start_update
-        from app.services.updates import check_github_update, clear_update_cache
-
-        body = {}
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        clear_update_cache()
-        info = await check_github_update(force=True)
-        target = (body or {}).get("target") or info.get("remote_version")
-        if not info.get("update_available") and not (body or {}).get("force"):
-            from app.services.panel_update import read_status
-
-            st = read_status()
-            if st.get("state") != "error":
-                return {"ok": False, "error": "نسخه جدیدی برای آپدیت نیست", "info": info}
-        result = start_update(target_version=target)
-        return result
+    async def update_start(staff: dict = Depends(require_admin)):
+        return {
+            "ok": False,
+            "error": "آپدیت از داخل پنل حذف شده است. در ترمینال سرور اجرا کنید: bash pgclock.sh update",
+        }
 
     @app.post("/update/rollback")
-    async def update_rollback(
-        request: Request,
-        staff: dict = Depends(require_admin),
-    ):
-        from app.services.panel_update import start_rollback
-
-        body = {}
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        snapshot_id = str((body or {}).get("snapshot_id") or "").strip()
-        if not snapshot_id:
-            return {"ok": False, "error": "نقطه بازگشت مشخص نشده"}
-        return start_rollback(snapshot_id)
+    async def update_rollback(staff: dict = Depends(require_admin)):
+        return {
+            "ok": False,
+            "error": "بازگشت از پنل غیرفعال است. در صورت نیاز از بکاپ/گیت روی سرور استفاده کنید.",
+        }
 
     @app.get("/notifications", response_class=HTMLResponse)
     async def notifications_page(staff: dict = Depends(require_admin)):
@@ -1714,13 +1689,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.notifications import NOTIFY_PREFS, get_notify_prefs
-        from app.services.panel_update import update_page_context
-        from app.services.updates import check_github_update, clear_update_cache
+        from app.services.updates import check_github_update, clear_update_cache, local_version
 
         tab = (request.query_params.get("tab") or "welcome").strip()
         valid = {t[0] for t in SETTINGS_TABS}
         if tab == "users":
             return RedirectResponse("/settings?tab=naming", status_code=303)
+        if tab == "security":
+            return RedirectResponse("/security", status_code=303)
         if tab not in valid:
             tab = "welcome"
 
@@ -1749,7 +1725,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             if request.query_params.get("force") == "1":
                 clear_update_cache()
                 await check_github_update(force=True)
-            ctx.update(await update_page_context())
+            info = await check_github_update()
+            ctx["update_info"] = info
+            ctx["local_version"] = local_version()
         elif tab == "bot":
             from app.services.setup_wizard import current_setup_values
 
