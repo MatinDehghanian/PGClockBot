@@ -1846,6 +1846,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 }
             )
             ensure_web_secret()
+            get_settings.cache_clear()
+            reset_pg()
             schedule_panel_restart(delay_sec=2.5, reason="bot settings saved")
             return RedirectResponse(
                 "/settings?tab=bot&restarting=1",
