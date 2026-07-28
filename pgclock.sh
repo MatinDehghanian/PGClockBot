@@ -197,18 +197,27 @@ print_success() {
   # print_success "Title" [extra lines...]
   local title="$1"
   shift || true
-  local port ip user
+  local port ip user panel_path
   port="$(env_get WEB_PORT "${WEB_PORT:-9000}")"
   ip="$(detect_server_ip)"
   user="$(web_username)"
+  if [[ -f data/setup_complete.flag ]]; then
+    panel_path="/login"
+  else
+    panel_path="/setup"
+  fi
   {
     echo ""
     printf '%s==========================================%s\n' "$G" "$N"
     printf '%s  SUCCESS · %s%s\n' "$G" "$title" "$N"
     printf '%s==========================================%s\n' "$G" "$N"
-    printf '  Web panel:  %shttp://%s:%s/login%s\n' "$B" "$ip" "$port" "$N"
+    printf '  Web panel:  %shttp://%s:%s%s%s\n' "$B" "$ip" "$port" "$panel_path" "$N"
     printf '  Health:     %shttp://127.0.0.1:%s/health%s\n' "$B" "$port" "$N"
-    printf '  Username:   %s%s%s\n' "$B" "$user" "$N"
+    if [[ -f data/setup_complete.flag ]]; then
+      printf '  Username:   %s%s%s\n' "$B" "$user" "$N"
+    else
+      printf '  Next step:  %sopen the URL above and finish the wizard%s\n' "$B" "$N"
+    fi
     if [[ $# -gt 0 ]]; then
       echo ""
       local line
