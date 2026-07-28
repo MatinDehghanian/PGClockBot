@@ -9,9 +9,16 @@ from aiogram import Bot
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, Role
+from app.db.models import BotUser, BroadcastLog, Role
 
 logger = logging.getLogger("pgclock.broadcast")
+
+AUDIENCE_LABELS = {
+    "all": "همه",
+    "users": "کاربران عادی",
+    "resellers": "نمایندگان",
+    "admins": "ادمین‌ها",
+}
 
 
 async def list_broadcast_targets(
@@ -30,6 +37,13 @@ async def list_broadcast_targets(
     return list(result.scalars().all())
 
 
+async def list_broadcast_history(session: AsyncSession, *, limit: int = 50) -> list[BroadcastLog]:
+    result = await session.execute(
+        select(BroadcastLog).order_by(BroadcastLog.id.desc()).limit(limit)
+    )
+    return list(result.scalars().all())
+
+
 async def send_broadcast(
     bot: Bot,
     session: AsyncSession,
@@ -37,8 +51,9 @@ async def send_broadcast(
     text: str,
     audience: str = "all",
     delay: float = 0.05,
+    created_by: str | None = None,
 ) -> dict:
-    """Send HTML text to matching users. Returns counts."""
+    """Send HTML text to matching users and persist history. Returns counts."""
     body = (text or "").strip()
     if not body:
         raise ValueError("متن پیام خالی است")
@@ -57,4 +72,22 @@ async def send_broadcast(
             logger.debug("broadcast fail tg=%s: %s", u.telegram_id, e)
         if delay:
             await asyncio.sleep(delay)
-    return {"total": len(users), "ok": ok, "fail": fail, "audience": audience}
+
+    log = BroadcastLog(
+        audience=audience,
+        text=body,
+        total=len(users),
+        ok_count=ok,
+        fail_count=fail,
+        created_by=(created_by or "")[:128] or None,
+    )
+    session.add(log)
+    await session.commit()
+
+    return {
+        "total": len(users),
+        "ok": ok,
+        "fail": fail,
+        "audience": audience,
+        "log_id": log.id,
+    }

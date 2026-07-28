@@ -140,6 +140,12 @@ DEFAULT_SETTINGS = {
     "notify_wallet_topup": "1",
     "notify_new_ticket": "1",
     "notify_auto_approve": "1",
+    # User low-remaining alerts (volume / time)
+    "user_alert_low_enabled": "0",
+    "user_alert_low_traffic_pct": "20",
+    "user_alert_low_time_pct": "20",
+    # Reseller panel base URL (setup links). Empty = PUBLIC_BASE_URL
+    "reseller_panel_base_url": "",
 
     "btn_shop": "🟢🛒 خرید سرویس",
     "btn_services": "🔵📦 سرویس‌های من",
@@ -224,6 +230,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("supports", "پشتیبان‌ها"),
     ("naming", "نام‌گذاری سرویس"),
     ("forcejoin", "کانال اجباری"),
+    ("reseller", "نمایندگی"),
     ("notifications", "نوتیفیکیشن"),
     ("update", "آپدیت"),
     ("bot", "ربات و اتصال"),
@@ -280,8 +287,41 @@ SETTING_GROUPS = {
         ("show_guide", "نمایش راهنما", "toggle", ""),
         ("show_faq", "نمایش سوالات متداول", "toggle", ""),
         ("show_referral", "نمایش دعوت", "toggle", ""),
-        ("show_reseller_apply", "نمایش درخواست نمایندگی", "toggle", "دکمه درخواست نمایندگی برای کاربران عادی"),
         ("show_miniapp", "نمایش مینی‌اپ", "toggle", ""),
+    ],
+    "نمایندگی": [
+        (
+            "show_reseller_apply",
+            "نمایش درخواست نمایندگی",
+            "toggle",
+            "دکمه درخواست نمایندگی در منوی کاربران عادی",
+        ),
+        (
+            "reseller_panel_base_url",
+            "آدرس وب‌پنل نماینده",
+            "text",
+            "لینک راه‌اندازی بعد از تأیید روی این آدرس ساخته می‌شود. خالی = آدرس پیش‌فرض پنل (PUBLIC_BASE_URL)",
+        ),
+    ],
+    "هشدار سرویس کاربر": [
+        (
+            "user_alert_low_enabled",
+            "ارسال خودکار هشدار کمبود",
+            "toggle",
+            "وقتی حجم یا زمان باقی‌مانده کمتر از حد تعیین‌شده باشد، به کاربر پیام می‌رود",
+        ),
+        (
+            "user_alert_low_traffic_pct",
+            "آستانه حجم باقی‌مانده (٪)",
+            "number",
+            "مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ حجم مانده پیام بفرست",
+        ),
+        (
+            "user_alert_low_time_pct",
+            "آستانه زمان باقی‌مانده (٪)",
+            "number",
+            "مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ از مدت سرویس مانده پیام بفرست",
+        ),
     ],
     "QR اشتراک": [
         ("qr_enabled", "ارسال خودکار QR", "toggle", "بعد از تحویل سرویس، QR لینک اشتراک فرستاده می‌شود"),
@@ -368,6 +408,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "supports": [],
     "naming": ["نام‌گذاری سرویس در پاسارگارد"],
     "forcejoin": ["کانال اجباری"],
+    "reseller": ["نمایندگی", "هشدار سرویس کاربر"],
     "notifications": [],
     "update": [],
     "bot": [],

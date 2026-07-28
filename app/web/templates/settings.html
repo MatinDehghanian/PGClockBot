@@ -42,6 +42,32 @@
         <button class="btn" type="submit">ذخیره تنظیمات</button>
       </div>
     </form>
+  {% elif tab == 'reseller' %}
+    <div class="card settings-card">
+      <h2>سطح دسترسی نماینده (وب = بات)</h2>
+      <p class="muted update-card-caption">
+        دسترسی‌های هر نماینده (خانه، سفارش، پرداخت، تیکت، آمار) را با سوییچ فعال/غیرفعال در
+        <a href="/resellers">صفحه نمایندگان</a> یا
+        <a href="/resellers/plans">پلن‌های نمایندگی</a> تعیین کنید.
+        همان دسترسی هم‌زمان روی وب‌پنل و ربات اعمال می‌شود — در ربات نسخهٔ ساده‌تر همان امکانات است.
+      </p>
+    </div>
+    <form method="post" action="/settings?tab=reseller" enctype="multipart/form-data" class="settings-form" id="settings-form">
+      {% for group_name in tab_groups %}
+      {% set fields = groups[group_name] %}
+      <div class="card settings-card">
+        <h2>{{ group_name }}</h2>
+        <div class="settings-grid">
+        {% for field in fields %}
+          {% include "_settings_field.html" %}
+        {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      <div class="actions sticky-actions">
+        <button class="btn" type="submit">ذخیره تنظیمات</button>
+      </div>
+    </form>
   {% elif tab == 'naming' %}
     {% include "_settings_naming.html" %}
     <form method="post" action="/settings?tab=naming" enctype="multipart/form-data" class="settings-form" id="settings-form">

@@ -16,6 +16,22 @@
 </div>
 
 <div class="card">
+  <h2>آدرس وب‌پنل نماینده</h2>
+  <p class="muted">لینک راه‌اندازی بعد از تأیید روی این آدرس ساخته می‌شود. اگر خالی بگذارید، آدرس پیش‌فرض پنل استفاده می‌شود.</p>
+  <form method="post" action="/resellers/panel-url" class="form-stack">
+    <label class="form-field">آدرس پایه
+      <small class="muted">پیش‌فرض فعلی: <code dir="ltr">{{ default_panel_url or '— تنظیم نشده —' }}</code>
+        {% if panel_url %} · در حال استفاده: <code dir="ltr">{{ panel_url }}</code>{% endif %}
+      </small>
+      <input name="reseller_panel_base_url" value="{{ custom_panel_url or '' }}" placeholder="https://panel.example.com" dir="ltr" />
+    </label>
+    <div class="actions">
+      <button class="btn" type="submit">ذخیره آدرس</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
   <h2>افزودن نماینده</h2>
   <p class="muted">پس از ثبت، لینک راه‌اندازی یک‌بارمصرف برای ساخت یوزر وب و ثبت توکن ربات خودش ارسال می‌شود. به ربات اصلی ادمین وصل نمی‌شود.</p>
   <form method="post" action="/resellers" class="form-stack">
@@ -45,8 +61,8 @@
     </div>
 
     <div class="ui-switch-section">
-      <span class="ui-switch-section-title">سطح دسترسی (وب = بات)</span>
-      <p class="ui-switch-section-hint">هر دسترسی اینجا برای هر دو محیط اعمال می‌شود؛ نماینده از ربات بیشتر از وب نمی‌تواند.</p>
+      <span class="ui-switch-section-title">سطح دسترسی — فعال / غیرفعال (وب = بات)</span>
+      <p class="ui-switch-section-hint">هر سوییچ هم‌زمان برای وب‌پنل و ربات اعمال می‌شود.</p>
       <div class="ui-switch-list">
         {% for key, label in feature_perms %}
         {{ switch('perm_' ~ key, label, checked=true) }}

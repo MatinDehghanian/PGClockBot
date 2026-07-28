@@ -18,6 +18,7 @@ from app.services.resellers import (
     approve_application,
     format_credentials_message,
     get_application,
+    get_reseller_panel_base_url,
     join_perms,
     list_applications,
     list_reseller_plans,
@@ -56,6 +57,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.config import get_settings
+        from app.services.users import get_setting
+
         result = await session.execute(
             select(BotUser, ResellerProfile)
             .join(ResellerProfile, ResellerProfile.user_id == BotUser.id)
@@ -67,6 +71,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
             roles = await get_pg().get_admin_roles()
         except Exception:
             roles = []
+        panel_url = await get_reseller_panel_base_url(session)
+        custom_url = (await get_setting(session, "reseller_panel_base_url") or "").strip()
+        default_url = (get_settings().public_base_url or "").rstrip("/")
         return render(
             request,
             "resellers.html",
@@ -77,9 +84,28 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
                 "tab": "list",
                 "feature_perms": FEATURE_PERMS,
                 "pg_roles": roles,
+                "panel_url": panel_url,
+                "custom_panel_url": custom_url,
+                "default_panel_url": default_url,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
+        )
+
+    @app.post("/resellers/panel-url")
+    async def reseller_panel_url_save(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.users import set_setting
+
+        form = await request.form()
+        url = str(form.get("reseller_panel_base_url") or "").strip().rstrip("/")
+        await set_setting(session, "reseller_panel_base_url", url)
+        return RedirectResponse(
+            f"/resellers?ok={_q('آدرس وب‌پنل نماینده ذخیره شد')}",
+            status_code=303,
         )
 
     @app.post("/resellers")
@@ -108,7 +134,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         create_pg = bool(form.get("create_pg_admin"))
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
-        panel_url = str(get_settings().public_base_url or "").strip()
+        panel_url = await get_reseller_panel_base_url(session)
         try:
             creds = await provision_reseller(
                 session,
@@ -210,7 +236,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
             profile.setup_token = token
             profile.setup_token_expires = expires
             profile.setup_completed_at = None
-            base = str(get_settings().public_base_url or "").rstrip("/")
+            base = await get_reseller_panel_base_url(session)
             if base:
                 try:
                     from app.bot import create_bot
@@ -428,7 +454,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
                 session,
                 app,
                 reviewer_tg=0,
-                panel_base_url=str(get_settings().public_base_url or ""),
+                panel_base_url=await get_reseller_panel_base_url(session),
             )
             user = await session.get(BotUser, app.user_id)
             if user:

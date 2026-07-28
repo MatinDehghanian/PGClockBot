@@ -566,10 +566,15 @@ async def pay_wallet_cb(callback: CallbackQuery, session: AsyncSession, db_user:
             )
         for aid in get_settings().admin_ids:
             try:
+                app_id = int(str(order.note).split(":", 1)[1])
+            except Exception:
+                app_id = 0
+            try:
                 await callback.bot.send_message(
                     aid,
                     f"🤝 درخواست نمایندگی پرداخت‌شده — سفارش #{order.id}\n"
                     f"کاربر: {db_user.full_name or db_user.telegram_id}",
+                    reply_markup=kb.reseller_app_review(app_id) if app_id else None,
                 )
             except Exception:
                 pass

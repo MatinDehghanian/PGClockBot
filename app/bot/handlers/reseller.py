@@ -2,12 +2,21 @@ from __future__ import annotations
 
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.config import get_settings
-from app.db.models import BotUser, Role
-from app.services.formatting import format_message, format_toman
+from app.db.models import (
+    BotUser,
+    Order,
+    Payment,
+    PaymentStatus,
+    Role,
+    Ticket,
+    TicketStatus,
+)
+from app.services.formatting import format_message, format_toman, order_status_fa
 from app.services.resellers import (
     create_application,
     get_reseller_profile,
@@ -19,6 +28,10 @@ from app.services.users import get_all_settings, on
 router = Router(name="reseller")
 
 
+def _notify_admins_markup(app_id: int) -> InlineKeyboardMarkup:
+    return kb.reseller_app_review(app_id)
+
+
 @router.callback_query(F.data == "res:home")
 async def res_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if db_user.role != Role.RESELLER.value:
@@ -28,9 +41,56 @@ async def res_home(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     await callback.answer()
     if callback.message:
         await callback.message.edit_text(
-            "🤝 <b>پنل نماینده</b>",
+            "🤝 <b>پنل نماینده</b>\nدسترسی‌ها با وب‌پنل یکسان است.",
             reply_markup=kb.reseller_home(profile),
         )
+
+
+@router.callback_query(F.data == "res:dash")
+async def res_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if db_user.role != Role.RESELLER.value:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    profile = await get_reseller_profile(session, db_user.id)
+    if not profile or not has_bot_perm(profile, "dashboard"):
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
+    await callback.answer()
+    users_n = await session.scalar(
+        select(func.count()).select_from(BotUser).where(BotUser.reseller_id == db_user.id)
+    ) or 0
+    orders_n = await session.scalar(
+        select(func.count()).select_from(Order).where(Order.reseller_id == db_user.id)
+    ) or 0
+    pending_pay = await session.scalar(
+        select(func.count())
+        .select_from(Payment)
+        .join(BotUser, BotUser.id == Payment.user_id)
+        .where(
+            BotUser.reseller_id == db_user.id,
+            Payment.status == PaymentStatus.PENDING.value,
+            Payment.receipt_file_id.is_not(None),
+        )
+    ) or 0
+    open_tickets = await session.scalar(
+        select(func.count())
+        .select_from(Ticket)
+        .join(BotUser, BotUser.id == Ticket.user_id)
+        .where(
+            BotUser.reseller_id == db_user.id,
+            Ticket.status == TicketStatus.OPEN.value,
+        )
+    ) or 0
+    text = (
+        "🏠 <b>خانه نماینده</b>\n\n"
+        f"👥 مشتریان: {users_n}\n"
+        f"🛒 سفارش‌ها: {orders_n}\n"
+        f"🧾 رسید معلق: {pending_pay}\n"
+        f"🎫 تیکت باز: {open_tickets}\n"
+        f"💼 کمیسیون: {profile.commission_percent}٪"
+    )
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=kb.reseller_home(profile))
 
 
 @router.callback_query(F.data == "res:stats")
@@ -44,28 +104,101 @@ async def res_stats(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         return
     await callback.answer()
     text = (
-        "📊 <b>وضعیت نماینده</b>\n\n"
+        "📊 <b>آمار و کمیسیون</b>\n\n"
         f"کمیسیون: {profile.commission_percent}%\n"
         f"موجودی کمیسیون: {format_toman(profile.balance, get_settings().currency)}\n"
-        f"تأیید رسید: {'بله' if profile.can_approve_receipts else 'خیر'}\n"
+        f"تأیید رسید: {'بله' if has_bot_perm(profile, 'payments') else 'خیر'}\n"
         f"وب‌پنل: <code>{profile.web_username or '—'}</code>\n"
+        f"ربات: <code>{('@' + profile.bot_username) if profile.bot_username else '—'}</code>\n"
         f"ادمین PG: <code>{profile.pg_admin_username or '—'}</code>"
     )
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.reseller_home(profile))
 
 
-@router.callback_query(F.data == "res:payments")
-async def res_payments(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    from sqlalchemy import select
-
-    from app.db.models import Payment, PaymentStatus
-
+@router.callback_query(F.data == "res:orders")
+async def res_orders(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if db_user.role != Role.RESELLER.value:
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
     profile = await get_reseller_profile(session, db_user.id)
-    if not profile or not has_bot_perm(profile, "approve_receipts"):
+    if not profile or not has_bot_perm(profile, "orders"):
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
+    await callback.answer()
+    result = await session.execute(
+        select(Order)
+        .where(Order.reseller_id == db_user.id)
+        .order_by(Order.id.desc())
+        .limit(15)
+    )
+    orders = list(result.scalars().all())
+    if not orders:
+        if callback.message:
+            await callback.message.edit_text(
+                "سفارشی برای مشتریان شما ثبت نشده.",
+                reply_markup=kb.reseller_home(profile),
+            )
+        return
+    lines = ["🛒 <b>آخرین سفارش‌های مشتریان</b>\n"]
+    for o in orders:
+        lines.append(
+            f"#{o.id} — {format_toman(o.amount, get_settings().currency)} — "
+            f"{order_status_fa(o.status)}"
+        )
+    if callback.message:
+        await callback.message.edit_text(
+            "\n".join(lines),
+            reply_markup=kb.reseller_home(profile),
+        )
+
+
+@router.callback_query(F.data == "res:tickets")
+async def res_tickets(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if db_user.role != Role.RESELLER.value:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    profile = await get_reseller_profile(session, db_user.id)
+    if not profile or not has_bot_perm(profile, "tickets"):
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
+    await callback.answer()
+    result = await session.execute(
+        select(Ticket, BotUser)
+        .join(BotUser, BotUser.id == Ticket.user_id)
+        .where(
+            BotUser.reseller_id == db_user.id,
+            Ticket.status.in_([TicketStatus.OPEN.value, TicketStatus.ANSWERED.value]),
+        )
+        .order_by(Ticket.id.desc())
+        .limit(15)
+    )
+    rows = result.all()
+    if not rows:
+        if callback.message:
+            await callback.message.edit_text(
+                "تیکت بازی از مشتریان نیست.",
+                reply_markup=kb.reseller_home(profile),
+            )
+        return
+    lines = ["🎫 <b>تیکت‌های مشتریان</b>\n"]
+    for t, u in rows:
+        lines.append(f"#{t.id} — {t.subject[:40]} — {u.full_name or u.telegram_id}")
+    lines.append("\nپاسخ کامل از وب‌پنل نماینده.")
+    if callback.message:
+        await callback.message.edit_text(
+            "\n".join(lines),
+            reply_markup=kb.reseller_home(profile),
+        )
+
+
+@router.callback_query(F.data == "res:payments")
+async def res_payments(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if db_user.role != Role.RESELLER.value:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    profile = await get_reseller_profile(session, db_user.id)
+    if not profile or not has_bot_perm(profile, "payments"):
         await callback.answer("اجازه تأیید ندارید", show_alert=True)
         return
     await callback.answer()
@@ -200,7 +333,6 @@ async def resapply_buy(callback: CallbackQuery, session: AsyncSession, db_user: 
 
     await callback.answer()
     if order is None:
-        # Free plan — waiting for admin
         if callback.message:
             await callback.message.edit_text(
                 format_message(
@@ -210,13 +342,17 @@ async def resapply_buy(callback: CallbackQuery, session: AsyncSession, db_user: 
                 ),
                 reply_markup=kb.back_home(ui),
             )
+        notify = (
+            f"🤝 درخواست نمایندگی جدید #{app.id}\n"
+            f"کاربر: {db_user.full_name or db_user.telegram_id}\n"
+            f"پلن: {plan.name}"
+        )
         for aid in get_settings().admin_ids:
             try:
                 await callback.bot.send_message(
                     aid,
-                    f"🤝 درخواست نمایندگی جدید #{app.id}\n"
-                    f"کاربر: {db_user.full_name or db_user.telegram_id}\n"
-                    f"پلن: {plan.name}",
+                    notify,
+                    reply_markup=_notify_admins_markup(app.id),
                 )
             except Exception:
                 pass

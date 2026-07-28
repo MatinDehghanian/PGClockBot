@@ -548,14 +548,42 @@ def reseller_home(profile=None) -> InlineKeyboardMarkup:
     from app.services.resellers import has_bot_perm
 
     rows: list[list[InlineKeyboardButton]] = []
+    if profile is None or has_bot_perm(profile, "dashboard"):
+        rows.append([InlineKeyboardButton(text="🏠 خانه نماینده", callback_data="res:dash")])
     if profile is None or has_bot_perm(profile, "stats"):
-        rows.append([InlineKeyboardButton(text="📊 وضعیت نماینده", callback_data="res:stats")])
-    if profile is not None and has_bot_perm(profile, "approve_receipts"):
+        rows.append([InlineKeyboardButton(text="📊 آمار و کمیسیون", callback_data="res:stats")])
+    if profile is not None and has_bot_perm(profile, "orders"):
+        rows.append([InlineKeyboardButton(text="🛒 سفارش‌های مشتریان", callback_data="res:orders")])
+    if profile is not None and has_bot_perm(profile, "payments"):
         rows.append(
             [InlineKeyboardButton(text="🧾 رسیدهای در انتظار", callback_data="res:payments")]
         )
+    if profile is not None and has_bot_perm(profile, "tickets"):
+        rows.append([InlineKeyboardButton(text="🎫 تیکت‌های مشتریان", callback_data="res:tickets")])
     rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="menu:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def reseller_app_review(app_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🟢✅ تأیید", callback_data=f"adm:resapp:ok:{app_id}"),
+                InlineKeyboardButton(text="🔴❌ رد", callback_data=f"adm:resapp:no:{app_id}"),
+            ],
+            [InlineKeyboardButton(text="⬅️ درخواست‌ها", callback_data="adm:resapp:list")],
+        ]
+    )
+
+
+def admin_resellers_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📋 درخواست‌های در انتظار", callback_data="adm:resapp:list")],
+            [InlineKeyboardButton(text="➕ افزودن دستی نماینده", callback_data="adm:resellers:add")],
+            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
+        ]
+    )
 
 
 def payment_review(payment_id: int) -> InlineKeyboardMarkup:

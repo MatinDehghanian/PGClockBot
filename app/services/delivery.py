@@ -143,6 +143,30 @@ async def send_delivery_to_user(
             await bot.send_message(chat_id, text, parse_mode="HTML")
         except Exception:
             pass
+        try:
+            app_id = int(str(order.note).split(":", 1)[1])
+        except Exception:
+            app_id = 0
+        if app_id:
+            from app.bot import keyboards as kb
+            from app.config import get_settings
+            from app.db.models import BotUser
+
+            user = await session.get(BotUser, order.user_id)
+            notify = (
+                f"🤝 درخواست نمایندگی پرداخت‌شده #{app_id}\n"
+                f"سفارش #{order.id}\n"
+                f"کاربر: {(user.full_name or user.telegram_id) if user else '—'}"
+            )
+            for aid in get_settings().admin_ids:
+                try:
+                    await bot.send_message(
+                        aid,
+                        notify,
+                        reply_markup=kb.reseller_app_review(app_id),
+                    )
+                except Exception:
+                    pass
         return text
     # Peek whether QR can carry the details (subscription only).
     sub_url_peek = None

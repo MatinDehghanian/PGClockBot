@@ -1205,7 +1205,20 @@ async def adm_users_block(callback: CallbackQuery, session: AsyncSession, db_use
 
 
 @router.callback_query(F.data == "adm:resellers")
-async def adm_resellers(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
+async def adm_resellers(callback: CallbackQuery, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        await callback.message.edit_text(
+            "🤝 <b>نمایندگان</b>\nدرخواست‌ها را تأیید/رد کنید یا نماینده دستی بسازید.",
+            reply_markup=kb.admin_resellers_menu(),
+        )
+
+
+@router.callback_query(F.data == "adm:resellers:add")
+async def adm_resellers_add(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -1220,6 +1233,142 @@ async def adm_resellers(callback: CallbackQuery, state: FSMContext, db_user: Bot
             "• عدد دوم: درصد کمیسیون (پیش‌فرض ۱۰)\n"
             "• عدد سوم: ۱ = اجازه تأیید رسید، ۰ یا خالی = بدون تأیید",
             reply_markup=kb.cancel_reply(),
+        )
+
+
+@router.callback_query(F.data == "adm:resapp:list")
+async def adm_resapp_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    from app.db.models import ResellerApplicationStatus
+    from app.services.resellers import list_applications
+
+    await callback.answer()
+    apps = await list_applications(
+        session, status=ResellerApplicationStatus.AWAITING_APPROVAL.value, limit=20
+    )
+    if not apps:
+        if callback.message:
+            await callback.message.edit_text(
+                "درخواست معلقی نیست.",
+                reply_markup=kb.admin_resellers_menu(),
+            )
+        return
+    rows = []
+    for a in apps:
+        u = a.user
+        plan = a.plan
+        label = f"#{a.id} {(u.full_name or str(u.telegram_id)) if u else '?'} — {(plan.name if plan else '?')}"
+        rows.append([InlineKeyboardButton(text=label[:60], callback_data=f"adm:resapp:view:{a.id}")])
+    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:resellers")])
+    if callback.message:
+        await callback.message.edit_text(
+            "📋 درخواست‌های منتظر تأیید:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:resapp:view:"))
+async def adm_resapp_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    from app.services.resellers import get_application
+
+    app = await get_application(session, int(callback.data.split(":")[-1]))
+    if not app:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await callback.answer()
+    u = app.user
+    plan = app.plan
+    text = (
+        f"🤝 درخواست #{app.id}\n"
+        f"وضعیت: <b>{app.status}</b>\n"
+        f"کاربر: {u.full_name or u.username or u.telegram_id if u else '—'}\n"
+        f"تلگرام: <code>{u.telegram_id if u else '—'}</code>\n"
+        f"پلن: {plan.name if plan else '—'}\n"
+        f"مبلغ: {format_toman(plan.price if plan else 0, get_settings().currency)}"
+    )
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=kb.reseller_app_review(app.id))
+
+
+@router.callback_query(F.data.startswith("adm:resapp:ok:"))
+async def adm_resapp_ok(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    from app.services.resellers import (
+        approve_application,
+        format_credentials_message,
+        get_application,
+        get_reseller_panel_base_url,
+    )
+
+    app = await get_application(session, int(callback.data.split(":")[-1]))
+    if not app:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    try:
+        creds = await approve_application(
+            session,
+            app,
+            reviewer_tg=db_user.telegram_id,
+            panel_base_url=await get_reseller_panel_base_url(session),
+        )
+    except Exception as e:
+        await callback.answer(str(e), show_alert=True)
+        return
+    user = await session.get(BotUser, app.user_id)
+    if user:
+        try:
+            await callback.bot.send_message(
+                user.telegram_id,
+                format_credentials_message(creds),
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
+    await callback.answer("تأیید شد ✅", show_alert=True)
+    if callback.message:
+        await callback.message.edit_text(
+            f"✅ درخواست #{app.id} تأیید شد — لینک راه‌اندازی ارسال شد.",
+            reply_markup=kb.admin_resellers_menu(),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:resapp:no:"))
+async def adm_resapp_no(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    from app.services.resellers import get_application, reject_application
+
+    app = await get_application(session, int(callback.data.split(":")[-1]))
+    if not app:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    try:
+        await reject_application(session, app, reviewer_tg=db_user.telegram_id)
+    except Exception as e:
+        await callback.answer(str(e), show_alert=True)
+        return
+    user = await session.get(BotUser, app.user_id)
+    if user:
+        try:
+            await callback.bot.send_message(
+                user.telegram_id,
+                "❌ درخواست نمایندگی شما رد شد.\nدر صورت نیاز با پشتیبانی در ارتباط باشید.",
+            )
+        except Exception:
+            pass
+    await callback.answer("رد شد", show_alert=True)
+    if callback.message:
+        await callback.message.edit_text(
+            f"❌ درخواست #{app.id} رد شد.",
+            reply_markup=kb.admin_resellers_menu(),
         )
 
 
@@ -1244,7 +1393,11 @@ async def make_res(message: Message, state: FSMContext, session: AsyncSession):
     if not user:
         await message.answer("کاربر باید حداقل یک بار ربات را استارت کرده باشد.")
         return
-    from app.services.resellers import format_credentials_message, provision_reseller
+    from app.services.resellers import (
+        format_credentials_message,
+        get_reseller_panel_base_url,
+        provision_reseller,
+    )
 
     perms = "dashboard,orders,tickets,stats"
     if can_approve:
@@ -1258,7 +1411,7 @@ async def make_res(message: Message, state: FSMContext, session: AsyncSession):
             web_permissions=perms,
             bot_permissions=perms,
             create_pg_admin=False,
-            panel_base_url=str(get_settings().public_base_url or ""),
+            panel_base_url=await get_reseller_panel_base_url(session),
         )
     except Exception as e:
         await message.answer(f"خطا: {e}")
@@ -1276,6 +1429,7 @@ async def make_res(message: Message, state: FSMContext, session: AsyncSession):
         f"کاربر {tg_id} نماینده شد ✅ — لینک راه‌اندازی ارسال شد",
         reply_markup=kb.admin_home(),
     )
+
 
 @router.callback_query(F.data == "adm:tickets")
 async def adm_tickets(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -1407,6 +1561,7 @@ async def adm_broadcast_send(message: Message, state: FSMContext, session: Async
             session,
             text=message.text or "",
             audience=audience,
+            created_by=str(db_user.telegram_id),
         )
     except ValueError as e:
         await message.answer(str(e), reply_markup=kb.admin_home())

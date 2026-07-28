@@ -28,7 +28,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("orders", "سفارش‌ها"),
     ("payments", "پرداخت‌ها و تأیید رسید"),
     ("tickets", "تیکت‌ها"),
-    ("stats", "آمار نماینده"),
+    ("stats", "آمار و کمیسیون"),
 ]
 
 # Back-compat aliases used by older templates
@@ -43,6 +43,17 @@ DEFAULT_WEB_PERMS = DEFAULT_FEATURE_PERMS
 DEFAULT_BOT_PERMS = DEFAULT_FEATURE_PERMS
 
 SETUP_TOKEN_HOURS = 48
+
+
+async def get_reseller_panel_base_url(session: AsyncSession) -> str:
+    """Admin-configured reseller panel URL, else PUBLIC_BASE_URL."""
+    from app.config import get_settings
+    from app.services.users import get_setting
+
+    custom = (await get_setting(session, "reseller_panel_base_url") or "").strip().rstrip("/")
+    if custom:
+        return custom
+    return (get_settings().public_base_url or "").strip().rstrip("/")
 
 
 def parse_perms(raw: str | None) -> list[str]:
@@ -475,6 +486,9 @@ def format_credentials_message(creds: dict) -> str:
             "۱) نام کاربری و رمز وب‌پنل خود را بسازید",
             "۲) توکن ربات اختصاصی‌تان از @BotFather را وارد کنید",
         ]
+        panel = (creds.get("panel_url") or "").rstrip("/")
+        if panel:
+            lines += ["", f"ورود بعدی به پنل: {panel}/login"]
     else:
         lines += [
             "",

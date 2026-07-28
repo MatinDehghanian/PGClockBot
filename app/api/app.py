@@ -1315,7 +1315,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         if role not in {Role.USER.value, Role.RESELLER.value, Role.ADMIN.value}:
             return RedirectResponse(f"/users?err={quote('نقش نامعتبر')}", status_code=303)
         if role == Role.RESELLER.value:
-            from app.services.resellers import format_credentials_message, provision_reseller
+            from app.services.resellers import (
+                format_credentials_message,
+                get_reseller_panel_base_url,
+                provision_reseller,
+            )
 
             try:
                 creds = await provision_reseller(
@@ -1325,7 +1329,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     web_permissions=DEFAULT_FEATURE_PERMS,
                     bot_permissions=DEFAULT_FEATURE_PERMS,
                     create_pg_admin=False,
-                    panel_base_url=str(get_settings().public_base_url or ""),
+                    panel_base_url=await get_reseller_panel_base_url(session),
                 )
             except Exception as e:
                 return RedirectResponse(f"/users?err={quote(str(e))}", status_code=303)
@@ -1769,12 +1773,18 @@ def create_api_app(lifespan=None) -> FastAPI:
     async def broadcast_page(
         request: Request,
         staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
     ):
+        from app.services.broadcast import AUDIENCE_LABELS, list_broadcast_history
+
+        history = await list_broadcast_history(session, limit=40)
         return render(
             request,
             "broadcast.html",
             {
                 "staff": staff,
+                "history": history,
+                "audience_labels": AUDIENCE_LABELS,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -1796,7 +1806,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             audience = "all"
         bot = create_bot()
         try:
-            result = await send_broadcast(bot, session, text=text, audience=audience)
+            result = await send_broadcast(
+                bot,
+                session,
+                text=text,
+                audience=audience,
+                created_by=str(staff.get("username") or "admin"),
+            )
         except ValueError as e:
             return _redirect_msg("/broadcast", err=str(e))
         except Exception as e:

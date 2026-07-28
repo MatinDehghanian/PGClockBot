@@ -207,6 +207,19 @@ class DiscountCode(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class BroadcastLog(Base):
+    __tablename__ = "broadcast_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    audience: Mapped[str] = mapped_column(String(32), default="all")
+    text: Mapped[str] = mapped_column(Text)
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    ok_count: Mapped[int] = mapped_column(Integer, default=0)
+    fail_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class ResellerProfile(Base):
     __tablename__ = "reseller_profiles"
 

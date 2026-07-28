@@ -27,4 +27,29 @@
     </div>
   </form>
 </div>
+
+<div class="card">
+  <h2>تاریخچه ارسال</h2>
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>#</th><th>زمان</th><th>مخاطب</th><th>متن</th><th>نتیجه</th><th>توسط</th></tr>
+    </thead>
+    <tbody>
+    {% for row in history %}
+      <tr>
+        <td class="mono">{{ row.id }}</td>
+        <td class="mono muted">{{ row.created_at }}</td>
+        <td>{{ audience_labels.get(row.audience, row.audience) }}</td>
+        <td style="max-width:280px;white-space:pre-wrap;word-break:break-word">{{ row.text[:180] }}{% if row.text|length > 180 %}…{% endif %}</td>
+        <td class="mono">{{ row.ok_count }}/{{ row.total }}{% if row.fail_count %} · ناموفق {{ row.fail_count }}{% endif %}</td>
+        <td class="muted">{{ row.created_by or '—' }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="muted">هنوز پیامی ارسال نشده</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
 {% endblock %}
