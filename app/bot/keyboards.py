@@ -402,25 +402,21 @@ def admin_home() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="📊 داشبورد", callback_data="adm:dash"),
                 InlineKeyboardButton(text="🧾 رسیدها", callback_data="adm:payments"),
-            ],
-            [
                 InlineKeyboardButton(text="🛒 سفارش‌ها", callback_data="adm:orders"),
-                InlineKeyboardButton(text="💎 پلن‌ها", callback_data="adm:plans"),
             ],
             [
                 InlineKeyboardButton(text="🎫 تیکت‌ها", callback_data="adm:tickets"),
+                InlineKeyboardButton(text="📊 داشبورد", callback_data="adm:dash"),
+            ],
+            [InlineKeyboardButton(text="💎 پلن‌ها", callback_data="adm:plans")],
+            [
                 InlineKeyboardButton(text="👥 کاربران", callback_data="adm:users"),
-            ],
-            [
                 InlineKeyboardButton(text="🤝 نمایندگان", callback_data="adm:resellers"),
-                InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="adm:settings"),
             ],
-            [
-                InlineKeyboardButton(text="🖥 پاسارگارد", callback_data="adm:pg"),
-            ],
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="menu:home")],
+            [InlineKeyboardButton(text="🖥 پاسارگارد", callback_data="adm:pg")],
+            [InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="adm:settings")],
+            [InlineKeyboardButton(text="⬅️ منوی اصلی", callback_data="menu:home")],
         ]
     )
 

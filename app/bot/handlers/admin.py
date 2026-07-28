@@ -54,7 +54,6 @@ async def _render_plans_list(callback: CallbackQuery, session: AsyncSession) -> 
         lines.extend(_plan_line(p) for p in plans[:20])
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text="➕ پلن جدید", callback_data="adm:plan:add")],
-        [InlineKeyboardButton(text="✨ پلن دلخواه (اتصال/فعال)", callback_data="adm:custom")],
     ]
     for p in plans[:12]:
         warn = " ⚠️" if _plan_needs_link(p) else ""
@@ -66,6 +65,12 @@ async def _render_plans_list(callback: CallbackQuery, session: AsyncSession) -> 
                 )
             ]
         )
+    rows.append(
+        [
+            InlineKeyboardButton(text="پلن دلخواه", callback_data="adm:st:sub:service:custom"),
+            InlineKeyboardButton(text="پلن تست", callback_data="adm:st:sub:service:trial"),
+        ]
+    )
     rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")])
     if callback.message:
         await callback.message.edit_text(
@@ -84,32 +89,33 @@ async def _custom_link_summary(session: AsyncSession) -> tuple[str, InlineKeyboa
     elif groups:
         link = f"گروه‌ها: {groups}"
     else:
-        link = "⚠️ بدون اتصال — سفارش دلخواه تحویل نمی‌شود"
+        link = "⚠️ بدون اتصال"
     text = (
-        "✨ <b>پلن دلخواه کاربر</b>\n\n"
-        f"وضعیت فروش: {'✅ فعال' if enabled else '⏸ خاموش'}\n"
-        f"قیمت هر گیگ: {ui.get('custom_plan_price_per_gb') or '—'} تومان\n"
-        f"قیمت هر روز: {ui.get('custom_plan_price_per_day') or '—'} تومان\n"
-        f"محدوده: {ui.get('custom_plan_min_gb') or 1}–{ui.get('custom_plan_max_gb') or 500} گیگ / "
-        f"{ui.get('custom_plan_min_days') or 1}–{ui.get('custom_plan_max_days') or 365} روز\n"
-        f"اتصال پاسارگارد: {link}\n\n"
-        "<i>قیمت و محدوده را از وب‌پنل → تنظیمات → کاربر و پلن هم می‌توانید تغییر دهید.</i>"
+        "✨ <b>اتصال پلن دلخواه</b>\n\n"
+        f"فروش: {'فعال' if enabled else 'خاموش'}\n"
+        f"پاسارگارد: {link}\n\n"
+        "قیمت و محدوده → تنظیمات ← سرویس و دسترسی ← پلن دلخواه"
     )
     rows = [
         [
             InlineKeyboardButton(
-                text="⏸ خاموش کردن فروش" if enabled else "▶️ روشن کردن فروش",
+                text="خاموش کردن فروش" if enabled else "روشن کردن فروش",
                 callback_data="adm:custom:toggle",
             )
         ],
-        [InlineKeyboardButton(text="📋 اتصال به تمپلیت", callback_data="adm:custom:picktpl")],
-        [InlineKeyboardButton(text="📁 اتصال به گروه", callback_data="adm:custom:pickgrp")],
+        [InlineKeyboardButton(text="تمپلیت", callback_data="adm:custom:picktpl")],
+        [InlineKeyboardButton(text="گروه", callback_data="adm:custom:pickgrp")],
     ]
     if tpl or groups:
         rows.append(
-            [InlineKeyboardButton(text="🧹 حذف اتصال", callback_data="adm:custom:clearlink")]
+            [InlineKeyboardButton(text="حذف اتصال", callback_data="adm:custom:clearlink")]
         )
-    rows.append([InlineKeyboardButton(text="⬅️ لیست پلن‌ها", callback_data="adm:plans")])
+    rows.append(
+        [
+            InlineKeyboardButton(text="⬅️ پلن دلخواه", callback_data="adm:st:sub:service:custom"),
+            InlineKeyboardButton(text="پلن‌ها", callback_data="adm:plans"),
+        ]
+    )
     return text, InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -191,7 +197,7 @@ async def adm_home(callback: CallbackQuery, db_user: BotUser):
     await callback.answer()
     if callback.message:
         await callback.message.edit_text(
-            f"🛠 <b>پنل ادمین</b>\nنسخه: <code>{local_version()}</code>",
+            f"🛠 <b>پنل ادمین</b>\n<code>{local_version()}</code>",
             reply_markup=kb.admin_home(),
         )
 
