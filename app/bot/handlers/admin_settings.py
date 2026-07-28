@@ -1,4 +1,4 @@
-"""Admin settings hub — mirror web panel settings inside Telegram."""
+"""Admin settings — Telegram-native nested menus (short screens, clear path)."""
 
 from __future__ import annotations
 
@@ -20,34 +20,151 @@ from app.services.support_contacts import (
     support_chat_url,
     upsert_support_contact,
 )
-from app.services.users import (
-    SETTING_GROUPS,
-    TAB_SETTING_GROUPS,
-    get_all_settings,
-    get_setting,
-    on,
-    set_setting,
-)
+from app.services.users import get_all_settings, get_setting, on, set_setting
 
 router = Router(name="admin_settings")
 
-# Tabs editable from bot (skip ops-heavy / sensitive)
-BOT_SETTINGS_TABS: list[tuple[str, str, str]] = [
-    ("welcome", "🏠 خوش‌آمد", "نام فروشگاه و پیام استارت"),
-    ("messages", "📝 متن پیام‌ها", "راهنما، FAQ، تحویل و …"),
-    ("buttons", "🔘 متن دکمه‌ها", "برچسب دکمه‌های منو"),
-    ("menu", "📋 منوی بات", "نمایش آیتم‌ها و چیدمان"),
-    ("qr", "📱 QR اشتراک", "ارسال و کپشن QR"),
-    ("payment", "💳 پرداخت", "روش‌ها، کارت، درگاه، رمزارز، استارز"),
-    ("supports", "🎧 پشتیبان‌ها", "لیست پشتیبان‌های تلگرام"),
-    ("naming", "🏷 نام‌گذاری", "پیشوند/پسوند یوزرنیم پاسارگارد"),
-    ("forcejoin", "📣 کانال اجباری", "عضویت اجباری"),
-    ("notifications", "🔔 نوتیفیکیشن", "اعلان‌های ادمین"),
-    ("plancfg", "✨ پلن تست/دلخواه", "کانفیگ تست و قیمت پلن دلخواه"),
+# ---------------------------------------------------------------------------
+# Navigation tree: hub → section → (optional subsection) → fields
+# Keep ≤6–8 buttons per screen. Short labels. No decorative/noop rows.
+# ---------------------------------------------------------------------------
+
+# field: (key, short_label, kind)  kind = toggle|text|textarea|number|select
+Field = tuple[str, str, str]
+
+SECTIONS: dict[str, dict] = {
+    "shop": {
+        "title": "فروشگاه و متون",
+        "subs": [
+            ("identity", "نام و خوش‌آمد", [
+                ("shop_title", "نام فروشگاه", "text"),
+                ("welcome_text", "پیام /start", "textarea"),
+            ]),
+            ("help_texts", "راهنما و دعوت", [
+                ("guide_text", "راهنما", "textarea"),
+                ("faq_text", "سوالات متداول", "textarea"),
+                ("support_text", "متن پشتیبانی", "textarea"),
+                ("referral_text", "متن دعوت", "textarea"),
+            ]),
+            ("sys_texts", "پیام‌های سیستم", [
+                ("empty_services_text", "بدون سرویس", "textarea"),
+                ("shop_empty_text", "فروشگاه خالی", "textarea"),
+                ("delivery_title", "عنوان تحویل", "text"),
+                ("purchase_success_text", "موفقیت خرید", "textarea"),
+                ("wallet_success_text", "موفقیت شارژ", "textarea"),
+                ("payment_reject_text", "رد پرداخت", "textarea"),
+            ]),
+            ("btn_labels", "متن دکمه‌های منو", [
+                ("btn_shop", "خرید", "text"),
+                ("btn_services", "سرویس‌ها", "text"),
+                ("btn_wallet", "کیف پول", "text"),
+                ("btn_support", "پشتیبانی", "text"),
+                ("btn_guide", "راهنما", "text"),
+                ("btn_faq", "سوالات", "text"),
+                ("btn_referral", "دعوت", "text"),
+                ("btn_miniapp", "مینی‌اپ", "text"),
+                ("btn_back", "بازگشت", "text"),
+                ("btn_cancel", "انصراف", "text"),
+                ("btn_renew", "تمدید", "text"),
+                ("btn_sub_link", "لینک/QR", "text"),
+            ]),
+        ],
+    },
+    "menu": {
+        "title": "منوی کاربر",
+        "subs": [
+            ("vis", "نمایش آیتم‌ها", "menu_vis"),
+            ("layout", "چیدمان", "menu_layout"),
+            ("order", "ترتیب دکمه‌ها", "menu_order"),
+        ],
+    },
+    "pay": {
+        "title": "پرداخت",
+        "subs": [
+            ("methods", "روش‌های فعال", [
+                ("pay_wallet_enabled", "کیف پول", "toggle"),
+                ("pay_card_enabled", "کارت به کارت", "toggle"),
+                ("pay_gateway_enabled", "درگاه", "toggle"),
+                ("pay_crypto_enabled", "رمزارز", "toggle"),
+                ("pay_stars_enabled", "استارز", "toggle"),
+                ("pay_discount_enabled", "کد تخفیف", "toggle"),
+                ("auto_approve_payments", "تأیید خودکار رسید", "toggle"),
+            ]),
+            ("card", "کارت به کارت", [
+                ("card_number", "شماره کارت", "text"),
+                ("card_holder", "صاحب کارت", "text"),
+                ("card_pay_text", "راهنمای پرداخت", "textarea"),
+                ("btn_pay_card", "متن دکمه", "text"),
+            ]),
+            ("gateway", "درگاه", [
+                ("gateway_name", "نام درگاه", "text"),
+                ("gateway_link", "لینک", "text"),
+                ("gateway_pay_text", "راهنما", "textarea"),
+                ("btn_pay_gateway", "متن دکمه", "text"),
+            ]),
+            ("crypto", "رمزارز", [
+                ("crypto_asset", "رمزارز", "text"),
+                ("crypto_network", "شبکه", "text"),
+                ("crypto_address", "آدرس ولت", "text"),
+                ("crypto_pay_text", "راهنما", "textarea"),
+                ("btn_pay_crypto", "متن دکمه", "text"),
+            ]),
+            ("stars", "استارز تلگرام", [
+                ("stars_toman_per_star", "تومان هر استارز", "number"),
+                ("stars_title", "عنوان فاکتور", "text"),
+                ("stars_description", "توضیح فاکتور", "text"),
+                ("btn_pay_stars", "متن دکمه", "text"),
+            ]),
+            ("pay_extra", "سایر", [
+                ("referral_bonus", "پاداش دعوت", "number"),
+                ("btn_pay_wallet", "متن دکمه کیف پول", "text"),
+                ("btn_pay_discount", "متن دکمه تخفیف", "text"),
+            ]),
+        ],
+    },
+    "support": {
+        "title": "پشتیبان‌ها",
+        "kind": "supports",
+    },
+    "service": {
+        "title": "سرویس و دسترسی",
+        "subs": [
+            ("naming", "نام در پاسارگارد", [
+                ("pg_username_prefix", "پیشوند", "text"),
+                ("pg_username_suffix", "پسوند", "text"),
+                ("pg_username_pattern", "الگو", "text"),
+            ]),
+            ("qr", "QR اشتراک", [
+                ("qr_enabled", "ارسال خودکار QR", "toggle"),
+                ("show_sub_link_in_text", "لینک در کپشن", "toggle"),
+                ("qr_caption", "کپشن QR", "textarea"),
+            ]),
+            ("force", "کانال اجباری", [
+                ("force_join_enabled", "فعال", "toggle"),
+                ("force_join_channel", "آدرس کانال", "text"),
+            ]),
+            ("trial", "پلن تست", "trial"),
+            ("custom", "پلن دلخواه", "custom"),
+        ],
+    },
+    "notify": {
+        "title": "اعلان‌ها",
+        "kind": "notify",
+    },
+}
+
+HUB_ORDER = ["shop", "menu", "pay", "support", "service", "notify"]
+
+MENU_VIS: list[Field] = [
+    ("show_wallet", "کیف پول", "toggle"),
+    ("show_support", "پشتیبانی", "toggle"),
+    ("show_guide", "راهنما", "toggle"),
+    ("show_faq", "سوالات", "toggle"),
+    ("show_referral", "دعوت", "toggle"),
+    ("show_miniapp", "مینی‌اپ", "toggle"),
 ]
 
-# Extra fields for custom plan pricing (managed on /plans in web)
-CUSTOM_PLAN_FIELDS: list[tuple[str, str, str]] = [
+CUSTOM_PRICE: list[Field] = [
     ("custom_plan_price_per_gb", "قیمت هر گیگ", "number"),
     ("custom_plan_price_per_day", "قیمت هر روز", "number"),
     ("custom_plan_min_gb", "حداقل گیگ", "number"),
@@ -55,6 +172,17 @@ CUSTOM_PLAN_FIELDS: list[tuple[str, str, str]] = [
     ("custom_plan_min_days", "حداقل روز", "number"),
     ("custom_plan_max_days", "حداکثر روز", "number"),
 ]
+
+MENU_ORDER_LABELS = {
+    "shop": "خرید",
+    "services": "سرویس‌ها",
+    "wallet": "کیف پول",
+    "support": "پشتیبانی",
+    "guide": "راهنما",
+    "faq": "سوالات",
+    "referral": "دعوت",
+    "miniapp": "مینی‌اپ",
+}
 
 
 class SettingsStates(StatesGroup):
@@ -70,22 +198,23 @@ def _is_admin(user: BotUser) -> bool:
     return user.role == Role.ADMIN.value or user.telegram_id in get_settings().admin_ids
 
 
-def _field_map() -> dict[str, tuple]:
-    """key -> field tuple from SETTING_GROUPS."""
-    out: dict[str, tuple] = {}
-    for fields in SETTING_GROUPS.values():
-        for item in fields:
-            out[item[0]] = item
-    for item in CUSTOM_PLAN_FIELDS:
-        out[item[0]] = item
+def _field_lookup() -> dict[str, Field]:
+    out: dict[str, Field] = {}
+    for sec in SECTIONS.values():
+        for sub in sec.get("subs") or []:
+            if isinstance(sub[2], list):
+                for f in sub[2]:
+                    out[f[0]] = f
+    for f in MENU_VIS + CUSTOM_PRICE:
+        out[f[0]] = f
     return out
 
 
-FIELD_MAP = _field_map()
+FIELDS = _field_lookup()
 
 
-def _preview(value: str | None, *, limit: int = 40) -> str:
-    text = (value or "").replace("\n", " ").strip()
+def _preview(value: str | None, *, limit: int = 120) -> str:
+    text = (value or "").strip()
     if not text:
         return "—"
     if len(text) > limit:
@@ -93,230 +222,282 @@ def _preview(value: str | None, *, limit: int = 40) -> str:
     return text
 
 
-def _hub_keyboard() -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
-    row: list[InlineKeyboardButton] = []
-    for tab_id, title, _ in BOT_SETTINGS_TABS:
-        row.append(InlineKeyboardButton(text=title, callback_data=f"adm:st:tab:{tab_id}"))
-        if len(row) == 2:
-            rows.append(row)
-            row = []
-    if row:
-        rows.append(row)
-    rows.append(
-        [InlineKeyboardButton(text="ℹ️ ربات/آپدیت (فقط وب)", callback_data="adm:st:webonly")]
-    )
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")])
+def _back_row(*buttons: tuple[str, str]) -> list[InlineKeyboardButton]:
+    return [InlineKeyboardButton(text=t, callback_data=c) for t, c in buttons]
+
+
+def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+# ----- render helpers -----
 
 
 async def _render_hub(callback: CallbackQuery) -> None:
-    lines = [
-        "⚙️ <b>تنظیمات بات</b>",
-        "",
-        "همان تنظیمات وب‌پنل — از دسته‌بندی زیر انتخاب کنید:",
+    rows = [
+        [InlineKeyboardButton(text=SECTIONS[sid]["title"], callback_data=f"adm:st:sec:{sid}")]
+        for sid in HUB_ORDER
     ]
-    for _, title, help_text in BOT_SETTINGS_TABS:
-        lines.append(f"• {title} — <i>{help_text}</i>")
-    if callback.message:
-        await callback.message.edit_text("\n".join(lines), reply_markup=_hub_keyboard())
-
-
-def _fields_for_tab(tab: str) -> list[tuple]:
-    names = TAB_SETTING_GROUPS.get(tab) or []
-    fields: list[tuple] = []
-    for name in names:
-        fields.extend(SETTING_GROUPS.get(name, []))
-    return fields
-
-
-def _value_label(kind: str, value: str | None) -> str:
-    if kind == "toggle":
-        return "✅" if on(value) else "⬜️"
-    return _preview(value, limit=28)
-
-
-async def _tab_keyboard(session: AsyncSession, tab: str) -> InlineKeyboardMarkup:
-    ui = await get_all_settings(session)
-    rows: list[list[InlineKeyboardButton]] = []
-
-    if tab == "supports":
-        contacts = await get_support_contacts(session)
-        rows.append([InlineKeyboardButton(text="➕ افزودن پشتیبان", callback_data="adm:st:sup:add")])
-        for c in contacts[:15]:
-            mark = "✅" if c.get("enabled", True) else "⏸"
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"{mark} {c['title']}"[:60],
-                        callback_data=f"adm:st:sup:v:{c['id']}",
-                    )
-                ]
-            )
-    elif tab == "notifications":
-        for key, title, _, default in NOTIFY_PREFS:
-            val = ui.get(key, default)
-            mark = "✅" if on(val) else "⬜️"
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"{mark} {title}"[:60],
-                        callback_data=f"adm:st:tog:{key}",
-                    )
-                ]
-            )
-    elif tab == "menu":
-        layout = ui.get("menu_layout") or "classic"
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"چیدمان: {'فشرده' if layout == 'compact' else 'کلاسیک'}",
-                    callback_data="adm:st:menu:layout",
-                )
-            ]
-        )
-        for key, label in [
-            ("show_wallet", "کیف پول"),
-            ("show_support", "پشتیبانی"),
-            ("show_guide", "راهنما"),
-            ("show_faq", "سوالات"),
-            ("show_referral", "دعوت"),
-            ("show_miniapp", "مینی‌اپ"),
-        ]:
-            mark = "✅" if on(ui.get(key)) else "⬜️"
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"{mark} {label}",
-                        callback_data=f"adm:st:tog:{key}",
-                    )
-                ]
-            )
-        # order controls
-        order = [p for p in (ui.get("menu_order") or "").split(",") if p.strip()]
-        rows.append(
-            [InlineKeyboardButton(text="↕️ ترتیب منو:", callback_data="adm:st:noop")]
-        )
-        for i, key in enumerate(order[:10]):
-            rows.append(
-                [
-                    InlineKeyboardButton(text=f"{i + 1}. {key}", callback_data="adm:st:noop"),
-                    InlineKeyboardButton(text="⬆️", callback_data=f"adm:st:menu:up:{i}"),
-                    InlineKeyboardButton(text="⬇️", callback_data=f"adm:st:menu:dn:{i}"),
-                ]
-            )
-    elif tab == "plancfg":
-        trial_on = on(ui.get("trial_enabled"))
-        custom_on = on(ui.get("custom_plan_enabled"))
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{'✅' if trial_on else '⬜️'} نمایش پلن تست",
-                    callback_data="adm:st:tog:trial_enabled",
-                )
-            ]
-        )
-        rows.append(
-            [InlineKeyboardButton(text="🧪 ویرایش پلن تست", callback_data="adm:st:trial")]
-        )
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{'✅' if custom_on else '⬜️'} پلن دلخواه",
-                    callback_data="adm:st:tog:custom_plan_enabled",
-                )
-            ]
-        )
-        for key, label, _kind in CUSTOM_PLAN_FIELDS:
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"✏️ {label}: {_preview(ui.get(key), limit=12)}",
-                        callback_data=f"adm:st:edit:{key}",
-                    )
-                ]
-            )
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text="🔗 اتصال پاسارگارد پلن دلخواه",
-                    callback_data="adm:custom",
-                )
-            ]
-        )
-    else:
-        # group fields; skip image kinds
-        current_group = None
-        for item in _fields_for_tab(tab):
-            key, label, kind = item[0], item[1], item[2]
-            if kind == "image":
-                rows.append(
-                    [
-                        InlineKeyboardButton(
-                            text=f"🖼 {label} (فقط وب)",
-                            callback_data="adm:st:webonly",
-                        )
-                    ]
-                )
-                continue
-            # find group name for section headers
-            for gname, gfields in SETTING_GROUPS.items():
-                if any(f[0] == key for f in gfields):
-                    if gname != current_group and tab == "payment":
-                        current_group = gname
-                        rows.append(
-                            [
-                                InlineKeyboardButton(
-                                    text=f"— {gname} —",
-                                    callback_data="adm:st:noop",
-                                )
-                            ]
-                        )
-                    break
-            if kind == "toggle":
-                mark = _value_label(kind, ui.get(key))
-                rows.append(
-                    [
-                        InlineKeyboardButton(
-                            text=f"{mark} {label}"[:60],
-                            callback_data=f"adm:st:tog:{key}",
-                        )
-                    ]
-                )
-            elif kind == "select":
-                options = item[4] if len(item) > 4 else []
-                cur = ui.get(key) or ""
-                cur_label = next((lb for ov, lb in options if ov == cur), cur or "—")
-                rows.append(
-                    [
-                        InlineKeyboardButton(
-                            text=f"↕️ {label}: {_preview(cur_label, limit=20)}",
-                            callback_data=f"adm:st:sel:{key}",
-                        )
-                    ]
-                )
-            else:
-                rows.append(
-                    [
-                        InlineKeyboardButton(
-                            text=f"✏️ {label}: {_value_label(kind, ui.get(key))}"[:60],
-                            callback_data=f"adm:st:edit:{key}",
-                        )
-                    ]
-                )
-
-    rows.append([InlineKeyboardButton(text="⬅️ دسته‌ها", callback_data="adm:settings")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-async def _render_tab(callback: CallbackQuery, session: AsyncSession, tab: str) -> None:
-    title = next((t[1] for t in BOT_SETTINGS_TABS if t[0] == tab), tab)
-    help_text = next((t[2] for t in BOT_SETTINGS_TABS if t[0] == tab), "")
-    text = f"{title}\n<i>{help_text}</i>\n\nروی هر مورد بزنید تا تغییر دهید."
+    rows.append(_back_row(("⬅️ پنل ادمین", "adm:home")))
     if callback.message:
         await callback.message.edit_text(
-            text, reply_markup=await _tab_keyboard(session, tab)
+            "⚙️ <b>تنظیمات</b>\nیک بخش را انتخاب کنید:",
+            reply_markup=_kb(rows),
         )
+
+
+async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id: str) -> None:
+    sec = SECTIONS.get(sec_id)
+    if not sec:
+        await _render_hub(callback)
+        return
+
+    if sec.get("kind") == "supports":
+        await _render_supports(callback, session)
+        return
+    if sec.get("kind") == "notify":
+        await _render_notify(callback, session)
+        return
+
+    rows: list[list[InlineKeyboardButton]] = []
+    for sub in sec.get("subs") or []:
+        sub_id, title, _payload = sub[0], sub[1], sub[2]
+        rows.append(
+            [InlineKeyboardButton(text=title, callback_data=f"adm:st:sub:{sec_id}:{sub_id}")]
+        )
+    rows.append(_back_row(("⬅️ تنظیمات", "adm:settings")))
+    if callback.message:
+        await callback.message.edit_text(
+            f"⚙️ <b>{sec['title']}</b>\nزیر‌بخش را انتخاب کنید:",
+            reply_markup=_kb(rows),
+        )
+
+
+def _field_button(ui: dict, key: str, label: str, kind: str) -> InlineKeyboardButton:
+    if kind == "toggle":
+        mark = "✅" if on(ui.get(key)) else "⬜️"
+        return InlineKeyboardButton(text=f"{mark} {label}", callback_data=f"adm:st:tog:{key}")
+    return InlineKeyboardButton(text=label, callback_data=f"adm:st:edit:{key}")
+
+
+async def _render_fields(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    *,
+    title: str,
+    fields: list[Field],
+    back_cb: str,
+    extra_rows: list[list[InlineKeyboardButton]] | None = None,
+) -> None:
+    ui = await get_all_settings(session)
+    rows = [[_field_button(ui, k, lab, kind)] for k, lab, kind in fields]
+    if extra_rows:
+        rows.extend(extra_rows)
+    rows.append(_back_row(("⬅️ بازگشت", back_cb)))
+    if callback.message:
+        await callback.message.edit_text(
+            f"<b>{title}</b>\nبرای تغییر، روی مورد بزنید.",
+            reply_markup=_kb(rows),
+        )
+
+
+async def _render_sub(callback: CallbackQuery, session: AsyncSession, sec_id: str, sub_id: str) -> None:
+    sec = SECTIONS.get(sec_id) or {}
+    sub = next((s for s in (sec.get("subs") or []) if s[0] == sub_id), None)
+    if not sub:
+        await _render_section(callback, session, sec_id)
+        return
+    title = sub[1]
+    payload = sub[2]
+    back = f"adm:st:sec:{sec_id}"
+
+    if payload == "menu_vis":
+        await _render_fields(callback, session, title=title, fields=MENU_VIS, back_cb=back)
+        return
+    if payload == "menu_layout":
+        ui = await get_all_settings(session)
+        layout = ui.get("menu_layout") or "classic"
+        label = "فشرده (جفتی)" if layout == "compact" else "کلاسیک (تکی)"
+        rows = [
+            [InlineKeyboardButton(text=f"حالت: {label}", callback_data="adm:st:menu:layout")],
+            _back_row(("⬅️ بازگشت", back)),
+        ]
+        if callback.message:
+            await callback.message.edit_text(
+                "<b>چیدمان منو</b>\nروی دکمه بزنید تا عوض شود.",
+                reply_markup=_kb(rows),
+            )
+        return
+    if payload == "menu_order":
+        await _render_menu_order(callback, session, back)
+        return
+    if payload == "trial":
+        await _render_trial(callback, session)
+        return
+    if payload == "custom":
+        ui = await get_all_settings(session)
+        extra = [
+            [
+                InlineKeyboardButton(
+                    text=f"{'✅' if on(ui.get('custom_plan_enabled')) else '⬜️'} فعال در فروشگاه",
+                    callback_data="adm:st:tog:custom_plan_enabled",
+                )
+            ],
+            [InlineKeyboardButton(text="اتصال پاسارگارد", callback_data="adm:custom")],
+        ]
+        await _render_fields(
+            callback,
+            session,
+            title=title,
+            fields=CUSTOM_PRICE,
+            back_cb=back,
+            extra_rows=extra,
+        )
+        return
+    if isinstance(payload, list):
+        await _render_fields(callback, session, title=title, fields=payload, back_cb=back)
+        return
+    await _render_section(callback, session, sec_id)
+
+
+async def _render_menu_order(callback: CallbackQuery, session: AsyncSession, back: str) -> None:
+    ui = await get_all_settings(session)
+    order = [p.strip() for p in (ui.get("menu_order") or "").split(",") if p.strip()]
+    rows: list[list[InlineKeyboardButton]] = []
+    for i, key in enumerate(order[:10]):
+        label = MENU_ORDER_LABELS.get(key, key)
+        row = [InlineKeyboardButton(text=f"{i + 1}. {label}", callback_data="adm:st:noop")]
+        if i > 0:
+            row.append(InlineKeyboardButton(text="⬆️", callback_data=f"adm:st:menu:up:{i}"))
+        if i < len(order) - 1:
+            row.append(InlineKeyboardButton(text="⬇️", callback_data=f"adm:st:menu:dn:{i}"))
+        rows.append(row)
+    rows.append(_back_row(("⬅️ بازگشت", back)))
+    if callback.message:
+        await callback.message.edit_text(
+            "<b>ترتیب منو</b>\nبا فلش جابه‌جا کنید.",
+            reply_markup=_kb(rows),
+        )
+
+
+async def _render_supports(callback: CallbackQuery, session: AsyncSession) -> None:
+    contacts = await get_support_contacts(session)
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="➕ پشتیبان جدید", callback_data="adm:st:sup:add")]
+    ]
+    for c in contacts[:12]:
+        mark = "✅" if c.get("enabled", True) else "⏸"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{mark} {c['title']}"[:40],
+                    callback_data=f"adm:st:sup:v:{c['id']}",
+                )
+            ]
+        )
+    if not contacts:
+        rows.append([InlineKeyboardButton(text="لیست خالی است", callback_data="adm:st:noop")])
+    rows.append(_back_row(("⬅️ تنظیمات", "adm:settings")))
+    if callback.message:
+        await callback.message.edit_text(
+            "🎧 <b>پشتیبان‌ها</b>\n"
+            "۱ نفر → دکمه پشتیبانی مستقیم به چت می‌رود\n"
+            "چند نفر → لیست انتخاب برای کاربر",
+            reply_markup=_kb(rows),
+        )
+
+
+async def _render_notify(callback: CallbackQuery, session: AsyncSession) -> None:
+    ui = await get_all_settings(session)
+    rows: list[list[InlineKeyboardButton]] = []
+    for key, title, _, default in NOTIFY_PREFS:
+        mark = "✅" if on(ui.get(key, default)) else "⬜️"
+        rows.append(
+            [InlineKeyboardButton(text=f"{mark} {title}", callback_data=f"adm:st:tog:{key}")]
+        )
+    rows.append(_back_row(("⬅️ تنظیمات", "adm:settings")))
+    if callback.message:
+        await callback.message.edit_text(
+            "🔔 <b>اعلان‌های ادمین</b>\nروشن/خاموش کنید:",
+            reply_markup=_kb(rows),
+        )
+
+
+async def _render_trial(callback: CallbackQuery, session: AsyncSession) -> None:
+    result = await session.execute(select(Plan).where(Plan.is_trial.is_(True)))
+    trial = result.scalar_one_or_none()
+    ui = await get_all_settings(session)
+    if trial:
+        gb = f"{trial.data_limit_gb:g} گیگ" if trial.data_limit_gb is not None else "نامحدود"
+        if trial.pg_template_id:
+            link = f"تمپلیت #{trial.pg_template_id}"
+        elif trial.pg_group_ids:
+            link = f"گروه {trial.pg_group_ids}"
+        else:
+            link = "بدون اتصال"
+        body = (
+            f"نام: <b>{trial.name}</b>\n"
+            f"مدت: {trial.duration_days} روز · حجم: {gb}\n"
+            f"اتصال: {link}"
+        )
+    else:
+        body = "هنوز ساخته نشده."
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if on(ui.get('trial_enabled')) else '⬜️'} نمایش در فروشگاه",
+                callback_data="adm:st:tog:trial_enabled",
+            )
+        ],
+        [InlineKeyboardButton(text="نام", callback_data="adm:st:trial:name")],
+        [InlineKeyboardButton(text="مدت (روز)", callback_data="adm:st:trial:days")],
+        [InlineKeyboardButton(text="حجم (گیگ)", callback_data="adm:st:trial:gb")],
+        [InlineKeyboardButton(text="تمپلیت پاسارگارد", callback_data="adm:st:trial:tpl")],
+        [InlineKeyboardButton(text="گروه پاسارگارد", callback_data="adm:st:trial:grp")],
+        _back_row(("⬅️ بازگشت", "adm:st:sec:service")),
+    ]
+    if callback.message:
+        await callback.message.edit_text(
+            f"🧪 <b>پلن تست</b>\n\n{body}",
+            reply_markup=_kb(rows),
+        )
+
+
+def _owner_screen_for_key(key: str) -> tuple[str, str] | None:
+    """Return (sec_id, sub_id) that owns this key for re-render after toggle/edit."""
+    if key.startswith("notify_"):
+        return ("notify", "")
+    if key.startswith("show_"):
+        return ("menu", "vis")
+    if key == "menu_layout":
+        return ("menu", "layout")
+    if key == "trial_enabled":
+        return ("service", "trial")
+    if key.startswith("custom_plan_"):
+        return ("service", "custom")
+    for sec_id, sec in SECTIONS.items():
+        for sub in sec.get("subs") or []:
+            payload = sub[2]
+            if isinstance(payload, list) and any(f[0] == key for f in payload):
+                return (sec_id, sub[0])
+    return None
+
+
+async def _rerender_after_key(callback: CallbackQuery, session: AsyncSession, key: str) -> None:
+    loc = _owner_screen_for_key(key)
+    if not loc:
+        await _render_hub(callback)
+        return
+    sec_id, sub_id = loc
+    if sec_id == "notify":
+        await _render_notify(callback, session)
+    elif not sub_id:
+        await _render_section(callback, session, sec_id)
+    else:
+        await _render_sub(callback, session, sec_id, sub_id)
+
+
+# ----- callbacks: navigation -----
 
 
 @router.callback_query(F.data == "adm:st:noop")
@@ -334,25 +515,29 @@ async def settings_hub(callback: CallbackQuery, state: FSMContext, db_user: BotU
     await _render_hub(callback)
 
 
-@router.callback_query(F.data == "adm:st:webonly")
-async def settings_webonly(callback: CallbackQuery, db_user: BotUser):
+@router.callback_query(F.data.startswith("adm:st:sec:"))
+async def settings_section(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
-    await callback.answer(
-        "آپلود عکس، توکن ربات، اتصال پاسارگارد و آپدیت پنل فقط از وب‌پنل قابل تغییرند.",
-        show_alert=True,
-    )
-
-
-@router.callback_query(F.data.startswith("adm:st:tab:"))
-async def settings_tab(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    tab = callback.data.split(":")[-1]
+    sec_id = callback.data.split(":")[-1]
     await callback.answer()
-    await _render_tab(callback, session, tab)
+    await _render_section(callback, session, sec_id)
+
+
+@router.callback_query(F.data.startswith("adm:st:sub:"))
+async def settings_sub(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    # adm:st:sub:{sec}:{sub}
+    parts = callback.data.split(":")
+    sec_id, sub_id = parts[3], parts[4]
+    await callback.answer()
+    await _render_sub(callback, session, sec_id, sub_id)
+
+
+# ----- toggle / edit -----
 
 
 @router.callback_query(F.data.startswith("adm:st:tog:"))
@@ -365,33 +550,12 @@ async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_use
     new_val = "0" if on(cur) else "1"
     await set_setting(session, key, new_val)
     if key == "trial_enabled":
-        trial = (
-            await session.execute(select(Plan).where(Plan.is_trial.is_(True)))
-        ).scalar_one_or_none()
+        trial = (await session.execute(select(Plan).where(Plan.is_trial.is_(True)))).scalar_one_or_none()
         if trial:
             trial.is_active = new_val == "1"
             await session.commit()
-    await callback.answer("بروز شد")
-    tab = _tab_for_key(key)
-    if tab:
-        await _render_tab(callback, session, tab)
-    else:
-        await _render_hub(callback)
-
-
-def _tab_for_key(key: str) -> str | None:
-    if key == "trial_enabled" or key.startswith("custom_plan_"):
-        return "plancfg"
-    if key.startswith("notify_"):
-        return "notifications"
-    if key.startswith("show_") or key in {"menu_layout", "menu_order"}:
-        return "menu"
-    for tab, groups in TAB_SETTING_GROUPS.items():
-        for gname in groups:
-            for item in SETTING_GROUPS.get(gname, []):
-                if item[0] == key:
-                    return tab
-    return None
+    await callback.answer("ذخیره شد")
+    await _rerender_after_key(callback, session, key)
 
 
 @router.callback_query(F.data.startswith("adm:st:edit:"))
@@ -402,17 +566,18 @@ async def settings_edit_ask(
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     key = callback.data.split(":", 3)[-1]
-    meta = FIELD_MAP.get(key)
+    meta = FIELDS.get(key)
     label = meta[1] if meta else key
     kind = meta[2] if meta else "text"
     cur = await get_setting(session, key)
+    loc = _owner_screen_for_key(key)
     await callback.answer()
     await state.set_state(SettingsStates.edit_value)
-    await state.update_data(edit_key=key, edit_tab=_tab_for_key(key) or "welcome")
-    hint = "عدد بفرستید." if kind == "number" else "متن جدید را بفرستید (یا انصراف)."
+    await state.update_data(edit_key=key, edit_loc=loc)
+    hint = "عدد بفرستید." if kind == "number" else "متن جدید را بفرستید.\nبرای انصراف: انصراف"
     if callback.message:
         await callback.message.answer(
-            f"✏️ <b>{label}</b>\nمقدار فعلی:\n<code>{_preview(cur, limit=200)}</code>\n\n{hint}",
+            f"<b>{label}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}",
             reply_markup=kb.cancel_reply(),
         )
 
@@ -421,85 +586,44 @@ async def settings_edit_ask(
 async def settings_edit_save(message: Message, state: FSMContext, session: AsyncSession):
     data = await state.get_data()
     key = data.get("edit_key")
-    tab = data.get("edit_tab") or "welcome"
+    loc = data.get("edit_loc")
     text = (message.text or "").strip()
     if text == "انصراف" or not key:
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        await message.answer(
+            "لغو شد.",
+            reply_markup=_kb([[InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="adm:settings")]]),
+        )
         return
-    meta = FIELD_MAP.get(key)
+    meta = FIELDS.get(key)
     kind = meta[2] if meta else "text"
     if kind == "number":
+        raw = text.replace(",", "").replace("٬", "")
         try:
-            float(text.replace(",", "").replace("٬", ""))
+            float(raw)
         except ValueError:
             await message.answer("عدد معتبر بفرستید")
             return
-        text = text.replace(",", "").replace("٬", "")
+        text = raw
     await set_setting(session, key, text)
     await state.clear()
-    await message.answer(f"ذخیره شد ✅\n<code>{key}</code>", reply_markup=kb.admin_home())
-    # also offer jump back
+    jump = "adm:settings"
+    if loc:
+        sec_id, sub_id = loc
+        jump = f"adm:st:sub:{sec_id}:{sub_id}" if sub_id else f"adm:st:sec:{sec_id}"
+        if sec_id == "notify":
+            jump = "adm:st:sec:notify"
+        if sub_id == "trial":
+            jump = "adm:st:sub:service:trial"
     await message.answer(
-        "بازگشت به دسته:",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="📂 همان دسته", callback_data=f"adm:st:tab:{tab}")],
+        "ذخیره شد ✅",
+        reply_markup=_kb(
+            [
+                [InlineKeyboardButton(text="بازگشت", callback_data=jump)],
                 [InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="adm:settings")],
             ]
         ),
     )
-
-
-@router.callback_query(F.data.startswith("adm:st:sel:"))
-async def settings_select_menu(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
-):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    key = callback.data.split(":", 3)[-1]
-    meta = FIELD_MAP.get(key)
-    if not meta or meta[2] != "select":
-        await callback.answer("نامعتبر", show_alert=True)
-        return
-    options = meta[4] if len(meta) > 4 else []
-    cur = await get_setting(session, key)
-    rows = []
-    for ov, olabel in options:
-        mark = "✅ " if ov == cur else ""
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{mark}{olabel}"[:60],
-                    callback_data=f"adm:st:setsel:{key}:{ov}",
-                )
-            ]
-        )
-    tab = _tab_for_key(key) or "menu"
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data=f"adm:st:tab:{tab}")])
-    await callback.answer()
-    if callback.message:
-        await callback.message.edit_text(
-            f"انتخاب «{meta[1]}»:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-        )
-
-
-@router.callback_query(F.data.startswith("adm:st:setsel:"))
-async def settings_select_set(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
-):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    # adm:st:setsel:{key}:{value} — value may contain colon? use rsplit
-    rest = callback.data[len("adm:st:setsel:") :]
-    key, _, value = rest.partition(":")
-    await set_setting(session, key, value)
-    await callback.answer("ذخیره شد")
-    tab = _tab_for_key(key) or "menu"
-    await _render_tab(callback, session, tab)
 
 
 @router.callback_query(F.data == "adm:st:menu:layout")
@@ -509,8 +633,8 @@ async def menu_layout_toggle(callback: CallbackQuery, session: AsyncSession, db_
         return
     cur = await get_setting(session, "menu_layout") or "classic"
     await set_setting(session, "menu_layout", "compact" if cur == "classic" else "classic")
-    await callback.answer("بروز شد")
-    await _render_tab(callback, session, "menu")
+    await callback.answer("ذخیره شد")
+    await _render_sub(callback, session, "menu", "layout")
 
 
 @router.callback_query(
@@ -521,10 +645,8 @@ async def menu_reorder(callback: CallbackQuery, session: AsyncSession, db_user: 
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     parts = callback.data.split(":")
-    direction = parts[3]  # up | dn
-    idx = int(parts[4])
-    raw = await get_setting(session, "menu_order")
-    order = [p.strip() for p in (raw or "").split(",") if p.strip()]
+    direction, idx = parts[3], int(parts[4])
+    order = [p.strip() for p in (await get_setting(session, "menu_order") or "").split(",") if p.strip()]
     if idx < 0 or idx >= len(order):
         await callback.answer()
         return
@@ -536,11 +658,11 @@ async def menu_reorder(callback: CallbackQuery, session: AsyncSession, db_user: 
     await set_setting(session, "menu_order", ",".join(order))
     for key in ("wallet", "support", "guide", "faq", "referral", "miniapp", "services"):
         await set_setting(session, f"show_{key}", "1" if key in order else "0")
-    await callback.answer("جابه‌جا شد")
-    await _render_tab(callback, session, "menu")
+    await callback.answer()
+    await _render_menu_order(callback, session, "adm:st:sec:menu")
 
 
-# ----- Supports CRUD -----
+# ----- Supports -----
 
 
 @router.callback_query(F.data == "adm:st:sup:add")
@@ -553,7 +675,7 @@ async def support_add_start(callback: CallbackQuery, state: FSMContext, db_user:
     await state.update_data(support_edit_id=None)
     if callback.message:
         await callback.message.answer(
-            "عنوان پشتیبان را بفرستید (مثلاً پشتیبان ربات):",
+            "عنوان پشتیبان (مثلاً پشتیبان ربات):",
             reply_markup=kb.cancel_reply(),
         )
 
@@ -563,11 +685,14 @@ async def support_title_msg(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if text == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        await message.answer(
+            "لغو شد.",
+            reply_markup=_kb([[InlineKeyboardButton(text="🎧 پشتیبان‌ها", callback_data="adm:st:sec:support")]]),
+        )
         return
     await state.update_data(support_title=text)
     await state.set_state(SettingsStates.support_telegram)
-    await message.answer("آیدی یا یوزرنیم تلگرام (@user یا عدد):")
+    await message.answer("یوزرنیم یا آیدی تلگرام (@user یا عدد):")
 
 
 @router.message(SettingsStates.support_telegram)
@@ -575,7 +700,10 @@ async def support_telegram_msg(message: Message, state: FSMContext, session: Asy
     text = (message.text or "").strip()
     if text == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        await message.answer(
+            "لغو شد.",
+            reply_markup=_kb([[InlineKeyboardButton(text="🎧 پشتیبان‌ها", callback_data="adm:st:sec:support")]]),
+        )
         return
     data = await state.get_data()
     await state.clear()
@@ -587,16 +715,11 @@ async def support_telegram_msg(message: Message, state: FSMContext, session: Asy
         enabled=True,
     )
     if err:
-        await message.answer(f"❌ {err}", reply_markup=kb.admin_home())
+        await message.answer(f"❌ {err}")
         return
     await message.answer(
-        f"ذخیره شد ✅ — {item['title']} ({item['telegram']})",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🎧 پشتیبان‌ها", callback_data="adm:st:tab:supports")],
-                [InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="adm:settings")],
-            ]
-        ),
+        f"ذخیره شد ✅\n{item['title']} — <code>{item['telegram']}</code>",
+        reply_markup=_kb([[InlineKeyboardButton(text="🎧 پشتیبان‌ها", callback_data="adm:st:sec:support")]]),
     )
 
 
@@ -606,8 +729,7 @@ async def support_view(callback: CallbackQuery, session: AsyncSession, db_user: 
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     cid = callback.data.split(":")[-1]
-    contacts = await get_support_contacts(session)
-    c = next((x for x in contacts if x["id"] == cid), None)
+    c = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
     if not c:
         await callback.answer("یافت نشد", show_alert=True)
         return
@@ -615,26 +737,23 @@ async def support_view(callback: CallbackQuery, session: AsyncSession, db_user: 
     url = support_chat_url(c["telegram"]) or "—"
     text = (
         f"🎧 <b>{c['title']}</b>\n"
-        f"تلگرام: <code>{c['telegram']}</code>\n"
-        f"لینک: {url}\n"
-        f"وضعیت: {'فعال' if c.get('enabled', True) else 'خاموش'}\n"
-        f"ترتیب: {c.get('sort', 0)}"
+        f"<code>{c['telegram']}</code>\n"
+        f"{url}\n"
+        f"{'فعال' if c.get('enabled', True) else 'خاموش'}"
     )
     rows = [
         [
             InlineKeyboardButton(
-                text="⏸ خاموش" if c.get("enabled", True) else "▶️ روشن",
+                text="خاموش" if c.get("enabled", True) else "روشن",
                 callback_data=f"adm:st:sup:tog:{cid}",
-            )
+            ),
+            InlineKeyboardButton(text="ویرایش", callback_data=f"adm:st:sup:edit:{cid}"),
+            InlineKeyboardButton(text="حذف", callback_data=f"adm:st:sup:del:{cid}"),
         ],
-        [
-            InlineKeyboardButton(text="✏️ ویرایش", callback_data=f"adm:st:sup:edit:{cid}"),
-            InlineKeyboardButton(text="🗑 حذف", callback_data=f"adm:st:sup:del:{cid}"),
-        ],
-        [InlineKeyboardButton(text="⬅️ لیست", callback_data="adm:st:tab:supports")],
+        _back_row(("⬅️ لیست", "adm:st:sec:support")),
     ]
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+        await callback.message.edit_text(text, reply_markup=_kb(rows))
 
 
 @router.callback_query(F.data.startswith("adm:st:sup:tog:"))
@@ -643,8 +762,7 @@ async def support_toggle(callback: CallbackQuery, session: AsyncSession, db_user
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     cid = callback.data.split(":")[-1]
-    contacts = await get_support_contacts(session)
-    c = next((x for x in contacts if x["id"] == cid), None)
+    c = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
     if not c:
         await callback.answer("یافت نشد", show_alert=True)
         return
@@ -656,33 +774,29 @@ async def support_toggle(callback: CallbackQuery, session: AsyncSession, db_user
         sort=int(c.get("sort") or 0),
         enabled=not c.get("enabled", True),
     )
-    await callback.answer("بروز شد")
-    contacts = await get_support_contacts(session)
-    c = next((x for x in contacts if x["id"] == cid), None)
-    if not c or not callback.message:
+    await callback.answer("ذخیره شد")
+    callback.data = f"adm:st:sup:v:{cid}"
+    # avoid double answer
+    c2 = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
+    if not c2 or not callback.message:
         return
-    url = support_chat_url(c["telegram"]) or "—"
+    url = support_chat_url(c2["telegram"]) or "—"
     text = (
-        f"🎧 <b>{c['title']}</b>\n"
-        f"تلگرام: <code>{c['telegram']}</code>\n"
-        f"لینک: {url}\n"
-        f"وضعیت: {'فعال' if c.get('enabled', True) else 'خاموش'}\n"
-        f"ترتیب: {c.get('sort', 0)}"
+        f"🎧 <b>{c2['title']}</b>\n<code>{c2['telegram']}</code>\n{url}\n"
+        f"{'فعال' if c2.get('enabled', True) else 'خاموش'}"
     )
     rows = [
         [
             InlineKeyboardButton(
-                text="⏸ خاموش" if c.get("enabled", True) else "▶️ روشن",
+                text="خاموش" if c2.get("enabled", True) else "روشن",
                 callback_data=f"adm:st:sup:tog:{cid}",
-            )
+            ),
+            InlineKeyboardButton(text="ویرایش", callback_data=f"adm:st:sup:edit:{cid}"),
+            InlineKeyboardButton(text="حذف", callback_data=f"adm:st:sup:del:{cid}"),
         ],
-        [
-            InlineKeyboardButton(text="✏️ ویرایش", callback_data=f"adm:st:sup:edit:{cid}"),
-            InlineKeyboardButton(text="🗑 حذف", callback_data=f"adm:st:sup:del:{cid}"),
-        ],
-        [InlineKeyboardButton(text="⬅️ لیست", callback_data="adm:st:tab:supports")],
+        _back_row(("⬅️ لیست", "adm:st:sec:support")),
     ]
-    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    await callback.message.edit_text(text, reply_markup=_kb(rows))
 
 
 @router.callback_query(F.data.startswith("adm:st:sup:edit:"))
@@ -693,8 +807,7 @@ async def support_edit_start(
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     cid = callback.data.split(":")[-1]
-    contacts = await get_support_contacts(session)
-    c = next((x for x in contacts if x["id"] == cid), None)
+    c = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
     if not c:
         await callback.answer("یافت نشد", show_alert=True)
         return
@@ -713,66 +826,16 @@ async def support_delete(callback: CallbackQuery, session: AsyncSession, db_user
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
-    cid = callback.data.split(":")[-1]
-    await delete_support_contact(session, cid)
+    await delete_support_contact(session, callback.data.split(":")[-1])
     await callback.answer("حذف شد")
-    await _render_tab(callback, session, "supports")
+    await _render_supports(callback, session)
 
 
-# ----- Trial plan -----
-
-
-@router.callback_query(F.data == "adm:st:trial")
-async def trial_menu(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    result = await session.execute(select(Plan).where(Plan.is_trial.is_(True)))
-    trial = result.scalar_one_or_none()
-    ui = await get_all_settings(session)
-    if trial:
-        gb = f"{trial.data_limit_gb:g}گ" if trial.data_limit_gb is not None else "∞"
-        link = (
-            f"تمپلیت #{trial.pg_template_id}"
-            if trial.pg_template_id
-            else (f"گروه {trial.pg_group_ids}" if trial.pg_group_ids else "⚠️ بدون اتصال")
-        )
-        body = (
-            f"نام: {trial.name}\n"
-            f"مدت: {trial.duration_days} روز\n"
-            f"حجم: {gb}\n"
-            f"اتصال: {link}\n"
-            f"نمایش: {'✅' if on(ui.get('trial_enabled')) else '⬜️'}"
-        )
-    else:
-        body = "هنوز پلن تست ساخته نشده — از دکمه‌های زیر بسازید/ویرایش کنید."
-    await callback.answer()
-    rows = [
-        [InlineKeyboardButton(text="✏️ نام", callback_data="adm:st:trial:name")],
-        [InlineKeyboardButton(text="📅 مدت (روز)", callback_data="adm:st:trial:days")],
-        [InlineKeyboardButton(text="📦 حجم (گیگ، 0=نامحدود)", callback_data="adm:st:trial:gb")],
-        [
-            InlineKeyboardButton(
-                text="📋 تمپلیت پاسارگارد", callback_data="adm:st:trial:tpl"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="📁 گروه پاسارگارد", callback_data="adm:st:trial:grp"
-            )
-        ],
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:st:tab:plancfg")],
-    ]
-    if callback.message:
-        await callback.message.edit_text(
-            f"🧪 <b>پلن تست</b>\n\n{body}",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-        )
+# ----- Trial -----
 
 
 async def _ensure_trial(session: AsyncSession) -> Plan:
-    result = await session.execute(select(Plan).where(Plan.is_trial.is_(True)))
-    trial = result.scalar_one_or_none()
+    trial = (await session.execute(select(Plan).where(Plan.is_trial.is_(True)))).scalar_one_or_none()
     if trial:
         return trial
     trial = Plan(
@@ -806,7 +869,10 @@ async def trial_save_name(message: Message, state: FSMContext, session: AsyncSes
     text = (message.text or "").strip()
     if text == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        await message.answer(
+            "لغو شد.",
+            reply_markup=_kb([[InlineKeyboardButton(text="پلن تست", callback_data="adm:st:sub:service:trial")]]),
+        )
         return
     trial = await _ensure_trial(session)
     trial.name = text[:128]
@@ -814,11 +880,7 @@ async def trial_save_name(message: Message, state: FSMContext, session: AsyncSes
     await state.clear()
     await message.answer(
         "ذخیره شد ✅",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🧪 پلن تست", callback_data="adm:st:trial")]
-            ]
-        ),
+        reply_markup=_kb([[InlineKeyboardButton(text="پلن تست", callback_data="adm:st:sub:service:trial")]]),
     )
 
 
@@ -838,7 +900,10 @@ async def trial_save_days(message: Message, state: FSMContext, session: AsyncSes
     text = (message.text or "").strip()
     if text == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        await message.answer(
+            "لغو شد.",
+            reply_markup=_kb([[InlineKeyboardButton(text="پلن تست", callback_data="adm:st:sub:service:trial")]]),
+        )
         return
     try:
         days = max(1, int(text))
@@ -851,11 +916,7 @@ async def trial_save_days(message: Message, state: FSMContext, session: AsyncSes
     await state.clear()
     await message.answer(
         "ذخیره شد ✅",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🧪 پلن تست", callback_data="adm:st:trial")]
-            ]
-        ),
+        reply_markup=_kb([[InlineKeyboardButton(text="پلن تست", callback_data="adm:st:sub:service:trial")]]),
     )
 
 
@@ -867,9 +928,7 @@ async def trial_ask_gb(callback: CallbackQuery, state: FSMContext, db_user: BotU
     await callback.answer()
     await state.set_state(SettingsStates.trial_gb)
     if callback.message:
-        await callback.message.answer(
-            "حجم به گیگ (۰ = نامحدود):", reply_markup=kb.cancel_reply()
-        )
+        await callback.message.answer("حجم به گیگ (۰ = نامحدود):", reply_markup=kb.cancel_reply())
 
 
 @router.message(SettingsStates.trial_gb)
@@ -877,7 +936,10 @@ async def trial_save_gb(message: Message, state: FSMContext, session: AsyncSessi
     text = (message.text or "").strip()
     if text == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        await message.answer(
+            "لغو شد.",
+            reply_markup=_kb([[InlineKeyboardButton(text="پلن تست", callback_data="adm:st:sub:service:trial")]]),
+        )
         return
     try:
         gb = float(text)
@@ -890,16 +952,12 @@ async def trial_save_gb(message: Message, state: FSMContext, session: AsyncSessi
     await state.clear()
     await message.answer(
         "ذخیره شد ✅",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🧪 پلن تست", callback_data="adm:st:trial")]
-            ]
-        ),
+        reply_markup=_kb([[InlineKeyboardButton(text="پلن تست", callback_data="adm:st:sub:service:trial")]]),
     )
 
 
 @router.callback_query(F.data == "adm:st:trial:tpl")
-async def trial_pick_tpl(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def trial_pick_tpl(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -909,7 +967,7 @@ async def trial_pick_tpl(callback: CallbackQuery, session: AsyncSession, db_user
     except Exception:
         templates = []
     rows: list[list[InlineKeyboardButton]] = []
-    for t in templates[:20]:
+    for t in templates[:15]:
         tid = t.get("id")
         if tid is None:
             continue
@@ -917,21 +975,16 @@ async def trial_pick_tpl(callback: CallbackQuery, session: AsyncSession, db_user
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"#{tid} — {name}"[:60],
+                    text=f"#{tid} {name}"[:40],
                     callback_data=f"adm:st:trial:settpl:{tid}",
                 )
             ]
         )
     if not rows:
-        rows.append(
-            [InlineKeyboardButton(text="تمپلیتی نیست", callback_data="adm:st:trial")]
-        )
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:st:trial")])
+        rows.append([InlineKeyboardButton(text="تمپلیتی نیست", callback_data="adm:st:sub:service:trial")])
+    rows.append(_back_row(("⬅️ بازگشت", "adm:st:sub:service:trial")))
     if callback.message:
-        await callback.message.edit_text(
-            "تمپلیت پلن تست را انتخاب کنید:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-        )
+        await callback.message.edit_text("تمپلیت را انتخاب کنید:", reply_markup=_kb(rows))
 
 
 @router.callback_query(F.data.startswith("adm:st:trial:settpl:"))
@@ -945,33 +998,8 @@ async def trial_set_tpl(callback: CallbackQuery, session: AsyncSession, db_user:
     trial.pg_group_ids = None
     await session.commit()
     await callback.answer("ذخیره شد")
-    # re-open trial menu without double-answer
-    result = await session.execute(select(Plan).where(Plan.is_trial.is_(True)))
-    trial = result.scalar_one_or_none()
-    ui = await get_all_settings(session)
-    gb = f"{trial.data_limit_gb:g}گ" if trial and trial.data_limit_gb is not None else "∞"
-    link = (
-        f"تمپلیت #{trial.pg_template_id}"
-        if trial and trial.pg_template_id
-        else (f"گروه {trial.pg_group_ids}" if trial and trial.pg_group_ids else "⚠️ بدون اتصال")
-    )
-    body = (
-        f"نام: {trial.name}\nمدت: {trial.duration_days} روز\nحجم: {gb}\nاتصال: {link}\n"
-        f"نمایش: {'✅' if on(ui.get('trial_enabled')) else '⬜️'}"
-    )
-    rows = [
-        [InlineKeyboardButton(text="✏️ نام", callback_data="adm:st:trial:name")],
-        [InlineKeyboardButton(text="📅 مدت (روز)", callback_data="adm:st:trial:days")],
-        [InlineKeyboardButton(text="📦 حجم (گیگ، 0=نامحدود)", callback_data="adm:st:trial:gb")],
-        [InlineKeyboardButton(text="📋 تمپلیت پاسارگارد", callback_data="adm:st:trial:tpl")],
-        [InlineKeyboardButton(text="📁 گروه پاسارگارد", callback_data="adm:st:trial:grp")],
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:st:tab:plancfg")],
-    ]
-    if callback.message:
-        await callback.message.edit_text(
-            f"🧪 <b>پلن تست</b>\n\n{body}",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-        )
+    await _render_trial(callback, session)
+
 
 @router.callback_query(F.data == "adm:st:trial:grp")
 async def trial_pick_grp(
@@ -992,14 +1020,13 @@ async def trial_pick_grp(
 
 
 async def _show_trial_groups(callback: CallbackQuery, state: FSMContext) -> None:
-    data = await state.get_data()
-    selected = [int(x) for x in (data.get("trial_groups") or [])]
+    selected = [int(x) for x in ((await state.get_data()).get("trial_groups") or [])]
     try:
         groups = await get_pg().get_groups_simple()
     except Exception:
         groups = []
     rows: list[list[InlineKeyboardButton]] = []
-    for g in groups[:25]:
+    for g in groups[:20]:
         gid = g.get("id")
         if gid is None:
             continue
@@ -1009,7 +1036,7 @@ async def _show_trial_groups(callback: CallbackQuery, state: FSMContext) -> None
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"{mark}#{gid} — {name}"[:60],
+                    text=f"{mark}{name}"[:40],
                     callback_data=f"adm:st:trial:toggrp:{gid}",
                 )
             ]
@@ -1018,21 +1045,16 @@ async def _show_trial_groups(callback: CallbackQuery, state: FSMContext) -> None
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"✅ تأیید ({len(selected)})",
+                    text=f"تأیید ({len(selected)})",
                     callback_data="adm:st:trial:grpdone",
                 )
             ]
         )
     else:
-        rows.append(
-            [InlineKeyboardButton(text="گروهی نیست", callback_data="adm:st:trial")]
-        )
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:st:trial")])
+        rows.append([InlineKeyboardButton(text="گروهی نیست", callback_data="adm:st:sub:service:trial")])
+    rows.append(_back_row(("⬅️ بازگشت", "adm:st:sub:service:trial")))
     if callback.message:
-        await callback.message.edit_text(
-            "گروه‌های پلن تست را انتخاب کنید:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-        )
+        await callback.message.edit_text("گروه(ها) را انتخاب کنید:", reply_markup=_kb(rows))
 
 
 @router.callback_query(F.data.startswith("adm:st:trial:toggrp:"))
@@ -1041,8 +1063,7 @@ async def trial_tog_grp(callback: CallbackQuery, state: FSMContext, db_user: Bot
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     gid = int(callback.data.split(":")[-1])
-    data = await state.get_data()
-    selected = [int(x) for x in (data.get("trial_groups") or [])]
+    selected = [int(x) for x in ((await state.get_data()).get("trial_groups") or [])]
     if gid in selected:
         selected = [x for x in selected if x != gid]
     else:
@@ -1059,8 +1080,7 @@ async def trial_grp_done(
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
-    data = await state.get_data()
-    selected = [int(x) for x in (data.get("trial_groups") or [])]
+    selected = [int(x) for x in ((await state.get_data()).get("trial_groups") or [])]
     if not selected:
         await callback.answer("حداقل یک گروه", show_alert=True)
         return
@@ -1070,29 +1090,4 @@ async def trial_grp_done(
     await session.commit()
     await state.update_data(trial_groups=[])
     await callback.answer("ذخیره شد")
-    result = await session.execute(select(Plan).where(Plan.is_trial.is_(True)))
-    trial = result.scalar_one_or_none()
-    ui = await get_all_settings(session)
-    gb = f"{trial.data_limit_gb:g}گ" if trial and trial.data_limit_gb is not None else "∞"
-    link = (
-        f"تمپلیت #{trial.pg_template_id}"
-        if trial and trial.pg_template_id
-        else (f"گروه {trial.pg_group_ids}" if trial and trial.pg_group_ids else "⚠️ بدون اتصال")
-    )
-    body = (
-        f"نام: {trial.name}\nمدت: {trial.duration_days} روز\nحجم: {gb}\nاتصال: {link}\n"
-        f"نمایش: {'✅' if on(ui.get('trial_enabled')) else '⬜️'}"
-    )
-    rows = [
-        [InlineKeyboardButton(text="✏️ نام", callback_data="adm:st:trial:name")],
-        [InlineKeyboardButton(text="📅 مدت (روز)", callback_data="adm:st:trial:days")],
-        [InlineKeyboardButton(text="📦 حجم (گیگ، 0=نامحدود)", callback_data="adm:st:trial:gb")],
-        [InlineKeyboardButton(text="📋 تمپلیت پاسارگارد", callback_data="adm:st:trial:tpl")],
-        [InlineKeyboardButton(text="📁 گروه پاسارگارد", callback_data="adm:st:trial:grp")],
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:st:tab:plancfg")],
-    ]
-    if callback.message:
-        await callback.message.edit_text(
-            f"🧪 <b>پلن تست</b>\n\n{body}",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-        )
+    await _render_trial(callback, session)
