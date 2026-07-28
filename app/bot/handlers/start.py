@@ -208,7 +208,7 @@ async def _link_subscription(
     )
     svc = existing.scalar_one_or_none()
     if not svc:
-        sub_url = f"{get_settings().pg_base_url.rstrip('/')}/sub/{token}"
+        sub_url = f"{pg.base_url.rstrip('/')}/sub/{token}"
         svc = UserService(
             bot_user_id=db_user.id,
             pg_user_id=info.get("id"),

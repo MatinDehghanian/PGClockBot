@@ -1793,6 +1793,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         form = await request.form()
 
         if tab == "bot":
+            from app.services.pasarguard import reset_pg
             from app.services.service_control import schedule_panel_restart
             from app.services.setup_wizard import parse_admin_ids
 

@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import httpx
 
-from app.config import get_settings
+from app.config import get_settings, pg_api_base_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +34,57 @@ class PasarGuardClient:
     async def close(self) -> None:
         await self._client.aclose()
 
+    async def _rebind_base(self, base: str) -> None:
+        base = (base or "").rstrip("/")
+        if not base or base == self.base_url:
+            return
+        logger.warning(
+            "PasarGuard API root adjusted %s → %s (path was dashboard UI, not API)",
+            self.base_url,
+            base,
+        )
+        old = self._client
+        self.base_url = base
+        self._client = httpx.AsyncClient(
+            base_url=base,
+            timeout=30.0,
+            follow_redirects=True,
+        )
+        try:
+            await old.aclose()
+        except Exception:
+            pass
+
+    async def _ensure_api_base(self) -> None:
+        """If PG_BASE_URL includes a dashboard path, switch to the real API root."""
+        if getattr(self, "_api_base_resolved", False):
+            return
+        candidates = pg_api_base_candidates(self.settings.pg_base_url or self.base_url)
+        if len(candidates) <= 1:
+            self._api_base_resolved = True
+            return
+        for base in candidates:
+            try:
+                async with httpx.AsyncClient(
+                    base_url=base, timeout=15.0, follow_redirects=True
+                ) as probe:
+                    # Live API: openapi 200, or /api/system 401 without token
+                    r = await probe.get("/openapi.json")
+                    if r.status_code == 200 and "PasarGuard" in (r.text or ""):
+                        await self._rebind_base(base)
+                        break
+                    r2 = await probe.get("/api/system")
+                    if r2.status_code in (200, 401, 403):
+                        await self._rebind_base(base)
+                        break
+            except Exception:
+                continue
+        self._api_base_resolved = True
+
     async def ensure_token(self) -> str:
         if self._token:
             return self._token
+        await self._ensure_api_base()
         username = (self.settings.pg_username or "").strip()
         password = (self.settings.pg_password or "").replace("\r", "").strip()
         if not username or not password:
@@ -46,27 +94,58 @@ class PasarGuardClient:
             {"grant_type": "password", "username": username, "password": password},
             {"username": username, "password": password},
         ]
+        candidates = pg_api_base_candidates(self.settings.pg_base_url or self.base_url)
+        # Prefer already-resolved base first
+        if self.base_url:
+            candidates = [self.base_url] + [c for c in candidates if c != self.base_url]
+
         last: httpx.Response | None = None
-        for data in attempts:
-            last = await self._client.post("/api/admin/token", data=data)
-            if last.status_code < 400:
-                break
+        last_base = candidates[0] if candidates else self.base_url
+        for base in candidates:
+            last_base = base
+            async with httpx.AsyncClient(
+                base_url=base, timeout=30.0, follow_redirects=True
+            ) as probe:
+                for data in attempts:
+                    last = await probe.post("/api/admin/token", data=data)
+                    if last.status_code < 400:
+                        await self._rebind_base(base)
+                        self._api_base_resolved = True
+                        payload = last.json()
+                        token = payload.get("access_token")
+                        if not token:
+                            raise PasarGuardError(
+                                "PasarGuard login response missing access_token",
+                                body=payload,
+                            )
+                        self._token = token
+                        logger.info("PasarGuard login OK · base=%s", self.base_url)
+                        return self._token
+                    if last.status_code in (401, 403):
+                        detail = (last.text or "")[:300]
+                        raise PasarGuardError(
+                            f"PasarGuard login failed ({last.status_code}) at "
+                            f"{base}/api/admin/token — check PG_USERNAME / PG_PASSWORD. {detail}",
+                            last.status_code,
+                            last.text,
+                        )
+                    if last.status_code not in (404, 405):
+                        break
+
         assert last is not None
-        if last.status_code >= 400:
-            detail = (last.text or "")[:300]
-            raise PasarGuardError(
-                f"PasarGuard login failed ({last.status_code}) at "
-                f"{self.base_url}/api/admin/token — check PG_BASE_URL / user / password. {detail}",
-                last.status_code,
-                last.text,
+        detail = (last.text or "")[:300]
+        hint = ""
+        if last.status_code == 405 and len(candidates) > 1:
+            hint = (
+                " Hint: PG_BASE_URL includes a dashboard path; API is usually at the domain root "
+                f"(try {candidates[-1]})."
             )
-        payload = last.json()
-        token = payload.get("access_token")
-        if not token:
-            raise PasarGuardError("PasarGuard login response missing access_token", body=payload)
-        self._token = token
-        logger.info("PasarGuard login OK · base=%s", self.base_url)
-        return self._token
+        raise PasarGuardError(
+            f"PasarGuard login failed ({last.status_code}) at "
+            f"{last_base}/api/admin/token — check PG_BASE_URL / user / password.{hint} {detail}",
+            last.status_code,
+            last.text,
+        )
 
     async def _headers(self) -> dict[str, str]:
         token = await self.ensure_token()
@@ -83,6 +162,8 @@ class PasarGuardClient:
         headers = kwargs.pop("headers", {})
         if auth:
             headers.update(await self._headers())
+        else:
+            await self._ensure_api_base()
         resp = await self._client.request(method, path, headers=headers, **kwargs)
         if resp.status_code == 401 and auth:
             self._token = None
@@ -308,6 +389,21 @@ def get_pg() -> PasarGuardClient:
     if _pg is None:
         _pg = PasarGuardClient()
     return _pg
+
+
+def reset_pg() -> None:
+    """Drop cached client (after PG_BASE_URL / credentials change)."""
+    global _pg
+    _pg = None
+
+
+def public_pg_api_base() -> str:
+    """Best-known API root for building public /sub links."""
+    client = _pg
+    if client and client.base_url:
+        return client.base_url.rstrip("/")
+    cands = pg_api_base_candidates(get_settings().pg_base_url or "")
+    return (cands[0] if cands else "").rstrip("/")
 
 
 def extract_sub_token(subscription_url: str | None) -> str | None:

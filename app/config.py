@@ -38,6 +38,26 @@ def normalize_pg_base_url(raw: str) -> str:
     return urlunparse((parsed.scheme, parsed.netloc, path, "", "", "")).rstrip("/")
 
 
+def pg_api_base_candidates(raw: str) -> list[str]:
+    """Candidate API roots for PasarGuard.
+
+    Dashboard path (e.g. /MrClock, /dashboard) is UI-only — API usually lives at
+    the domain root. Prefer the configured URL first, then the origin without path.
+    """
+    from urllib.parse import urlparse, urlunparse
+
+    base = normalize_pg_base_url(raw)
+    if not base:
+        return []
+    out = [base]
+    parsed = urlparse(base)
+    path = (parsed.path or "").rstrip("/")
+    if path and path != "/":
+        origin = urlunparse((parsed.scheme, parsed.netloc, "", "", "", "")).rstrip("/")
+        if origin and origin not in out:
+            out.append(origin)
+    return out
+
 def _parse_admin_ids(value: object) -> List[int]:
     """Parse ADMIN_IDS from env/.env without requiring JSON (empty string → [])."""
     if value is None or value == "":
