@@ -1966,11 +1966,6 @@ body.modal-open { overflow: hidden; }
     max-width: none;
     overflow: visible;
   }
-  /* While a kebab is open, don't let the table clip the overlay */
-  .table-wrap:has(.row-actions.open),
-  .card:has(.row-actions.open) {
-    overflow: visible;
-  }
 }
 
 @media (max-width: 560px) {
