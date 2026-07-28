@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Reseller plans, applications, and staff management pages."""
 
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 from fastapi import Depends, Request
@@ -9,7 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_settings
+from app.config import get_settings, normalize_pg_base_url
 from app.db.models import BotUser, ResellerPlan, ResellerProfile, Role
 from app.services.pasarguard import get_pg
 from app.services.resellers import (
@@ -23,7 +24,6 @@ from app.services.resellers import (
     join_perms,
     list_applications,
     list_reseller_plans,
-    make_reseller,
     normalize_feature_perms,
     notify_reseller_revoked,
     parse_perms,
@@ -31,7 +31,6 @@ from app.services.resellers import (
     reject_application,
     revoke_reseller,
 )
-from app.services.web_auth import hash_password
 
 
 def _q(msg: str) -> str:
@@ -60,7 +59,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.config import get_settings
         from app.services.setup_wizard import default_panel_base_url
         from app.services.users import get_setting
 
@@ -80,7 +78,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         default_url = default_panel_base_url()
         pg_panel_url = await get_reseller_pg_panel_base_url(session)
         custom_pg_url = (await get_setting(session, "reseller_pg_panel_base_url") or "").strip()
-        default_pg_url = (get_settings().pg_base_url or "").rstrip("/")
+        default_pg_url = normalize_pg_base_url(get_settings().pg_base_url or "")
         return render(
             request,
             "resellers.html",
@@ -114,7 +112,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
 
         form = await request.form()
         bot_url = str(form.get("reseller_panel_base_url") or "").strip().rstrip("/")
-        pg_url = str(form.get("reseller_pg_panel_base_url") or "").strip().rstrip("/")
+        pg_url = normalize_pg_base_url(str(form.get("reseller_pg_panel_base_url") or ""))
         await set_setting(session, "reseller_panel_base_url", bot_url)
         await set_setting(session, "reseller_pg_panel_base_url", pg_url)
         return RedirectResponse(
@@ -249,21 +247,41 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
             token, expires = new_setup_token()
             profile.setup_token = token
             profile.setup_token_expires = expires
-            profile.setup_completed_at = None
+            # Keep web login if creds already exist — link is for bot-token only
+            if profile.web_username and profile.web_password_hash:
+                if not profile.setup_completed_at:
+                    profile.setup_completed_at = datetime.now(timezone.utc)
+            else:
+                profile.setup_completed_at = None
             base = await get_reseller_panel_base_url(session)
+            pg_panel = await get_reseller_pg_panel_base_url(session)
             if base:
                 try:
                     from app.bot import create_bot
 
                     bot = create_bot()
                     try:
+                        parts = [
+                            "🔗 لینک جدید راه‌اندازی نماینده:",
+                            f"{base}/rsetup/{token}",
+                            "",
+                            f"آدرس وب‌پنل ربات: {base}",
+                            f"ورود: {base}/login",
+                        ]
+                        if pg_panel:
+                            parts += ["", f"آدرس پنل پاسارگارد: {pg_panel}"]
+                        if profile.web_username:
+                            parts += [
+                                "",
+                                f"یوزر وب فعلی: <code>{profile.web_username}</code>",
+                                "در لینک فقط توکن ربات اختصاصی را ثبت کنید.",
+                            ]
+                        else:
+                            parts += ["", "۴۸ ساعت اعتبار — یوزر/رمز وب را در همان صفحه بسازید."]
                         await bot.send_message(
                             user.telegram_id,
-                            "🔗 لینک جدید راه‌اندازی پنل نماینده:\n"
-                            f"{base}/rsetup/{token}\n\n"
-                            f"آدرس پنل: {base}\n"
-                            f"ورود: {base}/login\n\n"
-                            "۴۸ ساعت اعتبار دارد. یوزر/رمز را خودتان می‌سازید.",
+                            "\n".join(parts),
+                            parse_mode="HTML",
                         )
                     finally:
                         await bot.session.close()

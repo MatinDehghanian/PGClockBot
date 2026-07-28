@@ -19,7 +19,11 @@ def _clean_str(value: object) -> str:
 
 
 def normalize_pg_base_url(raw: str) -> str:
-    """Keep only scheme://host[:port] — drop path/query typos."""
+    """Normalize PG panel URL while preserving path.
+
+    Trims whitespace, adds https:// if scheme is missing, drops query/fragment,
+    keeps scheme://host[:port]/path exactly as configured (trailing slash removed).
+    """
     from urllib.parse import urlparse, urlunparse
 
     s = (raw or "").strip().rstrip("/")
@@ -30,7 +34,8 @@ def normalize_pg_base_url(raw: str) -> str:
     parsed = urlparse(s)
     if not parsed.scheme or not parsed.netloc:
         return s
-    return urlunparse((parsed.scheme, parsed.netloc, "", "", "", "")).rstrip("/")
+    path = (parsed.path or "").rstrip("/")
+    return urlunparse((parsed.scheme, parsed.netloc, path, "", "", "")).rstrip("/")
 
 
 def _parse_admin_ids(value: object) -> List[int]:

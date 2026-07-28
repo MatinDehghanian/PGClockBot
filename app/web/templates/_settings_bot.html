@@ -34,7 +34,8 @@
     <div class="settings-grid">
       <div class="setting-item full">
         <label>آدرس پنل (PG_BASE_URL)
-          <input name="PG_BASE_URL" value="{{ env_values.get('PG_BASE_URL','') }}" dir="ltr" required placeholder="https://panel.example.com" />
+          <small class="muted">آدرس کامل با path — مثلاً https://panel.example.com یا https://domain.com/pg</small>
+          <input name="PG_BASE_URL" value="{{ env_values.get('PG_BASE_URL','') }}" dir="ltr" required placeholder="https://panel.example.com/path" />
         </label>
       </div>
       <div class="setting-item">

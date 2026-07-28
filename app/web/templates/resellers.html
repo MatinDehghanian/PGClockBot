@@ -39,7 +39,8 @@
     </label>
     <label class="form-field">آدرس پنل پاسارگارد
       <small class="muted">
-        پیش‌فرض (پنل ادمین): <code dir="ltr">{{ default_pg_panel_url or '— تنظیم نشده —' }}</code>
+        پیش‌فرض از تنظیمات اتصال بات (با path کامل):
+        <code dir="ltr">{{ default_pg_panel_url or '— تنظیم نشده —' }}</code>
         · در حال استفاده: <code dir="ltr">{{ pg_panel_url or '—' }}</code>
         {% if using_custom_pg_panel_url %}
         · <span class="badge approved">اختصاصی</span>
@@ -70,7 +71,7 @@
 
 <div class="card">
   <h2>افزودن نماینده</h2>
-  <p class="muted">پس از ثبت، آدرس پنل و لینک راه‌اندازی برای ساخت یوزر وب و ثبت توکن ربات ارسال می‌شود.</p>
+  <p class="muted">پس از ثبت، آدرس پنل‌ها و یوزر/رمز ساخته‌شده در تلگرام ارسال می‌شود.</p>
   <form method="post" action="/resellers" class="form-stack">
     <div class="form-row">
       <div>

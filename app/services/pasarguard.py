@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import httpx
 
-from app.config import get_settings, normalize_pg_base_url
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,8 @@ class PasarGuardError(Exception):
 class PasarGuardClient:
     def __init__(self) -> None:
         self.settings = get_settings()
-        self.base_url = normalize_pg_base_url(self.settings.pg_base_url)
+        # Use settings value as-is (already normalized with path preserved)
+        self.base_url = (self.settings.pg_base_url or "").rstrip("/")
         self._token: str | None = (self.settings.pg_access_token or None) or None
         if self._token == "":
             self._token = None
@@ -29,12 +30,6 @@ class PasarGuardClient:
             timeout=30.0,
             follow_redirects=True,
         )
-        if self.base_url != (self.settings.pg_base_url or "").rstrip("/"):
-            logger.warning(
-                "PG_BASE_URL normalized: %r → %r",
-                self.settings.pg_base_url,
-                self.base_url,
-            )
 
     async def close(self) -> None:
         await self._client.aclose()

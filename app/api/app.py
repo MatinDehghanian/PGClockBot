@@ -18,7 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.config import DATA_DIR, get_settings
+from app.config import DATA_DIR, get_settings, normalize_pg_base_url
 from app.db.models import (
     BotUser,
     Order,
@@ -371,7 +371,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         if is_setup_complete():
             return RedirectResponse("/", status_code=303)
         begin_setup()
-        base = (pg_base_url or "").strip()
+        base = normalize_pg_base_url((pg_base_url or "").strip())
         if not base:
             return _setup_page(request, step=3, err="آدرس پاسارگارد الزامی است.")
         if not (pg_username or "").strip():
@@ -1709,7 +1709,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             token = str(form.get("BOT_TOKEN") or "").strip()
             uname = str(form.get("BOT_USERNAME") or "").strip().lstrip("@")
             ids_raw = str(form.get("ADMIN_IDS") or "").strip()
-            pg_base = str(form.get("PG_BASE_URL") or "").strip()
+            pg_base = normalize_pg_base_url(str(form.get("PG_BASE_URL") or "").strip())
             pg_user = str(form.get("PG_USERNAME") or "").strip()
             pg_pass = str(form.get("PG_PASSWORD") or "").strip()
             web_port = str(form.get("WEB_PORT") or "9000").strip()
