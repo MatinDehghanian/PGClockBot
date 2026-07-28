@@ -21,17 +21,148 @@ from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.pasarguard import get_pg
 from app.services.resellers import make_reseller
 from app.services.tickets import get_ticket, list_open_tickets, reply_ticket
-from app.services.users import get_setting, set_setting
+from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.updates import local_version
 
 
 def _plan_line(p: Plan) -> str:
     flag = "✅" if p.is_active else "⏸"
-    tpl = f"تمپلیت #{p.pg_template_id}" if p.pg_template_id else "بدون تمپلیت"
+    if p.pg_template_id:
+        link = f"تمپلیت #{p.pg_template_id}"
+    elif p.pg_group_ids:
+        link = f"گروه {p.pg_group_ids}"
+    else:
+        link = "⚠️ بدون اتصال پاسارگارد"
+    gb = f"{p.data_limit_gb:g}گ" if p.data_limit_gb is not None else "∞"
     return (
         f"{flag} #{p.id} {p.name} — {format_toman(p.price, get_settings().currency)} "
-        f"| {p.duration_days} روز | {tpl}"
+        f"| {p.duration_days}ر / {gb} | {link}"
     )
+
+
+def _plan_needs_link(p: Plan) -> bool:
+    return not p.pg_template_id and not (p.pg_group_ids or "").strip()
+
+
+async def _render_plans_list(callback: CallbackQuery, session: AsyncSession) -> None:
+    result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
+    plans = list(result.scalars().all())
+    lines = ["📦 <b>پلن‌ها</b>\n"]
+    if not plans:
+        lines.append("پلنی نیست.")
+    else:
+        lines.extend(_plan_line(p) for p in plans[:20])
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="➕ پلن جدید", callback_data="adm:plan:add")],
+        [InlineKeyboardButton(text="✨ پلن دلخواه (اتصال/فعال)", callback_data="adm:custom")],
+    ]
+    for p in plans[:12]:
+        warn = " ⚠️" if _plan_needs_link(p) else ""
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{'✅' if p.is_active else '⏸'} #{p.id} {p.name}{warn}"[:60],
+                    callback_data=f"adm:plan:view:{p.id}",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")])
+    if callback.message:
+        await callback.message.edit_text(
+            "\n".join(lines),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
+async def _custom_link_summary(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
+    ui = await get_all_settings(session)
+    enabled = on(ui.get("custom_plan_enabled"))
+    tpl = (ui.get("custom_plan_template_id") or "").strip()
+    groups = (ui.get("custom_plan_group_ids") or "").strip()
+    if tpl:
+        link = f"تمپلیت #{tpl}"
+    elif groups:
+        link = f"گروه‌ها: {groups}"
+    else:
+        link = "⚠️ بدون اتصال — سفارش دلخواه تحویل نمی‌شود"
+    text = (
+        "✨ <b>پلن دلخواه کاربر</b>\n\n"
+        f"وضعیت فروش: {'✅ فعال' if enabled else '⏸ خاموش'}\n"
+        f"قیمت هر گیگ: {ui.get('custom_plan_price_per_gb') or '—'} تومان\n"
+        f"قیمت هر روز: {ui.get('custom_plan_price_per_day') or '—'} تومان\n"
+        f"محدوده: {ui.get('custom_plan_min_gb') or 1}–{ui.get('custom_plan_max_gb') or 500} گیگ / "
+        f"{ui.get('custom_plan_min_days') or 1}–{ui.get('custom_plan_max_days') or 365} روز\n"
+        f"اتصال پاسارگارد: {link}\n\n"
+        "<i>قیمت و محدوده را از وب‌پنل → تنظیمات → کاربر و پلن هم می‌توانید تغییر دهید.</i>"
+    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="⏸ خاموش کردن فروش" if enabled else "▶️ روشن کردن فروش",
+                callback_data="adm:custom:toggle",
+            )
+        ],
+        [InlineKeyboardButton(text="📋 اتصال به تمپلیت", callback_data="adm:custom:picktpl")],
+        [InlineKeyboardButton(text="📁 اتصال به گروه", callback_data="adm:custom:pickgrp")],
+    ]
+    if tpl or groups:
+        rows.append(
+            [InlineKeyboardButton(text="🧹 حذف اتصال", callback_data="adm:custom:clearlink")]
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ لیست پلن‌ها", callback_data="adm:plans")])
+    return text, InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _plan_detail_text(p: Plan) -> str:
+    gb = f"{p.data_limit_gb:g} گیگ" if p.data_limit_gb is not None else "نامحدود"
+    if p.pg_template_id:
+        link = f"تمپلیت #{p.pg_template_id}"
+    elif p.pg_group_ids:
+        link = f"گروه‌ها: {p.pg_group_ids}"
+    else:
+        link = "⚠️ هنوز به تمپلیت/گروه وصل نشده — خرید تحویل نمی‌شود"
+    return (
+        f"💎 <b>پلن #{p.id}</b> — {p.name}\n\n"
+        f"قیمت: {format_toman(p.price, get_settings().currency)}\n"
+        f"مدت: {p.duration_days} روز\n"
+        f"حجم: {gb}\n"
+        f"وضعیت: {'فعال' if p.is_active else 'خاموش'}\n"
+        f"اتصال پاسارگارد: {link}"
+    )
+
+
+def _plan_detail_keyboard(p: Plan) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="⏸ خاموش" if p.is_active else "▶️ روشن",
+                callback_data=f"adm:plan:toggle:{p.id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📋 اتصال به تمپلیت",
+                callback_data=f"adm:plan:picktpl:{p.id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📁 اتصال به گروه",
+                callback_data=f"adm:plan:pickgrp:{p.id}",
+            )
+        ],
+    ]
+    if p.pg_template_id or p.pg_group_ids:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🧹 حذف اتصال پاسارگارد",
+                    callback_data=f"adm:plan:clearlink:{p.id}",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ لیست پلن‌ها", callback_data="adm:plans")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 router = Router(name="admin")
 
@@ -41,7 +172,7 @@ class AdminStates(StatesGroup):
     add_plan_price = State()
     add_plan_days = State()
     add_plan_gb = State()
-    add_plan_template = State()
+    add_plan_link = State()  # waiting for mode after basics
     set_card = State()
     set_card_holder = State()
     pg_search = State()
@@ -363,24 +494,23 @@ async def adm_plans(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
-    plans = list(result.scalars().all())
-    lines = ["📦 <b>پلن‌ها</b>\n"] + [_plan_line(p) for p in plans]
-    rows = [[InlineKeyboardButton(text="➕ پلن جدید", callback_data="adm:plan:add")]]
-    for p in plans[:10]:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{'⏸' if p.is_active else '▶️'} #{p.id}",
-                    callback_data=f"adm:plan:toggle:{p.id}",
-                )
-            ]
-        )
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")])
+    await _render_plans_list(callback, session)
+
+
+@router.callback_query(F.data.startswith("adm:plan:view:"))
+async def adm_plan_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    plan = await session.get(Plan, int(callback.data.split(":")[-1]))
+    if not plan:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await callback.answer()
     if callback.message:
         await callback.message.edit_text(
-            "\n".join(lines) or "پلنی نیست",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            await _plan_detail_text(plan),
+            reply_markup=_plan_detail_keyboard(plan),
         )
 
 
@@ -399,15 +529,19 @@ async def adm_plan_add(callback: CallbackQuery, state: FSMContext, db_user: BotU
 async def plan_name(message: Message, state: FSMContext):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.")
+        await message.answer("لغو شد.", reply_markup=kb.admin_home())
         return
-    await state.update_data(name=message.text.strip())
+    await state.update_data(name=(message.text or "").strip())
     await state.set_state(AdminStates.add_plan_price)
     await message.answer("قیمت به تومان:")
 
 
 @router.message(AdminStates.add_plan_price)
 async def plan_price(message: Message, state: FSMContext):
+    if (message.text or "").strip() == "انصراف":
+        await state.clear()
+        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        return
     try:
         price = int((message.text or "").replace(",", "").replace("٬", ""))
     except ValueError:
@@ -420,6 +554,10 @@ async def plan_price(message: Message, state: FSMContext):
 
 @router.message(AdminStates.add_plan_days)
 async def plan_days(message: Message, state: FSMContext):
+    if (message.text or "").strip() == "انصراف":
+        await state.clear()
+        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        return
     try:
         days = int(message.text or "30")
     except ValueError:
@@ -432,23 +570,36 @@ async def plan_days(message: Message, state: FSMContext):
 
 @router.message(AdminStates.add_plan_gb)
 async def plan_gb(message: Message, state: FSMContext):
+    if (message.text or "").strip() == "انصراف":
+        await state.clear()
+        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        return
     try:
         gb = float(message.text or "0")
     except ValueError:
         await message.answer("عدد معتبر")
         return
     await state.update_data(gb=None if gb <= 0 else gb)
-    await state.set_state(AdminStates.add_plan_template)
-    await message.answer("آیدی تمپلیت پاسارگارد (یا 0 برای ساخت دستی):")
+    await state.set_state(AdminStates.add_plan_link)
+    await message.answer(
+        "اتصال پاسارگارد را انتخاب کنید:",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="📋 از تمپلیت", callback_data="adm:plan:new:mode:tpl")],
+                [InlineKeyboardButton(text="📁 با گروه (سفارشی)", callback_data="adm:plan:new:mode:grp")],
+                [InlineKeyboardButton(text="❌ انصراف", callback_data="adm:plans")],
+            ]
+        ),
+    )
 
 
-@router.message(AdminStates.add_plan_template)
-async def plan_tpl(message: Message, state: FSMContext, session: AsyncSession):
-    try:
-        tpl = int(message.text or "0")
-    except ValueError:
-        await message.answer("عدد معتبر")
-        return
+async def _finish_new_plan(
+    session: AsyncSession,
+    state: FSMContext,
+    *,
+    template_id: int | None = None,
+    group_ids: str | None = None,
+) -> Plan:
     data = await state.get_data()
     await state.clear()
     plan = Plan(
@@ -456,12 +607,259 @@ async def plan_tpl(message: Message, state: FSMContext, session: AsyncSession):
         price=data["price"],
         duration_days=data["days"],
         data_limit_gb=data.get("gb"),
-        pg_template_id=tpl or None,
+        pg_template_id=template_id,
+        pg_group_ids=group_ids,
         is_active=True,
     )
     session.add(plan)
     await session.commit()
-    await message.answer(f"پلن #{plan.id} ساخته شد ✅", reply_markup=kb.admin_home())
+    await session.refresh(plan)
+    return plan
+
+
+@router.callback_query(F.data == "adm:plan:new:mode:tpl")
+async def adm_plan_new_tpl(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    if await state.get_state() != AdminStates.add_plan_link.state:
+        await callback.answer("ابتدا ساخت پلن را شروع کنید", show_alert=True)
+        return
+    await callback.answer()
+    await state.update_data(new_plan=1)
+    await _show_template_picker(callback, plan_id=0)
+
+
+@router.callback_query(F.data == "adm:plan:new:mode:grp")
+async def adm_plan_new_grp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    if await state.get_state() != AdminStates.add_plan_link.state:
+        await callback.answer("ابتدا ساخت پلن را شروع کنید", show_alert=True)
+        return
+    await callback.answer()
+    await state.update_data(new_plan=1, selected_groups=[])
+    await _show_group_picker(callback, state, plan_id=0)
+
+
+async def _show_template_picker(callback: CallbackQuery, *, plan_id: int) -> None:
+    try:
+        templates = await get_pg().get_user_templates_simple()
+    except Exception:
+        templates = []
+    rows: list[list[InlineKeyboardButton]] = []
+    for t in templates[:20]:
+        tid = t.get("id")
+        if tid is None:
+            continue
+        name = t.get("name") or f"تمپلیت {tid}"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"#{tid} — {name}"[:60],
+                    callback_data=f"adm:plan:settpl:{plan_id}:{tid}",
+                )
+            ]
+        )
+    if not rows:
+        rows.append(
+            [InlineKeyboardButton(text="تمپلیتی نیست — از وب‌پنل بسازید", callback_data="adm:plans")]
+        )
+    back = f"adm:plan:view:{plan_id}" if plan_id else "adm:plans"
+    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data=back)])
+    text = "📋 یک تمپلیت پاسارگارد انتخاب کنید:"
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+async def _show_group_picker(callback: CallbackQuery, state: FSMContext, *, plan_id: int) -> None:
+    data = await state.get_data()
+    selected = [int(x) for x in (data.get("selected_groups") or [])]
+    try:
+        groups = await get_pg().get_groups_simple()
+    except Exception:
+        groups = []
+    rows: list[list[InlineKeyboardButton]] = []
+    for g in groups[:25]:
+        gid = g.get("id")
+        if gid is None:
+            continue
+        gid = int(gid)
+        mark = "✅ " if gid in selected else ""
+        name = g.get("name") or f"گروه {gid}"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{mark}#{gid} — {name}"[:60],
+                    callback_data=f"adm:plan:toggrp:{plan_id}:{gid}",
+                )
+            ]
+        )
+    if not rows:
+        rows.append(
+            [InlineKeyboardButton(text="گروهی نیست — از وب‌پنل بسازید", callback_data="adm:plans")]
+        )
+    else:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"✅ تأیید انتخاب ({len(selected)})",
+                    callback_data=f"adm:plan:grpdone:{plan_id}",
+                )
+            ]
+        )
+    back = f"adm:plan:view:{plan_id}" if plan_id else "adm:plans"
+    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data=back)])
+    text = (
+        "📁 گروه‌های اینباند را انتخاب کنید (می‌توانید چندتا بزنید):\n"
+        f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}"
+    )
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+@router.callback_query(F.data.startswith("adm:plan:picktpl:"))
+async def adm_plan_pick_tpl(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    plan_id = int(callback.data.split(":")[-1])
+    await callback.answer()
+    await state.update_data(new_plan=0, selected_groups=[])
+    await _show_template_picker(callback, plan_id=plan_id)
+
+
+@router.callback_query(F.data.startswith("adm:plan:pickgrp:"))
+async def adm_plan_pick_grp(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    plan_id = int(callback.data.split(":")[-1])
+    plan = await session.get(Plan, plan_id)
+    selected: list[int] = []
+    if plan and plan.pg_group_ids:
+        for part in str(plan.pg_group_ids).split(","):
+            part = part.strip()
+            if part.isdigit():
+                selected.append(int(part))
+    await callback.answer()
+    await state.update_data(new_plan=0, selected_groups=selected)
+    await _show_group_picker(callback, state, plan_id=plan_id)
+
+
+@router.callback_query(F.data.startswith("adm:plan:settpl:"))
+async def adm_plan_set_tpl(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    plan_id = int(parts[-2])
+    tpl_id = int(parts[-1])
+    data = await state.get_data()
+    await callback.answer("ذخیره شد")
+    if data.get("new_plan") or plan_id == 0:
+        plan = await _finish_new_plan(session, state, template_id=tpl_id, group_ids=None)
+        if callback.message:
+            await callback.message.edit_text(
+                f"پلن #{plan.id} با تمپلیت #{tpl_id} ساخته شد ✅\n\n"
+                + await _plan_detail_text(plan),
+                reply_markup=_plan_detail_keyboard(plan),
+            )
+        return
+    plan = await session.get(Plan, plan_id)
+    if not plan:
+        return
+    plan.pg_template_id = tpl_id
+    plan.pg_group_ids = None
+    await session.commit()
+    await state.clear()
+    if callback.message:
+        await callback.message.edit_text(
+            await _plan_detail_text(plan),
+            reply_markup=_plan_detail_keyboard(plan),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:plan:toggrp:"))
+async def adm_plan_tog_grp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    plan_id = int(parts[-2])
+    gid = int(parts[-1])
+    data = await state.get_data()
+    selected = [int(x) for x in (data.get("selected_groups") or [])]
+    if gid in selected:
+        selected = [x for x in selected if x != gid]
+    else:
+        selected.append(gid)
+    await state.update_data(selected_groups=selected)
+    await callback.answer()
+    await _show_group_picker(callback, state, plan_id=plan_id)
+
+
+@router.callback_query(F.data.startswith("adm:plan:grpdone:"))
+async def adm_plan_grp_done(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    plan_id = int(callback.data.split(":")[-1])
+    data = await state.get_data()
+    selected = [int(x) for x in (data.get("selected_groups") or [])]
+    if not selected:
+        await callback.answer("حداقل یک گروه انتخاب کنید", show_alert=True)
+        return
+    group_csv = ",".join(str(x) for x in selected)
+    await callback.answer("ذخیره شد")
+    if data.get("new_plan") or plan_id == 0:
+        plan = await _finish_new_plan(session, state, template_id=None, group_ids=group_csv)
+        if callback.message:
+            await callback.message.edit_text(
+                f"پلن #{plan.id} با گروه(ها) {group_csv} ساخته شد ✅\n\n"
+                + await _plan_detail_text(plan),
+                reply_markup=_plan_detail_keyboard(plan),
+            )
+        return
+    plan = await session.get(Plan, plan_id)
+    if not plan:
+        return
+    plan.pg_template_id = None
+    plan.pg_group_ids = group_csv
+    await session.commit()
+    await state.clear()
+    if callback.message:
+        await callback.message.edit_text(
+            await _plan_detail_text(plan),
+            reply_markup=_plan_detail_keyboard(plan),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:plan:clearlink:"))
+async def adm_plan_clear_link(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    plan = await session.get(Plan, int(callback.data.split(":")[-1]))
+    if not plan:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    plan.pg_template_id = None
+    plan.pg_group_ids = None
+    await session.commit()
+    await callback.answer("اتصال حذف شد")
+    if callback.message:
+        await callback.message.edit_text(
+            await _plan_detail_text(plan),
+            reply_markup=_plan_detail_keyboard(plan),
+        )
 
 
 @router.callback_query(F.data.startswith("adm:plan:toggle:"))
@@ -476,25 +874,206 @@ async def plan_toggle(callback: CallbackQuery, session: AsyncSession, db_user: B
     plan.is_active = not plan.is_active
     await session.commit()
     await callback.answer("بروز شد")
-    result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
-    plans = list(result.scalars().all())
-    lines = ["📦 <b>پلن‌ها</b>\n"] + [_plan_line(p) for p in plans]
-    rows = [[InlineKeyboardButton(text="➕ پلن جدید", callback_data="adm:plan:add")]]
-    for p in plans[:10]:
+    # Prefer detail view if we came from there; otherwise list
+    if callback.message and callback.message.reply_markup:
+        # re-render detail when possible
+        try:
+            await callback.message.edit_text(
+                await _plan_detail_text(plan),
+                reply_markup=_plan_detail_keyboard(plan),
+            )
+            return
+        except Exception:
+            pass
+    await _render_plans_list(callback, session)
+
+
+@router.callback_query(F.data == "adm:custom")
+async def adm_custom(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await callback.answer()
+    text, markup = await _custom_link_summary(session)
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=markup)
+
+
+@router.callback_query(F.data == "adm:custom:toggle")
+async def adm_custom_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    cur = await get_setting(session, "custom_plan_enabled")
+    await set_setting(session, "custom_plan_enabled", "0" if on(cur) else "1")
+    await callback.answer("بروز شد")
+    text, markup = await _custom_link_summary(session)
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=markup)
+
+
+@router.callback_query(F.data == "adm:custom:clearlink")
+async def adm_custom_clear(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await set_setting(session, "custom_plan_template_id", "")
+    await set_setting(session, "custom_plan_group_ids", "")
+    await callback.answer("اتصال حذف شد")
+    text, markup = await _custom_link_summary(session)
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=markup)
+
+
+async def _show_custom_template_picker(callback: CallbackQuery) -> None:
+    try:
+        templates = await get_pg().get_user_templates_simple()
+    except Exception:
+        templates = []
+    rows: list[list[InlineKeyboardButton]] = []
+    for t in templates[:20]:
+        tid = t.get("id")
+        if tid is None:
+            continue
+        name = t.get("name") or f"تمپلیت {tid}"
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"{'⏸' if p.is_active else '▶️'} #{p.id}",
-                    callback_data=f"adm:plan:toggle:{p.id}",
+                    text=f"#{tid} — {name}"[:60],
+                    callback_data=f"adm:custom:settpl:{tid}",
                 )
             ]
         )
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")])
+    if not rows:
+        rows.append(
+            [InlineKeyboardButton(text="تمپلیتی نیست — از وب‌پنل بسازید", callback_data="adm:custom")]
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:custom")])
     if callback.message:
         await callback.message.edit_text(
-            "\n".join(lines) or "پلنی نیست",
+            "📋 تمپلیت پاسارگارد برای پلن دلخواه:",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
+
+
+async def _show_custom_group_picker(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    selected = [int(x) for x in (data.get("custom_selected_groups") or [])]
+    try:
+        groups = await get_pg().get_groups_simple()
+    except Exception:
+        groups = []
+    rows: list[list[InlineKeyboardButton]] = []
+    for g in groups[:25]:
+        gid = g.get("id")
+        if gid is None:
+            continue
+        gid = int(gid)
+        mark = "✅ " if gid in selected else ""
+        name = g.get("name") or f"گروه {gid}"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{mark}#{gid} — {name}"[:60],
+                    callback_data=f"adm:custom:toggrp:{gid}",
+                )
+            ]
+        )
+    if not rows:
+        rows.append(
+            [InlineKeyboardButton(text="گروهی نیست — از وب‌پنل بسازید", callback_data="adm:custom")]
+        )
+    else:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"✅ تأیید انتخاب ({len(selected)})",
+                    callback_data="adm:custom:grpdone",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:custom")])
+    text = (
+        "📁 گروه‌های اینباند برای پلن دلخواه:\n"
+        f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}"
+    )
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+@router.callback_query(F.data == "adm:custom:picktpl")
+async def adm_custom_pick_tpl(callback: CallbackQuery, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await callback.answer()
+    await _show_custom_template_picker(callback)
+
+
+@router.callback_query(F.data.startswith("adm:custom:settpl:"))
+async def adm_custom_set_tpl(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    tpl_id = callback.data.split(":")[-1]
+    await set_setting(session, "custom_plan_template_id", tpl_id)
+    await set_setting(session, "custom_plan_group_ids", "")
+    await callback.answer("ذخیره شد")
+    text, markup = await _custom_link_summary(session)
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=markup)
+
+
+@router.callback_query(F.data == "adm:custom:pickgrp")
+async def adm_custom_pick_grp(callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    groups_raw = (await get_setting(session, "custom_plan_group_ids") or "").strip()
+    selected: list[int] = []
+    for part in groups_raw.split(","):
+        part = part.strip()
+        if part.isdigit():
+            selected.append(int(part))
+    await state.update_data(custom_selected_groups=selected)
+    await callback.answer()
+    await _show_custom_group_picker(callback, state)
+
+
+@router.callback_query(F.data.startswith("adm:custom:toggrp:"))
+async def adm_custom_tog_grp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    gid = int(callback.data.split(":")[-1])
+    data = await state.get_data()
+    selected = [int(x) for x in (data.get("custom_selected_groups") or [])]
+    if gid in selected:
+        selected = [x for x in selected if x != gid]
+    else:
+        selected.append(gid)
+    await state.update_data(custom_selected_groups=selected)
+    await callback.answer()
+    await _show_custom_group_picker(callback, state)
+
+
+@router.callback_query(F.data == "adm:custom:grpdone")
+async def adm_custom_grp_done(callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    data = await state.get_data()
+    selected = [int(x) for x in (data.get("custom_selected_groups") or [])]
+    if not selected:
+        await callback.answer("حداقل یک گروه انتخاب کنید", show_alert=True)
+        return
+    await set_setting(session, "custom_plan_group_ids", ",".join(str(x) for x in selected))
+    await set_setting(session, "custom_plan_template_id", "")
+    await state.update_data(custom_selected_groups=[])
+    await callback.answer("ذخیره شد")
+    text, markup = await _custom_link_summary(session)
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=markup)
 
 
 @router.callback_query(F.data == "adm:settings")
