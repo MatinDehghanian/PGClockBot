@@ -16,21 +16,20 @@
 </div>
 
 <div class="card">
-  <h2>آدرس وب‌پنل ربات برای نماینده</h2>
+  <h2>آدرس پنل‌ها برای نماینده</h2>
   <p class="muted">
-    این آدرس در پیام تأیید نمایندگی و لینک راه‌اندازی ارسال می‌شود.
-    اگر خالی بگذارید، به‌صورت پیش‌فرض <code dir="ltr">{{ default_panel_url }}</code> استفاده می‌شود
-    (آی‌پی سرور + پورت پنل ادمین).
+    این آدرس‌ها در پیام تأیید نمایندگی ارسال می‌شوند.
+    اگر خالی بگذارید، پیش‌فرض سیستم استفاده می‌شود.
   </p>
-  <form method="post" action="/resellers/panel-url" class="form-stack">
-    <label class="form-field">آدرس پایه اختصاصی (اختیاری)
+  <form method="post" action="/resellers/panel-url" class="form-stack" id="reseller-urls-form">
+    <label class="form-field">آدرس وب‌پنل ربات (نماینده)
       <small class="muted">
-        در حال استفاده:
-        <code dir="ltr">{{ panel_url }}</code>
+        پیش‌فرض: <code dir="ltr">{{ default_panel_url }}</code>
+        · در حال استفاده: <code dir="ltr">{{ panel_url }}</code>
         {% if using_custom_panel_url %}
         · <span class="badge approved">اختصاصی</span>
         {% else %}
-        · <span class="badge pending">پیش‌فرض سیستم</span>
+        · <span class="badge pending">پیش‌فرض</span>
         {% endif %}
       </small>
       <input name="reseller_panel_base_url"
@@ -38,10 +37,32 @@
              placeholder="{{ default_panel_url }}"
              dir="ltr" />
     </label>
+    <label class="form-field">آدرس پنل پاسارگارد
+      <small class="muted">
+        پیش‌فرض (پنل ادمین): <code dir="ltr">{{ default_pg_panel_url or '— تنظیم نشده —' }}</code>
+        · در حال استفاده: <code dir="ltr">{{ pg_panel_url or '—' }}</code>
+        {% if using_custom_pg_panel_url %}
+        · <span class="badge approved">اختصاصی</span>
+        {% else %}
+        · <span class="badge pending">پیش‌فرض</span>
+        {% endif %}
+      </small>
+      <input name="reseller_pg_panel_base_url"
+             value="{{ custom_pg_panel_url or '' }}"
+             placeholder="{{ default_pg_panel_url }}"
+             dir="ltr" />
+    </label>
     <div class="actions">
-      <button class="btn" type="submit">ذخیره آدرس</button>
-      {% if custom_panel_url %}
-      <button class="btn btn-ghost" type="submit" name="reseller_panel_base_url" value="">بازگشت به پیش‌فرض</button>
+      <button class="btn" type="submit">ذخیره آدرس‌ها</button>
+      {% if custom_panel_url or custom_pg_panel_url %}
+      <button class="btn btn-ghost" type="button"
+              onclick="
+                this.form.reseller_panel_base_url.value='';
+                this.form.reseller_pg_panel_base_url.value='';
+                this.form.submit();
+              ">
+        بازگشت هر دو به پیش‌فرض
+      </button>
       {% endif %}
     </div>
   </form>

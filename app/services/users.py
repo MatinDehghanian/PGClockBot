@@ -144,8 +144,9 @@ DEFAULT_SETTINGS = {
     "user_alert_low_enabled": "0",
     "user_alert_low_traffic_pct": "20",
     "user_alert_low_time_pct": "20",
-    # Reseller panel base URL (setup links). Empty = PUBLIC_BASE_URL
+    # Reseller panel URLs (setup links + messages). Empty = system defaults
     "reseller_panel_base_url": "",
+    "reseller_pg_panel_base_url": "",
 
     "btn_shop": "🟢🛒 خرید سرویس",
     "btn_services": "🔵📦 سرویس‌های من",
@@ -301,6 +302,12 @@ SETTING_GROUPS = {
             "آدرس وب‌پنل نماینده",
             "text",
             "اختیاری. خالی = پیش‌فرض سیستم (آی‌پی سرور + پورت پنل، معمولاً :9000). در پیام تأیید برای نماینده ارسال می‌شود.",
+        ),
+        (
+            "reseller_pg_panel_base_url",
+            "آدرس پنل پاسارگارد برای نماینده",
+            "text",
+            "اختیاری. خالی = همان آدرس پنل پاسارگارد ادمین (PG_BASE_URL).",
         ),
     ],
     "هشدار سرویس کاربر": [

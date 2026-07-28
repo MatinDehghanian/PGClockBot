@@ -19,6 +19,7 @@ from app.services.resellers import (
     format_credentials_message,
     get_application,
     get_reseller_panel_base_url,
+    get_reseller_pg_panel_base_url,
     join_perms,
     list_applications,
     list_reseller_plans,
@@ -59,6 +60,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.config import get_settings
         from app.services.setup_wizard import default_panel_base_url
         from app.services.users import get_setting
 
@@ -76,6 +78,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         panel_url = await get_reseller_panel_base_url(session)
         custom_url = (await get_setting(session, "reseller_panel_base_url") or "").strip()
         default_url = default_panel_base_url()
+        pg_panel_url = await get_reseller_pg_panel_base_url(session)
+        custom_pg_url = (await get_setting(session, "reseller_pg_panel_base_url") or "").strip()
+        default_pg_url = (get_settings().pg_base_url or "").rstrip("/")
         return render(
             request,
             "resellers.html",
@@ -90,6 +95,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
                 "custom_panel_url": custom_url,
                 "default_panel_url": default_url,
                 "using_custom_panel_url": bool(custom_url),
+                "pg_panel_url": pg_panel_url,
+                "custom_pg_panel_url": custom_pg_url,
+                "default_pg_panel_url": default_pg_url,
+                "using_custom_pg_panel_url": bool(custom_pg_url),
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -104,11 +113,12 @@ def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None)
         from app.services.users import set_setting
 
         form = await request.form()
-        url = str(form.get("reseller_panel_base_url") or "").strip().rstrip("/")
-        await set_setting(session, "reseller_panel_base_url", url)
-        note = "آدرس اختصاصی ذخیره شد" if url else "آدرس اختصاصی پاک شد — از پیش‌فرض سیستم استفاده می‌شود"
+        bot_url = str(form.get("reseller_panel_base_url") or "").strip().rstrip("/")
+        pg_url = str(form.get("reseller_pg_panel_base_url") or "").strip().rstrip("/")
+        await set_setting(session, "reseller_panel_base_url", bot_url)
+        await set_setting(session, "reseller_pg_panel_base_url", pg_url)
         return RedirectResponse(
-            f"/resellers?ok={_q(note)}",
+            f"/resellers?ok={_q('آدرس‌های پنل نماینده ذخیره شد')}",
             status_code=303,
         )
 

@@ -56,6 +56,17 @@ async def get_reseller_panel_base_url(session: AsyncSession) -> str:
     return default_panel_base_url()
 
 
+async def get_reseller_pg_panel_base_url(session: AsyncSession) -> str:
+    """Custom PG panel URL for resellers → else PG_BASE_URL (admin panel)."""
+    from app.config import get_settings
+    from app.services.users import get_setting
+
+    custom = (await get_setting(session, "reseller_pg_panel_base_url") or "").strip().rstrip("/")
+    if custom:
+        return custom
+    return (get_settings().pg_base_url or "").strip().rstrip("/")
+
+
 def parse_perms(raw: str | None) -> list[str]:
     if not raw:
         return []
@@ -457,9 +468,7 @@ async def provision_reseller(
         base = await get_reseller_panel_base_url(session)
     setup_url = f"{base}/rsetup/{profile.setup_token}" if base and profile.setup_token else ""
 
-    from app.config import get_settings
-
-    pg_panel = (get_settings().pg_base_url or "").rstrip("/")
+    pg_panel = await get_reseller_pg_panel_base_url(session)
 
     return {
         "profile": profile,
@@ -475,7 +484,7 @@ async def provision_reseller(
 
 
 def format_credentials_message(creds: dict) -> str:
-    """Notify reseller after approval — always include web panel URL."""
+    """Notify reseller after approval — bot panel + PasarGuard panel URLs."""
     lines = [
         "✅ <b>درخواست نمایندگی تأیید شد</b>",
         "",
@@ -510,16 +519,22 @@ def format_credentials_message(creds: dict) -> str:
             "لینک راه‌اندازی ساخته نشد — از ادمین لینک بخواهید.",
         ]
 
+    pg_panel = (creds.get("pg_panel_url") or "").rstrip("/")
+    lines += [
+        "",
+        "🛡 <b>پنل پاسارگارد</b>",
+    ]
+    if pg_panel:
+        lines.append(f"آدرس پنل: {pg_panel}")
+    else:
+        lines.append("آدرس پاسارگارد هنوز تنظیم نشده — از ادمین بپرسید.")
+
     if creds.get("pg_username") and creds.get("pg_password"):
         lines += [
-            "",
-            "🛡 <b>اکانت پاسارگارد</b>",
             f"نام کاربری: <code>{creds['pg_username']}</code>",
             f"رمز: <code>{creds['pg_password']}</code>",
             "رمز را عوض کنید و در جای امن نگه دارید.",
         ]
-    if creds.get("pg_panel_url"):
-        lines += [f"آدرس پاسارگارد: {creds['pg_panel_url']}"]
 
     lines += [
         "",
