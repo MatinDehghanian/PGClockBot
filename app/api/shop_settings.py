@@ -154,6 +154,20 @@ def register_shop_settings(app, *, render, require_staff, get_db):
             ctx["bot_status"] = await _bot_token_status(token)
             ctx["bot_token_masked"] = ("••••" + token[-6:]) if len(token) > 8 else ("••••" if token else "")
             ctx["bot_username"] = (profile.bot_username if profile else "") or ""
+        elif tab == "appearance":
+            from app.services.bot_appearance import load_appearance_context
+
+            token = (profile.bot_token if profile else "") or ""
+            uname = (profile.bot_username if profile else "") or ""
+            ctx["bot_username"] = uname
+            ctx.update(
+                await load_appearance_context(
+                    session,
+                    token=token,
+                    reseller_id=rid,
+                    fallback_username=uname,
+                )
+            )
         elif tab == "supports":
             from app.services.support_contacts import get_support_contacts
 
@@ -219,6 +233,33 @@ def register_shop_settings(app, *, render, require_staff, get_db):
                     status_code=303,
                 )
             return RedirectResponse("/shop-settings?tab=bot&saved=1", status_code=303)
+
+        if tab == "appearance":
+            from app.services.bot_appearance import save_appearance_from_form
+
+            token = (profile.bot_token or "").strip()
+            if not token:
+                return RedirectResponse(
+                    "/shop-settings?tab=appearance&err="
+                    + quote("ابتدا توکن ربات اختصاصی را در تب «ربات اختصاصی» ذخیره کنید"),
+                    status_code=303,
+                )
+            ok, msg = await save_appearance_from_form(
+                session,
+                form,
+                token=token,
+                reseller_id=rid,
+                upload_prefix=f"r{rid}",
+            )
+            if not ok:
+                return RedirectResponse(
+                    "/shop-settings?tab=appearance&err=" + quote(msg),
+                    status_code=303,
+                )
+            return RedirectResponse(
+                "/shop-settings?tab=appearance&saved=1&msg=" + quote(msg),
+                status_code=303,
+            )
 
         known = keys_for_tab(tab)
         if tab == "menu":

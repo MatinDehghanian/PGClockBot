@@ -236,6 +236,13 @@ DEFAULT_SETTINGS = {
     # Reseller panel URLs (setup links + messages). Empty = system defaults
     "reseller_panel_base_url": "",
     "reseller_pg_panel_base_url": "",
+    # Cached Telegram bot profile (synced via appearance tab → Bot API)
+    "bot_tg_name": "",
+    "bot_tg_description": "",
+    "bot_tg_short_description": "",
+    "bot_tg_photo": "",
+    "bot_cmd_start": "شروع / منو",
+    "bot_cmd_help": "راهنما",
 
     "btn_shop": "🟢🛒 خرید سرویس",
     "btn_services": "🔵📦 سرویس‌های من",
@@ -312,6 +319,7 @@ DEFAULT_SETTINGS = {
 # Tabs for /settings?tab=... (order matches product IA)
 SETTINGS_TABS: list[tuple[str, str]] = [
     ("welcome", "خوش‌آمد و هویت"),
+    ("appearance", "ظاهر ربات"),
     ("messages", "متن پیام‌ها"),
     ("buttons", "متن دکمه‌ها"),
     ("menu", "منوی بات"),
@@ -510,6 +518,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "backup": [],
     "update": [],
     "bot": [],
+    "appearance": [],
 }
 
 TOGGLE_KEYS = {

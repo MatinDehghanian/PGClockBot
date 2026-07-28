@@ -47,6 +47,7 @@ DEFAULT_BOT_PERMS = DEFAULT_FEATURE_PERMS
 # Tabs a reseller may edit for their own shop bot
 RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("welcome", "خوش‌آمد و هویت"),
+    ("appearance", "ظاهر ربات"),
     ("messages", "متن پیام‌ها"),
     ("buttons", "متن دکمه‌ها"),
     ("menu", "منوی بات"),

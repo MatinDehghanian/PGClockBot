@@ -1818,6 +1818,18 @@ def create_api_app(lifespan=None) -> FastAPI:
             env_values = current_setup_values()
             ctx["env_values"] = env_values
             ctx["bot_status"] = await _bot_token_status(env_values.get("BOT_TOKEN") or "")
+        elif tab == "appearance":
+            from app.services.bot_appearance import load_appearance_context
+            from app.services.setup_wizard import current_setup_values
+
+            env_values = current_setup_values()
+            token = (env_values.get("BOT_TOKEN") or "").strip()
+            uname = (env_values.get("BOT_USERNAME") or "").strip()
+            ctx.update(
+                await load_appearance_context(
+                    session, token=token, fallback_username=uname
+                )
+            )
         elif tab == "supports":
             from app.services.support_contacts import get_support_contacts
 
@@ -1921,6 +1933,24 @@ def create_api_app(lifespan=None) -> FastAPI:
             schedule_panel_restart(delay_sec=2.5, reason="bot settings saved")
             return RedirectResponse(
                 "/settings?tab=bot&restarting=1",
+                status_code=303,
+            )
+
+        if tab == "appearance":
+            from app.services.bot_appearance import save_appearance_from_form
+            from app.services.setup_wizard import current_setup_values
+
+            token = (current_setup_values().get("BOT_TOKEN") or "").strip()
+            ok, msg = await save_appearance_from_form(
+                session, form, token=token, upload_prefix="main"
+            )
+            if not ok:
+                return RedirectResponse(
+                    "/settings?tab=appearance&err=" + quote(msg),
+                    status_code=303,
+                )
+            return RedirectResponse(
+                "/settings?tab=appearance&saved=1&msg=" + quote(msg),
                 status_code=303,
             )
 
