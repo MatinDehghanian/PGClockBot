@@ -30,7 +30,7 @@
 <div class="flash warn">{{ update_info.label }}</div>
 {% endif %}
 
-<div class="card update-card" id="upd-root"
+<div class="card" id="upd-root"
      data-remote="{{ update_info.remote_version or '' }}"
      data-can-start="{{ '1' if available else '0' }}"
      data-running="{{ '1' if running else '0' }}"
@@ -72,7 +72,7 @@
   </div>
 
   <div class="actions update-actions">
-    <button type="button" class="btn {% if available or has_error %}btn-ok{% endif %}" id="upd-start"
+    <button type="button" class="btn" id="upd-start"
       {% if not available and not has_error and not running %}disabled{% endif %}>
       {% if running %}در حال اجرا…
       {% elif has_error %}تلاش دوباره
@@ -183,9 +183,10 @@
       rollbackBtns().forEach(b => { b.disabled = false; });
     } else if (st.state === 'error') {
       if (startBtn) {
+        startBtn.classList.remove('btn-ok');
+        startBtn.classList.add('btn');
         startBtn.disabled = false;
         startBtn.textContent = 'تلاش دوباره';
-        startBtn.classList.add('btn-ok');
       }
       canStart = true;
       rollbackBtns().forEach(b => { b.disabled = false; });

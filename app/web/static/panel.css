@@ -155,9 +155,10 @@ a:hover { opacity: 0.8; }
 }
 .nav-item:hover { background: var(--bg-hover); color: var(--foreground); opacity: 1; }
 .nav-item.active {
-  background: rgba(249, 115, 22, 0.1);
-  color: var(--brand-fg);
-  border-color: rgba(249, 115, 22, 0.35);
+  background: var(--muted);
+  color: var(--foreground);
+  border-color: transparent;
+  font-weight: 600;
 }
 .side-user {
   display: none;
@@ -224,7 +225,7 @@ a:hover { opacity: 0.8; }
   margin-bottom: 20px;
   width: 100%;
 }
-.stat, .card, .glass-panel {
+.stat, .card {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -245,7 +246,7 @@ a:hover { opacity: 0.8; }
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
-.card, .glass-panel {
+.card {
   padding: 18px;
   margin-bottom: 16px;
   width: 100%;
@@ -347,8 +348,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 }
 .checks input { width: auto; min-height: 0; margin: 0; }
 
-.btn, button.btn, button[type=submit], a.btn,
-.btn-sm, .btn.sm, a.btn-sm {
+.btn, a.btn, .btn-sm, a.btn-sm {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -368,7 +368,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   background: rgba(59, 130, 246, 0.12);
   box-sizing: border-box;
 }
-.btn:hover, button.btn:hover, button[type=submit]:hover, a.btn:hover {
+.btn:hover, a.btn:hover {
   background: rgba(59, 130, 246, 0.2);
   opacity: 1;
 }
@@ -376,36 +376,30 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   opacity: 0.45;
   cursor: not-allowed;
 }
+/* Secondary / shortcuts — سفید خنثی */
 .btn-ghost {
-  color: var(--muted-fg) !important;
+  color: var(--foreground) !important;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.04);
   font-weight: 500;
 }
-.btn-ghost:hover { background: rgba(255, 255, 255, 0.07); color: var(--foreground) !important; opacity: 1; }
-.btn-danger, .btn-remove {
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--foreground) !important;
+  opacity: 1;
+}
+.btn-danger {
   color: var(--destructive-fg) !important;
   border: 1px solid rgba(239, 68, 68, 0.42);
   background: rgba(239, 68, 68, 0.12);
 }
-.btn-danger:hover, .btn-remove:hover { background: rgba(239, 68, 68, 0.2); opacity: 1; }
-.btn-ok, .btn-add {
+.btn-danger:hover { background: rgba(239, 68, 68, 0.2); opacity: 1; }
+.btn-ok {
   color: var(--ok-fg) !important;
   border: 1px solid rgba(34, 197, 94, 0.42);
   background: rgba(34, 197, 94, 0.12);
 }
-.btn-ok:hover, .btn-add:hover { background: rgba(34, 197, 94, 0.2); opacity: 1; }
-.btn-brand {
-  color: var(--brand-fg) !important;
-  border: 1px solid rgba(249, 115, 22, 0.42);
-  background: rgba(249, 115, 22, 0.12);
-}
-.btn-brand:hover { background: rgba(249, 115, 22, 0.2); opacity: 1; }
-.btn-warn {
-  color: var(--warn-fg) !important;
-  border: 1px solid rgba(234, 179, 8, 0.42);
-  background: rgba(234, 179, 8, 0.12);
-}
+.btn-ok:hover { background: rgba(34, 197, 94, 0.2); opacity: 1; }
 
 .icon-btn {
   display: inline-grid;
@@ -417,8 +411,8 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   font-weight: 600;
   cursor: pointer;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--muted-fg);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--foreground);
 }
 .icon-btn .ico {
   width: 14px;
@@ -430,9 +424,9 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   stroke-linejoin: round;
 }
 .icon-btn.icon-move {
-  color: var(--info-fg);
-  border-color: rgba(59, 130, 246, 0.35);
-  background: rgba(59, 130, 246, 0.1);
+  color: var(--foreground);
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.04);
 }
 .icon-btn.icon-add {
   color: var(--ok-fg);
@@ -467,14 +461,14 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   min-height: var(--btn-h);
   padding: 0 12px;
   border-radius: var(--radius);
-  border: 1px solid rgba(59, 130, 246, 0.35);
-  background: rgba(59, 130, 246, 0.1);
-  color: var(--info-fg);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--foreground);
   font-weight: 500;
   font-size: 13px;
   text-align: center;
 }
-.quick-links a:hover { background: rgba(59, 130, 246, 0.18); opacity: 1; }
+.quick-links a:hover { background: rgba(255, 255, 255, 0.09); opacity: 1; }
 
 .table-wrap {
   display: block;
@@ -488,16 +482,6 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   position: relative;
   scrollbar-gutter: stable;
 }
-.h-scroll {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
-  padding-bottom: 2px;
-}
-.h-scroll > * { flex: 0 0 auto; }
 .card > .table-wrap {
   border: 0;
   border-radius: 0;
@@ -631,13 +615,6 @@ tr:last-child td { border-bottom: 0; }
 .auth-form label { margin: 0; }
 .auth-form .btn { width: 100%; height: var(--btn-h); margin-top: 4px; }
 .auth-foot { text-align: center; color: var(--muted-fg); font-size: 12px; }
-.auth-box {
-  width: min(380px, 100%);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-}
 .error {
   background: rgba(239, 68, 68, 0.1);
   color: #fca5a5;
@@ -815,9 +792,10 @@ tr:last-child td { border-bottom: 0; }
 }
 .section-tabs a:hover { color: var(--foreground); background: rgba(255, 255, 255, 0.07); opacity: 1; }
 .section-tabs a.active {
-  background: rgba(249, 115, 22, 0.12);
-  color: var(--brand-fg);
-  border: 1px solid rgba(249, 115, 22, 0.4);
+  background: var(--muted);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  font-weight: 600;
 }
 
 /* Update page helpers */
@@ -999,12 +977,9 @@ tr:last-child td { border-bottom: 0; }
   pointer-events: auto;
 }
 
-.mobile-only { display: none !important; }
-
 /* —— Mobile layout: toolbar + hamburger drawer —— */
 @media (max-width: 900px) {
   .desk-only { display: none !important; }
-  /* فقط تولبار — نه backdrop (قبلاً flex!important کل صفحه را قفل می‌کرد) */
   .topbar.mobile-only { display: flex !important; }
 
   .shell {
@@ -1055,7 +1030,7 @@ tr:last-child td { border-bottom: 0; }
   .stat { min-height: 72px; padding: 12px; }
   .stat strong { font-size: 18px; }
   .dash-cols { grid-template-columns: 1fr; gap: 12px; }
-  .card, .glass-panel { padding: 14px; margin-bottom: 12px; }
+  .card { padding: 14px; margin-bottom: 12px; }
   .settings-grid, .dnd-cols, .update-meta { grid-template-columns: 1fr; }
   .quick-links { grid-template-columns: 1fr 1fr; gap: 8px; }
   .quick-links a { height: var(--btn-h); min-height: var(--btn-h); }
@@ -1085,9 +1060,6 @@ tr:last-child td { border-bottom: 0; }
     padding: 8px 12px 10px;
     border-top: 1px solid var(--border);
     background: var(--bg-card);
-  }
-  .table-scroll {
-    position: relative;
   }
   table { min-width: 560px; }
   th, td { padding: 10px; font-size: 12px; }

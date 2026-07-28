@@ -60,8 +60,6 @@ NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
     ),
 ]
 
-NOTIFY_KEYS = {item[0] for item in NOTIFY_PREFS}
-
 
 async def get_notify_prefs(session: AsyncSession) -> dict[str, bool]:
     ui = await get_all_settings(session)

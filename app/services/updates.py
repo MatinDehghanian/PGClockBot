@@ -74,10 +74,6 @@ async def check_github_update(*, timeout: float = 4.0, force: bool = False) -> d
                 result["update_available"] = True
                 result["label"] = f"آپدیت {remote} آماده است"
                 result["tone"] = "err"
-            elif remote and remote != local:
-                # local ahead of remote (dev/feature) or equal after normalize mismatch
-                result["label"] = "آخرین نسخه"
-                result["tone"] = "ok"
             else:
                 result["label"] = "آخرین نسخه"
                 result["tone"] = "ok"

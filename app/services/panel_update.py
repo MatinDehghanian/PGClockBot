@@ -292,7 +292,7 @@ def _git_head() -> tuple[str, str]:
     root = _repo_root()
     code, sha = _run([git, "rev-parse", "HEAD"], cwd=root)
     sha = (sha or "").strip()
-    code2, branch = _run([git, "rev-parse", "--abbrev-ref", "HEAD"], cwd=root)
+    _, branch = _run([git, "rev-parse", "--abbrev-ref", "HEAD"], cwd=root)
     branch = (branch or "main").strip() or "main"
     if branch == "HEAD":
         branch = "detached"
@@ -357,6 +357,16 @@ def get_snapshot(snapshot_id: str) -> dict[str, Any] | None:
         if item.get("id") == snapshot_id or item.get("sha") == snapshot_id:
             return item
     return None
+
+
+def _read_local_version_file(root: Path) -> str | None:
+    ver_file = root / "VERSION"
+    if not ver_file.exists():
+        return None
+    try:
+        return ver_file.read_text(encoding="utf-8").strip().splitlines()[0].strip() or None
+    except Exception:
+        return None
 
 
 def _finish_ok(message: str) -> None:
@@ -493,12 +503,8 @@ def _do_update(target_version: str | None) -> None:
             raise RuntimeError(f"pip install ناموفق: {out[:400]}")
         _append_log("وابستگی‌ها نصب شد")
 
-        ver_file = root / "VERSION"
-        new_ver = (
-            ver_file.read_text(encoding="utf-8").strip().splitlines()[0].strip()
-            if ver_file.exists()
-            else target_version
-        )
+        ver_file_ver = _read_local_version_file(root)
+        new_ver = ver_file_ver or target_version
         write_status({"to_version": new_ver or target_version})
 
         _set_step("restart", "راه‌اندازی مجدد…")
@@ -591,12 +597,7 @@ def _do_rollback(snapshot_id: str) -> None:
         if code != 0:
             raise RuntimeError(f"pip install ناموفق: {out[:400]}")
 
-        ver_file = root / "VERSION"
-        new_ver = (
-            ver_file.read_text(encoding="utf-8").strip().splitlines()[0].strip()
-            if ver_file.exists()
-            else snap.get("version")
-        )
+        new_ver = _read_local_version_file(root) or snap.get("version")
         write_status({"to_version": new_ver})
 
         _set_step("restart", "راه‌اندازی مجدد…")
@@ -621,12 +622,10 @@ def _start_thread(target, *args) -> dict[str, Any]:
     return {"ok": True, "status": read_status()}
 
 
-def clear_idle_status(*, keep_if_update: bool = False) -> dict[str, Any]:
-    """Hide stale logs/progress when there is nothing to show."""
+def clear_idle_status() -> dict[str, Any]:
+    """Reset stale logs/progress when there is nothing active to show."""
     st = read_status()
     if st.get("state") == "running":
-        return st
-    if keep_if_update and st.get("state") == "error":
         return st
     if st.get("state") in {"idle", None} and not st.get("log") and not st.get("error"):
         return st
