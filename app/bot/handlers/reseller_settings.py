@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.tg_utils import safe_edit_text
-from app.db.models import BotUser, Role
+from app.db.models import BotUser
 from app.services.resellers import get_reseller_profile, has_bot_perm
 from app.services.support_contacts import (
     delete_support_contact,
@@ -175,11 +175,24 @@ def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-async def _gate(session: AsyncSession, db_user: BotUser):
-    if db_user.role != Role.RESELLER.value:
+async def _gate(
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.reseller_access import load_reseller_actor
+
+    owner_id, profile = await load_reseller_actor(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not owner_id or not profile:
         return None, "فقط نمایندگان"
-    profile = await get_reseller_profile(session, db_user.id)
-    if not profile or not has_bot_perm(profile, "shop_settings"):
+    if not has_bot_perm(profile, "shop_settings"):
         return None, "دسترسی تنظیمات فروشگاه ندارید"
     return profile, None
 
@@ -346,8 +359,10 @@ def _owner_screen_for_key(key: str) -> tuple[str, str] | None:
 
 
 @router.callback_query(F.data == "res:st:hub")
-async def settings_hub(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
-    profile, err = await _gate(session, db_user)
+async def settings_hub(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if err:
         await callback.answer(err, show_alert=True)
         return
@@ -357,8 +372,10 @@ async def settings_hub(callback: CallbackQuery, session: AsyncSession, db_user: 
 
 
 @router.callback_query(F.data.startswith("res:st:sec:"))
-async def settings_section(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    profile, err = await _gate(session, db_user)
+async def settings_section(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if err:
         await callback.answer(err, show_alert=True)
         return
@@ -368,8 +385,10 @@ async def settings_section(callback: CallbackQuery, session: AsyncSession, db_us
 
 
 @router.callback_query(F.data.startswith("res:st:sub:"))
-async def settings_sub(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    profile, err = await _gate(session, db_user)
+async def settings_sub(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if err:
         await callback.answer(err, show_alert=True)
         return
@@ -380,8 +399,10 @@ async def settings_sub(callback: CallbackQuery, session: AsyncSession, db_user: 
 
 
 @router.callback_query(F.data.startswith("res:st:tog:"))
-async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    profile, err = await _gate(session, db_user)
+async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if err:
         await callback.answer(err, show_alert=True)
         return
@@ -401,9 +422,11 @@ async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_use
 
 @router.callback_query(F.data.startswith("res:st:edit:"))
 async def settings_edit_ask(
-    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
-    profile, err = await _gate(session, db_user)
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if err:
         await callback.answer(err, show_alert=True)
         return
@@ -425,8 +448,10 @@ async def settings_edit_ask(
 
 
 @router.message(ResellerSettingsStates.edit_value)
-async def settings_edit_save(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    profile, err = await _gate(session, db_user)
+async def settings_edit_save(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if err:
         await state.clear()
         await message.answer(err)
@@ -450,8 +475,10 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
 
 
 @router.callback_query(F.data == "res:st:sup:add")
-async def support_add(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    profile, err = await _gate(session, db_user)
+async def support_add(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if err:
         await callback.answer(err, show_alert=True)
         return
@@ -463,8 +490,10 @@ async def support_add(callback: CallbackQuery, state: FSMContext, session: Async
 
 
 @router.message(ResellerSettingsStates.support_title)
-async def support_title_save(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    profile, err = await _gate(session, db_user)
+async def support_title_save(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if err:
         await state.clear()
         return
@@ -479,8 +508,10 @@ async def support_title_save(message: Message, state: FSMContext, session: Async
 
 
 @router.message(ResellerSettingsStates.support_telegram)
-async def support_telegram_save(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    profile, err = await _gate(session, db_user)
+async def support_telegram_save(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if err:
         await state.clear()
         return
@@ -509,8 +540,10 @@ async def support_telegram_save(message: Message, state: FSMContext, session: As
 
 
 @router.callback_query(F.data.startswith("res:st:sup:del:"))
-async def support_del(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    profile, err = await _gate(session, db_user)
+async def support_del(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if err:
         await callback.answer(err, show_alert=True)
         return
@@ -521,8 +554,10 @@ async def support_del(callback: CallbackQuery, session: AsyncSession, db_user: B
 
 
 @router.callback_query(F.data == "res:st:bot:token")
-async def bot_token_ask(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    profile, err = await _gate(session, db_user)
+async def bot_token_ask(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if err:
         await callback.answer(err, show_alert=True)
         return
@@ -537,8 +572,10 @@ async def bot_token_ask(callback: CallbackQuery, state: FSMContext, session: Asy
 
 
 @router.message(ResellerSettingsStates.bot_token)
-async def bot_token_save(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    profile, err = await _gate(session, db_user)
+async def bot_token_save(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if err:
         await state.clear()
         return

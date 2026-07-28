@@ -1,5 +1,5 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch, switch_chip, pg_tabs %}
+{% from "macros.html" import switch, switch_chip, pg_tabs, row_actions %}
 {% block title %}گروه‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -44,24 +44,24 @@
   <p class="muted">گروهی نیست.</p>
   {% else %}
   <div class="table-wrap">
-  <table>
-    <thead><tr><th>شناسه</th><th>نام</th><th>اینباندها</th><th>کاربران</th><th>وضعیت</th><th></th></tr></thead>
+  <table class="table-compact">
+    <thead><tr><th>شناسه</th><th>نام</th><th class="col-hide-sm">اینباندها</th><th class="col-hide-sm">کاربران</th><th>وضعیت</th><th class="col-actions"></th></tr></thead>
     <tbody>
     {% for g in groups %}
       <tr>
         <td class="mono">{{ g.get('id') }}</td>
         <td>{{ g.get('name') }}</td>
-        <td class="mono muted">{{ g.get('inbound_tags') or '—' }}</td>
-        <td class="mono">{{ g.get('total_users') if g.get('total_users') is not none else '—' }}</td>
+        <td class="mono muted col-hide-sm">{{ g.get('inbound_tags') or '—' }}</td>
+        <td class="mono col-hide-sm">{{ g.get('total_users') if g.get('total_users') is not none else '—' }}</td>
         <td>{% if g.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
-        <td>
+        <td class="col-actions">
           {% if can_write %}
-          <div class="actions" style="margin:0">
+          {% call row_actions() %}
             <a class="btn btn-ghost btn-sm" href="/pg/groups?edit={{ g.get('id') }}">ویرایش</a>
             <form method="post" action="/pg/groups/{{ g.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
-              <button class="icon-btn icon-remove" type="submit" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+              <button class="btn btn-sm btn-danger" type="submit">حذف</button>
             </form>
-          </div>
+          {% endcall %}
           {% endif %}
         </td>
       </tr>

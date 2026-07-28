@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros.html" import row_actions %}
 {% block title %}کاربران بات{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -9,16 +10,22 @@
 </div>
 <div class="card card-flush">
   <div class="table-wrap">
-  <table>
+  <table class="table-compact">
     <thead>
       <tr>
-        <th>#</th><th>تلگرام</th><th>نام</th><th>نقش</th><th>کیف پول</th><th>وضعیت</th><th>عملیات</th>
+        <th class="col-hide-sm">#</th>
+        <th>تلگرام</th>
+        <th>نام</th>
+        <th>نقش</th>
+        <th class="col-hide-sm">کیف پول</th>
+        <th>وضعیت</th>
+        <th class="col-actions"></th>
       </tr>
     </thead>
     <tbody>
     {% for u in users %}
       <tr>
-        <td class="mono">{{ u.id }}</td>
+        <td class="mono col-hide-sm">{{ u.id }}</td>
         <td class="mono">{{ u.telegram_id }}</td>
         <td>{{ u.full_name or u.username or "—" }}</td>
         <td>
@@ -26,7 +33,7 @@
             {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
           </span>
         </td>
-        <td class="mono">{{ u.wallet_balance | num }}</td>
+        <td class="mono col-hide-sm">{{ u.wallet_balance | num }}</td>
         <td>
           {% if u.is_blocked %}
           <span class="badge blocked">مسدود</span>
@@ -34,9 +41,9 @@
           <span class="badge active">فعال</span>
           {% endif %}
         </td>
-        <td>
-          <div class="actions" style="margin:0">
-            <form method="post" action="/users/{{ u.id }}/role" style="display:flex;gap:6px;align-items:center">
+        <td class="col-actions">
+          {% call row_actions() %}
+            <form method="post" action="/users/{{ u.id }}/role" class="row-actions-stack">
               <select name="role" class="select-sm">
                 <option value="user" {% if u.role=='user' %}selected{% endif %}>کاربر</option>
                 <option value="reseller" {% if u.role=='reseller' %}selected{% endif %}>نماینده</option>
@@ -55,7 +62,7 @@
               <button class="btn btn-sm btn-danger" type="submit">حذف</button>
             </form>
             {% endif %}
-          </div>
+          {% endcall %}
         </td>
       </tr>
     {% else %}

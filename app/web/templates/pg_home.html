@@ -19,44 +19,66 @@
 {% if not is_admin %}
   {% set ov = reseller_overview or {} %}
   {% if ov.ready %}
-  <div class="stats-grid pg-reseller-stats">
-    {% if ov.users %}
-    <div class="stat">
-      <span>کاربران VPN</span>
-      <strong>{{ ov.users.used_text }}{% if ov.users.has_limit %} / {{ ov.users.limit_text }}{% endif %}</strong>
-      {% if ov.users.has_limit %}
-      <small class="muted">باقی‌مانده: {{ ov.users.remain_text }}</small>
-      <div class="meter" aria-hidden="true"><i style="width:{{ '%.1f'|format(ov.users.pct or 0) }}%"></i></div>
-      {% else %}
-      <small class="muted">بدون سقف کاربر</small>
-      {% endif %}
-    </div>
+  {% if ov.username %}
+  <div class="pg-admin-head">
+    <strong class="pg-admin-name" dir="ltr">{{ ov.username }}</strong>
+    {% if ov.status_label %}
+    <span class="badge {{ ov.status_badge or 'neutral' }}">{{ ov.status_label }}</span>
     {% endif %}
+  </div>
+  {% endif %}
+  <div class="stats-grid pg-reseller-stats">
     {% if ov.traffic %}
     <div class="stat">
-      <span>حجم</span>
-      <strong>{{ ov.traffic.used_text }}{% if ov.traffic.has_limit %} / {{ ov.traffic.limit_text }}{% endif %}</strong>
+      <span>حجم کل</span>
+      <strong>{{ ov.traffic.limit_text if ov.traffic.has_limit else 'نامحدود' }}</strong>
+      {% if not ov.traffic.has_limit and ov.lifetime_text %}
+      <small class="muted">lifetime: {{ ov.lifetime_text }}</small>
+      {% endif %}
+    </div>
+    <div class="stat">
+      <span>حجم باقیمانده</span>
+      <strong>{% if ov.traffic.has_limit %}{{ ov.traffic.remain_text }}{% else %}—{% endif %}</strong>
       {% if ov.traffic.has_limit %}
-      <small class="muted">باقی‌مانده: {{ ov.traffic.remain_text }}</small>
+      <small class="muted">مصرف‌شده: {{ ov.traffic.used_text }}</small>
       <div class="meter" aria-hidden="true"><i style="width:{{ '%.1f'|format(ov.traffic.pct or 0) }}%"></i></div>
       {% else %}
-      <small class="muted">بدون سقف حجم{% if ov.lifetime_text %} · lifetime: {{ ov.lifetime_text }}{% endif %}</small>
+      <small class="muted">مصرف‌شده: {{ ov.traffic.used_text }}</small>
       {% endif %}
     </div>
     {% endif %}
     {% if ov.time and ov.time.has_limit %}
     <div class="stat">
-      <span>زمان</span>
-      <strong>{% if ov.time.used_sec is not none %}{{ ov.time.used_text }} / {% endif %}تا {{ ov.time.expire_text }}</strong>
-      <small class="muted">باقی‌مانده: {{ ov.time.remain_text }}</small>
+      <span>زمان کل</span>
+      <strong>{{ ov.time.total_text or ov.time.expire_text }}</strong>
+      {% if ov.time.expire_text and ov.time.total_text %}
+      <small class="muted">انقضا: {{ ov.time.expire_text }}</small>
+      {% endif %}
+    </div>
+    <div class="stat">
+      <span>زمان باقیمانده</span>
+      <strong>{{ ov.time.remain_text }}</strong>
       {% if ov.time.pct is not none %}
       <div class="meter" aria-hidden="true"><i style="width:{{ '%.1f'|format(ov.time.pct or 0) }}%"></i></div>
       {% endif %}
     </div>
+    {% else %}
+    <div class="stat">
+      <span>زمان کل</span>
+      <strong>نامحدود</strong>
+    </div>
+    <div class="stat">
+      <span>زمان باقیمانده</span>
+      <strong>—</strong>
+    </div>
     {% endif %}
   </div>
-  {% if ov.username %}
-  <p class="muted" style="margin-top:-6px;margin-bottom:14px">ادمین پاسارگارد: <code dir="ltr">{{ ov.username }}</code>{% if ov.status %} · وضعیت: {{ ov.status }}{% endif %}</p>
+  {% if ov.users %}
+  <p class="muted pg-users-line">
+    کاربران VPN:
+    <strong>{{ ov.users.used_text }}{% if ov.users.has_limit %} / {{ ov.users.limit_text }}{% endif %}</strong>
+    {% if ov.users.has_limit %} · باقی‌مانده {{ ov.users.remain_text }}{% else %} · بدون سقف{% endif %}
+  </p>
   {% endif %}
   {% elif ov.error %}
   <div class="flash warn">{{ ov.error }}</div>

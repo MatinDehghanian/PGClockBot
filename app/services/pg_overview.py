@@ -133,17 +133,21 @@ def _time_meter(expire_raw: Any, created_raw: Any = None) -> dict[str, Any] | No
     created = parse_expire(created_raw) if created_raw is not None else None
     used_sec = None
     pct = None
+    total_sec = None
     if created is not None:
         if created.tzinfo is None:
             created = created.replace(tzinfo=timezone.utc)
-        total = max(1.0, (exp - created).total_seconds())
-        used_sec = max(0.0, min(total, (now - created).total_seconds()))
-        pct = min(100.0, (used_sec / total) * 100.0)
-        remain_sec = max(0.0, total - used_sec)
+        total_sec = max(1.0, (exp - created).total_seconds())
+        used_sec = max(0.0, min(total_sec, (now - created).total_seconds()))
+        pct = min(100.0, (used_sec / total_sec) * 100.0)
+        remain_sec = max(0.0, total_sec - used_sec)
+    expire_text = format_expire(expire_raw)
     return {
         "label": "زمان",
         "has_limit": True,
-        "expire_text": format_expire(expire_raw),
+        "expire_text": expire_text,
+        "total_sec": total_sec,
+        "total_text": _format_duration(total_sec) if total_sec is not None else expire_text,
         "remain_sec": remain_sec,
         "remain_text": _format_duration(remain_sec) if remain_sec > 0 else "منقضی",
         "used_sec": used_sec,
@@ -152,6 +156,24 @@ def _time_meter(expire_raw: Any, created_raw: Any = None) -> dict[str, Any] | No
         "used_label": "مصرف‌شده",
         "remain_label": "باقی‌مانده",
     }
+
+
+_STATUS_LABELS = {
+    "active": ("فعال", "active"),
+    "limited": ("محدود", "warn"),
+    "disabled": ("غیرفعال", "danger"),
+    "expired": ("منقضی", "danger"),
+    "on_hold": ("معلق", "warn"),
+}
+
+
+def _status_meta(raw: Any) -> tuple[str | None, str | None]:
+    if raw is None or raw == "":
+        return None, None
+    key = str(raw).strip().lower()
+    if key in _STATUS_LABELS:
+        return _STATUS_LABELS[key]
+    return str(raw), "neutral"
 
 
 async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
@@ -165,6 +187,8 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
         "traffic": None,
         "time": None,
         "status": None,
+        "status_label": None,
+        "status_badge": None,
         "lifetime_text": None,
     }
     if not owner:
@@ -197,7 +221,11 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
         lifetime = _as_int(admin.get("lifetime_used_traffic"))
 
         out["ready"] = True
-        out["status"] = admin.get("status") or ("limited" if admin.get("is_limited") else None)
+        status_raw = admin.get("status") or ("limited" if admin.get("is_limited") else None)
+        out["status"] = status_raw
+        label, badge = _status_meta(status_raw)
+        out["status_label"] = label
+        out["status_badge"] = badge
         out["users"] = _meter(
             label="کاربران VPN",
             used=total_users,

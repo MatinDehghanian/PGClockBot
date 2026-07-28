@@ -17,9 +17,9 @@ from app.db.models import (
     TicketStatus,
 )
 from app.services.formatting import format_message, format_toman, order_status_fa
+from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import (
     create_application,
-    get_reseller_profile,
     has_bot_perm,
     list_active_reseller_plans,
 )
@@ -29,12 +29,35 @@ from app.services.users import get_all_settings, on
 router = Router(name="reseller")
 
 
+async def _actor(
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    return await load_reseller_actor(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+
+
 @router.callback_query(F.data == "res:home")
-async def res_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if db_user.role != Role.RESELLER.value:
+async def res_home(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
-    profile = await get_reseller_profile(session, db_user.id)
     await callback.answer()
     if callback.message:
         await safe_edit_text(
@@ -45,27 +68,35 @@ async def res_home(callback: CallbackQuery, session: AsyncSession, db_user: BotU
 
 
 @router.callback_query(F.data == "res:dash")
-async def res_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if db_user.role != Role.RESELLER.value:
+async def res_dash(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
-    profile = await get_reseller_profile(session, db_user.id)
-    if not profile or not has_bot_perm(profile, "dashboard"):
+    if not has_bot_perm(profile, "dashboard"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
     users_n = await session.scalar(
-        select(func.count()).select_from(BotUser).where(BotUser.reseller_id == db_user.id)
+        select(func.count()).select_from(BotUser).where(BotUser.reseller_id == owner_id)
     ) or 0
     orders_n = await session.scalar(
-        select(func.count()).select_from(Order).where(Order.reseller_id == db_user.id)
+        select(func.count()).select_from(Order).where(Order.reseller_id == owner_id)
     ) or 0
     pending_pay = await session.scalar(
         select(func.count())
         .select_from(Payment)
         .join(BotUser, BotUser.id == Payment.user_id)
         .where(
-            BotUser.reseller_id == db_user.id,
+            BotUser.reseller_id == owner_id,
             Payment.status == PaymentStatus.PENDING.value,
             Payment.receipt_file_id.is_not(None),
         )
@@ -75,7 +106,7 @@ async def res_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         .select_from(Ticket)
         .join(BotUser, BotUser.id == Ticket.user_id)
         .where(
-            BotUser.reseller_id == db_user.id,
+            BotUser.reseller_id == owner_id,
             Ticket.status == TicketStatus.OPEN.value,
         )
     ) or 0
@@ -92,12 +123,20 @@ async def res_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotU
 
 
 @router.callback_query(F.data == "res:stats")
-async def res_stats(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if db_user.role != Role.RESELLER.value:
+async def res_stats(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
-    profile = await get_reseller_profile(session, db_user.id)
-    if not profile or not has_bot_perm(profile, "stats"):
+    if not has_bot_perm(profile, "stats"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
@@ -115,25 +154,34 @@ async def res_stats(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 
 
 @router.callback_query(F.data == "res:orders")
-async def res_orders(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if db_user.role != Role.RESELLER.value:
+async def res_orders(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
-    profile = await get_reseller_profile(session, db_user.id)
-    if not profile or not has_bot_perm(profile, "orders"):
+    if not has_bot_perm(profile, "orders"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
     result = await session.execute(
         select(Order)
-        .where(Order.reseller_id == db_user.id)
+        .where(Order.reseller_id == owner_id)
         .order_by(Order.id.desc())
         .limit(15)
     )
     orders = list(result.scalars().all())
     if not orders:
         if callback.message:
-            await safe_edit_text(callback.message, 
+            await safe_edit_text(
+                callback.message,
                 "سفارشی برای مشتریان شما ثبت نشده.",
                 reply_markup=kb.reseller_home(profile),
             )
@@ -145,19 +193,28 @@ async def res_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
             f"{order_status_fa(o.status)}"
         )
     if callback.message:
-        await safe_edit_text(callback.message, 
+        await safe_edit_text(
+            callback.message,
             "\n".join(lines),
             reply_markup=kb.reseller_home(profile),
         )
 
 
 @router.callback_query(F.data == "res:tickets")
-async def res_tickets(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if db_user.role != Role.RESELLER.value:
+async def res_tickets(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
-    profile = await get_reseller_profile(session, db_user.id)
-    if not profile or not has_bot_perm(profile, "tickets"):
+    if not has_bot_perm(profile, "tickets"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
@@ -165,7 +222,7 @@ async def res_tickets(callback: CallbackQuery, session: AsyncSession, db_user: B
         select(Ticket, BotUser)
         .join(BotUser, BotUser.id == Ticket.user_id)
         .where(
-            BotUser.reseller_id == db_user.id,
+            BotUser.reseller_id == owner_id,
             Ticket.status.in_([TicketStatus.OPEN.value, TicketStatus.ANSWERED.value]),
         )
         .order_by(Ticket.id.desc())
@@ -174,7 +231,8 @@ async def res_tickets(callback: CallbackQuery, session: AsyncSession, db_user: B
     rows = result.all()
     if not rows:
         if callback.message:
-            await safe_edit_text(callback.message, 
+            await safe_edit_text(
+                callback.message,
                 "تیکت بازی از مشتریان نیست.",
                 reply_markup=kb.reseller_home(profile),
             )
@@ -184,19 +242,28 @@ async def res_tickets(callback: CallbackQuery, session: AsyncSession, db_user: B
         lines.append(f"#{t.id} — {t.subject[:40]} — {u.full_name or u.telegram_id}")
     lines.append("\nپاسخ کامل از وب‌پنل نماینده.")
     if callback.message:
-        await safe_edit_text(callback.message, 
+        await safe_edit_text(
+            callback.message,
             "\n".join(lines),
             reply_markup=kb.reseller_home(profile),
         )
 
 
 @router.callback_query(F.data == "res:payments")
-async def res_payments(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if db_user.role != Role.RESELLER.value:
+async def res_payments(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
-    profile = await get_reseller_profile(session, db_user.id)
-    if not profile or not has_bot_perm(profile, "payments"):
+    if not has_bot_perm(profile, "payments"):
         await callback.answer("اجازه تأیید ندارید", show_alert=True)
         return
     await callback.answer()
@@ -204,7 +271,7 @@ async def res_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
         select(Payment, BotUser)
         .join(BotUser, BotUser.id == Payment.user_id)
         .where(
-            BotUser.reseller_id == db_user.id,
+            BotUser.reseller_id == owner_id,
             Payment.status == PaymentStatus.PENDING.value,
             Payment.receipt_file_id.is_not(None),
         )

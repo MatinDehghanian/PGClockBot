@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.tg_utils import safe_edit_text
-from app.db.models import BotUser, Plan, ResellerProfile, Role
+from app.db.models import BotUser, Plan, ResellerProfile
 from app.services.plans_catalog import (
     groups_allowed_for_staff,
     load_pg_plan_options,
@@ -30,15 +30,21 @@ class ResellerPlanStates(StatesGroup):
     mode = State()
 
 
-def _is_reseller(user: BotUser) -> bool:
-    return user.role == Role.RESELLER.value
+async def _actor(
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> tuple[int | None, ResellerProfile | None]:
+    from app.services.reseller_access import load_reseller_actor
 
-
-async def _profile(session: AsyncSession, user: BotUser) -> ResellerProfile | None:
-    result = await session.execute(
-        select(ResellerProfile).where(ResellerProfile.user_id == user.id)
+    return await load_reseller_actor(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
     )
-    return result.scalar_one_or_none()
 
 
 async def _staff_ctx(profile: ResellerProfile) -> dict:
@@ -110,16 +116,21 @@ def _plan_text(plan: Plan) -> str:
 
 
 @router.callback_query(F.data == "res:plans")
-async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if not _is_reseller(db_user):
+async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
         await callback.answer("نماینده نیستید", show_alert=True)
         return
-    profile = await _profile(session, db_user)
     if not profile or not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی پلن ندارید", show_alert=True)
         return
     await callback.answer()
-    plans = await _list_plans(session, db_user.id)
+    plans = await _list_plans(session, owner_id)
     text = "💎 <b>پلن‌های فروش فروشگاه شما</b>\n"
     if not plans:
         text += "هنوز پلنی نساخته‌اید. از دکمه زیر بسازید یا در وب‌پنل کامل‌تر تنظیم کنید."
@@ -130,8 +141,14 @@ async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 
 
 @router.callback_query(F.data == "res:plan:webhint")
-async def res_plan_webhint(callback: CallbackQuery, db_user: BotUser):
-    if not _is_reseller(db_user):
+async def res_plan_webhint(callback: CallbackQuery, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
         await callback.answer("نماینده نیستید", show_alert=True)
         return
     await callback.answer()
@@ -143,16 +160,21 @@ async def res_plan_webhint(callback: CallbackQuery, db_user: BotUser):
 
 
 @router.callback_query(F.data.startswith("res:plan:view:"))
-async def res_plan_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if not _is_reseller(db_user):
+async def res_plan_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
         await callback.answer("نماینده نیستید", show_alert=True)
         return
-    profile = await _profile(session, db_user)
     if not profile or not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     plan = await session.get(Plan, int(callback.data.split(":")[-1]))
-    if not plan or plan.owner_reseller_id != db_user.id:
+    if not plan or plan.owner_reseller_id != owner_id:
         await callback.answer("یافت نشد", show_alert=True)
         return
     await callback.answer()
@@ -161,16 +183,21 @@ async def res_plan_view(callback: CallbackQuery, session: AsyncSession, db_user:
 
 
 @router.callback_query(F.data.startswith("res:plan:tog:"))
-async def res_plan_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if not _is_reseller(db_user):
+async def res_plan_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
         await callback.answer("نماینده نیستید", show_alert=True)
         return
-    profile = await _profile(session, db_user)
     if not profile or not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     plan = await session.get(Plan, int(callback.data.split(":")[-1]))
-    if not plan or plan.owner_reseller_id != db_user.id or plan.is_trial:
+    if not plan or plan.owner_reseller_id != owner_id or plan.is_trial:
         await callback.answer("یافت نشد", show_alert=True)
         return
     plan.is_active = not plan.is_active
@@ -181,22 +208,27 @@ async def res_plan_toggle(callback: CallbackQuery, session: AsyncSession, db_use
 
 
 @router.callback_query(F.data.startswith("res:plan:del:"))
-async def res_plan_delete(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    if not _is_reseller(db_user):
+async def res_plan_delete(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
         await callback.answer("نماینده نیستید", show_alert=True)
         return
-    profile = await _profile(session, db_user)
     if not profile or not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     plan = await session.get(Plan, int(callback.data.split(":")[-1]))
-    if not plan or plan.owner_reseller_id != db_user.id or plan.is_trial:
+    if not plan or plan.owner_reseller_id != owner_id or plan.is_trial:
         await callback.answer("یافت نشد", show_alert=True)
         return
     await session.delete(plan)
     await session.commit()
     await callback.answer("حذف شد")
-    plans = await _list_plans(session, db_user.id)
+    plans = await _list_plans(session, owner_id)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -206,11 +238,16 @@ async def res_plan_delete(callback: CallbackQuery, session: AsyncSession, db_use
 
 
 @router.callback_query(F.data == "res:plan:add")
-async def res_plan_add(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    if not _is_reseller(db_user):
+async def res_plan_add(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
         await callback.answer("نماینده نیستید", show_alert=True)
         return
-    profile = await _profile(session, db_user)
     if not profile or not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
@@ -221,15 +258,25 @@ async def res_plan_add(callback: CallbackQuery, state: FSMContext, session: Asyn
 
 
 @router.message(ResellerPlanStates.name)
-async def res_plan_name(message: Message, state: FSMContext, db_user: BotUser):
-    if not _is_reseller(db_user):
+async def res_plan_name(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
         await state.clear()
         return
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.reseller_home())
+        await message.answer("لغو شد.", reply_markup=kb.reseller_home(profile))
         return
-    await state.update_data(name=(message.text or "").strip())
+    await state.update_data(name=(message.text or "").strip(), owner_id=owner_id)
     await state.set_state(ResellerPlanStates.price)
     await message.answer("قیمت به تومان:")
 
@@ -267,7 +314,10 @@ async def res_plan_days(message: Message, state: FSMContext):
 
 
 @router.message(ResellerPlanStates.gb)
-async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
+async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
         await message.answer("لغو شد.")
@@ -280,14 +330,14 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
         return
     gb = None if gb_val <= 0 else gb_val
     await state.update_data(gb=gb)
-    profile = await _profile(session, db_user)
-    if not profile:
+    owner_id, profile = await _actor(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    if not owner_id or not profile:
         await state.clear()
-        await message.answer("پروفایل نماینده یافت نشد.")
+        await message.answer("نماینده نیستید.")
         return
     staff = await _staff_ctx(profile)
     templates, groups, pg_error = await load_pg_plan_options(staff)
-    await state.update_data(templates=templates, groups=groups)
+    await state.update_data(templates=templates, groups=groups, owner_id=owner_id)
     rows: list[list[InlineKeyboardButton]] = []
     if groups:
         rows.append(
@@ -369,8 +419,14 @@ async def res_plan_toggle_group(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data == "res:plan:save:groups", ResellerPlanStates.mode)
-async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    profile = await _profile(session, db_user)
+async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    if not owner_id or not profile:
+        await callback.answer("نماینده نیستید", show_alert=True)
+        return
     if not profile or not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
@@ -387,14 +443,14 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
         data_limit_gb=data.get("gb"),
         pg_group_ids=",".join(str(i) for i in selected),
         pg_template_id=None,
-        owner_reseller_id=db_user.id,
+        owner_reseller_id=owner_id,
         is_active=True,
     )
     session.add(plan)
     await session.commit()
     await state.clear()
     await callback.answer("ذخیره شد")
-    plans = await _list_plans(session, db_user.id)
+    plans = await _list_plans(session, owner_id)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -427,8 +483,14 @@ async def res_plan_pick_tpl(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data.startswith("res:plan:t:"), ResellerPlanStates.mode)
-async def res_plan_save_tpl(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    profile = await _profile(session, db_user)
+async def res_plan_save_tpl(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    if not owner_id or not profile:
+        await callback.answer("نماینده نیستید", show_alert=True)
+        return
     if not profile or not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
@@ -445,14 +507,14 @@ async def res_plan_save_tpl(callback: CallbackQuery, state: FSMContext, session:
         data_limit_gb=data.get("gb"),
         pg_template_id=tid,
         pg_group_ids=None,
-        owner_reseller_id=db_user.id,
+        owner_reseller_id=owner_id,
         is_active=True,
     )
     session.add(plan)
     await session.commit()
     await state.clear()
     await callback.answer("ذخیره شد")
-    plans = await _list_plans(session, db_user.id)
+    plans = await _list_plans(session, owner_id)
     if callback.message:
         await safe_edit_text(
             callback.message,
