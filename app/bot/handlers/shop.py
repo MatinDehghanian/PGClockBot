@@ -42,6 +42,12 @@ def _custom_bounds(ui: dict) -> tuple[int, int, int, int, int, int]:
     return min_gb, max_gb, min_days, max_days, price_gb, price_day
 
 
+def _custom_has_pg_link(ui: dict) -> bool:
+    tpl = (ui.get("custom_plan_template_id") or "").strip()
+    groups = (ui.get("custom_plan_group_ids") or "").strip()
+    return bool(tpl or groups)
+
+
 @router.callback_query(F.data == "shop:list")
 async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     await callback.answer()
@@ -85,6 +91,12 @@ async def custom_start(callback: CallbackQuery, session: AsyncSession, state: FS
     ui = await get_all_settings(session)
     if not on(ui.get("custom_plan_enabled")):
         await callback.answer("پلن دلخواه فعال نیست", show_alert=True)
+        return
+    if not _custom_has_pg_link(ui):
+        await callback.answer(
+            "پلن دلخواه هنوز به تمپلیت/گروه پاسارگارد وصل نشده. به ادمین اطلاع دهید.",
+            show_alert=True,
+        )
         return
     await callback.answer()
     min_gb, max_gb, _, _, _, _ = _custom_bounds(ui)
