@@ -42,6 +42,7 @@ def create_dispatcher() -> Dispatcher:
 
     from app.bot.handlers import (
         admin,
+        admin_backup,
         admin_settings,
         payments,
         reseller,
@@ -62,10 +63,11 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(reseller.router)
     dp.include_router(reseller_settings.router)
     dp.include_router(admin_settings.router)
+    dp.include_router(admin_backup.router)
     dp.include_router(admin.router)
 
     block = _BlockPlatformAdminOnResellerBot()
-    for r in (admin.router, admin_settings.router):
+    for r in (admin.router, admin_backup.router, admin_settings.router):
         r.message.middleware(block)
         r.callback_query.middleware(block)
     return dp

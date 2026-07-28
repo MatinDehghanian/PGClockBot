@@ -10,6 +10,7 @@
 </div>
 
 {% if saved %}<div class="flash ok">{{ saved_msg or 'ذخیره شد.' }}</div>{% endif %}
+{% if request.query_params.get('ok') %}<div class="flash ok">{{ request.query_params.get('ok') }}</div>{% endif %}
 {% if request.query_params.get('err') %}<div class="flash err">{{ request.query_params.get('err') }}</div>{% endif %}
 {{ settings_tabs(tab) }}
 
@@ -18,6 +19,8 @@
 
   {% if tab == 'update' %}
     {% include "_settings_update.html" %}
+  {% elif tab == 'backup' %}
+    {% include "_settings_backup.html" %}
   {% elif tab == 'notifications' %}
     {% include "_settings_notifications.html" %}
   {% elif tab == 'supports' %}

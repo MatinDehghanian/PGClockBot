@@ -486,6 +486,7 @@ def admin_home() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="📢 پیام گروهی", callback_data="adm:broadcast")],
             [InlineKeyboardButton(text="🖥 پاسارگارد", callback_data="adm:pg")],
             [InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="adm:settings")],
+            [InlineKeyboardButton(text="💾 بکاپ / ریستور", callback_data="adm:backup")],
             [InlineKeyboardButton(text="⬅️ منوی اصلی", callback_data="menu:home")],
         ]
     )
