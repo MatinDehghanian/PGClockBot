@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -232,14 +233,82 @@ def _pip_install() -> tuple[int, str]:
 
 
 def _restart_service() -> tuple[bool, str]:
-    try:
-        from app.services.service_control import ensure_restart_helper, restart_panel_service
+    """Schedule an automatic restart using the freshest on-disk code possible."""
+    note = ""
 
-        ensure_restart_helper()
-        return restart_panel_service(reason="panel update", delay_sec=2.0)
+    # 1) Prefer a fresh interpreter process so we never use a stale imported module
+    #    after git pull / archive overlay during in-panel update.
+    try:
+        script = ROOT_DIR / "scripts" / "panel_restart.py"
+        py = sys.executable or "python3"
+        if script.is_file():
+            proc = subprocess.Popen(
+                [py, str(script), "--delay", "3.5", "--reason", "panel update"],
+                cwd=str(ROOT_DIR),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+                close_fds=True,
+                env=_env_with_path(),
+            )
+            try:
+                out_b, _ = proc.communicate(timeout=8)
+                out = (out_b or b"").decode("utf-8", errors="replace").strip()
+            except subprocess.TimeoutExpired:
+                # Still running — restart was likely armed; do not kill it.
+                out = "restart helper still running"
+            if out:
+                _append_log(out.splitlines()[-1][:240])
+            if proc.poll() in (None, 0):
+                return True, out.splitlines()[-1] if out else "ریستارت سرویس زمان‌بندی شد"
+            note = out or f"panel_restart exit {proc.returncode}"
+            _append_log(note[:240])
+    except Exception as exc:
+        logger.exception("panel_restart.py spawn failed")
+        note = str(exc)
+        _append_log(f"spawn restart script: {note[:200]}")
+
+    # 2) Same-process helpers (reload from disk)
+    try:
+        import importlib
+
+        from app.services import service_control as sc
+
+        sc = importlib.reload(sc)
+        helper_ok, helper_msg = sc.ensure_restart_helper()
+        if helper_msg:
+            _append_log(helper_msg)
+        ok, note2 = sc.restart_panel_service(reason="panel update", delay_sec=3.5)
+        if ok:
+            return True, note2
+        note = note2 or note
+        _append_log(note or "ریستارت از service_control ناموفق")
     except Exception as exc:
         logger.exception("panel update restart failed")
-        return False, str(exc)
+        note = str(exc)
+        _append_log(f"خطا در ریستارت: {note[:200]}")
+
+    # 3) Hard fallback: under systemd Restart=always, exiting the process is enough.
+    try:
+        if os.environ.get("INVOCATION_ID") or os.environ.get("NOTIFY_SOCKET"):
+
+            def _die() -> None:
+                time.sleep(3.5)
+                try:
+                    os.kill(os.getpid(), signal.SIGTERM)
+                except Exception:
+                    pass
+                os._exit(0)
+
+            threading.Thread(target=_die, name="panel-update-die", daemon=False).start()
+            return True, "ریستارت از طریق systemd زمان‌بندی شد"
+    except Exception as exc:
+        _append_log(f"fallback ریستارت ناموفق: {exc}")
+
+    return False, note or (
+        "ریستارت خودکار ممکن نشد — روی سرور: sudo systemctl restart pgclockbot"
+    )
 
 
 def _git_bin() -> str | None:
@@ -547,11 +616,14 @@ def _do_update(target_version: str | None) -> None:
         ok, note = _restart_service()
         _append_log(note)
         if not ok:
-            _finish_ok("کد آپدیت شد؛ سرویس را دستی ری‌استارت کنید. در صورت پشیمانی از «بازگشت» استفاده کنید.")
+            _finish_ok(
+                "کد آپدیت شد؛ ریستارت خودکار ممکن نشد. "
+                "یک‌بار روی سرور: sudo systemctl restart pgclockbot"
+            )
             return
 
-        time.sleep(1.5)
-        _finish_ok("آپدیت با موفقیت انجام شد — در صورت پشیمانی می‌توانید برگردید عقب")
+        time.sleep(1.2)
+        _finish_ok("آپدیت انجام شد — سرویس در حال راه‌اندازی مجدد است")
     except Exception as e:
         _finish_error(e)
 
@@ -640,10 +712,13 @@ def _do_rollback(snapshot_id: str) -> None:
         ok, note = _restart_service()
         _append_log(note)
         if not ok:
-            _finish_ok(f"بازگشت به {new_ver or sha[:7]} انجام شد؛ سرویس را دستی ری‌استارت کنید")
+            _finish_ok(
+                f"بازگشت به {new_ver or sha[:7]} انجام شد؛ ریستارت خودکار ممکن نشد — "
+                "sudo systemctl restart pgclockbot"
+            )
             return
-        time.sleep(1.5)
-        _finish_ok(f"بازگشت موفق به نسخه {new_ver or sha[:7]}")
+        time.sleep(1.2)
+        _finish_ok(f"بازگشت موفق به نسخه {new_ver or sha[:7]} — در حال راه‌اندازی مجدد")
     except Exception as e:
         _finish_error(e)
 
