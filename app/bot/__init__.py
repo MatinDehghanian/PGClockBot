@@ -8,7 +8,12 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import TelegramObject
 
-from app.bot.middlewares import DbSessionMiddleware, ErrorLogMiddleware, UserMiddleware
+from app.bot.middlewares import (
+    DbSessionMiddleware,
+    ErrorLogMiddleware,
+    ForceJoinMiddleware,
+    UserMiddleware,
+)
 from app.config import get_settings
 
 
@@ -39,6 +44,7 @@ def create_dispatcher() -> Dispatcher:
     dp.update.middleware(ErrorLogMiddleware())
     dp.update.middleware(DbSessionMiddleware())
     dp.update.middleware(UserMiddleware())
+    dp.update.middleware(ForceJoinMiddleware())
 
     from app.bot.handlers import (
         admin,

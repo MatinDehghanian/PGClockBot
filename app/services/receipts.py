@@ -31,6 +31,10 @@ async def process_receipt(
     - else → notify admins; return status text for the user
     """
     auto = on(await get_setting(session, "auto_approve_payments", "0"))
+    # Never auto-approve wallet top-ups — shared global wallet would let a
+    # reseller mint balance usable on other shops / main bot.
+    if auto and payment.is_wallet_topup:
+        auto = False
     if auto:
         try:
             order = await approve_payment(session, payment, reviewer_tg=0)

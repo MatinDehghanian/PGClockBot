@@ -154,12 +154,15 @@ def create_api_app(lifespan=None) -> FastAPI:
     app = FastAPI(title="PGClockBot Panel", docs_url=None, redoc_url=None, lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    (DATA_DIR / "uploads").mkdir(parents=True, exist_ok=True)
-    app.mount("/media", StaticFiles(directory=str(DATA_DIR)), name="media")
+    uploads_dir = DATA_DIR / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    # CRITICAL: never mount DATA_DIR itself — that would expose bot.db, backups, web_admin.json
+    app.mount("/media/uploads", StaticFiles(directory=str(uploads_dir)), name="media_uploads")
 
     def get_signer() -> URLSafeSerializer:
-        settings = get_settings()
-        return URLSafeSerializer(settings.web_secret or "pgclock-secret", salt="pgclock-session")
+        # Never fall back to a hardcoded secret — forgeable sessions otherwise
+        secret = ensure_web_secret()
+        return URLSafeSerializer(secret, salt="pgclock-session")
 
     async def get_db():
         async with SessionLocal() as session:
@@ -174,25 +177,53 @@ def create_api_app(lifespan=None) -> FastAPI:
         except BadSignature:
             return None
 
-    def require_staff(request: Request) -> dict:
+    async def require_staff(
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+    ) -> dict:
         user = get_session_user(request)
         if not user or user.get("role") not in {"admin", "reseller"}:
             raise NotAuthenticated()
         if user.get("role") == "reseller":
-            # Keep session soft-upgraded for newly added core perms (plans, shop_settings)
+            from sqlalchemy import select
+
+            from app.db.models import ResellerProfile
+            from app.services.resellers import parse_perms, setup_is_complete
+
+            bot_user_id = user.get("bot_user_id")
+            if not bot_user_id:
+                raise NotAuthenticated()
+            result = await session.execute(
+                select(ResellerProfile).where(ResellerProfile.user_id == int(bot_user_id))
+            )
+            profile = result.scalar_one_or_none()
+            if not profile or not profile.is_active or not setup_is_complete(profile):
+                raise NotAuthenticated()
+            # Always re-read ACL from DB — never trust stale cookie permissions
             user = dict(user)
-            user["permissions"] = with_shop_settings(list(user.get("permissions") or []))
+            user["permissions"] = parse_perms(profile.web_permissions) or []
+            user["bot_user_id"] = int(bot_user_id)
+            if profile.pg_admin_username:
+                user["pg_admin_username"] = profile.pg_admin_username
+            if profile.pg_role_id:
+                user["pg_role_id"] = int(profile.pg_role_id)
         return user
 
-    def require_admin(request: Request) -> dict:
-        user = require_staff(request)
+    async def require_admin(
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+    ) -> dict:
+        user = await require_staff(request, session)
         if user.get("role") != "admin":
             raise NotAdmin()
         return user
 
     def require_perm(perm: str):
-        def _dep(request: Request) -> dict:
-            user = require_staff(request)
+        async def _dep(
+            request: Request,
+            session: AsyncSession = Depends(get_db),
+        ) -> dict:
+            user = await require_staff(request, session)
             if user.get("role") == "admin":
                 return user
             perms = user.get("permissions") or []
@@ -205,24 +236,42 @@ def create_api_app(lifespan=None) -> FastAPI:
     def require_pg_perm(perm: str):
         """Admin always; reseller needs mapped PG feature from their role."""
 
-        def _dep(request: Request) -> dict:
-            user = require_staff(request)
+        async def _dep(
+            request: Request,
+            session: AsyncSession = Depends(get_db),
+        ) -> dict:
+            user = await require_staff(request, session)
             if user.get("role") == "admin":
                 return user
-            if perm not in (user.get("pg_permissions") or []):
+            # Refresh PG features from live role (not cookie-only)
+            from app.services.pg_access import resolve_reseller_pg_features
+
+            pg_role_id = user.get("pg_role_id")
+            features, _ = await resolve_reseller_pg_features(pg_role_id)
+            if perm not in features:
                 raise NotAdmin()
+            user = dict(user)
+            user["pg_permissions"] = features
             return user
 
         return _dep
 
     def require_pg_any():
-        def _dep(request: Request) -> dict:
-            user = require_staff(request)
+        async def _dep(
+            request: Request,
+            session: AsyncSession = Depends(get_db),
+        ) -> dict:
+            user = await require_staff(request, session)
             if user.get("role") == "admin":
                 return user
-            if user.get("pg_permissions"):
-                return user
-            raise NotAdmin()
+            from app.services.pg_access import resolve_reseller_pg_features
+
+            features, _ = await resolve_reseller_pg_features(user.get("pg_role_id"))
+            if not features:
+                raise NotAdmin()
+            user = dict(user)
+            user["pg_permissions"] = features
+            return user
 
         return _dep
 
@@ -321,7 +370,13 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     register_reseller_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     register_reseller_setup(app, render=render, get_db=get_db)
-    register_shop_settings(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_shop_settings(
+        app,
+        render=render,
+        require_staff=require_staff,
+        require_shop_settings=require_perm("shop_settings"),
+        get_db=get_db,
+    )
     from app.api.backup_pages import register_backup_pages
 
     register_backup_pages(app, render=render, require_admin=require_admin, get_db=get_db)
@@ -341,7 +396,6 @@ def create_api_app(lifespan=None) -> FastAPI:
             "ok": True,
             "web_panel": True,
             "admin_user_configured": bool(creds.get("username") and creds.get("password")),
-            "admin_username": creds.get("username") or None,
             "setup_complete": is_setup_complete(),
         }
 
@@ -589,17 +643,10 @@ def create_api_app(lifespan=None) -> FastAPI:
 
                     role = "reseller"
                     display = profile.web_username or ru.full_name or str(ru.telegram_id)
-                    permissions = with_shop_settings(
-                        parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
+                    # Use DB permissions as-is — do not soft-upgrade ACL past admin intent
+                    permissions = parse_perms(profile.web_permissions) or parse_perms(
+                        DEFAULT_FEATURE_PERMS
                     )
-                    # Persist shop_settings onto legacy profiles so nav/API stay in sync
-                    joined = ",".join(sorted(permissions))
-                    if (profile.web_permissions or "") != joined or (
-                        profile.bot_permissions or ""
-                    ) != joined:
-                        profile.web_permissions = joined
-                        profile.bot_permissions = joined
-                        await session.commit()
                     bot_user_id = ru.id
                     pg_admin_username = profile.pg_admin_username
                     pg_permissions, pg_role = await resolve_reseller_pg_features(profile.pg_role_id)
@@ -1829,7 +1876,11 @@ def create_api_app(lifespan=None) -> FastAPI:
 
             env_values = current_setup_values()
             ctx["env_values"] = env_values
-            ctx["bot_status"] = await _bot_token_status(env_values.get("BOT_TOKEN") or "")
+            token = env_values.get("BOT_TOKEN") or ""
+            ctx["bot_status"] = await _bot_token_status(token)
+            ctx["bot_token_masked"] = (
+                ("••••" + token[-6:]) if len(token) > 8 else ("••••" if token else "")
+            )
         elif tab == "appearance":
             from app.services.bot_appearance import load_appearance_context
             from app.services.setup_wizard import current_setup_values
@@ -1889,7 +1940,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         if tab == "bot":
             from app.services.pasarguard import reset_pg
             from app.services.service_control import schedule_panel_restart
-            from app.services.setup_wizard import parse_admin_ids
+            from app.services.setup_wizard import current_setup_values, parse_admin_ids
 
             token = str(form.get("BOT_TOKEN") or "").strip()
             uname = str(form.get("BOT_USERNAME") or "").strip().lstrip("@")
@@ -1900,6 +1951,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             web_port = str(form.get("WEB_PORT") or "9000").strip()
             public_base = str(form.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
             currency = str(form.get("CURRENCY") or "").strip() or "تومان"
+            current = current_setup_values()
+            if not token:
+                token = (current.get("BOT_TOKEN") or "").strip()
+            if not pg_pass:
+                pg_pass = (current.get("PG_PASSWORD") or "").strip()
             if not token or not uname or not ids_raw or not pg_base or not pg_user or not pg_pass:
                 return RedirectResponse(
                     "/settings?tab=bot&err=" + quote("همه فیلدهای الزامی را پر کنید"),
@@ -2120,9 +2176,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             select(UserService).where(UserService.bot_user_id == user.id)
         )
         services = list(svc_result.scalars().all())
-        plans_result = await session.execute(
-            select(Plan).where(Plan.is_active.is_(True)).order_by(Plan.sort_order)
-        )
+        plans_q = select(Plan).where(Plan.is_active.is_(True), Plan.owner_reseller_id.is_(None))
+        if user.reseller_id:
+            plans_q = select(Plan).where(
+                Plan.is_active.is_(True),
+                Plan.owner_reseller_id == user.reseller_id,
+            )
+        plans_result = await session.execute(plans_q.order_by(Plan.sort_order))
         plans = list(plans_result.scalars().all())
         return {
             "user": {

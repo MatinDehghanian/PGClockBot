@@ -11,8 +11,8 @@
     <div class="settings-grid">
       <div class="setting-item full">
         <label>توکن ربات (BOT_TOKEN)
-          <small class="muted">از @BotFather — فقط برای ادمین پنل قابل مشاهده است</small>
-          <input name="BOT_TOKEN" type="text" value="{{ env_values.get('BOT_TOKEN','') }}" dir="ltr" autocomplete="off" required />
+          <small class="muted">خالی بگذارید تا توکن فعلی حفظ شود. فعلی: {{ bot_token_masked or '—' }}</small>
+          <input name="BOT_TOKEN" type="password" value="" dir="ltr" autocomplete="off" placeholder="•••• یا توکن جدید" />
         </label>
       </div>
       <div class="setting-item">
@@ -45,7 +45,8 @@
       </div>
       <div class="setting-item">
         <label>رمز پاسارگارد
-          <input name="PG_PASSWORD" type="password" value="{{ env_values.get('PG_PASSWORD','') }}" autocomplete="off" required />
+          <small class="muted">خالی = حفظ رمز فعلی</small>
+          <input name="PG_PASSWORD" type="password" value="" autocomplete="new-password" placeholder="•••• یا رمز جدید" />
         </label>
       </div>
     </div>
