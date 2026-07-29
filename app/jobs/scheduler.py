@@ -47,6 +47,32 @@ async def check_expiring_services(bot: Bot) -> None:
     async with SessionLocal() as session:
         from app.services.users import get_all_settings, on
 
+        settings_cache: dict[int | None, dict] = {}
+
+        async def ui_for(reseller_user_id: int | None) -> dict:
+            key = int(reseller_user_id) if reseller_user_id else None
+            if key not in settings_cache:
+                settings_cache[key] = await get_all_settings(session, reseller_id=key)
+            return settings_cache[key]
+
+        global_ui = await ui_for(None)
+        # Fast path: if platform alerts are off, only bother when a reseller shop enables them.
+        reseller_ids_with_alerts: set[int] = set()
+        if not on(global_ui.get("user_alert_low_enabled", "0")):
+            profiles_settings = (
+                await session.execute(
+                    select(ResellerProfile.user_id).where(ResellerProfile.is_active.is_(True))
+                )
+            ).all()
+            for (uid,) in profiles_settings:
+                if uid is None:
+                    continue
+                ui = await ui_for(int(uid))
+                if on(ui.get("user_alert_low_enabled", "0")):
+                    reseller_ids_with_alerts.add(int(uid))
+            if not reseller_ids_with_alerts:
+                return
+
         result = await session.execute(select(UserService))
         services = list(result.scalars().all())
         if not services:
@@ -62,31 +88,42 @@ async def check_expiring_services(bot: Bot) -> None:
         ).all()
         profile_by_user = {int(uid): int(pid) for uid, pid in profiles if uid is not None}
 
-        settings_cache: dict[int | None, dict] = {}
-
-        async def ui_for(reseller_user_id: int | None) -> dict:
-            key = int(reseller_user_id) if reseller_user_id else None
-            if key not in settings_cache:
-                settings_cache[key] = await get_all_settings(session, reseller_id=key)
-            return settings_cache[key]
+        # Prefetch users for alert eligibility before any remote PG call
+        user_ids = {svc.bot_user_id for svc in services}
+        users_by_id: dict[int, BotUser] = {}
+        if user_ids:
+            rows = (
+                await session.execute(select(BotUser).where(BotUser.id.in_(user_ids)))
+            ).scalars().all()
+            users_by_id = {u.id: u for u in rows}
 
         pg = get_pg()
         now = datetime.now(timezone.utc)
+        platform_on = on(global_ui.get("user_alert_low_enabled", "0"))
 
         for svc in services:
             if not svc.subscription_token:
                 continue
-            try:
-                info = await pg.subscription_info(svc.subscription_token)
-            except Exception:
-                continue
-
-            user = await session.get(BotUser, svc.bot_user_id)
+            user = users_by_id.get(svc.bot_user_id)
             if not user or user.is_blocked:
                 continue
 
-            ui = await ui_for(user.reseller_id)
+            rid = int(user.reseller_id) if user.reseller_id else None
+            if not platform_on:
+                if rid is None or rid not in reseller_ids_with_alerts:
+                    continue
+
+            ui = await ui_for(rid)
             if not on(ui.get("user_alert_low_enabled", "0")):
+                continue
+
+            # Skip remote call when both notifications already sent
+            if svc.notified_expire and svc.notified_traffic:
+                continue
+
+            try:
+                info = await pg.subscription_info(svc.subscription_token)
+            except Exception:
                 continue
 
             traffic_pct = max(1, min(99, _as_int(ui.get("user_alert_low_traffic_pct"), 20)))

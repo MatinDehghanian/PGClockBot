@@ -17,6 +17,8 @@ from app.db.session import SessionLocal
 log = logging.getLogger(__name__)
 
 _manager: "ResellerBotManager | None" = None
+_TOKEN_LOOKUP_CACHE: dict[str, tuple[float, dict[str, Any] | None]] = {}
+_TOKEN_LOOKUP_TTL = 60.0
 
 
 class ResellerBotManager:
@@ -204,10 +206,18 @@ def init_reseller_bot_manager(dispatcher: Dispatcher) -> ResellerBotManager:
 
 
 async def lookup_reseller_by_bot_token(session, token: str) -> dict[str, Any] | None:
-    """Resolve active reseller profile that owns this bot token."""
+    """Resolve active reseller profile that owns this bot token (cached briefly)."""
+    import time
+
     token = (token or "").strip()
     if not token:
         return None
+    now = time.monotonic()
+    cached = _TOKEN_LOOKUP_CACHE.get(token)
+    if cached is not None:
+        at, payload = cached
+        if now - at < _TOKEN_LOOKUP_TTL:
+            return dict(payload) if payload else None
     result = await session.execute(
         select(ResellerProfile).where(
             ResellerProfile.bot_token == token,
@@ -216,13 +226,21 @@ async def lookup_reseller_by_bot_token(session, token: str) -> dict[str, Any] | 
     )
     row = result.scalar_one_or_none()
     if not row:
+        _TOKEN_LOOKUP_CACHE[token] = (now, None)
         return None
-    return {
+    payload = {
         "profile_id": row.id,
         "user_id": row.user_id,
         "bot_username": row.bot_username,
         "bot_telegram_id": row.bot_telegram_id,
     }
+    _TOKEN_LOOKUP_CACHE[token] = (now, payload)
+    return dict(payload)
+
+
+def clear_reseller_token_cache() -> None:
+    _TOKEN_LOOKUP_CACHE.clear()
+
 
 
 async def start_reseller_bot_for_profile(profile_id: int) -> bool:

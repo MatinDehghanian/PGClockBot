@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from itsdangerous import BadSignature, URLSafeSerializer
+from itsdangerous import BadSignature, BadTimeSignature, URLSafeTimedSerializer
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -47,11 +47,13 @@ from app.services.resellers import (
 from app.services.setup_wizard import (
     begin_setup,
     current_setup_values,
+    ensure_setup_gate_token,
     ensure_web_secret,
     is_setup_complete,
     mark_setup_complete,
     panel_url_hint,
     parse_admin_ids,
+    setup_gate_ok,
     update_env_keys,
 )
 from app.services.updates import check_github_update, local_version
@@ -64,6 +66,7 @@ from app.services.users import (
     set_settings_bulk,
 )
 from app.services.web_auth import (
+    admin_session_version,
     load_web_admin,
     save_web_admin,
     validate_password_strength,
@@ -118,10 +121,18 @@ def _redirect_msg(path: str, *, ok: str | None = None, err: str | None = None) -
     return RedirectResponse(url, status_code=303)
 
 
+SESSION_MAX_AGE = 60 * 60 * 24 * 7
+
+
 def _client_ip(request: Request) -> str:
-    fwd = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
-    if fwd:
-        return fwd
+    # Trust X-Forwarded-For only when explicitly enabled (behind a real reverse proxy).
+    try:
+        if get_settings().trust_proxy:
+            fwd = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+            if fwd:
+                return fwd
+    except Exception:
+        pass
     if request.client and request.client.host:
         return request.client.host
     return "unknown"
@@ -146,8 +157,14 @@ def _login_success(ip: str) -> None:
 
 
 def _cookie_secure(request: Request) -> bool:
-    fwd = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
-    return request.url.scheme == "https" or fwd == "https"
+    try:
+        if get_settings().trust_proxy:
+            fwd = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+            if fwd == "https":
+                return True
+    except Exception:
+        pass
+    return request.url.scheme == "https"
 
 
 def create_api_app(lifespan=None) -> FastAPI:
@@ -159,10 +176,10 @@ def create_api_app(lifespan=None) -> FastAPI:
     # CRITICAL: never mount DATA_DIR itself — that would expose bot.db, backups, web_admin.json
     app.mount("/media/uploads", StaticFiles(directory=str(uploads_dir)), name="media_uploads")
 
-    def get_signer() -> URLSafeSerializer:
+    def get_signer() -> URLSafeTimedSerializer:
         # Never fall back to a hardcoded secret — forgeable sessions otherwise
         secret = ensure_web_secret()
-        return URLSafeSerializer(secret, salt="pgclock-session")
+        return URLSafeTimedSerializer(secret, salt="pgclock-session")
 
     async def get_db():
         async with SessionLocal() as session:
@@ -173,9 +190,17 @@ def create_api_app(lifespan=None) -> FastAPI:
         if not cookie:
             return None
         try:
-            return get_signer().loads(cookie)
-        except BadSignature:
+            data = get_signer().loads(cookie, max_age=SESSION_MAX_AGE)
+        except (BadSignature, BadTimeSignature):
             return None
+        if not isinstance(data, dict):
+            return None
+        # Admin sessions bind to web_admin.json token — password/username change revokes them
+        if data.get("role") == "admin":
+            expected = admin_session_version()
+            if not expected or data.get("sv") != expected:
+                return None
+        return data
 
     async def require_staff(
         request: Request,
@@ -198,6 +223,10 @@ def create_api_app(lifespan=None) -> FastAPI:
             )
             profile = result.scalar_one_or_none()
             if not profile or not profile.is_active or not setup_is_complete(profile):
+                raise NotAuthenticated()
+            # Password change invalidates older cookies
+            pwd = (profile.web_password_hash or "")[:24]
+            if pwd and user.get("pv") != pwd:
                 raise NotAuthenticated()
             # Always re-read ACL from DB — never trust stale cookie permissions
             user = dict(user)
@@ -294,9 +323,43 @@ def create_api_app(lifespan=None) -> FastAPI:
             or path.startswith("/static")
             or path == "/health"
         )
-        if allowed:
-            return await call_next(request)
-        return RedirectResponse("/", status_code=303)
+        if not allowed:
+            return RedirectResponse("/", status_code=303)
+
+        # Protect open wizard from remote takeover with a one-time gate token
+        needs_gate = path == "/" or path == "/setup" or path.startswith("/setup/")
+        if needs_gate:
+            gate_q = (request.query_params.get("gate") or "").strip()
+            gate_c = (request.cookies.get("setup_gate") or "").strip()
+            if setup_gate_ok(gate_q) or setup_gate_ok(gate_c):
+                response = await call_next(request)
+                if setup_gate_ok(gate_q) and not setup_gate_ok(gate_c):
+                    response.set_cookie(
+                        "setup_gate",
+                        ensure_setup_gate_token(),
+                        httponly=True,
+                        samesite="strict",
+                        secure=_cookie_secure(request),
+                        max_age=60 * 60 * 24,
+                        path="/",
+                    )
+                return response
+            token = ensure_setup_gate_token()
+            return HTMLResponse(
+                "<!DOCTYPE html><html lang='fa' dir='rtl'><head><meta charset='utf-8'/>"
+                "<meta name='viewport' content='width=device-width,initial-scale=1'/>"
+                "<title>Setup gate</title></head><body style='font-family:sans-serif;"
+                "max-width:40rem;margin:3rem auto;padding:0 1rem;line-height:1.7'>"
+                "<h1>دسترسی ویزارد قفل است</h1>"
+                "<p>برای امنیت نصب اول، لینک یک‌بارمصرف را از لاگ سرور بردارید:</p>"
+                "<pre style='background:#111;color:#eee;padding:12px;border-radius:8px;"
+                "direction:ltr;text-align:left;overflow:auto'>journalctl -u pgclockbot -n 50 | grep -i gate</pre>"
+                "<p style='color:#666;font-size:13px'>توکن gate در "
+                f"<code>data/setup_gate.token</code> هم ذخیره می‌شود "
+                f"(…{token[-6:]}).</p></body></html>",
+                status_code=403,
+            )
+        return await call_next(request)
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -332,7 +395,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         try:
             cookie = request.cookies.get("session")
             if cookie:
-                user = get_signer().loads(cookie)
+                user = get_signer().loads(cookie, max_age=SESSION_MAX_AGE)
         except Exception:
             user = None
         if user and user.get("role") == "reseller":
@@ -581,7 +644,9 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         ip = _client_ip(request)
         typed_user = (username or "").strip()
-        if _login_blocked(ip):
+        # Rate-limit by IP and by username+IP so XFF spoofing (when TRUST_PROXY=1) is harder.
+        limit_keys = [ip, f"{ip}|{typed_user.lower()}"]
+        if any(_login_blocked(k) for k in limit_keys):
             return render(
                 request,
                 "login.html",
@@ -604,6 +669,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         pg_admin_username = None
         bot_user_id = None
         pg_role_id = None
+        reseller_pv = ""
 
         if verify_web_admin(u, p):
             role = "admin"
@@ -623,7 +689,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             if row:
                 ru, profile = row
                 if not setup_is_complete(profile):
-                    _login_fail(ip)
+                    for k in limit_keys:
+                        _login_fail(k)
                     return render(
                         request,
                         "login.html",
@@ -654,9 +721,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                     pg_access = role_access_limits(pg_role)
                     pg_writes = map_pg_role_writes(pg_role)
                     pg_role_id = profile.pg_role_id
+                    reseller_pv = (profile.web_password_hash or "")[:24]
 
         if not role:
-            _login_fail(ip)
+            for k in limit_keys:
+                _login_fail(k)
             return render(
                 request,
                 "login.html",
@@ -667,13 +736,16 @@ def create_api_app(lifespan=None) -> FastAPI:
                 status_code=400,
             )
 
-        _login_success(ip)
+        for k in limit_keys:
+            _login_success(k)
         payload = {
             "role": role,
             "username": display,
             "permissions": permissions,
             "pg_permissions": pg_permissions,
         }
+        if role == "admin":
+            payload["sv"] = admin_session_version()
         if bot_user_id is not None:
             payload["bot_user_id"] = bot_user_id
         if pg_admin_username:
@@ -684,6 +756,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             payload["pg_writes"] = pg_writes
             if pg_role_id:
                 payload["pg_role_id"] = int(pg_role_id)
+            if reseller_pv:
+                payload["pv"] = reseller_pv
         home = "/dashboard"
         if role == "reseller":
             home = ""

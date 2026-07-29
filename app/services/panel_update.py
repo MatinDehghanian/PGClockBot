@@ -193,10 +193,42 @@ def _python_bin() -> str:
 
 def _pip_install() -> tuple[int, str]:
     py = _python_bin()
-    req = _repo_root() / "requirements.txt"
+    root = _repo_root()
+    req = root / "requirements.txt"
     if not req.exists():
         return 0, "no requirements.txt"
-    return _run([py, "-m", "pip", "install", "-q", "-r", str(req)], timeout=600)
+    # Skip pip when requirements.txt hash is unchanged (big win on weak VPS)
+    hash_file = root / ".venv" / ".requirements.sha256"
+    try:
+        import hashlib
+
+        digest = hashlib.sha256(req.read_bytes()).hexdigest()
+        if hash_file.exists() and hash_file.read_text(encoding="utf-8").strip() == digest:
+            return 0, "requirements unchanged — skipped pip"
+    except Exception:
+        digest = None
+    code, out = _run(
+        [
+            py,
+            "-m",
+            "pip",
+            "install",
+            "-q",
+            "--disable-pip-version-check",
+            "--no-input",
+            "-r",
+            str(req),
+        ],
+        timeout=600,
+    )
+    if code == 0 and digest:
+        try:
+            hash_file.parent.mkdir(parents=True, exist_ok=True)
+            hash_file.write_text(digest + "\n", encoding="utf-8")
+        except Exception:
+            pass
+    return code, out
+
 
 
 def _restart_service() -> tuple[bool, str]:
@@ -445,7 +477,11 @@ def _do_update(target_version: str | None) -> None:
         use_git = bool(git and (root / ".git").exists())
         if use_git:
             _set_step("fetch", "git fetch…")
-            code, out = _run([git, "fetch", "--all", "--tags"], cwd=root, timeout=180)
+            code, out = _run(
+                [git, "fetch", "--no-tags", "--prune", "origin", "main"],
+                cwd=root,
+                timeout=120,
+            )
             if out:
                 _append_log(out.splitlines()[-1][:200])
             if code != 0:

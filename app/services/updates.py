@@ -11,7 +11,7 @@ from app.version import GITHUB_REPO_URL, GITHUB_VERSION_URL, __version__
 logger = logging.getLogger(__name__)
 
 _CACHE: dict[str, Any] = {"at": 0.0, "data": None}
-_CACHE_TTL = 60.0  # seconds
+_CACHE_TTL = 300.0  # seconds — panel sidebar update badge
 
 
 def local_version() -> str:
