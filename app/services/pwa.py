@@ -232,9 +232,10 @@ def build_manifest(cfg: dict[str, Any]) -> dict[str, Any]:
         "name": name,
         "short_name": short[:40],
         "description": desc,
-        "start_url": "/",
+        "start_url": "/home",
         "scope": "/",
         "display": "standalone",
+        "id": "/home",
         "orientation": "any",
         "background_color": "#09090b",
         "theme_color": "#09090b",
@@ -265,12 +266,11 @@ def build_manifest(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def service_worker_js() -> str:
     return """/* PGClockBot panel service worker — static shell only */
-const CACHE = 'pgclock-shell-v2';
+const CACHE = 'pgclock-shell-v3';
 const PRECACHE = [
   '/static/panel.css',
   '/static/logo.png',
   '/static/logo-64.png',
-  '/pwa/icon/192',
   '/manifest.webmanifest'
 ];
 

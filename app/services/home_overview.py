@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -13,7 +14,6 @@ from app.db.models import (
     Order,
     Payment,
     PaymentStatus,
-    Plan,
     ResellerProfile,
     Ticket,
     UserService,
@@ -22,15 +22,19 @@ from app.services.host_metrics import host_metrics
 from app.services.pasarguard import get_pg
 from app.services.setup_wizard import current_setup_values
 
+_ERR_NODE = frozenset({"error", "offline", "unhealthy", "disabled", "disconnected"})
+_OK_NODE = frozenset({"connected", "online", "healthy", "active"})
+_WARN_NODE = frozenset({"pending", "waiting", "connecting"})
+
 
 def _node_tone(status: str) -> str:
     st = (status or "").strip().lower()
-    if st in {"connected", "online", "healthy", "active"}:
+    if st in _OK_NODE:
         return "ok"
-    if "connect" in st or st in {"pending", "waiting"}:
-        return "warn"
-    if st in {"error", "offline", "unhealthy", "disabled", "disconnected"}:
+    if st in _ERR_NODE or "disconnect" in st or "offline" in st:
         return "err"
+    if st in _WARN_NODE or "connect" in st:
+        return "warn"
     return "neutral"
 
 
@@ -49,7 +53,7 @@ async def check_bot_connection(token: str | None = None) -> dict[str, Any]:
     if not token:
         return {"ok": False, "error": "توکن تنظیم نشده", "username": None, "name": None}
     try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
+        async with httpx.AsyncClient(timeout=6.0) as client:
             resp = await client.get(f"https://api.telegram.org/bot{token}/getMe")
             data = resp.json()
         if data.get("ok") and isinstance(data.get("result"), dict):
@@ -70,26 +74,14 @@ async def check_bot_connection(token: str | None = None) -> dict[str, Any]:
     except Exception as exc:
         return {
             "ok": False,
-            "error": f"عدم اتصال به تلگرام",
+            "error": "عدم اتصال به تلگرام",
             "detail": str(exc),
             "username": None,
             "name": None,
         }
 
 
-async def load_nodes_status() -> dict[str, Any]:
-    try:
-        nodes = await get_pg().get_nodes_simple()
-    except Exception as exc:
-        return {
-            "ok": False,
-            "error": str(exc) or "خطا در دریافت نودها",
-            "nodes": [],
-            "total": 0,
-            "connected": 0,
-            "warn": 0,
-            "error_count": 0,
-        }
+def _summarize_nodes(nodes: list | None) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     connected = warn = err = 0
     for n in nodes or []:
@@ -130,6 +122,23 @@ async def load_nodes_status() -> dict[str, Any]:
     }
 
 
+async def load_nodes_status() -> dict[str, Any]:
+    try:
+        nodes = await get_pg().get_nodes_simple()
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": str(exc) or "خطا در دریافت نودها",
+            "nodes": [],
+            "total": 0,
+            "connected": 0,
+            "warn": 0,
+            "error_count": 0,
+            "overall": "err",
+        }
+    return _summarize_nodes(nodes)
+
+
 async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
     users = await session.scalar(select(func.count()).select_from(BotUser)) or 0
     orders = await session.scalar(select(func.count()).select_from(Order)) or 0
@@ -157,14 +166,6 @@ async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
         )
         or 0
     )
-    plans = (
-        await session.scalar(
-            select(func.count())
-            .select_from(Plan)
-            .where(Plan.is_active.is_(True), Plan.owner_reseller_id.is_(None))
-        )
-        or 0
-    )
     resellers = (
         await session.scalar(
             select(func.count())
@@ -180,13 +181,23 @@ async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
         "pending": int(pending),
         "revenue": int(revenue),
         "tickets": int(tickets),
-        "plans": int(plans),
         "resellers": int(resellers),
     }
 
 
-async def pg_panel_summary() -> dict[str, Any]:
-    out: dict[str, Any] = {
+async def pg_home_bundle() -> tuple[dict[str, Any], dict[str, Any]]:
+    """Fetch PasarGuard summary + node status in one pass (shared nodes call)."""
+    nodes_status = {
+        "ok": False,
+        "error": None,
+        "nodes": [],
+        "total": 0,
+        "connected": 0,
+        "warn": 0,
+        "error_count": 0,
+        "overall": "neutral",
+    }
+    summary: dict[str, Any] = {
         "ok": False,
         "error": None,
         "templates": 0,
@@ -198,42 +209,62 @@ async def pg_panel_summary() -> dict[str, Any]:
     }
     try:
         pg = get_pg()
-        templates = await pg.get_user_templates_simple()
-        groups = await pg.get_groups_simple()
-        hosts = await pg.get_hosts()
-        nodes = await pg.get_nodes_simple()
-        out.update(
-            {
-                "ok": True,
-                "templates": len(templates or []),
-                "groups": len(groups or []),
-                "hosts": len(hosts or []),
-                "nodes": len(nodes or []),
-            }
+        templates, groups, hosts, nodes, stats = await asyncio.gather(
+            pg.get_user_templates_simple(),
+            pg.get_groups_simple(),
+            pg.get_hosts(),
+            pg.get_nodes_simple(),
+            pg.get_system_stats(),
+            return_exceptions=True,
         )
-        try:
-            raw = await pg.get_system_stats()
-            if isinstance(raw, dict):
+        if isinstance(nodes, Exception):
+            nodes_status["error"] = str(nodes) or "خطا در دریافت نودها"
+            nodes_status["overall"] = "err"
+            nodes = []
+        else:
+            nodes_status = _summarize_nodes(nodes if isinstance(nodes, list) else [])
+
+        if any(isinstance(x, Exception) for x in (templates, groups, hosts)):
+            errs = [str(x) for x in (templates, groups, hosts) if isinstance(x, Exception)]
+            summary["error"] = errs[0] if errs else "خطا در دریافت آمار پاسارگارد"
+        else:
+            summary.update(
+                {
+                    "ok": True,
+                    "templates": len(templates or []),
+                    "groups": len(groups or []),
+                    "hosts": len(hosts or []),
+                    "nodes": nodes_status["total"],
+                }
+            )
+            if isinstance(stats, dict):
                 for key in ("total_user", "users_active", "users", "total_users"):
-                    if key in raw and isinstance(raw[key], (int, float)):
-                        out["users"] = int(raw[key])
+                    if key in stats and isinstance(stats[key], (int, float)):
+                        summary["users"] = int(stats[key])
                         break
-                ver = raw.get("version")
+                ver = stats.get("version")
                 if ver:
-                    out["version"] = str(ver)
-        except Exception:
-            pass
+                    summary["version"] = str(ver)
+            elif isinstance(stats, Exception):
+                # counts still usable even if /system fails
+                pass
     except Exception as exc:
-        out["error"] = str(exc) or "اتصال به پاسارگارد برقرار نشد"
-    return out
+        summary["error"] = str(exc) or "اتصال به پاسارگارد برقرار نشد"
+        nodes_status["error"] = summary["error"]
+        nodes_status["overall"] = "err"
+    return summary, nodes_status
 
 
 async def build_home_overview(session: AsyncSession) -> dict[str, Any]:
-    metrics = host_metrics(wait_cpu=0.12)
-    bot = await check_bot_connection()
-    nodes = await load_nodes_status()
-    bot_sum = await bot_panel_summary(session)
-    pg_sum = await pg_panel_summary()
+    metrics_task = asyncio.to_thread(host_metrics, wait_cpu=0.12)
+    bot_task = check_bot_connection()
+    bot_sum_task = bot_panel_summary(session)
+    pg_task = pg_home_bundle()
+
+    metrics, bot, bot_sum, pg_pair = await asyncio.gather(
+        metrics_task, bot_task, bot_sum_task, pg_task
+    )
+    pg_sum, nodes = pg_pair
 
     cpu = metrics.get("cpu_percent")
     mem_pct = metrics.get("memory_percent")

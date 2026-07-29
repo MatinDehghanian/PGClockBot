@@ -42,6 +42,7 @@ class HomeOverviewHelpersTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(_node_tone("connected"), "ok")
         self.assertEqual(_node_tone("connecting"), "warn")
         self.assertEqual(_node_tone("offline"), "err")
+        self.assertEqual(_node_tone("disconnected"), "err")
         self.assertEqual(_node_tone(""), "neutral")
 
     def test_tone_class(self):

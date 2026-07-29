@@ -755,22 +755,6 @@ def _do_rollback(snapshot_id: str) -> None:
         if not ok:
             _finish_ok(
                 f"بازگشت به {new_ver or sha[:7]} انجام شد؛ ریستارت خودکار ممکن نشد — "
-                "sudo systemctl restart pgclockbot"
-            )
-            return
-        time.sleep(1.2)
-        _finish_ok(
-            f"بازگشت به نسخه {new_ver or sha[:7]} انجام شد — سرویس در حال راه‌اندازی مجدد است. "
-            "ممکن است ۲ تا ۳ دقیقه طول بکشد؛ صفحه به‌صورت خودکار تازه می‌شود.",
-            awaiting_restart=True,
-        )
-    except Exception as e:
-        _finish_error(e)
-
-
-        if not ok:
-            _finish_ok(
-                f"بازگشت به {new_ver or sha[:7]} انجام شد؛ ریستارت خودکار ممکن نشد — "
                 "sudo systemctl restart pgclockbot",
                 restart_required=True,
             )
