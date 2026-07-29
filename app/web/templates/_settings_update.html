@@ -173,31 +173,12 @@
     }
   }
 
-  async function beginWaitingRestart(st){
-    if (waitingRestart) return;
-    waitingRestart = true;
-    sawDown = false;
-    restartStartedAt = Date.now();
-    expectedVersion = String(
-      (st && (st.to_version || st.current_version)) ||
-      (toEl && toEl.textContent) ||
-      targetRemote ||
-      ''
-    ).trim();
-    if (expectedVersion === '—' || expectedVersion === '-') expectedVersion = '';
-    markRestartUi();
-    // Capture identity of the CURRENT (pre-restart) process.
-    const h = await probeHealth();
-    if (h && h.boot_id) baselineBoot = String(h.boot_id);
-    if (h && h.pid) baselinePid = Number(h.pid);
-    startPolling();
-  }
-
   function finishReload(verifiedVersion){
     waitingRestart = false;
     showOps(false);
     if (idleHint) idleHint.hidden = false;
     if (stateEl) stateEl.textContent = 'آماده';
+    if (logEl) { logEl.textContent = ''; logEl.hidden = true; }
     clearInterval(timer); timer = null;
     const verNote = verifiedVersion ? (' · نسخه ' + verifiedVersion) : '';
     setTimeout(() => {
@@ -206,7 +187,7 @@
       url.searchParams.set('ok', 'آپدیت با موفقیت اعمال شد' + verNote);
       url.searchParams.set('force', '1');
       location.href = url.pathname + '?' + url.searchParams.toString();
-    }, 700);
+    }, 400);
   }
 
   function versionMatches(h){
@@ -215,11 +196,56 @@
     return String(h.version).trim() === expectedVersion;
   }
 
+  function versionAtLeast(current, target){
+    if (!target) return true;
+    if (!current) return false;
+    function parts(v){
+      return String(v).replace(/^[vV]/, '').split('.').map(function(p){
+        var n = parseInt(p, 10);
+        return isNaN(n) ? 0 : n;
+      });
+    }
+    var a = parts(current), b = parts(target);
+    var len = Math.max(a.length, b.length);
+    for (var i = 0; i < len; i++) {
+      var x = a[i] || 0, y = b[i] || 0;
+      if (x > y) return true;
+      if (x < y) return false;
+    }
+    return true;
+  }
+
   function processChanged(h){
     if (!h) return false;
     if (baselineBoot && h.boot_id && String(h.boot_id) !== baselineBoot) return true;
     if (baselinePid && h.pid && Number(h.pid) !== baselinePid) return true;
     return false;
+  }
+
+  async function beginWaitingRestart(st){
+    if (waitingRestart) return;
+    expectedVersion = String(
+      (st && (st.to_version || st.current_version)) ||
+      (toEl && toEl.textContent) ||
+      targetRemote ||
+      ''
+    ).trim();
+    if (expectedVersion === '—' || expectedVersion === '-') expectedVersion = '';
+
+    // Already on the new process/version (page opened after restart) → finish.
+    const h0 = await probeHealth();
+    if (h0 && h0.version && (!expectedVersion || versionAtLeast(h0.version, expectedVersion))) {
+      finishReload(h0.version);
+      return;
+    }
+
+    waitingRestart = true;
+    sawDown = false;
+    restartStartedAt = Date.now();
+    markRestartUi();
+    if (h0 && h0.boot_id) baselineBoot = String(h0.boot_id);
+    if (h0 && h0.pid) baselinePid = Number(h0.pid);
+    startPolling();
   }
 
   function applyStatus(st){
@@ -234,11 +260,12 @@
       beginWaitingRestart(st);
       return;
     }
-    if (st.state === 'done') {
+    if (st.state === 'done' || st.state === 'idle') {
       // Update finished — hide progress/logs/steps
       showOps(false);
       setBusy(false);
       if (logEl) { logEl.textContent = ''; logEl.hidden = true; }
+      if (st.state === 'idle' && stateEl) stateEl.textContent = 'آماده';
       return;
     }
     const active = st.state === 'running' || st.state === 'error' || canStart;

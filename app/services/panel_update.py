@@ -101,7 +101,18 @@ def _default_status() -> dict[str, Any]:
         "to_version": None,
         "error": None,
         "snapshot_id": None,
+        "awaiting_restart": False,
     }
+
+
+def _replace_status(data: dict[str, Any]) -> dict[str, Any]:
+    """Overwrite status file entirely (does not merge with previous)."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with _LOCK:
+        tmp = STATUS_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(STATUS_FILE)
+        return data
 
 
 def read_status() -> dict[str, Any]:
@@ -504,6 +515,7 @@ def _finish_error(err: Exception | str) -> None:
             "message": msg,
             "error": msg,
             "finished_at": _now(),
+            "awaiting_restart": False,
         }
     )
     _append_log(f"خطا: {msg}")
@@ -752,9 +764,50 @@ def clear_idle_status() -> dict[str, Any]:
     st = read_status()
     if st.get("state") == "running":
         return st
-    if st.get("state") in {"idle", None} and not st.get("log") and not st.get("error"):
+    if (
+        st.get("state") in {"idle", None}
+        and not st.get("log")
+        and not st.get("error")
+        and not st.get("awaiting_restart")
+        and not st.get("step_key")
+    ):
         return st
-    return write_status(_default_status())
+    return _replace_status(_default_status())
+
+
+def resolve_stale_update_status() -> dict[str, Any]:
+    """
+    Clear leftover restart/progress UI after the new process is already up.
+
+    Typical stuck case: awaiting_restart=True in panel_update.json while the
+    running panel already serves to_version (or newer). Opening the update tab
+    would otherwise keep showing steps/logs forever.
+    """
+    from app.services.updates import is_newer
+
+    st = read_status()
+    if st.get("state") == "running":
+        return st
+
+    awaiting = bool(st.get("awaiting_restart"))
+    local = local_version()
+    to_ver = str(st.get("to_version") or "").strip()
+
+    if awaiting:
+        # Target already reached (local >= to_version) → restart finished.
+        if to_ver and not is_newer(to_ver, local):
+            return clear_idle_status()
+        # No target recorded but marked done+awaiting → leftover after success.
+        if st.get("state") == "done" and not to_ver:
+            return clear_idle_status()
+        return st
+
+    if st.get("state") == "error":
+        return st
+
+    if st.get("state") == "done" or st.get("log") or st.get("step_key"):
+        return clear_idle_status()
+    return st
 
 
 def start_update(target_version: str | None = None) -> dict[str, Any]:
@@ -769,22 +822,10 @@ def start_rollback(snapshot_id: str) -> dict[str, Any]:
 
 async def update_page_context() -> dict[str, Any]:
     info = await check_github_update()
-    available = bool(info.get("update_available"))
-    status = read_status()
+    status = resolve_stale_update_status()
     awaiting = bool(status.get("awaiting_restart"))
-    # Finished (or stale leftovers): hide logs/steps. Keep error until retry.
-    if awaiting:
-        pass
-    elif status.get("state") == "running":
-        pass
-    elif status.get("state") == "error":
-        pass
-    else:
-        # done / idle / leftover logs after a finished update
-        if status.get("state") == "done" or status.get("log") or status.get("step_key"):
-            status = clear_idle_status()
-    snaps = list_snapshots()
     show_ops = bool(awaiting or status.get("state") in {"running", "error"})
+    snaps = list_snapshots()
     return {
         "update_info": info,
         "status": status,
