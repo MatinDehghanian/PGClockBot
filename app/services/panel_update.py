@@ -766,13 +766,15 @@ async def update_page_context() -> dict[str, Any]:
     info = await check_github_update()
     available = bool(info.get("update_available"))
     status = read_status()
-    # When up-to-date and idle/error leftover: don't show old logs/progress
-    if status.get("state") != "running" and not available:
+    awaiting = bool(status.get("awaiting_restart"))
+    # Keep restart-wait UI until the client confirms a new process boot.
+    if status.get("state") != "running" and not available and not awaiting:
         if status.get("state") in {"error", "done"} or status.get("log"):
             status = clear_idle_status()
     snaps = list_snapshots()
     show_ops = bool(
         available
+        or awaiting
         or status.get("state") in {"running", "error", "done"}
         or (status.get("log") and status.get("state") != "idle")
     )
