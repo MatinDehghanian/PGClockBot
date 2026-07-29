@@ -369,6 +369,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("notifications", "نوتیفیکیشن"),
     ("backup", "بکاپ"),
     ("update", "آپدیت"),
+    ("ssl", "SSL"),
     ("bot", "ربات و اتصال"),
 ]
 
@@ -548,6 +549,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "notifications": ["هشدار سرویس کاربر"],
     "backup": [],
     "update": [],
+    "ssl": [],
     "bot": [],
     "appearance": [],
 }

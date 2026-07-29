@@ -1378,6 +1378,53 @@ tr:last-child td { border-bottom: 0; }
   font-size: 12px;
   line-height: 1.5;
 }
+
+/* SSL progress */
+.ssl-progress {
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+.ssl-progress-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted-fg);
+  margin-bottom: 8px;
+}
+.ssl-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--muted);
+  overflow: hidden;
+}
+.ssl-progress-track i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--brand);
+  transition: width 0.35s ease;
+}
+.ssl-pre {
+  display: block;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre;
+  font-family: var(--mono);
+  font-size: 11px;
+  direction: ltr;
+  text-align: left;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--muted);
+  margin: 0;
+}
 .update-steps {
   list-style: none;
   margin: 0 0 8px;

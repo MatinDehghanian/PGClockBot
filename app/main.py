@@ -236,8 +236,12 @@ def main() -> None:
     else:
         creds = load_web_admin()
 
+    from app.services.ssl_certs import uvicorn_ssl_kwargs
+
+    ssl_kwargs = uvicorn_ssl_kwargs() or {}
+    scheme = "https" if ssl_kwargs else "http"
     host_hint = settings.web_host if settings.web_host not in {"0.0.0.0", "::"} else "127.0.0.1"
-    entry = f"http://{host_hint}:{settings.web_port}/"
+    entry = f"{scheme}://{host_hint}:{settings.web_port}/"
     if not creds.get("password") or not is_setup_complete():
         gate = ensure_setup_gate_token()
         logger.warning(
@@ -251,8 +255,16 @@ def main() -> None:
             creds.get("username") or "admin",
             entry,
         )
+        if ssl_kwargs:
+            logger.info("TLS enabled · cert=%s", ssl_kwargs.get("ssl_certfile"))
 
-    uvicorn.run(api, host=settings.web_host, port=settings.web_port, log_level="info")
+    uvicorn.run(
+        api,
+        host=settings.web_host,
+        port=settings.web_port,
+        log_level="info",
+        **ssl_kwargs,
+    )
 
 
 if __name__ == "__main__":
