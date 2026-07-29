@@ -2743,6 +2743,16 @@ html[data-theme="light"] .tg-preview-shell {
   position: relative;
   isolation: isolate;
 }
+.home-hero,
+.home-section {
+  animation: home-rise .45s ease both;
+}
+.home-section:nth-of-type(2) { animation-delay: .06s; }
+.home-section:nth-of-type(3) { animation-delay: .12s; }
+@keyframes home-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
 .home-ambient {
   pointer-events: none;
   position: absolute;
