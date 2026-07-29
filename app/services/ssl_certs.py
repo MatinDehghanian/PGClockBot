@@ -1,4 +1,4 @@
-"""Let's Encrypt SSL for the web panel + mini-app (single domain, automatic)."""
+"""Let's Encrypt SSL for panel + mini-app — issue without killing the panel."""
 from __future__ import annotations
 
 import json
@@ -6,8 +6,11 @@ import logging
 import os
 import re
 import shutil
+import signal
+import socket
 import subprocess
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,6 +26,7 @@ META_PATH = CERT_DIR / "meta.json"
 PROGRESS_PATH = CERT_DIR / "progress.json"
 LIVE_CERT = CERT_DIR / "fullchain.pem"
 LIVE_KEY = CERT_DIR / "privkey.pem"
+ACME_HELPER = CERT_DIR / "acme_http80.py"
 
 _PROGRESS_LOCK = threading.Lock()
 _JOB_LOCK = threading.Lock()
@@ -73,6 +77,8 @@ def _set_progress(
     message: str,
     done: bool = False,
     ok: bool | None = None,
+    restarting: bool = False,
+    https_url: str = "",
 ) -> None:
     ensure_dirs()
     payload = {
@@ -81,6 +87,8 @@ def _set_progress(
         "message": message,
         "done": bool(done),
         "ok": ok,
+        "restarting": bool(restarting),
+        "https_url": https_url or "",
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     with _PROGRESS_LOCK:
@@ -89,7 +97,15 @@ def _set_progress(
 
 def read_progress() -> dict[str, Any]:
     if not PROGRESS_PATH.is_file():
-        return {"pct": 0, "stage": "idle", "message": "", "done": True, "ok": None}
+        return {
+            "pct": 0,
+            "stage": "idle",
+            "message": "",
+            "done": True,
+            "ok": None,
+            "restarting": False,
+            "https_url": "",
+        }
     try:
         data = json.loads(PROGRESS_PATH.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {"pct": 0, "stage": "idle", "message": "", "done": True}
@@ -128,6 +144,15 @@ def job_running() -> bool:
     return _JOB_RUNNING
 
 
+def public_https_url(domain: str | None = None) -> str:
+    settings = get_settings()
+    port = int(settings.web_port or 9000)
+    d = normalize_domain(domain or read_meta().get("domain") or "")
+    if not d:
+        return ""
+    return f"https://{d}" if port == 443 else f"https://{d}:{port}"
+
+
 def _run(cmd: list[str], *, timeout: int = 300) -> tuple[int, str]:
     env = {
         **os.environ,
@@ -153,7 +178,7 @@ def _run(cmd: list[str], *, timeout: int = 300) -> tuple[int, str]:
 
 
 def _with_sudo(cmd: list[str]) -> list[str]:
-    if os.geteuid() == 0:
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
         return cmd
     sudo = which("sudo")
     if sudo:
@@ -161,12 +186,26 @@ def _with_sudo(cmd: list[str]) -> list[str]:
     return cmd
 
 
+def _port_in_use(port: int = 80) -> bool:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.settimeout(0.8)
+        return sock.connect_ex(("127.0.0.1", port)) == 0
+    except Exception:
+        return False
+    finally:
+        try:
+            sock.close()
+        except Exception:
+            pass
+
+
 def install_certbot() -> dict[str, Any]:
     if certbot_available():
         return {"ok": True, "path": certbot_bin()}
     apt = which("apt-get") or which("apt")
     if not apt:
-        return {"ok": False, "error": "apt پیدا نشد — دستی نصب کنید: sudo apt install certbot"}
+        return {"ok": False, "error": "apt پیدا نشد — دستی: sudo apt install certbot"}
     _set_progress(pct=12, stage="install", message="در حال نصب certbot…", done=False)
     code, out = _run(_with_sudo([apt, "install", "-y", "certbot"]), timeout=360)
     path = certbot_bin()
@@ -185,7 +224,6 @@ def _parse_expiry(cert_path: Path) -> tuple[str | None, bool]:
     if code != 0 or "notAfter=" not in out:
         return None, False
     raw = out.split("notAfter=", 1)[-1].strip().splitlines()[0].strip()
-    # e.g. Jul 29 12:00:00 2027 GMT
     exp_dt = None
     for fmt in ("%b %d %H:%M:%S %Y %Z", "%b %d %H:%M:%S %Y GMT"):
         try:
@@ -206,13 +244,9 @@ def cert_status() -> dict[str, Any]:
     expires_at, expired = (None, True)
     if has:
         expires_at, expired = _parse_expiry(cert_path)
-        if expires_at and not meta.get("expires_at"):
-            meta["expires_at"] = expires_at
     port = int(get_settings().web_port or 9000)
     domain = normalize_domain(meta.get("domain") or meta.get("panel_domain") or "")
-    public_https = ""
-    if domain:
-        public_https = f"https://{domain}" if port in (443, 8443) else f"https://{domain}:{port}"
+    enabled = bool(meta.get("ssl_enabled")) and has
     return {
         "has_cert": has,
         "certbot": certbot_available(),
@@ -225,12 +259,13 @@ def cert_status() -> dict[str, Any]:
         "issued_at": meta.get("issued_at"),
         "expires_at": expires_at or meta.get("expires_at"),
         "expired": bool(expired) if has else True,
-        "ssl_enabled": bool(meta.get("ssl_enabled")) and has,
+        "ssl_enabled": enabled,
         "last_error": meta.get("last_error"),
-        "public_https": public_https,
+        "public_https": public_https_url(domain) if domain else "",
         "web_port": port,
         "progress": read_progress(),
         "running": job_running(),
+        "port80_busy": _port_in_use(80),
     }
 
 
@@ -294,7 +329,11 @@ def _find_and_copy_cert(primary: str) -> str | None:
         if found:
             return found
     live_root = Path("/etc/letsencrypt/live")
-    if live_root.is_dir():
+    try:
+        is_dir = live_root.is_dir()
+    except PermissionError:
+        is_dir = True
+    if is_dir:
         try:
             children = sorted(
                 [p for p in live_root.iterdir() if p.is_dir() and not p.name.startswith(".")],
@@ -302,28 +341,93 @@ def _find_and_copy_cert(primary: str) -> str | None:
                 reverse=True,
             )
         except PermissionError:
-            code, out = _run(_with_sudo(["ls", "-1", str(live_root)]), timeout=20)
+            _code, out = _run(_with_sudo(["ls", "-1", str(live_root)]), timeout=20)
             children = [live_root / line.strip() for line in (out or "").splitlines() if line.strip()]
         for child in children:
-            found = _copy_live_from_letsencrypt(child.name if isinstance(child, Path) else str(child))
+            found = _copy_live_from_letsencrypt(child.name if isinstance(child, Path) else Path(child).name)
             if found:
                 return found
     return None
 
 
-def _apply_https_env(domain: str) -> str:
-    """Point PUBLIC_BASE_URL at the HTTPS panel/mini-app URL."""
-    settings = get_settings()
-    port = int(settings.web_port or 9000)
-    url = f"https://{domain}" if port == 443 else f"https://{domain}:{port}"
+def _write_acme_helper() -> Path:
+    ensure_dirs()
+    ACME_HELPER.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer\n"
+        "from pathlib import Path\n"
+        "root = Path(sys.argv[1]).resolve()\n"
+        "class H(SimpleHTTPRequestHandler):\n"
+        "    def __init__(self, *a, **k):\n"
+        "        super().__init__(*a, directory=str(root), **k)\n"
+        "    def log_message(self, *a):\n"
+        "        return\n"
+        "ThreadingHTTPServer(('0.0.0.0', 80), H).serve_forever()\n",
+        encoding="utf-8",
+    )
     try:
-        from app.services.setup_wizard import update_env_keys
+        ACME_HELPER.chmod(0o755)
+    except OSError:
+        pass
+    return ACME_HELPER
 
-        update_env_keys({"PUBLIC_BASE_URL": url})
-        get_settings.cache_clear()
+
+def _start_acme_http() -> subprocess.Popen | None:
+    """Serve WEBROOT on :80 without touching the panel process on WEB_PORT."""
+    if _port_in_use(80):
+        return None
+    helper = _write_acme_helper()
+    py = which("python3") or sys_executable()
+    cmd = _with_sudo([py, str(helper), str(WEBROOT_DIR)])
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            cwd=str(ROOT_DIR),
+        )
     except Exception as exc:
-        logger.warning("PUBLIC_BASE_URL update failed: %s", exc)
-    return url
+        logger.warning("ACME http80 start failed: %s", exc)
+        return None
+    # Wait until port 80 answers
+    for _ in range(25):
+        if proc.poll() is not None:
+            return None
+        if _port_in_use(80):
+            return proc
+        time.sleep(0.2)
+    _stop_acme_http(proc)
+    return None
+
+
+def sys_executable() -> str:
+    import sys
+
+    return sys.executable
+
+
+def _stop_acme_http(proc: subprocess.Popen | None) -> None:
+    if not proc:
+        return
+    try:
+        if proc.poll() is None:
+            # Prefer graceful terminate; escalate if needed
+            try:
+                os.kill(proc.pid, signal.SIGTERM)
+            except Exception:
+                proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except Exception:
+                try:
+                    os.kill(proc.pid, signal.SIGKILL)
+                except Exception:
+                    proc.kill()
+    except Exception:
+        pass
+    # Also kill helper by pattern if sudo spawned a child
+    _run(_with_sudo(["pkill", "-f", str(ACME_HELPER)]), timeout=10)
 
 
 def _certbot_issue(domain: str, email: str, *, force: bool = False) -> tuple[bool, str]:
@@ -346,32 +450,37 @@ def _certbot_issue(domain: str, email: str, *, force: bool = False) -> tuple[boo
     if force:
         base.append("--force-renewal")
 
-    # Prefer standalone (port 80) — most reliable on a fresh VPS without nginx.
-    _set_progress(pct=40, stage="challenge", message="درخواست گواهی (standalone روی پورت ۸۰)…", done=False)
-    cmd = _with_sudo([*base, "--standalone", "--preferred-challenges", "http"])
-    code, out = _run(cmd, timeout=240)
-    if code == 0:
-        return True, out
-
-    # Fallback: webroot (works if port 80 already reverse-proxies to this app)
-    _set_progress(pct=55, stage="challenge", message="تلاش دوم با webroot…", done=False)
     ensure_dirs()
-    cmd2 = _with_sudo([*base, "--webroot", "-w", str(WEBROOT_DIR)])
-    code2, out2 = _run(cmd2, timeout=240)
-    if code2 == 0:
-        return True, out2
+    helper: subprocess.Popen | None = None
+    try:
+        if _port_in_use(80):
+            return (
+                False,
+                "پورت ۸۰ اشغال است. سرویس/پروکسی روی ۸۰ را موقتاً متوقف کنید، "
+                "بعد دوباره «دریافت گواهی» را بزنید. پنل روی پورت فعلی دست نخورده می‌ماند.",
+            )
 
-    combined = (out or "") + "\n" + (out2 or "")
-    hint = ""
-    low = combined.lower()
-    if "bind" in low or "80" in low or "address already in use" in low:
-        hint = (
-            "\nپورت ۸۰ اشغال است. موقتاً سرویس روی پورت ۸۰ را متوقف کنید "
-            "یا DNS/فایروال را بررسی کنید."
-        )
-    elif "nxdomain" in low or "dns" in low or "no valid" in low:
-        hint = "\nرکورد DNS دامنه باید به IP همین سرور اشاره کند و پورت ۸۰ باز باشد."
-    return False, (combined.strip()[-1800:] + hint).strip()
+        _set_progress(pct=35, stage="acme_http", message="راه‌اندازی موقت ACME روی پورت ۸۰…", done=False)
+        helper = _start_acme_http()
+        if not helper:
+            return (
+                False,
+                "نتوانستیم پورت ۸۰ را برای تأیید دامنه باز کنیم. "
+                "با کاربر root/sudo و پورت ۸۰ آزاد دوباره تلاش کنید.",
+            )
+
+        _set_progress(pct=50, stage="challenge", message="درخواست گواهی از Let's Encrypt…", done=False)
+        cmd = _with_sudo([*base, "--webroot", "-w", str(WEBROOT_DIR)])
+        code, out = _run(cmd, timeout=240)
+        if code == 0:
+            return True, out
+        hint = ""
+        low = (out or "").lower()
+        if "nxdomain" in low or "dns" in low or "no valid" in low:
+            hint = "\nDNS دامنه باید به IP همین سرور اشاره کند."
+        return False, ((out or "certbot failed").strip()[-1800:] + hint).strip()
+    finally:
+        _stop_acme_http(helper)
 
 
 def issue_or_renew(
@@ -379,12 +488,14 @@ def issue_or_renew(
     domain: str,
     email: str,
     force: bool = False,
-    enable_https: bool = True,
 ) -> dict[str, Any]:
-    """Issue or renew a Let's Encrypt cert and enable HTTPS for panel + mini-app."""
+    """Issue/renew certificate only — never enables HTTPS and never restarts the panel."""
     ensure_dirs()
     domain = normalize_domain(domain)
     email = (email or "").strip()
+    prev = read_meta()
+    was_enabled = bool(prev.get("ssl_enabled"))
+
     if not is_valid_domain(domain):
         _set_progress(pct=100, stage="error", message="دامنه نامعتبر است", done=True, ok=False)
         return {"ok": False, "error": "دامنه نامعتبر است (مثال: panel.example.com)"}
@@ -392,7 +503,7 @@ def issue_or_renew(
         _set_progress(pct=100, stage="error", message="ایمیل نامعتبر است", done=True, ok=False)
         return {"ok": False, "error": "ایمیل معتبر برای Let's Encrypt لازم است"}
 
-    _set_progress(pct=5, stage="start", message="شروع…", done=False)
+    _set_progress(pct=5, stage="start", message="شروع دریافت گواهی…", done=False)
 
     if not certbot_available():
         inst = install_certbot()
@@ -404,32 +515,35 @@ def issue_or_renew(
             write_meta(meta)
             return {"ok": False, "error": err}
 
-    _set_progress(pct=25, stage="ready", message="certbot آماده است", done=False)
+    _set_progress(pct=22, stage="ready", message="certbot آماده است", done=False)
     ok, log = _certbot_issue(domain, email, force=force)
     if not ok:
         meta = read_meta()
-        meta.update({"last_error": log[-2000:], "domain": domain, "email": email, "ssl_enabled": False})
+        meta.update(
+            {
+                "last_error": log[-2000:],
+                "domain": domain,
+                "email": email,
+                # keep previous ssl_enabled as-is on failure
+                "ssl_enabled": was_enabled,
+            }
+        )
         write_meta(meta)
         _set_progress(pct=100, stage="error", message=(log[-280:] or "ناموفق"), done=True, ok=False)
         return {"ok": False, "error": log[-1500:] or "صدور گواهی ناموفق بود"}
 
-    _set_progress(pct=78, stage="copy", message="کپی گواهی به مسیر پنل…", done=False)
+    _set_progress(pct=82, stage="copy", message="کپی گواهی به data/certs…", done=False)
     live = _find_and_copy_cert(domain)
     if not live or not cert_files_exist():
         msg = "گواهی صادر شد ولی خواندن فایل‌ها ممکن نشد — دسترسی /etc/letsencrypt را بررسی کنید"
         meta = read_meta()
-        meta.update({"last_error": msg, "domain": domain, "email": email})
+        meta.update({"last_error": msg, "domain": domain, "email": email, "ssl_enabled": was_enabled})
         write_meta(meta)
         _set_progress(pct=100, stage="error", message=msg, done=True, ok=False)
         return {"ok": False, "error": msg}
 
     expires_at, _expired = _parse_expiry(LIVE_CERT)
     now = datetime.now(timezone.utc).isoformat()
-    public_url = ""
-    if enable_https:
-        _set_progress(pct=90, stage="enable", message="فعال‌سازی HTTPS و آدرس عمومی…", done=False)
-        public_url = _apply_https_env(domain)
-
     meta = {
         "domain": domain,
         "panel_domain": domain,
@@ -437,32 +551,83 @@ def issue_or_renew(
         "email": email,
         "issued_at": now,
         "expires_at": expires_at,
-        "ssl_enabled": bool(enable_https),
+        # Critical: do NOT flip HTTPS on here — that used to restart mid-HTTP and "crash" Safari
+        "ssl_enabled": was_enabled,
         "last_error": None,
         "letsencrypt_live": live,
         "log_tail": (log or "")[-800:],
-        "public_https": public_url,
+        "public_https": public_https_url(domain),
     }
     write_meta(meta)
-    _set_progress(pct=100, stage="done", message="گواهی آماده است — در حال راه‌اندازی مجدد…", done=True, ok=True)
+    msg = "گواهی آماده شد. برای HTTPS دکمه «فعال‌سازی HTTPS» را بزنید."
+    if was_enabled:
+        msg = "گواهی به‌روز شد. برای اعمال روی سرویس، دوباره «فعال‌سازی HTTPS» را بزنید."
+    _set_progress(pct=100, stage="done", message=msg, done=True, ok=True)
     return {
         "ok": True,
         "domain": domain,
-        "public_https": public_url,
         "expires_at": expires_at,
         "cert_path": str(LIVE_CERT),
         "key_path": str(LIVE_KEY),
+        "needs_enable": True,
     }
 
 
-def start_issue_job(
-    *,
-    domain: str,
-    email: str,
-    force: bool = False,
-    restart: bool = True,
-) -> dict[str, Any]:
-    """Run issue/renew in a background thread; UI polls /settings/ssl/progress."""
+def enable_https(*, restart: bool = True) -> dict[str, Any]:
+    """Turn on uvicorn TLS + PUBLIC_BASE_URL, then optionally restart."""
+    if not cert_files_exist():
+        return {"ok": False, "error": "ابتدا گواهی را دریافت کنید"}
+    meta = read_meta()
+    domain = normalize_domain(meta.get("domain") or "")
+    if not domain:
+        return {"ok": False, "error": "دامنه گواهی مشخص نیست"}
+    url = public_https_url(domain)
+    try:
+        from app.services.setup_wizard import update_env_keys
+
+        update_env_keys({"PUBLIC_BASE_URL": url})
+        get_settings.cache_clear()
+    except Exception as exc:
+        logger.warning("PUBLIC_BASE_URL update failed: %s", exc)
+    meta["ssl_enabled"] = True
+    meta["public_https"] = url
+    meta["last_error"] = None
+    write_meta(meta)
+    if restart:
+        _set_progress(
+            pct=100,
+            stage="restart",
+            message="HTTPS فعال شد — ری‌استارت پنل… بعداً با آدرس HTTPS وارد شوید",
+            done=True,
+            ok=True,
+            restarting=True,
+            https_url=url,
+        )
+        try:
+            from app.services.service_control import schedule_panel_restart
+
+            schedule_panel_restart(delay_sec=3.5, reason="ssl https enable")
+        except Exception as exc:
+            return {"ok": False, "error": f"فعال شد ولی ری‌استارت ممکن نشد: {exc}"}
+    return {"ok": True, "public_https": url}
+
+
+def disable_https(*, restart: bool = True) -> dict[str, Any]:
+    meta = read_meta()
+    meta["ssl_enabled"] = False
+    write_meta(meta)
+    if restart:
+        try:
+            from app.services.service_control import schedule_panel_restart
+
+            schedule_panel_restart(delay_sec=2.5, reason="ssl https disable")
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+    return {"ok": True}
+
+
+def start_issue_job(*, domain: str, email: str, force: bool = False) -> dict[str, Any]:
+    """Background issue/renew — panel stays on HTTP; no auto-restart."""
     global _JOB_RUNNING
     with _JOB_LOCK:
         if _JOB_RUNNING:
@@ -472,14 +637,7 @@ def start_issue_job(
     def _worker() -> None:
         global _JOB_RUNNING
         try:
-            result = issue_or_renew(domain=domain, email=email, force=force, enable_https=True)
-            if result.get("ok") and restart:
-                try:
-                    from app.services.service_control import schedule_panel_restart
-
-                    schedule_panel_restart(delay_sec=2.0, reason="ssl certificate ready")
-                except Exception:
-                    logger.exception("SSL restart schedule failed")
+            issue_or_renew(domain=domain, email=email, force=force)
         except Exception as exc:
             logger.exception("SSL job failed")
             _set_progress(pct=100, stage="error", message=str(exc)[:240], done=True, ok=False)
@@ -490,7 +648,7 @@ def start_issue_job(
             with _JOB_LOCK:
                 _JOB_RUNNING = False
 
-    _set_progress(pct=3, stage="queued", message="صف انتظار…", done=False)
+    _set_progress(pct=3, stage="queued", message="در صف…", done=False)
     threading.Thread(target=_worker, name="pgclock-ssl", daemon=True).start()
     return {"ok": True, "started": True}
 
@@ -503,9 +661,3 @@ def uvicorn_ssl_kwargs() -> dict[str, str] | None:
     if not cert.is_file() or not key.is_file():
         return None
     return {"ssl_certfile": str(cert), "ssl_keyfile": str(key)}
-
-
-def disable_ssl() -> None:
-    meta = read_meta()
-    meta["ssl_enabled"] = False
-    write_meta(meta)

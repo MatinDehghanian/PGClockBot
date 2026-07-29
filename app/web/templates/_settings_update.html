@@ -18,10 +18,16 @@
 <div class="card settings-card">
   <h2>دستور آپدیت از ترمینال</h2>
   <p class="muted update-card-caption">آپدیت از داخل پنل غیرفعال است. روی سرور این دستور را اجرا کنید:</p>
-  <pre class="update-log" style="display:block;margin:0 0 12px" dir="ltr">bash pgclock.sh update</pre>
-  <p class="muted" style="margin:0">یا از منوی مدیریت:</p>
-  <pre class="update-log" style="display:block;margin:8px 0 0" dir="ltr">bash pgclock.sh
+  <div class="cmd-copy">
+    <pre class="update-log" dir="ltr">bash pgclock.sh update</pre>
+    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="bash pgclock.sh update">کپی</button>
+  </div>
+  <p class="muted" style="margin:12px 0 0">یا از منوی مدیریت:</p>
+  <div class="cmd-copy">
+    <pre class="update-log" dir="ltr">bash pgclock.sh
 # سپس گزینه 2 — Update</pre>
+    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="bash pgclock.sh">کپی</button>
+  </div>
 </div>
 
 <div class="card settings-card">
@@ -41,12 +47,21 @@
     معمولاً <code dir="ltr">bash pgclock.sh update</code> خودش سرویس را ری‌استارت می‌کند.
     اگر پنل یا ربات بالا نیامد، یکی از این‌ها را اجرا کنید:
   </p>
-  <pre class="update-log" style="display:block;margin:0 0 12px" dir="ltr">sudo systemctl restart pgclockbot</pre>
-  <p class="muted" style="margin:0 0 8px">یا از منوی مدیریت اسکریپت:</p>
-  <pre class="update-log" style="display:block;margin:0 0 12px" dir="ltr">bash pgclock.sh
+  <div class="cmd-copy">
+    <pre class="update-log" dir="ltr">sudo systemctl restart pgclockbot</pre>
+    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="sudo systemctl restart pgclockbot">کپی</button>
+  </div>
+  <p class="muted" style="margin:12px 0 8px">یا از منوی مدیریت اسکریپت:</p>
+  <div class="cmd-copy">
+    <pre class="update-log" dir="ltr">bash pgclock.sh
 # گزینه 5 — Service → Restart</pre>
-  <p class="muted" style="margin:0">برای دیدن لاگ:</p>
-  <pre class="update-log" style="display:block;margin:8px 0 0" dir="ltr">journalctl -u pgclockbot -n 50 --no-pager</pre>
+    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="bash pgclock.sh">کپی</button>
+  </div>
+  <p class="muted" style="margin:12px 0 8px">برای دیدن لاگ:</p>
+  <div class="cmd-copy">
+    <pre class="update-log" dir="ltr">journalctl -u pgclockbot -n 50 --no-pager</pre>
+    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="journalctl -u pgclockbot -n 50 --no-pager">کپی</button>
+  </div>
   <div class="actions update-actions" style="margin-top:14px">
     <a class="btn btn-ghost" href="{{ update_info.repo_url }}" target="_blank" rel="noopener">گیت‌هاب</a>
     <a class="btn btn-ghost" href="/settings?tab=update&force=1">بررسی دوباره</a>
@@ -58,9 +73,15 @@
 <div class="card settings-card">
   <h2>آپدیت دستی</h2>
   <p class="muted update-card-caption">در صورت نیاز، همیشه می‌توانید از ترمینال آپدیت بگیرید:</p>
-  <pre class="update-log" style="display:block;margin:0" dir="ltr">bash pgclock.sh update</pre>
+  <div class="cmd-copy">
+    <pre class="update-log" dir="ltr">bash pgclock.sh update</pre>
+    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="bash pgclock.sh update">کپی</button>
+  </div>
   <p class="muted" style="margin:12px 0 8px">ری‌استارت دستی در صورت نیاز:</p>
-  <pre class="update-log" style="display:block;margin:0" dir="ltr">sudo systemctl restart pgclockbot</pre>
+  <div class="cmd-copy">
+    <pre class="update-log" dir="ltr">sudo systemctl restart pgclockbot</pre>
+    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="sudo systemctl restart pgclockbot">کپی</button>
+  </div>
   <div class="actions update-actions" style="margin-top:14px">
     <a class="btn btn-ghost" href="{{ update_info.repo_url }}" target="_blank" rel="noopener">گیت‌هاب</a>
     <a class="btn btn-ghost" href="/settings?tab=update&force=1">بررسی دوباره</a>
@@ -70,11 +91,50 @@
 <div class="flash warn">{{ update_info.label }}</div>
 <div class="card settings-card">
   <p class="muted">بررسی نسخه از گیت‌هاب ممکن نشد. بعداً دوباره تلاش کنید یا از ترمینال آپدیت بگیرید:</p>
-  <pre class="update-log" style="display:block;margin:0" dir="ltr">bash pgclock.sh update</pre>
+  <div class="cmd-copy">
+    <pre class="update-log" dir="ltr">bash pgclock.sh update</pre>
+    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="bash pgclock.sh update">کپی</button>
+  </div>
   <p class="muted" style="margin:12px 0 8px">ری‌استارت دستی:</p>
-  <pre class="update-log" style="display:block;margin:0" dir="ltr">sudo systemctl restart pgclockbot</pre>
+  <div class="cmd-copy">
+    <pre class="update-log" dir="ltr">sudo systemctl restart pgclockbot</pre>
+    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="sudo systemctl restart pgclockbot">کپی</button>
+  </div>
   <div class="actions update-actions" style="margin-top:14px">
     <a class="btn btn-ghost" href="/settings?tab=update&force=1">بررسی دوباره</a>
   </div>
 </div>
 {% endif %}
+
+<script>
+(function(){
+  async function copyText(text, btn){
+    const value = (text || '').trim();
+    if (!value) return;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = value;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      if (btn) {
+        const prev = btn.textContent;
+        btn.textContent = 'کپی شد';
+        btn.disabled = true;
+        setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 1200);
+      }
+    } catch (e) {}
+  }
+  document.querySelectorAll('.cmd-copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => copyText(btn.getAttribute('data-copy') || '', btn));
+  });
+})();
+</script>
