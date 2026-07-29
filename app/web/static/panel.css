@@ -409,17 +409,25 @@ input, select, textarea {
   color: var(--foreground);
   border: 1px solid var(--input);
   border-radius: var(--radius);
-  padding: 8px 12px;
+  padding: 0 12px;
   font-family: inherit;
   font-size: 16px;
   font-weight: 400;
-  line-height: 1.45;
+  line-height: 1.25;
+  height: var(--btn-h);
   min-height: var(--btn-h);
+  box-sizing: border-box;
+}
+textarea {
+  height: auto;
+  min-height: 96px;
+  padding: 8px 12px;
+  line-height: 1.45;
+  resize: vertical;
 }
 [contenteditable="true"] {
   font-size: 16px;
 }
-textarea { min-height: 96px; resize: vertical; }
 input:focus, select:focus, textarea:focus, button:focus, a:focus {
   outline: none;
 }
@@ -471,6 +479,37 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+.search-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+}
+.search-bar-field {
+  flex: 1 1 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
+}
+.search-bar-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.search-bar input {
+  margin-top: 0;
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+}
+.search-bar .btn {
+  flex: 0 0 auto;
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+  align-self: flex-end;
 }
 .form-field {
   display: flex;

@@ -6,6 +6,18 @@ from app.services.updates import is_newer, local_version
 
 # Newest first within each version. Keep short and scannable.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "1.7.47": [
+        "نمایش پایدار چنج‌لاگ در صفحه آپدیت",
+        "تایتل باکس سایدبار: وب پنل",
+        "حذف دکمه بروزرسانی دستی داشبورد",
+        "هم‌ارتفاع شدن باکس جستجو و دکمه جستجو",
+    ],
+    "1.7.46": [
+        "لینک اشتراک کاربران پاسارگارد با مودال و دریافت از سرور",
+        "بک‌دراپ مودال مات (بدون سرمه ای)",
+        "جلوگیری از زوم صفحه هنگام تایپ در موبایل",
+        "یکدست‌سازی فاصله‌ها و تایتل‌های سایدبار",
+    ],
     "1.7.45": [
         "چنج‌لاگ فارسی در صفحه آپدیت",
         "تنظیمات وب‌پنل یک‌جا با تب (زیر داشبورد)",
@@ -60,14 +72,33 @@ def changelog_between(local: str | None, remote: str | None) -> list[dict[str, o
     return items
 
 
+def recent_changelog(*, limit: int = 4) -> list[dict[str, object]]:
+    """Newest release notes with content, for idle update page."""
+    items: list[dict[str, object]] = []
+    for ver, notes in RELEASE_NOTES_FA.items():
+        if not notes:
+            continue
+        items.append({"version": ver, "notes": list(notes)})
+        if len(items) >= max(1, limit):
+            break
+    return items
+
+
 def changelog_for_update_page(*, local: str | None = None, remote: str | None = None) -> dict:
     local = (local or local_version() or "").strip()
     remote = (remote or "").strip() or None
     if remote and is_newer(remote, local):
         blocks = changelog_between(local, remote)
+        if not blocks:
+            # Remote newer but no curated notes yet — still show recent history
+            blocks = recent_changelog(limit=4)
         title = f"تغییرات تا نسخه {remote}"
     else:
         notes = notes_for_version(local)
-        blocks = [{"version": local, "notes": notes}] if notes else []
-        title = f"تغییرات نسخه {local}" if notes else "چنج‌لاگ"
+        if notes:
+            blocks = [{"version": local.lstrip("vV"), "notes": notes}]
+            title = f"تغییرات نسخه {local.lstrip('vV')}"
+        else:
+            blocks = recent_changelog(limit=4)
+            title = "آخرین تغییرات"
     return {"title": title, "blocks": blocks, "has_notes": bool(blocks)}

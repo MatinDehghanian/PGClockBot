@@ -25,10 +25,10 @@
 {% endif %}
 
 {% set cl = changelog if changelog is defined else none %}
-{% if cl and cl.has_notes %}
+{% if cl and cl.get('has_notes') %}
 <div class="card update-changelog">
-  <h2>{{ cl.title }}</h2>
-  {% for block in cl.blocks %}
+  <h2>{{ cl.get('title') or 'چنج‌لاگ' }}</h2>
+  {% for block in cl.get('blocks') or [] %}
   <div class="update-changelog-block">
     <strong class="update-changelog-ver" dir="ltr">v{{ block.version }}</strong>
     <ul class="update-changelog-list">

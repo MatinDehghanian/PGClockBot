@@ -16,12 +16,11 @@
 {{ pg_tabs('pg_users') }}
 
 <div class="card">
-  <form method="get" action="/pg/users" class="form-row" style="align-items:end;margin-bottom:12px">
-    <div style="flex:1">
-      <label class="form-field">جستجوی نام کاربری
-        <input name="q" value="{{ q or '' }}" placeholder="مثلاً user01" />
-      </label>
-    </div>
+  <form method="get" action="/pg/users" class="search-bar">
+    <label class="search-bar-field">
+      <span class="search-bar-label">جستجوی نام کاربری</span>
+      <input name="q" value="{{ q or '' }}" placeholder="مثلاً user01" />
+    </label>
     <button class="btn btn-ghost" type="submit">جستجو</button>
   </form>
 
