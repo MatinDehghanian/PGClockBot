@@ -2739,9 +2739,6 @@ html[data-theme="light"] .tg-preview-shell {
 }
 
 /* —— Overall home dashboard —— */
-.home-dash {
-  /* layout root */
-}
 .home-update-banner {
   display: flex;
   align-items: center;

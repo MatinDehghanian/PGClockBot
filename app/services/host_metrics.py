@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
 _CPU_SAMPLE: tuple[float, float, float] | None = None  # idle, total, monotonic
+_CPU_LOCK = threading.Lock()
 _MEMINFO = Path("/proc/meminfo")
 _STAT = Path("/proc/stat")
 
@@ -31,28 +33,29 @@ def _read_cpu_times() -> tuple[float, float] | None:
 def cpu_percent(*, wait_sec: float = 0.12) -> float | None:
     """Return CPU usage percent using /proc/stat delta sampling."""
     global _CPU_SAMPLE
-    now = time.monotonic()
-    cur = _read_cpu_times()
-    if cur is None:
-        return None
-    idle, total = cur
-    prev = _CPU_SAMPLE
-    _CPU_SAMPLE = (idle, total, now)
-    if prev is None or (now - prev[2]) < 0.05:
-        if wait_sec > 0:
-            time.sleep(wait_sec)
-            cur2 = _read_cpu_times()
-            if cur2 is None:
-                return None
-            idle2, total2 = cur2
-            _CPU_SAMPLE = (idle2, total2, time.monotonic())
-            d_total = total2 - total
-            d_idle = idle2 - idle
-        else:
+    with _CPU_LOCK:
+        now = time.monotonic()
+        cur = _read_cpu_times()
+        if cur is None:
             return None
-    else:
-        d_total = total - prev[1]
-        d_idle = idle - prev[0]
+        idle, total = cur
+        prev = _CPU_SAMPLE
+        _CPU_SAMPLE = (idle, total, now)
+        if prev is None or (now - prev[2]) < 0.05:
+            if wait_sec > 0:
+                time.sleep(wait_sec)
+                cur2 = _read_cpu_times()
+                if cur2 is None:
+                    return None
+                idle2, total2 = cur2
+                _CPU_SAMPLE = (idle2, total2, time.monotonic())
+                d_total = total2 - total
+                d_idle = idle2 - idle
+            else:
+                return None
+        else:
+            d_total = total - prev[1]
+            d_idle = idle - prev[0]
     if d_total <= 0:
         return 0.0
     used = max(0.0, min(100.0, (1.0 - (d_idle / d_total)) * 100.0))

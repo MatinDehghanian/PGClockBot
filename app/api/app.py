@@ -56,7 +56,7 @@ from app.services.setup_wizard import (
     setup_gate_ok,
     update_env_keys,
 )
-from app.services.updates import check_github_update, local_version
+from app.services.updates import local_version
 from app.services.users import (
     SETTING_GROUPS,
     SETTINGS_TABS,
@@ -420,34 +420,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
             )
         return response
-
-    @app.middleware("http")
-    async def attach_admin_update_badge(request: Request, call_next):
-        """Warm GitHub update info for admin HTML pages (sidebar badge)."""
-        path = request.url.path or ""
-        if (
-            request.method == "GET"
-            and not path.startswith("/static")
-            and not path.startswith("/media")
-            and not path.startswith("/.well-known")
-            and path
-            not in {
-                "/health",
-                "/sw.js",
-                "/manifest.webmanifest",
-                "/update/status",
-                "/home/metrics",
-            }
-        ):
-            try:
-                user = get_session_user(request)
-                if user and user.get("role") == "admin":
-                    from app.services.updates import check_github_update
-
-                    request.state.panel_update = await check_github_update()
-            except Exception:
-                pass
-        return await call_next(request)
 
     @app.exception_handler(NotAuthenticated)
     async def _unauth(request: Request, exc: NotAuthenticated):
@@ -988,7 +960,6 @@ def create_api_app(lifespan=None) -> FastAPI:
             ord_q = ord_q.where(Order.reseller_id == rid)
         recent_payments = list((await session.execute(pay_q)).scalars().all())
         recent_orders = list((await session.execute(ord_q)).scalars().all())
-        update = await check_github_update() if staff.get("role") == "admin" else None
         return render(
             request,
             "dashboard.html",
@@ -1005,7 +976,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 },
                 "recent_payments": recent_payments,
                 "recent_orders": recent_orders,
-                "update": update,
             },
         )
 

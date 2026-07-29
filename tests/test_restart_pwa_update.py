@@ -30,8 +30,15 @@ class PwaTests(unittest.TestCase):
 
         m = build_manifest({})
         self.assertEqual(m["name"], DEFAULT_NAME)
+        self.assertEqual(m["start_url"], "/home")
+        self.assertEqual(m["id"], "/home")
         self.assertEqual(m["display"], "standalone")
         self.assertTrue(any(i["src"].startswith("/pwa/icon/") for i in m["icons"]))
+        from app.services.pwa import service_worker_js
+
+        sw = service_worker_js()
+        self.assertIn("pgclock-shell-v3", sw)
+        self.assertNotIn("/pwa/icon/192", sw)
 
     def test_icon_from_logo(self):
         from app.services import pwa as pwa_mod

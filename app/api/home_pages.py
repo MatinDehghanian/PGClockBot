@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +24,7 @@ def register_home_pages(app, *, render, require_admin, get_db):
         try:
             from app.services.updates import check_github_update
 
-            update = await check_github_update()
+            update = await check_github_update(force=True)
         except Exception:
             update = None
         return render(
@@ -37,10 +39,10 @@ def register_home_pages(app, *, render, require_admin, get_db):
 
     @app.get("/home/metrics")
     async def home_metrics_json(staff: dict = Depends(require_admin)):
-        # Reuse prior CPU sample when polling (wait_cpu=0).
-        metrics = host_metrics(wait_cpu=0.0)
+        # Reuse prior CPU sample when polling (wait_cpu=0); sample off the event loop.
+        metrics = await asyncio.to_thread(host_metrics, wait_cpu=0.0)
         if metrics.get("cpu_percent") is None:
-            metrics = host_metrics(wait_cpu=0.12)
+            metrics = await asyncio.to_thread(host_metrics, wait_cpu=0.12)
         cpu = metrics.get("cpu_percent")
         mem_pct = metrics.get("memory_percent")
         return JSONResponse(
