@@ -78,6 +78,13 @@ def main() -> None:
     async def lifespan(app):
         await init_db()
         try:
+            from app.services.service_control import ensure_restart_helper
+
+            ok_h, msg_h = ensure_restart_helper()
+            logger.info("Restart helper: %s", msg_h if ok_h else f"skip — {msg_h}")
+        except Exception:
+            logger.debug("restart helper bootstrap skipped", exc_info=True)
+        try:
             await seed_demo_plan()
         except Exception:
             logger.exception("Demo plan seed failed — continuing")
