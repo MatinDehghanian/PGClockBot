@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import pg_tabs, row_actions %}
+{% from "macros.html" import pg_tabs, row_actions, switch_chip %}
 {% block title %}کاربران پنل{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -96,34 +96,111 @@
 </div>
 
 {% if can_create %}
+{% set default_mode = 'template' if require_template or (can_template_create and not can_custom_create) else 'custom' %}
 <div class="ui-modal" id="modal-pg-user-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
-  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-user-create-title">
+  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="pg-user-create-title">
     <div class="ui-modal-head">
-      <h2 id="pg-user-create-title">ساخت کاربر از تمپلیت</h2>
+      <h2 id="pg-user-create-title">ساخت کاربر پاسارگارد</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن">×</button>
     </div>
-    <form method="post" action="/pg/users" class="form-stack">
+    <form method="post" action="/pg/users" class="form-stack" id="pg-user-create-form">
       <label class="form-field">نام کاربری
         <input name="username" required autocomplete="off" placeholder="user_01" />
       </label>
-      <label class="form-field">تمپلیت
-        <select name="template_id" required>
-          <option value="">— انتخاب —</option>
-          {% for t in templates %}
-          <option value="{{ t.get('id') }}">{{ t.get('name') or t.get('id') }}</option>
-          {% endfor %}
+
+      <label class="form-field">حالت ساخت
+        {% if require_template %}
+        <input type="hidden" name="mode" value="template" />
+        <select id="pg-user-mode" disabled>
+          <option value="template" selected>از تمپلیت آماده</option>
         </select>
+        <small class="muted">نقش شما فقط ساخت از تمپلیت را مجاز می‌داند.</small>
+        {% else %}
+        <select name="mode" id="pg-user-mode">
+          {% if can_custom_create or groups %}
+          <option value="custom" {% if default_mode == 'custom' %}selected{% endif %}>سفارشی (گروه + حجم + مدت)</option>
+          {% endif %}
+          {% if can_template_create or templates %}
+          <option value="template" {% if default_mode == 'template' %}selected{% endif %}>از تمپلیت آماده</option>
+          {% endif %}
+        </select>
+        {% endif %}
       </label>
-      {% if not templates %}
-      <p class="muted">تمپلیتی در دسترس نیست.</p>
-      {% endif %}
+
+      <div id="pg-user-mode-custom" class="form-stack" {% if default_mode != 'custom' %}style="display:none"{% endif %}>
+        <div class="form-row">
+          <label class="form-field">حجم (گیگابایت)
+            <input name="data_limit_gb" type="number" min="0" step="0.1" placeholder="خالی = نامحدود" inputmode="decimal" />
+            <small class="muted">۰ یا خالی = نامحدود. سهمیه نماینده را خود پاسارگارد کنترل می‌کند.</small>
+          </label>
+          <label class="form-field">مدت (روز)
+            <input name="duration_days" type="number" min="0" step="1" placeholder="خالی = بدون انقضا" inputmode="numeric" />
+            <small class="muted">۰ یا خالی = بدون تاریخ انقضا</small>
+          </label>
+        </div>
+        <div class="form-field">
+          <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد (حداقل یکی)</span>
+          <div class="ui-switch-grid">
+            {% for g in groups %}
+            {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
+            {% else %}
+            <span class="muted">گروهی در دسترس نیست.</span>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div id="pg-user-mode-template" class="form-stack" {% if default_mode != 'template' %}style="display:none"{% endif %}>
+        <label class="form-field">تمپلیت پاسارگارد
+          <select name="template_id" id="pg-user-template">
+            <option value="">— انتخاب —</option>
+            {% for t in templates %}
+            <option value="{{ t.get('id') }}">#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        {% if not templates %}
+        <p class="muted">تمپلیتی در دسترس نیست.</p>
+        {% endif %}
+      </div>
+
       <div class="actions">
-        <button class="btn" type="submit" {% if not templates %}disabled{% endif %}>ساخت</button>
+        <button class="btn" type="submit" id="pg-user-create-btn"
+          {% if not can_custom_create and not can_template_create %}disabled{% endif %}>ساخت</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
       </div>
     </form>
   </div>
 </div>
+<script>
+(function(){
+  const mode = document.getElementById('pg-user-mode');
+  const custom = document.getElementById('pg-user-mode-custom');
+  const tpl = document.getElementById('pg-user-mode-template');
+  const tplSelect = document.getElementById('pg-user-template');
+  const form = document.getElementById('pg-user-create-form');
+  if (!mode || !custom || !tpl) return;
+  function sync(){
+    const isTpl = mode.value === 'template';
+    custom.style.display = isTpl ? 'none' : '';
+    tpl.style.display = isTpl ? '' : 'none';
+    if (tplSelect) tplSelect.required = isTpl;
+  }
+  mode.addEventListener('change', sync);
+  sync();
+  if (form) {
+    form.addEventListener('submit', function(e){
+      if (mode.value === 'custom') {
+        const chips = form.querySelectorAll('input[name^="group_"]:checked');
+        if (!chips.length) {
+          e.preventDefault();
+          alert('حداقل یک گروه انتخاب کنید');
+        }
+      }
+    });
+  }
+})();
+</script>
 {% endif %}
 {% endblock %}
