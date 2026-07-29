@@ -254,7 +254,7 @@ ensure_apt_packages() {
   export DEBIAN_FRONTEND=noninteractive
   sudo_wrap apt-get update -y >/dev/null
   sudo_wrap apt-get install -y \
-    python3 python3-venv python3-pip ca-certificates curl git openssl nano \
+    python3 python3-venv python3-pip ca-certificates curl git openssl nano certbot \
     >/dev/null
   ok "Prerequisites ready"
 }

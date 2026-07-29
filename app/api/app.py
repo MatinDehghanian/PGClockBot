@@ -175,6 +175,18 @@ def create_api_app(lifespan=None) -> FastAPI:
     uploads_dir.mkdir(parents=True, exist_ok=True)
     # CRITICAL: never mount DATA_DIR itself — that would expose bot.db, backups, web_admin.json
     app.mount("/media/uploads", StaticFiles(directory=str(uploads_dir)), name="media_uploads")
+    try:
+        from app.services.ssl_certs import WEBROOT_DIR, ensure_dirs as ensure_ssl_dirs
+
+        ensure_ssl_dirs()
+        acme_dir = WEBROOT_DIR / ".well-known" / "acme-challenge"
+        app.mount(
+            "/.well-known/acme-challenge",
+            StaticFiles(directory=str(acme_dir)),
+            name="acme_challenge",
+        )
+    except Exception:
+        pass
 
     def get_signer() -> URLSafeTimedSerializer:
         # Never fall back to a hardcoded secret — forgeable sessions otherwise
@@ -321,6 +333,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             or path.startswith("/setup/")
             or path.startswith("/rsetup/")
             or path.startswith("/static")
+            or path.startswith("/.well-known/")
             or path == "/health"
         )
         if not allowed:
@@ -451,6 +464,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         get_signer=get_signer,
         cookie_secure=_cookie_secure,
     )
+
+    @app.get("/settings/ssl/progress")
+    async def ssl_progress(staff: dict = Depends(require_admin)):
+        from fastapi.responses import JSONResponse
+
+        from app.services.ssl_certs import read_progress
+
+        return JSONResponse(read_progress())
 
     @app.get("/health")
     async def health():
@@ -1955,6 +1976,19 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["bot_token_masked"] = (
                 ("••••" + token[-6:]) if len(token) > 8 else ("••••" if token else "")
             )
+        elif tab == "ssl":
+            from urllib.parse import urlparse
+
+            from app.services.setup_wizard import current_setup_values
+            from app.services.ssl_certs import cert_status, normalize_domain
+
+            st = cert_status()
+            if not st.get("domain"):
+                pub = (current_setup_values().get("PUBLIC_BASE_URL") or "").strip()
+                if pub:
+                    host = urlparse(pub if "://" in pub else f"https://{pub}").hostname or ""
+                    st["domain"] = normalize_domain(host)
+            ctx["ssl"] = st
         elif tab == "appearance":
             from app.services.bot_appearance import load_appearance_context
             from app.services.setup_wizard import current_setup_values
@@ -2010,6 +2044,40 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         tab = (request.query_params.get("tab") or "welcome").strip()
         form = await request.form()
+
+        if tab == "ssl":
+            from app.services.ssl_certs import (
+                is_valid_domain,
+                normalize_domain,
+                start_issue_job,
+                write_meta,
+                read_meta,
+            )
+
+            action = str(form.get("action") or "issue").strip()
+            domain = normalize_domain(str(form.get("domain") or ""))
+            email = str(form.get("acme_email") or "").strip()
+            if not is_valid_domain(domain):
+                return RedirectResponse(
+                    "/settings?tab=ssl&err=" + quote("دامنه نامعتبر است"),
+                    status_code=303,
+                )
+            if not email or "@" not in email:
+                return RedirectResponse(
+                    "/settings?tab=ssl&err=" + quote("ایمیل معتبر لازم است"),
+                    status_code=303,
+                )
+            meta = read_meta()
+            meta.update({"domain": domain, "panel_domain": domain, "miniapp_domain": domain, "email": email})
+            write_meta(meta)
+            force = action == "renew"
+            result = start_issue_job(domain=domain, email=email, force=force, restart=True)
+            if not result.get("ok"):
+                return RedirectResponse(
+                    "/settings?tab=ssl&err=" + quote(str(result.get("error") or "خطا")[:400]),
+                    status_code=303,
+                )
+            return RedirectResponse("/settings?tab=ssl&working=1", status_code=303)
 
         if tab == "bot":
             from app.services.pasarguard import reset_pg
