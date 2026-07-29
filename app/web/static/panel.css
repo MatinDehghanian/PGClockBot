@@ -853,6 +853,7 @@ th {
 }
 tr:last-child td { border-bottom: 0; }
 .mono { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+input.mono, textarea.mono, select.mono { font-size: 16px; }
 
 .badge {
   display: inline-flex;
