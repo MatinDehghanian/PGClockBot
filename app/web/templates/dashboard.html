@@ -9,18 +9,6 @@
   </div>
 </div>
 
-{% if update and update.update_available %}
-<div class="flash err">
-  <div style="margin-bottom:10px">
-    <strong>آپدیت جدید</strong>
-    <span class="muted"> {{ update.version }} → {{ update.remote_version }}</span>
-  </div>
-  <p class="muted" style="margin:0 0 8px">آپدیت از پنل غیرفعال است. در ترمینال سرور:</p>
-  <pre class="update-log" style="display:block;margin:0 0 10px" dir="ltr">bash pgclock.sh update</pre>
-  <a class="btn btn-sm btn-ghost" href="/settings?tab=update">راهنمای آپدیت</a>
-</div>
-{% endif %}
-
 <div class="stats-grid">
   <div class="stat">
     <div class="stat-top">

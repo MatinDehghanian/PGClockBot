@@ -2739,6 +2739,25 @@ html[data-theme="light"] .tg-preview-shell {
 }
 
 /* —— Overall home dashboard —— */
+.home-dash {
+  /* layout root */
+}
+.home-update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.home-update-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.home-update-copy strong { font-size: 13px; font-weight: 650; }
+.home-update-copy .muted { font-size: 12px; }
 .home-top {
   margin-bottom: 16px;
 }
