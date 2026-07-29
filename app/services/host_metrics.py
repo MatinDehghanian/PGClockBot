@@ -110,12 +110,32 @@ def format_bytes_short(n: int | float | None) -> str:
     return f"{n:.1f} {units[i]}".replace(".", "٫")
 
 
+def cpu_core_count() -> int | None:
+    """Logical CPU count from /proc/stat (cpu0..cpuN) or os.cpu_count()."""
+    try:
+        lines = _STAT.read_text(encoding="utf-8").splitlines()
+        cores = sum(1 for ln in lines if ln.startswith("cpu") and ln[3:4].isdigit())
+        if cores > 0:
+            return cores
+    except OSError:
+        pass
+    try:
+        import os
+
+        n = os.cpu_count()
+        return int(n) if n else None
+    except Exception:
+        return None
+
+
 def host_metrics(*, wait_cpu: float = 0.12) -> dict[str, Any]:
     """Snapshot used by the overall home dashboard."""
     cpu = cpu_percent(wait_sec=wait_cpu)
     mem = memory_stats()
+    cores = cpu_core_count()
     return {
         "cpu_percent": cpu,
+        "cpu_cores": cores,
         "memory": mem,
         "memory_used_text": format_bytes_short(mem["used"]) if mem else "—",
         "memory_total_text": format_bytes_short(mem["total"]) if mem else "—",

@@ -2740,16 +2740,13 @@ html[data-theme="light"] .tg-preview-shell {
 
 /* —— Overall home dashboard —— */
 .home-top {
-  display: grid;
-  grid-template-columns: minmax(220px, 0.85fr) minmax(0, 1.15fr);
-  gap: 12px;
-  margin-bottom: 20px;
-  align-items: stretch;
+  margin-bottom: 16px;
 }
 .home-gauges {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+  max-width: 420px;
 }
 .home-gauge {
   display: flex;
@@ -2823,40 +2820,60 @@ html[data-theme="light"] .tg-preview-shell {
   font-weight: 600;
   color: var(--foreground);
 }
-.home-gauge-meta .mono { font-size: 11px; }
+.home-gauge-meta .mono,
+.home-gauge-meta .muted { font-size: 11px; }
 
-.home-conn-list {
-  display: flex;
-  flex-direction: column;
+.home-conn-card { margin-bottom: 16px; }
+.home-conn-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
-  justify-content: center;
-  min-width: 0;
 }
 .home-conn {
-  display: grid;
-  grid-template-columns: auto auto auto minmax(0, 1fr);
+  display: flex;
   align-items: center;
-  gap: 8px 10px;
-  min-height: 40px;
-  padding: 8px 12px;
+  gap: 10px;
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+  padding: 0 12px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: var(--bg-card);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
 }
-.home-conn-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--muted-fg);
+.home-conn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  opacity: 1;
+}
+.home-conn-ico {
+  width: 15px;
+  height: 15px;
   flex: 0 0 auto;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--muted-fg);
 }
-.home-conn.is-ok .home-conn-dot { background: var(--ok); }
-.home-conn.is-warn .home-conn-dot { background: var(--warn); }
-.home-conn.is-err .home-conn-dot { background: var(--destructive); }
-.home-conn-label {
+.home-conn.is-ok .home-conn-ico { color: var(--ok-fg); }
+.home-conn.is-warn .home-conn-ico { color: var(--warn-fg); }
+.home-conn.is-err .home-conn-ico { color: var(--destructive-fg); }
+.home-conn-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.home-conn-k {
+  color: var(--muted-fg);
   font-size: 12px;
   font-weight: 500;
-  color: var(--muted-fg);
 }
 .home-conn strong {
   font-size: 13px;
@@ -2864,11 +2881,15 @@ html[data-theme="light"] .tg-preview-shell {
   white-space: nowrap;
 }
 .home-conn-meta {
+  margin-inline-start: auto;
   font-size: 11px;
+  font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: start;
+  min-width: 0;
+  max-width: 45%;
+  text-align: end;
 }
 
 .home-panels {
@@ -2896,7 +2917,25 @@ html[data-theme="light"] .tg-preview-shell {
   gap: 10px;
   padding: 0 4px 8px;
 }
-.home-panel-head .nav-label { padding: 2px 4px 0; margin: 0; }
+.home-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.home-panel-ico {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.home-panel-bot .home-panel-ico { color: #f0b27a; }
+.home-panel-pg .home-panel-ico { color: #8ec5ef; }
+.home-panel-head .nav-label { padding: 0; margin: 0; }
 .home-panel-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2924,6 +2963,12 @@ html[data-theme="light"] .tg-preview-shell {
 }
 .home-panel-grid strong small { font-size: 11px; font-weight: 500; }
 
+html[data-theme="light"] .home-conn {
+  background: #fff;
+}
+html[data-theme="light"] .home-conn:hover {
+  background: var(--bg-hover);
+}
 html[data-theme="light"] .home-panel-bot {
   border-color: color-mix(in srgb, #ea580c 28%, var(--border));
   background: linear-gradient(180deg, color-mix(in srgb, #ea580c 8%, transparent), transparent);
@@ -2932,24 +2977,20 @@ html[data-theme="light"] .home-panel-pg {
   border-color: color-mix(in srgb, #2563eb 28%, var(--border));
   background: linear-gradient(180deg, color-mix(in srgb, #2563eb 8%, transparent), transparent);
 }
+html[data-theme="light"] .home-panel-bot .home-panel-ico { color: #c2410c; }
+html[data-theme="light"] .home-panel-pg .home-panel-ico { color: #1d4ed8; }
 
 @media (max-width: 1100px) {
   .home-panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 900px) {
-  .home-top { grid-template-columns: 1fr; }
+  .home-gauges { max-width: none; }
   .home-panels { grid-template-columns: 1fr; }
   .home-gauge-ring { width: 96px; height: 96px; }
   .home-gauge-center strong { font-size: 20px; }
 }
 @media (max-width: 560px) {
-  .home-conn {
-    grid-template-columns: auto auto auto;
-    grid-template-rows: auto auto;
-  }
-  .home-conn-meta {
-    grid-column: 2 / -1;
-    white-space: normal;
-  }
+  .home-conn-row { grid-template-columns: 1fr; }
+  .home-conn-meta { max-width: 40%; }
   .home-panel-grid { grid-template-columns: 1fr 1fr; }
 }
