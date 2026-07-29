@@ -470,16 +470,17 @@ def _read_local_version_file(root: Path) -> str | None:
         return None
 
 
-def _finish_ok(message: str) -> None:
+def _finish_ok(message: str, *, awaiting_restart: bool = False) -> None:
     write_status(
         {
             "state": "done",
             "percent": 100,
             "step_key": "done",
-            "step": "تمام شد",
+            "step": "تمام شد" if not awaiting_restart else "راه‌اندازی مجدد سرویس",
             "message": message,
             "finished_at": _now(),
             "error": None,
+            "awaiting_restart": bool(awaiting_restart),
         }
     )
     _append_log(message)
@@ -623,7 +624,11 @@ def _do_update(target_version: str | None) -> None:
             return
 
         time.sleep(1.2)
-        _finish_ok("آپدیت انجام شد — سرویس در حال راه‌اندازی مجدد است")
+        _finish_ok(
+            "آپدیت انجام شد — سرویس در حال راه‌اندازی مجدد است. "
+            "ممکن است ۲ تا ۳ دقیقه طول بکشد؛ صفحه به‌صورت خودکار تازه می‌شود.",
+            awaiting_restart=True,
+        )
     except Exception as e:
         _finish_error(e)
 
@@ -718,7 +723,11 @@ def _do_rollback(snapshot_id: str) -> None:
             )
             return
         time.sleep(1.2)
-        _finish_ok(f"بازگشت موفق به نسخه {new_ver or sha[:7]} — در حال راه‌اندازی مجدد")
+        _finish_ok(
+            f"بازگشت به نسخه {new_ver or sha[:7]} انجام شد — سرویس در حال راه‌اندازی مجدد است. "
+            "ممکن است ۲ تا ۳ دقیقه طول بکشد؛ صفحه به‌صورت خودکار تازه می‌شود.",
+            awaiting_restart=True,
+        )
     except Exception as e:
         _finish_error(e)
 
