@@ -27,8 +27,19 @@ class SslUiWiredTests(unittest.TestCase):
         src = Path("app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("/settings/ssl/progress", src)
         self.assertIn("start_issue_job", src)
+        self.assertIn("enable_https", src)
         main = Path("app/main.py").read_text(encoding="utf-8")
         self.assertIn("uvicorn_ssl_kwargs", main)
+        ssl_src = Path("app/services/ssl_certs.py").read_text(encoding="utf-8")
+        self.assertIn("never enables HTTPS", ssl_src)
+        self.assertIn("_start_acme_http", ssl_src)
+
+
+class UpdateCopyTests(unittest.TestCase):
+    def test_update_template_has_copy_buttons(self):
+        src = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
+        self.assertIn("cmd-copy-btn", src)
+        self.assertIn("bash pgclock.sh update", src)
 
 
 if __name__ == "__main__":

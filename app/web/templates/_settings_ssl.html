@@ -1,22 +1,33 @@
-{# SSL — دامنه پنل و مینی‌اپ (خودکار) #}
+{# SSL — دریافت گواهی بدون کرش؛ فعال‌سازی HTTPS جدا #}
 {% set st = ssl %}
 
 {% if request.query_params.get('working') == '1' %}
-<div class="flash warn">عملیات SSL شروع شد — پیشرفت را در نوار زیر دنبال کنید.</div>
+<div class="flash warn">دریافت گواهی شروع شد — پنل قطع نمی‌شود؛ پیشرفت را پایین ببینید.</div>
+{% endif %}
+{% if request.query_params.get('restarting') == '1' %}
+<div class="flash warn">
+  HTTPS فعال شد و پنل در حال ری‌استارت است.
+  چند ثانیه صبر کنید، بعد با آدرس
+  {% if st.public_https %}<a href="{{ st.public_https }}" dir="ltr">{{ st.public_https }}</a>{% else %}HTTPS دامنه{% endif %}
+  وارد شوید (دیگر از IP با http استفاده نکنید).
+</div>
 {% endif %}
 
 <div class="card settings-card">
   <h2>گواهی SSL (HTTPS)</h2>
   <p class="muted update-card-caption">
-    فقط دامنه پنل و مینی‌اپ را وارد کنید. نصب certbot، دریافت گواهی Let's Encrypt،
-    فعال‌سازی HTTPS و تنظیم آدرس عمومی به‌صورت خودکار انجام می‌شود.
+    فقط دامنه پنل و مینی‌اپ را وارد کنید. دریافت گواهی <strong>بدون ری‌استارت</strong> انجام می‌شود؛
+    بعد خودتان «فعال‌سازی HTTPS» را بزنید.
   </p>
 
   <div class="flash {% if st.certbot %}ok{% else %}warn{% endif %}" style="margin-bottom:12px">
     {% if st.certbot %}
       certbot آماده است{% if st.certbot_path %}: <code dir="ltr">{{ st.certbot_path }}</code>{% endif %}
     {% else %}
-      certbot نصب نیست — با زدن «دریافت گواهی» به‌صورت خودکار نصب می‌شود.
+      certbot نصب نیست — با «دریافت گواهی» خودکار نصب می‌شود.
+    {% endif %}
+    {% if st.port80_busy %}
+      <br/><strong>هشدار:</strong> پورت ۸۰ الان اشغال است — قبل از دریافت، آن را آزاد کنید.
     {% endif %}
   </div>
 
@@ -35,13 +46,13 @@
     <div class="settings-grid">
       <div class="setting-item full">
         <label>دامنه پنل و مینی‌اپ
-          <small class="muted">همان دامنه‌ای که DNS آن به IP این سرور اشاره می‌کند. مثال: <code dir="ltr">bot.example.com</code></small>
+          <small class="muted">DNS باید به IP همین سرور اشاره کند. مثال: <code dir="ltr">bot.example.com</code></small>
           <input name="domain" value="{{ st.domain }}" dir="ltr" required placeholder="bot.example.com" autocomplete="off" />
         </label>
       </div>
       <div class="setting-item full">
         <label>ایمیل Let's Encrypt
-          <small class="muted">برای اعلان انقضا — در پنل عمومی نمایش داده نمی‌شود.</small>
+          <small class="muted">برای اعلان انقضا — عمومی نمی‌شود.</small>
           <input name="acme_email" type="email" value="{{ st.email }}" dir="ltr" required placeholder="admin@example.com" />
         </label>
       </div>
@@ -53,6 +64,12 @@
       </button>
       {% if st.has_cert %}
       <button type="submit" class="btn btn-ghost" name="action" value="renew" id="ssl-renew-btn" {% if st.running %}disabled{% endif %}>تمدید</button>
+      <button type="submit" class="btn" name="action" value="enable" id="ssl-enable-btn" {% if st.running %}disabled{% endif %}>
+        {% if st.ssl_enabled %}اعمال مجدد HTTPS{% else %}فعال‌سازی HTTPS{% endif %}
+      </button>
+      {% if st.ssl_enabled %}
+      <button type="submit" class="btn btn-ghost" name="action" value="disable" id="ssl-disable-btn" {% if st.running %}disabled{% endif %}>غیرفعال‌سازی HTTPS</button>
+      {% endif %}
       {% endif %}
     </div>
   </form>
@@ -67,12 +84,12 @@
     {% elif st.expired %}
     <span class="badge rejected">منقضی</span>
     {% else %}
-    <span class="badge warn">صادر شده</span>
+    <span class="badge warn">صادر شده · منتظر فعال‌سازی</span>
     {% endif %}
     <code dir="ltr" style="margin-inline-start:8px">{{ st.domain }}</code>
   </p>
   {% if st.public_https %}
-  <p class="muted" style="margin:0 0 8px">آدرس HTTPS:
+  <p class="muted" style="margin:0 0 8px">آدرس HTTPS پس از فعال‌سازی:
     <a href="{{ st.public_https }}" dir="ltr" target="_blank" rel="noopener">{{ st.public_https }}</a>
   </p>
   {% endif %}
@@ -83,7 +100,7 @@
   <p class="muted" style="margin:0 0 8px">صدور: <span dir="ltr">{{ st.issued_at }}</span></p>
   {% endif %}
   {% else %}
-  <p class="muted" style="margin:0">هنوز گواهی فعالی وجود ندارد.</p>
+  <p class="muted" style="margin:0">هنوز گواهی صادر نشده.</p>
   {% endif %}
 
   <h3 style="margin:16px 0 8px;font-size:14px">مسیر فایل‌ها</h3>
@@ -97,8 +114,8 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
   {% endif %}
 
   <p class="muted" style="margin:14px 0 0">
-    قبل از دریافت گواهی: رکورد DNS دامنه → IP سرور، و پورت <code dir="ltr">80</code> باز باشد.
-    بعد از موفقیت، پنل با HTTPS روی پورت فعلی (<code dir="ltr">{{ st.web_port }}</code>) بالا می‌آید.
+    ۱) DNS دامنه → IP سرور · ۲) پورت <code dir="ltr">80</code> آزاد · ۳) دریافت گواهی ·
+    ۴) فعال‌سازی HTTPS · ۵) ورود با <code dir="ltr">https://دامنه:{{ st.web_port }}</code>
   </p>
 </div>
 
@@ -109,15 +126,12 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
   const bar = document.getElementById('ssl-progress-bar');
   const msg = document.getElementById('ssl-progress-msg');
   const pctEl = document.getElementById('ssl-progress-pct');
-  const issueBtn = document.getElementById('ssl-issue-btn');
-  const renewBtn = document.getElementById('ssl-renew-btn');
+  const btns = ['ssl-issue-btn','ssl-renew-btn','ssl-enable-btn','ssl-disable-btn']
+    .map(id => document.getElementById(id)).filter(Boolean);
   let timer = null;
   let finished = false;
 
-  function setBusy(v){
-    if (issueBtn) issueBtn.disabled = v;
-    if (renewBtn) renewBtn.disabled = v;
-  }
+  function setBusy(v){ btns.forEach(b => b.disabled = v); }
 
   function poll(){
     fetch('/settings/ssl/progress', {credentials:'same-origin', cache:'no-store'})
@@ -132,9 +146,18 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
           finished = true;
           clearInterval(timer);
           setBusy(false);
+          if (d.restarting) {
+            if (msg) msg.textContent = d.message || 'ری‌استارت…';
+            const url = d.https_url || '';
+            setTimeout(() => {
+              if (url) location.href = url + '/settings?tab=ssl';
+              else location.href = '/settings?tab=ssl&restarting=1';
+            }, 4000);
+            return;
+          }
           if (d.ok) {
-            if (msg) msg.textContent = (d.message || 'موفق') + ' — رفرش…';
-            setTimeout(() => location.href = '/settings?tab=ssl&ok=' + encodeURIComponent('گواهی SSL آماده شد'), 1200);
+            if (msg) msg.textContent = d.message || 'موفق';
+            setTimeout(() => location.href = '/settings?tab=ssl&ok=' + encodeURIComponent(d.message || 'گواهی آماده شد'), 700);
           }
         }
       }).catch(() => {});
@@ -152,6 +175,11 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
         if (bar) bar.style.width = '6%';
         if (pctEl) pctEl.textContent = '6%';
         timer = setInterval(poll, 800);
+      }
+      if (action === 'enable') {
+        if (!confirm('بعد از فعال‌سازی، پنل با HTTPS ری‌استارت می‌شود.\\nاز این لحظه با آدرس https://دامنه وارد شوید (نه IP با http).')) {
+          e.preventDefault();
+        }
       }
     });
   }
