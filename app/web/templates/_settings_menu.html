@@ -1,6 +1,9 @@
 <div class="card menu-layout-intro">
   <h2>چیدمان دکمه‌های منو</h2>
-  <p class="muted update-card-caption">با دکمه‌های بالا/پایین جابه‌جا کنید. نمایش روشن/خاموش و حالت ردیف‌ها را پایین‌تر ذخیره کنید.</p>
+  <p class="muted update-card-caption">
+    آیتم‌های «منوی فعال» همان دکمه‌هایی هستند که کاربر در ربات می‌بیند.
+    از مخزن اضافه کنید، با حذف به مخزن برگردانید، و با بالا/پایین ترتیب را عوض کنید.
+  </p>
 </div>
 <form method="post" action="/menu-layout" id="menu-form" class="menu-layout-form">
   <input type="hidden" name="menu_order" id="menu_order" value="{{ order_csv }}" />
@@ -46,8 +49,20 @@
       </ul>
     </div>
   </div>
+  <div class="card settings-card">
+    <h2>حالت چیدمان</h2>
+    <div class="settings-grid">
+      <label class="setting-item">
+        <span>حالت ردیف‌ها</span>
+        <select name="menu_layout_ui" id="menu_layout_select">
+          <option value="classic" {% if values.get('menu_layout','classic')=='classic' %}selected{% endif %}>کلاسیک — هر دکمه یک ردیف</option>
+          <option value="compact" {% if values.get('menu_layout')=='compact' %}selected{% endif %}>فشرده — دکمه‌ها جفتی</option>
+        </select>
+      </label>
+    </div>
+  </div>
   <div class="actions sticky-actions">
-    <button class="btn" type="submit">ذخیره چیدمان منو</button>
+    <button class="btn" type="submit">ذخیره منو</button>
   </div>
 </form>
 
@@ -56,8 +71,7 @@
   const active = document.getElementById('active-list');
   const pool = document.getElementById('pool-list');
   const orderInput = document.getElementById('menu_order');
-  const layoutSelect = document.getElementById('menu_layout_select')
-    || document.querySelector('select[name="s_menu_layout"]');
+  const layoutSelect = document.getElementById('menu_layout_select');
   const layoutHidden = document.getElementById('menu_layout');
 
   function syncOrder() {

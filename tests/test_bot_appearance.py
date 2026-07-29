@@ -51,7 +51,7 @@ class ValidateTests(unittest.TestCase):
             cmd_start="a",
             cmd_help="b",
         )
-        self.assertIn("کپشن", err or "")
+        self.assertIn("وسط", err or "")
 
     def test_short_too_long(self):
         err = validate_appearance_form(
@@ -61,7 +61,7 @@ class ValidateTests(unittest.TestCase):
             cmd_start="a",
             cmd_help="b",
         )
-        self.assertIn("وسط", err or "")
+        self.assertIn("کپشن", err or "")
 
     def test_commands_required(self):
         err = validate_appearance_form(

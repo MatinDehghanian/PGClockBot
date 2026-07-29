@@ -73,9 +73,8 @@ SECTIONS: dict[str, dict] = {
     "menu": {
         "title": "منوی کاربر",
         "subs": [
-            ("vis", "نمایش آیتم‌ها", "menu_vis"),
             ("layout", "چیدمان", "menu_layout"),
-            ("order", "ترتیب دکمه‌ها", "menu_order"),
+            ("order", "منوی فعال / ترتیب", "menu_order"),
         ],
     },
     "pay": {
@@ -375,7 +374,8 @@ async def _render_menu_order(callback: CallbackQuery, session: AsyncSession, bac
     rows.append(_back_row(("⬅️ بازگشت", back)))
     if callback.message:
         await callback.message.edit_text(
-            "<b>ترتیب منو</b>\nبا فلش جابه‌جا کنید.",
+            "<b>منوی فعال</b>\nبا فلش ترتیب را عوض کنید.\n"
+            "برای افزودن/حذف آیتم‌ها از وب‌پنل → تنظیمات → منوی بات استفاده کنید.",
             reply_markup=_kb(rows),
         )
 
@@ -656,8 +656,10 @@ async def menu_reorder(callback: CallbackQuery, session: AsyncSession, db_user: 
         return
     order[idx], order[swap] = order[swap], order[idx]
     await set_setting(session, "menu_order", ",".join(order))
-    for key in ("wallet", "support", "guide", "faq", "referral", "miniapp", "services"):
-        await set_setting(session, f"show_{key}", "1" if key in order else "0")
+    from app.bot.keyboards import sync_show_flags_for_order
+
+    for key, val in sync_show_flags_for_order(order).items():
+        await set_setting(session, key, val)
     await callback.answer()
     await _render_menu_order(callback, session, "adm:st:sec:menu")
 

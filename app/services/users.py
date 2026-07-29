@@ -378,15 +378,9 @@ SETTING_GROUPS = {
             "menu_layout",
             "حالت ردیف‌ها",
             "select",
-            "کلاسیک یا فشرده",
+            "کلاسیک یا فشرده — از تب منوی بات تنظیم می‌شود",
             [("classic", "کلاسیک — هر دکمه یک ردیف"), ("compact", "فشرده — دکمه‌ها جفتی")],
         ),
-        ("show_wallet", "نمایش کیف پول", "toggle", ""),
-        ("show_support", "نمایش پشتیبانی", "toggle", ""),
-        ("show_guide", "نمایش راهنما", "toggle", ""),
-        ("show_faq", "نمایش سوالات متداول", "toggle", ""),
-        ("show_referral", "نمایش دعوت", "toggle", ""),
-        ("show_miniapp", "نمایش مینی‌اپ", "toggle", ""),
     ],
     "نمایندگی": [
         (
@@ -497,7 +491,7 @@ SETTING_GROUPS = {
 
 # Map tab id → which SETTING_GROUPS cards to show (menu/notifications/update/naming special)
 TAB_SETTING_GROUPS: dict[str, list[str]] = {
-    "menu": ["نمایش منو"],
+    "menu": [],
     "welcome": ["خوش‌آمد و هویت"],
     "messages": ["متن پیام‌ها"],
     "buttons": ["متن دکمه‌های منو"],
