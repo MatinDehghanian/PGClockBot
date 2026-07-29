@@ -28,11 +28,51 @@
 {% endif %}
 
 <div class="stats-grid">
-  <div class="stat"><span>کاربران</span><strong>{{ stats.users | num }}</strong></div>
-  <div class="stat"><span>سفارش‌ها</span><strong>{{ stats.orders | num }}</strong></div>
-  <div class="stat"><span>سرویس‌ها</span><strong>{{ stats.services | num }}</strong></div>
-  <div class="stat"><span>رسید معلق</span><strong>{{ stats.pending | num }}</strong></div>
-  <div class="stat"><span>درآمد</span><strong>{{ stats.revenue | num }}</strong></div>
+  <div class="stat">
+    <div class="stat-top">
+      <span class="stat-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
+      </span>
+      <span>کاربران</span>
+    </div>
+    <strong>{{ stats.users | num }}</strong>
+  </div>
+  <div class="stat">
+    <div class="stat-top">
+      <span class="stat-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M7 7h13l-1.2 9.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.7L6 4H3"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>
+      </span>
+      <span>سفارش‌ها</span>
+    </div>
+    <strong>{{ stats.orders | num }}</strong>
+  </div>
+  <div class="stat">
+    <div class="stat-top">
+      <span class="stat-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 14h4"/></svg>
+      </span>
+      <span>سرویس‌ها</span>
+    </div>
+    <strong>{{ stats.services | num }}</strong>
+  </div>
+  <div class="stat">
+    <div class="stat-top">
+      <span class="stat-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
+      </span>
+      <span>رسید معلق</span>
+    </div>
+    <strong>{{ stats.pending | num }}</strong>
+  </div>
+  <div class="stat">
+    <div class="stat-top">
+      <span class="stat-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/></svg>
+      </span>
+      <span>درآمد</span>
+    </div>
+    <strong>{{ stats.revenue | num }}</strong>
+  </div>
 </div>
 
 <div class="card">

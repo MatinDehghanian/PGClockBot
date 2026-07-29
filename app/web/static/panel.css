@@ -272,7 +272,38 @@ a:hover { opacity: 0.8; }
   justify-content: space-between;
   gap: 12px;
 }
+.stat-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.stat-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: var(--muted);
+  color: var(--muted-fg);
+}
+.stat-ico svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .stat span { color: var(--muted-fg); font-size: 12px; font-weight: 500; line-height: 1.5; }
+.stat-top > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .stat strong {
   font-size: 20px;
   font-weight: 650;
