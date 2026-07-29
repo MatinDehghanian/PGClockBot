@@ -1,13 +1,14 @@
 {% set available = update_info.update_available %}
 {% set running = status.state == 'running' %}
 {% set has_error = status.state == 'error' %}
-{% set show_ops = show_ops if show_ops is defined else (available or running or has_error or status.state == 'done') %}
+{% set awaiting = status.awaiting_restart %}
+{% set show_ops = show_ops if show_ops is defined else (running or has_error or awaiting) %}
 
 <div class="update-tab-head">
   <div class="version-box" style="margin-bottom:14px">
     <span class="ver-num">نسخه فعلی {{ local_version }}</span>
     {% if update_info.remote_version %}
-    <span class="ver-badge {{ update_info.tone }}">ریموت: {{ update_info.remote_version }}</span>
+    <span class="ver-badge {{ update_info.tone }}">آخرین نسخه: {{ update_info.remote_version }}</span>
     {% endif %}
   </div>
 </div>
@@ -28,7 +29,7 @@
      data-can-start="{{ '1' if available else '0' }}"
      data-running="{{ '1' if running else '0' }}"
      data-done="{{ '1' if status.state == 'done' else '0' }}"
-     data-awaiting-restart="{{ '1' if status.awaiting_restart else '0' }}"
+     data-awaiting-restart="{{ '1' if awaiting else '0' }}"
      data-show-ops="{{ '1' if show_ops else '0' }}">
   <h2>وضعیت عملیات</h2>
 
@@ -68,8 +69,8 @@
 
   <div class="actions update-actions">
     <button type="button" class="btn" id="upd-start"
-      {% if not available and not has_error and not running %}disabled{% endif %}>
-      {% if running %}در حال اجرا…
+      {% if not available and not has_error and not running and not awaiting %}disabled{% endif %}>
+      {% if running or awaiting %}در حال اجرا…
       {% elif has_error %}تلاش دوباره
       {% elif available %}شروع آپدیت
       {% else %}آپدیتی نیست{% endif %}
@@ -82,11 +83,11 @@
 <div class="card">
   <h2>راه برگشت</h2>
   <p class="muted update-card-caption">
-    قبل از آپدیت، وضعیت فعلی ذخیره می‌شود. اگر از نسخه جدید راضی نبودید، از اینجا برگردید.
+    فقط آخرین نسخه قبل از آپدیت نگه داشته می‌شود. اگر از نسخه جدید راضی نبودید، از اینجا برگردید.
   </p>
   {% if snapshots %}
   <div class="snap-list" id="snap-list">
-    {% for s in snapshots %}
+    {% for s in snapshots[:1] %}
     <div class="snap-row">
       <div>
         <strong>{{ s.label or (s.version ~ ' · ' ~ s.short_sha) }}</strong>
@@ -194,13 +195,11 @@
 
   function finishReload(verifiedVersion){
     waitingRestart = false;
-    if (stateEl) stateEl.textContent = 'ریستارت تمام شد — بارگذاری نسخه جدید…';
-    if (stepEl) stepEl.textContent = 'تمام شد';
-    if (fill) fill.style.width = '100%';
-    if (percentEl) percentEl.textContent = '۱۰۰٪';
-    steps.forEach(li => { li.classList.remove('current'); li.classList.add('done'); });
+    showOps(false);
+    if (idleHint) idleHint.hidden = false;
+    if (stateEl) stateEl.textContent = 'آماده';
     clearInterval(timer); timer = null;
-    const verNote = verifiedVersion ? (' نسخه ' + verifiedVersion) : '';
+    const verNote = verifiedVersion ? (' · نسخه ' + verifiedVersion) : '';
     setTimeout(() => {
       const url = new URL(location.href);
       url.searchParams.set('tab', 'update');
@@ -225,8 +224,6 @@
 
   function applyStatus(st){
     if (!fill) return;
-    const active = st.state === 'running' || st.state === 'error' || st.state === 'done' || canStart;
-    if (active) showOps(true);
     if (st.to_version && toEl) toEl.textContent = st.to_version;
     if (st.from_version && fromEl) fromEl.textContent = st.from_version;
     if (waitingRestart) {
@@ -237,6 +234,15 @@
       beginWaitingRestart(st);
       return;
     }
+    if (st.state === 'done') {
+      // Update finished — hide progress/logs/steps
+      showOps(false);
+      setBusy(false);
+      if (logEl) { logEl.textContent = ''; logEl.hidden = true; }
+      return;
+    }
+    const active = st.state === 'running' || st.state === 'error' || canStart;
+    if (active || st.state === 'running') showOps(true);
     const pct = Number(st.percent || 0);
     fill.style.width = pct + '%';
     if (percentEl) percentEl.textContent = pct + '٪';
@@ -261,11 +267,9 @@
     const modeLabel = st.mode === 'rollback' ? 'بازگشت' : 'آپدیت';
     if (st.state === 'running') {
       setBusy(true, 'در حال ' + modeLabel + '…');
-    } else if (st.state === 'done') {
-      setBusy(true, modeLabel + ' انجام شد');
-      steps.forEach(li => { li.classList.remove('current'); li.classList.add('done'); });
-      rollbackBtns().forEach(b => { b.disabled = false; });
+      showOps(true);
     } else if (st.state === 'error') {
+      showOps(true);
       if (startBtn) {
         startBtn.classList.remove('btn-ok');
         startBtn.classList.add('btn');

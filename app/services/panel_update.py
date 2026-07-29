@@ -26,7 +26,7 @@ SNAPSHOTS_FILE = DATA_DIR / "update_snapshots.json"
 SERVICE_NAME = "pgclockbot"
 _LOCK = threading.Lock()
 _THREAD: threading.Thread | None = None
-MAX_SNAPSHOTS = 8
+MAX_SNAPSHOTS = 1
 
 # systemd often has a short PATH — resolve absolute binaries
 _EXTRA_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -409,7 +409,12 @@ def list_snapshots() -> list[dict[str, Any]]:
     try:
         raw = json.loads(SNAPSHOTS_FILE.read_text(encoding="utf-8"))
         if isinstance(raw, list):
-            return [x for x in raw if isinstance(x, dict) and x.get("sha")]
+            items = [x for x in raw if isinstance(x, dict) and x.get("sha")]
+            # Keep only the newest rollback point
+            if len(items) > MAX_SNAPSHOTS:
+                items = items[:MAX_SNAPSHOTS]
+                _save_snapshots(items)
+            return items
     except Exception:
         pass
     return []
@@ -423,7 +428,7 @@ def _save_snapshots(items: list[dict[str, Any]]) -> None:
 
 
 def create_snapshot(*, reason: str = "before_update") -> dict[str, Any] | None:
-    """Save current HEAD so the admin can roll back later."""
+    """Save current HEAD so the admin can roll back later (only one point kept)."""
     root = _repo_root()
     if not (root / ".git").exists():
         return None
@@ -448,8 +453,8 @@ def create_snapshot(*, reason: str = "before_update") -> dict[str, Any] | None:
         "created_at": _now(),
         "label": f"v{local_version()} · {sha[:7]}",
     }
-    items.insert(0, snap)
-    _save_snapshots(items)
+    # Newest only — drop older rollback points
+    _save_snapshots([snap])
     return snap
 
 
@@ -767,17 +772,19 @@ async def update_page_context() -> dict[str, Any]:
     available = bool(info.get("update_available"))
     status = read_status()
     awaiting = bool(status.get("awaiting_restart"))
-    # Keep restart-wait UI until the client confirms a new process boot.
-    if status.get("state") != "running" and not available and not awaiting:
-        if status.get("state") in {"error", "done"} or status.get("log"):
+    # Finished (or stale leftovers): hide logs/steps. Keep error until retry.
+    if awaiting:
+        pass
+    elif status.get("state") == "running":
+        pass
+    elif status.get("state") == "error":
+        pass
+    else:
+        # done / idle / leftover logs after a finished update
+        if status.get("state") == "done" or status.get("log") or status.get("step_key"):
             status = clear_idle_status()
     snaps = list_snapshots()
-    show_ops = bool(
-        available
-        or awaiting
-        or status.get("state") in {"running", "error", "done"}
-        or (status.get("log") and status.get("state") != "idle")
-    )
+    show_ops = bool(awaiting or status.get("state") in {"running", "error"})
     return {
         "update_info": info,
         "status": status,
