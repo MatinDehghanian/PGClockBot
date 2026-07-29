@@ -38,6 +38,7 @@ def _t(ui: dict | None, key: str) -> str:
 
 
 def _menu_order(ui: dict | None) -> list[str]:
+    """Active menu keys from menu_order only (no re-inject of removed items)."""
     raw = _t(ui, "menu_order")
     parts = [p.strip() for p in (raw or "").split(",") if p.strip()]
     known = set(DEFAULT_MENU_ORDER)
@@ -45,19 +46,25 @@ def _menu_order(ui: dict | None) -> list[str]:
     # shop always present
     if "shop" not in ordered:
         ordered.insert(0, "shop")
-    # Older saved menu_order may omit newly added keys — inject before miniapp/end
-    for key in DEFAULT_MENU_ORDER:
-        if key in ordered or key == "shop":
-            continue
-        if key == "reseller_apply" and not on(_t(ui, "show_reseller_apply")):
-            continue
-        if key == "miniapp" and not on(_t(ui, "show_miniapp")):
-            continue
-        if "miniapp" in ordered:
-            ordered.insert(ordered.index("miniapp"), key)
-        else:
-            ordered.append(key)
     return ordered
+
+
+MENU_SHOW_KEYS = (
+    "wallet",
+    "support",
+    "guide",
+    "faq",
+    "referral",
+    "reseller_apply",
+    "miniapp",
+    "services",
+)
+
+
+def sync_show_flags_for_order(order: list[str]) -> dict[str, str]:
+    """Map menu_order → show_* flags (for persistence / legacy readers)."""
+    active = set(order)
+    return {f"show_{key}": ("1" if key in active else "0") for key in MENU_SHOW_KEYS}
 
 
 def main_menu(
@@ -103,9 +110,9 @@ def main_menu(
             add_full(InlineKeyboardButton(text=_t(ui, "btn_shop"), callback_data="shop:list"))
         elif key == "services" and has_services:
             add_full(InlineKeyboardButton(text=_t(ui, "btn_services"), callback_data="svc:list"))
-        elif key == "wallet" and on(_t(ui, "show_wallet")):
+        elif key == "wallet":
             add_mid(InlineKeyboardButton(text=_t(ui, "btn_wallet"), callback_data="wallet:home"))
-        elif key == "support" and on(_t(ui, "show_support")):
+        elif key == "support":
             contacts = active_support_contacts(
                 parse_support_contacts((ui or {}).get("support_contacts"))
             )
@@ -127,16 +134,14 @@ def main_menu(
                         text=_t(ui, "btn_support"), callback_data="support:home"
                     )
                 )
-        elif key == "guide" and on(_t(ui, "show_guide")):
+        elif key == "guide":
             add_mid(InlineKeyboardButton(text=_t(ui, "btn_guide"), callback_data="help:guide"))
-        elif key == "faq" and on(_t(ui, "show_faq")):
+        elif key == "faq":
             add_mid(InlineKeyboardButton(text=_t(ui, "btn_faq"), callback_data="help:faq"))
-        elif key == "referral" and on(_t(ui, "show_referral")):
+        elif key == "referral":
             add_full(InlineKeyboardButton(text=_t(ui, "btn_referral"), callback_data="ref:home"))
-        elif (
-            key == "reseller_apply"
-            and on(_t(ui, "show_reseller_apply"))
-            and role == Role.USER.value
+        elif key == "reseller_apply" and role == Role.USER.value and on(
+            _t(ui, "show_reseller_apply")
         ):
             add_full(
                 InlineKeyboardButton(
@@ -144,7 +149,7 @@ def main_menu(
                     callback_data="resapply:home",
                 )
             )
-        elif key == "miniapp" and settings.miniapp_enabled and on(_t(ui, "show_miniapp")):
+        elif key == "miniapp" and settings.miniapp_enabled:
             add_full(
                 InlineKeyboardButton(
                     text=_t(ui, "btn_miniapp"),

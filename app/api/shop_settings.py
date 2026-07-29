@@ -331,8 +331,10 @@ def register_shop_settings(app, *, render, require_staff, get_db):
         await set_setting(session, "menu_order", ",".join(order), reseller_id=rid)
         if layout in {"classic", "compact"}:
             await set_setting(session, "menu_layout", layout, reseller_id=rid)
-        for key in ("wallet", "support", "guide", "faq", "referral", "miniapp", "services"):
-            await set_setting(session, f"show_{key}", "1" if key in order else "0", reseller_id=rid)
+        from app.bot.keyboards import sync_show_flags_for_order
+
+        for key, val in sync_show_flags_for_order(order).items():
+            await set_setting(session, key, val, reseller_id=rid)
         await set_setting(session, "show_reseller_apply", "0", reseller_id=rid)
         return RedirectResponse("/shop-settings?tab=menu&saved=1", status_code=303)
 

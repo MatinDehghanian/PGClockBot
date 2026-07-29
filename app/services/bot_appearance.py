@@ -58,10 +58,11 @@ def validate_appearance_form(
 ) -> str | None:
     if len(name) > NAME_MAX:
         return f"نام ربات حداکثر {NAME_MAX} کاراکتر است"
+    # description = empty-chat text (متن وسط); short_description = profile caption (کپشن)
     if len(description) > DESCRIPTION_MAX:
-        return f"کپشن / درباره حداکثر {DESCRIPTION_MAX} کاراکتر است"
+        return f"متن وسط صفحه حداکثر {DESCRIPTION_MAX} کاراکتر است"
     if len(short_description) > SHORT_DESCRIPTION_MAX:
-        return f"متن وسط صفحه حداکثر {SHORT_DESCRIPTION_MAX} کاراکتر است"
+        return f"کپشن / درباره حداکثر {SHORT_DESCRIPTION_MAX} کاراکتر است"
     if len(cmd_start) > CMD_DESC_MAX or len(cmd_help) > CMD_DESC_MAX:
         return f"توضیح دستور حداکثر {CMD_DESC_MAX} کاراکتر است"
     if not (cmd_start or "").strip():

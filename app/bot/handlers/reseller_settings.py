@@ -69,14 +69,6 @@ SECTIONS: dict[str, dict] = {
     "menu": {
         "title": "منوی کاربر",
         "subs": [
-            ("vis", "نمایش آیتم‌ها", [
-                ("show_wallet", "کیف پول", "toggle"),
-                ("show_support", "پشتیبانی", "toggle"),
-                ("show_guide", "راهنما", "toggle"),
-                ("show_faq", "سوالات", "toggle"),
-                ("show_referral", "دعوت", "toggle"),
-                ("show_miniapp", "مینی‌اپ", "toggle"),
-            ]),
             ("layout", "چیدمان", [
                 ("menu_layout", "چیدمان منو", "text"),
             ]),

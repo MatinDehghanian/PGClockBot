@@ -1616,8 +1616,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         await set_setting(session, "menu_order", ",".join(order))
         if layout in {"classic", "compact"}:
             await set_setting(session, "menu_layout", layout)
-        for key in ("wallet", "support", "guide", "faq", "referral", "reseller_apply", "miniapp", "services"):
-            await set_setting(session, f"show_{key}", "1" if key in order else "0")
+        from app.bot.keyboards import sync_show_flags_for_order
+
+        for key, val in sync_show_flags_for_order(order).items():
+            await set_setting(session, key, val)
         return RedirectResponse("/settings?tab=menu&saved=1", status_code=303)
 
     @app.get("/update", response_class=HTMLResponse)
