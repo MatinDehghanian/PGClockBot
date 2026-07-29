@@ -575,6 +575,10 @@ def order_review(order_id: int) -> InlineKeyboardMarkup:
 def pg_admin_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [
+                InlineKeyboardButton(text="👥 کاربران VPN", callback_data="adm:pg:users"),
+                InlineKeyboardButton(text="➕ ساخت کاربر", callback_data="adm:pg:create"),
+            ],
             [InlineKeyboardButton(text="🔎 جستجوی یوزر", callback_data="adm:pg:search")],
             [InlineKeyboardButton(text="📊 آمار سیستم", callback_data="adm:pg:stats")],
             [InlineKeyboardButton(text="🕸 نودها", callback_data="adm:pg:nodes")],

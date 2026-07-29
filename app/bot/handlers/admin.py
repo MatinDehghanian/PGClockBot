@@ -17,7 +17,6 @@ from app.services.formatting import (
     format_toman,
     node_status_fa,
     order_status_fa,
-    service_card,
 )
 from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.pasarguard import get_pg
@@ -181,7 +180,6 @@ class AdminStates(StatesGroup):
     add_plan_days = State()
     add_plan_gb = State()
     add_plan_link = State()  # waiting for mode after basics
-    pg_search = State()
     make_reseller = State()
     ticket_reply = State()
     user_search = State()
@@ -1755,9 +1753,10 @@ async def adm_pg_group_hint(callback: CallbackQuery, db_user: BotUser):
         return
     await callback.answer()
     text = (
-        "📁 <b>ساخت گروه پاسارگارد</b>\n\n"
-        "ساخت گروه نیاز به انتخاب اینباندها دارد و در ربات پیچیده است.\n"
-        "از وب‌پنل مسیر <code>/pg/groups</code> استفاده کنید."
+        "📁 <b>گروه‌های پاسارگارد</b>\n\n"
+        "ساخت/ویرایش گروه نیاز به انتخاب اینباند دارد.\n"
+        "از وب‌پنل مسیر <code>/pg/groups</code> استفاده کنید.\n\n"
+        "مدیریت کاربران VPN از همین ربات: «کاربران VPN»."
     )
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.pg_admin_keyboard())
@@ -1770,9 +1769,9 @@ async def adm_pg_template_hint(callback: CallbackQuery, db_user: BotUser):
         return
     await callback.answer()
     text = (
-        "📋 <b>ساخت تمپلیت پاسارگارد</b>\n\n"
-        "ساخت تمپلیت از ربات پشتیبانی کامل ندارد.\n"
-        "از وب‌پنل مسیر <code>/pg/templates</code> استفاده کنید."
+        "📋 <b>تمپلیت‌های پاسارگارد</b>\n\n"
+        "ساخت تمپلیت از وب‌پنل مسیر <code>/pg/templates</code>.\n\n"
+        "ساخت کاربر از تمپلیت در ربات: پاسارگارد ← ساخت کاربر."
     )
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.pg_admin_keyboard())
@@ -1843,105 +1842,5 @@ async def pg_recon(callback: CallbackQuery, db_user: BotUser):
     try:
         await get_pg().reconnect_node(node_id)
         await callback.answer("درخواست اتصال مجدد ارسال شد ✅", show_alert=True)
-    except Exception as e:
-        await callback.answer(str(e), show_alert=True)
-
-
-@router.callback_query(F.data == "adm:pg:search")
-async def pg_search_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    await callback.answer()
-    await state.set_state(AdminStates.pg_search)
-    if callback.message:
-        await callback.message.answer("یوزرنیم پاسارگارد را بفرستید:", reply_markup=kb.cancel_reply())
-
-
-@router.message(AdminStates.pg_search)
-async def pg_search(message: Message, state: FSMContext):
-    if (message.text or "").strip() == "انصراف":
-        await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_admin_keyboard())
-        return
-    username = (message.text or "").strip()
-    try:
-        user = await get_pg().get_user_by_username(username)
-    except Exception as e:
-        await message.answer(f"خطا: {e}")
-        return
-    await state.clear()
-    uid = user.get("id")
-    text = service_card(user)
-    rows = [
-        [
-            InlineKeyboardButton(text="♻️ ریست حجم", callback_data=f"adm:pg:reset:{uid}"),
-            InlineKeyboardButton(text="🚫 غیرفعال", callback_data=f"adm:pg:dis:{uid}"),
-        ],
-        [
-            InlineKeyboardButton(text="✅ فعال", callback_data=f"adm:pg:en:{uid}"),
-            InlineKeyboardButton(text="🔏 باطل‌کردن ساب", callback_data=f"adm:pg:rev:{uid}"),
-        ],
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:pg")],
-    ]
-    await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
-
-
-@router.callback_query(F.data.startswith("adm:pg:reset:"))
-async def pg_reset(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    uid = int(callback.data.split(":")[-1])
-    try:
-        user = await get_pg().reset_user_by_id(uid)
-        await callback.answer("ریست شد", show_alert=True)
-        if callback.message:
-            await callback.message.edit_text(service_card(user), reply_markup=kb.pg_admin_keyboard())
-    except Exception as e:
-        await callback.answer(str(e), show_alert=True)
-
-
-@router.callback_query(F.data.startswith("adm:pg:dis:"))
-async def pg_dis(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    uid = int(callback.data.split(":")[-1])
-    try:
-        user = await get_pg().set_disabled_by_id(uid, True)
-        await callback.answer("غیرفعال شد", show_alert=True)
-        if callback.message:
-            await callback.message.edit_text(service_card(user), reply_markup=kb.pg_admin_keyboard())
-    except Exception as e:
-        await callback.answer(str(e), show_alert=True)
-
-
-@router.callback_query(F.data.startswith("adm:pg:en:"))
-async def pg_en(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    uid = int(callback.data.split(":")[-1])
-    try:
-        user = await get_pg().set_disabled_by_id(uid, False)
-        await callback.answer("فعال شد", show_alert=True)
-        if callback.message:
-            await callback.message.edit_text(service_card(user), reply_markup=kb.pg_admin_keyboard())
-    except Exception as e:
-        await callback.answer(str(e), show_alert=True)
-
-
-@router.callback_query(F.data.startswith("adm:pg:rev:"))
-async def pg_rev(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    uid = int(callback.data.split(":")[-1])
-    try:
-        user = await get_pg().revoke_sub_by_id(uid)
-        await callback.answer("سابسکریپشن باطل شد", show_alert=True)
-        if callback.message:
-            await callback.message.edit_text(service_card(user), reply_markup=kb.pg_admin_keyboard())
     except Exception as e:
         await callback.answer(str(e), show_alert=True)

@@ -6,6 +6,10 @@ from app.services.updates import is_newer, local_version
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "1.8.3": [
+        "مدیریت کاربران پاسارگارد در ربات: لیست ۱۰تایی، صفحه قبل/بعد، جستجو",
+        "ساخت/ویرایش/حذف/لینک ساب و اکشن‌های پنل از داخل ربات",
+    ],
     "1.8.2": [
         "رفع فورس‌جوین روی /start و قفل‌نشدن در خطای کانال",
         "جلوگیری از پرداخت تکراری کیف‌پول و تأیید مبلغ استارز",
