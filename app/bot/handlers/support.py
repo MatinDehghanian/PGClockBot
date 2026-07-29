@@ -14,11 +14,11 @@ from app.db.models import BotUser, Ticket
 from app.services.formatting import format_message, ticket_status_fa
 from app.services.support_contacts import (
     active_support_contacts,
-    get_support_contacts,
+    parse_support_contacts,
     support_chat_url,
 )
 from app.services.tickets import create_ticket, get_ticket, list_user_tickets, reply_ticket
-from app.services.users import get_all_settings, get_setting
+from app.services.users import get_all_settings
 
 router = Router(name="support")
 
@@ -29,15 +29,15 @@ class SupportStates(StatesGroup):
     reply = State()
 
 
-async def _active_contacts(session: AsyncSession) -> list[dict]:
-    return active_support_contacts(await get_support_contacts(session))
+def _active_contacts_from_ui(ui: dict) -> list[dict]:
+    return active_support_contacts(parse_support_contacts(ui.get("support_contacts")))
 
 
 @router.callback_query(F.data == "support:home")
 async def support_home(callback: CallbackQuery, session: AsyncSession):
     await callback.answer()
     ui = await get_all_settings(session)
-    contacts = await _active_contacts(session)
+    contacts = _active_contacts_from_ui(ui)
     if len(contacts) == 1:
         url = support_chat_url(contacts[0].get("telegram") or "")
         title = contacts[0].get("title") or "پشتیبان"
@@ -65,7 +65,7 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
             )
         return
     # No contacts → classic ticket UI
-    text = ui.get("support_text") or await get_setting(session, "support_text")
+    text = ui.get("support_text") or "پیام خود را بنویسید؛ تیم پشتیبانی پاسخ می‌دهد."
     if callback.message:
         await safe_edit_text(callback.message, 
             format_message("🎧 پشتیبانی", text),
@@ -77,7 +77,7 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
 async def support_tickets_home(callback: CallbackQuery, session: AsyncSession):
     await callback.answer()
     ui = await get_all_settings(session)
-    text = ui.get("support_text") or await get_setting(session, "support_text")
+    text = ui.get("support_text") or "پیام خود را بنویسید؛ تیم پشتیبانی پاسخ می‌دهد."
     if callback.message:
         await safe_edit_text(callback.message, 
             format_message("🎧 پشتیبانی — تیکت", text),

@@ -6,7 +6,11 @@ from app.config import get_settings
 from app.db import Base
 
 settings = get_settings()
-engine = create_async_engine(settings.database_url, echo=False, future=True)
+_db_url = settings.database_url
+_engine_kwargs: dict = {"echo": False, "future": True}
+if _db_url.startswith("sqlite"):
+    _engine_kwargs["connect_args"] = {"timeout": 30}
+engine = create_async_engine(_db_url, **_engine_kwargs)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
@@ -14,6 +18,12 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_migrate_sqlite)
+        if _db_url.startswith("sqlite"):
+            from sqlalchemy import text
+
+            await conn.execute(text("PRAGMA journal_mode=WAL"))
+            await conn.execute(text("PRAGMA busy_timeout=30000"))
+            await conn.execute(text("PRAGMA synchronous=NORMAL"))
 
 
 def _migrate_sqlite(sync_conn) -> None:

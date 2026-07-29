@@ -13,7 +13,7 @@ from app.config import get_settings
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
 from app.services.pasarguard import extract_sub_token, get_pg
-from app.services.users import get_all_settings, get_setting, on
+from app.services.users import get_all_settings, on
 
 router = Router(name="start")
 
@@ -131,8 +131,9 @@ async def cmd_start(
             reseller_owner_id=reseller_owner_id,
         )
         return
-    channel = await get_setting(session, "force_join_channel")
-    enabled = await get_setting(session, "force_join_enabled")
+    ui = await get_all_settings(session)
+    channel = (ui.get("force_join_channel") or "").strip()
+    enabled = ui.get("force_join_enabled")
     from app.bot.middlewares import check_force_join_member
     from app.services.reseller_access import effective_menu_role
 

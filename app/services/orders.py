@@ -21,7 +21,6 @@ from app.db.models import (
     UserService,
 )
 from app.services.pasarguard import extract_sub_token, get_pg
-from app.services.users import get_setting
 from app.services.wallet import credit_wallet, debit_wallet
 
 
@@ -65,12 +64,14 @@ async def generate_pg_username(
     user_id: int | None = None,
 ) -> str:
     """Read username prefix/suffix/pattern from settings and generate a name."""
-    prefix = await get_setting(session, "pg_username_prefix", "clk")
-    suffix = await get_setting(session, "pg_username_suffix", "")
-    pattern = await get_setting(session, "pg_username_pattern", "{prefix}_{random}{suffix}")
-    # Optional alias key some panels may use
+    from app.services.users import get_all_settings
+
+    ui = await get_all_settings(session)
+    prefix = ui.get("pg_username_prefix") or "clk"
+    suffix = ui.get("pg_username_suffix") or ""
+    pattern = ui.get("pg_username_pattern") or "{prefix}_{random}{suffix}"
     if not pattern:
-        pattern = await get_setting(session, "pg_username_vars", "")
+        pattern = ui.get("pg_username_vars") or ""
     return _random_username(
         prefix=prefix or "clk",
         suffix=suffix or "",

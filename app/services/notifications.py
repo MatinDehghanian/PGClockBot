@@ -84,7 +84,9 @@ async def _send_admins(
     markup: InlineKeyboardMarkup | None = None,
     photo: str | None = None,
 ) -> None:
-    for admin_id in get_settings().admin_ids:
+    import asyncio
+
+    async def _one(admin_id: int) -> None:
         try:
             if photo:
                 await bot.send_photo(
@@ -98,6 +100,11 @@ async def _send_admins(
                     await bot.send_message(admin_id, text, reply_markup=markup)
                 except Exception:
                     pass
+
+    await asyncio.gather(
+        *(_one(admin_id) for admin_id in get_settings().admin_ids),
+        return_exceptions=True,
+    )
 
 
 def _approval_markup(*, order_id: int | None = None, payment_id: int | None = None) -> InlineKeyboardMarkup:

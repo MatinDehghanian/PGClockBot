@@ -84,6 +84,19 @@ class ResellerBotManager:
                     row.bot_telegram_id = tg_id
                     row.bot_username = uname
                     await session.commit()
+                    try:
+                        setattr(
+                            bot,
+                            "_pgclock_reseller",
+                            {
+                                "profile_id": int(reseller_profile_id),
+                                "user_id": int(row.user_id),
+                                "bot_telegram_id": tg_id,
+                                "bot_username": uname,
+                            },
+                        )
+                    except Exception:
+                        pass
 
             self._bots[reseller_profile_id] = bot
             task = asyncio.create_task(

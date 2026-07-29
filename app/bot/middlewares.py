@@ -81,17 +81,37 @@ async def check_force_join_member(bot: Bot, telegram_id: int, channel: str) -> b
     None means the channel/bot is misconfigured or Telegram errored — callers should
     not permanently lock users out on None.
     """
+    import time
+
     chat_id = channel if str(channel).startswith("@") else channel
+    cache_key = (int(telegram_id), str(chat_id))
+    now = time.monotonic()
+    hit = _FORCE_JOIN_MEMBER_CACHE.get(cache_key)
+    if hit and (now - hit[0]) < _FORCE_JOIN_MEMBER_TTL:
+        return hit[1]
     try:
         member = await bot.get_chat_member(chat_id, int(telegram_id))
         status = getattr(member, "status", None)
         status_val = getattr(status, "value", status)
         if str(status_val) in {"left", "kicked"}:
-            return False
-        return True
+            result: bool | None = False
+        else:
+            result = True
     except Exception as exc:
         logger.warning("force-join membership check failed for %s: %s", channel, exc)
-        return None
+        result = None
+    # Cache only definitive answers; None should be rechecked next time
+    if result is not None:
+        _FORCE_JOIN_MEMBER_CACHE[cache_key] = (now, result)
+        if len(_FORCE_JOIN_MEMBER_CACHE) > 4000:
+            oldest = sorted(_FORCE_JOIN_MEMBER_CACHE.items(), key=lambda kv: kv[1][0])[:1000]
+            for k, _ in oldest:
+                _FORCE_JOIN_MEMBER_CACHE.pop(k, None)
+    return result
+
+
+_FORCE_JOIN_MEMBER_CACHE: dict[tuple[int, str], tuple[float, bool | None]] = {}
+_FORCE_JOIN_MEMBER_TTL = 120.0
 
 
 class DbSessionMiddleware(BaseMiddleware):
@@ -122,11 +142,21 @@ class UserMiddleware(BaseMiddleware):
         token = getattr(bot, "token", None) if bot else None
         main_token = (get_settings().bot_token or "").strip()
         if token and main_token and token != main_token:
-            info = await lookup_reseller_by_bot_token(session, token)
+            info = getattr(bot, "_pgclock_reseller", None)
+            if not isinstance(info, dict):
+                info = await lookup_reseller_by_bot_token(session, token)
             if info:
                 reseller_owner_id = int(info["user_id"])
                 reseller_profile_id = int(info["profile_id"])
                 is_reseller_bot = True
+                if bot is not None and not getattr(bot, "_pgclock_reseller", None):
+                    try:
+                        setattr(bot, "_pgclock_reseller", {
+                            "profile_id": reseller_profile_id,
+                            "user_id": reseller_owner_id,
+                        })
+                    except Exception:
+                        pass
 
         data["reseller_owner_id"] = reseller_owner_id
         data["reseller_profile_id"] = reseller_profile_id
@@ -199,11 +229,12 @@ class ForceJoinMiddleware(BaseMiddleware):
         if _extract_start_payload(event) is not None or _is_bare_start(event):
             return await handler(event, data)
 
-        from app.services.users import get_setting, on
+        from app.services.users import get_all_settings, on
         from app.services.reseller_access import effective_menu_role
 
-        enabled = await get_setting(session, "force_join_enabled")
-        channel = (await get_setting(session, "force_join_channel") or "").strip()
+        ui = await get_all_settings(session)
+        enabled = ui.get("force_join_enabled")
+        channel = (ui.get("force_join_channel") or "").strip()
         if not on(enabled) or not channel:
             return await handler(event, data)
 
@@ -213,6 +244,7 @@ class ForceJoinMiddleware(BaseMiddleware):
             is_reseller_bot=bool(data.get("is_reseller_bot")),
             reseller_owner_id=data.get("reseller_owner_id"),
         )
+        data["menu_role"] = role
         if role != "user":
             return await handler(event, data)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import secrets
 import string
+import time
 from contextvars import ContextVar
 
 from sqlalchemy import select
@@ -13,6 +14,18 @@ from app.db.models import BotUser, Role, Setting
 # When handling updates on a reseller-owned bot, settings read/write overlay
 # that reseller's shop settings automatically.
 _shop_reseller_id: ContextVar[int | None] = ContextVar("shop_reseller_id", default=None)
+
+# Short TTL cache: reseller_id (0=global) → (monotonic_at, settings dict)
+_SETTINGS_CACHE: dict[int, tuple[float, dict[str, str]]] = {}
+_SETTINGS_CACHE_TTL = 15.0
+
+
+def clear_settings_cache(reseller_id: int | None = None) -> None:
+    """Drop cached settings. Clear all when global keys change."""
+    if reseller_id is None:
+        _SETTINGS_CACHE.clear()
+        return
+    _SETTINGS_CACHE.pop(int(reseller_id), None)
 
 
 def set_shop_reseller_id(reseller_user_id: int | None):
@@ -164,6 +177,7 @@ async def set_setting(
                 ResellerSetting(reseller_user_id=rid, key=key, value=value)
             )
         await session.commit()
+        clear_settings_cache(rid)
         return
     result = await session.execute(select(Setting).where(Setting.key == key))
     row = result.scalar_one_or_none()
@@ -172,6 +186,7 @@ async def set_setting(
     else:
         session.add(Setting(key=key, value=value))
     await session.commit()
+    clear_settings_cache()
 
 
 async def set_settings_bulk(
@@ -181,18 +196,22 @@ async def set_settings_bulk(
     reseller_id: int | None = None,
 ) -> None:
     """Upsert many settings with a single commit (avoids lock storms on menu save)."""
+    if not values:
+        return
     rid = _effective_reseller_id(reseller_id)
+    keys = list(values.keys())
     if rid:
         from app.db.models import ResellerSetting
 
-        for key, value in values.items():
-            result = await session.execute(
-                select(ResellerSetting).where(
-                    ResellerSetting.reseller_user_id == rid,
-                    ResellerSetting.key == key,
-                )
+        result = await session.execute(
+            select(ResellerSetting).where(
+                ResellerSetting.reseller_user_id == rid,
+                ResellerSetting.key.in_(keys),
             )
-            row = result.scalar_one_or_none()
+        )
+        existing = {r.key: r for r in result.scalars().all()}
+        for key, value in values.items():
+            row = existing.get(key)
             if row:
                 row.value = value
             else:
@@ -200,15 +219,18 @@ async def set_settings_bulk(
                     ResellerSetting(reseller_user_id=rid, key=key, value=value)
                 )
         await session.commit()
+        clear_settings_cache(rid)
         return
+    result = await session.execute(select(Setting).where(Setting.key.in_(keys)))
+    existing = {r.key: r for r in result.scalars().all()}
     for key, value in values.items():
-        result = await session.execute(select(Setting).where(Setting.key == key))
-        row = result.scalar_one_or_none()
+        row = existing.get(key)
         if row:
             row.value = value
         else:
             session.add(Setting(key=key, value=value))
     await session.commit()
+    clear_settings_cache()
 
 
 DEFAULT_SETTINGS = {
@@ -613,8 +635,14 @@ async def get_all_settings(
     reseller_id: int | None = None,
 ) -> dict[str, str]:
     # Defaults are seeded at startup — avoid N+1 writes on every read path.
-    data = dict(DEFAULT_SETTINGS)
     rid = _effective_reseller_id(reseller_id)
+    cache_key = int(rid or 0)
+    now = time.monotonic()
+    hit = _SETTINGS_CACHE.get(cache_key)
+    if hit and (now - hit[0]) < _SETTINGS_CACHE_TTL:
+        return dict(hit[1])
+
+    data = dict(DEFAULT_SETTINGS)
     if rid:
         from app.db.models import ResellerSetting
 
@@ -627,10 +655,12 @@ async def get_all_settings(
         data.update({r.key: r.value for r in r_result.scalars().all()})
         # Reseller bots never show platform apply / admin buttons
         data["show_reseller_apply"] = "0"
+        _SETTINGS_CACHE[cache_key] = (now, dict(data))
         return data
     result = await session.execute(select(Setting))
     rows = result.scalars().all()
     data.update({r.key: r.value for r in rows})
+    _SETTINGS_CACHE[cache_key] = (now, dict(data))
     return data
 
 

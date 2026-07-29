@@ -69,8 +69,10 @@ class ForceJoinTests(unittest.TestCase):
 
     def test_check_force_join_member_left(self):
         import asyncio
+        from app.bot import middlewares as mw
         from app.bot.middlewares import check_force_join_member
 
+        mw._FORCE_JOIN_MEMBER_CACHE.clear()
         bot = AsyncMock()
         member = MagicMock()
         member.status = "left"
@@ -83,8 +85,10 @@ class ForceJoinTests(unittest.TestCase):
 
     def test_check_force_join_member_ok(self):
         import asyncio
+        from app.bot import middlewares as mw
         from app.bot.middlewares import check_force_join_member
 
+        mw._FORCE_JOIN_MEMBER_CACHE.clear()
         bot = AsyncMock()
         member = MagicMock()
         member.status = "member"
@@ -97,8 +101,10 @@ class ForceJoinTests(unittest.TestCase):
 
     def test_check_force_join_member_api_error(self):
         import asyncio
+        from app.bot import middlewares as mw
         from app.bot.middlewares import check_force_join_member
 
+        mw._FORCE_JOIN_MEMBER_CACHE.clear()
         bot = AsyncMock()
         bot.get_chat_member = AsyncMock(side_effect=RuntimeError("chat not found"))
 

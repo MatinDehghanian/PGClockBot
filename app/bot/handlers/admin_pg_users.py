@@ -348,10 +348,14 @@ async def pg_reset(callback: CallbackQuery, db_user: BotUser):
         return
     uid = int(callback.data.split(":")[-1])
     try:
-        await get_pg().reset_user_by_id(uid)
+        user = await get_pg().reset_user_by_id(uid)
         await callback.answer("ریست شد ✅", show_alert=True)
         if callback.message:
-            await _show_user_card(callback.message, uid, notice="♻️ حجم ریست شد")
+            if isinstance(user, dict) and user.get("id") is not None:
+                text = "♻️ حجم ریست شد\n\n" + service_card(user)
+                await safe_edit_text(callback.message, text, reply_markup=_user_actions_kb(uid))
+            else:
+                await _show_user_card(callback.message, uid, notice="♻️ حجم ریست شد")
     except Exception as e:
         await callback.answer(str(e), show_alert=True)
 
@@ -363,10 +367,14 @@ async def pg_dis(callback: CallbackQuery, db_user: BotUser):
         return
     uid = int(callback.data.split(":")[-1])
     try:
-        await get_pg().set_disabled_by_id(uid, True)
+        user = await get_pg().set_disabled_by_id(uid, True)
         await callback.answer("غیرفعال شد", show_alert=True)
         if callback.message:
-            await _show_user_card(callback.message, uid, notice="🚫 کاربر غیرفعال شد")
+            if isinstance(user, dict) and user.get("id") is not None:
+                text = "🚫 کاربر غیرفعال شد\n\n" + service_card(user)
+                await safe_edit_text(callback.message, text, reply_markup=_user_actions_kb(uid))
+            else:
+                await _show_user_card(callback.message, uid, notice="🚫 کاربر غیرفعال شد")
     except Exception as e:
         await callback.answer(str(e), show_alert=True)
 
@@ -378,10 +386,14 @@ async def pg_en(callback: CallbackQuery, db_user: BotUser):
         return
     uid = int(callback.data.split(":")[-1])
     try:
-        await get_pg().set_disabled_by_id(uid, False)
+        user = await get_pg().set_disabled_by_id(uid, False)
         await callback.answer("فعال شد", show_alert=True)
         if callback.message:
-            await _show_user_card(callback.message, uid, notice="✅ کاربر فعال شد")
+            if isinstance(user, dict) and user.get("id") is not None:
+                text = "✅ کاربر فعال شد\n\n" + service_card(user)
+                await safe_edit_text(callback.message, text, reply_markup=_user_actions_kb(uid))
+            else:
+                await _show_user_card(callback.message, uid, notice="✅ کاربر فعال شد")
     except Exception as e:
         await callback.answer(str(e), show_alert=True)
 
@@ -393,10 +405,14 @@ async def pg_rev(callback: CallbackQuery, db_user: BotUser):
         return
     uid = int(callback.data.split(":")[-1])
     try:
-        await get_pg().revoke_sub_by_id(uid)
+        user = await get_pg().revoke_sub_by_id(uid)
         await callback.answer("ساب باطل شد", show_alert=True)
         if callback.message:
-            await _show_user_card(callback.message, uid, notice="🔏 سابسکریپشن باطل شد")
+            if isinstance(user, dict) and user.get("id") is not None:
+                text = "🔏 سابسکریپشن باطل شد\n\n" + service_card(user)
+                await safe_edit_text(callback.message, text, reply_markup=_user_actions_kb(uid))
+            else:
+                await _show_user_card(callback.message, uid, notice="🔏 سابسکریپشن باطل شد")
     except Exception as e:
         await callback.answer(str(e), show_alert=True)
 
@@ -539,10 +555,13 @@ async def _show_create_group_picker(callback: CallbackQuery, state: FSMContext) 
     data = await state.get_data()
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
     edit_uid = data.get("pg_edit_uid")
-    try:
-        groups = await get_pg().get_groups_simple()
-    except Exception:
-        groups = []
+    groups = data.get("pg_groups_cache")
+    if not isinstance(groups, list):
+        try:
+            groups = await get_pg().get_groups_simple()
+        except Exception:
+            groups = []
+        await state.update_data(pg_groups_cache=groups)
     rows: list[list[InlineKeyboardButton]] = []
     prefix = "adm:pg:edgrp" if edit_uid else "adm:pg:toggrp"
     for g in groups[:25]:

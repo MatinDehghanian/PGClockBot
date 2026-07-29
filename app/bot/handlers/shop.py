@@ -52,13 +52,19 @@ def _custom_has_pg_link(ui: dict) -> bool:
     return bool(tpl or groups)
 
 
-async def _custom_available_for_users(session: AsyncSession, ui: dict) -> bool:
+async def _custom_available_for_users(
+    session: AsyncSession,
+    ui: dict,
+    *,
+    plans: list | None = None,
+) -> bool:
     """Custom plan only when enabled, linked, AND at least one catalog plan exists."""
     if not on(ui.get("custom_plan_enabled")):
         return False
     if not _custom_has_pg_link(ui):
         return False
-    plans = await list_active_plans(session, include_trial=True)
+    if plans is None:
+        plans = await list_active_plans(session, include_trial=True)
     catalog = [p for p in plans if not p.is_trial]
     return bool(catalog)
 
@@ -80,7 +86,7 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if has_svc:
         plans = [p for p in plans if not p.is_trial]
     # Custom plan only when catalog plans exist (and setting/link OK)
-    custom_on = await _custom_available_for_users(session, ui)
+    custom_on = await _custom_available_for_users(session, ui, plans=plans)
     if not plans and not custom_on:
         text = format_message(
             "🛒 فروشگاه",

@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/panel.css?v=1.8.1" />
+  <link rel="stylesheet" href="/static/panel.css?v=1.8.3" />
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
   <script>
   (function () {
@@ -250,13 +250,21 @@
         {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
         {% block content %}{% endblock %}
       </div>
-      <footer class="site-footer desk-only">
-        <span class="muted">© ۲۰۲۶ MrClockBot</span>
-        <a class="link-quiet" href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener">GitHub</a>
+      <footer class="site-footer">
+        <div class="footer-meta">
+          <span>© ۲۰۲۶ MrClockBot</span>
+          <a href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener noreferrer">GitHub</a>
+        </div>
+        <div class="footer-actions">
+          <a class="btn-star" href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener noreferrer">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21 8 14 2 9.4h7.6L12 2z"/></svg>
+            ستاره
+          </a>
+        </div>
       </footer>
     </main>
   </div>
-  <script src="/static/panel.js?v=1.8.1" defer></script>
+  <script src="/static/panel.js?v=1.8.3" defer></script>
   {% else %}
     {% block auth %}{% endblock %}
   {% endif %}

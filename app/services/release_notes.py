@@ -6,6 +6,10 @@ from app.services.updates import is_newer, local_version
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "1.8.4": [
+        "بازگشت فوتر پنل (کپی‌رایت، GitHub، دکمه ستاره) در دسکتاپ و موبایل",
+        "شتاب ربات: کش تنظیمات، کش عضویت فورس‌جوین، WAL اسکیولایت و حذف queryهای تکراری",
+    ],
     "1.8.3": [
         "مدیریت کاربران پاسارگارد در ربات: لیست ۱۰تایی، صفحه قبل/بعد، جستجو",
         "ساخت/ویرایش/حذف/لینک ساب و اکشن‌های پنل از داخل ربات",
