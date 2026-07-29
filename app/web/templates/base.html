@@ -28,6 +28,7 @@
         <div class="topbar-brand-text">
           <strong dir="ltr">MrClockBot</strong>
           <span class="topbar-version" dir="ltr">
+            <span class="brand-ver-dot {% if update and update.update_available %}brand-ver-dot-warn{% else %}brand-ver-dot-ok{% endif %}" aria-hidden="true"></span>
             v{{ app_version }}{% if update and update.update_available %}<span class="ver-badge err">آپدیت کنید</span>{% endif %}
           </span>
         </div>
@@ -42,25 +43,12 @@
         <span class="brand-logo" aria-hidden="true"><img src="/static/logo.png" alt="" /></span>
         <div>
           <strong dir="ltr">MrClockBot</strong>
-          <small class="brand-meta">
-            <span>{{ staff.username }}</span>
-            {% if is_admin %}
-            <span class="role-tag role-tag-admin">ادمین</span>
-            {% elif is_reseller %}
-            <span class="role-tag role-tag-reseller">نماینده</span>
-            {% endif %}
-          </small>
+          <span class="brand-ver-line" dir="ltr">
+            <span class="brand-ver-dot {% if update and update.update_available %}brand-ver-dot-warn{% else %}brand-ver-dot-ok{% endif %}" aria-hidden="true"></span>
+            v{{ app_version }}{% if update and update.update_available %}<span class="ver-badge err">آپدیت کنید</span>{% endif %}
+          </span>
         </div>
       </div>
-      <div class="side-user mobile-only">
-        <span>{{ staff.username }}</span>
-        {% if is_admin %}
-        <span class="role-tag role-tag-admin">ادمین</span>
-        {% elif is_reseller %}
-        <span class="role-tag role-tag-reseller">نماینده</span>
-        {% endif %}
-      </div>
-
       <nav class="side-nav">
         {% if has_bot %}
         <div class="nav-section nav-section-bot">
@@ -182,7 +170,14 @@
       </nav>
 
       <div class="side-foot">
-        <span class="brand-version">v{{ app_version }}</span>
+        <div class="side-foot-user">
+          <span class="side-foot-name">{{ staff.username }}</span>
+          {% if is_admin %}
+          <span class="role-tag role-tag-admin">ادمین</span>
+          {% elif is_reseller %}
+          <span class="role-tag role-tag-reseller">نماینده</span>
+          {% endif %}
+        </div>
         <a href="/logout" class="logout-link">
           <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/><path d="M14 12H4.5M14 12l3-3M14 12l3 3"/></svg>
           خروج
