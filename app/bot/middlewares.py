@@ -161,6 +161,83 @@ class UserMiddleware(BaseMiddleware):
             reset_shop_reseller_id(ctx_token)
 
 
+class ForceJoinMiddleware(BaseMiddleware):
+    """Block shop/pay actions until channel membership is verified (real API check)."""
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any],
+    ) -> Any:
+        session: AsyncSession | None = data.get("session")
+        bot: Bot | None = data.get("bot")
+        db_user = data.get("db_user")
+        if not session or not bot or not db_user:
+            return await handler(event, data)
+
+        # Always allow /start so the join prompt can be shown
+        if _extract_start_payload(event) is not None or _is_bare_start(event):
+            return await handler(event, data)
+
+        from app.services.users import get_setting, on
+        from app.services.reseller_access import effective_menu_role
+
+        enabled = await get_setting(session, "force_join_enabled")
+        channel = (await get_setting(session, "force_join_channel") or "").strip()
+        if not on(enabled) or not channel:
+            return await handler(event, data)
+
+        role = await effective_menu_role(
+            session,
+            db_user,
+            is_reseller_bot=bool(data.get("is_reseller_bot")),
+            reseller_owner_id=data.get("reseller_owner_id"),
+        )
+        if role != "user":
+            return await handler(event, data)
+
+        chat_id = channel if channel.startswith("@") else channel
+        try:
+            member = await bot.get_chat_member(chat_id, int(db_user.telegram_id))
+            status = getattr(member, "status", None)
+            status_val = getattr(status, "value", status)
+            if str(status_val) in {"left", "kicked"}:
+                raise PermissionError("not a member")
+        except Exception:
+            msg = _reply_message(event)
+            text = (
+                f"برای ادامه، ابتدا در کانال {channel} عضو شوید، سپس دوباره /start بزنید."
+            )
+            if msg:
+                try:
+                    await msg.answer(text)
+                except Exception:
+                    pass
+            cq = event.callback_query if isinstance(event, Update) else (
+                event if isinstance(event, CallbackQuery) else None
+            )
+            if cq is not None:
+                try:
+                    await cq.answer("ابتدا در کانال عضو شوید", show_alert=True)
+                except Exception:
+                    pass
+            return None
+
+        return await handler(event, data)
+
+
+def _is_bare_start(event: TelegramObject) -> bool:
+    text = None
+    if isinstance(event, Message) and event.text:
+        text = event.text.strip()
+    elif isinstance(event, Update) and event.message and event.message.text:
+        text = event.message.text.strip()
+    if not text:
+        return False
+    return text.split()[0].startswith("/start")
+
+
 class ErrorLogMiddleware(BaseMiddleware):
     async def __call__(
         self,

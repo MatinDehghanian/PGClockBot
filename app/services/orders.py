@@ -144,6 +144,27 @@ async def create_order(
             raise ValueError("این پلن در این فروشگاه موجود نیست")
     elif plan.owner_reseller_id is not None:
         raise ValueError("این پلن در این فروشگاه موجود نیست")
+    if plan.is_trial:
+        # One free trial per user per shop (prevent callback re-buy)
+        prior = await session.execute(
+            select(Order.id)
+            .join(Plan, Plan.id == Order.plan_id)
+            .where(
+                Order.user_id == user_id,
+                Plan.is_trial.is_(True),
+                Order.status.in_(
+                    [
+                        OrderStatus.PAID.value,
+                        OrderStatus.DELIVERED.value,
+                        OrderStatus.AWAITING_APPROVAL.value,
+                        OrderStatus.AWAITING_RECEIPT.value,
+                    ]
+                ),
+            )
+            .limit(1)
+        )
+        if prior.scalar_one_or_none() is not None:
+            raise ValueError("پلن تست رایگان را قبلاً دریافت کرده‌اید")
     discount, used_code = await apply_discount(session, discount_code, plan.price)
     order = Order(
         user_id=user_id,
@@ -214,6 +235,26 @@ async def create_custom_order(
     tpl_id = int(tpl_raw) if tpl_raw.isdigit() else None
     group_ids = (ui.get("custom_plan_group_ids") or "").strip() or None
     shop_rid = current_shop_reseller_id()
+    if shop_rid:
+        # Do not inherit platform PG template/groups for reseller custom plans
+        from app.db.models import ResellerSetting
+
+        own = await session.execute(
+            select(ResellerSetting).where(
+                ResellerSetting.reseller_user_id == int(shop_rid),
+                ResellerSetting.key.in_(
+                    ("custom_plan_template_id", "custom_plan_group_ids")
+                ),
+            )
+        )
+        own_map = {r.key: (r.value or "").strip() for r in own.scalars().all()}
+        tpl_raw = own_map.get("custom_plan_template_id") or ""
+        group_ids = own_map.get("custom_plan_group_ids") or None
+        tpl_id = int(tpl_raw) if tpl_raw.isdigit() else None
+        if not tpl_id and not group_ids:
+            raise ValueError(
+                "برای پلن دلخواه، تمپلیت یا گروه پاسارگارد اختصاصی فروشگاه را در تنظیمات مشخص کنید"
+            )
 
     plan = Plan(
         name="پلن دلخواه",
@@ -354,7 +395,15 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
         if payment.order_id:
             return await session.get(Order, payment.order_id)
         return None
-    if payment.status != PaymentStatus.PENDING.value:
+    # Atomic claim: only one concurrent approver wins
+    result = await session.execute(
+        select(Payment).where(
+            Payment.id == payment.id,
+            Payment.status == PaymentStatus.PENDING.value,
+        )
+    )
+    payment = result.scalar_one_or_none()
+    if not payment:
         raise ValueError("این پرداخت قابل تأیید نیست")
 
     payment.status = PaymentStatus.APPROVED.value
@@ -525,6 +574,21 @@ async def renew_service_with_plan(
     plan: Plan,
 ) -> Order:
     """Create a pending renewal order. Caller shows pay_methods (or uses pay_with_wallet)."""
+    from app.services.users import current_shop_reseller_id
+
+    if not plan or not plan.is_active:
+        raise ValueError("پلن یافت نشد")
+    if plan.is_trial:
+        raise ValueError("پلن تست برای تمدید مجاز نیست")
+    shop_rid = current_shop_reseller_id()
+    if shop_rid:
+        if int(plan.owner_reseller_id or 0) != int(shop_rid):
+            raise ValueError("این پلن در این فروشگاه موجود نیست")
+    elif plan.owner_reseller_id is not None:
+        raise ValueError("این پلن در این فروشگاه موجود نیست")
+    if service.bot_user_id != user_id:
+        raise ValueError("سرویس متعلق به شما نیست")
+
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
@@ -532,6 +596,7 @@ async def renew_service_with_plan(
         status=OrderStatus.PENDING.value,
         note=f"renew:{service.id}",
         service_id=service.id,
+        reseller_id=shop_rid,
     )
     session.add(order)
     await session.commit()

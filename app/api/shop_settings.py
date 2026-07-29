@@ -25,8 +25,9 @@ from app.services.users import (
 )
 
 
-def register_shop_settings(app, *, render, require_staff, get_db):
+def register_shop_settings(app, *, render, require_staff, get_db, require_shop_settings=None):
     allowed_tabs = {t[0] for t in RESELLER_SETTINGS_TABS}
+    shop_dep = require_shop_settings or require_staff
 
     def _menu_tab_context(values: dict) -> dict:
         from app.bot.keyboards import DEFAULT_MENU_ORDER
@@ -108,7 +109,7 @@ def register_shop_settings(app, *, render, require_staff, get_db):
     @app.get("/shop-settings", response_class=HTMLResponse)
     async def shop_settings_page(
         request: Request,
-        staff: dict = Depends(require_staff),
+        staff: dict = Depends(shop_dep),
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") == "admin":
@@ -178,7 +179,7 @@ def register_shop_settings(app, *, render, require_staff, get_db):
     @app.post("/shop-settings")
     async def shop_settings_save(
         request: Request,
-        staff: dict = Depends(require_staff),
+        staff: dict = Depends(shop_dep),
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") != "reseller":
@@ -314,7 +315,7 @@ def register_shop_settings(app, *, render, require_staff, get_db):
     @app.post("/shop-settings/menu-layout")
     async def shop_menu_layout_save(
         request: Request,
-        staff: dict = Depends(require_staff),
+        staff: dict = Depends(shop_dep),
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") != "reseller":
@@ -341,7 +342,7 @@ def register_shop_settings(app, *, render, require_staff, get_db):
     @app.post("/shop-supports/save")
     async def shop_supports_save(
         request: Request,
-        staff: dict = Depends(require_staff),
+        staff: dict = Depends(shop_dep),
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") != "reseller":
@@ -379,7 +380,7 @@ def register_shop_settings(app, *, render, require_staff, get_db):
     @app.post("/shop-supports/delete")
     async def shop_supports_delete(
         request: Request,
-        staff: dict = Depends(require_staff),
+        staff: dict = Depends(shop_dep),
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") != "reseller":
