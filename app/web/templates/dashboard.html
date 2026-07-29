@@ -8,9 +8,11 @@
     <p class="desk-only">خلاصه فروش و دسترسی سریع</p>
   </div>
   <div class="version-box">
-    {% if update %}
+    {% if update and update.update_available %}
     <span class="ver-num">v{{ update.version }}</span>
-    <span class="ver-badge {{ update.tone }}">{{ update.label }}</span>
+    <span class="ver-badge err">آپدیت کنید</span>
+    {% elif update %}
+    <span class="ver-num muted">v{{ update.version }}</span>
     {% endif %}
   </div>
 </div>
