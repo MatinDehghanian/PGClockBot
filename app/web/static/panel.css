@@ -2819,7 +2819,7 @@ html[data-theme="light"] .tg-preview-shell {
   height: auto;
   box-sizing: border-box;
   overflow: hidden;
-  direction: ltr; /* ring left, title right on all viewports */
+  direction: ltr; /* ring left, title block on the right */
 }
 .home-gauge-ring {
   --p: 0;
@@ -2872,10 +2872,11 @@ html[data-theme="light"] .tg-preview-shell {
   letter-spacing: 0.06em;
 }
 .home-gauge-meta {
-  text-align: end;
+  text-align: start; /* with direction:rtl → physical right, opposite the ring */
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: flex-start;
   gap: 4px;
   min-width: 0;
   flex: 1 1 auto;
@@ -3080,11 +3081,51 @@ html[data-theme="light"] .home-panel-pg .home-panel-h { color: #1d4ed8; }
 @media (max-width: 1100px) {
   .home-panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+@media (max-width: 720px) {
+  .home-gauges { gap: 10px; }
+  .home-gauge {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 10px;
+    padding: 14px 12px 12px;
+    min-height: 168px;
+    height: 168px;
+  }
+  .home-gauge-meta {
+    text-align: center;
+    align-items: center;
+  }
+  .home-gauge-ring { width: 96px; height: 96px; }
+  .home-gauge-center strong { font-size: 20px; }
+}
 @media (max-width: 560px) {
-  .home-gauges { gap: 8px; }
-  .home-gauge { gap: 12px; padding: 12px; }
-  .home-gauge-ring { width: 72px; height: 72px; }
-  .home-gauge-center strong { font-size: 16px; }
   .home-conn-row { grid-template-columns: 1fr; }
   .home-panel-grid { grid-template-columns: 1fr 1fr; }
 }
+
+.update-changelog { margin-bottom: 16px; }
+.update-changelog-block + .update-changelog-block {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.update-changelog-ver {
+  display: inline-block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.update-changelog-list {
+  margin: 0;
+  padding: 0 18px 0 0;
+  list-style: disc;
+}
+.update-changelog-list li {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--foreground);
+}
+.update-changelog-list li:last-child { margin-bottom: 0; }

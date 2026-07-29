@@ -28,7 +28,16 @@ class PgUserCreateUiTests(unittest.TestCase):
         self.assertIn("parse_group_ids_from_form", src)
         self.assertIn("modify_user_by_id", src)
         self.assertIn("/pg/users/{user_id}/edit", src)
+        self.assertIn("build_user_create_payload", src)
         self.assertIn("days * 86400", src)
+
+    def test_create_payload_has_proxy_settings(self):
+        from app.services.pasarguard import build_user_create_payload
+
+        p = build_user_create_payload(username="user_01", group_ids=[1], expire_ts=1_700_000_000)
+        self.assertEqual(p["proxy_settings"], {})
+        self.assertEqual(p["group_ids"], [1])
+        self.assertIn("T", str(p["expire"]))  # ISO datetime
 
     def test_nodes_reconnect_for_viewers(self):
         src = Path("app/api/pg_pages.py").read_text(encoding="utf-8")
@@ -37,6 +46,15 @@ class PgUserCreateUiTests(unittest.TestCase):
         tpl = Path("app/web/templates/pg_nodes.html").read_text(encoding="utf-8")
         self.assertIn("اتصال مجدد", tpl)
         self.assertIn("can_reconnect", tpl)
+
+    def test_panel_settings_tabs(self):
+        src = Path("app/web/templates/base.html").read_text(encoding="utf-8")
+        self.assertIn("تنظیمات وب پنل", src)
+        self.assertNotIn("nav-section-panel", src)
+        tabs = Path("app/web/templates/_panel_settings_tabs.html").read_text(encoding="utf-8")
+        self.assertIn("tab=backup", tabs)
+        self.assertIn("/security", tabs)
+        self.assertIn("آپدیت", tabs)
 
 
 class PgUserCreateLogicTests(unittest.TestCase):

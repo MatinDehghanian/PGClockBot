@@ -16,6 +16,129 @@ class PasarGuardError(Exception):
         self.status_code = status_code
         self.body = body
 
+    def user_message(self, *, fallback: str | None = None) -> str:
+        """Short Persian-friendly message extracted from API error body."""
+        detail = _pg_error_detail(self.body)
+        if detail:
+            return detail[:400]
+        base = str(self.args[0] if self.args else "") or (fallback or "خطای پاسارگارد")
+        if self.status_code:
+            return f"{base}"
+        return base
+
+
+def _pg_error_detail(body: Any) -> str | None:
+    if body is None:
+        return None
+    text = body if isinstance(body, str) else None
+    data = None
+    if isinstance(body, dict):
+        data = body
+    elif isinstance(body, (bytes, bytearray)):
+        text = body.decode("utf-8", errors="replace")
+    if text and data is None:
+        try:
+            import json
+
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                data = parsed
+            else:
+                return text.strip()[:400] or None
+        except Exception:
+            return text.strip()[:400] or None
+    if not isinstance(data, dict):
+        return None
+    for key in ("detail", "message", "error", "msg"):
+        val = data.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+        if isinstance(val, list):
+            parts = []
+            for item in val:
+                if isinstance(item, dict):
+                    loc = ".".join(str(x) for x in (item.get("loc") or []) if x != "body")
+                    msg = item.get("msg") or item.get("message") or ""
+                    parts.append(f"{loc}: {msg}".strip(": "))
+                else:
+                    parts.append(str(item))
+            joined = "؛ ".join(p for p in parts if p)
+            if joined:
+                return joined[:400]
+        if isinstance(val, dict):
+            inner = _pg_error_detail(val)
+            if inner:
+                return inner
+    return None
+
+
+def build_user_create_payload(
+    *,
+    username: str,
+    group_ids: list[int],
+    data_limit: int | None = None,
+    expire_ts: int | None = None,
+    note: str | None = None,
+    status: str = "active",
+) -> dict[str, Any]:
+    """Payload compatible with current PasarGuard UserCreate schema."""
+    from datetime import datetime, timezone
+
+    payload: dict[str, Any] = {
+        "username": username,
+        "status": status,
+        "group_ids": group_ids,
+        "proxy_settings": {},
+    }
+    if data_limit is not None:
+        payload["data_limit"] = int(data_limit)
+    if expire_ts is not None:
+        if expire_ts <= 0:
+            payload["expire"] = 0
+        else:
+            # Prefer ISO datetime (newer PG); timestamp still accepted by validators.
+            payload["expire"] = (
+                datetime.fromtimestamp(int(expire_ts), tz=timezone.utc)
+                .replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
+    if note:
+        payload["note"] = note
+    return payload
+
+
+def build_user_modify_payload(
+    *,
+    username: str | None = None,
+    group_ids: list[int] | None = None,
+    data_limit: int | None = None,
+    expire_ts: int | None = None,
+    status: str | None = None,
+) -> dict[str, Any]:
+    from datetime import datetime, timezone
+
+    payload: dict[str, Any] = {}
+    if username is not None:
+        payload["username"] = username
+    if group_ids is not None:
+        payload["group_ids"] = group_ids
+    if data_limit is not None:
+        payload["data_limit"] = int(data_limit)
+    if expire_ts is not None:
+        if expire_ts <= 0:
+            payload["expire"] = 0
+        else:
+            payload["expire"] = (
+                datetime.fromtimestamp(int(expire_ts), tz=timezone.utc)
+                .replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
+    if status:
+        payload["status"] = status
+    return payload
+
 
 class PasarGuardClient:
     def __init__(self) -> None:

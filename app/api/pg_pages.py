@@ -9,12 +9,26 @@ from fastapi import Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services.formatting import data_limit_to_gb, expire_remaining_days, format_stat_row
-from app.services.pasarguard import as_list, get_pg, user_group_ids, user_subscription_url
+from app.services.pasarguard import (
+    PasarGuardError,
+    as_list,
+    build_user_create_payload,
+    build_user_modify_payload,
+    get_pg,
+    user_group_ids,
+    user_subscription_url,
+)
 from app.services.pg_access import staff_pg_writes, staff_user_actions
 
 
 def _q(msg: str) -> str:
     return quote(str(msg), safe="")
+
+
+def _pg_err(exc: Exception) -> str:
+    if isinstance(exc, PasarGuardError):
+        return _q(exc.user_message(fallback="خطا در ارتباط با پاسارگارد"))
+    return _q(exc)
 
 
 def _inbound_tags(raw) -> list[str]:
@@ -287,6 +301,13 @@ def register_pg_pages(
             mode = "template" if str(form.get("template_id") or "").strip() else "custom"
 
         note = f"web panel · {staff.get('username') or 'staff'}"
+        import re
+
+        if not re.fullmatch(r"[A-Za-z0-9_]{3,32}", uname):
+            return RedirectResponse(
+                f"/pg/users?err={_q('نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی، عدد یا _ باشد')}",
+                status_code=303,
+            )
         try:
             if mode == "template":
                 raw_tid = str(form.get("template_id") or form.get("pg_template_id") or "").strip()
@@ -326,7 +347,7 @@ def register_pg_pages(
                 gb_raw = str(form.get("data_limit_gb") or "").strip()
                 days_raw = str(form.get("duration_days") or "").strip()
                 data_limit = None
-                expire = None
+                expire_ts = None
                 if gb_raw:
                     try:
                         gb = float(gb_raw.replace(",", "."))
@@ -345,7 +366,7 @@ def register_pg_pages(
                         if days < 0:
                             raise ValueError
                         if days > 0:
-                            expire = int(time.time()) + days * 86400
+                            expire_ts = int(time.time()) + days * 86400
                     except ValueError:
                         return RedirectResponse(
                             f"/pg/users?err={_q('مدت نامعتبر است')}",
@@ -353,14 +374,13 @@ def register_pg_pages(
                         )
 
                 created = await get_pg().create_user(
-                    {
-                        "username": uname,
-                        "status": "active",
-                        "data_limit": data_limit,
-                        "expire": expire,
-                        "group_ids": ids,
-                        "note": note,
-                    }
+                    build_user_create_payload(
+                        username=uname,
+                        group_ids=ids,
+                        data_limit=data_limit,
+                        expire_ts=expire_ts,
+                        note=note,
+                    )
                 )
 
             if not _is_admin(staff):
@@ -372,7 +392,7 @@ def register_pg_pages(
                     except Exception:
                         pass
         except Exception as e:
-            return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
+            return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ساخته شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/edit")
@@ -399,8 +419,8 @@ def register_pg_pages(
 
         gb_raw = str(form.get("data_limit_gb") or "").strip()
         days_raw = str(form.get("duration_days") or "").strip()
-        data_limit = 0  # 0 = unlimited in PG APIs commonly
-        expire = None
+        data_limit = 0  # 0 = unlimited
+        expire_ts = 0  # clear expire when empty
         if gb_raw:
             try:
                 gb = float(gb_raw.replace(",", "."))
@@ -414,29 +434,24 @@ def register_pg_pages(
                 days = int(float(days_raw))
                 if days < 0:
                     raise ValueError
-                expire = int(time.time()) + days * 86400 if days > 0 else 0
+                expire_ts = int(time.time()) + days * 86400 if days > 0 else 0
             except ValueError:
                 return RedirectResponse(f"/pg/users?err={_q('مدت نامعتبر است')}", status_code=303)
-        else:
-            expire = 0  # clear expire
 
         try:
             current = await _assert_owned_user(staff, user_id)
             if current is None:
                 return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
-            payload: dict = {
-                "username": uname,
-                "group_ids": ids,
-                "data_limit": data_limit,
-                "expire": expire,
-            }
-            # Preserve status when present
-            st = current.get("status")
-            if st:
-                payload["status"] = st
+            payload = build_user_modify_payload(
+                username=uname,
+                group_ids=ids,
+                data_limit=data_limit,
+                expire_ts=expire_ts,
+                status=str(current.get("status") or "") or None,
+            )
             await get_pg().modify_user_by_id(user_id, payload)
         except Exception as e:
-            return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
+            return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ویرایش شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/disable")
@@ -448,7 +463,7 @@ def register_pg_pages(
                 return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
             await get_pg().set_disabled_by_id(user_id, True)
         except Exception as e:
-            return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
+            return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q('کاربر غیرفعال شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/enable")
@@ -460,7 +475,7 @@ def register_pg_pages(
                 return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
             await get_pg().set_disabled_by_id(user_id, False)
         except Exception as e:
-            return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
+            return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q('کاربر فعال شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/reset")
@@ -473,7 +488,7 @@ def register_pg_pages(
                 return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
             await get_pg().reset_user_by_id(user_id)
         except Exception as e:
-            return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
+            return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q('مصرف ریست شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/revoke")
@@ -486,7 +501,7 @@ def register_pg_pages(
                 return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
             await get_pg().revoke_sub_by_id(user_id)
         except Exception as e:
-            return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
+            return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q('سابسکرایب ابطال شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/delete")
@@ -498,7 +513,7 @@ def register_pg_pages(
                 return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
             await get_pg().delete_user_by_id(user_id)
         except Exception as e:
-            return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
+            return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q('کاربر حذف شد')}", status_code=303)
 
     # ---- templates ----
