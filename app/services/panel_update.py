@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 STATUS_FILE = DATA_DIR / "panel_update.json"
 SNAPSHOTS_FILE = DATA_DIR / "update_snapshots.json"
 SERVICE_NAME = "pgclockbot"
-_LOCK = threading.Lock()
+_LOCK = threading.RLock()
 _THREAD: threading.Thread | None = None
 MAX_SNAPSHOTS = 1
 
@@ -102,6 +102,8 @@ def _default_status() -> dict[str, Any]:
         "error": None,
         "snapshot_id": None,
         "awaiting_restart": False,
+        "restart_required": False,
+        "pre_boot_id": None,
     }
 
 
@@ -486,17 +488,27 @@ def _read_local_version_file(root: Path) -> str | None:
         return None
 
 
-def _finish_ok(message: str, *, awaiting_restart: bool = False) -> None:
+def _finish_ok(message: str, *, awaiting_restart: bool = False, restart_required: bool = False) -> None:
+    pre_boot = None
+    if awaiting_restart:
+        try:
+            from app.runtime import BOOT_ID
+
+            pre_boot = BOOT_ID
+        except Exception:
+            pre_boot = None
     write_status(
         {
-            "state": "done",
+            "state": "error" if restart_required else "done",
             "percent": 100,
-            "step_key": "done",
+            "step_key": "done" if not awaiting_restart else "restart",
             "step": "تمام شد" if not awaiting_restart else "راه‌اندازی مجدد سرویس",
             "message": message,
             "finished_at": _now(),
-            "error": None,
+            "error": message if restart_required else None,
             "awaiting_restart": bool(awaiting_restart),
+            "restart_required": bool(restart_required),
+            "pre_boot_id": pre_boot,
         }
     )
     _append_log(message)
@@ -536,6 +548,12 @@ def _do_update(target_version: str | None) -> None:
                 "to_version": target_version,
                 "log": [],
                 "snapshot_id": None,
+                "awaiting_restart": False,
+                "restart_required": False,
+                "pre_boot_id": None,
+                "step": "",
+                "step_key": "",
+                "message": "شروع آپدیت…",
             }
         )
         _set_step("prepare", "شروع آپدیت…")
@@ -576,43 +594,37 @@ def _do_update(target_version: str | None) -> None:
                 use_git = False
             else:
                 _set_step("pull", "دریافت کد (origin/main)…")
-                _, branch = _run([git, "rev-parse", "--abbrev-ref", "HEAD"], cwd=root)
-                branch = (branch or "main").strip() or "main"
-                if branch == "HEAD":
-                    branch = "main"
-                code, out = _run([git, "pull", "--ff-only", "origin", branch], cwd=root, timeout=180)
+                # Always deploy main channel — update check compares against main/VERSION.
+                code, out = _run(
+                    [git, "checkout", "-f", "-B", "main", "origin/main"],
+                    cwd=root,
+                    timeout=120,
+                )
                 if code != 0:
-                    _append_log("ff-only ناموفق — همگام‌سازی با origin/main")
-                    code2, out2 = _run(
-                        [git, "checkout", "-f", "-B", "main", "origin/main"], cwd=root, timeout=120
-                    )
+                    _append_log(f"checkout main ناموفق — سوییچ به zip: {(out or '')[:160]}")
+                    use_git = False
+                else:
+                    code2, out2 = _run([git, "reset", "--hard", "origin/main"], cwd=root, timeout=120)
                     if code2 != 0:
-                        _append_log(f"checkout ناموفق — سوییچ به zip: {(out2 or '')[:160]}")
+                        _append_log(f"reset ناموفق — سوییچ به zip: {(out2 or '')[:160]}")
                         use_git = False
                     else:
-                        code3, out3 = _run([git, "reset", "--hard", "origin/main"], cwd=root, timeout=120)
-                        if code3 != 0:
-                            _append_log(f"reset ناموفق — سوییچ به zip: {(out3 or '')[:160]}")
-                            use_git = False
-                        else:
-                            _run(
-                                [
-                                    git,
-                                    "clean",
-                                    "-fd",
-                                    "--exclude=.env",
-                                    "--exclude=data",
-                                    "--exclude=.venv",
-                                    "--exclude=.env.bak.*",
-                                ],
-                                cwd=root,
-                                timeout=60,
-                            )
-                            _append_log("کد با origin/main همگام شد")
-                else:
-                    _append_log(f"کد به‌روز شد ({branch})")
-                    if out:
-                        _append_log(out.splitlines()[-1][:200])
+                        _run(
+                            [
+                                git,
+                                "clean",
+                                "-fd",
+                                "--exclude=.env",
+                                "--exclude=data",
+                                "--exclude=.venv",
+                                "--exclude=.env.bak.*",
+                            ],
+                            cwd=root,
+                            timeout=60,
+                        )
+                        _append_log("کد با origin/main همگام شد")
+                        if out2:
+                            _append_log(out2.splitlines()[-1][:200])
 
         if not use_git:
             _set_step("fetch", "دانلود نسخه جدید…")
@@ -636,7 +648,8 @@ def _do_update(target_version: str | None) -> None:
         if not ok:
             _finish_ok(
                 "کد آپدیت شد؛ ریستارت خودکار ممکن نشد. "
-                "یک‌بار روی سرور: sudo systemctl restart pgclockbot"
+                "یک‌بار روی سرور: sudo systemctl restart pgclockbot",
+                restart_required=True,
             )
             return
 
@@ -674,6 +687,12 @@ def _do_rollback(snapshot_id: str) -> None:
                 "to_version": snap.get("version"),
                 "log": [],
                 "snapshot_id": snap.get("id"),
+                "awaiting_restart": False,
+                "restart_required": False,
+                "pre_boot_id": None,
+                "step": "",
+                "step_key": "",
+                "message": "شروع بازگشت…",
             }
         )
         _set_step("prepare", f"شروع بازگشت به {snap.get('label')}")
@@ -749,85 +768,225 @@ def _do_rollback(snapshot_id: str) -> None:
         _finish_error(e)
 
 
+        if not ok:
+            _finish_ok(
+                f"بازگشت به {new_ver or sha[:7]} انجام شد؛ ریستارت خودکار ممکن نشد — "
+                "sudo systemctl restart pgclockbot",
+                restart_required=True,
+            )
+            return
+        time.sleep(1.2)
+        _finish_ok(
+            f"بازگشت به نسخه {new_ver or sha[:7]} انجام شد — سرویس در حال راه‌اندازی مجدد است. "
+            "ممکن است ۲ تا ۳ دقیقه طول بکشد؛ صفحه به‌صورت خودکار تازه می‌شود.",
+            awaiting_restart=True,
+        )
+    except Exception as e:
+        _finish_error(e)
+
+
+def _parse_iso(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).timestamp()
+    except Exception:
+        return None
+
+
+def _age_seconds(iso_ts: str | None) -> float | None:
+    ts = _parse_iso(iso_ts)
+    if ts is None:
+        return None
+    return max(0.0, datetime.now(timezone.utc).timestamp() - ts)
+
+
+def _thread_alive() -> bool:
+    t = _THREAD
+    return bool(t is not None and t.is_alive())
+
+
 def _start_thread(target, *args) -> dict[str, Any]:
     global _THREAD
     with _LOCK:
         if _THREAD is not None and _THREAD.is_alive():
             return {"ok": False, "error": "یک عملیات آپدیت/بازگشت در حال اجراست"}
+        # Mark running immediately so /update/status never returns stale awaiting.
+        mode = "rollback" if target is _do_rollback else "update"
+        seed = _default_status()
+        seed.update(
+            {
+                "state": "running",
+                "mode": mode,
+                "started_at": _now(),
+                "message": "شروع عملیات…",
+                "awaiting_restart": False,
+                "restart_required": False,
+                "pre_boot_id": None,
+                "log": [],
+            }
+        )
+        if mode == "update" and args:
+            seed["to_version"] = args[0]
+        if mode == "rollback" and args:
+            seed["snapshot_id"] = args[0]
+        _replace_status(seed)
         _THREAD = threading.Thread(target=target, args=args, name="panel-update", daemon=True)
         _THREAD.start()
     return {"ok": True, "status": read_status()}
 
 
 def clear_idle_status() -> dict[str, Any]:
-    """Reset stale logs/progress when there is nothing active to show."""
+    """Reset progress UI when nothing active remains."""
     st = read_status()
-    if st.get("state") == "running":
-        return st
-    if (
-        st.get("state") in {"idle", None}
-        and not st.get("log")
-        and not st.get("error")
-        and not st.get("awaiting_restart")
-        and not st.get("step_key")
-    ):
+    if st.get("state") == "running" and _thread_alive():
         return st
     return _replace_status(_default_status())
 
 
+# How long to wait for systemd restart before unlocking the UI for retry.
+AWAITING_RESTART_TIMEOUT_SEC = 12 * 60
+STALE_RUNNING_TIMEOUT_SEC = 20 * 60
+
+
 def resolve_stale_update_status() -> dict[str, Any]:
     """
-    Clear leftover restart/progress UI after the new process is already up.
+    Recover stuck panel_update.json so the update UI stays usable.
 
-    Typical stuck case: awaiting_restart=True in panel_update.json while the
-    running panel already serves to_version (or newer). Opening the update tab
-    would otherwise keep showing steps/logs forever.
+    - Clear awaiting_restart only after a real process identity change, or timeout.
+    - Unlock zombie "running" when the worker thread is gone.
+    - Keep restart_required / error visible until cleared.
     """
-    from app.services.updates import is_newer
+    from app.services.updates import is_newer, is_same_or_newer
 
     st = read_status()
-    if st.get("state") == "running":
-        return st
-
-    awaiting = bool(st.get("awaiting_restart"))
     local = local_version()
     to_ver = str(st.get("to_version") or "").strip()
+    mode = str(st.get("mode") or "update")
 
-    if awaiting:
-        # Target already reached (local >= to_version) → restart finished.
-        if to_ver and not is_newer(to_ver, local):
-            return clear_idle_status()
-        # No target recorded but marked done+awaiting → leftover after success.
-        if st.get("state") == "done" and not to_ver:
-            return clear_idle_status()
+    # Zombie running (process restarted mid-update, thread gone).
+    if st.get("state") == "running":
+        if _thread_alive():
+            return st
+        age = _age_seconds(st.get("started_at")) or _age_seconds(st.get("finished_at"))
+        if age is None or age >= 30:
+            return write_status(
+                {
+                    "state": "error",
+                    "awaiting_restart": False,
+                    "restart_required": False,
+                    "finished_at": _now(),
+                    "message": "عملیات آپدیت ناتمام ماند. دوباره تلاش کنید.",
+                    "error": "عملیات آپدیت ناتمام ماند. دوباره تلاش کنید.",
+                    "step_key": "restart",
+                }
+            )
+        return st
+
+    if st.get("restart_required"):
+        # Keep actionable manual-restart message visible.
         return st
 
     if st.get("state") == "error":
         return st
 
+    awaiting = bool(st.get("awaiting_restart"))
+    if awaiting:
+        try:
+            from app.runtime import BOOT_ID
+
+            cur_boot = BOOT_ID
+        except Exception:
+            cur_boot = None
+        pre_boot = st.get("pre_boot_id")
+
+        restarted = bool(pre_boot and cur_boot and str(pre_boot) != str(cur_boot))
+        version_ok = False
+        if to_ver:
+            if mode == "rollback":
+                # Rollback target should match (not merely local >= target).
+                version_ok = not is_newer(to_ver, local) and not is_newer(local, to_ver)
+            else:
+                version_ok = is_same_or_newer(local, to_ver)
+        else:
+            version_ok = restarted
+
+        if restarted and version_ok:
+            return clear_idle_status()
+
+        # Legacy status without pre_boot_id: if already on/after target, clear.
+        if not pre_boot and to_ver and is_same_or_newer(local, to_ver):
+            age = _age_seconds(st.get("finished_at"))
+            if age is not None and age >= 20:
+                return clear_idle_status()
+
+        age = _age_seconds(st.get("finished_at")) or _age_seconds(st.get("started_at"))
+        if age is not None and age >= AWAITING_RESTART_TIMEOUT_SEC:
+            return write_status(
+                {
+                    "state": "error",
+                    "awaiting_restart": False,
+                    "restart_required": True,
+                    "finished_at": _now(),
+                    "step_key": "restart",
+                    "step": "راه‌اندازی مجدد سرویس",
+                    "message": (
+                        "ری‌استارت بیش از حد طول کشید. اگر نسخه عوض نشده، روی سرور اجرا کنید: "
+                        "sudo systemctl restart pgclockbot — سپس دوباره بررسی کنید."
+                    ),
+                    "error": (
+                        "ری‌استارت بیش از حد طول کشید. اگر لازم است: "
+                        "sudo systemctl restart pgclockbot"
+                    ),
+                }
+            )
+        return st
+
+    # Finished cleanly (no awaiting) — hide logs/steps.
     if st.get("state") == "done" or st.get("log") or st.get("step_key"):
         return clear_idle_status()
     return st
 
 
 def start_update(target_version: str | None = None) -> dict[str, Any]:
+    # Allow retry even if a previous awaiting_restart was stuck.
+    st = resolve_stale_update_status()
+    if st.get("state") == "running" and _thread_alive():
+        return {"ok": False, "error": "یک عملیات آپدیت در حال اجراست", "status": st}
+    if st.get("awaiting_restart"):
+        # Still genuinely waiting — don't start a second update.
+        age = _age_seconds(st.get("finished_at")) or 0
+        if age < AWAITING_RESTART_TIMEOUT_SEC:
+            return {
+                "ok": False,
+                "error": "سرویس در حال راه‌اندازی مجدد است؛ چند دقیقه صبر کنید یا صفحه را تازه کنید.",
+                "status": st,
+            }
     return _start_thread(_do_update, target_version)
 
 
 def start_rollback(snapshot_id: str) -> dict[str, Any]:
     if not get_snapshot(snapshot_id):
         return {"ok": False, "error": "نقطه بازگشت معتبر نیست"}
+    st = resolve_stale_update_status()
+    if st.get("state") == "running" and _thread_alive():
+        return {"ok": False, "error": "یک عملیات در حال اجراست", "status": st}
     return _start_thread(_do_rollback, snapshot_id)
 
 
-async def update_page_context() -> dict[str, Any]:
-    info = await check_github_update()
+async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
+    info = await check_github_update(force=force_check)
     status = resolve_stale_update_status()
     awaiting = bool(status.get("awaiting_restart"))
-    show_ops = bool(awaiting or status.get("state") in {"running", "error"})
+    show_ops = bool(
+        awaiting
+        or status.get("restart_required")
+        or status.get("state") in {"running", "error"}
+    )
     snaps = list_snapshots()
     return {
         "update_info": info,
+        "update": info,  # sidebar badge on settings tab
         "status": status,
         "local_version": local_version(),
         "steps": [{"key": k, "label": lab, "percent": pct} for k, lab, pct in STEPS],

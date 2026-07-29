@@ -116,6 +116,18 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["pwa_name"] = panel_display_name()
         except Exception:
             ctx["pwa_name"] = "MrClockBot"
+    # Sidebar update badge — prefer explicit context, else request.state, else cache peek.
+    if "update" not in ctx:
+        upd = getattr(request.state, "panel_update", None)
+        if upd is None:
+            try:
+                from app.services.updates import peek_update_cache
+
+                upd = peek_update_cache()
+            except Exception:
+                upd = None
+        if upd is not None:
+            ctx["update"] = upd
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
 
@@ -408,6 +420,34 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
             )
         return response
+
+    @app.middleware("http")
+    async def attach_admin_update_badge(request: Request, call_next):
+        """Warm GitHub update info for admin HTML pages (sidebar badge)."""
+        path = request.url.path or ""
+        if (
+            request.method == "GET"
+            and not path.startswith("/static")
+            and not path.startswith("/media")
+            and not path.startswith("/.well-known")
+            and path
+            not in {
+                "/health",
+                "/sw.js",
+                "/manifest.webmanifest",
+                "/update/status",
+                "/home/metrics",
+            }
+        ):
+            try:
+                user = get_session_user(request)
+                if user and user.get("role") == "admin":
+                    from app.services.updates import check_github_update
+
+                    request.state.panel_update = await check_github_update()
+            except Exception:
+                pass
+        return await call_next(request)
 
     @app.exception_handler(NotAuthenticated)
     async def _unauth(request: Request, exc: NotAuthenticated):
@@ -1832,22 +1872,37 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.get("/update/status")
     async def update_status(staff: dict = Depends(require_admin)):
-        from app.runtime import BOOT_ID
+        from app.runtime import BOOT_ID, PID
         from app.services.panel_update import resolve_stale_update_status
         from app.services.updates import local_version
 
         st = resolve_stale_update_status()
         st["current_version"] = local_version()
         st["boot_id"] = BOOT_ID
+        st["pid"] = PID
         return st
+
+    @app.post("/update/clear")
+    async def update_clear(staff: dict = Depends(require_admin)):
+        """Admin escape hatch: unlock stuck update UI."""
+        from app.services.panel_update import clear_idle_status, resolve_stale_update_status
+
+        st = resolve_stale_update_status()
+        if st.get("state") == "running":
+            # Still try to clear zombies
+            from app.services.panel_update import _thread_alive
+
+            if _thread_alive():
+                return {"ok": False, "error": "عملیات در حال اجراست", "status": st}
+        return {"ok": True, "status": clear_idle_status()}
 
     @app.post("/update/start")
     async def update_start(
         request: Request,
         staff: dict = Depends(require_admin),
     ):
-        from app.services.panel_update import start_update
-        from app.services.updates import check_github_update, clear_update_cache
+        from app.services.panel_update import clear_idle_status, start_update
+        from app.services.updates import check_github_update, clear_update_cache, is_newer
 
         body = {}
         try:
@@ -1857,12 +1912,21 @@ def create_api_app(lifespan=None) -> FastAPI:
         clear_update_cache()
         info = await check_github_update(force=True)
         target = (body or {}).get("target") or info.get("remote_version")
-        if not info.get("update_available") and not (body or {}).get("force"):
+        force = bool((body or {}).get("force"))
+        # Retry after error may force; otherwise require a real newer remote.
+        if not info.get("update_available") and not force:
             from app.services.panel_update import read_status
 
             st = read_status()
-            if st.get("state") != "error":
+            if st.get("state") != "error" and not st.get("restart_required"):
                 return {"ok": False, "error": "نسخه جدیدی برای آپدیت نیست", "info": info}
+        if target and info.get("remote_version") and not force:
+            # Prefer the freshly checked remote over a stale client target.
+            if is_newer(info.get("remote_version"), target):
+                target = info.get("remote_version")
+        # Clear leftover awaiting before starting a forced retry.
+        if force:
+            clear_idle_status()
         return start_update(target_version=target)
 
     @app.post("/update/rollback")
@@ -2057,13 +2121,13 @@ def create_api_app(lifespan=None) -> FastAPI:
         elif tab == "update":
             from app.services.panel_update import clear_idle_status, update_page_context
 
-            if request.query_params.get("force") == "1":
+            force = request.query_params.get("force") == "1"
+            if force:
                 clear_update_cache()
-                await check_github_update(force=True)
-            # Success redirect after confirmed restart — wipe progress UI
+            # Success flash after confirmed restart — wipe progress UI
             if request.query_params.get("ok"):
                 clear_idle_status()
-            ctx.update(await update_page_context())
+            ctx.update(await update_page_context(force_check=force))
         elif tab == "pwa":
             from app.services.pwa import load_pwa_settings
 

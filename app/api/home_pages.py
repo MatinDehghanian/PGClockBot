@@ -18,12 +18,20 @@ def register_home_pages(app, *, render, require_admin, get_db):
         session: AsyncSession = Depends(get_db),
     ):
         overview = await build_home_overview(session)
+        update = None
+        try:
+            from app.services.updates import check_github_update
+
+            update = await check_github_update()
+        except Exception:
+            update = None
         return render(
             request,
             "home.html",
             {
                 "staff": staff,
                 "overview": overview,
+                "update": update,
             },
         )
 
