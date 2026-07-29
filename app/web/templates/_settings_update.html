@@ -27,6 +27,8 @@
      data-remote="{{ update_info.remote_version or '' }}"
      data-can-start="{{ '1' if available else '0' }}"
      data-running="{{ '1' if running else '0' }}"
+     data-done="{{ '1' if status.state == 'done' else '0' }}"
+     data-awaiting-restart="{{ '1' if status.awaiting_restart else '0' }}"
      data-show-ops="{{ '1' if show_ops else '0' }}">
   <h2>وضعیت عملیات</h2>
 
@@ -123,6 +125,9 @@
   const rollbackBtns = () => Array.from(document.querySelectorAll('.snap-rollback'));
   let timer = null;
   let waitingRestart = false;
+  let sawDown = false;
+  let restartStartedAt = 0;
+  const RESTART_MSG = 'سرویس در حال راه‌اندازی مجدد است — ممکن است ۲ تا ۳ دقیقه طول بکشد. لطفاً صبر کنید؛ صفحه خودکار تازه می‌شود.';
   const targetRemote = (root && root.dataset.remote) || '';
   let canStart = root && root.dataset.canStart === '1';
 
@@ -140,10 +145,54 @@
     rollbackBtns().forEach(b => { b.disabled = busy; });
   }
 
+  function markRestartUi(){
+    showOps(true);
+    setBusy(true, 'در حال راه‌اندازی مجدد…');
+    if (stateEl) stateEl.textContent = RESTART_MSG;
+    if (stepEl) stepEl.textContent = 'راه‌اندازی مجدد سرویس';
+    if (fill) fill.style.width = '98%';
+    if (percentEl) percentEl.textContent = '۹۸٪';
+    steps.forEach(li => {
+      li.classList.remove('current');
+      if (li.dataset.key === 'restart') li.classList.add('current');
+      else if (li.dataset.key !== 'done') li.classList.add('done');
+    });
+  }
+
+  function beginWaitingRestart(){
+    if (waitingRestart) return;
+    waitingRestart = true;
+    sawDown = false;
+    restartStartedAt = Date.now();
+    markRestartUi();
+    startPolling();
+  }
+
+  function finishReload(){
+    waitingRestart = false;
+    if (stateEl) stateEl.textContent = 'سرویس برگشت — در حال بارگذاری دوباره…';
+    if (stepEl) stepEl.textContent = 'تمام شد';
+    if (fill) fill.style.width = '100%';
+    if (percentEl) percentEl.textContent = '۱۰۰٪';
+    steps.forEach(li => { li.classList.remove('current'); li.classList.add('done'); });
+    clearInterval(timer); timer = null;
+    setTimeout(() => {
+      const url = new URL(location.href);
+      url.searchParams.set('tab', 'update');
+      url.searchParams.set('ok', 'آپدیت با موفقیت اعمال شد');
+      url.searchParams.delete('force');
+      location.href = url.pathname + '?' + url.searchParams.toString();
+    }, 900);
+  }
+
   function applyStatus(st){
     if (!fill) return;
     const active = st.state === 'running' || st.state === 'error' || st.state === 'done' || canStart;
     if (active) showOps(true);
+    if (waitingRestart || st.awaiting_restart) {
+      markRestartUi();
+      return;
+    }
     const pct = Number(st.percent || 0);
     fill.style.width = pct + '%';
     if (percentEl) percentEl.textContent = pct + '٪';
@@ -188,48 +237,77 @@
     }
   }
 
-  async function poll(){
+  async function probeHealth(){
     try {
-      const res = await fetch('/update/status', { credentials: 'same-origin' });
+      const r = await fetch('/health', { cache: 'no-store', credentials: 'same-origin' });
+      return r.ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function poll(){
+    if (waitingRestart) {
+      const up = await probeHealth();
+      const elapsed = Date.now() - restartStartedAt;
+      if (!up) {
+        sawDown = true;
+        markRestartUi();
+        if (elapsed > 180000 && stateEl) {
+          stateEl.textContent = RESTART_MSG + ' اگر بیش از ۳ دقیقه طول کشید، صفحه را تازه کنید یا: sudo systemctl restart pgclockbot';
+        }
+        return;
+      }
+      // Wait until we observed downtime (or a few seconds passed) so we don't
+      // celebrate the still-old process before it actually exits.
+      if (sawDown || elapsed > 5000) {
+        // Confirm status API is also back
+        try {
+          const res = await fetch('/update/status', { credentials: 'same-origin', cache: 'no-store' });
+          if (res.ok) {
+            finishReload();
+            return;
+          }
+        } catch (_) {}
+      }
+      markRestartUi();
+      return;
+    }
+
+    try {
+      const res = await fetch('/update/status', { credentials: 'same-origin', cache: 'no-store' });
       if (!res.ok) throw new Error('status ' + res.status);
       const data = await res.json();
       applyStatus(data);
-      if (waitingRestart && (data.state === 'done' || data.state === 'idle')) {
-        waitingRestart = false;
-        clearInterval(timer); timer = null;
-        if (stateEl) stateEl.textContent = 'انجام شد — بارگذاری دوباره…';
-        setTimeout(() => location.reload(), 1200);
-        return;
-      }
-      waitingRestart = false;
       if (data.state === 'running') return;
       if (data.state === 'done') {
+        if (data.awaiting_restart) {
+          beginWaitingRestart();
+          return;
+        }
         clearInterval(timer); timer = null;
-        setTimeout(() => location.reload(), 1500);
+        setTimeout(() => location.reload(), 1200);
         return;
       }
       if (data.state === 'error' || data.state === 'idle') {
         clearInterval(timer); timer = null;
       }
     } catch (e) {
-      waitingRestart = true;
-      showOps(true);
-      if (stateEl) stateEl.textContent = 'در حال راه‌اندازی مجدد سرویس…';
-      if (stepEl) stepEl.textContent = 'راه‌اندازی مجدد';
-      if (fill) fill.style.width = '96%';
-      if (percentEl) percentEl.textContent = '۹۶٪';
+      beginWaitingRestart();
     }
   }
 
   function startPolling(){
     if (timer) return;
-    timer = setInterval(poll, 900);
+    timer = setInterval(poll, 1200);
     poll();
   }
 
   if (startBtn) startBtn.addEventListener('click', async () => {
     showOps(true);
     setBusy(true, 'شروع…');
+    waitingRestart = false;
+    sawDown = false;
     try {
       const res = await fetch('/update/start', {
         method: 'POST',
@@ -259,6 +337,8 @@
     if (!confirm('بازگشت به «' + label + '»؟\nوضعیت فعلی هم ذخیره می‌شود تا اگر اشتباه بود دوباره برگردید.')) return;
     showOps(true);
     setBusy(true, 'شروع بازگشت…');
+    waitingRestart = false;
+    sawDown = false;
     try {
       const res = await fetch('/update/rollback', {
         method: 'POST',
@@ -281,10 +361,15 @@
   });
 
   if (refreshBtn) refreshBtn.addEventListener('click', () => {
-    location.href = '/update?force=1';
+    location.href = '/settings?tab=update&force=1';
   });
 
   if (root && root.dataset.running === '1') startPolling();
+  const params = new URLSearchParams(location.search);
+  const justOk = params.get('ok');
+  if (!justOk && root && (root.dataset.awaitingRestart === '1' || (root.dataset.done === '1' && /راه‌اندازی مجدد|ریستارت|۲ تا ۳|2 تا 3/i.test((stateEl && stateEl.textContent) || '')))) {
+    beginWaitingRestart();
+  }
 })();
 </script>
 
