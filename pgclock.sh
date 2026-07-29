@@ -380,6 +380,38 @@ print(proc.stdout.strip())
 PY
 }
 
+install_restart_helper() {
+  local service_user="${1:-$(whoami)}"
+  local ctl_src="${SCRIPT_DIR}/scripts/pgclockbot-ctl"
+  local ctl_dst="/usr/local/lib/pgclockbot/ctl"
+  local sudoers_path="/etc/sudoers.d/pgclockbot"
+  if [[ ! -f "$ctl_src" ]]; then
+    warn "restart helper source missing: ${ctl_src}"
+    return 1
+  fi
+  local tmp_ctl tmp_sudoers
+  tmp_ctl="$(mktemp)"
+  tmp_sudoers="$(mktemp)"
+  cp "$ctl_src" "$tmp_ctl"
+  chmod 755 "$tmp_ctl"
+  cat > "$tmp_sudoers" <<EOF
+# Managed by PGClockBot — passwordless service control for panel SSL/updates
+${service_user} ALL=(root) NOPASSWD: ${ctl_dst} *
+${service_user} ALL=(root) NOPASSWD: /bin/systemctl restart ${SERVICE_NAME}, /usr/bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl try-restart ${SERVICE_NAME}, /usr/bin/systemctl try-restart ${SERVICE_NAME}, /bin/systemctl is-active ${SERVICE_NAME}, /usr/bin/systemctl is-active ${SERVICE_NAME}, /usr/bin/certbot, /bin/certbot
+EOF
+  chmod 440 "$tmp_sudoers"
+  sudo_wrap install -d -m 755 /usr/local/lib/pgclockbot
+  sudo_wrap install -m 755 "$tmp_ctl" "$ctl_dst"
+  sudo_wrap install -m 440 "$tmp_sudoers" "$sudoers_path"
+  if sudo_wrap visudo -cf "$sudoers_path" >/dev/null 2>&1; then
+    ok "Passwordless restart helper installed for ${service_user}"
+  else
+    warn "sudoers validation failed — removing ${sudoers_path}"
+    sudo_wrap rm -f "$sudoers_path" || true
+  fi
+  rm -f "$tmp_ctl" "$tmp_sudoers"
+}
+
 install_systemd() {
   local service_user="${1:-$(whoami)}"
   local content
@@ -392,6 +424,7 @@ Type=simple
 User=${service_user}
 WorkingDirectory=${SCRIPT_DIR}
 Environment=PATH=${SCRIPT_DIR}/.venv/bin
+Environment=PGCLOCKBOT_SERVICE_USER=${service_user}
 ExecStart=${SCRIPT_DIR}/.venv/bin/python run.py
 Restart=always
 RestartSec=5
@@ -406,6 +439,7 @@ WantedBy=multi-user.target
   rm -f "$tmp"
   sudo_wrap systemctl daemon-reload
   sudo_wrap systemctl enable --now "$SERVICE_NAME"
+  install_restart_helper "$service_user" || true
   ok "systemd service enabled: ${SERVICE_NAME}"
 }
 
@@ -559,6 +593,14 @@ PY
       err ".env missing after update."
       return 1
     fi
+  fi
+
+  # Ensure passwordless restart helper exists for in-panel SSL/updates
+  if service_installed; then
+    local svc_user
+    svc_user="$(systemctl show -p User --value "$SERVICE_NAME" 2>/dev/null || whoami)"
+    [[ -z "$svc_user" || "$svc_user" == "-" ]] && svc_user="$(whoami)"
+    install_restart_helper "$svc_user" || true
   fi
 
   restart_service_if_any

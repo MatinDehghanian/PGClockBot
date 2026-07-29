@@ -1,4 +1,7 @@
 {% set available = update_info.update_available %}
+{% set running = status.state == 'running' %}
+{% set has_error = status.state == 'error' %}
+{% set show_ops = show_ops if show_ops is defined else (available or running or has_error or status.state == 'done') %}
 
 <div class="update-tab-head">
   <div class="version-box" style="margin-bottom:14px">
@@ -14,98 +17,285 @@
   <strong>نسخه جدید آماده است:</strong>
   {{ update_info.version }} → {{ update_info.remote_version }}
 </div>
-
-<div class="card settings-card">
-  <h2>دستور آپدیت از ترمینال</h2>
-  <p class="muted update-card-caption">آپدیت از داخل پنل غیرفعال است. روی سرور این دستور را اجرا کنید:</p>
-  <div class="cmd-copy">
-    <pre class="update-log" dir="ltr">bash pgclock.sh update</pre>
-    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="bash pgclock.sh update">کپی</button>
-  </div>
-  <p class="muted" style="margin:12px 0 0">یا از منوی مدیریت:</p>
-  <div class="cmd-copy">
-    <pre class="update-log" dir="ltr">bash pgclock.sh
-# سپس گزینه 2 — Update</pre>
-    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="bash pgclock.sh">کپی</button>
-  </div>
-</div>
-
-<div class="card settings-card">
-  <h2>نحوه آپدیت</h2>
-  <ol class="update-steps" style="margin:0">
-    <li class="done"><span class="step-dot"></span><span>با SSH به سرور وصل شوید و به پوشه پروژه بروید.</span></li>
-    <li class="done"><span class="step-dot"></span><span>دستور <code dir="ltr">bash pgclock.sh update</code> را اجرا کنید.</span></li>
-    <li class="done"><span class="step-dot"></span><span>کد از GitHub گرفته می‌شود، وابستگی‌ها نصب می‌شوند و در صورت نصب بودن سرویس، خودکار ری‌استارت می‌شود.</span></li>
-    <li class="done"><span class="step-dot"></span><span>فایل <code dir="ltr">.env</code> و پوشه <code dir="ltr">data</code> دست‌نخورده می‌مانند.</span></li>
-    <li class="done"><span class="step-dot"></span><span>بعد از اتمام، این صفحه را رفرش کنید تا نسخه جدید دیده شود.</span></li>
-  </ol>
-</div>
-
-<div class="card settings-card">
-  <h2>اگر بعد از آپدیت نیاز به ری‌استارت بود</h2>
-  <p class="muted update-card-caption">
-    معمولاً <code dir="ltr">bash pgclock.sh update</code> خودش سرویس را ری‌استارت می‌کند.
-    اگر پنل یا ربات بالا نیامد، یکی از این‌ها را اجرا کنید:
-  </p>
-  <div class="cmd-copy">
-    <pre class="update-log" dir="ltr">sudo systemctl restart pgclockbot</pre>
-    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="sudo systemctl restart pgclockbot">کپی</button>
-  </div>
-  <p class="muted" style="margin:12px 0 8px">یا از منوی مدیریت اسکریپت:</p>
-  <div class="cmd-copy">
-    <pre class="update-log" dir="ltr">bash pgclock.sh
-# گزینه 5 — Service → Restart</pre>
-    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="bash pgclock.sh">کپی</button>
-  </div>
-  <p class="muted" style="margin:12px 0 8px">برای دیدن لاگ:</p>
-  <div class="cmd-copy">
-    <pre class="update-log" dir="ltr">journalctl -u pgclockbot -n 50 --no-pager</pre>
-    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="journalctl -u pgclockbot -n 50 --no-pager">کپی</button>
-  </div>
-  <div class="actions update-actions" style="margin-top:14px">
-    <a class="btn btn-ghost" href="{{ update_info.repo_url }}" target="_blank" rel="noopener">گیت‌هاب</a>
-    <a class="btn btn-ghost" href="/settings?tab=update&force=1">بررسی دوباره</a>
-  </div>
-</div>
-
 {% elif update_info.checked %}
 <div class="flash ok">شما روی آخرین نسخه منتشرشده هستید.</div>
-<div class="card settings-card">
-  <h2>آپدیت دستی</h2>
-  <p class="muted update-card-caption">در صورت نیاز، همیشه می‌توانید از ترمینال آپدیت بگیرید:</p>
-  <div class="cmd-copy">
-    <pre class="update-log" dir="ltr">bash pgclock.sh update</pre>
-    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="bash pgclock.sh update">کپی</button>
-  </div>
-  <p class="muted" style="margin:12px 0 8px">ری‌استارت دستی در صورت نیاز:</p>
-  <div class="cmd-copy">
-    <pre class="update-log" dir="ltr">sudo systemctl restart pgclockbot</pre>
-    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="sudo systemctl restart pgclockbot">کپی</button>
-  </div>
-  <div class="actions update-actions" style="margin-top:14px">
-    <a class="btn btn-ghost" href="{{ update_info.repo_url }}" target="_blank" rel="noopener">گیت‌هاب</a>
-    <a class="btn btn-ghost" href="/settings?tab=update&force=1">بررسی دوباره</a>
-  </div>
-</div>
 {% else %}
 <div class="flash warn">{{ update_info.label }}</div>
-<div class="card settings-card">
-  <p class="muted">بررسی نسخه از گیت‌هاب ممکن نشد. بعداً دوباره تلاش کنید یا از ترمینال آپدیت بگیرید:</p>
+{% endif %}
+
+<div class="card" id="upd-root"
+     data-remote="{{ update_info.remote_version or '' }}"
+     data-can-start="{{ '1' if available else '0' }}"
+     data-running="{{ '1' if running else '0' }}"
+     data-show-ops="{{ '1' if show_ops else '0' }}">
+  <h2>وضعیت عملیات</h2>
+
+  <p class="muted update-idle-hint" {% if show_ops %}hidden{% endif %}>
+    الان آپدیتی در صف نیست. برای بررسی نسخهٔ جدید از دکمه زیر استفاده کنید.
+  </p>
+
+  <div id="upd-ops" class="update-ops" {% if not show_ops %}hidden{% endif %}>
+    <div class="update-meta">
+      <div><span class="muted">از</span> <strong id="upd-from">{{ status.from_version or local_version }}</strong></div>
+      <div><span class="muted">به</span> <strong id="upd-to">{{ status.to_version or update_info.remote_version or '—' }}</strong></div>
+      <div><span class="muted">وضعیت</span> <strong id="upd-state-label">{{ status.message if show_ops else 'آماده' }}</strong></div>
+    </div>
+
+    <div class="progress-wrap" aria-label="نوار پیشرفت">
+      <div class="progress-bar">
+        <div class="progress-fill" id="upd-fill" style="width: {{ (status.percent or 0) if show_ops else 0 }}%"></div>
+      </div>
+      <div class="progress-meta">
+        <span id="upd-step">{{ status.step if show_ops else 'آماده' }}</span>
+        <strong id="upd-percent">{{ (status.percent or 0) if show_ops else 0 }}٪</strong>
+      </div>
+    </div>
+
+    <ol class="update-steps" id="upd-steps">
+      {% for s in steps %}
+      <li data-key="{{ s.key }}" class="{% if show_ops and status.step_key == s.key %}current{% endif %}">
+        <span class="step-dot"></span>
+        <span>{{ s.label }}</span>
+      </li>
+      {% endfor %}
+    </ol>
+
+    <pre class="update-log" id="upd-log"{% if not show_ops or not (status.log or []) %} hidden{% endif %}>{% if show_ops %}{% for line in status.log or [] %}{{ line }}
+{% endfor %}{% endif %}</pre>
+  </div>
+
+  <div class="actions update-actions">
+    <button type="button" class="btn" id="upd-start"
+      {% if not available and not has_error and not running %}disabled{% endif %}>
+      {% if running %}در حال اجرا…
+      {% elif has_error %}تلاش دوباره
+      {% elif available %}شروع آپدیت
+      {% else %}آپدیتی نیست{% endif %}
+    </button>
+    <button type="button" class="btn btn-ghost" id="upd-refresh">بررسی دوباره</button>
+    <a class="btn btn-ghost" href="{{ update_info.repo_url }}" target="_blank" rel="noopener">گیت‌هاب</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2>راه برگشت</h2>
+  <p class="muted update-card-caption">
+    قبل از آپدیت، وضعیت فعلی ذخیره می‌شود. اگر از نسخه جدید راضی نبودید، از اینجا برگردید.
+  </p>
+  {% if snapshots %}
+  <div class="snap-list" id="snap-list">
+    {% for s in snapshots %}
+    <div class="snap-row">
+      <div>
+        <strong>{{ s.label or (s.version ~ ' · ' ~ s.short_sha) }}</strong>
+        <small>
+          {{ s.created_at or '' }}
+          {% if s.reason == 'before_update' %} · قبل از آپدیت{% elif s.reason == 'before_rollback' %} · قبل از بازگشت{% endif %}
+        </small>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm snap-rollback" data-id="{{ s.id }}"
+        data-label="{{ s.label }}">
+        بازگشت به این نسخه
+      </button>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">هنوز نقطه بازگشتی نیست. بعد از اولین آپدیت از پنل، اینجا ظاهر می‌شود.</p>
+  {% endif %}
+</div>
+
+<script>
+(function(){
+  const root = document.getElementById('upd-root');
+  const startBtn = document.getElementById('upd-start');
+  const refreshBtn = document.getElementById('upd-refresh');
+  const fill = document.getElementById('upd-fill');
+  const percentEl = document.getElementById('upd-percent');
+  const stepEl = document.getElementById('upd-step');
+  const stateEl = document.getElementById('upd-state-label');
+  const logEl = document.getElementById('upd-log');
+  const toEl = document.getElementById('upd-to');
+  const fromEl = document.getElementById('upd-from');
+  const ops = document.getElementById('upd-ops');
+  const idleHint = document.querySelector('.update-idle-hint');
+  const steps = Array.from(document.querySelectorAll('#upd-steps li'));
+  const rollbackBtns = () => Array.from(document.querySelectorAll('.snap-rollback'));
+  let timer = null;
+  let waitingRestart = false;
+  const targetRemote = (root && root.dataset.remote) || '';
+  let canStart = root && root.dataset.canStart === '1';
+
+  function showOps(on){
+    if (ops) ops.hidden = !on;
+    if (idleHint) idleHint.hidden = !!on;
+    if (root) root.dataset.showOps = on ? '1' : '0';
+  }
+
+  function setBusy(busy, label){
+    if (!startBtn) return;
+    startBtn.disabled = busy || (!canStart && startBtn.textContent !== 'تلاش دوباره');
+    if (busy) startBtn.textContent = label || 'در حال اجرا…';
+    else startBtn.textContent = canStart ? 'شروع آپدیت' : 'آپدیتی نیست';
+    rollbackBtns().forEach(b => { b.disabled = busy; });
+  }
+
+  function applyStatus(st){
+    if (!fill) return;
+    const active = st.state === 'running' || st.state === 'error' || st.state === 'done' || canStart;
+    if (active) showOps(true);
+    const pct = Number(st.percent || 0);
+    fill.style.width = pct + '%';
+    if (percentEl) percentEl.textContent = pct + '٪';
+    if (stepEl) stepEl.textContent = st.step || 'آماده';
+    if (stateEl) stateEl.textContent = st.message || st.state || '';
+    if (st.from_version && fromEl) fromEl.textContent = st.from_version;
+    if (st.to_version && toEl) toEl.textContent = st.to_version;
+    if (logEl) {
+      const lines = st.log || [];
+      logEl.textContent = lines.join('\n');
+      logEl.hidden = lines.length === 0;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    let seenCurrent = false;
+    steps.forEach(li => {
+      li.classList.remove('current', 'done');
+      if (li.dataset.key === st.step_key) {
+        li.classList.add('current');
+        seenCurrent = true;
+      } else if (!seenCurrent && st.step_key) {
+        li.classList.add('done');
+      }
+    });
+    const modeLabel = st.mode === 'rollback' ? 'بازگشت' : 'آپدیت';
+    if (st.state === 'running') {
+      setBusy(true, 'در حال ' + modeLabel + '…');
+    } else if (st.state === 'done') {
+      setBusy(true, modeLabel + ' انجام شد');
+      steps.forEach(li => { li.classList.remove('current'); li.classList.add('done'); });
+      rollbackBtns().forEach(b => { b.disabled = false; });
+    } else if (st.state === 'error') {
+      if (startBtn) {
+        startBtn.classList.remove('btn-ok');
+        startBtn.classList.add('btn');
+        startBtn.disabled = false;
+        startBtn.textContent = 'تلاش دوباره';
+      }
+      canStart = true;
+      rollbackBtns().forEach(b => { b.disabled = false; });
+    } else {
+      setBusy(false);
+    }
+  }
+
+  async function poll(){
+    try {
+      const res = await fetch('/update/status', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('status ' + res.status);
+      const data = await res.json();
+      applyStatus(data);
+      if (waitingRestart && (data.state === 'done' || data.state === 'idle')) {
+        waitingRestart = false;
+        clearInterval(timer); timer = null;
+        if (stateEl) stateEl.textContent = 'انجام شد — بارگذاری دوباره…';
+        setTimeout(() => location.reload(), 1200);
+        return;
+      }
+      waitingRestart = false;
+      if (data.state === 'running') return;
+      if (data.state === 'done') {
+        clearInterval(timer); timer = null;
+        setTimeout(() => location.reload(), 1500);
+        return;
+      }
+      if (data.state === 'error' || data.state === 'idle') {
+        clearInterval(timer); timer = null;
+      }
+    } catch (e) {
+      waitingRestart = true;
+      showOps(true);
+      if (stateEl) stateEl.textContent = 'در حال راه‌اندازی مجدد سرویس…';
+      if (stepEl) stepEl.textContent = 'راه‌اندازی مجدد';
+      if (fill) fill.style.width = '96%';
+      if (percentEl) percentEl.textContent = '۹۶٪';
+    }
+  }
+
+  function startPolling(){
+    if (timer) return;
+    timer = setInterval(poll, 900);
+    poll();
+  }
+
+  if (startBtn) startBtn.addEventListener('click', async () => {
+    showOps(true);
+    setBusy(true, 'شروع…');
+    try {
+      const res = await fetch('/update/start', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: targetRemote || null, force: true })
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        if (stateEl) stateEl.textContent = data.error || 'شروع آپدیت ممکن نشد';
+        if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'تلاش دوباره'; }
+        return;
+      }
+      if (data.status) applyStatus(data.status);
+      startPolling();
+    } catch (e) {
+      if (stateEl) stateEl.textContent = 'خطا در شروع آپدیت';
+      if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'تلاش دوباره'; }
+    }
+  });
+
+  document.getElementById('snap-list') && document.getElementById('snap-list').addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('.snap-rollback');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const label = btn.dataset.label || id;
+    if (!confirm('بازگشت به «' + label + '»؟\nوضعیت فعلی هم ذخیره می‌شود تا اگر اشتباه بود دوباره برگردید.')) return;
+    showOps(true);
+    setBusy(true, 'شروع بازگشت…');
+    try {
+      const res = await fetch('/update/rollback', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snapshot_id: id })
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        if (stateEl) stateEl.textContent = data.error || 'بازگشت ممکن نشد';
+        setBusy(false);
+        return;
+      }
+      if (data.status) applyStatus(data.status);
+      startPolling();
+    } catch (e) {
+      if (stateEl) stateEl.textContent = 'خطا در شروع بازگشت';
+      setBusy(false);
+    }
+  });
+
+  if (refreshBtn) refreshBtn.addEventListener('click', () => {
+    location.href = '/update?force=1';
+  });
+
+  if (root && root.dataset.running === '1') startPolling();
+})();
+</script>
+
+<div class="card settings-card" style="margin-top:14px">
+  <h2>روش جایگزین (ترمینال)</h2>
+  <p class="muted update-card-caption">اگر آپدیت از پنل ممکن نبود، روی سرور:</p>
   <div class="cmd-copy">
     <pre class="update-log" dir="ltr">bash pgclock.sh update</pre>
     <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="bash pgclock.sh update">کپی</button>
   </div>
-  <p class="muted" style="margin:12px 0 8px">ری‌استارت دستی:</p>
-  <div class="cmd-copy">
-    <pre class="update-log" dir="ltr">sudo systemctl restart pgclockbot</pre>
-    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="sudo systemctl restart pgclockbot">کپی</button>
-  </div>
-  <div class="actions update-actions" style="margin-top:14px">
-    <a class="btn btn-ghost" href="/settings?tab=update&force=1">بررسی دوباره</a>
-  </div>
 </div>
-{% endif %}
-
 <script>
 (function(){
   async function copyText(text, btn){

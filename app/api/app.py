@@ -108,6 +108,13 @@ def render(request: Request, name: str, context: dict | None = None, status_code
     ctx.setdefault("flash_ok", None)
     ctx.setdefault("flash_err", None)
     ctx.setdefault("app_version", local_version())
+    if "pwa_name" not in ctx:
+        try:
+            from app.services.pwa import panel_display_name
+
+            ctx["pwa_name"] = panel_display_name()
+        except Exception:
+            ctx["pwa_name"] = "MrClockBot"
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
 
@@ -334,7 +341,10 @@ def create_api_app(lifespan=None) -> FastAPI:
             or path.startswith("/rsetup/")
             or path.startswith("/static")
             or path.startswith("/.well-known/")
+            or path.startswith("/pwa/")
             or path == "/health"
+            or path == "/sw.js"
+            or path == "/manifest.webmanifest"
         )
         if not allowed:
             return RedirectResponse("/", status_code=303)
@@ -482,6 +492,50 @@ def create_api_app(lifespan=None) -> FastAPI:
             "admin_user_configured": bool(creds.get("username") and creds.get("password")),
             "setup_complete": is_setup_complete(),
         }
+
+    @app.get("/manifest.webmanifest")
+    async def pwa_manifest(session: AsyncSession = Depends(get_db)):
+        from fastapi.responses import JSONResponse
+
+        from app.services.pwa import build_manifest, load_pwa_settings
+
+        cfg = await load_pwa_settings(session)
+        resp = JSONResponse(build_manifest(cfg), media_type="application/manifest+json")
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+    @app.get("/sw.js")
+    async def pwa_service_worker():
+        from fastapi.responses import Response
+
+        from app.services.pwa import service_worker_js
+
+        return Response(
+            service_worker_js(),
+            media_type="application/javascript; charset=utf-8",
+            headers={
+                "Cache-Control": "no-cache",
+                "Service-Worker-Allowed": "/",
+            },
+        )
+
+    @app.get("/pwa/icon/{size}")
+    async def pwa_icon(size: int, request: Request):
+        from fastapi.responses import Response
+
+        from app.services.pwa import icon_bytes
+
+        if size not in (180, 192, 512):
+            raise HTTPException(status_code=404)
+        maskable = request.query_params.get("maskable") in {"1", "true", "yes"} and size == 512
+        data = icon_bytes(size, maskable=maskable)
+        if not data:
+            raise HTTPException(status_code=404)
+        return Response(
+            data,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
 
     # -------- Setup wizard --------
     def _setup_page(request: Request, *, step: int = 0, err: str | None = None, ok: str | None = None, show_done: bool = False):
@@ -1764,21 +1818,53 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.get("/update/status")
     async def update_status(staff: dict = Depends(require_admin)):
-        return {"ok": False, "error": "آپدیت از پنل غیرفعال است — از ترمینال: bash pgclock.sh update"}
+        from app.services.panel_update import read_status
+        from app.services.updates import local_version
+
+        st = read_status()
+        st["current_version"] = local_version()
+        return st
 
     @app.post("/update/start")
-    async def update_start(staff: dict = Depends(require_admin)):
-        return {
-            "ok": False,
-            "error": "آپدیت از داخل پنل حذف شده است. در ترمینال سرور اجرا کنید: bash pgclock.sh update",
-        }
+    async def update_start(
+        request: Request,
+        staff: dict = Depends(require_admin),
+    ):
+        from app.services.panel_update import start_update
+        from app.services.updates import check_github_update, clear_update_cache
+
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        clear_update_cache()
+        info = await check_github_update(force=True)
+        target = (body or {}).get("target") or info.get("remote_version")
+        if not info.get("update_available") and not (body or {}).get("force"):
+            from app.services.panel_update import read_status
+
+            st = read_status()
+            if st.get("state") != "error":
+                return {"ok": False, "error": "نسخه جدیدی برای آپدیت نیست", "info": info}
+        return start_update(target_version=target)
 
     @app.post("/update/rollback")
-    async def update_rollback(staff: dict = Depends(require_admin)):
-        return {
-            "ok": False,
-            "error": "بازگشت از پنل غیرفعال است. در صورت نیاز از بکاپ/گیت روی سرور استفاده کنید.",
-        }
+    async def update_rollback(
+        request: Request,
+        staff: dict = Depends(require_admin),
+    ):
+        from app.services.panel_update import start_rollback
+
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        snapshot_id = str((body or {}).get("snapshot_id") or "").strip()
+        if not snapshot_id:
+            return {"ok": False, "error": "نقطه بازگشت مشخص نشده"}
+        return start_rollback(snapshot_id)
 
     @app.get("/notifications", response_class=HTMLResponse)
     async def notifications_page(staff: dict = Depends(require_admin)):
@@ -1953,12 +2039,16 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["notify_prefs"] = prefs
             ctx["notify_items"] = NOTIFY_PREFS
         elif tab == "update":
+            from app.services.panel_update import update_page_context
+
             if request.query_params.get("force") == "1":
                 clear_update_cache()
                 await check_github_update(force=True)
-            info = await check_github_update()
-            ctx["update_info"] = info
-            ctx["local_version"] = local_version()
+            ctx.update(await update_page_context())
+        elif tab == "pwa":
+            from app.services.pwa import load_pwa_settings
+
+            ctx["pwa"] = await load_pwa_settings(session)
         elif tab == "backup":
             from app.services.backup import list_backups, read_restore_status, sqlite_db_path
 
@@ -2167,6 +2257,20 @@ def create_api_app(lifespan=None) -> FastAPI:
             schedule_panel_restart(delay_sec=2.5, reason="bot settings saved")
             return RedirectResponse(
                 "/settings?tab=bot&restarting=1",
+                status_code=303,
+            )
+
+        if tab == "pwa":
+            from app.services.pwa import save_pwa_from_form
+
+            ok, msg = await save_pwa_from_form(session, form)
+            if not ok:
+                return RedirectResponse(
+                    "/settings?tab=pwa&err=" + quote(msg),
+                    status_code=303,
+                )
+            return RedirectResponse(
+                "/settings?tab=pwa&saved=1&msg=" + quote(msg),
                 status_code=303,
             )
 
