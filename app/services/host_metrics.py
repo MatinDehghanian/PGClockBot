@@ -1,0 +1,124 @@
+"""Local host CPU / RAM metrics (Linux /proc; no extra deps)."""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+from typing import Any
+
+_CPU_SAMPLE: tuple[float, float, float] | None = None  # idle, total, monotonic
+_MEMINFO = Path("/proc/meminfo")
+_STAT = Path("/proc/stat")
+
+
+def _read_cpu_times() -> tuple[float, float] | None:
+    try:
+        line = _STAT.read_text(encoding="utf-8").splitlines()[0]
+    except OSError:
+        return None
+    parts = line.split()
+    if not parts or parts[0] != "cpu" or len(parts) < 5:
+        return None
+    try:
+        nums = [float(x) for x in parts[1:]]
+    except ValueError:
+        return None
+    idle = nums[3] + (nums[4] if len(nums) > 4 else 0.0)  # idle + iowait
+    total = sum(nums)
+    return idle, total
+
+
+def cpu_percent(*, wait_sec: float = 0.12) -> float | None:
+    """Return CPU usage percent using /proc/stat delta sampling."""
+    global _CPU_SAMPLE
+    now = time.monotonic()
+    cur = _read_cpu_times()
+    if cur is None:
+        return None
+    idle, total = cur
+    prev = _CPU_SAMPLE
+    _CPU_SAMPLE = (idle, total, now)
+    if prev is None or (now - prev[2]) < 0.05:
+        if wait_sec > 0:
+            time.sleep(wait_sec)
+            cur2 = _read_cpu_times()
+            if cur2 is None:
+                return None
+            idle2, total2 = cur2
+            _CPU_SAMPLE = (idle2, total2, time.monotonic())
+            d_total = total2 - total
+            d_idle = idle2 - idle
+        else:
+            return None
+    else:
+        d_total = total - prev[1]
+        d_idle = idle - prev[0]
+    if d_total <= 0:
+        return 0.0
+    used = max(0.0, min(100.0, (1.0 - (d_idle / d_total)) * 100.0))
+    return round(used, 1)
+
+
+def memory_stats() -> dict[str, Any] | None:
+    """Return RAM totals from /proc/meminfo (bytes + percent)."""
+    try:
+        text = _MEMINFO.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    vals: dict[str, int] = {}
+    for line in text.splitlines():
+        if ":" not in line:
+            continue
+        key, rest = line.split(":", 1)
+        bits = rest.strip().split()
+        if not bits:
+            continue
+        try:
+            kb = int(bits[0])
+        except ValueError:
+            continue
+        vals[key] = kb * 1024
+    total = vals.get("MemTotal")
+    available = vals.get("MemAvailable")
+    if not total or total <= 0:
+        return None
+    if available is None:
+        free = vals.get("MemFree", 0)
+        cached = vals.get("Cached", 0) + vals.get("Buffers", 0)
+        available = free + cached
+    used = max(0, total - available)
+    pct = round(min(100.0, (used / total) * 100.0), 1)
+    return {
+        "total": total,
+        "used": used,
+        "available": available,
+        "percent": pct,
+    }
+
+
+def format_bytes_short(n: int | float | None) -> str:
+    if n is None:
+        return "—"
+    n = float(n)
+    units = ("B", "KB", "MB", "GB", "TB")
+    i = 0
+    while n >= 1024 and i < len(units) - 1:
+        n /= 1024
+        i += 1
+    if i == 0:
+        return f"{int(n)} {units[i]}"
+    return f"{n:.1f} {units[i]}".replace(".", "٫")
+
+
+def host_metrics(*, wait_cpu: float = 0.12) -> dict[str, Any]:
+    """Snapshot used by the overall home dashboard."""
+    cpu = cpu_percent(wait_sec=wait_cpu)
+    mem = memory_stats()
+    return {
+        "cpu_percent": cpu,
+        "memory": mem,
+        "memory_used_text": format_bytes_short(mem["used"]) if mem else "—",
+        "memory_total_text": format_bytes_short(mem["total"]) if mem else "—",
+        "memory_percent": mem["percent"] if mem else None,
+        "ok": cpu is not None or mem is not None,
+    }

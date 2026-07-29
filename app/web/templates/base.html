@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/panel.css?v=1.7.27-form-nav" />
+  <link rel="stylesheet" href="/static/panel.css?v=1.7.32-home" />
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
   <script>
   (function () {
@@ -91,6 +91,12 @@
         </div>
       </div>
       <nav class="side-nav">
+        {% if is_admin %}
+        <a href="/home" class="nav-item nav-item-home {% if path=='/home' %}active{% endif %}">
+          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
+          <span>داشبورد</span>
+        </a>
+        {% endif %}
         {% if has_bot %}
         <div class="nav-section nav-section-bot">
           <span class="nav-label nav-label-bot">پنل ربات</span>

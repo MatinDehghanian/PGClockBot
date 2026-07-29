@@ -73,6 +73,7 @@ from app.services.web_auth import (
     verify_password_hash,
     verify_web_admin,
 )
+from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -441,6 +442,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse("/logout", status_code=303)
         return RedirectResponse("/dashboard", status_code=303)
 
+    register_home_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     register_pg_pages(
         app,
         render=render,
@@ -696,13 +698,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         user = get_session_user(request)
         if not user:
             return RedirectResponse("/login", status_code=303)
+        if user.get("role") == "admin":
+            return RedirectResponse("/home", status_code=303)
         return RedirectResponse("/dashboard", status_code=303)
 
     @app.get("/login", response_class=HTMLResponse)
     async def login_page(request: Request):
         if not is_setup_complete():
             return RedirectResponse("/", status_code=303)
-        if get_session_user(request):
+        sess = get_session_user(request)
+        if sess:
+            if sess.get("role") == "admin":
+                return RedirectResponse("/home", status_code=303)
             return RedirectResponse("/dashboard", status_code=303)
         return render(
             request,
@@ -840,7 +847,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 payload["pg_role_id"] = int(pg_role_id)
             if reseller_pv:
                 payload["pv"] = reseller_pv
-        home = "/dashboard"
+        home = "/home" if role == "admin" else "/dashboard"
         if role == "reseller":
             home = ""
             for path, key in (

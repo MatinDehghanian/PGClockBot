@@ -232,7 +232,7 @@ def build_manifest(cfg: dict[str, Any]) -> dict[str, Any]:
         "name": name,
         "short_name": short[:40],
         "description": desc,
-        "start_url": "/dashboard",
+        "start_url": "/",
         "scope": "/",
         "display": "standalone",
         "orientation": "any",

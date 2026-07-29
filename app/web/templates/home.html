@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% block title %}داشبورد{% endblock %}
+{% block head %}
+<style>
+  .main-body:has(.home-dash) { position: relative; }
+</style>
+{% endblock %}
+{% block content %}
+{% set ov = overview %}
+{% set host = ov.host %}
+{% set bot = ov.bot %}
+{% set nodes = ov.nodes %}
+{% set bs = ov.bot_summary %}
+{% set pg = ov.pg_summary %}
+
+<div class="home-dash" id="home-dash"
+     data-cpu="{{ host.cpu_percent if host.cpu_percent is not none else '' }}"
+     data-mem="{{ host.memory_percent if host.memory_percent is not none else '' }}">
+  <div class="home-ambient" aria-hidden="true"></div>
+
+  <div class="page-head home-head">
+    <div>
+      <h1>داشبورد</h1>
+      <p>وضعیت سرور، اتصال‌ها و میانبرهای مدیریت</p>
+    </div>
+    <a class="btn btn-ghost home-refresh" href="/home">بروزرسانی</a>
+  </div>
+
+  {# —— Server gauges + live status —— #}
+  <section class="home-hero" aria-label="وضعیت سرور و اتصال">
+    <div class="home-gauges">
+      <article class="home-gauge home-gauge-{{ host.cpu_tone }}" data-metric="cpu">
+        <div class="home-gauge-ring" style="--p: {{ host.cpu_percent or 0 }}">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="home-gauge-track" cx="60" cy="60" r="52" />
+            <circle class="home-gauge-val" cx="60" cy="60" r="52" pathLength="100" />
+          </svg>
+          <div class="home-gauge-center">
+            <strong id="home-cpu-val">{% if host.cpu_percent is not none %}{{ '%.0f'|format(host.cpu_percent) }}٪{% else %}—{% endif %}</strong>
+            <span>CPU</span>
+          </div>
+        </div>
+        <div class="home-gauge-meta">
+          <span class="home-gauge-label">پردازنده سرور</span>
+          <span class="muted" id="home-cpu-hint">مصرف لحظه‌ای</span>
+        </div>
+      </article>
+
+      <article class="home-gauge home-gauge-{{ host.mem_tone }}" data-metric="mem">
+        <div class="home-gauge-ring" style="--p: {{ host.memory_percent or 0 }}">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="home-gauge-track" cx="60" cy="60" r="52" />
+            <circle class="home-gauge-val" cx="60" cy="60" r="52" pathLength="100" />
+          </svg>
+          <div class="home-gauge-center">
+            <strong id="home-mem-val">{% if host.memory_percent is not none %}{{ '%.0f'|format(host.memory_percent) }}٪{% else %}—{% endif %}</strong>
+            <span>RAM</span>
+          </div>
+        </div>
+        <div class="home-gauge-meta">
+          <span class="home-gauge-label">حافظه سرور</span>
+          <span class="muted mono" id="home-mem-hint" dir="ltr">{{ host.memory_used_text }} / {{ host.memory_total_text }}</span>
+        </div>
+      </article>
+    </div>
+
+    <div class="home-status-stack">
+      <article class="home-status {% if bot.ok %}is-ok{% else %}is-err{% endif %}">
+        <div class="home-status-top">
+          <span class="home-status-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+          </span>
+          <div class="home-status-copy">
+            <span class="home-status-kicker">ربات تلگرام</span>
+            <strong>{% if bot.ok %}متصل{% else %}قطع{% endif %}</strong>
+          </div>
+          <span class="home-pulse" aria-hidden="true"></span>
+        </div>
+        <p class="home-status-detail">
+          {% if bot.ok %}
+            {% if bot.username %}<span dir="ltr">@{{ bot.username }}</span>{% endif %}
+            {% if bot.name %}<span class="muted"> · {{ bot.name }}</span>{% endif %}
+          {% else %}
+            {{ bot.error or 'اتصال برقرار نیست' }}
+          {% endif %}
+        </p>
+      </article>
+
+      <article class="home-status home-status-nodes {% if nodes.overall == 'ok' %}is-ok{% elif nodes.overall == 'err' %}is-err{% elif nodes.overall == 'warn' %}is-warn{% else %}is-neutral{% endif %}">
+        <div class="home-status-top">
+          <span class="home-status-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
+          </span>
+          <div class="home-status-copy">
+            <span class="home-status-kicker">نودهای پاسارگارد</span>
+            <strong>
+              {% if not nodes.ok %}خطا{% elif nodes.total == 0 %}بدون نود{% else %}{{ nodes.connected }} از {{ nodes.total }} آنلاین{% endif %}
+            </strong>
+          </div>
+          <span class="home-pulse" aria-hidden="true"></span>
+        </div>
+        {% if nodes.ok and nodes.nodes %}
+        <ul class="home-node-list">
+          {% for n in nodes.nodes[:6] %}
+          <li>
+            <span class="home-node-dot tone-{{ n.tone }}" aria-hidden="true"></span>
+            <span class="home-node-name">{{ n.name }}</span>
+            <span class="badge {% if n.tone == 'ok' %}connected{% elif n.tone == 'warn' %}connecting{% elif n.tone == 'err' %}error{% else %}neutral{% endif %}">{{ n.status }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% if nodes.nodes|length > 6 %}
+        <a class="home-more-link" href="/pg/nodes">مشاهده همه نودها ←</a>
+        {% endif %}
+        {% elif nodes.error %}
+        <p class="home-status-detail">{{ nodes.error }}</p>
+        {% else %}
+        <p class="home-status-detail muted">نودی ثبت نشده است.</p>
+        {% endif %}
+      </article>
+    </div>
+  </section>
+
+  {# —— Shortcuts —— #}
+  <section class="home-section" aria-label="میانبرها">
+    <div class="home-section-head">
+      <h2>میانبرها</h2>
+      <p class="muted">دسترسی سریع به کارهای پرتکرار</p>
+    </div>
+    <div class="home-shortcuts">
+      <a class="home-shot" href="/broadcast">
+        <span class="home-shot-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M18.8 6.2a8.5 8.5 0 0 1 0 11.6"/></svg>
+        </span>
+        <span class="home-shot-text">
+          <strong>پیام گروهی</strong>
+          <small>ارسال همگانی به کاربران</small>
+        </span>
+      </a>
+      <a class="home-shot" href="/resellers">
+        <span class="home-shot-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
+        </span>
+        <span class="home-shot-text">
+          <strong>نماینده‌ها</strong>
+          <small>{{ bs.resellers | num }} نماینده فعال</small>
+        </span>
+      </a>
+      <a class="home-shot" href="/users">
+        <span class="home-shot-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
+        </span>
+        <span class="home-shot-text">
+          <strong>کاربرها</strong>
+          <small>{{ bs.users | num }} کاربر ربات</small>
+        </span>
+      </a>
+      <a class="home-shot" href="/settings">
+        <span class="home-shot-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M4.9 7.1l1.6 1.6M17.5 15.3l1.6 1.6M3.5 12h2.2M18.3 12h2.2M4.9 16.9l1.6-1.6M17.5 8.7l1.6-1.6"/></svg>
+        </span>
+        <span class="home-shot-text">
+          <strong>تنظیمات ربات</strong>
+          <small>پیام‌ها، ظاهر و اتصال</small>
+        </span>
+      </a>
+    </div>
+  </section>
+
+  {# —— Panel summaries —— #}
+  <section class="home-section" aria-label="خلاصه پنل‌ها">
+    <div class="home-section-head">
+      <h2>خلاصه پنل‌ها</h2>
+      <p class="muted">نگاهی سریع به ربات و پاسارگارد</p>
+    </div>
+    <div class="home-panels">
+      <article class="home-panel home-panel-bot">
+        <header class="home-panel-head">
+          <div>
+            <span class="home-panel-kicker">پنل ربات</span>
+            <h3>فروش و پشتیبانی</h3>
+          </div>
+          <a class="btn btn-sm btn-ghost" href="/dashboard">نمای کلی</a>
+        </header>
+        <div class="home-panel-grid">
+          <div><span>کاربران</span><strong>{{ bs.users | num }}</strong></div>
+          <div><span>سفارش‌ها</span><strong>{{ bs.orders | num }}</strong></div>
+          <div><span>سرویس‌ها</span><strong>{{ bs.services | num }}</strong></div>
+          <div><span>رسید معلق</span><strong>{{ bs.pending | num }}</strong></div>
+          <div><span>تیکت باز</span><strong>{{ bs.tickets | num }}</strong></div>
+          <div><span>درآمد</span><strong>{{ bs.revenue | num }}</strong></div>
+        </div>
+      </article>
+
+      <article class="home-panel home-panel-pg">
+        <header class="home-panel-head">
+          <div>
+            <span class="home-panel-kicker">پنل پاسارگارد</span>
+            <h3>منابع و زیرساخت{% if pg.version %} <span class="muted mono" dir="ltr">{{ pg.version }}</span>{% endif %}</h3>
+          </div>
+          <a class="btn btn-sm btn-ghost" href="/pg">نمای کلی</a>
+        </header>
+        {% if pg.ok %}
+        <div class="home-panel-grid">
+          <div><span>تمپلیت‌ها</span><strong>{{ pg.templates | num }}</strong></div>
+          <div><span>گروه‌ها</span><strong>{{ pg.groups | num }}</strong></div>
+          <div><span>هاست‌ها</span><strong>{{ pg.hosts | num }}</strong></div>
+          <div><span>نودها</span><strong>{{ pg.nodes | num }}</strong></div>
+          {% if pg.users is not none %}
+          <div><span>کاربران پنل</span><strong>{{ pg.users | num }}</strong></div>
+          {% endif %}
+          <div><span>آنلاین</span><strong>{{ nodes.connected | num }}{% if nodes.total %}<small class="muted">/{{ nodes.total }}</small>{% endif %}</strong></div>
+        </div>
+        {% else %}
+        <p class="muted home-panel-err">{{ pg.error or 'اتصال به پاسارگارد برقرار نشد.' }}</p>
+        {% endif %}
+      </article>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var root = document.getElementById('home-dash');
+  if (!root) return;
+  var cpuEl = document.getElementById('home-cpu-val');
+  var memEl = document.getElementById('home-mem-val');
+  var memHint = document.getElementById('home-mem-hint');
+  var cpuGauge = root.querySelector('[data-metric="cpu"]');
+  var memGauge = root.querySelector('[data-metric="mem"]');
+
+  function setGauge(article, pct, tone) {
+    if (!article) return;
+    var ring = article.querySelector('.home-gauge-ring');
+    if (ring && pct != null) ring.style.setProperty('--p', String(pct));
+    article.className = article.className.replace(/home-gauge-\w+/g, '').trim();
+    article.classList.add('home-gauge');
+    if (tone) article.classList.add('home-gauge-' + tone);
+  }
+
+  function fmtPct(n) {
+    if (n == null || isNaN(n)) return '—';
+    return Math.round(n) + '٪';
+  }
+
+  async function tick() {
+    try {
+      var r = await fetch('/home/metrics?_=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' });
+      if (!r.ok) return;
+      var d = await r.json();
+      if (cpuEl) cpuEl.textContent = fmtPct(d.cpu_percent);
+      if (memEl) memEl.textContent = fmtPct(d.memory_percent);
+      if (memHint && d.memory_used_text && d.memory_total_text) {
+        memHint.textContent = d.memory_used_text + ' / ' + d.memory_total_text;
+      }
+      setGauge(cpuGauge, d.cpu_percent, d.cpu_tone);
+      setGauge(memGauge, d.memory_percent, d.mem_tone);
+    } catch (e) {}
+  }
+
+  setInterval(tick, 5000);
+  setTimeout(tick, 2500);
+})();
+</script>
+{% endblock %}
