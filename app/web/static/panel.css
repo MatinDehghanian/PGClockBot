@@ -2567,6 +2567,7 @@ html[data-theme="light"] .ui-modal-panel {
   background: var(--bg-card);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.14);
 }
+html[data-theme="light"] .nav-label-home { color: var(--foreground); }
 html[data-theme="light"] .nav-label-panel { color: #0f766e; }
 html[data-theme="light"] .nav-item-home.active {
   background: var(--muted);
