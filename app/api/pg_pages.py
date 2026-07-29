@@ -167,6 +167,9 @@ def register_pg_pages(
         q = (request.query_params.get("q") or "").strip()
         users: list[dict] = []
         templates: list[dict] = []
+        groups: list[dict] = []
+        access = staff.get("pg_access") or {}
+        require_template = bool(access.get("require_template")) and not _is_admin(staff)
         try:
             pg = get_pg()
             params: dict = {"offset": 0, "limit": 200}
@@ -188,9 +191,21 @@ def register_pg_pages(
             elif isinstance(full, dict):
                 templates = as_list(full, "templates") or templates
             templates = _filter_templates(templates, staff)
+            try:
+                groups = await pg.get_groups_simple()
+                gfull = await pg.get_groups()
+                if isinstance(gfull, list) and gfull:
+                    groups = gfull
+                elif isinstance(gfull, dict):
+                    groups = as_list(gfull, "groups") or groups
+            except Exception:
+                groups = groups or []
+            groups = _filter_groups(groups, staff)
         except Exception as e:
             err = str(e)
         actions = staff_user_actions(staff)
+        can_custom = bool(actions["create"]) and (not require_template) and bool(groups)
+        can_template = bool(actions["create"]) and bool(templates)
         return render(
             request,
             "pg_users.html",
@@ -198,10 +213,14 @@ def register_pg_pages(
                 staff,
                 users=users,
                 templates=templates,
+                groups=groups,
                 q=q,
                 flash_err=err,
                 flash_ok=ok,
                 can_create=actions["create"],
+                can_custom_create=can_custom,
+                can_template_create=can_template,
+                require_template=require_template,
                 can_modify=actions["update"],
                 can_delete=actions["delete"],
                 can_reset=actions["reset_usage"] or actions["update"],
@@ -215,35 +234,112 @@ def register_pg_pages(
     @app.post("/pg/users")
     async def pg_users_create(
         request: Request,
-        username: str = Form(...),
-        template_id: str = Form(...),
         staff: dict = Depends(require_pg_perm("pg_users")),
     ):
+        import time
+
+        from app.services.pasarguard import parse_group_ids
+        from app.services.plans_catalog import (
+            groups_allowed_for_staff,
+            parse_group_ids_from_form,
+            template_allowed_for_staff,
+        )
+
         actions = staff_user_actions(staff)
         if not actions["create"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ساخت کاربر ندارید')}", status_code=303)
-        uname = username.strip()
+
+        form = await request.form()
+        uname = str(form.get("username") or "").strip()
         if not uname:
             return RedirectResponse(f"/pg/users?err={_q('نام کاربری الزامی است')}", status_code=303)
-        if not str(template_id).strip().isdigit():
-            return RedirectResponse(f"/pg/users?err={_q('تمپلیت نامعتبر')}", status_code=303)
-        tid = int(template_id)
+
         access = staff.get("pg_access") or {}
-        allowed = access.get("allowed_template_ids")
-        if not _is_admin(staff) and allowed is not None:
-            try:
-                if int(tid) not in {int(x) for x in allowed}:
-                    return RedirectResponse(f"/pg/users?err={_q('این تمپلیت مجاز نیست')}", status_code=303)
-            except (TypeError, ValueError):
-                return RedirectResponse(f"/pg/users?err={_q('این تمپلیت مجاز نیست')}", status_code=303)
+        require_template = bool(access.get("require_template")) and not _is_admin(staff)
+        mode = str(form.get("mode") or "").strip().lower()
+        if require_template:
+            mode = "template"
+        if mode not in {"template", "custom"}:
+            # Back-compat: old forms only sent template_id
+            mode = "template" if str(form.get("template_id") or "").strip() else "custom"
+
+        note = f"web panel · {staff.get('username') or 'staff'}"
         try:
-            created = await get_pg().create_user_from_template(
-                {
-                    "username": uname,
-                    "user_template_id": tid,
-                    "note": f"web panel · {staff.get('username') or 'staff'}",
-                }
-            )
+            if mode == "template":
+                raw_tid = str(form.get("template_id") or form.get("pg_template_id") or "").strip()
+                if not raw_tid.isdigit():
+                    return RedirectResponse(f"/pg/users?err={_q('تمپلیت نامعتبر')}", status_code=303)
+                tid = int(raw_tid)
+                if not template_allowed_for_staff(staff, tid):
+                    return RedirectResponse(f"/pg/users?err={_q('این تمپلیت مجاز نیست')}", status_code=303)
+                created = await get_pg().create_user_from_template(
+                    {
+                        "username": uname,
+                        "user_template_id": tid,
+                        "note": note,
+                    }
+                )
+            else:
+                if require_template:
+                    return RedirectResponse(
+                        f"/pg/users?err={_q('نقش شما فقط ساخت از تمپلیت را مجاز می‌داند')}",
+                        status_code=303,
+                    )
+                ids = parse_group_ids_from_form(form)
+                if not ids:
+                    # also accept comma field if present
+                    ids = parse_group_ids(str(form.get("group_ids") or ""))
+                if not ids:
+                    return RedirectResponse(
+                        f"/pg/users?err={_q('حداقل یک گروه انتخاب کنید')}",
+                        status_code=303,
+                    )
+                if not groups_allowed_for_staff(staff, ids):
+                    return RedirectResponse(
+                        f"/pg/users?err={_q('یکی از گروه‌های انتخاب‌شده مجاز نیست')}",
+                        status_code=303,
+                    )
+
+                gb_raw = str(form.get("data_limit_gb") or "").strip()
+                days_raw = str(form.get("duration_days") or "").strip()
+                data_limit = None
+                expire = None
+                if gb_raw:
+                    try:
+                        gb = float(gb_raw.replace(",", "."))
+                        if gb < 0:
+                            raise ValueError
+                        if gb > 0:
+                            data_limit = int(gb * (1024**3))
+                    except ValueError:
+                        return RedirectResponse(
+                            f"/pg/users?err={_q('حجم نامعتبر است')}",
+                            status_code=303,
+                        )
+                if days_raw:
+                    try:
+                        days = int(float(days_raw))
+                        if days < 0:
+                            raise ValueError
+                        if days > 0:
+                            expire = int(time.time()) + days * 86400
+                    except ValueError:
+                        return RedirectResponse(
+                            f"/pg/users?err={_q('مدت نامعتبر است')}",
+                            status_code=303,
+                        )
+
+                created = await get_pg().create_user(
+                    {
+                        "username": uname,
+                        "status": "active",
+                        "data_limit": data_limit,
+                        "expire": expire,
+                        "group_ids": ids,
+                        "note": note,
+                    }
+                )
+
             if not _is_admin(staff):
                 owner = _pg_owner(staff)
                 uid = created.get("id") if isinstance(created, dict) else None
