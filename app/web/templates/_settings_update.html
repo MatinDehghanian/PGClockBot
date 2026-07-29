@@ -127,7 +127,10 @@
   let waitingRestart = false;
   let sawDown = false;
   let restartStartedAt = 0;
-  const RESTART_MSG = 'سرویس در حال راه‌اندازی مجدد است — ممکن است ۲ تا ۳ دقیقه طول بکشد. لطفاً صبر کنید؛ صفحه خودکار تازه می‌شود.';
+  let baselineBoot = null;
+  let baselinePid = null;
+  let expectedVersion = '';
+  const RESTART_MSG = 'سرویس در حال راه‌اندازی مجدد است — ممکن است ۲ تا ۳ دقیقه طول بکشد. تا وقتی ریستارت کامل نشود صفحه تازه نمی‌شود.';
   const targetRemote = (root && root.dataset.remote) || '';
   let canStart = root && root.dataset.canStart === '1';
 
@@ -145,10 +148,10 @@
     rollbackBtns().forEach(b => { b.disabled = busy; });
   }
 
-  function markRestartUi(){
+  function markRestartUi(extra){
     showOps(true);
     setBusy(true, 'در حال راه‌اندازی مجدد…');
-    if (stateEl) stateEl.textContent = RESTART_MSG;
+    if (stateEl) stateEl.textContent = (extra || RESTART_MSG);
     if (stepEl) stepEl.textContent = 'راه‌اندازی مجدد سرویس';
     if (fill) fill.style.width = '98%';
     if (percentEl) percentEl.textContent = '۹۸٪';
@@ -159,38 +162,79 @@
     });
   }
 
-  function beginWaitingRestart(){
+  async function probeHealth(){
+    try {
+      const r = await fetch('/health?_=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' });
+      if (!r.ok) return null;
+      return await r.json();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function beginWaitingRestart(st){
     if (waitingRestart) return;
     waitingRestart = true;
     sawDown = false;
     restartStartedAt = Date.now();
+    expectedVersion = String(
+      (st && (st.to_version || st.current_version)) ||
+      (toEl && toEl.textContent) ||
+      targetRemote ||
+      ''
+    ).trim();
+    if (expectedVersion === '—' || expectedVersion === '-') expectedVersion = '';
     markRestartUi();
+    // Capture identity of the CURRENT (pre-restart) process.
+    const h = await probeHealth();
+    if (h && h.boot_id) baselineBoot = String(h.boot_id);
+    if (h && h.pid) baselinePid = Number(h.pid);
     startPolling();
   }
 
-  function finishReload(){
+  function finishReload(verifiedVersion){
     waitingRestart = false;
-    if (stateEl) stateEl.textContent = 'سرویس برگشت — در حال بارگذاری دوباره…';
+    if (stateEl) stateEl.textContent = 'ریستارت تمام شد — بارگذاری نسخه جدید…';
     if (stepEl) stepEl.textContent = 'تمام شد';
     if (fill) fill.style.width = '100%';
     if (percentEl) percentEl.textContent = '۱۰۰٪';
     steps.forEach(li => { li.classList.remove('current'); li.classList.add('done'); });
     clearInterval(timer); timer = null;
+    const verNote = verifiedVersion ? (' نسخه ' + verifiedVersion) : '';
     setTimeout(() => {
       const url = new URL(location.href);
       url.searchParams.set('tab', 'update');
-      url.searchParams.set('ok', 'آپدیت با موفقیت اعمال شد');
-      url.searchParams.delete('force');
+      url.searchParams.set('ok', 'آپدیت با موفقیت اعمال شد' + verNote);
+      url.searchParams.set('force', '1');
       location.href = url.pathname + '?' + url.searchParams.toString();
-    }, 900);
+    }, 700);
+  }
+
+  function versionMatches(h){
+    if (!expectedVersion) return true;
+    if (!h || !h.version) return false;
+    return String(h.version).trim() === expectedVersion;
+  }
+
+  function processChanged(h){
+    if (!h) return false;
+    if (baselineBoot && h.boot_id && String(h.boot_id) !== baselineBoot) return true;
+    if (baselinePid && h.pid && Number(h.pid) !== baselinePid) return true;
+    return false;
   }
 
   function applyStatus(st){
     if (!fill) return;
     const active = st.state === 'running' || st.state === 'error' || st.state === 'done' || canStart;
     if (active) showOps(true);
-    if (waitingRestart || st.awaiting_restart) {
+    if (st.to_version && toEl) toEl.textContent = st.to_version;
+    if (st.from_version && fromEl) fromEl.textContent = st.from_version;
+    if (waitingRestart) {
       markRestartUi();
+      return;
+    }
+    if (st.awaiting_restart) {
+      beginWaitingRestart(st);
       return;
     }
     const pct = Number(st.percent || 0);
@@ -198,8 +242,6 @@
     if (percentEl) percentEl.textContent = pct + '٪';
     if (stepEl) stepEl.textContent = st.step || 'آماده';
     if (stateEl) stateEl.textContent = st.message || st.state || '';
-    if (st.from_version && fromEl) fromEl.textContent = st.from_version;
-    if (st.to_version && toEl) toEl.textContent = st.to_version;
     if (logEl) {
       const lines = st.log || [];
       logEl.textContent = lines.join('\n');
@@ -237,38 +279,54 @@
     }
   }
 
-  async function probeHealth(){
-    try {
-      const r = await fetch('/health', { cache: 'no-store', credentials: 'same-origin' });
-      return r.ok;
-    } catch (_) {
-      return false;
-    }
-  }
-
   async function poll(){
     if (waitingRestart) {
-      const up = await probeHealth();
       const elapsed = Date.now() - restartStartedAt;
-      if (!up) {
+      const h = await probeHealth();
+      if (!h) {
         sawDown = true;
-        markRestartUi();
-        if (elapsed > 180000 && stateEl) {
-          stateEl.textContent = RESTART_MSG + ' اگر بیش از ۳ دقیقه طول کشید، صفحه را تازه کنید یا: sudo systemctl restart pgclockbot';
-        }
+        markRestartUi(
+          elapsed > 180000
+            ? (RESTART_MSG + ' اگر بیش از ۳ دقیقه طول کشید: sudo systemctl restart pgclockbot')
+            : RESTART_MSG
+        );
         return;
       }
-      // Wait until we observed downtime (or a few seconds passed) so we don't
-      // celebrate the still-old process before it actually exits.
-      if (sawDown || elapsed > 5000) {
-        // Confirm status API is also back
-        try {
-          const res = await fetch('/update/status', { credentials: 'same-origin', cache: 'no-store' });
-          if (res.ok) {
-            finishReload();
-            return;
-          }
-        } catch (_) {}
+
+      const changed = processChanged(h);
+      const verOk = versionMatches(h);
+
+      // Still the OLD process answering — keep waiting, never celebrate.
+      if (!changed && !sawDown) {
+        markRestartUi(
+          'منتظر قطع شدن سرویس قبلی… ' +
+          (expectedVersion ? ('نسخه هدف: ' + expectedVersion + ' · ') : '') +
+          'ممکن است ۲ تا ۳ دقیقه طول بکشد.'
+        );
+        return;
+      }
+      if (!changed && sawDown) {
+        // Came back but boot_id same? Unusual — keep waiting a bit more.
+        markRestartUi('سرویس برگشت؛ در حال تأیید نسخه جدید…');
+        return;
+      }
+
+      // New process is up.
+      if (changed && verOk) {
+        finishReload(h.version || expectedVersion);
+        return;
+      }
+      if (changed && !verOk) {
+        // New process but VERSION not yet matching — rare race; keep probing.
+        markRestartUi(
+          'پروسس جدید بالا آمد؛ منتظر نسخه ' + (expectedVersion || 'جدید') +
+          ' (الان: ' + (h.version || '—') + ')…'
+        );
+        // If no expected version known, accept new boot after downtime.
+        if (!expectedVersion && sawDown) {
+          finishReload(h.version || '');
+        }
+        return;
       }
       markRestartUi();
       return;
@@ -282,24 +340,23 @@
       if (data.state === 'running') return;
       if (data.state === 'done') {
         if (data.awaiting_restart) {
-          beginWaitingRestart();
+          beginWaitingRestart(data);
           return;
         }
         clearInterval(timer); timer = null;
-        setTimeout(() => location.reload(), 1200);
         return;
       }
       if (data.state === 'error' || data.state === 'idle') {
         clearInterval(timer); timer = null;
       }
     } catch (e) {
-      beginWaitingRestart();
+      beginWaitingRestart(null);
     }
   }
 
   function startPolling(){
     if (timer) return;
-    timer = setInterval(poll, 1200);
+    timer = setInterval(poll, 1500);
     poll();
   }
 
@@ -308,6 +365,9 @@
     setBusy(true, 'شروع…');
     waitingRestart = false;
     sawDown = false;
+    baselineBoot = null;
+    baselinePid = null;
+    expectedVersion = '';
     try {
       const res = await fetch('/update/start', {
         method: 'POST',
@@ -339,6 +399,9 @@
     setBusy(true, 'شروع بازگشت…');
     waitingRestart = false;
     sawDown = false;
+    baselineBoot = null;
+    baselinePid = null;
+    expectedVersion = '';
     try {
       const res = await fetch('/update/rollback', {
         method: 'POST',
@@ -368,7 +431,9 @@
   const params = new URLSearchParams(location.search);
   const justOk = params.get('ok');
   if (!justOk && root && (root.dataset.awaitingRestart === '1' || (root.dataset.done === '1' && /راه‌اندازی مجدد|ریستارت|۲ تا ۳|2 تا 3/i.test((stateEl && stateEl.textContent) || '')))) {
-    beginWaitingRestart();
+    beginWaitingRestart({
+      to_version: (toEl && toEl.textContent) || targetRemote || ''
+    });
   }
 })();
 </script>

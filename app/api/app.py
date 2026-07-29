@@ -485,12 +485,19 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.get("/health")
     async def health():
+        from app.runtime import BOOT_AT, BOOT_ID, PID
+        from app.services.updates import local_version
+
         creds = load_web_admin()
         return {
             "ok": True,
             "web_panel": True,
             "admin_user_configured": bool(creds.get("username") and creds.get("password")),
             "setup_complete": is_setup_complete(),
+            "version": local_version(),
+            "boot_id": BOOT_ID,
+            "boot_at": BOOT_AT,
+            "pid": PID,
         }
 
     @app.get("/manifest.webmanifest")
@@ -1818,11 +1825,13 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.get("/update/status")
     async def update_status(staff: dict = Depends(require_admin)):
+        from app.runtime import BOOT_ID
         from app.services.panel_update import read_status
         from app.services.updates import local_version
 
         st = read_status()
         st["current_version"] = local_version()
+        st["boot_id"] = BOOT_ID
         return st
 
     @app.post("/update/start")
@@ -2039,11 +2048,16 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["notify_prefs"] = prefs
             ctx["notify_items"] = NOTIFY_PREFS
         elif tab == "update":
-            from app.services.panel_update import update_page_context
+            from app.services.panel_update import read_status, update_page_context, write_status
 
             if request.query_params.get("force") == "1":
                 clear_update_cache()
                 await check_github_update(force=True)
+            # Success redirect after confirmed restart — stop waiting UI
+            if request.query_params.get("ok"):
+                st = read_status()
+                if st.get("awaiting_restart"):
+                    write_status({"awaiting_restart": False, "step": "تمام شد", "step_key": "done"})
             ctx.update(await update_page_context())
         elif tab == "pwa":
             from app.services.pwa import load_pwa_settings
