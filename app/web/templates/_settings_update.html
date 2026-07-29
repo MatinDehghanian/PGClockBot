@@ -198,25 +198,6 @@
     return String(h.version).trim() === expectedVersion;
   }
 
-  function versionAtLeast(current, target){
-    if (!target) return true;
-    if (!current) return false;
-    function parts(v){
-      return String(v).replace(/^[vV]/, '').split('.').map(function(p){
-        var n = parseInt(p, 10);
-        return isNaN(n) ? 0 : n;
-      });
-    }
-    var a = parts(current), b = parts(target);
-    var len = Math.max(a.length, b.length);
-    for (var i = 0; i < len; i++) {
-      var x = a[i] || 0, y = b[i] || 0;
-      if (x > y) return true;
-      if (x < y) return false;
-    }
-    return true;
-  }
-
   function processChanged(h){
     if (!h) return false;
     if (baselineBoot && h.boot_id && String(h.boot_id) !== baselineBoot) return true;
