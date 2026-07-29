@@ -36,13 +36,11 @@ from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.pasarguard import get_pg
 from app.services.resellers import (
     get_reseller_profile,
-    has_web_perm,
     make_reseller,
     parse_perms,
     setup_is_complete,
     with_shop_settings,
     DEFAULT_FEATURE_PERMS,
-    DEFAULT_WEB_PERMS,
 )
 from app.services.setup_wizard import (
     begin_setup,
@@ -279,6 +277,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 user["pg_admin_username"] = profile.pg_admin_username
             if profile.pg_role_id:
                 user["pg_role_id"] = int(profile.pg_role_id)
+                from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
+
+                features, role = await resolve_reseller_pg_features(int(profile.pg_role_id))
+                user = enrich_staff_pg_from_role(user, features, role)
         return user
 
     async def require_admin(
@@ -1458,12 +1460,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         if not user:
             return
         try:
-            from aiogram import Bot
-
             from app.services.delivery import send_delivery_to_user
             from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok
+            from app.services.reseller_bots import open_notify_bot_for_user
 
-            bot = Bot(token=get_settings().bot_token)
+            bot, should_close = await open_notify_bot_for_user(session, user)
             try:
                 await send_delivery_to_user(
                     bot, user.telegram_id, session, payment, order
@@ -1482,7 +1483,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                         needs_approval=False,
                     )
             finally:
-                await bot.session.close()
+                if should_close:
+                    await bot.session.close()
         except Exception:
             pass
 
@@ -1547,18 +1549,18 @@ def create_api_app(lifespan=None) -> FastAPI:
             user = await session.get(BotUser, payment.user_id)
             if user:
                 try:
-                    from aiogram import Bot
-
                     from app.services.formatting import format_message
+                    from app.services.reseller_bots import open_notify_bot_for_user
 
-                    bot = Bot(token=get_settings().bot_token)
+                    bot, should_close = await open_notify_bot_for_user(session, user)
                     try:
                         await bot.send_message(
                             user.telegram_id,
                             format_message("❌ سفارش رد شد", f"سفارش #{order_id} رد شد."),
                         )
                     finally:
-                        await bot.session.close()
+                        if should_close:
+                            await bot.session.close()
                 except Exception:
                     pass
         else:
@@ -1621,12 +1623,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         user = await session.get(BotUser, payment.user_id)
         if user:
             try:
-                from aiogram import Bot
-
                 from app.services.delivery import send_delivery_to_user
                 from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok
+                from app.services.reseller_bots import open_notify_bot_for_user
 
-                bot = Bot(token=get_settings().bot_token)
+                bot, should_close = await open_notify_bot_for_user(session, user)
                 try:
                     await send_delivery_to_user(
                         bot, user.telegram_id, session, payment, order
@@ -1645,7 +1646,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                             needs_approval=False,
                         )
                 finally:
-                    await bot.session.close()
+                    if should_close:
+                        await bot.session.close()
             except Exception:
                 pass
         return _redirect_msg("/payments", ok="پرداخت تأیید شد")
@@ -1671,22 +1673,23 @@ def create_api_app(lifespan=None) -> FastAPI:
         user = await session.get(BotUser, payment.user_id)
         if user:
             try:
-                from aiogram import Bot
-
                 from app.services.formatting import format_message
+                from app.services.reseller_bots import open_notify_bot_for_user
 
-                ui = await get_all_settings(session)
+                shop_rid = getattr(user, "reseller_id", None)
+                ui = await get_all_settings(session, reseller_id=shop_rid)
                 body = ui.get("payment_reject_text") or (
                     "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
                 )
-                bot = Bot(token=get_settings().bot_token)
+                bot, should_close = await open_notify_bot_for_user(session, user)
                 try:
                     await bot.send_message(
                         user.telegram_id,
                         format_message("❌ پرداخت رد شد", body),
                     )
                 finally:
-                    await bot.session.close()
+                    if should_close:
+                        await bot.session.close()
             except Exception:
                 pass
         return _redirect_msg("/payments", ok="پرداخت رد شد")
@@ -1758,8 +1761,28 @@ def create_api_app(lifespan=None) -> FastAPI:
             except Exception:
                 pass
         else:
-            user.role = role
-            await session.commit()
+            # Demoting a reseller must tear down profile / PG admin / shop bot
+            if user.role == Role.RESELLER.value and role != Role.RESELLER.value:
+                from app.services.resellers import revoke_reseller
+
+                try:
+                    await revoke_reseller(
+                        session,
+                        user.id,
+                        delete_pg_admin=True,
+                        reason="role changed from web panel",
+                    )
+                except ValueError:
+                    user.role = role
+                    await session.commit()
+                if role == Role.ADMIN.value:
+                    user = await session.get(BotUser, user_id)
+                    if user and user.role != Role.ADMIN.value:
+                        user.role = Role.ADMIN.value
+                        await session.commit()
+            else:
+                user.role = role
+                await session.commit()
         return RedirectResponse(f"/users?ok={quote('نقش به‌روز شد')}", status_code=303)
 
     @app.post("/users/{user_id}/block")

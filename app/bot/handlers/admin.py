@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -1625,10 +1627,10 @@ async def adm_ticket_view(callback: CallbackQuery, session: AsyncSession, db_use
         await callback.answer("یافت نشد", show_alert=True)
         return
     await callback.answer()
-    lines = [f"🎫 #{ticket.id} — {ticket.subject}"]
+    lines = [f"🎫 #{ticket.id} — {html.escape(ticket.subject or '')}"]
     for m in ticket.messages[-12:]:
         who = "پشتیبانی" if m.is_staff else "کاربر"
-        lines.append(f"<b>{who}:</b> {m.body}")
+        lines.append(f"<b>{who}:</b> {html.escape(m.body or '')}")
     await state.set_state(AdminStates.ticket_reply)
     await state.update_data(ticket_id=ticket.id)
     if callback.message:

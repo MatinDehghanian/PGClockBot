@@ -5,18 +5,14 @@ from aiogram.types import CallbackQuery, Message, PreCheckoutQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
-from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus, Role
+from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
-from app.services.orders import approve_payment, reject_payment
+from app.services.orders import approve_payment, reject_payment, stars_amount_for_toman
 from app.services.resellers import reseller_can_review_payment
-from app.services.users import get_all_settings
+from app.services.users import get_all_settings, get_setting
 
 router = Router(name="payments")
-
-
-async def _can_review_payment(session: AsyncSession, user: BotUser, payment: Payment) -> bool:
-    return await reseller_can_review_payment(session, user, payment)
 
 
 @router.pre_checkout_query()
@@ -52,6 +48,23 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
         return
     if payment.status == PaymentStatus.APPROVED.value:
         await message.answer("این پرداخت قبلاً تأیید شده.")
+        return
+    expected_stars = None
+    if len(parts) >= 3:
+        try:
+            expected_stars = int(parts[2])
+        except ValueError:
+            expected_stars = None
+    if expected_stars is None:
+        try:
+            rate = int(float(await get_setting(session, "stars_toman_per_star") or 500))
+        except (TypeError, ValueError):
+            rate = 500
+        expected_stars = stars_amount_for_toman(payment.amount, rate)
+    if int(sp.total_amount or 0) != int(expected_stars):
+        await message.answer(
+            f"مبلغ استارز نامعتبر است (انتظار {expected_stars}، دریافت {sp.total_amount})."
+        )
         return
     payment.receipt_file_id = payment.receipt_file_id or f"stars:{sp.telegram_payment_charge_id}"
     payment.status = PaymentStatus.PENDING.value
@@ -99,7 +112,7 @@ async def pay_approve(callback: CallbackQuery, session: AsyncSession, db_user: B
     if not payment:
         await callback.answer("یافت نشد", show_alert=True)
         return
-    if not await _can_review_payment(session, db_user, payment):
+    if not await reseller_can_review_payment(session, db_user, payment):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     try:
@@ -154,7 +167,7 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     if not payment:
         await callback.answer("یافت نشد", show_alert=True)
         return
-    if not await _can_review_payment(session, db_user, payment):
+    if not await reseller_can_review_payment(session, db_user, payment):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await reject_payment(session, payment, db_user.telegram_id, "rejected")

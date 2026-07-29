@@ -199,6 +199,27 @@ def get_reseller_bot_manager() -> ResellerBotManager | None:
     return _manager
 
 
+async def open_notify_bot_for_user(session, user) -> tuple[Bot, bool]:
+    """Return (bot, should_close) for notifying a customer.
+
+    Prefers the dedicated reseller shop bot when the user belongs to a shop;
+    otherwise creates a short-lived main-bot instance that the caller must close.
+    """
+    from app.config import get_settings
+    from app.services.resellers import get_reseller_profile
+
+    reseller_id = getattr(user, "reseller_id", None)
+    if reseller_id:
+        mgr = get_reseller_bot_manager()
+        if mgr:
+            profile = await get_reseller_profile(session, int(reseller_id))
+            if profile:
+                shop = mgr.bot_for_profile_id(int(profile.id))
+                if shop is not None:
+                    return shop, False
+    return Bot(token=get_settings().bot_token), True
+
+
 def init_reseller_bot_manager(dispatcher: Dispatcher) -> ResellerBotManager:
     global _manager
     _manager = ResellerBotManager(dispatcher)

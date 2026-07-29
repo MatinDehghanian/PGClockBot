@@ -546,6 +546,9 @@ async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_use
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     key = callback.data.split(":", 3)[-1]
+    if key not in FIELDS and key not in {"custom_plan_enabled", "trial_enabled"}:
+        await callback.answer("کلید نامعتبر", show_alert=True)
+        return
     cur = await get_setting(session, key)
     new_val = "0" if on(cur) else "1"
     await set_setting(session, key, new_val)
@@ -566,6 +569,9 @@ async def settings_edit_ask(
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     key = callback.data.split(":", 3)[-1]
+    if key not in FIELDS:
+        await callback.answer("کلید نامعتبر", show_alert=True)
+        return
     meta = FIELDS.get(key)
     label = meta[1] if meta else key
     kind = meta[2] if meta else "text"

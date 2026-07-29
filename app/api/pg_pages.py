@@ -588,6 +588,10 @@ def register_pg_pages(
         group_ids = [int(v) for k, v in form.items() if str(k).startswith("g_") and str(v).isdigit()]
         if not group_ids:
             return RedirectResponse(f"/pg/templates?err={_q('حداقل یک گروه انتخاب کنید')}", status_code=303)
+        from app.services.plans_catalog import groups_allowed_for_staff
+
+        if not groups_allowed_for_staff(staff, group_ids):
+            return RedirectResponse(f"/pg/templates?err={_q('گروه خارج از دسترسی شماست')}", status_code=303)
         try:
             days = int(expire_days or "30")
             gb = float(data_limit_gb) if str(data_limit_gb).strip() else None
@@ -608,6 +612,10 @@ def register_pg_pages(
     async def pg_templates_delete(template_id: int, staff: dict = Depends(require_pg_perm("pg_templates"))):
         if not staff_pg_writes(staff)["templates"]:
             return RedirectResponse(f"/pg/templates?err={_q('اجازه حذف ندارید')}", status_code=303)
+        from app.services.plans_catalog import template_allowed_for_staff
+
+        if not template_allowed_for_staff(staff, template_id):
+            return RedirectResponse(f"/pg/templates?err={_q('تمپلیت خارج از دسترسی شماست')}", status_code=303)
         try:
             await get_pg().delete_user_template(template_id)
         except Exception as e:
@@ -676,6 +684,10 @@ def register_pg_pages(
     ):
         if not staff_pg_writes(staff)["groups"]:
             return RedirectResponse(f"/pg/groups?err={_q('اجازه ویرایش ندارید')}", status_code=303)
+        from app.services.plans_catalog import groups_allowed_for_staff
+
+        if not groups_allowed_for_staff(staff, [group_id]):
+            return RedirectResponse(f"/pg/groups?err={_q('گروه خارج از دسترسی شماست')}", status_code=303)
         form = await request.form()
         tags = [str(v) for k, v in form.items() if str(k).startswith("tag_")]
         disabled = bool(form.get("is_disabled"))
@@ -692,6 +704,10 @@ def register_pg_pages(
     async def pg_groups_delete(group_id: int, staff: dict = Depends(require_pg_perm("pg_groups"))):
         if not staff_pg_writes(staff)["groups"]:
             return RedirectResponse(f"/pg/groups?err={_q('اجازه حذف ندارید')}", status_code=303)
+        from app.services.plans_catalog import groups_allowed_for_staff
+
+        if not groups_allowed_for_staff(staff, [group_id]):
+            return RedirectResponse(f"/pg/groups?err={_q('گروه خارج از دسترسی شماست')}", status_code=303)
         try:
             await get_pg().delete_group(group_id)
         except Exception as e:

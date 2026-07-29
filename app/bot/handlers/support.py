@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -93,20 +95,28 @@ async def support_new(callback: CallbackQuery, state: FSMContext):
 
 @router.message(SupportStates.subject)
 async def support_subject(message: Message, state: FSMContext):
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.back_home())
         return
-    await state.update_data(subject=message.text.strip())
+    subject = (message.text or "").strip()
+    if not subject:
+        await message.answer("موضوع را به‌صورت متن بفرستید.")
+        return
+    await state.update_data(subject=subject)
     await state.set_state(SupportStates.body)
     await message.answer("متن پیام را بنویسید:")
 
 
 @router.message(SupportStates.body)
 async def support_body(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.back_home())
+        return
+    body = (message.text or "").strip()
+    if not body:
+        await message.answer("متن پیام را به‌صورت متن بفرستید.")
         return
     data = await state.get_data()
     await state.clear()
@@ -114,7 +124,7 @@ async def support_body(message: Message, state: FSMContext, session: AsyncSessio
         session,
         db_user.id,
         data.get("subject") or "پشتیبانی",
-        message.text or "",
+        body,
         db_user.telegram_id,
     )
     await message.answer(
@@ -169,12 +179,12 @@ async def support_view(callback: CallbackQuery, session: AsyncSession, db_user: 
     await callback.answer()
     lines = [
         f"🎫 تیکت #{ticket.id} — {ticket_status_fa(ticket.status)}",
-        f"<b>{ticket.subject}</b>",
+        f"<b>{html.escape(ticket.subject or '')}</b>",
         "",
     ]
     for m in ticket.messages[-10:]:
         who = "پشتیبانی" if m.is_staff else "شما"
-        lines.append(f"<b>{who}:</b> {m.body}")
+        lines.append(f"<b>{who}:</b> {html.escape(m.body or '')}")
     await state.set_state(SupportStates.reply)
     await state.update_data(ticket_id=ticket.id)
     if callback.message:

@@ -46,7 +46,7 @@ def _feature_perms_from_form(form) -> str:
     return normalize_feature_perms(join_perms(selected) or DEFAULT_FEATURE_PERMS)
 
 
-def register_reseller_pages(app, *, render, require_admin, get_db, get_bot=None):
+def register_reseller_pages(app, *, render, require_admin, get_db):
     def _tabs(active: str) -> list[dict]:
         return [
             {"href": "/resellers", "label": "لیست", "id": "list"},

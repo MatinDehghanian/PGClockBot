@@ -289,9 +289,20 @@ async def create_custom_order(
     return order
 
 
+_PAYABLE_ORDER_STATUSES = frozenset(
+    {
+        OrderStatus.PENDING.value,
+        OrderStatus.REJECTED.value,
+        OrderStatus.AWAITING_RECEIPT.value,
+    }
+)
+
+
 async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     if order.status == OrderStatus.DELIVERED.value:
         return order
+    if order.status not in _PAYABLE_ORDER_STATUSES:
+        raise ValueError("این سفارش قابل پرداخت با کیف پول نیست")
     if order.amount > 0:
         await debit_wallet(session, user, order.amount, f"خرید سفارش #{order.id}")
     order.payment_method = PaymentMethod.WALLET.value
@@ -357,6 +368,19 @@ async def start_method_payment(
     user_id: int,
     method: str,
 ) -> Payment:
+    if order.status not in _PAYABLE_ORDER_STATUSES:
+        raise ValueError("این سفارش قابل پرداخت نیست")
+    # Drop older pending payments when switching method
+    if order.id:
+        old = await session.execute(
+            select(Payment).where(
+                Payment.order_id == order.id,
+                Payment.status == PaymentStatus.PENDING.value,
+            )
+        )
+        for prev in old.scalars().all():
+            prev.status = PaymentStatus.REJECTED.value
+            prev.review_note = prev.review_note or "replaced by new payment method"
     order.payment_method = method
     order.status = OrderStatus.AWAITING_RECEIPT.value
     payment = Payment(

@@ -169,7 +169,7 @@ async def _topup_instructions(session: AsyncSession, payment: Payment, method: s
     return format_message(title, body), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-@router.callback_query(F.data.in_({"wtop:card", "wtop:gateway", "wtop:crypto"}))
+@router.callback_query(F.data.in_({"wtop:card", "wtop:gateway", "wtop:crypto"}), WalletStates.choose_method)
 async def wtop_choose_method(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser
 ):

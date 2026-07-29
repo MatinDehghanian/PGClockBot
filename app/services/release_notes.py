@@ -6,6 +6,12 @@ from app.services.updates import is_newer, local_version
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "1.8.2": [
+        "رفع فورس‌جوین روی /start و قفل‌نشدن در خطای کانال",
+        "جلوگیری از پرداخت تکراری کیف‌پول و تأیید مبلغ استارز",
+        "عدم بازنشانی رمز پنل از .env در هر ری‌استارت",
+        "کنترل دسترسی تمپلیت/گروه برای نماینده و نوتیف از ربات فروشگاه",
+    ],
     "1.8.1": [
         "چنج‌لاگ فقط تغییرات آخرین نسخه",
         "حذف دکمه گیت‌هاب و پاک‌سازی وضعیت از صفحه آپدیت",

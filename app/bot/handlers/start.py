@@ -133,6 +133,7 @@ async def cmd_start(
         return
     channel = await get_setting(session, "force_join_channel")
     enabled = await get_setting(session, "force_join_enabled")
+    from app.bot.middlewares import check_force_join_member
     from app.services.reseller_access import effective_menu_role
 
     role_for_force = await effective_menu_role(
@@ -142,11 +143,13 @@ async def cmd_start(
         reseller_owner_id=reseller_owner_id,
     )
     if on(enabled) and channel and role_for_force == "user":
-        await message.answer(
-            f"برای استفاده، ابتدا در کانال {channel} عضو شوید سپس دوباره /start بزنید.",
-            reply_markup=kb.persistent_reply_keyboard(),
-        )
-        return
+        joined = await check_force_join_member(message.bot, int(db_user.telegram_id), channel)
+        if joined is False:
+            await message.answer(
+                f"برای استفاده، ابتدا در کانال {channel} عضو شوید سپس دوباره /start بزنید.",
+                reply_markup=kb.persistent_reply_keyboard(),
+            )
+            return
     await render_home(
         message,
         session,
@@ -162,10 +165,12 @@ async def cb_home(
     callback: CallbackQuery,
     session: AsyncSession,
     db_user: BotUser,
+    state: FSMContext,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
     await callback.answer()
+    await state.clear()
     if callback.message:
         await render_home(
             callback.message,

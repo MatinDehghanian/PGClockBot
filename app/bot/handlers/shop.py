@@ -448,12 +448,16 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
             )
         return
 
-    order = await create_order(
-        session,
-        user_id=db_user.id,
-        plan_id=plan_id,
-        reseller_id=db_user.reseller_id,
-    )
+    try:
+        order = await create_order(
+            session,
+            user_id=db_user.id,
+            plan_id=plan_id,
+            reseller_id=db_user.reseller_id,
+        )
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
 
     # Free / trial: deliver immediately
     if order.amount <= 0:
@@ -512,9 +516,13 @@ async def apply_discount_msg(
     message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
     ui = await get_all_settings(session)
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.back_home(ui))
+        return
+    code_raw = (message.text or "").strip()
+    if not code_raw:
+        await message.answer("کد تخفیف را به‌صورت متن بفرستید.")
         return
     data = await state.get_data()
     order = await session.get(Order, data.get("order_id"))
@@ -525,7 +533,7 @@ async def apply_discount_msg(
     from app.services.orders import apply_discount
 
     discount, code = await apply_discount(
-        session, message.text.strip(), order.amount + order.discount_amount
+        session, code_raw, order.amount + order.discount_amount
     )
     if not code:
         await message.answer("کد تخفیف نامعتبر است.", reply_markup=kb.pay_methods(order.id, ui))
@@ -629,8 +637,12 @@ async def pay_card_cb(callback: CallbackQuery, session: AsyncSession, db_user: B
     if not order or order.user_id != db_user.id:
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
+    try:
+        payment = await start_card_payment(session, order, db_user.id)
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
     await callback.answer()
-    payment = await start_card_payment(session, order, db_user.id)
     amount = format_toman(order.amount, get_settings().currency)
     try:
         body = ui["card_pay_text"].format(
@@ -661,10 +673,14 @@ async def pay_gateway_cb(callback: CallbackQuery, session: AsyncSession, db_user
     if not order or order.user_id != db_user.id:
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
+    try:
+        payment = await start_method_payment(
+            session, order, db_user.id, PaymentMethod.GATEWAY.value
+        )
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
     await callback.answer()
-    payment = await start_method_payment(
-        session, order, db_user.id, PaymentMethod.GATEWAY.value
-    )
     amount = format_toman(order.amount, get_settings().currency)
     name = ui.get("gateway_name") or "درگاه پرداخت"
     link = (ui.get("gateway_link") or "").strip()
@@ -706,10 +722,14 @@ async def pay_crypto_cb(callback: CallbackQuery, session: AsyncSession, db_user:
     if not address:
         await callback.answer("آدرس ولت تنظیم نشده — به ادمین اطلاع دهید", show_alert=True)
         return
+    try:
+        payment = await start_method_payment(
+            session, order, db_user.id, PaymentMethod.CRYPTO.value
+        )
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
     await callback.answer()
-    payment = await start_method_payment(
-        session, order, db_user.id, PaymentMethod.CRYPTO.value
-    )
     amount = format_toman(order.amount, get_settings().currency)
     try:
         body = (ui.get("crypto_pay_text") or "").format(
@@ -745,10 +765,14 @@ async def pay_stars_cb(callback: CallbackQuery, session: AsyncSession, db_user: 
     if not order or order.user_id != db_user.id:
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
+    try:
+        payment = await start_method_payment(
+            session, order, db_user.id, PaymentMethod.STARS.value
+        )
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
     await callback.answer()
-    payment = await start_method_payment(
-        session, order, db_user.id, PaymentMethod.STARS.value
-    )
     try:
         rate = int(float(ui.get("stars_toman_per_star") or 500))
     except ValueError:
@@ -761,7 +785,7 @@ async def pay_stars_cb(callback: CallbackQuery, session: AsyncSession, db_user: 
             chat_id=db_user.telegram_id,
             title=title,
             description=desc,
-            payload=f"stars:{payment.id}:{order.id}",
+            payload=f"stars:{payment.id}:{stars}",
             currency="XTR",
             prices=[LabeledPrice(label=title, amount=stars)],
             provider_token="",
@@ -776,4 +800,5 @@ async def pay_stars_cb(callback: CallbackQuery, session: AsyncSession, db_user: 
                 reply_markup=kb.back_home(ui),
             )
     except Exception as e:
-        await callback.message.answer(f"خطا در ساخت فاکتور استارز: {e}")
+        if callback.message:
+            await callback.message.answer(f"خطا در ساخت فاکتور استارز: {e}")

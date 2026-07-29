@@ -37,6 +37,8 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     p = password or ""
     if len(p) < 8:
         return False, "رمز عبور باید حداقل ۸ کاراکتر باشد."
+    if len(p) > 72:
+        return False, "رمز عبور حداکثر ۷۲ کاراکتر باشد."
     if not any(c.isupper() for c in p):
         return False, "رمز عبور باید حداقل یک حرف بزرگ انگلیسی داشته باشد."
     if not any(c.islower() for c in p):
@@ -186,7 +188,16 @@ def validate_web_username(username: str, *, lowercase: bool = False) -> tuple[st
 
 
 def repair_web_admin_from_env() -> dict[str, str]:
-    """Force-refresh web_admin.json from cleaned .env values."""
+    """Migrate credentials from .env only when web_admin.json is missing/incomplete.
+
+    Never overwrites an existing panel password or rotates the session token just
+    because WEB_ADMIN_PASSWORD is still present in .env.
+    """
+    if AUTH_FILE.exists():
+        data = load_web_admin()
+        if data.get("password") and data.get("token"):
+            return data
+
     from app.config import get_settings
 
     get_settings.cache_clear()

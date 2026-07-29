@@ -235,12 +235,10 @@ def main() -> None:
     from app.services.setup_wizard import ensure_setup_gate_token, is_setup_complete
     from app.services.web_auth import repair_web_admin_from_env
 
-    if is_setup_complete():
-        try:
-            creds = repair_web_admin_from_env()
-        except Exception:
-            creds = load_web_admin()
-    else:
+    # Migrate from .env only when web_admin.json is missing — never reset panel password
+    try:
+        creds = repair_web_admin_from_env() if is_setup_complete() else load_web_admin()
+    except Exception:
         creds = load_web_admin()
 
     from app.services.ssl_certs import uvicorn_ssl_kwargs

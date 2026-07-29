@@ -75,6 +75,25 @@ def _extract_start_payload(event: TelegramObject) -> str | None:
     return None
 
 
+async def check_force_join_member(bot: Bot, telegram_id: int, channel: str) -> bool | None:
+    """Return True if member, False if left/kicked, None if membership cannot be verified.
+
+    None means the channel/bot is misconfigured or Telegram errored — callers should
+    not permanently lock users out on None.
+    """
+    chat_id = channel if str(channel).startswith("@") else channel
+    try:
+        member = await bot.get_chat_member(chat_id, int(telegram_id))
+        status = getattr(member, "status", None)
+        status_val = getattr(status, "value", status)
+        if str(status_val) in {"left", "kicked"}:
+            return False
+        return True
+    except Exception as exc:
+        logger.warning("force-join membership check failed for %s: %s", channel, exc)
+        return None
+
+
 class DbSessionMiddleware(BaseMiddleware):
     async def __call__(
         self,
@@ -197,14 +216,8 @@ class ForceJoinMiddleware(BaseMiddleware):
         if role != "user":
             return await handler(event, data)
 
-        chat_id = channel if channel.startswith("@") else channel
-        try:
-            member = await bot.get_chat_member(chat_id, int(db_user.telegram_id))
-            status = getattr(member, "status", None)
-            status_val = getattr(status, "value", status)
-            if str(status_val) in {"left", "kicked"}:
-                raise PermissionError("not a member")
-        except Exception:
+        joined = await check_force_join_member(bot, int(db_user.telegram_id), channel)
+        if joined is False:
             msg = _reply_message(event)
             text = (
                 f"برای ادامه، ابتدا در کانال {channel} عضو شوید، سپس دوباره /start بزنید."
@@ -223,6 +236,7 @@ class ForceJoinMiddleware(BaseMiddleware):
                 except Exception:
                     pass
             return None
+        # joined True or None (unverifiable) → allow through
 
         return await handler(event, data)
 
