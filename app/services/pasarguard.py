@@ -444,6 +444,57 @@ def extract_sub_token(subscription_url: str | None) -> str | None:
     return token or None
 
 
+def user_subscription_url(user: dict | None) -> str | None:
+    """Best-effort subscription URL from a PG user payload."""
+    if not isinstance(user, dict):
+        return None
+    for key in ("subscription_url", "subscription", "sub_url", "link"):
+        raw = user.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+        if isinstance(raw, dict):
+            for k in ("url", "subscription_url", "link"):
+                v = raw.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+    token = user.get("subscription_token") or user.get("token")
+    if isinstance(token, str) and token.strip():
+        base = public_pg_api_base()
+        if base:
+            return f"{base}/sub/{token.strip()}"
+    return None
+
+
+def user_group_ids(user: dict | None) -> list[int]:
+    if not isinstance(user, dict):
+        return []
+    raw = user.get("group_ids")
+    if isinstance(raw, list):
+        out = []
+        for x in raw:
+            try:
+                out.append(int(x))
+            except (TypeError, ValueError):
+                continue
+        return out
+    groups = user.get("groups")
+    if isinstance(groups, list):
+        out = []
+        for g in groups:
+            if isinstance(g, dict) and g.get("id") is not None:
+                try:
+                    out.append(int(g["id"]))
+                except (TypeError, ValueError):
+                    continue
+            else:
+                try:
+                    out.append(int(g))
+                except (TypeError, ValueError):
+                    continue
+        return out
+    return []
+
+
 def parse_group_ids(raw: str | None) -> list[int]:
     if not raw:
         return []

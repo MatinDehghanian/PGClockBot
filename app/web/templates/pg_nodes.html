@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import pg_tabs %}
+{% from "macros.html" import pg_tabs, row_actions %}
 {% block title %}نودهای پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -15,7 +15,7 @@
   {% else %}
   <div class="table-wrap">
   <table>
-    <thead><tr><th>شناسه</th><th>نام</th><th>آدرس</th><th>وضعیت</th><th></th></tr></thead>
+    <thead><tr><th>شناسه</th><th>نام</th><th>آدرس</th><th>وضعیت</th><th class="col-actions"></th></tr></thead>
     <tbody>
     {% for n in nodes %}
       <tr>
@@ -24,15 +24,17 @@
         <td class="mono">{{ n.get('address') or n.get('host') or '—' }}</td>
         <td>
           {% set st = (n.get('status') or n.get('connection_status') or '')|string|lower %}
-          <span class="badge {% if st in ['connected','online','healthy'] %}connected{% elif 'connect' in st %}connecting{% elif st in ['error','offline','unhealthy','disabled'] %}error{% else %}neutral{% endif %}">
+          <span class="badge {% if st in ['connected','online','healthy'] %}connected{% elif 'connect' in st %}connecting{% elif st in ['error','offline','unhealthy','disabled','disconnected'] %}error{% else %}neutral{% endif %}">
             {{ n.get('status') or n.get('connection_status') or '—' }}
           </span>
         </td>
-        <td>
-          {% if can_write and n.get('id') %}
-          <form method="post" action="/pg/nodes/{{ n.get('id') }}/reconnect">
-            <button class="btn btn-ghost btn-sm" type="submit">اتصال مجدد</button>
-          </form>
+        <td class="col-actions">
+          {% if can_reconnect and n.get('id') %}
+          {% call row_actions() %}
+            <form method="post" action="/pg/nodes/{{ n.get('id') }}/reconnect">
+              <button class="btn btn-ghost btn-sm" type="submit">اتصال مجدد</button>
+            </form>
+          {% endcall %}
           {% endif %}
         </td>
       </tr>
