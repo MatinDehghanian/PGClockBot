@@ -107,12 +107,60 @@
         <a class="btn btn-sm btn-ghost" href="/dashboard">نمای کلی</a>
       </div>
       <div class="home-panel-grid">
-        <div><span>کاربران</span><strong>{{ bs.users | num }}</strong></div>
-        <div><span>سفارش‌ها</span><strong>{{ bs.orders | num }}</strong></div>
-        <div><span>سرویس‌ها</span><strong>{{ bs.services | num }}</strong></div>
-        <div><span>رسید معلق</span><strong>{{ bs.pending | num }}</strong></div>
-        <div><span>تیکت باز</span><strong>{{ bs.tickets | num }}</strong></div>
-        <div><span>درآمد</span><strong>{{ bs.revenue | num }}</strong></div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
+            </span>
+            <span>کاربران</span>
+          </div>
+          <strong>{{ bs.users | num }}</strong>
+        </div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M7 7h13l-1.2 9.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.7L6 4H3"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>
+            </span>
+            <span>سفارش‌ها</span>
+          </div>
+          <strong>{{ bs.orders | num }}</strong>
+        </div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 14h4"/></svg>
+            </span>
+            <span>سرویس‌ها</span>
+          </div>
+          <strong>{{ bs.services | num }}</strong>
+        </div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
+            </span>
+            <span>رسید معلق</span>
+          </div>
+          <strong>{{ bs.pending | num }}</strong>
+        </div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
+            </span>
+            <span>تیکت باز</span>
+          </div>
+          <strong>{{ bs.tickets | num }}</strong>
+        </div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/></svg>
+            </span>
+            <span>درآمد</span>
+          </div>
+          <strong>{{ bs.revenue | num }}</strong>
+        </div>
       </div>
     </section>
 
@@ -126,14 +174,62 @@
       </div>
       {% if pg.ok %}
       <div class="home-panel-grid">
-        <div><span>تمپلیت‌ها</span><strong>{{ pg.templates | num }}</strong></div>
-        <div><span>گروه‌ها</span><strong>{{ pg.groups | num }}</strong></div>
-        <div><span>هاست‌ها</span><strong>{{ pg.hosts | num }}</strong></div>
-        <div><span>نودها</span><strong>{{ pg.nodes | num }}</strong></div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
+            </span>
+            <span>تمپلیت‌ها</span>
+          </div>
+          <strong>{{ pg.templates | num }}</strong>
+        </div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
+            </span>
+            <span>گروه‌ها</span>
+          </div>
+          <strong>{{ pg.groups | num }}</strong>
+        </div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            </span>
+            <span>هاست‌ها</span>
+          </div>
+          <strong>{{ pg.hosts | num }}</strong>
+        </div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
+            </span>
+            <span>نودها</span>
+          </div>
+          <strong>{{ pg.nodes | num }}</strong>
+        </div>
         {% if pg.users is not none %}
-        <div><span>کاربران پنل</span><strong>{{ pg.users | num }}</strong></div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/></svg>
+            </span>
+            <span>کاربران پنل</span>
+          </div>
+          <strong>{{ pg.users | num }}</strong>
+        </div>
         {% endif %}
-        <div><span>آنلاین</span><strong>{{ nodes.connected | num }}{% if nodes.total %}<small class="muted">/{{ nodes.total }}</small>{% endif %}</strong></div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            </span>
+            <span>آنلاین</span>
+          </div>
+          <strong>{{ nodes.connected | num }}{% if nodes.total %}<small class="muted">/{{ nodes.total }}</small>{% endif %}</strong>
+        </div>
       </div>
       {% else %}
       <p class="muted" style="margin:0;font-size:12px">{{ pg.error or 'اتصال برقرار نشد.' }}</p>

@@ -2941,27 +2941,14 @@ html[data-theme="light"] .tg-preview-shell {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   padding: 0 4px 4px;
+  margin: 0;
 }
-.home-panel-grid > div {
-  padding: 10px;
-  border-radius: var(--radius);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  min-width: 0;
+.home-panel-grid > .stat {
+  margin: 0;
+  min-height: 72px;
+  padding: 12px;
 }
-.home-panel-grid span {
-  display: block;
-  font-size: 11px;
-  color: var(--muted-fg);
-  margin-bottom: 6px;
-  font-weight: 500;
-}
-.home-panel-grid strong {
-  font-size: 16px;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-.home-panel-grid strong small { font-size: 11px; font-weight: 500; }
+.home-panel-grid > .stat strong small { font-size: 11px; font-weight: 500; }
 
 html[data-theme="light"] .home-conn {
   background: #fff;
