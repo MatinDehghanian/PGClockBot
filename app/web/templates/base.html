@@ -25,7 +25,12 @@
     <header class="topbar mobile-only">
       <div class="topbar-brand">
         <span class="brand-logo" aria-hidden="true"><img src="/static/logo.png" alt="" /></span>
-        <strong dir="ltr">MrClockBot</strong>
+        <div class="topbar-brand-text">
+          <strong dir="ltr">MrClockBot</strong>
+          <span class="topbar-version" dir="ltr">
+            v{{ app_version }}{% if update and update.update_available %}<span class="ver-badge err">آپدیت کنید</span>{% endif %}
+          </span>
+        </div>
       </div>
       <button type="button" class="menu-toggle" id="menu-toggle" aria-label="منو" aria-expanded="false" aria-controls="sidebar">
         <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span>
@@ -125,7 +130,7 @@
           {% if is_admin or 'pg_users' in pg_nav %}
           <a href="/pg/users" class="nav-item nav-item-pg {% if path.startswith('/pg/users') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/></svg>
-            <span>کاربران VPN</span>
+            <span>کاربران پنل</span>
           </a>
           {% endif %}
           {% if is_admin or 'pg_templates' in pg_nav %}
