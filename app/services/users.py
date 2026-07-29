@@ -367,12 +367,18 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("forcejoin", "کانال اجباری"),
     ("reseller", "نمایندگی"),
     ("notifications", "نوتیفیکیشن"),
-    ("backup", "بکاپ"),
-    ("pwa", "وب‌اپ"),
-    ("update", "آپدیت"),
-    ("ssl", "SSL"),
     ("bot", "ربات و اتصال"),
 ]
+
+# Web-panel settings (sidebar under dashboard — not bot settings tabs)
+PANEL_SETTINGS_TABS: list[tuple[str, str]] = [
+    ("backup", "بکاپ"),
+    ("pwa", "وب‌اپ"),
+    ("ssl", "SSL"),
+    ("update", "آپدیت"),
+]
+PANEL_SETTINGS_KEYS = {t[0] for t in PANEL_SETTINGS_TABS}
+ALL_SETTINGS_TABS: list[tuple[str, str]] = [*SETTINGS_TABS, *PANEL_SETTINGS_TABS]
 
 SETTING_GROUPS = {
     "خوش‌آمد و هویت": [
