@@ -959,7 +959,12 @@ def start_rollback(snapshot_id: str) -> dict[str, Any]:
 
 
 async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
-    from app.services.release_notes import INSTALL_SCRIPT_CMD, changelog_for_update_page
+    from app.services.release_notes import (
+        INSTALL_SCRIPT_CMD,
+        changelog_for_update_page,
+        fetch_remote_release_notes,
+    )
+    from app.services.updates import is_newer
 
     info = await check_github_update(force=force_check)
     status = resolve_stale_update_status()
@@ -972,6 +977,9 @@ async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
     snaps = list_snapshots()
     local = local_version()
     remote = info.get("remote_version") if isinstance(info, dict) else None
+    remote_notes = None
+    if remote and is_newer(str(remote), local):
+        remote_notes = await fetch_remote_release_notes(force=force_check)
     return {
         "update_info": info,
         "update": info,  # sidebar badge on settings tab
@@ -981,6 +989,8 @@ async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
         "snapshots": snaps,
         "can_rollback": bool(snaps),
         "show_ops": show_ops,
-        "changelog": changelog_for_update_page(local=local, remote=remote),
+        "changelog": changelog_for_update_page(
+            local=local, remote=remote, remote_notes=remote_notes
+        ),
         "install_script_cmd": INSTALL_SCRIPT_CMD,
     }

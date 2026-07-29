@@ -24,6 +24,30 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertEqual(len(cl["blocks"]), 1)
         self.assertEqual(cl["blocks"][0]["version"], "1.7.45")
 
+    def test_upgrade_uses_remote_notes_not_local_fallback(self):
+        """Installed panel may not yet contain notes for the target version."""
+        from app.services.release_notes import changelog_for_update_page
+
+        remote_notes = {
+            "1.9.0": ["ویژگی جدید از ریموت"],
+            "1.8.3": ["نسخه قدیمی‌تر"],
+        }
+        cl = changelog_for_update_page(
+            local="1.8.3",
+            remote="1.9.0",
+            remote_notes=remote_notes,
+        )
+        self.assertEqual(cl["blocks"][0]["version"], "1.9.0")
+        self.assertIn("ویژگی جدید از ریموت", cl["blocks"][0]["notes"])
+
+    def test_parse_release_notes_source(self):
+        from app.services.release_notes import parse_release_notes_source
+
+        src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        parsed = parse_release_notes_source(src)
+        self.assertIn("1.8.5", parsed)
+        self.assertTrue(parsed["1.8.5"])
+
     def test_unknown_local_falls_back_to_newest(self):
         from app.services.release_notes import changelog_for_update_page, RELEASE_NOTES_FA
 
@@ -50,6 +74,11 @@ class ReleaseNotesTests(unittest.TestCase):
         src = Path("app/web/templates/base.html").read_text(encoding="utf-8")
         self.assertIn("وب پنل", src)
         self.assertIn("nav-label-home", src)
+
+    def test_update_context_fetches_remote_notes(self):
+        src = Path("app/services/panel_update.py").read_text(encoding="utf-8")
+        self.assertIn("fetch_remote_release_notes", src)
+        self.assertIn("remote_notes=", src)
 
 
 if __name__ == "__main__":

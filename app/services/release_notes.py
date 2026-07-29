@@ -2,10 +2,23 @@
 
 from __future__ import annotations
 
+import ast
+import logging
+import time
+from typing import Any
+
+import httpx
+
 from app.services.updates import is_newer, local_version
+from app.version import GITHUB_RELEASE_NOTES_URL
+
+logger = logging.getLogger(__name__)
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "1.8.5": [
+        "چنج‌لاگ صفحه آپدیت برای نسخهٔ هدف (نسخهٔ جدید) نمایش داده می‌شود",
+    ],
     "1.8.4": [
         "بازگشت فوتر پنل (کپی‌رایت، GitHub، دکمه ستاره) در دسکتاپ و موبایل",
         "شتاب ربات: کش تنظیمات، کش عضویت فورس‌جوین، WAL اسکیولایت و حذف queryهای تکراری",
@@ -71,36 +84,130 @@ INSTALL_SCRIPT_CMD = (
     "bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)"
 )
 
+_REMOTE_NOTES_CACHE: dict[str, Any] = {"at": 0.0, "data": None, "ok": False}
+_REMOTE_NOTES_TTL_OK = 300.0
+_REMOTE_NOTES_TTL_FAIL = 30.0
 
-def notes_for_version(version: str | None) -> list[str]:
+
+def notes_for_version(version: str | None, source: dict[str, list[str]] | None = None) -> list[str]:
     if not version:
         return []
     key = str(version).strip().lstrip("vV")
-    return list(RELEASE_NOTES_FA.get(key) or [])
+    table = source if source is not None else RELEASE_NOTES_FA
+    return list(table.get(key) or [])
 
 
-def latest_notes_block() -> dict[str, object] | None:
-    for ver, notes in RELEASE_NOTES_FA.items():
+def latest_notes_block(source: dict[str, list[str]] | None = None) -> dict[str, object] | None:
+    table = source if source is not None else RELEASE_NOTES_FA
+    for ver, notes in table.items():
         if notes:
             return {"version": ver, "notes": list(notes)}
     return None
 
 
-def changelog_for_update_page(*, local: str | None = None, remote: str | None = None) -> dict:
-    """Single-version changelog: only the newest relevant release notes."""
+def parse_release_notes_source(src: str) -> dict[str, list[str]]:
+    """Extract RELEASE_NOTES_FA dict from release_notes.py source text."""
+    tree = ast.parse(src)
+    value_node = None
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "RELEASE_NOTES_FA":
+                    value_node = node.value
+                    break
+        elif isinstance(node, ast.AnnAssign):
+            target = node.target
+            if isinstance(target, ast.Name) and target.id == "RELEASE_NOTES_FA":
+                value_node = node.value
+        if value_node is not None:
+            break
+    if value_node is None:
+        return {}
+    try:
+        raw = ast.literal_eval(value_node)
+    except (ValueError, TypeError, SyntaxError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, list[str]] = {}
+    for k, v in raw.items():
+        key = str(k).strip().lstrip("vV")
+        if isinstance(v, (list, tuple)):
+            notes = [str(x) for x in v if str(x).strip()]
+            if notes:
+                out[key] = notes
+    return out
+
+
+async def fetch_remote_release_notes(
+    *,
+    timeout: float = 4.0,
+    force: bool = False,
+) -> dict[str, list[str]] | None:
+    """Download RELEASE_NOTES_FA from GitHub main (cached)."""
+    now = time.monotonic()
+    cached = _REMOTE_NOTES_CACHE.get("data")
+    ttl = _REMOTE_NOTES_TTL_OK if _REMOTE_NOTES_CACHE.get("ok") else _REMOTE_NOTES_TTL_FAIL
+    if (
+        not force
+        and isinstance(cached, dict)
+        and (now - float(_REMOTE_NOTES_CACHE["at"])) < ttl
+    ):
+        return dict(cached)
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            resp = await client.get(
+                GITHUB_RELEASE_NOTES_URL,
+                headers={
+                    "User-Agent": "PGClockBot-Panel",
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache",
+                },
+                params={"_": str(int(time.time()))} if force else None,
+            )
+            if resp.status_code != 200:
+                raise RuntimeError(f"status {resp.status_code}")
+            parsed = parse_release_notes_source(resp.text or "")
+            if not parsed:
+                raise RuntimeError("empty release notes")
+            _REMOTE_NOTES_CACHE.update({"at": now, "data": dict(parsed), "ok": True})
+            return dict(parsed)
+    except Exception as e:
+        logger.debug("remote release notes fetch failed: %s", e)
+        _REMOTE_NOTES_CACHE.update({"at": now, "data": cached if isinstance(cached, dict) else None, "ok": False})
+        return dict(cached) if isinstance(cached, dict) else None
+
+
+def changelog_for_update_page(
+    *,
+    local: str | None = None,
+    remote: str | None = None,
+    remote_notes: dict[str, list[str]] | None = None,
+) -> dict:
+    """Show changelog for the version the panel will update *to* when available."""
     local = (local or local_version() or "").strip()
     remote = (remote or "").strip() or None
+    upgrading = bool(remote and is_newer(remote, local))
 
-    if remote and is_newer(remote, local):
+    if upgrading:
         ver = remote.lstrip("vV")
+        # Prefer remote notes (what you are updating to); local may not have them yet.
+        notes = notes_for_version(ver, remote_notes) or notes_for_version(ver)
+        if notes:
+            block = {"version": ver, "notes": notes}
+        else:
+            block = latest_notes_block(remote_notes) or {"version": ver, "notes": [
+                "جزئیات این نسخه پس از دریافت از گیت‌هاب نمایش داده می‌شود."
+            ]}
+            # If fallback picked a different version, keep target version label when notes empty for it
+            if block.get("version") != ver and not notes_for_version(ver, remote_notes):
+                # Still OK to show newest remote block (usually same as target)
+                pass
     else:
         ver = local.lstrip("vV")
-
-    notes = notes_for_version(ver)
-    if notes:
-        block = {"version": ver, "notes": notes}
-    else:
-        block = latest_notes_block()
+        notes = notes_for_version(ver)
+        block = {"version": ver, "notes": notes} if notes else latest_notes_block()
 
     blocks = [block] if block else []
     title = f"تغییرات نسخه {block['version']}" if block else "چنج‌لاگ"
