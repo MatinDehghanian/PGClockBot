@@ -149,9 +149,9 @@ async def get_owned_plan(
     return plan
 
 
-def parse_group_ids_from_form(form: Any) -> list[int]:
+def parse_group_ids_from_form(form: Any, *, prefix: str = "group_") -> list[int]:
     ids: list[int] = []
     for k, v in form.items():
-        if str(k).startswith("group_") and str(v).isdigit():
+        if str(k).startswith(prefix) and str(v).isdigit():
             ids.append(int(v))
     return ids

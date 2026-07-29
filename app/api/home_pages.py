@@ -24,7 +24,8 @@ def register_home_pages(app, *, render, require_admin, get_db):
         try:
             from app.services.updates import check_github_update
 
-            update = await check_github_update(force=True)
+            # Use cache when warm; avoid forcing a GitHub round-trip on every home load.
+            update = await check_github_update(force=False)
         except Exception:
             update = None
         return render(

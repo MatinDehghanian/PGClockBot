@@ -5,6 +5,7 @@ from __future__ import annotations
 Resellers never get PG settings / admin_roles / cores / api_keys in our UI.
 """
 
+import time
 from typing import Any
 
 # Our panel feature keys (shown in sidebar under «پاسارگارد»)
@@ -31,6 +32,17 @@ PG_FEATURE_LABELS: dict[str, str] = {
     "pg_nodes": "نودها",
     "pg_admins": "ادمین‌ها",
 }
+
+# Short-lived cache: role_id → (monotonic_at, features, raw_role)
+_ROLE_CACHE: dict[int, tuple[float, list[str], dict]] = {}
+_ROLE_CACHE_TTL = 60.0
+
+
+def clear_role_cache(role_id: int | None = None) -> None:
+    if role_id is None:
+        _ROLE_CACHE.clear()
+    else:
+        _ROLE_CACHE.pop(int(role_id), None)
 
 
 def _action_allowed(value: Any) -> bool:
@@ -171,23 +183,43 @@ def role_access_limits(role: dict | None) -> dict:
 
 
 async def resolve_reseller_pg_features(pg_role_id: int | None) -> tuple[list[str], dict | None]:
-    """Fetch role from PasarGuard and return (feature_keys, raw_role)."""
+    """Fetch role from PasarGuard and return (feature_keys, raw_role). Cached ~60s."""
     if not pg_role_id:
         return [], None
+    rid = int(pg_role_id)
+    now = time.monotonic()
+    hit = _ROLE_CACHE.get(rid)
+    if hit and (now - hit[0]) < _ROLE_CACHE_TTL:
+        return list(hit[1]), dict(hit[2]) if isinstance(hit[2], dict) else hit[2]
+
     from app.services.pasarguard import get_pg
 
+    role = None
     try:
-        role = await get_pg().get_admin_role(int(pg_role_id))
+        role = await get_pg().get_admin_role(rid)
     except Exception:
         # Fallback: try list and find by id
         try:
             roles = await get_pg().get_admin_roles()
-            role = next((r for r in roles if int(r.get("id") or 0) == int(pg_role_id)), None)
+            role = next((r for r in roles if int(r.get("id") or 0) == rid), None)
         except Exception:
             return [], None
     if not isinstance(role, dict):
         return [], None
-    return map_pg_role_to_features(role), role
+    features = map_pg_role_to_features(role)
+    _ROLE_CACHE[rid] = (now, list(features), dict(role))
+    return features, role
+
+
+def enrich_staff_pg_from_role(user: dict, features: list[str], role: dict | None) -> dict:
+    """Attach live PG ACL fields onto a staff dict (mutates a copy)."""
+    out = dict(user)
+    out["pg_permissions"] = list(features or [])
+    if role:
+        out["pg_writes"] = map_pg_role_writes(role)
+        out["pg_user_actions"] = role_user_actions(role)
+        out["pg_access"] = role_access_limits(role)
+    return out
 
 
 def staff_has_pg(staff: dict, key: str) -> bool:

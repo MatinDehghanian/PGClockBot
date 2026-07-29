@@ -150,9 +150,20 @@ def write_pwa_meta(payload: dict[str, Any]) -> None:
         logger.debug("pwa meta write failed", exc_info=True)
 
 
+_DISPLAY_NAME_CACHE: tuple[float, str] | None = None
+_DISPLAY_NAME_TTL = 30.0
+
+
 def panel_display_name() -> str:
-    name = str(read_pwa_meta().get("name") or "").strip()
-    return name or DEFAULT_NAME
+    global _DISPLAY_NAME_CACHE
+    import time
+
+    now = time.monotonic()
+    if _DISPLAY_NAME_CACHE and (now - _DISPLAY_NAME_CACHE[0]) < _DISPLAY_NAME_TTL:
+        return _DISPLAY_NAME_CACHE[1]
+    name = str(read_pwa_meta().get("name") or "").strip() or DEFAULT_NAME
+    _DISPLAY_NAME_CACHE = (now, name)
+    return name
 
 
 async def load_pwa_settings(session: AsyncSession) -> dict[str, Any]:

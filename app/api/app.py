@@ -81,11 +81,12 @@ from app.api.pg_pages import register_pg_pages
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
-from app.services.formatting import format_bytes, format_gb, format_number, order_status_fa, ticket_status_fa
+from app.services.formatting import format_bytes, format_gb, format_number, format_expire_short, order_status_fa, ticket_status_fa
 
 templates.env.filters["bytes"] = format_bytes
 templates.env.filters["gb"] = format_gb
 templates.env.filters["num"] = format_number
+templates.env.filters["expire"] = format_expire_short
 templates.env.filters["order_status"] = order_status_fa
 templates.env.filters["ticket_status"] = ticket_status_fa
 templates.env.globals["app_version"] = local_version()
@@ -191,7 +192,15 @@ def _cookie_secure(request: Request) -> bool:
 
 def create_api_app(lifespan=None) -> FastAPI:
     app = FastAPI(title="PGClockBot Panel", docs_url=None, redoc_url=None, lifespan=lifespan)
-    app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
+    class _CachedStatic(StaticFiles):
+        async def get_response(self, path, scope):  # type: ignore[override]
+            response = await super().get_response(path, scope)
+            # Versioned assets (?v=) can be cached aggressively by browsers.
+            if response.status_code == 200:
+                response.headers.setdefault("Cache-Control", "public, max-age=604800, immutable")
+            return response
+
+    app.mount("/static", _CachedStatic(directory=str(WEB_DIR / "static")), name="static")
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     uploads_dir = DATA_DIR / "uploads"
     uploads_dir.mkdir(parents=True, exist_ok=True)
@@ -306,16 +315,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             user = await require_staff(request, session)
             if user.get("role") == "admin":
                 return user
-            # Refresh PG features from live role (not cookie-only)
-            from app.services.pg_access import resolve_reseller_pg_features
+            from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
 
             pg_role_id = user.get("pg_role_id")
-            features, _ = await resolve_reseller_pg_features(pg_role_id)
+            features, role = await resolve_reseller_pg_features(pg_role_id)
             if perm not in features:
                 raise NotAdmin()
-            user = dict(user)
-            user["pg_permissions"] = features
-            return user
+            return enrich_staff_pg_from_role(user, features, role)
 
         return _dep
 
@@ -327,14 +333,12 @@ def create_api_app(lifespan=None) -> FastAPI:
             user = await require_staff(request, session)
             if user.get("role") == "admin":
                 return user
-            from app.services.pg_access import resolve_reseller_pg_features
+            from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
 
-            features, _ = await resolve_reseller_pg_features(user.get("pg_role_id"))
+            features, role = await resolve_reseller_pg_features(user.get("pg_role_id"))
             if not features:
                 raise NotAdmin()
-            user = dict(user)
-            user["pg_permissions"] = features
-            return user
+            return enrich_staff_pg_from_role(user, features, role)
 
         return _dep
 

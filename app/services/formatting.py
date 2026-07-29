@@ -314,6 +314,41 @@ def format_expire(value: Any) -> str:
     return f"{local.strftime('%Y/%m/%d %H:%M')} ({days} روز و {hours} ساعت)"
 
 
+def format_expire_short(value: Any) -> str:
+    """Compact expire for tables: date + remaining days."""
+    dt = parse_expire(value)
+    if not dt:
+        return "—"
+    remaining = dt - datetime.now(timezone.utc)
+    if remaining.total_seconds() <= 0:
+        return f"{dt.astimezone().strftime('%Y/%m/%d')} · منقضی"
+    days = max(1, int((remaining.total_seconds() + 86399) // 86400))
+    return f"{dt.astimezone().strftime('%Y/%m/%d')} · {days} روز"
+
+
+def expire_remaining_days(value: Any) -> int | None:
+    """Whole days left until expire (ceil); None if unlimited."""
+    dt = parse_expire(value)
+    if not dt:
+        return None
+    remaining = dt - datetime.now(timezone.utc)
+    if remaining.total_seconds() <= 0:
+        return 0
+    return max(1, int((remaining.total_seconds() + 86399) // 86400))
+
+
+def data_limit_to_gb(value: Any) -> float | None:
+    if value is None or value == 0:
+        return None
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return None
+    if n <= 0:
+        return None
+    return round(n / (1024**3), 2)
+
+
 STATUS_FA = {
     "active": "🟢 فعال",
     "disabled": "🔴 غیرفعال",

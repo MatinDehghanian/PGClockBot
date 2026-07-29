@@ -2,14 +2,15 @@ from __future__ import annotations
 
 """PasarGuard manager pages — admin + reseller (permission-gated)."""
 
+import asyncio
 from urllib.parse import quote
 
 from fastapi import Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app.services.formatting import format_stat_row
-from app.services.pasarguard import as_list, get_pg
-from app.services.pg_access import staff_has_pg, staff_pg_writes, staff_user_actions
+from app.services.formatting import data_limit_to_gb, expire_remaining_days, format_stat_row
+from app.services.pasarguard import as_list, get_pg, user_group_ids, user_subscription_url
+from app.services.pg_access import staff_pg_writes, staff_user_actions
 
 
 def _q(msg: str) -> str:
@@ -126,7 +127,14 @@ def register_pg_pages(
         try:
             pg = get_pg()
             if _is_admin(staff):
-                raw = await pg.get_system_stats()
+                raw, nodes, templates, groups, hosts = await asyncio.gather(
+                    pg.get_system_stats(),
+                    pg.get_nodes_simple(),
+                    pg.get_user_templates_simple(),
+                    pg.get_groups_simple(),
+                    pg.get_hosts(),
+                    return_exceptions=True,
+                )
                 if isinstance(raw, dict):
                     for key, val in raw.items():
                         if isinstance(val, (dict, list)):
@@ -134,11 +142,13 @@ def register_pg_pages(
                         if is_server_stat_key(str(key)):
                             continue
                         stats_rows.append(format_stat_row(str(key), val))
-                nodes = await pg.get_nodes_simple()
+                elif isinstance(raw, Exception):
+                    err = str(raw)
+                nodes = nodes if isinstance(nodes, list) else []
                 counts["nodes"] = len(nodes)
-                counts["templates"] = len(await pg.get_user_templates_simple())
-                counts["groups"] = len(await pg.get_groups_simple())
-                counts["hosts"] = len(await pg.get_hosts())
+                counts["templates"] = len(templates) if isinstance(templates, list) else 0
+                counts["groups"] = len(groups) if isinstance(groups, list) else 0
+                counts["hosts"] = len(hosts) if isinstance(hosts, list) else 0
             else:
                 # Reseller: only own users/usage/limits — never server/hardware stats
                 reseller_overview = await build_reseller_pg_overview(staff)
@@ -178,28 +188,41 @@ def register_pg_pages(
             owner = _pg_owner(staff)
             if not _is_admin(staff) and owner:
                 params["admin"] = owner
-            data = await pg.get_users(**params)
+            data, templates_raw, groups_raw = await asyncio.gather(
+                pg.get_users(**params),
+                pg.get_user_templates(),
+                pg.get_groups(),
+                return_exceptions=True,
+            )
+            if isinstance(data, Exception):
+                raise data
             if isinstance(data, dict):
                 users = as_list(data, "users") or []
             elif isinstance(data, list):
                 users = data
             users = _filter_owned_users(users, staff)
-            templates = await pg.get_user_templates_simple()
-            full = await pg.get_user_templates()
-            if isinstance(full, list) and full:
-                templates = full
-            elif isinstance(full, dict):
-                templates = as_list(full, "templates") or templates
+            for u in users:
+                if not isinstance(u, dict):
+                    continue
+                u["_sub_url"] = user_subscription_url(u)
+                u["_days_left"] = expire_remaining_days(u.get("expire") or u.get("expire_date"))
+                u["_data_gb"] = data_limit_to_gb(u.get("data_limit"))
+                u["_group_ids"] = user_group_ids(u)
+
+            if isinstance(templates_raw, list):
+                templates = templates_raw
+            elif isinstance(templates_raw, dict):
+                templates = as_list(templates_raw, "templates") or []
+            elif not isinstance(templates_raw, Exception):
+                templates = []
             templates = _filter_templates(templates, staff)
-            try:
-                groups = await pg.get_groups_simple()
-                gfull = await pg.get_groups()
-                if isinstance(gfull, list) and gfull:
-                    groups = gfull
-                elif isinstance(gfull, dict):
-                    groups = as_list(gfull, "groups") or groups
-            except Exception:
-                groups = groups or []
+
+            if isinstance(groups_raw, list):
+                groups = groups_raw
+            elif isinstance(groups_raw, dict):
+                groups = as_list(groups_raw, "groups") or []
+            elif not isinstance(groups_raw, Exception):
+                groups = []
             groups = _filter_groups(groups, staff)
         except Exception as e:
             err = str(e)
@@ -352,6 +375,70 @@ def register_pg_pages(
             return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ساخته شد')}", status_code=303)
 
+    @app.post("/pg/users/{user_id}/edit")
+    async def pg_users_edit(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_users")),
+    ):
+        import time
+
+        from app.services.plans_catalog import groups_allowed_for_staff, parse_group_ids_from_form
+
+        if not staff_user_actions(staff)["update"]:
+            return RedirectResponse(f"/pg/users?err={_q('اجازه ویرایش ندارید')}", status_code=303)
+        form = await request.form()
+        uname = str(form.get("username") or "").strip()
+        if not uname:
+            return RedirectResponse(f"/pg/users?err={_q('نام کاربری الزامی است')}", status_code=303)
+        ids = parse_group_ids_from_form(form, prefix="edit_group_")
+        if not ids:
+            return RedirectResponse(f"/pg/users?err={_q('حداقل یک گروه انتخاب کنید')}", status_code=303)
+        if not groups_allowed_for_staff(staff, ids):
+            return RedirectResponse(f"/pg/users?err={_q('یکی از گروه‌های انتخاب‌شده مجاز نیست')}", status_code=303)
+
+        gb_raw = str(form.get("data_limit_gb") or "").strip()
+        days_raw = str(form.get("duration_days") or "").strip()
+        data_limit = 0  # 0 = unlimited in PG APIs commonly
+        expire = None
+        if gb_raw:
+            try:
+                gb = float(gb_raw.replace(",", "."))
+                if gb < 0:
+                    raise ValueError
+                data_limit = int(gb * (1024**3)) if gb > 0 else 0
+            except ValueError:
+                return RedirectResponse(f"/pg/users?err={_q('حجم نامعتبر است')}", status_code=303)
+        if days_raw:
+            try:
+                days = int(float(days_raw))
+                if days < 0:
+                    raise ValueError
+                expire = int(time.time()) + days * 86400 if days > 0 else 0
+            except ValueError:
+                return RedirectResponse(f"/pg/users?err={_q('مدت نامعتبر است')}", status_code=303)
+        else:
+            expire = 0  # clear expire
+
+        try:
+            current = await _assert_owned_user(staff, user_id)
+            if current is None:
+                return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
+            payload: dict = {
+                "username": uname,
+                "group_ids": ids,
+                "data_limit": data_limit,
+                "expire": expire,
+            }
+            # Preserve status when present
+            st = current.get("status")
+            if st:
+                payload["status"] = st
+            await get_pg().modify_user_by_id(user_id, payload)
+        except Exception as e:
+            return RedirectResponse(f"/pg/users?err={_q(e)}", status_code=303)
+        return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ویرایش شد')}", status_code=303)
+
     @app.post("/pg/users/{user_id}/disable")
     async def pg_users_disable(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
         if not staff_user_actions(staff)["disable"]:
@@ -422,14 +509,19 @@ def register_pg_pages(
         templates, groups = [], []
         try:
             pg = get_pg()
-            templates = await pg.get_user_templates_simple()
-            full = await pg.get_user_templates()
-            if isinstance(full, list) and full:
-                templates = full
-            elif isinstance(full, dict):
-                templates = as_list(full, "templates") or templates
+            templates_raw, groups_raw = await asyncio.gather(
+                pg.get_user_templates(),
+                pg.get_groups_simple(),
+                return_exceptions=True,
+            )
+            if isinstance(templates_raw, list):
+                templates = templates_raw
+            elif isinstance(templates_raw, dict):
+                templates = as_list(templates_raw, "templates") or []
+            elif isinstance(templates_raw, Exception):
+                raise templates_raw
             templates = _filter_templates(templates, staff)
-            groups = _filter_groups(await pg.get_groups_simple(), staff)
+            groups = _filter_groups(groups_raw if isinstance(groups_raw, list) else [], staff)
         except Exception as e:
             err = str(e)
         return render(
@@ -651,6 +743,7 @@ def register_pg_pages(
     @app.get("/pg/nodes", response_class=HTMLResponse)
     async def pg_nodes(request: Request, staff: dict = Depends(require_pg_perm("pg_nodes"))):
         err = request.query_params.get("err")
+        ok = request.query_params.get("ok")
         nodes = []
         try:
             nodes = await get_pg().get_nodes()
@@ -663,20 +756,20 @@ def register_pg_pages(
                 staff,
                 nodes=nodes,
                 flash_err=err,
-                can_write=staff_pg_writes(staff)["nodes"],
+                flash_ok=ok,
+                # Anyone who can open nodes may reconnect
+                can_reconnect=True,
                 active="pg_nodes",
             ),
         )
 
     @app.post("/pg/nodes/{node_id}/reconnect")
     async def pg_node_reconnect(node_id: int, staff: dict = Depends(require_pg_perm("pg_nodes"))):
-        if not staff_pg_writes(staff)["nodes"]:
-            return RedirectResponse(f"/pg/nodes?err={_q('اجازه ندارید')}", status_code=303)
         try:
             await get_pg().reconnect_node(node_id)
         except Exception as e:
             return RedirectResponse(f"/pg/nodes?err={_q(e)}", status_code=303)
-        return RedirectResponse("/pg/nodes", status_code=303)
+        return RedirectResponse(f"/pg/nodes?ok={_q('درخواست اتصال مجدد ارسال شد')}", status_code=303)
 
     @app.get("/pg/inbounds", response_class=HTMLResponse)
     async def pg_inbounds(request: Request, staff: dict = Depends(require_pg_perm("pg_inbounds"))):
