@@ -6,6 +6,9 @@ from app.services.updates import is_newer, local_version
 
 # Newest first within each version. Keep short and scannable.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "1.8.0": [
+        "رنگ دکمه نمای کلی در باکس‌های داشبورد هماهنگ با رنگ همان باکس",
+    ],
     "1.7.47": [
         "نمایش پایدار چنج‌لاگ در صفحه آپدیت",
         "تایتل باکس سایدبار: وب پنل",

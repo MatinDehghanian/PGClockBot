@@ -3086,6 +3086,28 @@ html[data-theme="light"] .tg-preview-shell {
 .home-panel-bot .home-panel-h { color: #f0b27a; }
 .home-panel-pg .home-panel-ico,
 .home-panel-pg .home-panel-h { color: #8ec5ef; }
+.home-panel-bot .btn,
+.home-panel-bot a.btn {
+  color: #f0b27a !important;
+  border-color: color-mix(in srgb, #e08a3c 45%, transparent);
+  background: color-mix(in srgb, #e08a3c 16%, transparent);
+}
+.home-panel-bot .btn:hover,
+.home-panel-bot a.btn:hover {
+  background: color-mix(in srgb, #e08a3c 26%, transparent);
+  opacity: 1;
+}
+.home-panel-pg .btn,
+.home-panel-pg a.btn {
+  color: #8ec5ef !important;
+  border-color: color-mix(in srgb, #3d8fd1 45%, transparent);
+  background: color-mix(in srgb, #3d8fd1 16%, transparent);
+}
+.home-panel-pg .btn:hover,
+.home-panel-pg a.btn:hover {
+  background: color-mix(in srgb, #3d8fd1 26%, transparent);
+  opacity: 1;
+}
 .home-panel-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3139,6 +3161,26 @@ html[data-theme="light"] .home-panel-bot .home-panel-ico,
 html[data-theme="light"] .home-panel-bot .home-panel-h { color: #c2410c; }
 html[data-theme="light"] .home-panel-pg .home-panel-ico,
 html[data-theme="light"] .home-panel-pg .home-panel-h { color: #1d4ed8; }
+html[data-theme="light"] .home-panel-bot .btn,
+html[data-theme="light"] .home-panel-bot a.btn {
+  color: #c2410c !important;
+  border-color: color-mix(in srgb, #ea580c 36%, transparent);
+  background: color-mix(in srgb, #ea580c 12%, transparent);
+}
+html[data-theme="light"] .home-panel-bot .btn:hover,
+html[data-theme="light"] .home-panel-bot a.btn:hover {
+  background: color-mix(in srgb, #ea580c 18%, transparent);
+}
+html[data-theme="light"] .home-panel-pg .btn,
+html[data-theme="light"] .home-panel-pg a.btn {
+  color: #1d4ed8 !important;
+  border-color: color-mix(in srgb, #2563eb 36%, transparent);
+  background: color-mix(in srgb, #2563eb 12%, transparent);
+}
+html[data-theme="light"] .home-panel-pg .btn:hover,
+html[data-theme="light"] .home-panel-pg a.btn:hover {
+  background: color-mix(in srgb, #2563eb 18%, transparent);
+}
 
 @media (max-width: 1100px) {
   .home-panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
