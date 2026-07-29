@@ -17,56 +17,65 @@
     <a class="btn btn-ghost" href="/home">بروزرسانی</a>
   </div>
 
-  <div class="stats-grid home-metrics">
-    <div class="stat home-metric" data-metric="cpu">
-      <div class="stat-top">
-        <span class="stat-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg>
-        </span>
-        <span>CPU</span>
-      </div>
-      <strong id="home-cpu-val">{% if host.cpu_percent is not none %}{{ '%.0f'|format(host.cpu_percent) }}٪{% else %}—{% endif %}</strong>
-      <div class="meter home-meter tone-{{ host.cpu_tone }}" aria-hidden="true"><i id="home-cpu-bar" style="width:{{ host.cpu_percent or 0 }}%"></i></div>
+  <section class="home-top" aria-label="وضعیت سرور و اتصال">
+    <div class="home-gauges">
+      <article class="home-gauge home-gauge-{{ host.cpu_tone }}" data-metric="cpu">
+        <div class="home-gauge-ring" style="--p: {{ host.cpu_percent or 0 }}">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="home-gauge-track" cx="60" cy="60" r="52" />
+            <circle class="home-gauge-val" cx="60" cy="60" r="52" pathLength="100" />
+          </svg>
+          <div class="home-gauge-center">
+            <strong id="home-cpu-val">{% if host.cpu_percent is not none %}{{ '%.0f'|format(host.cpu_percent) }}٪{% else %}—{% endif %}</strong>
+            <span>CPU</span>
+          </div>
+        </div>
+        <div class="home-gauge-meta">
+          <span class="home-gauge-label">پردازنده</span>
+        </div>
+      </article>
+
+      <article class="home-gauge home-gauge-{{ host.mem_tone }}" data-metric="mem">
+        <div class="home-gauge-ring" style="--p: {{ host.memory_percent or 0 }}">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="home-gauge-track" cx="60" cy="60" r="52" />
+            <circle class="home-gauge-val" cx="60" cy="60" r="52" pathLength="100" />
+          </svg>
+          <div class="home-gauge-center">
+            <strong id="home-mem-val">{% if host.memory_percent is not none %}{{ '%.0f'|format(host.memory_percent) }}٪{% else %}—{% endif %}</strong>
+            <span>RAM</span>
+          </div>
+        </div>
+        <div class="home-gauge-meta">
+          <span class="home-gauge-label">حافظه</span>
+          <span class="muted mono" id="home-mem-hint" dir="ltr">{{ host.memory_used_text }} / {{ host.memory_total_text }}</span>
+        </div>
+      </article>
     </div>
-    <div class="stat home-metric" data-metric="mem">
-      <div class="stat-top">
-        <span class="stat-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 7V5M12 7V5M17 7V5M7 19v-2M12 19v-2M17 19v-2"/></svg>
-        </span>
-        <span>RAM</span>
+
+    <div class="home-conn-list">
+      <div class="home-conn {% if bot.ok %}is-ok{% else %}is-err{% endif %}">
+        <span class="home-conn-dot" aria-hidden="true"></span>
+        <span class="home-conn-label">ربات</span>
+        <strong>{% if bot.ok %}متصل{% else %}قطع{% endif %}</strong>
+        <span class="home-conn-meta muted">{% if bot.ok and bot.username %}<span dir="ltr">@{{ bot.username }}</span>{% elif bot.error %}{{ bot.error }}{% else %}—{% endif %}</span>
       </div>
-      <strong id="home-mem-val">{% if host.memory_percent is not none %}{{ '%.0f'|format(host.memory_percent) }}٪{% else %}—{% endif %}</strong>
-      <small class="muted mono" id="home-mem-hint" dir="ltr">{{ host.memory_used_text }} / {{ host.memory_total_text }}</small>
-      <div class="meter home-meter tone-{{ host.mem_tone }}" aria-hidden="true"><i id="home-mem-bar" style="width:{{ host.memory_percent or 0 }}%"></i></div>
-    </div>
-    <div class="stat home-conn {% if bot.ok %}is-ok{% else %}is-err{% endif %}">
-      <div class="stat-top">
-        <span class="stat-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+      <div class="home-conn {% if nodes.overall == 'ok' %}is-ok{% elif nodes.overall == 'err' %}is-err{% elif nodes.overall == 'warn' %}is-warn{% else %}is-neutral{% endif %}">
+        <span class="home-conn-dot" aria-hidden="true"></span>
+        <span class="home-conn-label">نودها</span>
+        <strong>
+          {% if not nodes.ok %}خطا
+          {% elif nodes.total == 0 %}۰
+          {% else %}{{ nodes.connected }}/{{ nodes.total }}{% endif %}
+        </strong>
+        <span class="home-conn-meta muted">
+          {% if nodes.ok and nodes.total %}آنلاین · <a class="link-quiet" href="/pg/nodes">جزئیات</a>
+          {% elif nodes.error %}{{ nodes.error }}
+          {% else %}ثبت‌نشده{% endif %}
         </span>
-        <span>ربات</span>
       </div>
-      <strong>{% if bot.ok %}متصل{% else %}قطع{% endif %}</strong>
-      <small class="muted">{% if bot.ok and bot.username %}<span dir="ltr">@{{ bot.username }}</span>{% elif bot.error %}{{ bot.error }}{% else %}—{% endif %}</small>
     </div>
-    <div class="stat home-conn {% if nodes.overall == 'ok' %}is-ok{% elif nodes.overall == 'err' %}is-err{% elif nodes.overall == 'warn' %}is-warn{% endif %}">
-      <div class="stat-top">
-        <span class="stat-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
-        </span>
-        <span>نودها</span>
-      </div>
-      <strong>
-        {% if not nodes.ok %}خطا
-        {% elif nodes.total == 0 %}۰
-        {% else %}{{ nodes.connected }}/{{ nodes.total }}{% endif %}
-      </strong>
-      <small class="muted">
-        {% if nodes.ok and nodes.total %}آنلاین{% elif nodes.error %}{{ nodes.error }}{% else %}ثبت‌نشده{% endif %}
-        {% if nodes.ok and nodes.total %} · <a class="link-quiet" href="/pg/nodes">جزئیات</a>{% endif %}
-      </small>
-    </div>
-  </div>
+  </section>
 
   <div class="card">
     <h2>میانبرها</h2>
@@ -124,20 +133,14 @@
   var cpuEl = document.getElementById('home-cpu-val');
   var memEl = document.getElementById('home-mem-val');
   var memHint = document.getElementById('home-mem-hint');
-  var cpuBar = document.getElementById('home-cpu-bar');
-  var memBar = document.getElementById('home-mem-bar');
+  var cpuGauge = root.querySelector('[data-metric="cpu"]');
+  var memGauge = root.querySelector('[data-metric="mem"]');
 
-  function toneFor(pct) {
-    if (pct == null || isNaN(pct)) return 'neutral';
-    if (pct >= 90) return 'err';
-    if (pct >= 75) return 'warn';
-    return 'ok';
-  }
-  function setMeter(bar, pct, tone) {
-    if (!bar) return;
-    bar.style.width = (pct != null ? pct : 0) + '%';
-    var wrap = bar.parentElement;
-    if (wrap) wrap.className = 'meter home-meter tone-' + (tone || 'neutral');
+  function setGauge(article, pct, tone) {
+    if (!article) return;
+    var ring = article.querySelector('.home-gauge-ring');
+    if (ring && pct != null) ring.style.setProperty('--p', String(pct));
+    article.className = 'home-gauge home-gauge-' + (tone || 'neutral');
   }
   function fmtPct(n) {
     if (n == null || isNaN(n)) return '—';
@@ -153,8 +156,8 @@
       if (memHint && d.memory_used_text && d.memory_total_text) {
         memHint.textContent = d.memory_used_text + ' / ' + d.memory_total_text;
       }
-      setMeter(cpuBar, d.cpu_percent, d.cpu_tone || toneFor(d.cpu_percent));
-      setMeter(memBar, d.memory_percent, d.mem_tone || toneFor(d.memory_percent));
+      setGauge(cpuGauge, d.cpu_percent, d.cpu_tone);
+      setGauge(memGauge, d.memory_percent, d.mem_tone);
     } catch (e) {}
   }
   setInterval(tick, 5000);

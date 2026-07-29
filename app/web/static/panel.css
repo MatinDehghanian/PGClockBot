@@ -2739,30 +2739,138 @@ html[data-theme="light"] .tg-preview-shell {
 }
 
 /* —— Overall home dashboard —— */
-.home-metrics {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+.home-top {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.85fr) minmax(0, 1.15fr);
+  gap: 12px;
+  margin-bottom: 20px;
+  align-items: stretch;
 }
-.home-metric .meter,
-.home-meter {
-  margin-top: 10px;
+.home-gauges {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
-.home-meter > i { background: var(--ok); }
-.home-meter.tone-warn > i { background: var(--warn); }
-.home-meter.tone-err > i { background: var(--destructive); }
-.home-meter.tone-neutral > i { background: var(--muted-fg); }
-.home-conn strong { font-size: 18px; }
-.home-conn.is-ok .stat-ico {
-  background: color-mix(in srgb, var(--ok) 14%, var(--muted));
-  color: var(--ok-fg);
+.home-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  min-height: 0;
 }
-.home-conn.is-warn .stat-ico {
-  background: color-mix(in srgb, var(--warn) 14%, var(--muted));
-  color: var(--warn-fg);
+.home-gauge-ring {
+  --p: 0;
+  position: relative;
+  width: 104px;
+  height: 104px;
 }
-.home-conn.is-err .stat-ico {
-  background: color-mix(in srgb, var(--destructive) 14%, var(--muted));
-  color: var(--destructive-fg);
+.home-gauge-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
 }
+.home-gauge-track,
+.home-gauge-val {
+  fill: none;
+  stroke-width: 8;
+}
+.home-gauge-track { stroke: color-mix(in srgb, var(--muted-fg) 18%, transparent); }
+.home-gauge-val {
+  stroke: var(--ok-fg);
+  stroke-linecap: round;
+  stroke-dasharray: var(--p) 100;
+  transition: stroke-dasharray .6s ease, stroke .25s ease;
+}
+.home-gauge-warn .home-gauge-val { stroke: var(--warn-fg); }
+.home-gauge-err .home-gauge-val { stroke: var(--destructive-fg); }
+.home-gauge-neutral .home-gauge-val { stroke: var(--muted-fg); }
+.home-gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+}
+.home-gauge-center strong {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.home-gauge-center span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-fg);
+  letter-spacing: 0.06em;
+}
+.home-gauge-meta {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.home-gauge-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.home-gauge-meta .mono { font-size: 11px; }
+
+.home-conn-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+  min-width: 0;
+}
+.home-conn {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 10px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+}
+.home-conn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted-fg);
+  flex: 0 0 auto;
+}
+.home-conn.is-ok .home-conn-dot { background: var(--ok); }
+.home-conn.is-warn .home-conn-dot { background: var(--warn); }
+.home-conn.is-err .home-conn-dot { background: var(--destructive); }
+.home-conn-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-fg);
+}
+.home-conn strong {
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.home-conn-meta {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+}
+
 .home-panels {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2829,9 +2937,19 @@ html[data-theme="light"] .home-panel-pg {
   .home-panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 900px) {
-  .home-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-top { grid-template-columns: 1fr; }
   .home-panels { grid-template-columns: 1fr; }
+  .home-gauge-ring { width: 96px; height: 96px; }
+  .home-gauge-center strong { font-size: 20px; }
 }
 @media (max-width: 560px) {
+  .home-conn {
+    grid-template-columns: auto auto auto;
+    grid-template-rows: auto auto;
+  }
+  .home-conn-meta {
+    grid-column: 2 / -1;
+    white-space: normal;
+  }
   .home-panel-grid { grid-template-columns: 1fr 1fr; }
 }
