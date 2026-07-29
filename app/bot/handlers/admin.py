@@ -1743,7 +1743,11 @@ async def adm_pg(callback: CallbackQuery, db_user: BotUser):
         return
     await callback.answer()
     if callback.message:
-        await callback.message.edit_text("🖥 عملیات پاسارگارد", reply_markup=kb.pg_admin_keyboard())
+        await callback.message.edit_text(
+            "🖥 <b>عملیات پاسارگارد</b>\n"
+            "کاربران VPN را لیست/جستجو کنید، بسازید و مثل پنل مدیریت کنید.",
+            reply_markup=kb.pg_admin_keyboard(),
+        )
 
 
 @router.callback_query(F.data == "adm:pg:group")
