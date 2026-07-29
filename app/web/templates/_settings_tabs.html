@@ -1,27 +1,9 @@
 {% macro settings_tabs(active, tabs=none) -%}
-<nav class="section-tabs settings-tabs" aria-label="تب‌های تنظیمات">
-  {% if tabs %}
-    {% for key, label in tabs %}
-    <a href="/settings?tab={{ key }}" class="{% if active==key %}active{% endif %}">{{ label }}</a>
-    {% endfor %}
-  {% else %}
-  <a href="/settings?tab=welcome" class="{% if active=='welcome' %}active{% endif %}">خوش‌آمد و هویت</a>
-  <a href="/settings?tab=appearance" class="{% if active=='appearance' %}active{% endif %}">ظاهر ربات</a>
-  <a href="/settings?tab=messages" class="{% if active=='messages' %}active{% endif %}">متن پیام‌ها</a>
-  <a href="/settings?tab=buttons" class="{% if active=='buttons' %}active{% endif %}">متن دکمه‌ها</a>
-  <a href="/settings?tab=menu" class="{% if active=='menu' %}active{% endif %}">منوی بات</a>
-  <a href="/settings?tab=qr" class="{% if active=='qr' %}active{% endif %}">QR اشتراک</a>
-  <a href="/settings?tab=payment" class="{% if active=='payment' %}active{% endif %}">پرداخت</a>
-  <a href="/settings?tab=supports" class="{% if active=='supports' %}active{% endif %}">پشتیبان‌ها</a>
-  <a href="/settings?tab=naming" class="{% if active=='naming' %}active{% endif %}">نام‌گذاری سرویس</a>
-  <a href="/settings?tab=forcejoin" class="{% if active=='forcejoin' %}active{% endif %}">کانال اجباری</a>
-  <a href="/settings?tab=reseller" class="{% if active=='reseller' %}active{% endif %}">نمایندگی</a>
-  <a href="/settings?tab=notifications" class="{% if active=='notifications' %}active{% endif %}">نوتیفیکیشن</a>
-  <a href="/settings?tab=backup" class="{% if active=='backup' %}active{% endif %}">بکاپ</a>
-  <a href="/settings?tab=pwa" class="{% if active=='pwa' %}active{% endif %}">وب‌اپ</a>
-  <a href="/settings?tab=update" class="{% if active=='update' %}active{% endif %}">آپدیت</a>
-  <a href="/settings?tab=ssl" class="{% if active=='ssl' %}active{% endif %}">SSL</a>
-  <a href="/settings?tab=bot" class="{% if active=='bot' %}active{% endif %}">ربات و اتصال</a>
-  {% endif %}
+{% if tabs %}
+<nav class="section-tabs settings-tabs" aria-label="تب‌های تنظیمات ربات">
+  {% for key, label in tabs %}
+  <a href="/settings?tab={{ key }}" class="{% if active==key %}active{% endif %}">{{ label }}</a>
+  {% endfor %}
 </nav>
+{% endif %}
 {%- endmacro %}

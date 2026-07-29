@@ -18,14 +18,16 @@ class SslDomainTests(unittest.TestCase):
 
 class SslUiWiredTests(unittest.TestCase):
     def test_settings_tab_and_template(self):
-        from app.services.users import SETTINGS_TABS, TAB_SETTING_GROUPS
+        from app.services.users import PANEL_SETTINGS_TABS, SETTINGS_TABS, TAB_SETTING_GROUPS
 
-        self.assertIn(("ssl", "SSL"), SETTINGS_TABS)
+        self.assertNotIn(("ssl", "SSL"), SETTINGS_TABS)
+        self.assertIn(("ssl", "SSL"), PANEL_SETTINGS_TABS)
         self.assertEqual(TAB_SETTING_GROUPS.get("ssl"), [])
         self.assertTrue(Path("app/web/templates/_settings_ssl.html").is_file())
         self.assertTrue(Path("app/services/ssl_certs.py").is_file())
         src = Path("app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("/settings/ssl/progress", src)
+        self.assertIn("PANEL_SETTINGS", src)
         self.assertIn("start_issue_job", src)
         self.assertIn("enable_https", src)
         main = Path("app/main.py").read_text(encoding="utf-8")

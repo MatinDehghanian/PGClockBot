@@ -60,6 +60,8 @@ from app.services.updates import local_version
 from app.services.users import (
     SETTING_GROUPS,
     SETTINGS_TABS,
+    PANEL_SETTINGS_KEYS,
+    PANEL_SETTINGS_TABS,
     TAB_SETTING_GROUPS,
     get_all_settings,
     set_setting,
@@ -2059,7 +2061,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.updates import check_github_update, clear_update_cache, local_version
 
         tab = (request.query_params.get("tab") or "welcome").strip()
-        valid = {t[0] for t in SETTINGS_TABS}
+        valid = {t[0] for t in SETTINGS_TABS} | PANEL_SETTINGS_KEYS
         if tab == "users":
             return RedirectResponse("/settings?tab=naming", status_code=303)
         if tab == "security":
@@ -2071,13 +2073,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
         groups = {name: SETTING_GROUPS[name] for name in tab_groups if name in SETTING_GROUPS}
 
+        # Bot settings tabs only in horizontal nav; panel tabs use sidebar.
+        page_tabs = SETTINGS_TABS if tab not in PANEL_SETTINGS_KEYS else []
+
         ctx: dict = {
             "staff": staff,
             "values": values,
             "groups": groups,
             "tab_groups": tab_groups,
-            "tabs": SETTINGS_TABS,
+            "tabs": page_tabs,
             "tab": tab,
+            "is_panel_settings": tab in PANEL_SETTINGS_KEYS,
+            "panel_tab_label": dict(PANEL_SETTINGS_TABS).get(tab),
             "saved": request.query_params.get("saved") == "1",
             "saved_msg": request.query_params.get("msg") or "",
         }
