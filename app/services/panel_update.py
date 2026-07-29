@@ -959,7 +959,7 @@ def start_rollback(snapshot_id: str) -> dict[str, Any]:
 
 
 async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
-    from app.services.release_notes import changelog_for_update_page
+    from app.services.release_notes import INSTALL_SCRIPT_CMD, changelog_for_update_page
 
     info = await check_github_update(force=force_check)
     status = resolve_stale_update_status()
@@ -982,4 +982,5 @@ async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
         "can_rollback": bool(snaps),
         "show_ops": show_ops,
         "changelog": changelog_for_update_page(local=local, remote=remote),
+        "install_script_cmd": INSTALL_SCRIPT_CMD,
     }

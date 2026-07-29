@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from app.services.updates import is_newer, local_version
 
-# Newest first within each version. Keep short and scannable.
+# Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "1.8.1": [
+        "چنج‌لاگ فقط تغییرات آخرین نسخه",
+        "حذف دکمه گیت‌هاب و پاک‌سازی وضعیت از صفحه آپدیت",
+        "روش جایگزین با آدرس اسکریپت نصب و گزینه Update",
+    ],
     "1.8.0": [
         "رنگ دکمه نمای کلی در باکس‌های داشبورد هماهنگ با رنگ همان باکس",
     ],
@@ -48,6 +53,10 @@ RELEASE_NOTES_FA: dict[str, list[str]] = {
     ],
 }
 
+INSTALL_SCRIPT_CMD = (
+    "bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)"
+)
+
 
 def notes_for_version(version: str | None) -> list[str]:
     if not version:
@@ -56,52 +65,29 @@ def notes_for_version(version: str | None) -> list[str]:
     return list(RELEASE_NOTES_FA.get(key) or [])
 
 
-def changelog_between(local: str | None, remote: str | None) -> list[dict[str, object]]:
-    """Notes for versions newer than local up to remote (remote first)."""
-    local = (local or local_version() or "").strip().lstrip("vV")
-    remote = (remote or "").strip().lstrip("vV")
-    if not remote:
-        return []
-    items: list[dict[str, object]] = []
+def latest_notes_block() -> dict[str, object] | None:
     for ver, notes in RELEASE_NOTES_FA.items():
-        if not notes:
-            continue
-        if local and not is_newer(ver, local):
-            continue
-        if remote and is_newer(ver, remote):
-            continue
-        items.append({"version": ver, "notes": list(notes)})
-    # Already newest-first because dict insertion order matches RELEASE_NOTES_FA
-    return items
-
-
-def recent_changelog(*, limit: int = 4) -> list[dict[str, object]]:
-    """Newest release notes with content, for idle update page."""
-    items: list[dict[str, object]] = []
-    for ver, notes in RELEASE_NOTES_FA.items():
-        if not notes:
-            continue
-        items.append({"version": ver, "notes": list(notes)})
-        if len(items) >= max(1, limit):
-            break
-    return items
+        if notes:
+            return {"version": ver, "notes": list(notes)}
+    return None
 
 
 def changelog_for_update_page(*, local: str | None = None, remote: str | None = None) -> dict:
+    """Single-version changelog: only the newest relevant release notes."""
     local = (local or local_version() or "").strip()
     remote = (remote or "").strip() or None
+
     if remote and is_newer(remote, local):
-        blocks = changelog_between(local, remote)
-        if not blocks:
-            # Remote newer but no curated notes yet — still show recent history
-            blocks = recent_changelog(limit=4)
-        title = f"تغییرات تا نسخه {remote}"
+        ver = remote.lstrip("vV")
     else:
-        notes = notes_for_version(local)
-        if notes:
-            blocks = [{"version": local.lstrip("vV"), "notes": notes}]
-            title = f"تغییرات نسخه {local.lstrip('vV')}"
-        else:
-            blocks = recent_changelog(limit=4)
-            title = "آخرین تغییرات"
+        ver = local.lstrip("vV")
+
+    notes = notes_for_version(ver)
+    if notes:
+        block = {"version": ver, "notes": notes}
+    else:
+        block = latest_notes_block()
+
+    blocks = [block] if block else []
+    title = f"تغییرات نسخه {block['version']}" if block else "چنج‌لاگ"
     return {"title": title, "blocks": blocks, "has_notes": bool(blocks)}

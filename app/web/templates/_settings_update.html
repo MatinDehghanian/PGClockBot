@@ -94,8 +94,6 @@
       {% else %}آپدیتی نیست{% endif %}
     </button>
     <button type="button" class="btn btn-ghost" id="upd-refresh">بررسی دوباره</button>
-    <button type="button" class="btn btn-ghost" id="upd-clear" title="پاک کردن وضعیت گیرکرده">پاک‌سازی وضعیت</button>
-    <a class="btn btn-ghost" href="{{ update_info.repo_url }}" target="_blank" rel="noopener">گیت‌هاب</a>
   </div>
 </div>
 
@@ -484,22 +482,6 @@
     location.href = '/settings?tab=update&force=1';
   });
 
-  const clearBtn = document.getElementById('upd-clear');
-  if (clearBtn) clearBtn.addEventListener('click', async () => {
-    if (!confirm('وضعیت عملیات آپدیت پاک شود؟ (اگر گیر کرده باشد)')) return;
-    try {
-      const res = await fetch('/update/clear', { method: 'POST', credentials: 'same-origin' });
-      const data = await res.json();
-      if (!data.ok) {
-        if (stateEl) stateEl.textContent = data.error || 'پاک‌سازی ممکن نشد';
-        return;
-      }
-      location.href = '/settings?tab=update&force=1';
-    } catch (e) {
-      if (stateEl) stateEl.textContent = 'خطا در پاک‌سازی';
-    }
-  });
-
   if (root && root.dataset.running === '1') startPolling();
   const params = new URLSearchParams(location.search);
   const justOk = params.get('ok');
@@ -514,10 +496,15 @@
 
 <div class="card settings-card" style="margin-top:14px">
   <h2>روش جایگزین (ترمینال)</h2>
-  <p class="muted update-card-caption">اگر آپدیت از پنل ممکن نبود، روی سرور:</p>
+  <p class="muted update-card-caption">
+    اگر آپدیت از پنل ممکن نبود، روی سرور اسکریپت نصب را اجرا کنید و در منو
+    <strong>گزینه ۲ (Update)</strong> را بزنید:
+  </p>
+  {% set install_cmd = install_script_cmd if install_script_cmd is defined and install_script_cmd else 'bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)' %}
   <div class="cmd-copy">
-    <pre class="update-log" dir="ltr">bash pgclock.sh update</pre>
-    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn" data-copy="bash pgclock.sh update">کپی</button>
+    <pre class="update-log" dir="ltr">{{ install_cmd }}</pre>
+    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn"
+      data-copy="{{ install_cmd }}">کپی</button>
   </div>
 </div>
 <script>
