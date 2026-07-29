@@ -2777,7 +2777,10 @@ html[data-theme="light"] .tg-preview-shell {
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--bg-card);
-  min-height: 0;
+  min-height: 190px;
+  height: 190px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 .home-gauge-ring {
   --p: 0;
@@ -2926,10 +2929,15 @@ html[data-theme="light"] .tg-preview-shell {
   grid-template-columns: 1fr 1fr;
   gap: 14px;
   margin-bottom: 8px;
+  align-items: stretch;
 }
 .home-panel {
+  display: flex;
+  flex-direction: column;
   padding: 18px 18px 14px;
   border-radius: var(--radius);
+  min-width: 0;
+  height: 100%;
 }
 .home-panel-bot {
   border: 1px solid color-mix(in srgb, #e08a3c 38%, var(--border));
@@ -2946,6 +2954,7 @@ html[data-theme="light"] .tg-preview-shell {
   gap: 10px;
   margin: 0 0 14px;
   padding: 0;
+  flex: 0 0 auto;
 }
 .home-panel-title {
   display: inline-flex;
@@ -2979,13 +2988,34 @@ html[data-theme="light"] .tg-preview-shell {
   gap: 8px;
   padding: 0;
   margin: 0;
+  flex: 1 1 auto;
+  align-content: start;
 }
 .home-panel-grid > .stat {
   margin: 0;
-  min-height: 72px;
+  height: 84px;
+  min-height: 84px;
+  max-height: 84px;
   padding: 12px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
-.home-panel-grid > .stat strong small { font-size: 11px; font-weight: 500; }
+.home-panel-grid > .stat .stat-top {
+  min-width: 0;
+}
+.home-panel-grid > .stat .stat-top > span:last-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-panel-grid > .stat strong {
+  display: block;
+  font-size: 18px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 html[data-theme="light"] .home-conn {
   background: #fff;

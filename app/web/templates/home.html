@@ -222,7 +222,6 @@
           </div>
           <strong>{{ pg.nodes | num }}</strong>
         </div>
-        {% if pg.users is not none %}
         <div class="stat">
           <div class="stat-top">
             <span class="stat-ico" aria-hidden="true">
@@ -230,9 +229,8 @@
             </span>
             <span>کاربران پنل</span>
           </div>
-          <strong>{{ pg.users | num }}</strong>
+          <strong>{% if pg.users is not none %}{{ pg.users | num }}{% else %}—{% endif %}</strong>
         </div>
-        {% endif %}
         <div class="stat">
           <div class="stat-top">
             <span class="stat-ico" aria-hidden="true">
@@ -240,7 +238,7 @@
             </span>
             <span>آنلاین</span>
           </div>
-          <strong>{{ nodes.connected | num }}{% if nodes.total %}<small class="muted">/{{ nodes.total }}</small>{% endif %}</strong>
+          <strong>{% if nodes.total %}{{ nodes.connected }}/{{ nodes.total }}{% else %}{{ nodes.connected | num }}{% endif %}</strong>
         </div>
       </div>
       {% else %}
