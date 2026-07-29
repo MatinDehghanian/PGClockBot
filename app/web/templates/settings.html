@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% from "_settings_tabs.html" import settings_tabs %}
-{% block title %}{% if is_panel_settings %}{{ panel_tab_label or 'تنظیمات وب پنل' }}{% else %}تنظیمات{% endif %}{% endblock %}
+{% from "_panel_settings_tabs.html" import panel_settings_tabs %}
+{% block title %}{% if is_panel_settings %}تنظیمات وب پنل{% else %}تنظیمات{% endif %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     {% if is_panel_settings %}
-    <h1>{{ panel_tab_label or 'تنظیمات وب پنل' }}</h1>
-    <p>تنظیمات زیرساخت وب‌پنل — بکاپ، وب‌اپ، SSL، آپدیت و امنیت.</p>
+    <h1>تنظیمات وب پنل</h1>
+    <p>بکاپ، وب‌اپ، SSL، آپدیت و امنیت حساب وب‌پنل.</p>
     {% else %}
     <h1>تنظیمات ربات</h1>
     <p>متن‌ها، منو، پرداخت، نام‌گذاری سرویس و اتصال بات — با پیش‌نمایش زنده شبیه تلگرام.</p>
@@ -17,7 +18,11 @@
 {% if saved %}<div class="flash ok">{{ saved_msg or 'ذخیره شد.' }}</div>{% endif %}
 {% if request.query_params.get('ok') %}<div class="flash ok">{{ request.query_params.get('ok') }}</div>{% endif %}
 {% if request.query_params.get('err') %}<div class="flash err">{{ request.query_params.get('err') }}</div>{% endif %}
-{% if tabs %}{{ settings_tabs(tab, tabs) }}{% endif %}
+{% if is_panel_settings %}
+{{ panel_settings_tabs(tab) }}
+{% elif tabs %}
+{{ settings_tabs(tab, tabs) }}
+{% endif %}
 
 <div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance'] %}has-preview{% endif %}">
   <div class="settings-main">

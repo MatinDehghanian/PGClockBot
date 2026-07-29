@@ -959,6 +959,8 @@ def start_rollback(snapshot_id: str) -> dict[str, Any]:
 
 
 async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
+    from app.services.release_notes import changelog_for_update_page
+
     info = await check_github_update(force=force_check)
     status = resolve_stale_update_status()
     awaiting = bool(status.get("awaiting_restart"))
@@ -968,13 +970,16 @@ async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
         or status.get("state") in {"running", "error"}
     )
     snaps = list_snapshots()
+    local = local_version()
+    remote = info.get("remote_version") if isinstance(info, dict) else None
     return {
         "update_info": info,
         "update": info,  # sidebar badge on settings tab
         "status": status,
-        "local_version": local_version(),
+        "local_version": local,
         "steps": [{"key": k, "label": lab, "percent": pct} for k, lab, pct in STEPS],
         "snapshots": snaps,
         "can_rollback": bool(snaps),
         "show_ops": show_ops,
+        "changelog": changelog_for_update_page(local=local, remote=remote),
     }

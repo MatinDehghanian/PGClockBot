@@ -1,12 +1,17 @@
 {% extends "base.html" %}
+{% from "_panel_settings_tabs.html" import panel_settings_tabs %}
 {% block title %}امنیت{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>امنیت</h1>
+    <h1>تنظیمات وب پنل</h1>
     <p>تغییر نام کاربری و رمز ورود وب‌پنل{% if staff.role == 'reseller' %} نماینده{% endif %}.</p>
   </div>
 </div>
+
+{% if staff.role == 'admin' %}
+{{ panel_settings_tabs('security') }}
+{% endif %}
 
 {% if ok %}<div class="flash ok">{{ ok }}</div>{% endif %}
 {% if err %}<div class="flash err">{{ err }}</div>{% endif %}

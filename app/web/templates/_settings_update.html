@@ -24,6 +24,23 @@
 <div class="flash warn">{{ update_info.label }}</div>
 {% endif %}
 
+{% set cl = changelog if changelog is defined else none %}
+{% if cl and cl.has_notes %}
+<div class="card update-changelog">
+  <h2>{{ cl.title }}</h2>
+  {% for block in cl.blocks %}
+  <div class="update-changelog-block">
+    <strong class="update-changelog-ver" dir="ltr">v{{ block.version }}</strong>
+    <ul class="update-changelog-list">
+      {% for note in block.notes %}
+      <li>{{ note }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <div class="card" id="upd-root"
      data-remote="{{ update_info.remote_version or '' }}"
      data-can-start="{{ '1' if available else '0' }}"

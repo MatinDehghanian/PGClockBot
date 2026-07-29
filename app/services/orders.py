@@ -475,7 +475,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         }
         pg_user = await pg.create_user_from_template(payload)
     else:
-        from app.services.pasarguard import parse_group_ids
+        from app.services.pasarguard import build_user_create_payload, parse_group_ids
 
         data_limit = None
         if plan.data_limit_gb is not None:
@@ -491,14 +491,13 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                 "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
             )
         pg_user = await pg.create_user(
-            {
-                "username": username,
-                "status": "active",
-                "data_limit": data_limit,
-                "expire": expire,
-                "group_ids": group_ids,
-                "note": f"PGClockBot order #{order.id}",
-            }
+            build_user_create_payload(
+                username=username,
+                group_ids=group_ids,
+                data_limit=data_limit,
+                expire_ts=expire,
+                note=f"PGClockBot order #{order.id}",
+            )
         )
 
     sub_url = pg_user.get("subscription_url")
