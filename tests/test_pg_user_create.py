@@ -15,9 +15,10 @@ class PgUserCreateUiTests(unittest.TestCase):
         self.assertIn("duration_days", src)
         self.assertIn("pg-user-mode-custom", src)
         self.assertIn("گروه + حجم + مدت", src)
-        self.assertIn("data-copy", src)
+        self.assertIn("modal-pg-user-link", src)
         self.assertIn("modal-pg-user-edit", src)
         self.assertIn("ویرایش", src)
+        self.assertIn("/pg/users/", src)
 
     def test_post_handler_supports_custom(self):
         src = Path("app/api/pg_pages.py").read_text(encoding="utf-8")
@@ -28,6 +29,7 @@ class PgUserCreateUiTests(unittest.TestCase):
         self.assertIn("parse_group_ids_from_form", src)
         self.assertIn("modify_user_by_id", src)
         self.assertIn("/pg/users/{user_id}/edit", src)
+        self.assertIn("/pg/users/{user_id}/link", src)
         self.assertIn("build_user_create_payload", src)
         self.assertIn("days * 86400", src)
 

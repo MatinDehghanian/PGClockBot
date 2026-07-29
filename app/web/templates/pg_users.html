@@ -74,8 +74,12 @@
         {% endif %}
         <td class="col-actions">
           {% call row_actions() %}
-            {% if sub %}
-            <button type="button" class="btn btn-ghost btn-sm" data-copy="{{ sub }}">لینک</button>
+            {% if uid %}
+            <button type="button" class="btn btn-ghost btn-sm"
+              data-modal-open="modal-pg-user-link"
+              data-uid="{{ uid }}"
+              data-username="{{ u.get('username') or '' }}"
+              data-sub="{{ sub }}">لینک</button>
             {% endif %}
             {% if can_modify and uid %}
             <button type="button" class="btn btn-ghost btn-sm"
@@ -232,6 +236,29 @@
 </div>
 {% endif %}
 
+<div class="ui-modal" id="modal-pg-user-link" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-user-link-title">
+    <div class="ui-modal-head">
+      <h2 id="pg-user-link-title">لینک اشتراک</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن">×</button>
+    </div>
+    <div class="form-stack">
+      <p id="pg-user-link-user" class="muted" style="margin:0"></p>
+      <p id="pg-user-link-status" class="muted" style="margin:0">در حال دریافت لینک…</p>
+      <label class="form-field" id="pg-user-link-field" hidden>
+        آدرس اشتراک
+        <input type="text" id="pg-user-link-url" class="mono" readonly dir="ltr" />
+      </label>
+      <div class="actions" id="pg-user-link-actions" hidden>
+        <button type="button" class="btn" id="pg-user-link-copy">کپی لینک</button>
+        <a class="btn btn-ghost" id="pg-user-link-open" href="#" target="_blank" rel="noopener">باز کردن</a>
+        <button type="button" class="btn btn-ghost" data-modal-close>بستن</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
   const mode = document.getElementById('pg-user-mode');
@@ -284,6 +311,87 @@
       if (!chips.length) {
         e.preventDefault();
         alert('حداقل یک گروه انتخاب کنید');
+      }
+    });
+  }
+
+  const linkUserEl = document.getElementById('pg-user-link-user');
+  const linkStatusEl = document.getElementById('pg-user-link-status');
+  const linkFieldEl = document.getElementById('pg-user-link-field');
+  const linkUrlEl = document.getElementById('pg-user-link-url');
+  const linkActionsEl = document.getElementById('pg-user-link-actions');
+  const linkOpenEl = document.getElementById('pg-user-link-open');
+  const linkCopyBtn = document.getElementById('pg-user-link-copy');
+
+  function showLink(url, username) {
+    if (linkUserEl) linkUserEl.textContent = username ? ('کاربر: ' + username) : '';
+    if (!url) {
+      if (linkStatusEl) linkStatusEl.textContent = 'لینک اشتراک برای این کاربر یافت نشد.';
+      if (linkFieldEl) linkFieldEl.hidden = true;
+      if (linkActionsEl) linkActionsEl.hidden = true;
+      return;
+    }
+    if (linkStatusEl) linkStatusEl.textContent = '';
+    if (linkFieldEl) linkFieldEl.hidden = false;
+    if (linkActionsEl) linkActionsEl.hidden = false;
+    if (linkUrlEl) linkUrlEl.value = url;
+    if (linkOpenEl) linkOpenEl.href = url;
+  }
+
+  async function loadUserLink(uid, cached, username) {
+    if (linkUserEl) linkUserEl.textContent = username ? ('کاربر: ' + username) : '';
+    if (linkStatusEl) linkStatusEl.textContent = 'در حال دریافت لینک…';
+    if (linkFieldEl) linkFieldEl.hidden = true;
+    if (linkActionsEl) linkActionsEl.hidden = true;
+    if (cached) {
+      showLink(cached, username || '');
+      return;
+    }
+    if (!uid) {
+      showLink('', username || '');
+      return;
+    }
+    try {
+      const res = await fetch('/pg/users/' + encodeURIComponent(uid) + '/link', {
+        headers: { Accept: 'application/json', 'X-Requested-With': 'fetch' },
+        credentials: 'same-origin',
+      });
+      const data = await res.json().catch(function () { return {}; });
+      if (!res.ok || !data.ok) {
+        showLink('', data.username || username || '');
+        if (linkStatusEl) linkStatusEl.textContent = data.error || 'دریافت لینک ناموفق بود.';
+        return;
+      }
+      showLink(data.url || '', data.username || username || '');
+    } catch (err) {
+      showLink('', username || '');
+      if (linkStatusEl) linkStatusEl.textContent = 'خطا در ارتباط با سرور.';
+    }
+  }
+
+  document.addEventListener('click', function(e){
+    const btn = e.target.closest('[data-modal-open="modal-pg-user-link"]');
+    if (!btn) return;
+    const uid = btn.getAttribute('data-uid') || '';
+    const cached = btn.getAttribute('data-sub') || '';
+    const username = btn.getAttribute('data-username') || '';
+    loadUserLink(uid, cached, username);
+  });
+
+  if (linkCopyBtn) {
+    linkCopyBtn.addEventListener('click', async function () {
+      const url = (linkUrlEl && linkUrlEl.value) || '';
+      if (!url) return;
+      try {
+        await navigator.clipboard.writeText(url);
+        const prev = linkCopyBtn.textContent;
+        linkCopyBtn.textContent = 'کپی شد';
+        setTimeout(function () { linkCopyBtn.textContent = prev; }, 1500);
+      } catch (err) {
+        if (linkUrlEl) {
+          linkUrlEl.focus();
+          linkUrlEl.select();
+        }
       }
     });
   }

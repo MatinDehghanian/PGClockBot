@@ -571,16 +571,43 @@ def user_subscription_url(user: dict | None) -> str | None:
     """Best-effort subscription URL from a PG user payload."""
     if not isinstance(user, dict):
         return None
-    for key in ("subscription_url", "subscription", "sub_url", "link"):
+    for key in (
+        "subscription_url",
+        "subscription",
+        "sub_url",
+        "link",
+        "subscribe_url",
+        "sub_link",
+    ):
         raw = user.get(key)
         if isinstance(raw, str) and raw.strip():
             return raw.strip()
         if isinstance(raw, dict):
-            for k in ("url", "subscription_url", "link"):
+            for k in ("url", "subscription_url", "link", "href"):
                 v = raw.get(k)
                 if isinstance(v, str) and v.strip():
                     return v.strip()
-    token = user.get("subscription_token") or user.get("token")
+    links = user.get("links")
+    if isinstance(links, dict):
+        for k in ("subscription", "subscription_url", "url", "sub"):
+            v = links.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    if isinstance(links, list):
+        for item in links:
+            if isinstance(item, str) and ("/sub/" in item or item.startswith("http")):
+                return item.strip()
+            if isinstance(item, dict):
+                for k in ("url", "link", "href"):
+                    v = item.get(k)
+                    if isinstance(v, str) and v.strip():
+                        return v.strip()
+    token = (
+        user.get("subscription_token")
+        or user.get("token")
+        or user.get("sub_id")
+        or user.get("subscription_id")
+    )
     if isinstance(token, str) and token.strip():
         base = public_pg_api_base()
         if base:

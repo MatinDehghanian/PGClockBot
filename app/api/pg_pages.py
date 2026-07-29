@@ -395,6 +395,27 @@ def register_pg_pages(
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ساخته شد')}", status_code=303)
 
+    @app.get("/pg/users/{user_id}/link")
+    async def pg_users_link(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
+        from fastapi.responses import JSONResponse
+
+        try:
+            info = await _assert_owned_user(staff, user_id)
+            if info is None:
+                return JSONResponse({"ok": False, "error": "دسترسی ندارید"}, status_code=403)
+            url = user_subscription_url(info)
+            if not url:
+                return JSONResponse({"ok": False, "error": "لینک اشتراک برای این کاربر یافت نشد"}, status_code=404)
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "url": url,
+                    "username": info.get("username") or "",
+                }
+            )
+        except Exception as e:
+            return JSONResponse({"ok": False, "error": str(e)[:300]}, status_code=502)
+
     @app.post("/pg/users/{user_id}/edit")
     async def pg_users_edit(
         user_id: int,
