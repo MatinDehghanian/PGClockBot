@@ -400,8 +400,10 @@ input, select, textarea {
   border: 1px solid var(--input);
   border-radius: var(--radius);
   padding: 8px 12px;
-  font: inherit;
-  font-size: 16px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
   min-height: var(--btn-h);
 }
 textarea { min-height: 96px; resize: vertical; }
@@ -419,22 +421,27 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 select {
   appearance: none;
   -webkit-appearance: none;
-  padding-inline-end: 34px;
+  /* text side 12px · chevron side 12px + 14px icon */
+  padding-inline: 12px 36px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4 6l4 4 4-4' stroke='%23a1a1aa' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-position: calc(100% - 10px) 50%;
+  background-position: right 12px center;
   background-size: 14px 14px;
   background-repeat: no-repeat;
   cursor: pointer;
 }
+/* Panel content is RTL — keep chevron on the inline-end (physical left) with matching inset */
 .side select, .main select {
-  background-position: 10px 50%;
-  padding-inline-start: 32px;
-  padding-inline-end: 12px;
+  background-position: left 12px center;
+  padding-inline-start: 12px;
+  padding-inline-end: 36px;
 }
-select option { background: #18181b; color: var(--foreground); }
+select option { background: #18181b; color: var(--foreground); font-weight: 400; }
 .actions select, select.select-sm {
   width: auto; min-width: 110px; min-height: 32px; margin: 0;
-  padding-block: 4px; font-size: 12px;
+  padding-block: 4px;
+  padding-inline: 10px 30px;
+  font-size: 12px;
+  font-weight: 400;
 }
 
 input[type=number]::-webkit-outer-spin-button,
@@ -1745,7 +1752,7 @@ tr:last-child td { border-bottom: 0; }
 }
 
 @media (min-width: 901px) {
-  input, select, textarea { font-size: 14px; min-height: var(--btn-h); }
+  input, select, textarea { font-size: 13px; font-weight: 400; min-height: var(--btn-h); }
   .mobile-only { display: none !important; }
   .side-backdrop,
   .side-backdrop.show { display: none !important; pointer-events: none !important; }
