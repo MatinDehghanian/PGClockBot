@@ -27,6 +27,11 @@
   --side-w: 248px;
   --topbar-h: 52px;
   --btn-h: 36px;
+  /* Notch / status bar / home indicator (PWA + iOS Safari) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
   --font: "Vazirmatn", ui-sans-serif, system-ui, sans-serif;
   --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
 
@@ -78,6 +83,8 @@ a:hover { opacity: 0.8; }
   width: 100%;
   background: var(--background);
   overflow: hidden;
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
 }
 .side, .main { direction: rtl; }
 .topbar { direction: ltr; }
@@ -93,7 +100,7 @@ a:hover { opacity: 0.8; }
   overflow-y: auto;
   background: var(--bg-card);
   border-left: 1px solid var(--border);
-  padding: 16px 12px;
+  padding: calc(16px + var(--safe-top)) 12px calc(16px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -105,7 +112,7 @@ a:hover { opacity: 0.8; }
   min-height: 0;
   height: 100%;
   max-height: 100dvh;
-  padding: 28px 32px 24px;
+  padding: 28px 32px calc(24px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
@@ -886,7 +893,7 @@ tr:last-child td { border-bottom: 0; }
   min-height: 100dvh;
   display: grid;
   place-items: center;
-  padding: 24px 16px;
+  padding: calc(24px + var(--safe-top)) calc(16px + var(--safe-right)) calc(24px + var(--safe-bottom)) calc(16px + var(--safe-left));
   background: var(--background);
 }
 .auth-panel {
@@ -1230,7 +1237,7 @@ tr:last-child td { border-bottom: 0; }
 
 .sticky-actions {
   position: sticky;
-  bottom: 12px;
+  bottom: calc(12px + var(--safe-bottom));
   background: var(--bg-card);
   padding: 12px;
   border-radius: var(--radius);
@@ -1515,8 +1522,8 @@ tr:last-child td { border-bottom: 0; }
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  height: var(--topbar-h);
-  padding: 0 12px;
+  height: calc(var(--topbar-h) + var(--safe-top));
+  padding: var(--safe-top) 12px 0;
   border-bottom: 1px solid var(--border);
   background: var(--bg-card);
   position: sticky;
@@ -1593,7 +1600,7 @@ tr:last-child td { border-bottom: 0; }
 .side-backdrop {
   display: none !important;
   position: fixed;
-  top: var(--topbar-h);
+  top: calc(var(--topbar-h) + var(--safe-top));
   right: 0;
   bottom: 0;
   left: 0;
@@ -1627,13 +1634,13 @@ tr:last-child td { border-bottom: 0; }
 
   .side {
     position: fixed;
-    top: var(--topbar-h);
+    top: calc(var(--topbar-h) + var(--safe-top));
     right: 0;
     left: auto;
     width: min(300px, 86vw);
-    height: calc(100vh - var(--topbar-h));
-    height: calc(100dvh - var(--topbar-h));
-    max-height: calc(100dvh - var(--topbar-h));
+    height: calc(100vh - var(--topbar-h) - var(--safe-top));
+    height: calc(100dvh - var(--topbar-h) - var(--safe-top));
+    max-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
     z-index: 50;
     transform: translateX(105%);
     transition: transform .2s ease;
@@ -1642,11 +1649,12 @@ tr:last-child td { border-bottom: 0; }
     grid-area: unset;
     display: flex !important;
     padding-top: 10px;
+    padding-bottom: calc(12px + var(--safe-bottom));
   }
   .side.open { transform: translateX(0); }
 
   .main {
-    padding: 14px 14px 20px;
+    padding: 14px 14px calc(20px + var(--safe-bottom));
     min-height: 0;
     height: auto;
     max-height: none;
@@ -1709,7 +1717,7 @@ tr:last-child td { border-bottom: 0; }
     min-height: var(--btn-h);
   }
 
-  .sticky-actions { bottom: 10px; }
+  .sticky-actions { bottom: calc(10px + var(--safe-bottom)); }
   body.nav-open { overflow: hidden; }
 
   .notify-row { flex-direction: row; }
@@ -2113,7 +2121,7 @@ body.modal-open { overflow: hidden; }
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 8vh 16px 24px;
+  padding: calc(8vh + var(--safe-top)) calc(16px + var(--safe-right)) calc(24px + var(--safe-bottom)) calc(16px + var(--safe-left));
 }
 .ui-modal[hidden] { display: none !important; }
 .ui-modal.open { display: flex; }
@@ -2154,7 +2162,10 @@ body.modal-open { overflow: hidden; }
   to { opacity: 1; transform: none; }
 }
 @media (max-width: 640px) {
-  .ui-modal { padding: 12px; align-items: flex-end; }
+  .ui-modal {
+    padding: calc(12px + var(--safe-top)) calc(12px + var(--safe-right)) calc(12px + var(--safe-bottom)) calc(12px + var(--safe-left));
+    align-items: flex-end;
+  }
   .ui-modal-panel {
     width: 100%;
     max-height: 88vh;
