@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services.formatting import data_limit_to_gb, expire_remaining_days, format_stat_row
 from app.services.pasarguard import as_list, get_pg, user_group_ids, user_subscription_url
-from app.services.pg_access import staff_has_pg, staff_pg_writes, staff_user_actions
+from app.services.pg_access import staff_pg_writes, staff_user_actions
 
 
 def _q(msg: str) -> str:
