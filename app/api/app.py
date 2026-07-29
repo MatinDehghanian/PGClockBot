@@ -61,6 +61,7 @@ from app.services.users import (
     TAB_SETTING_GROUPS,
     get_all_settings,
     set_setting,
+    set_settings_bulk,
 )
 from app.services.web_auth import (
     load_web_admin,
@@ -1605,21 +1606,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.bot.keyboards import DEFAULT_MENU_ORDER
-
         form = await request.form()
-        order = [p.strip() for p in str(form.get("menu_order") or "").split(",") if p.strip()]
-        order = [k for k in order if k in DEFAULT_MENU_ORDER]
-        if "shop" not in order:
-            order.insert(0, "shop")
-        layout = str(form.get("menu_layout") or "classic").strip()
-        await set_setting(session, "menu_order", ",".join(order))
-        if layout in {"classic", "compact"}:
-            await set_setting(session, "menu_layout", layout)
-        from app.bot.keyboards import sync_show_flags_for_order
-
-        for key, val in sync_show_flags_for_order(order).items():
-            await set_setting(session, key, val)
+        await _save_menu_layout(session, form)
         return RedirectResponse("/settings?tab=menu&saved=1", status_code=303)
 
     @app.get("/update", response_class=HTMLResponse)
@@ -1738,7 +1726,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         }
         items = []
         for key in order:
-            meta = catalog_meta[key]
+            meta = catalog_meta.get(key)
+            if not meta:
+                continue
             items.append(
                 {
                     "key": key,
@@ -1750,7 +1740,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         pool = []
         for key in DEFAULT_MENU_ORDER:
             if key not in order and key != "shop":
-                meta = catalog_meta[key]
+                meta = catalog_meta.get(key)
+                if not meta:
+                    continue
                 pool.append(
                     {
                         "key": key,
@@ -1760,6 +1752,24 @@ def create_api_app(lifespan=None) -> FastAPI:
                     }
                 )
         return {"items": items, "pool": pool, "order_csv": ",".join(order)}
+
+    async def _save_menu_layout(session: AsyncSession, form, *, reseller_id: int | None = None) -> None:
+        from app.bot.keyboards import DEFAULT_MENU_ORDER, sync_show_flags_for_order
+
+        order = [p.strip() for p in str(form.get("menu_order") or "").split(",") if p.strip()]
+        order = [k for k in order if k in DEFAULT_MENU_ORDER]
+        if reseller_id is not None:
+            order = [k for k in order if k != "reseller_apply"]
+        if "shop" not in order:
+            order.insert(0, "shop")
+        layout = str(form.get("menu_layout") or "classic").strip()
+        payload = {"menu_order": ",".join(order)}
+        if layout in {"classic", "compact"}:
+            payload["menu_layout"] = layout
+        payload.update(sync_show_flags_for_order(order))
+        if reseller_id is not None:
+            payload["show_reseller_apply"] = "0"
+        await set_settings_bulk(session, payload, reseller_id=reseller_id)
 
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(
@@ -1955,6 +1965,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "/settings?tab=appearance&saved=1&msg=" + quote(msg),
                 status_code=303,
             )
+
+        if tab == "menu" or form.get("menu_layout_save"):
+            await _save_menu_layout(session, form)
+            return RedirectResponse("/settings?tab=menu&saved=1", status_code=303)
 
         known = keys_for_tab(tab)
         if tab == "menu":

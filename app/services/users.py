@@ -174,6 +174,43 @@ async def set_setting(
     await session.commit()
 
 
+async def set_settings_bulk(
+    session: AsyncSession,
+    values: dict[str, str],
+    *,
+    reseller_id: int | None = None,
+) -> None:
+    """Upsert many settings with a single commit (avoids lock storms on menu save)."""
+    rid = _effective_reseller_id(reseller_id)
+    if rid:
+        from app.db.models import ResellerSetting
+
+        for key, value in values.items():
+            result = await session.execute(
+                select(ResellerSetting).where(
+                    ResellerSetting.reseller_user_id == rid,
+                    ResellerSetting.key == key,
+                )
+            )
+            row = result.scalar_one_or_none()
+            if row:
+                row.value = value
+            else:
+                session.add(
+                    ResellerSetting(reseller_user_id=rid, key=key, value=value)
+                )
+        await session.commit()
+        return
+    for key, value in values.items():
+        result = await session.execute(select(Setting).where(Setting.key == key))
+        row = result.scalar_one_or_none()
+        if row:
+            row.value = value
+        else:
+            session.add(Setting(key=key, value=value))
+    await session.commit()
+
+
 DEFAULT_SETTINGS = {
     "shop_title": "کلاک بات",
     "welcome_text": (

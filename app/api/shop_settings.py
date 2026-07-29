@@ -328,14 +328,14 @@ def register_shop_settings(app, *, render, require_staff, get_db):
         if "shop" not in order:
             order.insert(0, "shop")
         layout = str(form.get("menu_layout") or "classic").strip()
-        await set_setting(session, "menu_order", ",".join(order), reseller_id=rid)
-        if layout in {"classic", "compact"}:
-            await set_setting(session, "menu_layout", layout, reseller_id=rid)
         from app.bot.keyboards import sync_show_flags_for_order
+        from app.services.users import set_settings_bulk
 
-        for key, val in sync_show_flags_for_order(order).items():
-            await set_setting(session, key, val, reseller_id=rid)
-        await set_setting(session, "show_reseller_apply", "0", reseller_id=rid)
+        payload = {"menu_order": ",".join(order), **sync_show_flags_for_order(order)}
+        payload["show_reseller_apply"] = "0"
+        if layout in {"classic", "compact"}:
+            payload["menu_layout"] = layout
+        await set_settings_bulk(session, payload, reseller_id=rid)
         return RedirectResponse("/shop-settings?tab=menu&saved=1", status_code=303)
 
     @app.post("/shop-supports/save")
