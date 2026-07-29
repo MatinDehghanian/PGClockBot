@@ -278,9 +278,25 @@ ensure_venv() {
   fi
   # shellcheck disable=SC1091
   source .venv/bin/activate
-  pip install -U pip wheel -q
-  pip install -r requirements.txt -q
-  ok "Python dependencies installed"
+  local hash_file=".venv/.requirements.sha256"
+  local new_hash=""
+  if command -v sha256sum >/dev/null 2>&1; then
+    new_hash="$(sha256sum requirements.txt | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    new_hash="$(shasum -a 256 requirements.txt | awk '{print $1}')"
+  fi
+  if [[ -n "$new_hash" && -f "$hash_file" && "$(cat "$hash_file" 2>/dev/null)" == "$new_hash" && -x .venv/bin/python ]]; then
+    ok "Python dependencies unchanged (skip pip)"
+  else
+    if [[ ! -f "$hash_file" ]]; then
+      pip install -U pip wheel -q --disable-pip-version-check --no-input || true
+    fi
+    pip install -r requirements.txt -q --disable-pip-version-check --no-input
+    if [[ -n "$new_hash" ]]; then
+      printf '%s\n' "$new_hash" > "$hash_file"
+    fi
+    ok "Python dependencies installed"
+  fi
   PY="${SCRIPT_DIR}/.venv/bin/python"
   PIP="${SCRIPT_DIR}/.venv/bin/pip"
 }
@@ -500,16 +516,21 @@ cmd_update() {
 
   if [[ -d .git ]]; then
     info "Pulling latest code from GitHub..."
-    git fetch --all --tags || true
     local branch
     branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
     if [[ "$branch" == "HEAD" ]]; then
+      branch="main"
+    fi
+    # Targeted fetch (no tags / no --all) — much faster on weak VPS links
+    if ! timeout 120 git fetch --no-tags --prune origin "$branch" 2>/dev/null; then
+      timeout 120 git fetch --no-tags --prune origin main || true
       branch="main"
     fi
     if git pull --ff-only origin "$branch" 2>/dev/null || git pull --ff-only 2>/dev/null; then
       ok "Code updated (branch: ${branch})"
     else
       warn "Fast-forward failed — syncing hard to origin/main (keeps .env + data)"
+      git fetch --no-tags --prune origin main || true
       git checkout -f -B main origin/main
       git reset --hard origin/main
       git clean -fd --exclude=.env --exclude=data --exclude=.venv --exclude='.env.bak.*'

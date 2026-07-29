@@ -9,6 +9,7 @@ from app.services.web_auth import load_web_admin
 
 SETUP_FLAG = DATA_DIR / "setup_complete.flag"
 SETUP_IN_PROGRESS = DATA_DIR / "setup_in_progress.flag"
+SETUP_GATE_FILE = DATA_DIR / "setup_gate.token"
 ENV_PATH = ROOT_DIR / ".env"
 
 # Keys the wizard may write; unknown keys in .env are preserved on merge.
@@ -43,7 +44,41 @@ def mark_setup_complete() -> Path:
             SETUP_IN_PROGRESS.unlink()
     except OSError:
         pass
+    try:
+        if SETUP_GATE_FILE.exists():
+            SETUP_GATE_FILE.unlink()
+    except OSError:
+        pass
     return SETUP_FLAG
+
+
+def ensure_setup_gate_token() -> str:
+    """One-time gate for the first-run wizard so the open panel cannot be claimed remotely."""
+    _ensure_data_dir()
+    if SETUP_GATE_FILE.exists():
+        token = SETUP_GATE_FILE.read_text(encoding="utf-8").strip()
+        if token:
+            return token
+    token = secrets.token_urlsafe(24)
+    SETUP_GATE_FILE.write_text(token + "\n", encoding="utf-8")
+    try:
+        SETUP_GATE_FILE.chmod(0o600)
+    except OSError:
+        pass
+    return token
+
+
+def setup_gate_ok(provided: str | None) -> bool:
+    if is_setup_complete():
+        return True
+    expected = ensure_setup_gate_token()
+    got = (provided or "").strip()
+    if not got or not expected:
+        return False
+    try:
+        return secrets.compare_digest(got, expected)
+    except (TypeError, ValueError):
+        return False
 
 
 def begin_setup() -> None:

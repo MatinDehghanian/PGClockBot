@@ -101,5 +101,53 @@ class SessionRevalidationTests(unittest.TestCase):
         self.assertTrue(any("Never trust stale cookie" in src or "re-read ACL" in src for _ in [1]))
 
 
+class TimedSessionTests(unittest.TestCase):
+    def test_uses_timed_serializer(self):
+        src = Path("app/api/app.py").read_text(encoding="utf-8")
+        self.assertIn("URLSafeTimedSerializer", src)
+        self.assertIn("max_age=SESSION_MAX_AGE", src)
+        self.assertIn("admin_session_version", src)
+
+
+class TrustProxyTests(unittest.TestCase):
+    def test_xff_gated_by_trust_proxy(self):
+        src = Path("app/api/app.py").read_text(encoding="utf-8")
+        self.assertIn("trust_proxy", src)
+        self.assertIn("x-forwarded-for", src.lower())
+
+
+class WebhookSecretTests(unittest.TestCase):
+    def test_webhook_rejects_missing_secret(self):
+        src = Path("app/main.py").read_text(encoding="utf-8")
+        self.assertIn("X-Telegram-Bot-Api-Secret-Token", src)
+        self.assertIn("ensure_webhook_secret", src)
+
+
+class SetupGateTests(unittest.TestCase):
+    def test_setup_gate_helpers_exist(self):
+        from app.services.setup_wizard import ensure_setup_gate_token, setup_gate_ok
+
+        token = ensure_setup_gate_token()
+        self.assertTrue(len(token) >= 16)
+        self.assertTrue(setup_gate_ok(token))
+        self.assertFalse(setup_gate_ok("wrong-token"))
+
+
+class SettingsReadPerfTests(unittest.TestCase):
+    def test_get_all_settings_does_not_reseed(self):
+        src = Path("app/services/users.py").read_text(encoding="utf-8")
+        start = src.index("async def get_all_settings")
+        end = src.index("\ndef on(", start)
+        body = src[start:end]
+        self.assertNotIn("ensure_default_settings", body)
+
+
+class DepsCleanupTests(unittest.TestCase):
+    def test_unused_heavy_deps_removed(self):
+        req = Path("requirements.txt").read_text(encoding="utf-8")
+        self.assertNotIn("python-jose", req)
+        self.assertNotIn("aiofiles", req)
+
+
 if __name__ == "__main__":
     unittest.main()

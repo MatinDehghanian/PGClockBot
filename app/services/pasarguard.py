@@ -123,11 +123,15 @@ class PasarGuardClient:
                         return self._token
                     if last.status_code in (401, 403):
                         detail = (last.text or "")[:300]
+                        from app.services.redact import redact
+
                         raise PasarGuardError(
-                            f"PasarGuard login failed ({last.status_code}) at "
-                            f"{base}/api/admin/token — check PG_USERNAME / PG_PASSWORD. {detail}",
+                            redact(
+                                f"PasarGuard login failed ({last.status_code}) at "
+                                f"{base}/api/admin/token — check PG_USERNAME / PG_PASSWORD. {detail}"
+                            ),
                             last.status_code,
-                            last.text,
+                            redact(last.text),
                         )
                     if last.status_code not in (404, 405):
                         break

@@ -25,9 +25,15 @@ from app.services.web_auth import (
 
 
 def register_security_pages(app, *, render, require_staff, get_db, get_signer, cookie_secure):
-    def _refresh_session(request: Request, staff: dict, *, username: str) -> RedirectResponse:
+    def _refresh_session(request: Request, staff: dict, *, username: str, pv: str | None = None) -> RedirectResponse:
+        from app.services.web_auth import admin_session_version
+
         payload = dict(staff)
         payload["username"] = username
+        if payload.get("role") == "admin":
+            payload["sv"] = admin_session_version()
+        if pv is not None:
+            payload["pv"] = pv
         resp = RedirectResponse("/security?ok=" + quote("ذخیره شد"), status_code=303)
         resp.set_cookie(
             "session",
@@ -122,7 +128,12 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
             )
         profile.web_username = cleaned
         await session.commit()
-        return _refresh_session(request, staff, username=cleaned)
+        return _refresh_session(
+            request,
+            staff,
+            username=cleaned,
+            pv=(profile.web_password_hash or "")[:24],
+        )
 
     @app.post("/security/password")
     async def security_change_password(
@@ -153,7 +164,9 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
                 change_web_admin_password(new_password)
             except ValueError as e:
                 return RedirectResponse("/security?err=" + quote(str(e)), status_code=303)
-            return RedirectResponse("/security?ok=" + quote("رمز عبور تغییر کرد"), status_code=303)
+            return _refresh_session(
+                request, staff, username=load_web_admin().get("username") or staff.get("username") or "admin"
+            )
 
         if role != "reseller":
             return RedirectResponse("/logout", status_code=303)
@@ -170,4 +183,9 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
             )
         profile.web_password_hash = hash_password(new_password)
         await session.commit()
-        return RedirectResponse("/security?ok=" + quote("رمز عبور تغییر کرد"), status_code=303)
+        return _refresh_session(
+            request,
+            staff,
+            username=profile.web_username or staff.get("username") or "",
+            pv=(profile.web_password_hash or "")[:24],
+        )

@@ -109,7 +109,10 @@ class Settings(BaseSettings):
 
     webhook_url: str = Field(default="", alias="WEBHOOK_URL")
     webhook_path: str = Field(default="/telegram/webhook", alias="WEBHOOK_PATH")
+    webhook_secret_token: str = Field(default="", alias="WEBHOOK_SECRET_TOKEN")
     public_base_url: str = Field(default="", alias="PUBLIC_BASE_URL")
+    # When 1, trust X-Forwarded-For / X-Forwarded-Proto (only behind a real reverse proxy)
+    trust_proxy: bool = Field(default=False, alias="TRUST_PROXY")
 
     currency: str = Field(default="تومان", alias="CURRENCY")
     default_locale: str = Field(default="fa", alias="DEFAULT_LOCALE")
@@ -127,6 +130,7 @@ class Settings(BaseSettings):
         "web_admin_password",
         "webhook_url",
         "webhook_path",
+        "webhook_secret_token",
         "public_base_url",
         "currency",
         "default_locale",
@@ -136,6 +140,14 @@ class Settings(BaseSettings):
     @classmethod
     def strip_wrap_quotes(cls, value: object) -> str:
         return _clean_str(value)
+
+    @field_validator("trust_proxy", mode="before")
+    @classmethod
+    def parse_trust_proxy(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        s = _clean_str(value).lower()
+        return s in {"1", "true", "yes", "on"}
 
     @field_validator("pg_base_url", mode="after")
     @classmethod

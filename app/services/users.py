@@ -577,12 +577,24 @@ def keys_for_tab(tab: str) -> set[str]:
     return keys
 
 
+_defaults_ready = False
+
+
 async def ensure_default_settings(session: AsyncSession) -> None:
+    """Insert missing default settings once per process (cheap after first call)."""
+    global _defaults_ready
+    if _defaults_ready:
+        return
+    result = await session.execute(select(Setting.key))
+    existing = {row[0] for row in result.all()}
+    missing = False
     for key, value in DEFAULT_SETTINGS.items():
-        result = await session.execute(select(Setting).where(Setting.key == key))
-        if result.scalar_one_or_none() is None:
+        if key not in existing:
             session.add(Setting(key=key, value=value))
-    await session.commit()
+            missing = True
+    if missing:
+        await session.commit()
+    _defaults_ready = True
 
 
 async def get_all_settings(
@@ -590,7 +602,7 @@ async def get_all_settings(
     *,
     reseller_id: int | None = None,
 ) -> dict[str, str]:
-    await ensure_default_settings(session)
+    # Defaults are seeded at startup — avoid N+1 writes on every read path.
     data = dict(DEFAULT_SETTINGS)
     rid = _effective_reseller_id(reseller_id)
     if rid:

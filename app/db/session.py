@@ -61,8 +61,20 @@ def _migrate_sqlite(sync_conn) -> None:
             )
 
     # Ensure core shop perms exist on legacy reseller profiles / plans (1.7+)
-    _ensure_core_reseller_perms(sync_conn, "reseller_profiles")
-    _ensure_core_reseller_perms(sync_conn, "reseller_plans")
+    # Skip after a successful one-time migration (new rows already get core perms).
+    marker = None
+    try:
+        from app.config import DATA_DIR
+
+        marker = DATA_DIR / ".migrated_core_reseller_perms_v1"
+        if not marker.exists():
+            _ensure_core_reseller_perms(sync_conn, "reseller_profiles")
+            _ensure_core_reseller_perms(sync_conn, "reseller_plans")
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            marker.write_text("1\n", encoding="utf-8")
+    except Exception:
+        _ensure_core_reseller_perms(sync_conn, "reseller_profiles")
+        _ensure_core_reseller_perms(sync_conn, "reseller_plans")
 
 
 def _ensure_core_reseller_perms(sync_conn, table: str) -> None:

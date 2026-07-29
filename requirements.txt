@@ -3,6 +3,7 @@ fastapi>=0.115,<1
 uvicorn[standard]>=0.32,<1
 sqlalchemy[asyncio]>=2.0,<3
 aiosqlite>=0.20
+# Optional: only needed when DATABASE_URL uses postgresql+asyncpg
 asyncpg>=0.30
 httpx>=0.28
 pydantic>=2.9,<3
@@ -14,6 +15,4 @@ qrcode[pil]>=8.0
 apscheduler>=3.10
 passlib[bcrypt]>=1.7
 bcrypt>=4.0.1,<4.1
-python-jose[cryptography]>=3.3
-aiofiles>=24.1
 greenlet>=3.1

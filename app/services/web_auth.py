@@ -77,13 +77,17 @@ def load_web_admin() -> dict[str, str]:
         data = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
         username = _clean_secret(str(data.get("username", "admin")))
         password = _clean_secret(str(data.get("password", "")))
+        token = _clean_secret(str(data.get("token", "")))
         # Auto-repair dirty credentials written by older installs
         if password and (
             str(data.get("password", "")) != password
             or str(data.get("username", "")).strip() != username
+            or not token
         ):
             save_web_admin(username, password)
-        return {"username": username or "admin", "password": password}
+            data = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
+            token = _clean_secret(str(data.get("token", "")))
+        return {"username": username or "admin", "password": password, "token": token}
 
     # Fallback for old installs: migrate from .env once
     from app.config import get_settings
@@ -94,8 +98,13 @@ def load_web_admin() -> dict[str, str]:
     password = _clean_secret(settings.web_admin_password)
     if password:
         save_web_admin(user, password)
-        return {"username": user, "password": load_web_admin().get("password", "")}
-    return {"username": "admin", "password": ""}
+        return load_web_admin()
+    return {"username": "admin", "password": "", "token": ""}
+
+
+def admin_session_version() -> str:
+    """Opaque value that changes whenever admin credentials are rewritten."""
+    return (load_web_admin().get("token") or "").strip()
 
 
 def verify_web_admin(username: str, password: str) -> bool:

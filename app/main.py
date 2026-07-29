@@ -115,20 +115,32 @@ def main() -> None:
                 panel_only = True
 
             if not panel_only:
-                try:
-                    await get_pg().ensure_token()
-                    logger.info("PasarGuard panel login OK · %s", get_settings().pg_base_url)
-                except Exception:
-                    logger.exception(
-                        "PasarGuard login FAILED — fix PG_BASE_URL / PG_USERNAME / PG_PASSWORD "
-                        "(use https://host only, no path)"
-                    )
+                async def _pg_warmup() -> None:
+                    try:
+                        await get_pg().ensure_token()
+                        logger.info("PasarGuard panel login OK · %s", get_settings().pg_base_url)
+                    except Exception:
+                        logger.exception(
+                            "PasarGuard login FAILED — fix PG_BASE_URL / PG_USERNAME / PG_PASSWORD "
+                            "(use https://host only, no path)"
+                        )
+
+                asyncio.create_task(_pg_warmup())
 
                 if settings.webhook_url.strip():
                     url = settings.webhook_url.rstrip("/") + settings.webhook_path
+                    secret = (settings.webhook_secret_token or "").strip()
+                    if not secret:
+                        from app.services.webhook_secret import ensure_webhook_secret
+
+                        secret = ensure_webhook_secret()
                     try:
-                        await bot.set_webhook(url, drop_pending_updates=True)
-                        logger.info("Webhook set: %s", url)
+                        await bot.set_webhook(
+                            url,
+                            drop_pending_updates=True,
+                            secret_token=secret,
+                        )
+                        logger.info("Webhook set: %s (secret token enabled)", url)
                     except Exception:
                         logger.exception("set_webhook failed")
                 else:
@@ -197,15 +209,23 @@ def main() -> None:
     api = create_api_app(lifespan=lifespan)
 
     if bot is not None and dp is not None and settings.webhook_url.strip():
+        from fastapi.responses import JSONResponse
+
+        from app.services.webhook_secret import ensure_webhook_secret
+
+        webhook_secret = (settings.webhook_secret_token or "").strip() or ensure_webhook_secret()
 
         @api.post(settings.webhook_path)
         async def telegram_webhook(request: Request):
+            header = (request.headers.get("X-Telegram-Bot-Api-Secret-Token") or "").strip()
+            if not header or header != webhook_secret:
+                return JSONResponse({"ok": False}, status_code=403)
             data = await request.json()
             update = Update.model_validate(data, context={"bot": bot})
             await dp.feed_update(bot, update)
             return {"ok": True}
 
-    from app.services.setup_wizard import is_setup_complete
+    from app.services.setup_wizard import ensure_setup_gate_token, is_setup_complete
     from app.services.web_auth import repair_web_admin_from_env
 
     if is_setup_complete():
@@ -216,9 +236,15 @@ def main() -> None:
     else:
         creds = load_web_admin()
 
-    entry = f"http://{settings.web_host}:{settings.web_port}/"
+    host_hint = settings.web_host if settings.web_host not in {"0.0.0.0", "::"} else "127.0.0.1"
+    entry = f"http://{host_hint}:{settings.web_port}/"
     if not creds.get("password") or not is_setup_complete():
-        logger.warning("First-run wizard pending — open %s", entry)
+        gate = ensure_setup_gate_token()
+        logger.warning(
+            "First-run wizard pending — open gated URL: %s?gate=%s",
+            entry.rstrip("/"),
+            gate,
+        )
     else:
         logger.info(
             "Web panel ready · user=%s · %s",
