@@ -6,11 +6,17 @@
   <meta name="color-scheme" content="dark light" />
   <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
   <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
-  <title>{% block title %}پنل مدیریت{% endblock %} · MrClockBot</title>
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="{{ pwa_name|default('MrClockBot') }}" />
+  <title>{% block title %}پنل مدیریت{% endblock %} · {{ pwa_name|default('MrClockBot') }}</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/pwa/icon/180" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/panel.css?v=1.7.23-ssl-fix" />
+  <link rel="stylesheet" href="/static/panel.css?v=1.7.24-pwa-restart" />
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
   <script>
   (function () {
@@ -453,5 +459,12 @@
   {% else %}
     {% block auth %}{% endblock %}
   {% endif %}
+  <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {});
+    });
+  }
+  </script>
 </body>
 </html>

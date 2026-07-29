@@ -36,9 +36,10 @@ class SslUiWiredTests(unittest.TestCase):
 
 
 class UpdateCopyTests(unittest.TestCase):
-    def test_update_template_has_copy_buttons(self):
+    def test_update_template_has_progress_ui(self):
         src = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
-        self.assertIn("cmd-copy-btn", src)
+        self.assertIn("upd-start", src)
+        self.assertIn("/update/status", src)
         self.assertIn("bash pgclock.sh update", src)
 
 

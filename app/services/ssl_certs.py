@@ -606,9 +606,25 @@ def enable_https(*, restart: bool = True) -> dict[str, Any]:
         try:
             from app.services.service_control import schedule_panel_restart
 
-            schedule_panel_restart(delay_sec=3.5, reason="ssl https enable")
+            ok = schedule_panel_restart(delay_sec=3.5, reason="ssl https enable")
+            if not ok:
+                return {
+                    "ok": False,
+                    "error": (
+                        "HTTPS در تنظیمات فعال شد ولی ری‌استارت خودکار ممکن نشد. "
+                        "روی سرور اجرا کنید: sudo systemctl restart pgclockbot "
+                        "سپس با آدرس HTTPS دامنه وارد شوید."
+                    ),
+                    "public_https": url,
+                    "needs_manual_restart": True,
+                }
         except Exception as exc:
-            return {"ok": False, "error": f"فعال شد ولی ری‌استارت ممکن نشد: {exc}"}
+            return {
+                "ok": False,
+                "error": f"فعال شد ولی ری‌استارت ممکن نشد: {exc}",
+                "public_https": url,
+                "needs_manual_restart": True,
+            }
     return {"ok": True, "public_https": url}
 
 
@@ -620,7 +636,16 @@ def disable_https(*, restart: bool = True) -> dict[str, Any]:
         try:
             from app.services.service_control import schedule_panel_restart
 
-            schedule_panel_restart(delay_sec=2.5, reason="ssl https disable")
+            ok = schedule_panel_restart(delay_sec=2.5, reason="ssl https disable")
+            if not ok:
+                return {
+                    "ok": False,
+                    "error": (
+                        "HTTPS در تنظیمات خاموش شد ولی ری‌استارت خودکار ممکن نشد. "
+                        "دستی: sudo systemctl restart pgclockbot"
+                    ),
+                    "needs_manual_restart": True,
+                }
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
     return {"ok": True}

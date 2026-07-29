@@ -1,0 +1,20 @@
+#!/bin/bash
+# Privileged control helper for PGClockBot panel (restart / status only).
+set -euo pipefail
+SERVICE_NAME="pgclockbot"
+cmd="${1:-}"
+case "$cmd" in
+  restart)
+    /bin/systemctl restart "$SERVICE_NAME"
+    ;;
+  try-restart)
+    /bin/systemctl try-restart "$SERVICE_NAME"
+    ;;
+  is-active)
+    /bin/systemctl is-active "$SERVICE_NAME"
+    ;;
+  *)
+    echo "usage: pgclockbot-ctl restart|try-restart|is-active" >&2
+    exit 2
+    ;;
+esac

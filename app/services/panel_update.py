@@ -232,14 +232,14 @@ def _pip_install() -> tuple[int, str]:
 
 
 def _restart_service() -> tuple[bool, str]:
-    systemctl = _which("systemctl")
-    if systemctl:
-        code, out = _run([systemctl, "restart", SERVICE_NAME], timeout=60)
-        if code == 0:
-            return True, f"systemd restart {SERVICE_NAME}"
-        # try without failing hard
-        return False, out or "systemctl restart failed"
-    return False, "systemd موجود نیست — سرویس را دستی ری‌استارت کنید"
+    try:
+        from app.services.service_control import ensure_restart_helper, restart_panel_service
+
+        ensure_restart_helper()
+        return restart_panel_service(reason="panel update", delay_sec=2.0)
+    except Exception as exc:
+        logger.exception("panel update restart failed")
+        return False, str(exc)
 
 
 def _git_bin() -> str | None:
