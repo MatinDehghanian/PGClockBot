@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions %}
+{% from "macros.html" import row_actions, page_title %}
 {% block title %}درخواست‌های نمایندگی{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>درخواست‌های نمایندگی</h1>
+    {{ page_title('applications', 'درخواست‌های نمایندگی') }}
     <p>پس از تأیید، لینک راه‌اندازی وب‌پنل برای ساخت یوزر/رمز و ثبت ربات اختصاصی ارسال می‌شود</p>
   </div>
 </div>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros.html" import page_title %}
 {% from "_settings_tabs.html" import settings_tabs %}
 {% from "_panel_settings_tabs.html" import panel_settings_tabs %}
 {% block title %}{% if is_panel_settings %}تنظیمات وب پنل{% else %}تنظیمات{% endif %}{% endblock %}
@@ -6,10 +7,10 @@
 <div class="page-head">
   <div>
     {% if is_panel_settings %}
-    <h1>تنظیمات وب پنل</h1>
+    {{ page_title('settings', 'تنظیمات وب پنل', 'neutral') }}
     <p>بکاپ، وب‌اپ، SSL، آپدیت و امنیت حساب وب‌پنل.</p>
     {% else %}
-    <h1>تنظیمات ربات</h1>
+    {{ page_title('settings', 'تنظیمات ربات') }}
     <p>متن‌ها، منو، پرداخت، نام‌گذاری سرویس و اتصال بات — با پیش‌نمایش زنده شبیه تلگرام.</p>
     {% endif %}
   </div>

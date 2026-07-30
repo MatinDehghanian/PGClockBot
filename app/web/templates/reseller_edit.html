@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch %}
+{% from "macros.html" import switch, page_title %}
 {% block title %}ویرایش نماینده{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>ویرایش نماینده</h1>
+    {{ page_title('reseller-edit', 'ویرایش نماینده') }}
     <p>{{ user.full_name or user.username or user.telegram_id }}</p>
   </div>
   <a class="btn btn-ghost" href="/resellers">بازگشت</a>

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch %}
+{% from "macros.html" import switch, page_title %}
 {% block title %}ویرایش پلن نمایندگی{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>ویرایش پلن</h1>
+    {{ page_title('plan-edit', 'ویرایش پلن') }}
     <p>{{ plan.name }}</p>
   </div>
   <a class="btn btn-ghost" href="/resellers/plans">بازگشت</a>

@@ -1,11 +1,11 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch, switch_chip %}
+{% from "macros.html" import switch, switch_chip, page_title %}
 {% from "macros.html" import row_actions %}
 {% block title %}پلن‌های فروش{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>پلن‌های فروش</h1>
+    {{ page_title('plans', 'پلن‌های فروش') }}
     <p>{% if staff.role == 'reseller' %}پلن‌های فروشگاه ربات خودتان — فقط با گروه‌ها/تمپلیت‌های مجاز پاسارگارد{% else %}پلن تست، پلن دلخواه، و پلن‌های ثابت فروشگاه{% endif %}</p>
   </div>
 </div>

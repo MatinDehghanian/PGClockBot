@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions %}
+{% from "macros.html" import row_actions, page_title %}
 {% block title %}کاربران بات{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>کاربران بات</h1>
+    {{ page_title('users', 'کاربران بات') }}
     <p>نقش، مسدودسازی و موجودی کیف پول</p>
   </div>
 </div>

@@ -1,10 +1,10 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch, switch_chip, pg_tabs, row_actions %}
+{% from "macros.html" import switch, switch_chip, pg_tabs, row_actions, page_title %}
 {% block title %}گروه‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>گروه‌ها</h1>
+    {{ page_title('groups', 'گروه‌ها', 'pg') }}
     <p>ساخت، ویرایش و حذف گروه — متصل به اینباندهای زنده پنل</p>
   </div>
   {% if can_write and not edit_group %}

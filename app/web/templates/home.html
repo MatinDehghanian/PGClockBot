@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros.html" import page_title %}
 {% block title %}داشبورد{% endblock %}
 {% block content %}
 {% set ov = overview %}
@@ -21,7 +22,7 @@
 
   <div class="page-head">
     <div>
-      <h1>داشبورد</h1>
+      {{ page_title('home', 'داشبورد') }}
       <p class="desk-only">وضعیت سرور، اتصال‌ها و میانبرها</p>
     </div>
   </div>

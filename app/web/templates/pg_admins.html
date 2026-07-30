@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, pg_tabs, row_actions %}
+{% from "macros.html" import switch, pg_tabs, row_actions, page_title %}
 {% block title %}ادمین{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>ادمین</h1>
+    {{ page_title('admins', 'ادمین', 'pg') }}
     <p>ادمین‌های پاسارگارد — نقش‌ها را از پنل پاسارگارد تعریف کنید. با اعطای دسترسی وب، یک پلن نمایندگی انتخاب می‌شود تا ادمین فرعی مثل نماینده بتواند ربات و فروشگاه را تنظیم کند.</p>
   </div>
   <button type="button" class="btn" data-modal-open="modal-pg-admin-create">ساخت ادمین</button>

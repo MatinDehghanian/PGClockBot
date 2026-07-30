@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import ord_status, pay_status %}
+{% from "macros.html" import ord_status, pay_status, page_title %}
 {% block title %}نمای کلی{% endblock %}
 {% block content %}
 {% set perms = staff.get('permissions') or [] %}
@@ -11,7 +11,7 @@
 {% set can_shop = is_admin or 'shop_settings' in perms or staff.role == 'reseller' %}
 <div class="page-head">
   <div>
-    <h1>نمای کلی</h1>
+    {{ page_title('overview', 'نمای کلی') }}
     {% if not bot_setup_needed %}
     <p class="desk-only">خلاصه فروش و دسترسی سریع</p>
     {% endif %}

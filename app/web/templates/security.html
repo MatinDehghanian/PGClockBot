@@ -1,10 +1,11 @@
 {% extends "base.html" %}
+{% from "macros.html" import page_title %}
 {% from "_panel_settings_tabs.html" import panel_settings_tabs %}
 {% block title %}امنیت{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>تنظیمات وب پنل</h1>
+    {{ page_title('security', 'تنظیمات وب پنل', 'neutral') }}
     <p>تغییر نام کاربری و رمز ورود وب‌پنل{% if staff.role == 'reseller' %} نماینده{% endif %}.</p>
   </div>
 </div>

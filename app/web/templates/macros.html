@@ -67,6 +67,66 @@
 </div>
 {%- endmacro %}
 
+{# Page title icon — stroke SVGs matching sidebar language; tone: brand | pg | neutral #}
+{% macro page_ico(name, tone='brand') -%}
+<span class="page-title-ico{% if tone == 'pg' %} page-title-ico--pg{% elif tone == 'neutral' %} page-title-ico--neutral{% endif %}" aria-hidden="true">
+{%- if name == 'home' -%}
+<svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
+{%- elif name == 'overview' -%}
+<svg viewBox="0 0 24 24"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+{%- elif name == 'users' -%}
+<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
+{%- elif name == 'user' -%}
+<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/></svg>
+{%- elif name == 'orders' -%}
+<svg viewBox="0 0 24 24"><path d="M7 7h13l-1.2 9.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.7L6 4H3"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>
+{%- elif name == 'payments' -%}
+<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 14h4"/></svg>
+{%- elif name == 'plans' -%}
+<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/><path d="M18 15v4M16 17h4"/></svg>
+{%- elif name == 'plan-edit' -%}
+<svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>
+{%- elif name == 'tickets' -%}
+<svg viewBox="0 0 24 24"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
+{%- elif name == 'broadcast' -%}
+<svg viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M18.8 6.2a8.5 8.5 0 0 1 0 11.6"/></svg>
+{%- elif name == 'settings' -%}
+<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M4.9 7.1l1.6 1.6M17.5 15.3l1.6 1.6M3.5 12h2.2M18.3 12h2.2M4.9 16.9l1.6-1.6M17.5 8.7l1.6-1.6"/></svg>
+{%- elif name == 'shop' -%}
+<svg viewBox="0 0 24 24"><path d="M4 9h16l-1.2 10.2A2 2 0 0 1 16.8 21H7.2a2 2 0 0 1-2-1.8L4 9z"/><path d="M8 9V7a4 4 0 0 1 8 0v2"/></svg>
+{%- elif name == 'security' -%}
+<svg viewBox="0 0 24 24"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M12 11v3.2M12 16.2h.01"/></svg>
+{%- elif name == 'resellers' -%}
+<svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
+{%- elif name == 'reseller-edit' -%}
+<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M15 14.5l5 5M20 14.5l-5 5"/></svg>
+{%- elif name == 'applications' -%}
+<svg viewBox="0 0 24 24"><path d="M7 3.5h10a2 2 0 0 1 2 2V20l-3.2-2H7a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2z"/><path d="M9 9h6M9 13h4"/></svg>
+{%- elif name == 'nodes' -%}
+<svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
+{%- elif name == 'groups' -%}
+<svg viewBox="0 0 24 24"><path d="M4 7h16v10H4z"/><path d="M8 7V5h8v2"/></svg>
+{%- elif name == 'hosts' -%}
+<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/></svg>
+{%- elif name == 'templates' -%}
+<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
+{%- elif name == 'inbounds' -%}
+<svg viewBox="0 0 24 24"><path d="M4 12h16M12 4v16"/><circle cx="12" cy="12" r="3"/></svg>
+{%- elif name == 'admins' -%}
+<svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.2 2.8 7.2 7 8.5 4.2-1.3 7-4.3 7-8.5V6l-7-3z"/></svg>
+{%- else -%}
+<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2.5"/></svg>
+{%- endif -%}
+</span>
+{%- endmacro %}
+
+{% macro page_title(name, text, tone='brand') -%}
+<div class="page-title">
+  {{ page_ico(name, tone) }}
+  <h1>{{ text }}</h1>
+</div>
+{%- endmacro %}
+
 {# PasarGuard sub-nav — respects pg_perms / is_admin #}
 {% macro pg_tabs(active='') -%}
 {% set perms = pg_perms if pg_perms is defined else [] %}

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import pay_status, row_actions %}
+{% from "macros.html" import pay_status, row_actions, page_title %}
 {% block title %}پرداخت‌ها{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>پرداخت‌ها</h1>
+    {{ page_title('payments', 'پرداخت‌ها') }}
     <p>تأیید یا رد دستی — اگر «تأیید خودکار» در تنظیمات روشن باشد، رسیدها خودکار تأیید می‌شوند</p>
   </div>
   {% if staff.role == 'admin' %}

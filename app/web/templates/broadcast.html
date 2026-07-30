@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "macros.html" import page_title %}
 {% block title %}پیام گروهی{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>پیام گروهی</h1>
+    {{ page_title('broadcast', 'پیام گروهی') }}
     <p>ارسال پیام از ربات اصلی به کاربران (فقط ادمین)</p>
   </div>
 </div>

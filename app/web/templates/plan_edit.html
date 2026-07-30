@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch_chip %}
+{% from "macros.html" import switch_chip, page_title %}
 {% block title %}ویرایش پلن{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>ویرایش پلن #{{ plan.id }}</h1>
+    {{ page_title('plan-edit', 'ویرایش پلن #' ~ plan.id) }}
     <p>{{ plan.name }}</p>
   </div>
   <a class="btn btn-ghost" href="/plans">بازگشت</a>

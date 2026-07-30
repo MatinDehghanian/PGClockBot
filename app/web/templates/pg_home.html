@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import pg_tabs %}
+{% from "macros.html" import pg_tabs, page_title %}
 {% block title %}مدیر پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>پنل پاسارگارد</h1>
+    {{ page_title('overview', 'پنل پاسارگارد', 'pg') }}
     <p>{% if is_admin %}آمار کاربران و منابع پنل{% else %}مصرف و محدودیت حساب پاسارگارد شما{% endif %}</p>
   </div>
   <a class="btn btn-ghost" href="/pg">بروزرسانی</a>

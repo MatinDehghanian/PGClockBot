@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import tkt_status %}
+{% from "macros.html" import tkt_status, page_title %}
 {% block title %}پشتیبانی{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>پشتیبانی</h1>
+    {{ page_title('tickets', 'پشتیبانی') }}
     <p>درخواست‌های پشتیبانی کاربران</p>
   </div>
 </div>

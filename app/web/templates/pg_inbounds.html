@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import pg_tabs %}
+{% from "macros.html" import pg_tabs, page_title %}
 {% block title %}اینباندهای پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>اینباندها</h1>
+    {{ page_title('inbounds', 'اینباندها', 'pg') }}
     <p>فقط مشاهده — ساخت/ویرایش کانفیگ اینباند در Core پاسارگارد انجام می‌شود</p>
   </div>
 </div>

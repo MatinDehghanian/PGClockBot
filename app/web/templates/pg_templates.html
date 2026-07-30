@@ -1,10 +1,10 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch_chip, pg_tabs, row_actions %}
+{% from "macros.html" import switch_chip, pg_tabs, row_actions, page_title %}
 {% block title %}تمپلیت‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>تمپلیت‌های کاربر</h1>
+    {{ page_title('templates', 'تمپلیت‌های کاربر', 'pg') }}
     <p>ساخت و مدیریت تمپلیت مستقیم روی پاسارگارد</p>
   </div>
   {% if can_write %}

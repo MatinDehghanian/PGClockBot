@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import ord_status, row_actions %}
+{% from "macros.html" import ord_status, row_actions, page_title %}
 {% block title %}سفارش‌ها{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>سفارش‌ها</h1>
+    {{ page_title('orders', 'سفارش‌ها') }}
     <p>تأیید یا رد دستی سفارش‌های در انتظار</p>
   </div>
 </div>

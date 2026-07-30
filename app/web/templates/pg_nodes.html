@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import pg_tabs, row_actions %}
+{% from "macros.html" import pg_tabs, row_actions, page_title %}
 {% block title %}نودهای پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>نودها</h1>
+    {{ page_title('nodes', 'نودها', 'pg') }}
     <p>وضعیت زنده و اتصال مجدد نودهای پاسارگارد</p>
   </div>
 </div>
