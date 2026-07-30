@@ -3653,6 +3653,9 @@ html[data-theme="light"] .tg-preview-shell {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+.home-conn-row:has(> .home-conn:only-child) {
+  grid-template-columns: 1fr;
+}
 .home-conn {
   display: flex;
   align-items: center;
