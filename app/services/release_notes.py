@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "2.2.5": [
+        "منوی سه‌نقطه بدون اسکرول؛ ارتفاع کامل آیتم‌ها و باز شدن به بالا وقتی پایین جا نیست",
+    ],
     "2.2.4": [
         "منوی سه‌نقطه همیشه تک‌ستونه و زیر هم (حتی بعد از باز شدن روی صفحه)",
         "هشدار آپدیت: از صفحه خارج نشوید و رفرش نکنید؛ زمان انتظار «چند دقیقه»",

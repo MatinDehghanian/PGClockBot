@@ -164,6 +164,9 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIsNotNone(ported)
         self.assertIn("flex-direction: column", ported.group(1))
         self.assertIn("flex-wrap: nowrap", ported.group(1))
+        self.assertIn("max-height: none", ported.group(1))
+        self.assertIn("overflow: visible", ported.group(1))
+        self.assertNotIn("overflow-y: auto", ported.group(1))
         self.assertIn(".row-actions-menu.is-ported .row-actions-stack", css)
         self.assertIn(".row-actions-menu.is-ported select", css)
         js = JS.read_text(encoding="utf-8")
@@ -171,6 +174,10 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("force-kebab", js)
         self.assertIn("is-ported", js)
         self.assertIn("rowMenuHomes", js)
+        # Flip up when full height does not fit below; never clamp with scroll maxHeight
+        self.assertIn("spaceAbove >= mh", js)
+        self.assertIn("maxHeight = 'none'", js)
+        self.assertNotIn("Math.min(mh, 140)", js)
 
     def test_update_warns_stay_on_page(self):
         upd = (ROOT / "app/web/templates/_settings_update.html").read_text(encoding="utf-8")

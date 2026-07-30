@@ -183,14 +183,16 @@
       const gap = 4;
       const pad = 8;
       const rect = btn.getBoundingClientRect();
-      /* measure while visible */
+      /* Full natural height — never scroll / clamp with max-height */
       menu.style.top = '0px';
       menu.style.left = '0px';
       menu.style.right = 'auto';
       menu.style.bottom = 'auto';
-      menu.style.maxHeight = '';
+      menu.style.maxHeight = 'none';
+      menu.style.height = 'auto';
+      menu.style.overflow = 'visible';
       const mw = Math.max(menu.offsetWidth || 168, 168);
-      let mh = menu.offsetHeight || 120;
+      const mh = menu.offsetHeight || 120;
       const vw = window.innerWidth;
       const vh = window.innerHeight;
 
@@ -204,29 +206,27 @@
 
       const spaceBelow = vh - rect.bottom - gap - pad;
       const spaceAbove = rect.top - gap - pad;
+      /* Prefer the side that fits the full menu; flip up when below is short */
+      let openDown;
+      if (spaceBelow >= mh) openDown = true;
+      else if (spaceAbove >= mh) openDown = false;
+      else openDown = spaceBelow >= spaceAbove;
+
       let top;
-      const openDown = spaceBelow >= Math.min(mh, 140) || spaceBelow >= spaceAbove;
       if (openDown) {
-        const avail = Math.max(80, spaceBelow);
-        if (mh > avail) {
-          menu.style.maxHeight = Math.floor(avail) + 'px';
-          mh = menu.offsetHeight || avail;
-        }
         top = rect.bottom + gap;
+        if (top + mh > vh - pad) top = Math.max(pad, vh - pad - mh);
       } else {
-        const avail = Math.max(80, spaceAbove);
-        if (mh > avail) {
-          menu.style.maxHeight = Math.floor(avail) + 'px';
-          mh = menu.offsetHeight || avail;
-        }
         top = rect.top - gap - mh;
+        if (top < pad) top = pad;
       }
-      top = Math.max(pad, Math.min(top, vh - pad - Math.min(mh, vh - 2 * pad)));
 
       menu.style.top = Math.round(top) + 'px';
       menu.style.left = Math.round(left) + 'px';
       menu.style.right = 'auto';
       menu.style.bottom = 'auto';
+      menu.style.maxHeight = 'none';
+      menu.style.overflow = 'visible';
     }
     document.addEventListener('click', (e) => {
       const toggle = e.target.closest('.row-actions-toggle');
