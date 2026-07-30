@@ -19,6 +19,14 @@ class PgUsersKeyboardTests(unittest.TestCase):
         self.assertIn("adm:pg:create", flat)
         self.assertIn("adm:pg:search", flat)
 
+    def test_overview_is_first_button(self):
+        from app.bot.keyboards import pg_admin_keyboard
+
+        kb = pg_admin_keyboard()
+        first = kb.inline_keyboard[0][0]
+        self.assertEqual(first.callback_data, "adm:pg:stats")
+        self.assertIn("نمای کلی", first.text)
+
 
 class PgUsersModuleTests(unittest.TestCase):
     def test_page_size_is_ten(self):

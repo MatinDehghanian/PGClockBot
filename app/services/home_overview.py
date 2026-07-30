@@ -183,7 +183,7 @@ async def pg_home_bundle() -> tuple[dict[str, Any], dict[str, Any]]:
     summary: dict[str, Any] = {
         "ok": False,
         "error": None,
-        "templates": 0,
+        "admins": 0,
         "groups": 0,
         "hosts": 0,
         "nodes": 0,
@@ -192,8 +192,8 @@ async def pg_home_bundle() -> tuple[dict[str, Any], dict[str, Any]]:
     }
     try:
         pg = get_pg()
-        templates, groups, hosts, nodes, stats = await asyncio.gather(
-            pg.get_user_templates_simple(),
+        admins, groups, hosts, nodes, stats = await asyncio.gather(
+            pg.get_admins_simple(),
             pg.get_groups_simple(),
             pg.get_hosts(),
             pg.get_nodes_simple(),
@@ -207,14 +207,14 @@ async def pg_home_bundle() -> tuple[dict[str, Any], dict[str, Any]]:
         else:
             nodes_status = _summarize_nodes(nodes if isinstance(nodes, list) else [])
 
-        if any(isinstance(x, Exception) for x in (templates, groups, hosts)):
-            errs = [str(x) for x in (templates, groups, hosts) if isinstance(x, Exception)]
+        if any(isinstance(x, Exception) for x in (admins, groups, hosts)):
+            errs = [str(x) for x in (admins, groups, hosts) if isinstance(x, Exception)]
             summary["error"] = errs[0] if errs else "خطا در دریافت آمار پاسارگارد"
         else:
             summary.update(
                 {
                     "ok": True,
-                    "templates": len(templates or []),
+                    "admins": len(admins or []),
                     "groups": len(groups or []),
                     "hosts": len(hosts or []),
                     "nodes": nodes_status["total"],

@@ -1790,7 +1790,7 @@ async def pg_stats(callback: CallbackQuery, db_user: BotUser):
         if callback.message:
             await callback.message.edit_text(f"خطا: {e}", reply_markup=kb.pg_admin_keyboard())
         return
-    text = "📊 <b>آمار سیستم</b>\n\n" + format_system_stats(stats)
+    text = "🏠 <b>نمای کلی پاسارگارد</b>\n\n" + format_system_stats(stats)
     if callback.message:
         await callback.message.edit_text(text[:3500], reply_markup=kb.pg_admin_keyboard())
 

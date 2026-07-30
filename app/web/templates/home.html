@@ -53,14 +53,14 @@
             <circle class="home-gauge-track" cx="60" cy="60" r="52" />
             <circle class="home-gauge-val" cx="60" cy="60" r="52" pathLength="100" />
           </svg>
-          <div class="home-gauge-center home-gauge-center-quiet">
+          <div class="home-gauge-center">
+            <strong id="home-mem-val">{% if host.memory_percent is not none %}{{ '%.0f'|format(host.memory_percent) }}٪{% else %}—{% endif %}</strong>
             <span>RAM</span>
           </div>
         </div>
         <div class="home-gauge-meta">
           <span class="home-gauge-label">حافظه</span>
-          <strong class="home-gauge-amount" id="home-mem-val">{% if host.memory_percent is not none %}{{ '%.0f'|format(host.memory_percent) }}٪{% else %}—{% endif %}</strong>
-          <span class="muted mono" id="home-mem-hint" dir="ltr">{{ host.memory_used_text }} / {{ host.memory_total_text }}</span>
+          <strong class="home-gauge-amount" id="home-mem-hint" dir="ltr">{{ host.memory_used_text }} / {{ host.memory_total_text }}</strong>
         </div>
       </article>
     </div>
@@ -200,11 +200,20 @@
         <div class="stat">
           <div class="stat-top">
             <span class="stat-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/></svg>
             </span>
-            <span>تمپلیت‌ها</span>
+            <span>کاربران</span>
           </div>
-          <strong>{{ pg.templates | num }}</strong>
+          <strong>{% if pg.users is not none %}{{ pg.users | num }}{% else %}—{% endif %}</strong>
+        </div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.2 2.8 7.2 7 8.5 4.2-1.3 7-4.3 7-8.5V6l-7-3z"/></svg>
+            </span>
+            <span>ادمین‌ها</span>
+          </div>
+          <strong>{{ pg.admins | num }}</strong>
         </div>
         <div class="stat">
           <div class="stat-top">
@@ -232,15 +241,6 @@
             <span>نودها</span>
           </div>
           <strong>{{ pg.nodes | num }}</strong>
-        </div>
-        <div class="stat">
-          <div class="stat-top">
-            <span class="stat-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/></svg>
-            </span>
-            <span>کاربران پنل</span>
-          </div>
-          <strong>{% if pg.users is not none %}{{ pg.users | num }}{% else %}—{% endif %}</strong>
         </div>
         <div class="stat">
           <div class="stat-top">

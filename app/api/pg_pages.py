@@ -149,15 +149,15 @@ def register_pg_pages(
         err = None
         stats_rows: list[tuple[str, str]] = []
         nodes = []
-        counts = {"templates": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0}
+        counts = {"admins": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0}
         reseller_overview = None
         try:
             pg = get_pg()
             if _is_admin(staff):
-                raw, nodes, templates, groups, hosts = await asyncio.gather(
+                raw, nodes, admins, groups, hosts = await asyncio.gather(
                     pg.get_system_stats(),
                     pg.get_nodes_simple(),
-                    pg.get_user_templates_simple(),
+                    pg.get_admins_simple(),
                     pg.get_groups_simple(),
                     pg.get_hosts(),
                     return_exceptions=True,
@@ -169,11 +169,15 @@ def register_pg_pages(
                         if is_server_stat_key(str(key)):
                             continue
                         stats_rows.append(format_stat_row(str(key), val))
+                    for key in ("total_user", "users_active", "users", "total_users"):
+                        if key in raw and isinstance(raw[key], (int, float)):
+                            counts["users"] = int(raw[key])
+                            break
                 elif isinstance(raw, Exception):
                     err = str(raw)
                 nodes = nodes if isinstance(nodes, list) else []
                 counts["nodes"] = len(nodes)
-                counts["templates"] = len(templates) if isinstance(templates, list) else 0
+                counts["admins"] = len(admins) if isinstance(admins, list) else 0
                 counts["groups"] = len(groups) if isinstance(groups, list) else 0
                 counts["hosts"] = len(hosts) if isinstance(hosts, list) else 0
             else:

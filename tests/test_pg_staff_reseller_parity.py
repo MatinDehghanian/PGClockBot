@@ -98,10 +98,15 @@ class WiringTests(unittest.TestCase):
         src = Path("app/web/templates/broadcast.html").read_text(encoding="utf-8")
         self.assertIn('<small class="muted">گروه دریافت‌کننده', src)
 
-    def test_ram_amount_under_title(self):
+    def test_ram_percent_in_ring_amount_under_title(self):
         src = Path("app/web/templates/home.html").read_text(encoding="utf-8")
-        self.assertIn('home-gauge-amount" id="home-mem-val"', src)
-        self.assertIn("home-gauge-center-quiet", src)
+        # Percent lives in the ring center (like CPU); used/total sits under the title.
+        self.assertIn('id="home-mem-val"', src)
+        self.assertIn('home-gauge-amount" id="home-mem-hint"', src)
+        self.assertNotIn("home-gauge-center-quiet", src)
+        # PG dashboard boxes: users + admins first (no templates slot)
+        self.assertIn(">ادمین‌ها</span>", src)
+        self.assertNotIn(">تمپلیت‌ها</span>", src)
 
     def test_base_nav_web_panel_for_all(self):
         src = Path("app/web/templates/base.html").read_text(encoding="utf-8")

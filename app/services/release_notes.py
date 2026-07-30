@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "2.6.1": [
+        "داشبورد پاسارگارد: کاربران و ادمین‌ها به‌جای تمپلیت؛ نمای کلی اول منوی ربات",
+        "درصد رم وسط دایره؛ فوتر هم‌تراز سایدبار؛ فاصله موبایل و هاور رنگی منو",
+    ],
     "2.6.0": [
         "بهینه‌سازی کامل نصب/آپدیت/لودینگ پنل و ربات؛ سخت‌گیری امنیتی سهمیه نماینده و ادمین فرعی",
         "set_owner اجباری با rollback، جلوگیری از دور زدن max_users با ساخت زیر owner؛ گیت limited برای هاست/نود",

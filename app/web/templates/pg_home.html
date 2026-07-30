@@ -80,11 +80,20 @@
   <div class="stat">
     <div class="stat-top">
       <span class="stat-ico" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/></svg>
       </span>
-      <span>تمپلیت‌ها</span>
+      <span>کاربران</span>
     </div>
-    <strong>{{ counts.templates }}</strong>
+    <strong>{{ counts.users }}</strong>
+  </div>
+  <div class="stat">
+    <div class="stat-top">
+      <span class="stat-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.2 2.8 7.2 7 8.5 4.2-1.3 7-4.3 7-8.5V6l-7-3z"/></svg>
+      </span>
+      <span>ادمین‌ها</span>
+    </div>
+    <strong>{{ counts.admins }}</strong>
   </div>
   <div class="stat">
     <div class="stat-top">
