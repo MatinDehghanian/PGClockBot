@@ -1143,7 +1143,8 @@ input.mono, textarea.mono, select.mono { font-size: var(--title-size); }
   gap: 8px 14px;
 }
 .footer-actions { display: flex; align-items: center; gap: 8px; }
-.btn-star {
+.btn-star,
+a.btn.btn-star {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1158,7 +1159,8 @@ input.mono, textarea.mono, select.mono { font-size: var(--title-size); }
   text-decoration: none !important;
   box-sizing: border-box;
 }
-.btn-star:hover {
+.btn-star:hover,
+a.btn.btn-star:hover {
   background: rgba(249, 115, 22, 0.2);
   color: var(--brand-fg) !important;
   opacity: 1;
