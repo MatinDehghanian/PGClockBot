@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "2.6.0": [
+        "بهینه‌سازی کامل نصب/آپدیت/لودینگ پنل و ربات؛ سخت‌گیری امنیتی سهمیه نماینده و ادمین فرعی",
+        "set_owner اجباری با rollback، جلوگیری از دور زدن max_users با ساخت زیر owner؛ گیت limited برای هاست/نود",
+    ],
     "2.5.9": [
         "سخت‌گیری امنیتی سهمیه ادمین فرعی/نماینده: set_owner اجباری با rollback، بدون لینک PG ساخت/تحویل بسته است",
         "گیت محدود بودن برای هاست/نود؛ جلوگیری از باقی‌ماندن کاربر زیر owner و دور زدن max_users",
