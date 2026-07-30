@@ -95,8 +95,16 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         except Exception as exc:
             return {"ok": False, "error": f"عدم اتصال به تلگرام: {exc}"}
 
-    def _rid(staff: dict) -> int:
-        return int(staff.get("bot_user_id") or 0)
+    def _rid(staff: dict) -> int | None:
+        from app.services.shop_scope import shop_owner_id
+
+        return shop_owner_id(staff)
+
+    def _deny_scope() -> RedirectResponse:
+        return RedirectResponse(
+            "/dashboard?err=" + quote("محدوده فروشگاه مشخص نیست — به داده ادمین اصلی دسترسی ندارید"),
+            status_code=303,
+        )
 
     async def _load_profile(session: AsyncSession, user_id: int) -> ResellerProfile | None:
         from sqlalchemy import select
@@ -124,6 +132,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             tab = "welcome"
 
         rid = _rid(staff)
+        if not rid:
+            return _deny_scope()
         values = await get_all_settings(session, reseller_id=rid)
         values["show_reseller_apply"] = "0"
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
@@ -186,6 +196,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             return RedirectResponse("/settings", status_code=303)
 
         rid = _rid(staff)
+        if not rid:
+            return _deny_scope()
         tab = (request.query_params.get("tab") or "welcome").strip()
         if tab not in allowed_tabs:
             return RedirectResponse("/shop-settings", status_code=303)
@@ -323,6 +335,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         from app.bot.keyboards import DEFAULT_MENU_ORDER
 
         rid = _rid(staff)
+        if not rid:
+            return _deny_scope()
         form = await request.form()
         order = [p.strip() for p in str(form.get("menu_order") or "").split(",") if p.strip()]
         order = [k for k in order if k in DEFAULT_MENU_ORDER and k != "reseller_apply"]
@@ -350,6 +364,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         from app.services.support_contacts import upsert_support_contact
 
         rid = _rid(staff)
+        if not rid:
+            return _deny_scope()
         form = await request.form()
         contact_id = str(form.get("id") or "").strip() or None
         title = str(form.get("title") or "").strip()
@@ -388,6 +404,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         from app.services.support_contacts import delete_support_contact
 
         rid = _rid(staff)
+        if not rid:
+            return _deny_scope()
         form = await request.form()
         contact_id = str(form.get("id") or "").strip()
         if contact_id:

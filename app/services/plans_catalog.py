@@ -9,32 +9,64 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Plan
 from app.services.pasarguard import as_list, get_pg
+from app.services.shop_scope import ShopScopeError, is_platform_admin, shop_owner_id
 
 
 def catalog_owner_id(staff: dict | None) -> int | None:
-    """Reseller bot_user_id for their catalog; None = platform (admin) catalog."""
+    """Reseller bot_user_id for their catalog; None = platform (admin) catalog only.
+
+    Non-admin without a shop id returns None; callers must use
+    ``apply_catalog_owner_filter`` / ``require_catalog_owner_id`` which fail
+    closed for that case (never treat as platform).
+    """
     if not staff:
         return None
-    if staff.get("role") == "reseller":
-        rid = int(staff.get("bot_user_id") or 0)
-        return rid or None
-    return None
+    if is_platform_admin(staff):
+        return None
+    return shop_owner_id(staff)
+
+
+def require_catalog_owner_id(staff: dict | None) -> int | None:
+    """Owner id for catalog writes: admin → None (platform); reseller → positive id.
+
+    Raises ShopScopeError for any non-admin without a shop scope so they cannot
+    create/edit platform plans or settings.
+    """
+    if is_platform_admin(staff):
+        return None
+    rid = shop_owner_id(staff)
+    if not rid:
+        raise ShopScopeError(
+            "حساب شما به فروشگاه متصل نیست — دسترسی به کاتالوگ ادمین اصلی مجاز نیست"
+        )
+    return rid
 
 
 def apply_catalog_owner_filter(query, staff: dict | None):
-    rid = catalog_owner_id(staff)
-    if rid:
-        return query.where(Plan.owner_reseller_id == rid)
-    return query.where(Plan.owner_reseller_id.is_(None))
+    """Filter plans to the staff shop. Non-admin without scope → empty result."""
+    if is_platform_admin(staff):
+        return query.where(Plan.owner_reseller_id.is_(None))
+    if not staff:
+        # Unauthenticated/internal callers: platform catalog only
+        return query.where(Plan.owner_reseller_id.is_(None))
+    rid = shop_owner_id(staff)
+    if not rid:
+        # Fail closed: never show platform catalog to secondary staff
+        return query.where(Plan.id < 0)
+    return query.where(Plan.owner_reseller_id == rid)
 
 
 def plan_belongs_to_staff(plan: Plan | None, staff: dict | None) -> bool:
     if not plan:
         return False
-    rid = catalog_owner_id(staff)
-    if rid:
-        return int(plan.owner_reseller_id or 0) == rid
-    return plan.owner_reseller_id is None
+    if is_platform_admin(staff):
+        return plan.owner_reseller_id is None
+    if not staff:
+        return plan.owner_reseller_id is None
+    rid = shop_owner_id(staff)
+    if not rid:
+        return False
+    return int(plan.owner_reseller_id or 0) == rid
 
 
 def _allowed_id_set(raw) -> set[int] | None:

@@ -1116,71 +1116,94 @@ def create_api_app(lifespan=None) -> FastAPI:
         # Dashboard is always available to every web-panel user.
         if staff.get("role") == "admin":
             return RedirectResponse("/home", status_code=303)
-        rid = staff.get("bot_user_id") if staff.get("role") == "reseller" else None
-        users_q = select(func.count()).select_from(BotUser)
-        orders_q = select(func.count()).select_from(Order)
-        pending_q = (
-            select(func.count())
-            .select_from(Payment)
-            .where(
-                Payment.status == PaymentStatus.PENDING.value,
-                Payment.receipt_file_id.is_not(None),
-            )
-        )
-        services_q = select(func.count()).select_from(UserService)
-        revenue_q = select(func.coalesce(func.sum(Order.amount), 0)).where(Order.status == "delivered")
-        if rid:
-            users_q = users_q.where(BotUser.reseller_id == rid)
-            orders_q = orders_q.where(Order.reseller_id == rid)
-            pending_q = pending_q.join(BotUser, BotUser.id == Payment.user_id).where(
-                BotUser.reseller_id == rid
-            )
-            services_q = services_q.join(BotUser, BotUser.id == UserService.bot_user_id).where(
-                BotUser.reseller_id == rid
-            )
-            revenue_q = revenue_q.where(Order.reseller_id == rid)
 
-        users_count = await session.scalar(users_q) or 0
-        orders_count = await session.scalar(orders_q) or 0
-        pending_payments = await session.scalar(pending_q) or 0
-        services_count = await session.scalar(services_q) or 0
-        revenue = await session.scalar(revenue_q) or 0
-        plans_q = select(func.count()).select_from(Plan).where(Plan.is_active.is_(True))
+        from app.services.shop_scope import empty_shop_stats, shop_owner_id
+
+        # Fail closed: never fall through to platform/admin aggregates.
+        rid = shop_owner_id(staff)
+        stats = empty_shop_stats()
+        recent_payments: list = []
+        recent_orders: list = []
         if rid:
-            plans_q = plans_q.where(Plan.owner_reseller_id == rid)
-        else:
-            plans_q = plans_q.where(Plan.owner_reseller_id.is_(None))
-        plans_count = await session.scalar(plans_q) or 0
-        tickets_q = select(func.count()).select_from(Ticket).where(Ticket.status == "open")
-        if rid:
-            tickets_q = tickets_q.join(BotUser, BotUser.id == Ticket.user_id).where(
-                BotUser.reseller_id == rid
-            )
-        open_tickets = await session.scalar(tickets_q) or 0
-        pay_q = select(Payment).order_by(Payment.id.desc()).limit(6)
-        ord_q = select(Order).order_by(Order.id.desc()).limit(6)
-        if rid:
-            pay_q = (
-                select(Payment)
+            users_count = await session.scalar(
+                select(func.count()).select_from(BotUser).where(BotUser.reseller_id == rid)
+            ) or 0
+            orders_count = await session.scalar(
+                select(func.count()).select_from(Order).where(Order.reseller_id == rid)
+            ) or 0
+            pending_payments = await session.scalar(
+                select(func.count())
+                .select_from(Payment)
                 .join(BotUser, BotUser.id == Payment.user_id)
+                .where(
+                    Payment.status == PaymentStatus.PENDING.value,
+                    Payment.receipt_file_id.is_not(None),
+                    BotUser.reseller_id == rid,
+                )
+            ) or 0
+            services_count = await session.scalar(
+                select(func.count())
+                .select_from(UserService)
+                .join(BotUser, BotUser.id == UserService.bot_user_id)
                 .where(BotUser.reseller_id == rid)
-                .order_by(Payment.id.desc())
-                .limit(6)
+            ) or 0
+            revenue = await session.scalar(
+                select(func.coalesce(func.sum(Order.amount), 0)).where(
+                    Order.status == "delivered",
+                    Order.reseller_id == rid,
+                )
+            ) or 0
+            plans_count = await session.scalar(
+                select(func.count())
+                .select_from(Plan)
+                .where(Plan.is_active.is_(True), Plan.owner_reseller_id == rid)
+            ) or 0
+            open_tickets = await session.scalar(
+                select(func.count())
+                .select_from(Ticket)
+                .join(BotUser, BotUser.id == Ticket.user_id)
+                .where(Ticket.status == "open", BotUser.reseller_id == rid)
+            ) or 0
+            recent_payments = list(
+                (
+                    await session.execute(
+                        select(Payment)
+                        .join(BotUser, BotUser.id == Payment.user_id)
+                        .where(BotUser.reseller_id == rid)
+                        .order_by(Payment.id.desc())
+                        .limit(6)
+                    )
+                ).scalars().all()
             )
-            ord_q = ord_q.where(Order.reseller_id == rid)
-        recent_payments = list((await session.execute(pay_q)).scalars().all())
-        recent_orders = list((await session.execute(ord_q)).scalars().all())
+            recent_orders = list(
+                (
+                    await session.execute(
+                        select(Order)
+                        .where(Order.reseller_id == rid)
+                        .order_by(Order.id.desc())
+                        .limit(6)
+                    )
+                ).scalars().all()
+            )
+            stats = {
+                "users": users_count,
+                "orders": orders_count,
+                "pending": pending_payments,
+                "services": services_count,
+                "revenue": revenue,
+                "plans": plans_count,
+                "tickets": open_tickets,
+            }
+
         pg_limits = None
         bot_setup_needed = False
-        if staff.get("role") == "reseller" and staff.get("bot_user_id"):
+        if rid:
             from app.db.models import ResellerProfile
             from app.services.resellers import bot_needs_setup
 
             profile = (
                 await session.execute(
-                    select(ResellerProfile).where(
-                        ResellerProfile.user_id == int(staff["bot_user_id"])
-                    )
+                    select(ResellerProfile).where(ResellerProfile.user_id == int(rid))
                 )
             ).scalar_one_or_none()
             bot_setup_needed = bot_needs_setup(profile)
@@ -1202,15 +1225,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             "dashboard.html",
             {
                 "staff": staff,
-                "stats": {
-                    "users": users_count,
-                    "orders": orders_count,
-                    "pending": pending_payments,
-                    "services": services_count,
-                    "revenue": revenue,
-                    "plans": plans_count,
-                    "tickets": open_tickets,
-                },
+                "stats": stats,
                 "recent_payments": recent_payments,
                 "recent_orders": recent_orders,
                 "pg_limits": pg_limits,
@@ -1225,13 +1240,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.plans_catalog import catalog_owner_id, list_catalog_plans, load_pg_plan_options
+        from app.services.shop_scope import is_platform_admin
 
         plans = await list_catalog_plans(session, staff, include_trial=True)
         trial = next((p for p in plans if p.is_trial), None)
         sale_plans = [p for p in plans if not p.is_trial]
         templates, groups, pg_error = await load_pg_plan_options(staff)
         rid = catalog_owner_id(staff)
-        values = await get_all_settings(session, reseller_id=rid)
+        # Non-admin without shop id must never load platform (admin) settings.
+        if not is_platform_admin(staff) and not rid:
+            values = {}
+        else:
+            values = await get_all_settings(session, reseller_id=rid)
         trial_group_ids = set()
         if trial and trial.pg_group_ids:
             trial_group_ids = {x.strip() for x in trial.pg_group_ids.split(",") if x.strip()}
@@ -1277,18 +1297,22 @@ def create_api_app(lifespan=None) -> FastAPI:
         from urllib.parse import quote
 
         from app.services.plans_catalog import (
-            catalog_owner_id,
             groups_allowed_for_staff,
             parse_group_ids_from_form,
+            require_catalog_owner_id,
             staff_can_create_pg_template,
             template_allowed_for_staff,
         )
+        from app.services.shop_scope import ShopScopeError
 
         form = await request.form()
         gb = float(data_limit_gb) if str(data_limit_gb).strip() else None
         tpl = None
         group_csv = None
-        owner_id = catalog_owner_id(staff)
+        try:
+            owner_id = require_catalog_owner_id(staff)
+        except ShopScopeError as e:
+            return RedirectResponse(f"/plans?err={quote(e.message)}", status_code=303)
 
         if mode == "template":
             tpl = int(pg_template_id) if str(pg_template_id).strip() else None
@@ -1367,14 +1391,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         from urllib.parse import quote
 
         from app.services.plans_catalog import (
-            catalog_owner_id,
             groups_allowed_for_staff,
             parse_group_ids_from_form,
+            require_catalog_owner_id,
             template_allowed_for_staff,
         )
+        from app.services.shop_scope import ShopScopeError
 
         form = await request.form()
-        owner_id = catalog_owner_id(staff)
+        try:
+            owner_id = require_catalog_owner_id(staff)
+        except ShopScopeError as e:
+            return RedirectResponse(f"/plans?err={quote(e.message)}", status_code=303)
         enabled = str(form.get("trial_enabled") or "") in {"1", "on", "true", "yes"}
         await set_setting(session, "trial_enabled", "1" if enabled else "0", reseller_id=owner_id)
         name = str(form.get("name") or "تست رایگان").strip() or "تست رایگان"
@@ -1458,14 +1486,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         from urllib.parse import quote
 
         from app.services.plans_catalog import (
-            catalog_owner_id,
             groups_allowed_for_staff,
             parse_group_ids_from_form,
+            require_catalog_owner_id,
             template_allowed_for_staff,
         )
+        from app.services.shop_scope import ShopScopeError
 
         form = await request.form()
-        owner_id = catalog_owner_id(staff)
+        try:
+            owner_id = require_catalog_owner_id(staff)
+        except ShopScopeError as e:
+            return RedirectResponse(f"/plans?err={quote(e.message)}", status_code=303)
         enabled = str(form.get("custom_plan_enabled") or "") in {"1", "on", "true", "yes"}
         await set_setting(
             session, "custom_plan_enabled", "1" if enabled else "0", reseller_id=owner_id
@@ -1657,8 +1689,25 @@ def create_api_app(lifespan=None) -> FastAPI:
             .order_by(Order.id.desc())
             .limit(100)
         )
-        if staff.get("role") == "reseller":
-            q = q.where(Order.reseller_id == staff.get("bot_user_id"))
+        from app.services.shop_scope import is_platform_admin, shop_owner_id
+
+        if not is_platform_admin(staff):
+            rid = shop_owner_id(staff)
+            if not rid:
+                orders = []
+                return render(
+                    request,
+                    "orders.html",
+                    {
+                        "staff": staff,
+                        "orders": orders,
+                        "payments_by_order": {},
+                        "flash_ok": request.query_params.get("ok"),
+                        "flash_err": request.query_params.get("err")
+                        or "محدوده فروشگاه مشخص نیست",
+                    },
+                )
+            q = q.where(Order.reseller_id == rid)
         result = await session.execute(q)
         orders = list(result.scalars().all())
         payments_by_order: dict[int, Payment] = {}
@@ -1728,8 +1777,13 @@ def create_api_app(lifespan=None) -> FastAPI:
         order = await session.get(Order, order_id)
         if not order:
             return _redirect_msg("/orders", err="سفارش یافت نشد")
-        if staff.get("role") == "reseller" and order.reseller_id != staff.get("bot_user_id"):
-            return _redirect_msg("/orders", err="دسترسی به این سفارش ندارید")
+        if staff.get("role") != "admin":
+            from app.services.shop_scope import ShopScopeError, assert_order_in_scope
+
+            try:
+                assert_order_in_scope(staff, order)
+            except ShopScopeError as e:
+                return _redirect_msg("/orders", err=e.message)
         if order.status == OrderStatus.DELIVERED.value:
             return _redirect_msg("/orders", ok="قبلاً تحویل شده")
 
@@ -1766,8 +1820,13 @@ def create_api_app(lifespan=None) -> FastAPI:
         order = await session.get(Order, order_id)
         if not order:
             return _redirect_msg("/orders", err="سفارش یافت نشد")
-        if staff.get("role") == "reseller" and order.reseller_id != staff.get("bot_user_id"):
-            return _redirect_msg("/orders", err="دسترسی به این سفارش ندارید")
+        if staff.get("role") != "admin":
+            from app.services.shop_scope import ShopScopeError, assert_order_in_scope
+
+            try:
+                assert_order_in_scope(staff, order)
+            except ShopScopeError as e:
+                return _redirect_msg("/orders", err=e.message)
         result = await session.execute(
             select(Payment)
             .where(Payment.order_id == order_id)
@@ -1806,11 +1865,26 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         q = select(Payment).order_by(Payment.id.desc()).limit(100)
-        if staff.get("role") == "reseller":
+        from app.services.shop_scope import is_platform_admin, shop_owner_id
+
+        if not is_platform_admin(staff):
+            rid = shop_owner_id(staff)
+            if not rid:
+                return render(
+                    request,
+                    "payments.html",
+                    {
+                        "staff": staff,
+                        "payments": [],
+                        "flash_ok": request.query_params.get("ok"),
+                        "flash_err": request.query_params.get("err")
+                        or "محدوده فروشگاه مشخص نیست",
+                    },
+                )
             q = (
                 select(Payment)
                 .join(BotUser, BotUser.id == Payment.user_id)
-                .where(BotUser.reseller_id == staff.get("bot_user_id"))
+                .where(BotUser.reseller_id == rid)
                 .order_by(Payment.id.desc())
                 .limit(100)
             )
@@ -1837,13 +1911,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_perm("payments")),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.resellers import reseller_owns_user
-
         payment = await session.get(Payment, payment_id)
         if not payment:
             return _redirect_msg("/payments", err="پرداخت یافت نشد")
-        if staff.get("role") == "reseller":
-            if not await reseller_owns_user(session, int(staff.get("bot_user_id") or 0), payment.user_id):
+        if staff.get("role") != "admin":
+            from app.services.resellers import reseller_owns_user
+            from app.services.shop_scope import ShopScopeError, require_shop_owner_id
+
+            try:
+                rid = require_shop_owner_id(staff)
+            except ShopScopeError as e:
+                return _redirect_msg("/payments", err=e.message)
+            if not await reseller_owns_user(session, rid, payment.user_id):
                 return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
         if payment.status != PaymentStatus.PENDING.value:
             return _redirect_msg("/payments", err="این پرداخت قابل تأیید نیست")
@@ -1889,13 +1968,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_perm("payments")),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.resellers import reseller_owns_user
-
         payment = await session.get(Payment, payment_id)
         if not payment:
             return _redirect_msg("/payments", err="پرداخت یافت نشد")
-        if staff.get("role") == "reseller":
-            if not await reseller_owns_user(session, int(staff.get("bot_user_id") or 0), payment.user_id):
+        if staff.get("role") != "admin":
+            from app.services.resellers import reseller_owns_user
+            from app.services.shop_scope import ShopScopeError, require_shop_owner_id
+
+            try:
+                rid = require_shop_owner_id(staff)
+            except ShopScopeError as e:
+                return _redirect_msg("/payments", err=e.message)
+            if not await reseller_owns_user(session, rid, payment.user_id):
                 return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
         try:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
@@ -2661,11 +2745,24 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         q = select(Ticket).order_by(Ticket.id.desc()).limit(100)
-        if staff.get("role") == "reseller":
+        from app.services.shop_scope import is_platform_admin, shop_owner_id
+
+        if not is_platform_admin(staff):
+            rid = shop_owner_id(staff)
+            if not rid:
+                return render(
+                    request,
+                    "tickets.html",
+                    {
+                        "staff": staff,
+                        "tickets": [],
+                        "flash_err": "محدوده فروشگاه مشخص نیست",
+                    },
+                )
             q = (
                 select(Ticket)
                 .join(BotUser, BotUser.id == Ticket.user_id)
-                .where(BotUser.reseller_id == staff.get("bot_user_id"))
+                .where(BotUser.reseller_id == rid)
                 .order_by(Ticket.id.desc())
                 .limit(100)
             )

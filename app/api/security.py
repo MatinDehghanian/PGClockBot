@@ -164,7 +164,11 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
         if role != "reseller":
             return RedirectResponse("/logout", status_code=303)
 
-        rid = int(staff.get("bot_user_id") or 0)
+        from app.services.shop_scope import shop_owner_id
+
+        rid = shop_owner_id(staff)
+        if not rid:
+            return RedirectResponse("/logout", status_code=303)
         result = await session.execute(
             select(ResellerProfile).where(ResellerProfile.user_id == rid)
         )
@@ -241,7 +245,11 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
         if role != "reseller":
             return RedirectResponse("/logout", status_code=303)
 
-        rid = int(staff.get("bot_user_id") or 0)
+        from app.services.shop_scope import shop_owner_id
+
+        rid = shop_owner_id(staff)
+        if not rid:
+            return RedirectResponse("/logout", status_code=303)
         result = await session.execute(
             select(ResellerProfile).where(ResellerProfile.user_id == rid)
         )
@@ -308,7 +316,11 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
         if role != "reseller":
             return RedirectResponse("/logout", status_code=303)
 
-        rid = int(staff.get("bot_user_id") or 0)
+        from app.services.shop_scope import shop_owner_id
+
+        rid = shop_owner_id(staff)
+        if not rid:
+            return RedirectResponse("/logout", status_code=303)
         result = await session.execute(
             select(ResellerProfile).where(ResellerProfile.user_id == rid)
         )
