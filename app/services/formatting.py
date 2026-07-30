@@ -5,7 +5,10 @@ from typing import Any, Optional
 
 
 def format_bytes(num: int | float | None, *, precision: int | None = None) -> str:
-    """Human-readable size using IEC binary units (1024): B, KB, MB, GB, TB, PB."""
+    """Human-readable size using IEC binary units (1024).
+
+    Large sizes use Persian unit labels in overview UI (گیگ instead of GB).
+    """
     if num is None:
         return "نامحدود"
     try:
@@ -14,20 +17,28 @@ def format_bytes(num: int | float | None, *, precision: int | None = None) -> st
         return "—"
     if n < 0:
         n = abs(n)
-    units = ("B", "KB", "MB", "GB", "TB", "PB")
-    for i, unit in enumerate(units):
+    # Display labels — GB shown as «گیگ» per product copy
+    units = (
+        ("B", "B"),
+        ("KB", "KB"),
+        ("MB", "MB"),
+        ("GB", "گیگ"),
+        ("TB", "TB"),
+        ("PB", "PB"),
+    )
+    for i, (_key, label) in enumerate(units):
         if n < 1024 or i == len(units) - 1:
-            if unit == "B":
+            if _key == "B":
                 return f"{int(round(n))} B"
             if precision is not None:
-                return f"{n:.{precision}f} {unit}"
+                return f"{n:.{precision}f} {label}"
             if n >= 100:
                 val = f"{n:.0f}"
             elif n >= 10:
                 val = f"{n:.1f}"
             else:
                 val = f"{n:.2f}".rstrip("0").rstrip(".")
-            return f"{val} {unit}"
+            return f"{val} {label}"
         n /= 1024
     return f"{n:.2f} PB"
 

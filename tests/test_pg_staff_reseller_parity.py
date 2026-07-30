@@ -62,14 +62,19 @@ class WiringTests(unittest.TestCase):
         src = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
         self.assertIn("bot_setup_needed", src)
         self.assertIn("shop-settings?tab=bot", src)
+        self.assertIn("dash-bot-setup-inner", src)
+        self.assertIn("home-panel-bot", src)
+        self.assertIn("home-panel-pg", src)
         self.assertNotIn("pg_limits.time", src)
+        self.assertNotIn('class="meter"', src)
 
     def test_pg_home_no_time_boxes(self):
         src = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
         self.assertNotIn("زمان کل", src)
         self.assertNotIn("زمان باقیمانده", src)
         self.assertIn("کاربران VPN", src)
-        self.assertIn("از {{ ov.traffic.limit_text }}", src)
+        self.assertNotIn('class="meter"', src)
+        self.assertIn("باقی‌مانده {{ ov.traffic.remain_text }}", src)
 
     def test_broadcast_caption_uses_small_muted(self):
         src = Path("app/web/templates/broadcast.html").read_text(encoding="utf-8")

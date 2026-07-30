@@ -220,7 +220,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         foot = re.search(r"(?ms)^\.site-footer\s*\{([^}]+)\}", css)
         self.assertIsNotNone(foot)
         body = foot.group(1)
-        self.assertIn("margin-top: 16px", body)
+        self.assertIn("margin-top: auto", body)
         self.assertIn("padding-top: 10px", body)
         # star button should be shorter than primary --btn-h
         self.assertIn("min-height: 28px", css)

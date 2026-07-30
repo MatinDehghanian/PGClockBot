@@ -1222,14 +1222,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
             ov = await build_reseller_pg_overview(staff)
             if ov.get("ready"):
-                limited = False
-                for key in ("users", "traffic"):
-                    meter = ov.get(key) or {}
-                    if isinstance(meter, dict) and meter.get("has_limit"):
-                        limited = True
-                        break
-                if limited or ov.get("status_label") or ov.get("constraints"):
-                    pg_limits = ov
+                pg_limits = ov
         return render(
             request,
             "dashboard.html",

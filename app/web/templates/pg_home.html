@@ -35,10 +35,9 @@
         </span>
         <span>کاربران VPN</span>
       </div>
-      <strong>{{ ov.users.used_text }}</strong>
+      <strong>{% if ov.users.has_limit %}{{ ov.users.used_text }} / {{ ov.users.limit_text }}{% else %}{{ ov.users.used_text }}{% endif %}</strong>
       {% if ov.users.has_limit %}
-      <small class="muted">از {{ ov.users.limit_text }} · باقی‌مانده {{ ov.users.remain_text }}</small>
-      <div class="meter" aria-hidden="true"><i style="width:{{ '%.1f'|format(ov.users.pct or 0) }}%"></i></div>
+      <small class="muted">باقی‌مانده {{ ov.users.remain_text }}</small>
       {% else %}
       <small class="muted">بدون سقف تعداد</small>
       {% endif %}
@@ -52,10 +51,9 @@
         </span>
         <span>حجم</span>
       </div>
-      <strong>{{ ov.traffic.used_text }}</strong>
+      <strong>{% if ov.traffic.has_limit %}{{ ov.traffic.used_text }} / {{ ov.traffic.limit_text }}{% else %}{{ ov.traffic.used_text }}{% endif %}</strong>
       {% if ov.traffic.has_limit %}
-      <small class="muted">از {{ ov.traffic.limit_text }} · باقی‌مانده {{ ov.traffic.remain_text }}</small>
-      <div class="meter" aria-hidden="true"><i style="width:{{ '%.1f'|format(ov.traffic.pct or 0) }}%"></i></div>
+      <small class="muted">باقی‌مانده {{ ov.traffic.remain_text }}</small>
       {% else %}
       <small class="muted">بدون سقف حجم{% if ov.lifetime_text %} · lifetime {{ ov.lifetime_text }}{% endif %}</small>
       {% endif %}
