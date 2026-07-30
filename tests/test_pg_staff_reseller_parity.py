@@ -75,6 +75,7 @@ class WiringTests(unittest.TestCase):
         self.assertIn("کاربران VPN", src)
         self.assertNotIn('class="meter"', src)
         self.assertIn("باقی‌مانده {{ ov.traffic.remain_text }}", src)
+        self.assertIn("ratio_text", src)
 
     def test_broadcast_caption_uses_small_muted(self):
         src = Path("app/web/templates/broadcast.html").read_text(encoding="utf-8")

@@ -106,7 +106,7 @@
           </span>
           <span>کاربران VPN</span>
         </div>
-        <strong>{% if pg_limits.users.has_limit %}{{ pg_limits.users.used_text }} / {{ pg_limits.users.limit_text }}{% else %}{{ pg_limits.users.used_text }}{% endif %}</strong>
+        <strong class="stat-value" dir="ltr">{{ pg_limits.users.ratio_text }}</strong>
         {% if pg_limits.users.has_limit %}
         <small class="muted">باقی‌مانده {{ pg_limits.users.remain_text }}</small>
         {% else %}
@@ -122,7 +122,7 @@
           </span>
           <span>حجم</span>
         </div>
-        <strong>{% if pg_limits.traffic.has_limit %}{{ pg_limits.traffic.used_text }} / {{ pg_limits.traffic.limit_text }}{% else %}{{ pg_limits.traffic.used_text }}{% endif %}</strong>
+        <strong class="stat-value" dir="ltr">{{ pg_limits.traffic.ratio_text }}</strong>
         {% if pg_limits.traffic.has_limit %}
         <small class="muted">باقی‌مانده {{ pg_limits.traffic.remain_text }}</small>
         {% else %}

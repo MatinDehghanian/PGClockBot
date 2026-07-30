@@ -5,12 +5,16 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from app.services.formatting import format_bytes, format_gb
+from app.services.formatting import format_bytes, format_bytes_ratio, format_count_ratio, format_gb
+
+
+GB = 1024**3
+MB = 1024**2
 
 
 class FormatGigLabelTests(unittest.TestCase):
     def test_gb_is_persian_gig(self):
-        text = format_bytes(5 * (1024**3))
+        text = format_bytes(5 * GB)
         self.assertIn("گیگ", text)
         self.assertNotIn("GB", text)
 
@@ -18,8 +22,26 @@ class FormatGigLabelTests(unittest.TestCase):
         self.assertIn("گیگ", format_gb(10))
         self.assertNotIn("GB", format_gb(10))
 
+    def test_byte_and_meg_labels(self):
+        self.assertIn("بایت", format_bytes(500))
+        self.assertIn("مگ", format_bytes(50 * MB))
+
     def test_unlimited(self):
         self.assertEqual(format_bytes(None), "نامحدود")
+
+    def test_bytes_ratio_single_unit(self):
+        text = format_bytes_ratio(10 * GB, 100 * GB)
+        self.assertEqual(text, "10/100 گیگ")
+        self.assertNotIn("گیگ /", text)
+        self.assertEqual(text.count("گیگ"), 1)
+
+    def test_bytes_ratio_meg(self):
+        text = format_bytes_ratio(256 * MB, 512 * MB)
+        self.assertIn("مگ", text)
+        self.assertRegex(text, r"256/512 مگ")
+
+    def test_count_ratio(self):
+        self.assertEqual(format_count_ratio(10, 100), "10/100")
 
 
 class DashboardPolishSourceTests(unittest.TestCase):
@@ -31,8 +53,8 @@ class DashboardPolishSourceTests(unittest.TestCase):
 
     def test_overview_boxes_equal_and_rtl(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn("height: 96px", css)
-        self.assertIn(".home-panel-grid > .stat strong", css)
+        self.assertIn("height: 120px", css)
+        self.assertIn("text-overflow: ellipsis", css)
         self.assertIn("text-align: right", css)
 
     def test_home_and_dashboard_share_panel_classes(self):
@@ -41,6 +63,14 @@ class DashboardPolishSourceTests(unittest.TestCase):
         for cls in ("home-panels", "home-panel-bot", "home-panel-pg", "home-panel-grid"):
             self.assertIn(cls, home)
             self.assertIn(cls, dash)
+
+    def test_templates_use_ratio_text(self):
+        dash = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
+        pg = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        self.assertIn("ratio_text", dash)
+        self.assertIn("ratio_text", pg)
+        self.assertNotIn("used_text }} / {{", dash)
+        self.assertNotIn("used_text }} / {{", pg)
 
 
 if __name__ == "__main__":

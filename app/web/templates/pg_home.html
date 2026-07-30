@@ -35,7 +35,7 @@
         </span>
         <span>کاربران VPN</span>
       </div>
-      <strong>{% if ov.users.has_limit %}{{ ov.users.used_text }} / {{ ov.users.limit_text }}{% else %}{{ ov.users.used_text }}{% endif %}</strong>
+      <strong class="stat-value" dir="ltr">{{ ov.users.ratio_text }}</strong>
       {% if ov.users.has_limit %}
       <small class="muted">باقی‌مانده {{ ov.users.remain_text }}</small>
       {% else %}
@@ -51,7 +51,7 @@
         </span>
         <span>حجم</span>
       </div>
-      <strong>{% if ov.traffic.has_limit %}{{ ov.traffic.used_text }} / {{ ov.traffic.limit_text }}{% else %}{{ ov.traffic.used_text }}{% endif %}</strong>
+      <strong class="stat-value" dir="ltr">{{ ov.traffic.ratio_text }}</strong>
       {% if ov.traffic.has_limit %}
       <small class="muted">باقی‌مانده {{ ov.traffic.remain_text }}</small>
       {% else %}

@@ -4,11 +4,42 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 
-def format_bytes(num: int | float | None, *, precision: int | None = None) -> str:
-    """Human-readable size using IEC binary units (1024).
+def _byte_unit_table() -> tuple[tuple[float, str], ...]:
+    """(divisor, Persian label) from smallest to largest."""
+    return (
+        (1.0, "بایت"),
+        (1024.0, "کیلوبایت"),
+        (1024.0**2, "مگ"),
+        (1024.0**3, "گیگ"),
+        (1024.0**4, "ترابایت"),
+        (1024.0**5, "پتابایت"),
+    )
 
-    Large sizes use Persian unit labels in overview UI (گیگ instead of GB).
-    """
+
+def _pick_byte_unit(nbytes: float) -> tuple[float, str]:
+    n = abs(float(nbytes))
+    units = _byte_unit_table()
+    chosen = units[0]
+    for div, label in units:
+        if n >= div:
+            chosen = (div, label)
+        else:
+            break
+    return chosen
+
+
+def _fmt_unit_amount(n: float, *, precision: int | None = None) -> str:
+    if precision is not None:
+        return f"{n:.{precision}f}"
+    if n >= 100:
+        return f"{n:.0f}"
+    if n >= 10:
+        return f"{n:.1f}".rstrip("0").rstrip(".")
+    return f"{n:.2f}".rstrip("0").rstrip(".")
+
+
+def format_bytes(num: int | float | None, *, precision: int | None = None) -> str:
+    """Human-readable size using IEC binary units (1024) with Persian labels."""
     if num is None:
         return "نامحدود"
     try:
@@ -17,30 +48,53 @@ def format_bytes(num: int | float | None, *, precision: int | None = None) -> st
         return "—"
     if n < 0:
         n = abs(n)
-    # Display labels — GB shown as «گیگ» per product copy
-    units = (
-        ("B", "B"),
-        ("KB", "KB"),
-        ("MB", "MB"),
-        ("GB", "گیگ"),
-        ("TB", "TB"),
-        ("PB", "PB"),
-    )
-    for i, (_key, label) in enumerate(units):
-        if n < 1024 or i == len(units) - 1:
-            if _key == "B":
-                return f"{int(round(n))} B"
-            if precision is not None:
-                return f"{n:.{precision}f} {label}"
-            if n >= 100:
-                val = f"{n:.0f}"
-            elif n >= 10:
-                val = f"{n:.1f}"
-            else:
-                val = f"{n:.2f}".rstrip("0").rstrip(".")
-            return f"{val} {label}"
-        n /= 1024
-    return f"{n:.2f} PB"
+    div, label = _pick_byte_unit(n)
+    if div == 1.0:
+        return f"{int(round(n))} {label}"
+    return f"{_fmt_unit_amount(n / div, precision=precision)} {label}"
+
+
+def format_bytes_ratio(
+    used: int | float | None,
+    limit: int | float | None,
+    *,
+    precision: int | None = None,
+) -> str:
+    """Shared-unit used/limit string, e.g. «۱۰/۱۰۰ گیگ» or «۵۱۲/۱۰۲۴ مگ»."""
+    if limit is None:
+        return format_bytes(used, precision=precision)
+    try:
+        u = float(used or 0)
+        lim = float(limit)
+    except (TypeError, ValueError):
+        return "—"
+    if lim <= 0:
+        return format_bytes(u, precision=precision)
+    if u < 0:
+        u = abs(u)
+    div, label = _pick_byte_unit(max(u, lim))
+    if div == 1.0:
+        return f"{int(round(u))}/{int(round(lim))} {label}"
+    left = _fmt_unit_amount(u / div, precision=precision)
+    right = _fmt_unit_amount(lim / div, precision=precision)
+    return f"{left}/{right} {label}"
+
+
+def format_count_ratio(used: int | float | None, limit: int | float | None) -> str:
+    """Integer used/limit without spaces: «۱۲/۲۰»."""
+    if limit is None:
+        return format_number(used)
+    try:
+        lim = int(limit)
+    except (TypeError, ValueError):
+        return format_number(used)
+    if lim <= 0:
+        return format_number(used)
+    try:
+        u = int(used or 0)
+    except (TypeError, ValueError):
+        u = 0
+    return f"{format_number(u)}/{format_number(lim)}"
 
 
 def format_gb(gb: float | int | None) -> str:

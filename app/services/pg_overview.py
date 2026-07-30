@@ -67,7 +67,10 @@ def _meter(
     used_label: str,
     remain_label: str,
     format_value,
+    kind: str = "count",
 ) -> dict[str, Any]:
+    from app.services.formatting import format_bytes_ratio, format_count_ratio
+
     has_limit = limit is not None and int(limit) > 0
     used_v = int(used or 0)
     remain = None
@@ -76,6 +79,12 @@ def _meter(
         lim = int(limit)
         remain = max(0, lim - used_v)
         pct = min(100.0, (used_v / lim) * 100.0) if lim else 0.0
+        if kind == "bytes":
+            ratio_text = format_bytes_ratio(used_v, lim)
+        else:
+            ratio_text = format_count_ratio(used_v, lim)
+    else:
+        ratio_text = format_value(used_v)
     return {
         "label": label,
         "has_limit": has_limit,
@@ -86,6 +95,7 @@ def _meter(
         "used_text": format_value(used_v),
         "limit_text": format_value(limit) if has_limit else "نامحدود",
         "remain_text": format_value(remain) if remain is not None else "—",
+        "ratio_text": ratio_text,
         "used_label": used_label,
         "remain_label": remain_label,
     }
@@ -283,6 +293,7 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
             used_label="مصرف‌شده",
             remain_label="باقی‌مانده",
             format_value=lambda v: format_number(v) if v is not None else "—",
+            kind="count",
         )
         out["traffic"] = _meter(
             label="حجم",
@@ -291,6 +302,7 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
             used_label="مصرف‌شده",
             remain_label="باقی‌مانده",
             format_value=format_bytes,
+            kind="bytes",
         )
         if lifetime is not None:
             out["lifetime_text"] = format_bytes(lifetime)
