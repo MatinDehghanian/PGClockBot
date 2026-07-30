@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.resellers import complete_reseller_setup, get_profile_by_setup_token
-from app.services.web_auth import hash_password, validate_password_strength
+from app.services.web_auth import hash_password, validate_password_strength, validate_web_username
 
 
 def _q(msg: str) -> str:
@@ -111,10 +111,13 @@ def register_reseller_setup(app, *, render, get_db):
                 ok, err = validate_password_strength(password)
                 if not ok:
                     return RedirectResponse(f"/rsetup/{token}?err={_q(err)}", status_code=303)
+                cleaned, uerr = validate_web_username(username.strip(), lowercase=True)
+                if uerr:
+                    return RedirectResponse(f"/rsetup/{token}?err={_q(uerr)}", status_code=303)
                 profile = await complete_reseller_setup(
                     session,
                     profile,
-                    web_username=username.strip(),
+                    web_username=cleaned,
                     password_hash=hash_password(password),
                     bot_token=bot_token,
                     bot_username=bot_username,

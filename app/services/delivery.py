@@ -37,7 +37,8 @@ async def build_delivery_content(
     For subscriptions, ``include_details=False`` yields a short success-only body
     (no service card / sub link); details stay available via sub_info/sub_url for QR.
     """
-    ui = await get_all_settings(session)
+    shop_rid = getattr(order, "reseller_id", None) if order is not None else None
+    ui = await get_all_settings(session, reseller_id=shop_rid)
     markup = kb.back_home(ui)
     title = ui.get("delivery_title") or "✅ سرویس آماده است"
     sub_url = None
@@ -133,7 +134,8 @@ async def send_delivery_to_user(
     Send delivery text to user; if subscription URL exists and QR is enabled,
     also send QR as a photo. Returns the HTML text that was sent.
     """
-    ui = await get_all_settings(session)
+    shop_rid = getattr(order, "reseller_id", None) if order is not None else None
+    ui = await get_all_settings(session, reseller_id=shop_rid)
     if order and order.note and str(order.note).startswith("reseller_app:"):
         text = (
             "✅ هزینه نمایندگی پرداخت شد.\n"
@@ -148,8 +150,6 @@ async def send_delivery_to_user(
         except Exception:
             app_id = 0
         if app_id:
-            from app.bot import keyboards as kb
-            from app.config import get_settings
             from app.db.models import BotUser
 
             user = await session.get(BotUser, order.user_id)

@@ -135,31 +135,32 @@ async def resolve_existing_web_access(
     reseller = await reseller_by_pg_username(session, pg_u)
 
     # Prefer reseller as the authoritative shop path when both somehow exist.
+    # Any reseller link (even inactive / no web creds yet) reserves this PG admin —
+    # matches web_access_status_map and the one-path invariant in the module doc.
     if reseller is not None:
         has_web = bool(reseller.web_username and reseller.web_password_hash)
         from app.services.resellers import setup_is_complete
 
         complete = setup_is_complete(reseller)
-        if has_web or reseller.is_active or staff is not None:
-            detail = (
-                f"این ادمین به نماینده متصل است"
-                f"{f' (یوزر وب: {reseller.web_username})' if reseller.web_username else ''}"
-                " — از بخش نمایندگان مدیریت شود"
-            )
-            if staff is not None:
-                detail += "؛ دسترسی جداگانه pg_staff هم ثبت شده و باید یکی حذف شود"
-            return ExistingWebAccess(
-                source="reseller",
-                pg_username=pg_u,
-                web_username=reseller.web_username,
-                is_active=bool(reseller.is_active) and has_web,
-                setup_complete=complete,
-                reseller_user_id=int(reseller.user_id),
-                reseller_profile_id=int(reseller.id),
-                staff_id=int(staff.id) if staff else None,
-                note=reseller.web_username,
-                detail=detail,
-            )
+        detail = (
+            f"این ادمین به نماینده متصل است"
+            f"{f' (یوزر وب: {reseller.web_username})' if reseller.web_username else ''}"
+            " — از بخش نمایندگان مدیریت شود"
+        )
+        if staff is not None:
+            detail += "؛ دسترسی جداگانه pg_staff هم ثبت شده و باید یکی حذف شود"
+        return ExistingWebAccess(
+            source="reseller",
+            pg_username=pg_u,
+            web_username=reseller.web_username,
+            is_active=bool(reseller.is_active) and has_web,
+            setup_complete=complete,
+            reseller_user_id=int(reseller.user_id),
+            reseller_profile_id=int(reseller.id),
+            staff_id=int(staff.id) if staff else None,
+            note=reseller.web_username,
+            detail=detail,
+        )
 
     if staff is not None:
         return ExistingWebAccess(

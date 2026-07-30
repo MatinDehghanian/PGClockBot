@@ -102,7 +102,14 @@ class NotAuthenticated(Exception):
 
 
 class NotAdmin(Exception):
-    pass
+    """Raised when staff lacks a permission.
+
+    Optional ``redirect`` uses *live* ACL (not the session cookie) so role
+    downgrades cannot infinite-redirect via stale ``pg_permissions``.
+    """
+
+    def __init__(self, redirect: str | None = None):
+        self.redirect = redirect
 
 
 def render(request: Request, name: str, context: dict | None = None, status_code: int = 200):
@@ -334,6 +341,24 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         return _dep
 
+    def _live_pg_home(features: list[str] | tuple[str, ...] | set[str]) -> str:
+        feats = set(features or [])
+        if "pg_overview" in feats:
+            return "/pg"
+        if "pg_users" in feats:
+            return "/pg/users"
+        if "pg_templates" in feats:
+            return "/pg/templates"
+        if "pg_groups" in feats:
+            return "/pg/groups"
+        if "pg_hosts" in feats:
+            return "/pg/hosts"
+        if "pg_nodes" in feats:
+            return "/pg/nodes"
+        if "pg_inbounds" in feats:
+            return "/pg/inbounds"
+        return "/logout"
+
     def require_pg_perm(perm: str):
         """Admin always; reseller needs mapped PG feature from their role."""
 
@@ -349,7 +374,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             pg_role_id = user.get("pg_role_id")
             features, role = await resolve_reseller_pg_features(pg_role_id)
             if perm not in features:
-                raise NotAdmin()
+                raise NotAdmin(redirect=_live_pg_home(features))
             return enrich_staff_pg_from_role(user, features, role)
 
         return _dep
@@ -366,7 +391,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
             features, role = await resolve_reseller_pg_features(user.get("pg_role_id"))
             if not features:
-                raise NotAdmin()
+                raise NotAdmin(redirect="/logout")
             return enrich_staff_pg_from_role(user, features, role)
 
         return _dep
@@ -462,6 +487,12 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.exception_handler(NotAdmin)
     async def _not_admin(request: Request, exc: NotAdmin):
+        # Prefer live-ACL redirect from the dependency that raised (avoids stale cookie loops).
+        live = getattr(exc, "redirect", None)
+        if live:
+            if live != request.url.path:
+                return RedirectResponse(live, status_code=303)
+            return RedirectResponse("/logout", status_code=303)
         user = None
         try:
             cookie = request.cookies.get("session")
@@ -473,17 +504,20 @@ def create_api_app(lifespan=None) -> FastAPI:
         if role in {"reseller", "pg_staff"}:
             pg = (user or {}).get("pg_permissions") or []
             if role == "pg_staff":
-                if "pg_overview" in pg:
-                    return RedirectResponse("/pg", status_code=303)
-                if "pg_users" in pg:
-                    return RedirectResponse("/pg/users", status_code=303)
-                if pg:
-                    return RedirectResponse("/pg", status_code=303)
+                for path in (
+                    "/pg" if "pg_overview" in pg else None,
+                    "/pg/users" if "pg_users" in pg else None,
+                    "/pg" if pg else None,
+                ):
+                    if path and path != request.url.path:
+                        return RedirectResponse(path, status_code=303)
                 return RedirectResponse("/logout", status_code=303)
-            if "pg_users" in pg:
-                return RedirectResponse("/pg/users", status_code=303)
-            if pg:
-                return RedirectResponse("/pg", status_code=303)
+            for path in (
+                "/pg/users" if "pg_users" in pg else None,
+                "/pg" if pg else None,
+            ):
+                if path and path != request.url.path:
+                    return RedirectResponse(path, status_code=303)
             perms = (user or {}).get("permissions") or []
             for path, key in (
                 ("/dashboard", "dashboard"),
@@ -493,7 +527,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 ("/tickets", "tickets"),
                 ("/shop-settings", "shop_settings"),
             ):
-                if key in perms:
+                if key in perms and path != request.url.path:
                     return RedirectResponse(path, status_code=303)
             return RedirectResponse("/logout", status_code=303)
         return RedirectResponse("/dashboard", status_code=303)
@@ -757,7 +791,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         if user.get("role") == "admin":
             return RedirectResponse("/home", status_code=303)
         if user.get("role") == "pg_staff":
-            return RedirectResponse("/pg", status_code=303)
+            pg = user.get("pg_permissions") or []
+            if "pg_overview" in pg:
+                return RedirectResponse("/pg", status_code=303)
+            if "pg_users" in pg:
+                return RedirectResponse("/pg/users", status_code=303)
+            if pg:
+                return RedirectResponse("/pg", status_code=303)
+            return RedirectResponse("/logout", status_code=303)
         return RedirectResponse("/dashboard", status_code=303)
 
     @app.get("/login", response_class=HTMLResponse)
@@ -769,7 +810,14 @@ def create_api_app(lifespan=None) -> FastAPI:
             if sess.get("role") == "admin":
                 return RedirectResponse("/home", status_code=303)
             if sess.get("role") == "pg_staff":
-                return RedirectResponse("/pg", status_code=303)
+                pg = sess.get("pg_permissions") or []
+                if "pg_overview" in pg:
+                    return RedirectResponse("/pg", status_code=303)
+                if "pg_users" in pg:
+                    return RedirectResponse("/pg/users", status_code=303)
+                if pg:
+                    return RedirectResponse("/pg", status_code=303)
+                return RedirectResponse("/logout", status_code=303)
             return RedirectResponse("/dashboard", status_code=303)
         return render(
             request,

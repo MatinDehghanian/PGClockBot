@@ -207,9 +207,13 @@ def _rand_username(prefix: str = "res") -> str:
 
 async def _unique_web_username(session: AsyncSession, prefix: str = "web") -> str:
     from app.db.models import PgStaffAccess
+    from app.services.web_auth import load_web_admin
 
+    admin_u = (load_web_admin().get("username") or "").strip().lower()
     for _ in range(12):
         uname = _rand_username(prefix)
+        if admin_u and uname == admin_u:
+            continue
         clash = await session.execute(
             select(ResellerProfile).where(ResellerProfile.web_username == uname)
         )
@@ -640,9 +644,15 @@ async def complete_reseller_setup(
 ) -> ResellerProfile:
     """Finalize setup wizard. bot_only=True updates bot token when web creds already exist."""
     if not bot_only:
-        uname = (web_username or "").strip().lower()
-        if len(uname) < 3:
-            raise ValueError("نام کاربری حداقل ۳ کاراکتر باشد")
+        from app.services.web_auth import load_web_admin, validate_web_username
+
+        cleaned, uerr = validate_web_username(web_username or "", lowercase=True)
+        if uerr:
+            raise ValueError(uerr)
+        uname = cleaned
+        admin_u = (load_web_admin().get("username") or "").strip().lower()
+        if uname == admin_u:
+            raise ValueError("این نام کاربری برای ادمین اصلی پنل رزرو است")
         clash = await session.execute(
             select(ResellerProfile).where(
                 ResellerProfile.web_username == uname,
@@ -693,6 +703,12 @@ async def complete_reseller_setup(
     profile.can_approve_receipts = "payments" in parse_perms(profile.web_permissions)
     await session.commit()
     await session.refresh(profile)
+    try:
+        from app.services.reseller_bots import clear_reseller_token_cache
+
+        clear_reseller_token_cache()
+    except Exception:
+        pass
     return profile
 
 

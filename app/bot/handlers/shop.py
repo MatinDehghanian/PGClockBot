@@ -61,7 +61,25 @@ async def _custom_available_for_users(
     """Custom plan only when enabled, linked, AND at least one catalog plan exists."""
     if not on(ui.get("custom_plan_enabled")):
         return False
-    if not _custom_has_pg_link(ui):
+    from app.services.users import current_shop_reseller_id
+
+    shop_rid = current_shop_reseller_id()
+    if shop_rid is not None:
+        # Mirror create_custom_order: reseller shops need their own PG link, not platform inheritance
+        from app.db.models import ResellerSetting
+
+        own = await session.execute(
+            select(ResellerSetting).where(
+                ResellerSetting.reseller_user_id == int(shop_rid),
+                ResellerSetting.key.in_(
+                    ("custom_plan_template_id", "custom_plan_group_ids")
+                ),
+            )
+        )
+        own_map = {r.key: (r.value or "").strip() for r in own.scalars().all()}
+        if not (own_map.get("custom_plan_template_id") or own_map.get("custom_plan_group_ids")):
+            return False
+    elif not _custom_has_pg_link(ui):
         return False
     if plans is None:
         plans = await list_active_plans(session, include_trial=True)
@@ -371,12 +389,16 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     await callback.answer()
 
     if order.amount <= 0:
-        from app.services.orders import deliver_order
+        from app.services.orders import deliver_order, revert_failed_free_delivery
 
         await mark_order_free_paid(session, order, db_user.id)
         try:
             order = await deliver_order(session, order)
         except Exception as e:
+            try:
+                await revert_failed_free_delivery(session, order)
+            except Exception:
+                pass
             if callback.message:
                 await safe_edit_text(callback.message, 
                     format_message("❌ خطا در تحویل", str(e)),
@@ -432,26 +454,14 @@ async def shop_plan(callback: CallbackQuery, session: AsyncSession):
 
 @router.callback_query(F.data.startswith("shop:buy:"))
 async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    await callback.answer()
     ui = await get_all_settings(session)
     plan_id = int(callback.data.split(":")[-1])
     plan = await get_plan(session, plan_id)
     if not plan:
-        if callback.message:
-            await safe_edit_text(callback.message, 
-                format_message("⚠️ خطا", "پلن پیدا نشد."),
-                reply_markup=kb.back_home(ui),
-            )
+        await callback.answer("پلن پیدا نشد", show_alert=True)
         return
     if plan.price > 0 and not kb.any_checkout_method_enabled(ui):
-        if callback.message:
-            await safe_edit_text(callback.message, 
-                format_message(
-                    "⚠️ پرداخت غیرفعال",
-                    "در حال حاضر هیچ روش پرداختی فعال نیست. با پشتیبانی تماس بگیرید.",
-                ),
-                reply_markup=kb.back_home(ui),
-            )
+        await callback.answer("هیچ روش پرداختی فعال نیست", show_alert=True)
         return
 
     try:
@@ -465,14 +475,20 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         await callback.answer(str(e), show_alert=True)
         return
 
+    await callback.answer()
+
     # Free / trial: deliver immediately
     if order.amount <= 0:
-        from app.services.orders import deliver_order
+        from app.services.orders import deliver_order, revert_failed_free_delivery
 
         await mark_order_free_paid(session, order, db_user.id)
         try:
             order = await deliver_order(session, order)
         except Exception as e:
+            try:
+                await revert_failed_free_delivery(session, order)
+            except Exception:
+                pass
             if callback.message:
                 await safe_edit_text(callback.message, 
                     format_message("❌ خطا در تحویل", str(e)),

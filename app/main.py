@@ -101,11 +101,6 @@ def main() -> None:
             )
         else:
             try:
-                start_scheduler(bot)
-            except Exception:
-                logger.exception("Scheduler failed to start")
-
-            try:
                 me = await bot.get_me()
                 logger.info(
                     "Bot online as @%s (id=%s) · admins=%s",
@@ -122,6 +117,11 @@ def main() -> None:
                 panel_only = True
 
             if not panel_only:
+                try:
+                    start_scheduler(bot)
+                except Exception:
+                    logger.exception("Scheduler failed to start")
+
                 async def _pg_warmup() -> None:
                     try:
                         await get_pg().ensure_token()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, WalletTransaction
@@ -14,7 +14,16 @@ async def credit_wallet(
 ) -> BotUser:
     if amount <= 0:
         raise ValueError("amount must be positive")
-    user.wallet_balance += amount
+    with session.no_autoflush:
+        result = await session.execute(
+            update(BotUser)
+            .where(BotUser.id == user.id)
+            .values(wallet_balance=BotUser.wallet_balance + int(amount))
+            .execution_options(synchronize_session=False)
+        )
+    if result.rowcount != 1:
+        raise ValueError("کاربر یافت نشد")
+    await session.refresh(user)
     session.add(
         WalletTransaction(
             user_id=user.id,
@@ -36,9 +45,19 @@ async def debit_wallet(
 ) -> BotUser:
     if amount <= 0:
         raise ValueError("amount must be positive")
-    if user.wallet_balance < amount:
+    with session.no_autoflush:
+        result = await session.execute(
+            update(BotUser)
+            .where(
+                BotUser.id == user.id,
+                BotUser.wallet_balance >= int(amount),
+            )
+            .values(wallet_balance=BotUser.wallet_balance - int(amount))
+            .execution_options(synchronize_session=False)
+        )
+    if result.rowcount != 1:
         raise ValueError("موجودی کافی نیست")
-    user.wallet_balance -= amount
+    await session.refresh(user)
     session.add(
         WalletTransaction(
             user_id=user.id,

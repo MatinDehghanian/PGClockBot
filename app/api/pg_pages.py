@@ -273,8 +273,8 @@ def register_pg_pages(
                 require_template=require_template,
                 can_modify=actions["update"],
                 can_delete=actions["delete"],
-                can_reset=actions["reset_usage"] or actions["update"],
-                can_revoke=actions["revoke_sub"] or actions["update"],
+                can_reset=actions["reset_usage"],
+                can_revoke=actions["revoke_sub"],
                 can_disable=actions["disable"],
                 can_enable=actions["enable"],
                 active="pg_users",
@@ -390,8 +390,25 @@ def register_pg_pages(
                 if owner and uid:
                     try:
                         await get_pg().set_owner_by_id(int(uid), owner)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        try:
+                            await get_pg().delete_user_by_id(int(uid))
+                        except Exception:
+                            pass
+                        msg = (
+                            e.user_message(fallback="خطا در تخصیص مالکیت کاربر")
+                            if isinstance(e, PasarGuardError)
+                            else str(e)
+                        )
+                        return _pg_form_err(
+                            f"کاربر ساخته شد ولی مالکیت ست نشد و حذف شد: {msg}",
+                            modal="create",
+                        )
+                elif owner and not uid:
+                    return _pg_form_err(
+                        "کاربر ساخته شد ولی شناسه برگشت داده نشد — مالکیت قابل تنظیم نیست",
+                        modal="create",
+                    )
         except Exception as e:
             msg = e.user_message(fallback="خطا در ساخت کاربر") if isinstance(e, PasarGuardError) else str(e)
             return _pg_form_err(msg, modal="create")
@@ -504,7 +521,7 @@ def register_pg_pages(
     @app.post("/pg/users/{user_id}/reset")
     async def pg_users_reset(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
         acts = staff_user_actions(staff)
-        if not (acts["reset_usage"] or acts["update"]):
+        if not acts["reset_usage"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
         try:
             if await _assert_owned_user(staff, user_id) is None:
@@ -517,7 +534,7 @@ def register_pg_pages(
     @app.post("/pg/users/{user_id}/revoke")
     async def pg_users_revoke(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
         acts = staff_user_actions(staff)
-        if not (acts["revoke_sub"] or acts["update"]):
+        if not acts["revoke_sub"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
         try:
             if await _assert_owned_user(staff, user_id) is None:
@@ -641,7 +658,13 @@ def register_pg_pages(
             groups = _filter_groups([g for g in groups if isinstance(g, dict)], staff)
             inbound_tags = _inbound_tags(await pg.get_inbounds())
             if edit_id and str(edit_id).isdigit():
-                edit_group = await pg.get_group(int(edit_id))
+                eid = int(edit_id)
+                from app.services.plans_catalog import groups_allowed_for_staff
+
+                if groups_allowed_for_staff(staff, [eid]):
+                    edit_group = await pg.get_group(eid)
+                else:
+                    err = err or "گروه خارج از دسترسی شماست"
         except Exception as e:
             err = str(e)
         return render(

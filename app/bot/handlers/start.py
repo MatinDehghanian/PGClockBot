@@ -303,6 +303,22 @@ async def _link_subscription(
     )
     svc = existing.scalar_one_or_none()
     if not svc:
+        claimed = await session.execute(
+            select(UserService).where(
+                UserService.subscription_token == token,
+                UserService.bot_user_id != db_user.id,
+            ).limit(1)
+        )
+        if claimed.scalar_one_or_none() is not None:
+            await message.answer("این اشتراک قبلاً به حساب دیگری وصل شده است.")
+            await render_home(
+                message,
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
+            return
         sub_url = f"{pg.base_url.rstrip('/')}/sub/{token}"
         svc = UserService(
             bot_user_id=db_user.id,

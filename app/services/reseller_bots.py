@@ -59,6 +59,7 @@ class ResellerBotManager:
         async with self._lock:
             await self._stop_locked(reseller_profile_id)
             bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+            registered = False
             try:
                 me = await bot.get_me()
                 tg_id = int(me.id)
@@ -73,39 +74,45 @@ class ResellerBotManager:
                     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
                 except Exception:
                     pass
-            except Exception as e:
-                log.warning("reseller bot %s get_me failed: %s", reseller_profile_id, e)
-                await bot.session.close()
-                return False
 
-            async with SessionLocal() as session:
-                row = await session.get(ResellerProfile, reseller_profile_id)
-                if row:
-                    row.bot_telegram_id = tg_id
-                    row.bot_username = uname
-                    await session.commit()
+                async with SessionLocal() as session:
+                    row = await session.get(ResellerProfile, reseller_profile_id)
+                    if row:
+                        row.bot_telegram_id = tg_id
+                        row.bot_username = uname
+                        await session.commit()
+                        try:
+                            setattr(
+                                bot,
+                                "_pgclock_reseller",
+                                {
+                                    "profile_id": int(reseller_profile_id),
+                                    "user_id": int(row.user_id),
+                                    "bot_telegram_id": tg_id,
+                                    "bot_username": uname,
+                                },
+                            )
+                        except Exception:
+                            pass
+
+                self._bots[reseller_profile_id] = bot
+                registered = True
+                task = asyncio.create_task(
+                    self._poll_loop(reseller_profile_id, bot),
+                    name=f"reseller-bot-{reseller_profile_id}",
+                )
+                self._tasks[reseller_profile_id] = task
+                log.info("Started reseller bot profile=%s (@%s)", reseller_profile_id, uname)
+                return True
+            except Exception as e:
+                log.warning("reseller bot %s start failed: %s", reseller_profile_id, e)
+                return False
+            finally:
+                if not registered:
                     try:
-                        setattr(
-                            bot,
-                            "_pgclock_reseller",
-                            {
-                                "profile_id": int(reseller_profile_id),
-                                "user_id": int(row.user_id),
-                                "bot_telegram_id": tg_id,
-                                "bot_username": uname,
-                            },
-                        )
+                        await bot.session.close()
                     except Exception:
                         pass
-
-            self._bots[reseller_profile_id] = bot
-            task = asyncio.create_task(
-                self._poll_loop(reseller_profile_id, bot),
-                name=f"reseller-bot-{reseller_profile_id}",
-            )
-            self._tasks[reseller_profile_id] = task
-            log.info("Started reseller bot profile=%s (@%s)", reseller_profile_id, uname)
-            return True
 
     async def stop_reseller(self, reseller_profile_id: int) -> None:
         async with self._lock:

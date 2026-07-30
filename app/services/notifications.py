@@ -6,6 +6,7 @@ from typing import Any
 
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -83,8 +84,21 @@ async def _send_admins(
     *,
     markup: InlineKeyboardMarkup | None = None,
     photo: str | None = None,
+    extra_chat_ids: list[int] | None = None,
 ) -> None:
     import asyncio
+
+    targets: list[int] = []
+    seen: set[int] = set()
+    for admin_id in list(get_settings().admin_ids) + list(extra_chat_ids or []):
+        try:
+            aid = int(admin_id)
+        except (TypeError, ValueError):
+            continue
+        if aid in seen:
+            continue
+        seen.add(aid)
+        targets.append(aid)
 
     async def _one(admin_id: int) -> None:
         try:
@@ -101,10 +115,41 @@ async def _send_admins(
                 except Exception:
                     pass
 
+    if not targets:
+        return
     await asyncio.gather(
-        *(_one(admin_id) for admin_id in get_settings().admin_ids),
+        *(_one(admin_id) for admin_id in targets),
         return_exceptions=True,
     )
+
+
+async def _shop_owner_chat_ids(
+    session: AsyncSession,
+    *,
+    order: Order | None = None,
+    payment: Payment | None = None,
+) -> list[int]:
+    """Telegram ids of the reseller shop owner (if any) for this order/payment."""
+    rid = None
+    if order is not None and order.reseller_id:
+        rid = int(order.reseller_id)
+    elif payment is not None and payment.order_id:
+        ord_row = await session.get(Order, payment.order_id)
+        if ord_row and ord_row.reseller_id:
+            rid = int(ord_row.reseller_id)
+    if not rid:
+        return []
+    from app.db.models import BotUser, ResellerProfile
+
+    profile = (
+        await session.execute(select(ResellerProfile).where(ResellerProfile.user_id == rid))
+    ).scalar_one_or_none()
+    if profile is not None and not profile.is_active:
+        return []
+    owner = await session.get(BotUser, rid)
+    if not owner or not owner.telegram_id:
+        return []
+    return [int(owner.telegram_id)]
 
 
 def _approval_markup(*, order_id: int | None = None, payment_id: int | None = None) -> InlineKeyboardMarkup:
@@ -175,7 +220,8 @@ async def notify_new_subscription(
     markup = None
     if needs_approval:
         markup = _approval_markup(order_id=order.id)
-    await _send_admins(bot, text, markup=markup)
+    extra = await _shop_owner_chat_ids(session, order=order)
+    await _send_admins(bot, text, markup=markup, extra_chat_ids=extra)
 
 
 async def notify_pending_approval(
@@ -203,7 +249,8 @@ async def notify_pending_approval(
         markup = _approval_markup(order_id=payment.order_id)
     else:
         markup = _approval_markup(payment_id=payment.id)
-    await _send_admins(bot, text, markup=markup, photo=payment.receipt_file_id)
+    extra = await _shop_owner_chat_ids(session, payment=payment)
+    await _send_admins(bot, text, markup=markup, photo=payment.receipt_file_id, extra_chat_ids=extra)
 
 
 async def notify_new_order(
@@ -226,7 +273,8 @@ async def notify_new_order(
     if plan_name:
         lines.append(kv_line("💎", "پلن", plan_name))
     text = format_message("🛒 سفارش جدید", info_block(lines))
-    await _send_admins(bot, text)
+    extra = await _shop_owner_chat_ids(session, order=order)
+    await _send_admins(bot, text, extra_chat_ids=extra)
 
 
 async def notify_wallet_topup_ok(

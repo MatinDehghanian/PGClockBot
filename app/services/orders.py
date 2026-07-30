@@ -4,7 +4,7 @@ import secrets
 import string
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -147,7 +147,10 @@ async def create_order(
         raise ValueError("این پلن در این فروشگاه موجود نیست")
     if plan.is_trial:
         # One free trial per user per shop (prevent callback re-buy)
-        prior = await session.execute(
+        from app.services.users import current_shop_reseller_id
+
+        shop_rid = current_shop_reseller_id()
+        trial_q = (
             select(Order.id)
             .join(Plan, Plan.id == Order.plan_id)
             .where(
@@ -162,8 +165,13 @@ async def create_order(
                     ]
                 ),
             )
-            .limit(1)
         )
+        if shop_rid is not None:
+            trial_q = trial_q.where(Order.reseller_id == int(shop_rid))
+        else:
+            # Platform shop: only platform-owned trial plans
+            trial_q = trial_q.where(Plan.owner_reseller_id.is_(None))
+        prior = await session.execute(trial_q.limit(1))
         if prior.scalar_one_or_none() is not None:
             raise ValueError("پلن تست رایگان را قبلاً دریافت کرده‌اید")
     discount, used_code = await apply_discount(session, discount_code, plan.price)
@@ -304,6 +312,7 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
         return order
     if order.status not in _PAYABLE_ORDER_STATUSES:
         raise ValueError("این سفارش قابل پرداخت با کیف پول نیست")
+    payment: Payment | None = None
     if order.amount > 0:
         await debit_wallet(session, user, order.amount, f"خرید سفارش #{order.id}")
     order.payment_method = PaymentMethod.WALLET.value
@@ -318,6 +327,7 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     session.add(payment)
     await session.commit()
     await session.refresh(order)
+    await session.refresh(payment)
     try:
         if order.note and order.note.startswith("reseller_app:"):
             from app.services.resellers import mark_application_paid
@@ -327,22 +337,32 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
             await session.commit()
             await session.refresh(order)
             return order
-        if order.note and order.note.startswith("renew:") and order.service_id and order.plan_id:
+        if order.note and order.note.startswith("renew:"):
+            if not (order.service_id and order.plan_id):
+                raise ValueError("سفارش تمدید ناقص است")
             service = await session.get(UserService, order.service_id)
             plan = await session.get(Plan, order.plan_id)
-            if service and plan:
-                return await apply_renewal(session, order, service, plan)
+            if not service or not plan:
+                raise ValueError("سرویس یا پلن تمدید یافت نشد")
+            return await apply_renewal(session, order, service, plan)
         return await deliver_order(session, order)
     except Exception:
         if order.amount > 0:
             await credit_wallet(session, user, order.amount, f"برگشت خرید ناموفق #{order.id}")
         order.status = OrderStatus.PENDING.value
+        if payment is not None:
+            payment.status = PaymentStatus.REJECTED.value
+            payment.review_note = payment.review_note or "delivery_failed_refunded"
         await session.commit()
         raise
 
 
 async def mark_order_free_paid(session: AsyncSession, order: Order, user_id: int) -> Order:
     """Mark a zero-amount order as paid with an approved payment row."""
+    if order.amount > 0:
+        raise ValueError("فقط سفارش رایگان قابل علامت‌گذاری رایگان است")
+    if order.status not in _PAYABLE_ORDER_STATUSES:
+        raise ValueError("این سفارش قابل پرداخت نیست")
     order.status = OrderStatus.PAID.value
     order.payment_method = PaymentMethod.WALLET.value
     session.add(
@@ -357,6 +377,21 @@ async def mark_order_free_paid(session: AsyncSession, order: Order, user_id: int
     await session.commit()
     await session.refresh(order)
     return order
+
+
+async def revert_failed_free_delivery(session: AsyncSession, order: Order) -> None:
+    """Undo mark_order_free_paid so the user can retry after a delivery failure."""
+    order.status = OrderStatus.PENDING.value
+    pays = await session.execute(
+        select(Payment).where(
+            Payment.order_id == order.id,
+            Payment.status == PaymentStatus.APPROVED.value,
+        )
+    )
+    for p in pays.scalars().all():
+        p.status = PaymentStatus.REJECTED.value
+        p.review_note = p.review_note or "delivery_failed"
+    await session.commit()
 
 
 async def start_card_payment(session: AsyncSession, order: Order, user_id: int) -> Payment:
@@ -414,25 +449,30 @@ async def attach_receipt(session: AsyncSession, payment: Payment, file_id: str) 
 
 
 async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: int) -> Order | None:
-    if payment.status == PaymentStatus.APPROVED.value:
-        if payment.is_wallet_topup:
-            return None
-        if payment.order_id:
-            return await session.get(Order, payment.order_id)
-        return None
-    # Atomic claim: only one concurrent approver wins
-    result = await session.execute(
-        select(Payment).where(
-            Payment.id == payment.id,
-            Payment.status == PaymentStatus.PENDING.value,
+    payment_id = int(payment.id)
+    # DB-only claim: disable autoflush so a dirty in-memory status cannot
+    # rewrite the row to pending before the conditional UPDATE runs.
+    with session.no_autoflush:
+        claim = await session.execute(
+            update(Payment)
+            .where(
+                Payment.id == payment_id,
+                Payment.status == PaymentStatus.PENDING.value,
+            )
+            .values(status=PaymentStatus.APPROVED.value, reviewed_by=reviewer_tg)
+            .execution_options(synchronize_session=False)
         )
-    )
-    payment = result.scalar_one_or_none()
-    if not payment:
+    if claim.rowcount != 1:
+        fresh = await session.get(Payment, payment_id)
+        if fresh and fresh.status == PaymentStatus.APPROVED.value:
+            if fresh.is_wallet_topup:
+                return None
+            if fresh.order_id:
+                return await session.get(Order, fresh.order_id)
+            return None
         raise ValueError("این پرداخت قابل تأیید نیست")
+    await session.refresh(payment)
 
-    payment.status = PaymentStatus.APPROVED.value
-    payment.reviewed_by = reviewer_tg
     if payment.is_wallet_topup:
         user = await session.get(BotUser, payment.user_id)
         if user:
@@ -458,11 +498,14 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
         await session.refresh(order)
         return order
     # Renewal orders extend existing service instead of creating a new panel user.
-    if order.note and order.note.startswith("renew:") and order.service_id and order.plan_id:
+    if order.note and order.note.startswith("renew:"):
+        if not (order.service_id and order.plan_id):
+            raise ValueError("سفارش تمدید ناقص است")
         service = await session.get(UserService, order.service_id)
         plan = await session.get(Plan, order.plan_id)
-        if service and plan:
-            return await apply_renewal(session, order, service, plan)
+        if not service or not plan:
+            raise ValueError("سرویس یا پلن تمدید یافت نشد")
+        return await apply_renewal(session, order, service, plan)
     return await deliver_order(session, order)
 
 

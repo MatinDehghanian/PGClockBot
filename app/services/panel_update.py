@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 STATUS_FILE = DATA_DIR / "panel_update.json"
 SNAPSHOTS_FILE = DATA_DIR / "update_snapshots.json"
-SERVICE_NAME = "pgclockbot"
 _LOCK = threading.RLock()
 _THREAD: threading.Thread | None = None
 MAX_SNAPSHOTS = 1

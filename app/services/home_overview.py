@@ -122,23 +122,6 @@ def _summarize_nodes(nodes: list | None) -> dict[str, Any]:
     }
 
 
-async def load_nodes_status() -> dict[str, Any]:
-    try:
-        nodes = await get_pg().get_nodes_simple()
-    except Exception as exc:
-        return {
-            "ok": False,
-            "error": str(exc) or "خطا در دریافت نودها",
-            "nodes": [],
-            "total": 0,
-            "connected": 0,
-            "warn": 0,
-            "error_count": 0,
-            "overall": "err",
-        }
-    return _summarize_nodes(nodes)
-
-
 async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
     users = await session.scalar(select(func.count()).select_from(BotUser)) or 0
     orders = await session.scalar(select(func.count()).select_from(Order)) or 0

@@ -99,6 +99,28 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
             if uerr:
                 return _err(uerr)
 
+            # Avoid colliding with reseller / pg_staff web usernames (case-insensitive)
+            from app.db.models import PgStaffAccess
+
+            res_rows = (
+                await session.execute(
+                    select(ResellerProfile.web_username).where(
+                        ResellerProfile.web_username.is_not(None)
+                    )
+                )
+            ).scalars().all()
+            if any((u or "").lower() == cleaned.lower() for u in res_rows):
+                return _err("این نام کاربری قبلاً برای یک نماینده گرفته شده")
+            staff_rows = (
+                await session.execute(
+                    select(PgStaffAccess.web_username).where(
+                        PgStaffAccess.web_username.is_not(None)
+                    )
+                )
+            ).scalars().all()
+            if any((u or "").lower() == cleaned.lower() for u in staff_rows):
+                return _err("این نام کاربری قبلاً برای دسترسی وب ادمین پاسارگارد گرفته شده")
+
             try:
                 if cleaned != stored_user:
                     saved = change_web_admin_username(cleaned)
