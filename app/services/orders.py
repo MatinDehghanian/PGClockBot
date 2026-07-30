@@ -21,7 +21,31 @@ from app.db.models import (
     UserService,
 )
 from app.services.pasarguard import extract_sub_token, get_pg
+from app.services.pg_quota import (
+    PgQuotaError,
+    assert_reseller_can_deliver,
+    assert_reseller_can_renew,
+)
 from app.services.wallet import credit_wallet, debit_wallet
+
+
+async def _reseller_pg_link(
+    session: AsyncSession, reseller_id: int | None
+) -> tuple[str | None, int | None]:
+    """Return (pg_admin_username, pg_role_id) for a reseller shop owner."""
+    if not reseller_id:
+        return None, None
+    profile = (
+        await session.execute(
+            select(ResellerProfile).where(ResellerProfile.user_id == int(reseller_id))
+        )
+    ).scalar_one_or_none()
+    if not profile:
+        return None, None
+    return (
+        (profile.pg_admin_username or "").strip() or None,
+        int(profile.pg_role_id) if profile.pg_role_id else None,
+    )
 
 
 def _random_alnum(length: int = 8) -> str:
@@ -534,6 +558,29 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
 
     pg = get_pg()
     username = await generate_pg_username(session, user_id=order.user_id)
+
+    pg_owner, pg_role_id = await _reseller_pg_link(session, order.reseller_id)
+    data_limit = None
+    expire = None
+    if plan.data_limit_gb is not None:
+        data_limit = int(plan.data_limit_gb * (1024**3))
+    if plan.duration_days:
+        import time
+
+        expire = int(time.time()) + plan.duration_days * 86400
+
+    if pg_owner:
+        try:
+            await assert_reseller_can_deliver(
+                pg_admin_username=pg_owner,
+                pg_role_id=pg_role_id,
+                data_limit=data_limit,
+                expire_ts=expire,
+                from_template=bool(plan.pg_template_id),
+            )
+        except PgQuotaError as e:
+            raise ValueError(e.message) from e
+
     pg_user: dict
     if plan.pg_template_id:
         payload = {
@@ -545,14 +592,6 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
     else:
         from app.services.pasarguard import build_user_create_payload, parse_group_ids
 
-        data_limit = None
-        if plan.data_limit_gb is not None:
-            data_limit = int(plan.data_limit_gb * (1024**3))
-        expire = None
-        if plan.duration_days:
-            import time
-
-            expire = int(time.time()) + plan.duration_days * 86400
         group_ids = parse_group_ids(getattr(plan, "pg_group_ids", None))
         if not group_ids:
             raise ValueError(
@@ -675,16 +714,33 @@ async def apply_renewal(session: AsyncSession, order: Order, service: UserServic
     pg = get_pg()
     if not service.pg_user_id:
         raise ValueError("service has no panel user")
+
+    pg_owner, pg_role_id = await _reseller_pg_link(session, order.reseller_id)
+    data_limit = int(plan.data_limit_gb * (1024**3)) if plan.data_limit_gb is not None else None
+    expire = None
+    if plan.duration_days:
+        import time
+
+        expire = int(time.time()) + plan.duration_days * 86400
+
+    if pg_owner:
+        try:
+            await assert_reseller_can_renew(
+                pg_admin_username=pg_owner,
+                pg_role_id=pg_role_id,
+                data_limit=data_limit,
+                expire_ts=expire,
+                from_template=bool(plan.pg_template_id),
+            )
+        except PgQuotaError as e:
+            raise ValueError(e.message) from e
+
     if plan.pg_template_id:
         pg_user = await pg.modify_user_with_template(
             service.pg_user_id,
             {"user_template_id": plan.pg_template_id},
         )
     else:
-        import time
-
-        data_limit = int(plan.data_limit_gb * (1024**3)) if plan.data_limit_gb is not None else None
-        expire = int(time.time()) + plan.duration_days * 86400 if plan.duration_days else None
         pg_user = await pg.modify_user_by_id(
             service.pg_user_id,
             {

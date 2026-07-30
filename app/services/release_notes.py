@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "2.3.0": [
+        "رفع امنیتی بحرانی: اعمال محدودیت‌های نقش ادمین پاسارگارد (تعداد کاربر، حجم، مدت، وضعیت محدود) در وب‌پنل و تحویل فروشگاه",
+        "دیگر با توکن ادمین اصلی نمی‌توان سقف max_users / data_limit / expire نقش را دور زد",
+    ],
     "2.2.6": [
         "فونت مودال‌ها یکدست با پنل؛ جلوگیری از بزرگ شدن متن روی سایدبار/موبایل",
     ],

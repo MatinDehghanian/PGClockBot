@@ -55,18 +55,9 @@ def _as_int(value: Any) -> int | None:
 
 
 def _role_limits(admin: dict | None, role: dict | None) -> dict:
-    limits: dict = {}
-    for src in (
-        (admin or {}).get("permission_overrides"),
-        ((admin or {}).get("role") or {}).get("limits") if isinstance((admin or {}).get("role"), dict) else None,
-        (role or {}).get("limits") if isinstance(role, dict) else None,
-    ):
-        if isinstance(src, dict):
-            for k, v in src.items():
-                if k not in limits or limits[k] is None:
-                    limits[k] = v
-    return limits
+    from app.services.pg_quota import merge_role_limits
 
+    return merge_role_limits(admin, role)
 
 def _meter(
     *,

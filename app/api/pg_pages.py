@@ -19,6 +19,12 @@ from app.services.pasarguard import (
     user_subscription_url,
 )
 from app.services.pg_access import staff_pg_writes, staff_user_actions
+from app.services.pg_quota import (
+    PgQuotaError,
+    assert_can_create_user,
+    assert_can_modify_user,
+    assert_can_mutate_owned_users,
+)
 
 
 def _q(msg: str) -> str:
@@ -329,6 +335,10 @@ def register_pg_pages(
                 tid = int(raw_tid)
                 if not template_allowed_for_staff(staff, tid):
                     return _pg_form_err("این تمپلیت مجاز نیست", modal="create")
+                try:
+                    await assert_can_create_user(staff, from_template=True)
+                except PgQuotaError as qe:
+                    return _pg_form_err(qe.message, modal="create")
                 created = await get_pg().create_user_from_template(
                     {
                         "username": uname,
@@ -373,6 +383,16 @@ def register_pg_pages(
                             expire_ts = int(time.time()) + days * 86400
                     except ValueError:
                         return _pg_form_err("مدت نامعتبر است", modal="create")
+
+                try:
+                    await assert_can_create_user(
+                        staff,
+                        data_limit=data_limit,
+                        expire_ts=expire_ts,
+                        from_template=False,
+                    )
+                except PgQuotaError as qe:
+                    return _pg_form_err(qe.message, modal="create")
 
                 created = await get_pg().create_user(
                     build_user_create_payload(
@@ -479,6 +499,16 @@ def register_pg_pages(
             current = await _assert_owned_user(staff, user_id)
             if current is None:
                 return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
+            try:
+                await assert_can_modify_user(
+                    staff,
+                    data_limit=data_limit,
+                    expire_ts=expire_ts,
+                    data_limit_changed=True,
+                    expire_changed=True,
+                )
+            except PgQuotaError as qe:
+                return _pg_form_err(qe.message, modal="edit", uid=user_id)
             # PasarGuard does not allow changing username after create
             payload = build_user_modify_payload(
                 username=None,
@@ -494,13 +524,24 @@ def register_pg_pages(
             return _pg_form_err(msg, modal="edit", uid=user_id)
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ویرایش شد')}", status_code=303)
 
+    async def _guard_owned_mutation(staff: dict, user_id: int) -> RedirectResponse | None:
+        """Ownership + limited-admin write gate. Returns redirect on failure."""
+        if await _assert_owned_user(staff, user_id) is None:
+            return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
+        try:
+            await assert_can_mutate_owned_users(staff)
+        except PgQuotaError as qe:
+            return RedirectResponse(f"/pg/users?err={_q(qe.message)}", status_code=303)
+        return None
+
     @app.post("/pg/users/{user_id}/disable")
     async def pg_users_disable(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
         if not staff_user_actions(staff)["disable"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
         try:
-            if await _assert_owned_user(staff, user_id) is None:
-                return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
+            denied = await _guard_owned_mutation(staff, user_id)
+            if denied is not None:
+                return denied
             await get_pg().set_disabled_by_id(user_id, True)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
@@ -511,8 +552,9 @@ def register_pg_pages(
         if not staff_user_actions(staff)["enable"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
         try:
-            if await _assert_owned_user(staff, user_id) is None:
-                return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
+            denied = await _guard_owned_mutation(staff, user_id)
+            if denied is not None:
+                return denied
             await get_pg().set_disabled_by_id(user_id, False)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
@@ -524,8 +566,9 @@ def register_pg_pages(
         if not acts["reset_usage"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
         try:
-            if await _assert_owned_user(staff, user_id) is None:
-                return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
+            denied = await _guard_owned_mutation(staff, user_id)
+            if denied is not None:
+                return denied
             await get_pg().reset_user_by_id(user_id)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
@@ -537,8 +580,9 @@ def register_pg_pages(
         if not acts["revoke_sub"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
         try:
-            if await _assert_owned_user(staff, user_id) is None:
-                return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
+            denied = await _guard_owned_mutation(staff, user_id)
+            if denied is not None:
+                return denied
             await get_pg().revoke_sub_by_id(user_id)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
@@ -549,8 +593,9 @@ def register_pg_pages(
         if not staff_user_actions(staff)["delete"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه حذف ندارید')}", status_code=303)
         try:
-            if await _assert_owned_user(staff, user_id) is None:
-                return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
+            denied = await _guard_owned_mutation(staff, user_id)
+            if denied is not None:
+                return denied
             await get_pg().delete_user_by_id(user_id)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
@@ -603,6 +648,10 @@ def register_pg_pages(
     ):
         if not staff_pg_writes(staff)["templates"]:
             return RedirectResponse(f"/pg/templates?err={_q('اجازه ساخت ندارید')}", status_code=303)
+        try:
+            await assert_can_mutate_owned_users(staff)
+        except PgQuotaError as qe:
+            return RedirectResponse(f"/pg/templates?err={_q(qe.message)}", status_code=303)
         form = await request.form()
         group_ids = [int(v) for k, v in form.items() if str(k).startswith("g_") and str(v).isdigit()]
         if not group_ids:
@@ -635,6 +684,10 @@ def register_pg_pages(
 
         if not template_allowed_for_staff(staff, template_id):
             return RedirectResponse(f"/pg/templates?err={_q('تمپلیت خارج از دسترسی شماست')}", status_code=303)
+        try:
+            await assert_can_mutate_owned_users(staff)
+        except PgQuotaError as qe:
+            return RedirectResponse(f"/pg/templates?err={_q(qe.message)}", status_code=303)
         try:
             await get_pg().delete_user_template(template_id)
         except Exception as e:
@@ -690,6 +743,10 @@ def register_pg_pages(
     ):
         if not staff_pg_writes(staff)["groups"]:
             return RedirectResponse(f"/pg/groups?err={_q('اجازه ساخت ندارید')}", status_code=303)
+        try:
+            await assert_can_mutate_owned_users(staff)
+        except PgQuotaError as qe:
+            return RedirectResponse(f"/pg/groups?err={_q(qe.message)}", status_code=303)
         form = await request.form()
         tags = [str(v) for k, v in form.items() if str(k).startswith("tag_")]
         if not tags:
@@ -713,6 +770,10 @@ def register_pg_pages(
 
         if not groups_allowed_for_staff(staff, [group_id]):
             return RedirectResponse(f"/pg/groups?err={_q('گروه خارج از دسترسی شماست')}", status_code=303)
+        try:
+            await assert_can_mutate_owned_users(staff)
+        except PgQuotaError as qe:
+            return RedirectResponse(f"/pg/groups?err={_q(qe.message)}", status_code=303)
         form = await request.form()
         tags = [str(v) for k, v in form.items() if str(k).startswith("tag_")]
         disabled = bool(form.get("is_disabled"))
@@ -733,6 +794,10 @@ def register_pg_pages(
 
         if not groups_allowed_for_staff(staff, [group_id]):
             return RedirectResponse(f"/pg/groups?err={_q('گروه خارج از دسترسی شماست')}", status_code=303)
+        try:
+            await assert_can_mutate_owned_users(staff)
+        except PgQuotaError as qe:
+            return RedirectResponse(f"/pg/groups?err={_q(qe.message)}", status_code=303)
         try:
             await get_pg().delete_group(group_id)
         except Exception as e:
