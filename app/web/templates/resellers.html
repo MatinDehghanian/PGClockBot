@@ -177,7 +177,7 @@
               <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}</option>
               {% endfor %}
             </select>
-        <small class=\"muted\">دسترسی‌های VPN در وب‌پنل از این نقش می‌آید</small>
+        <small class=\"muted\">دسترسی‌های پاسارگارد در وب‌پنل از این نقش می‌آید</small>
           </label>
         </div>
       </div>
@@ -193,8 +193,8 @@
       </div>
 
       <div class="ui-switch-list">
-        {{ switch('create_pg_admin', 'ساخت ادمین پاسارگارد', checked=true, help='برای مالکیت کاربران VPN لازم است — حتی اگر لینک پنل ارسال نشود') }}
-        {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=false, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات VPN را مدیریت می‌کند') }}
+        {{ switch('create_pg_admin', 'ساخت ادمین پاسارگارد', checked=true, help='برای مالکیت کاربران لازم است — حتی اگر لینک پنل ارسال نشود') }}
+        {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=false, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند') }}
       </div>
 
       <div class="actions">

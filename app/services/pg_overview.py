@@ -203,7 +203,7 @@ def _role_constraint_boxes(limits: dict) -> list[dict[str, Any]]:
     if dmin is not None and dmin > 0:
         boxes.append(_constraint_box("حداقل حجم کاربر", format_bytes(dmin), hint="کف حجم هنگام ساخت/ویرایش"))
     if dmax is not None and dmax > 0:
-        boxes.append(_constraint_box("حداکثر حجم کاربر", format_bytes(dmax), hint="سقف حجم هر کاربر VPN"))
+        boxes.append(_constraint_box("حداکثر حجم کاربر", format_bytes(dmax), hint="سقف حجم هر کاربر"))
     if emin is not None and emin > 0:
         boxes.append(_constraint_box("حداقل مدت کاربر", _format_duration(emin), hint="کف مدت از زمان ساخت"))
     if emax is not None and emax > 0:
@@ -287,7 +287,7 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
         out["status_label"] = label
         out["status_badge"] = badge
         out["users"] = _meter(
-            label="کاربران VPN",
+            label="کاربران",
             used=total_users,
             limit=max_users,
             used_label="مصرف‌شده",

@@ -53,7 +53,8 @@ class DashboardPolishSourceTests(unittest.TestCase):
 
     def test_overview_boxes_equal_and_rtl(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn("height: 120px", css)
+        self.assertIn("height: 96px", css)
+        self.assertIn("justify-content: space-between", css)
         self.assertIn("text-overflow: ellipsis", css)
         self.assertIn("text-align: right", css)
 
@@ -71,6 +72,11 @@ class DashboardPolishSourceTests(unittest.TestCase):
         self.assertIn("ratio_text", pg)
         self.assertNotIn("used_text }} / {{", dash)
         self.assertNotIn("used_text }} / {{", pg)
+
+    def test_web_panel_has_no_vpn_label(self):
+        for path in Path("app/web/templates").rglob("*.html"):
+            src = path.read_text(encoding="utf-8")
+            self.assertNotIn("VPN", src, msg=f"VPN still in {path}")
 
 
 if __name__ == "__main__":

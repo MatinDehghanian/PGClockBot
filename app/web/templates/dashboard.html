@@ -91,7 +91,16 @@
     <div class="home-panel-head">
       <div class="home-panel-title">
         <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-        <h2 class="home-panel-h">پنل پاسارگارد{% if pg_limits.username %} · <span dir="ltr">{{ pg_limits.username }}</span>{% endif %}</h2>
+        <h2 class="home-panel-h">پنل پاسارگارد</h2>
+        {% if pg_limits.username %}
+        <span class="pg-admin-name pg-admin-name-inline" dir="ltr">{{ pg_limits.username }}</span>
+        {% endif %}
+        {% if pg_limits.status_label %}
+        <span class="badge {{ pg_limits.status_badge or 'neutral' }}">{{ pg_limits.status_label }}</span>
+        {% endif %}
+        {% if pg_limits.role_name %}
+        <span class="badge neutral">{{ pg_limits.role_name }}</span>
+        {% endif %}
       </div>
       {% if 'pg_overview' in (staff.get('pg_permissions') or []) %}
       <a class="btn btn-sm btn-ghost" href="/pg">نمای کلی</a>
@@ -104,7 +113,7 @@
           <span class="stat-ico" aria-hidden="true">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/></svg>
           </span>
-          <span>کاربران VPN</span>
+          <span>کاربران</span>
         </div>
         <strong class="stat-value" dir="ltr">{{ pg_limits.users.ratio_text }}</strong>
         {% if pg_limits.users.has_limit %}
@@ -128,18 +137,6 @@
         {% else %}
         <small class="muted">بدون سقف حجم</small>
         {% endif %}
-      </div>
-      {% endif %}
-      {% if pg_limits.status_label %}
-      <div class="stat">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 1.5"/></svg>
-          </span>
-          <span>وضعیت</span>
-        </div>
-        <strong>{{ pg_limits.status_label }}</strong>
-        {% if pg_limits.role_name %}<small class="muted">نقش {{ pg_limits.role_name }}</small>{% endif %}
       </div>
       {% endif %}
       {% for c in pg_limits.constraints or [] %}

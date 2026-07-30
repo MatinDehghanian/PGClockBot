@@ -72,10 +72,18 @@ class WiringTests(unittest.TestCase):
         src = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
         self.assertNotIn("زمان کل", src)
         self.assertNotIn("زمان باقیمانده", src)
-        self.assertIn("کاربران VPN", src)
+        self.assertIn("کاربران", src)
+        self.assertNotIn("VPN", src)
         self.assertNotIn('class="meter"', src)
         self.assertIn("باقی‌مانده {{ ov.traffic.remain_text }}", src)
         self.assertIn("ratio_text", src)
+
+    def test_dashboard_status_is_badge_not_box(self):
+        src = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
+        self.assertIn("pg_limits.status_label", src)
+        self.assertIn('class="badge {{ pg_limits.status_badge', src)
+        self.assertNotIn("<span>وضعیت</span>", src)
+        self.assertNotIn("VPN", src)
 
     def test_broadcast_caption_uses_small_muted(self):
         src = Path("app/web/templates/broadcast.html").read_text(encoding="utf-8")
