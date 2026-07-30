@@ -182,11 +182,11 @@ def _status_meta(raw: Any) -> tuple[str | None, str | None]:
     return str(raw), "neutral"
 
 
-def _constraint_box(label: str, value_text: str, *, hint: str | None = None) -> dict[str, Any]:
+def _constraint_box(label: str, value_text: str) -> dict[str, Any]:
+    """Constraint stat box — no caption; only users/volume boxes keep remain hints."""
     return {
         "label": label,
         "value_text": value_text,
-        "hint": hint,
     }
 
 
@@ -201,17 +201,17 @@ def _role_constraint_boxes(limits: dict) -> list[dict[str, Any]]:
     hmax = _as_int(limits.get("max_hwid_per_user"))
 
     if dmin is not None and dmin > 0:
-        boxes.append(_constraint_box("حداقل حجم کاربر", format_bytes(dmin), hint="کف حجم هنگام ساخت/ویرایش"))
+        boxes.append(_constraint_box("حداقل حجم کاربر", format_bytes(dmin)))
     if dmax is not None and dmax > 0:
-        boxes.append(_constraint_box("حداکثر حجم کاربر", format_bytes(dmax), hint="سقف حجم هر کاربر"))
+        boxes.append(_constraint_box("حداکثر حجم کاربر", format_bytes(dmax)))
     if emin is not None and emin > 0:
-        boxes.append(_constraint_box("حداقل مدت کاربر", _format_duration(emin), hint="کف مدت از زمان ساخت"))
+        boxes.append(_constraint_box("حداقل مدت کاربر", _format_duration(emin)))
     if emax is not None and emax > 0:
-        boxes.append(_constraint_box("حداکثر مدت کاربر", _format_duration(emax), hint="سقف مدت از زمان ساخت"))
+        boxes.append(_constraint_box("حداکثر مدت کاربر", _format_duration(emax)))
     if hmin is not None and hmin > 0:
-        boxes.append(_constraint_box("حداقل HWID", format_number(hmin), hint="کف تعداد دستگاه"))
+        boxes.append(_constraint_box("حداقل HWID", format_number(hmin)))
     if hmax is not None and hmax > 0:
-        boxes.append(_constraint_box("حداکثر HWID", format_number(hmax), hint="سقف تعداد دستگاه"))
+        boxes.append(_constraint_box("حداکثر HWID", format_number(hmax)))
     return boxes
 
 

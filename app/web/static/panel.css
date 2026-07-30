@@ -433,10 +433,10 @@ label > .field-help,
 .field-help,
 .hint {
   display: block;
-  margin-top: 4px;
-  margin-bottom: 8px;
+  margin-top: 10px;
+  margin-bottom: 0;
   font-size: 11px;
-  color: #71717a;
+  color: var(--muted-fg);
   font-weight: 400;
   line-height: 1.55;
 }
@@ -446,7 +446,7 @@ label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):
 .form-field > small.muted,
 .form-field > .field-help {
   order: 10;
-  margin-top: 2px;
+  margin-top: 10px;
   margin-bottom: 0;
 }
 label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]), > select, > textarea, > .pw-field) > input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
@@ -463,14 +463,20 @@ label:has(> .pw-field) > .pw-field,
 .image-setting {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
-.image-setting > strong { order: 1; }
+.image-setting > strong { order: 1; margin-bottom: 8px; }
 .image-setting > small.muted,
-.image-setting > .field-help { order: 10; margin-top: 0; margin-bottom: 0; }
-.image-setting > .image-preview { order: 4; }
+.image-setting > .field-help {
+  order: 10;
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+.image-setting > .image-preview { order: 4; margin-bottom: 8px; }
 .image-setting > .file-label,
-.image-setting > label.file-label { order: 5; }
+.image-setting > label.file-label,
+.image-setting > label.upload-box { order: 5; }
+.image-setting > .ap-photo-row { order: 12; margin-top: 10px; }
 
 input::placeholder,
 textarea::placeholder {
@@ -2593,7 +2599,7 @@ body.modal-open { overflow: hidden; }
 
 /* —— Reseller PG meters —— */
 .pg-reseller-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.stat small { display: block; margin-top: 6px; font-size: 11px; line-height: 1.35; }
+.stat small { display: block; margin-top: 8px; font-size: 11px; line-height: 1.35; }
 .meter {
   margin-top: 10px;
   height: 6px;
@@ -3512,7 +3518,7 @@ html[data-theme="light"] .tg-preview-shell {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 0;
+  margin-top: 4px;
 }
 .pg-admin-name-inline {
   font-size: 13px;
@@ -3742,7 +3748,7 @@ html[data-theme="light"] .tg-preview-shell {
 }
 .home-panel-grid > .stat small {
   display: block;
-  margin-top: 0;
+  margin-top: 4px;
   font-size: 11px;
   line-height: 1.35;
   text-align: right;

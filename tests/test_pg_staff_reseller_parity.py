@@ -43,6 +43,15 @@ class ConstraintBoxesTests(unittest.TestCase):
         self.assertIn("حداقل حجم کاربر", labels)
         self.assertIn("حداکثر حجم کاربر", labels)
         self.assertIn("حداکثر مدت کاربر", labels)
+        # Constraint boxes must not carry captions (only users/volume keep remain hints)
+        for b in boxes:
+            self.assertNotIn("hint", b)
+
+    def test_templates_omit_constraint_captions(self):
+        for rel in ("app/web/templates/dashboard.html", "app/web/templates/pg_home.html"):
+            src = Path(rel).read_text(encoding="utf-8")
+            self.assertNotIn("c.hint", src)
+            self.assertIn("باقی‌مانده", src)
 
     def test_status_meta_still_works(self):
         self.assertEqual(_status_meta("limited"), ("محدود", "warn"))

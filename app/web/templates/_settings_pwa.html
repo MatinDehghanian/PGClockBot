@@ -33,27 +33,28 @@
         </label>
       </div>
       <div class="setting-item full">
-        <label>آیکن وب‌اپ
+        <div class="image-setting">
+          <strong>آیکن وب‌اپ</strong>
+          <label class="file-label upload-box">
+            <input name="pwa_icon" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" />
+            <span class="upload-box-plus" aria-hidden="true">+</span>
+            <span class="upload-box-title">انتخاب آیکن</span>
+            <span class="upload-box-hint muted">PNG یا JPG مربعی</span>
+            <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
+          </label>
           <small class="muted">خالی = لوگوی پنل</small>
-        </label>
-        <label class="upload-box">
-          <input name="pwa_icon" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" />
-          <span class="upload-box-plus" aria-hidden="true">+</span>
-          <span class="upload-box-title">انتخاب آیکن</span>
-          <span class="upload-box-hint muted">PNG یا JPG مربعی</span>
-          <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
-        </label>
-        <div class="ap-photo-row" style="margin-top:10px">
-          <img src="{{ p.get('icon_preview') }}?v={{ app_version }}" alt="" class="ap-photo-thumb"
-               width="64" height="64" style="border-radius:14px;object-fit:cover;background:#111" />
-          {% if p.get('has_custom_icon') %}
-          <button type="submit" name="pwa_icon_clear" value="1" class="btn btn-ghost"
-                  onclick="return confirm('آیکن سفارشی حذف شود و لوگوی پنل برگردد؟')">
-            بازگشت به لوگوی پنل
-          </button>
-          {% else %}
-          <span class="muted">در حال استفاده از لوگوی پیش‌فرض پنل</span>
-          {% endif %}
+          <div class="ap-photo-row">
+            <img src="{{ p.get('icon_preview') }}?v={{ app_version }}" alt="" class="ap-photo-thumb"
+                 width="64" height="64" style="border-radius:14px;object-fit:cover;background:#111" />
+            {% if p.get('has_custom_icon') %}
+            <button type="submit" name="pwa_icon_clear" value="1" class="btn btn-ghost"
+                    onclick="return confirm('آیکن سفارشی حذف شود و لوگوی پنل برگردد؟')">
+              بازگشت به لوگوی پنل
+            </button>
+            {% else %}
+            <span class="muted">در حال استفاده از لوگوی پیش‌فرض پنل</span>
+            {% endif %}
+          </div>
         </div>
       </div>
     </div>

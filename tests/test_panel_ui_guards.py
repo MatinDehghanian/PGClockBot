@@ -80,6 +80,14 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn("order: 10", css)
         self.assertIn(".form-field > small.muted", css)
+        # Hints under controls need clear gap + theme muted color (not hardcoded grey)
+        self.assertIn("margin-top: 10px", css)
+        block = re.search(
+            r"(?ms)label > small\.muted,\s*label > \.field-help,\s*\.field-help,\s*\.hint\s*\{([^}]+)\}",
+            css,
+        )
+        self.assertIsNotNone(block)
+        self.assertIn("color: var(--muted-fg)", block.group(1))
 
     def test_settings_field_help_after_control(self):
         src = (ROOT / "app/web/templates/_settings_field.html").read_text(encoding="utf-8")
@@ -87,6 +95,41 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
         self.assertIn("</select>\n    {% if help %}<small class=\"muted\">{{ help }}</small>{% endif %}", src)
         self.assertRegex(src, r"<input name=\"s_\{\{ key \}\}\" value=\"\{\{ val \}\}\" />\s*\{% if help %\}")
 
+    def test_no_escaped_muted_class_in_templates(self):
+        bad = []
+        needle = r'class=\"muted\"'
+        for path in (ROOT / "app/web/templates").rglob("*.html"):
+            text = path.read_text(encoding="utf-8")
+            if needle in text:
+                bad.append(str(path.relative_to(ROOT)))
+        self.assertEqual(bad, [], msg="broken escaped muted class breaks hint color/order CSS")
+
+    def test_appearance_and_pwa_hints_below_upload(self):
+        ap = (ROOT / "app/web/templates/_settings_appearance.html").read_text(encoding="utf-8")
+        self.assertIn('class="muted"', ap)
+        self.assertNotIn(r'class=\"muted\"', ap)
+        self.assertIn("image-setting", ap)
+        # Profile photo: upload box before the JPG caption
+        self.assertRegex(
+            ap,
+            r'(?s)upload-box.*<small class="muted">فقط JPG — از API',
+        )
+        # Caption must not sit alone under the title before the upload control
+        self.assertNotRegex(
+            ap,
+            r'(?s)<strong>عکس پروفایل</strong>\s*<small class="muted">',
+        )
+
+        pwa = (ROOT / "app/web/templates/_settings_pwa.html").read_text(encoding="utf-8")
+        self.assertIn("image-setting", pwa)
+        self.assertRegex(
+            pwa,
+            r'(?s)upload-box.*<small class="muted">خالی = لوگوی پنل',
+        )
+        self.assertNotRegex(
+            pwa,
+            r'(?s)<strong>آیکن وب‌اپ</strong>\s*<small class="muted">',
+        )
 
 class DeleteButtonAndKebabTests(unittest.TestCase):
     def test_btn_danger_matches_soft_tint_style(self):
