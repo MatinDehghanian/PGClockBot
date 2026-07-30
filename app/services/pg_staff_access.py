@@ -13,7 +13,7 @@ Creating a new staff grant must fail when any of these already apply.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +26,99 @@ from app.services.web_auth import (
     validate_web_username,
     verify_password_hash,
 )
+
+# Shown on login / session kick when PG admin is disabled or removed.
+PG_ACCESS_DENIED_MSG = (
+    "دسترسی وب‌پنل برای شما فعال نیست. با ادمین اصلی تماس بگیرید."
+)
+
+PgAdminGate = Literal["ok", "disabled", "missing", "unreachable"]
+
+
+def classify_pg_admin_dict(admin: dict | None) -> Literal["ok", "disabled", "missing"]:
+    """Map a PasarGuard admin payload to a gate state.
+
+    - ``missing``: admin fully deleted from PasarGuard
+    - ``disabled``: deactivated / inactive — block login, keep web credentials
+    - ``ok``: active, or merely limited / quota-exhausted / expired (keep account)
+    """
+    if not isinstance(admin, dict) or not admin:
+        return "missing"
+    if admin.get("enabled") is False or admin.get("is_disabled") is True:
+        return "disabled"
+    if admin.get("is_active") is False:
+        return "disabled"
+    status = str(admin.get("status") or "").strip().lower()
+    if status in {"disabled", "inactive", "deleted", "banned"}:
+        return "disabled"
+    # limited / expired / on_hold / quota exhausted → keep web account & allow login
+    return "ok"
+
+
+async def fetch_pg_admin_gate(pg_username: str) -> tuple[PgAdminGate, dict | None]:
+    """Live-check PasarGuard for this admin. Network errors → ``unreachable``."""
+    uname = _norm_pg(pg_username)
+    if not uname:
+        return "missing", None
+    from app.services.pasarguard import get_pg
+
+    try:
+        admin = await get_pg().get_admin(uname)
+    except Exception:
+        return "unreachable", None
+    return classify_pg_admin_dict(admin), admin
+
+
+async def enforce_pg_admin_web_gate(
+    session: AsyncSession,
+    pg_username: str,
+    *,
+    revoke_if_missing: bool = True,
+) -> tuple[bool, str | None]:
+    """Return ``(allowed, error_message)``.
+
+    When the PG admin was fully deleted, revoke ``PgStaffAccess`` (not reseller
+    shop profiles). Quota/limit exhaustion never deletes the web row.
+    """
+    gate, _admin = await fetch_pg_admin_gate(pg_username)
+    if gate == "ok":
+        return True, None
+    if gate == "unreachable":
+        # Don't lock everyone out if PasarGuard is temporarily down
+        return True, None
+    if gate == "missing" and revoke_if_missing:
+        try:
+            await revoke_web_access(session, pg_username)
+        except Exception:
+            pass
+    return False, PG_ACCESS_DENIED_MSG
+
+
+async def purge_orphaned_staff_access(session: AsyncSession) -> int:
+    """Delete PgStaffAccess rows whose PG admin no longer exists in PasarGuard."""
+    rows = await list_access_rows(session)
+    if not rows:
+        return 0
+    from app.services.pasarguard import get_pg
+
+    try:
+        admins = await get_pg().get_admins()
+    except Exception:
+        return 0
+    alive = {
+        str(a.get("username") or "").strip().lower()
+        for a in admins
+        if isinstance(a, dict) and a.get("username")
+    }
+    removed = 0
+    for row in rows:
+        key = _norm_pg(row.pg_username)
+        if key and key not in alive:
+            await session.delete(row)
+            removed += 1
+    if removed:
+        await session.commit()
+    return removed
 
 
 @dataclass(frozen=True)

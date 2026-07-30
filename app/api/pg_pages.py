@@ -870,7 +870,10 @@ def register_pg_pages(
         staff: dict = Depends(require_admin),
         session=Depends(get_db),
     ):
-        from app.services.pg_staff_access import web_access_status_map
+        from app.services.pg_staff_access import (
+            purge_orphaned_staff_access,
+            web_access_status_map,
+        )
 
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
@@ -878,6 +881,11 @@ def register_pg_pages(
         roles = []
         web_status: dict = {}
         try:
+            # Drop web rows for PG admins that no longer exist in PasarGuard
+            try:
+                await purge_orphaned_staff_access(session)
+            except Exception:
+                pass
             pg = get_pg()
             admins = await pg.get_admins()
             if not admins:
@@ -947,6 +955,7 @@ def register_pg_pages(
     ):
         from app.services.pg_staff_access import (
             access_by_pg_username,
+            classify_pg_admin_dict,
             grant_web_access,
             update_web_access,
         )
@@ -966,6 +975,11 @@ def register_pg_pages(
         if not admin:
             return RedirectResponse(
                 f"/pg/admins?err={_q('این ادمین در پاسارگارد یافت نشد')}",
+                status_code=303,
+            )
+        if classify_pg_admin_dict(admin) == "disabled":
+            return RedirectResponse(
+                f"/pg/admins?err={_q('این ادمین در پاسارگارد غیرفعال است — ابتدا فعالش کنید')}",
                 status_code=303,
             )
 

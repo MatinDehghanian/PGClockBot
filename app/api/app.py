@@ -98,7 +98,10 @@ _LOGIN_MAX_FAILURES = 8
 
 
 class NotAuthenticated(Exception):
-    pass
+    def __init__(self, message: str | None = None, *, login_error: str | None = None):
+        self.message = message
+        self.login_error = login_error or message
+        super().__init__(message or "not authenticated")
 
 
 class NotAdmin(Exception):
@@ -271,11 +274,22 @@ def create_api_app(lifespan=None) -> FastAPI:
             )
             profile = result.scalar_one_or_none()
             if not profile or not profile.is_active or not setup_is_complete(profile):
-                raise NotAuthenticated()
+                from app.services.pg_staff_access import PG_ACCESS_DENIED_MSG
+
+                raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
             # Password change invalidates older cookies
             pwd = (profile.web_password_hash or "")[:24]
             if pwd and user.get("pv") != pwd:
                 raise NotAuthenticated()
+            # Live PasarGuard gate when linked to a PG admin
+            if profile.pg_admin_username:
+                from app.services.pg_staff_access import enforce_pg_admin_web_gate
+
+                allowed, deny_msg = await enforce_pg_admin_web_gate(
+                    session, profile.pg_admin_username, revoke_if_missing=True
+                )
+                if not allowed:
+                    raise NotAuthenticated(login_error=deny_msg)
             # Always re-read ACL from DB — never trust stale cookie permissions
             user = dict(user)
             user["permissions"] = parse_perms(profile.web_permissions) or []
@@ -291,17 +305,30 @@ def create_api_app(lifespan=None) -> FastAPI:
         elif user.get("role") == "pg_staff":
             from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
             from app.services.pg_staff_access import (
+                PG_ACCESS_DENIED_MSG,
                 access_by_web_username,
+                enforce_pg_admin_web_gate,
                 resolve_pg_role_id_for_admin,
             )
 
             web_u = (user.get("username") or "").strip().lower()
             row = await access_by_web_username(session, web_u)
-            if not row or not row.is_active:
-                raise NotAuthenticated()
+            if not row:
+                raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
+            if not row.is_active:
+                raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
             pwd = (row.web_password_hash or "")[:24]
             if pwd and user.get("pv") != pwd:
                 raise NotAuthenticated()
+            allowed, deny_msg = await enforce_pg_admin_web_gate(
+                session, row.pg_username, revoke_if_missing=True
+            )
+            if not allowed:
+                raise NotAuthenticated(login_error=deny_msg)
+            # Row may have been revoked if PG admin was deleted
+            row = await access_by_web_username(session, web_u)
+            if not row or not row.is_active:
+                raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
             user = dict(user)
             user["permissions"] = []
             user["pg_admin_username"] = row.pg_username
@@ -314,7 +341,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             user = enrich_staff_pg_from_role(user, features, role)
             if not (user.get("pg_permissions") or []):
                 # No mapped features → deny panel use
-                raise NotAuthenticated()
+                raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
         return user
 
     async def require_admin(
@@ -483,6 +510,9 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.exception_handler(NotAuthenticated)
     async def _unauth(request: Request, exc: NotAuthenticated):
+        err = getattr(exc, "login_error", None) or getattr(exc, "message", None)
+        if err:
+            return RedirectResponse(f"/login?err={quote(str(err), safe='')}", status_code=303)
         return RedirectResponse("/login", status_code=303)
 
     @app.exception_handler(NotAdmin)
@@ -823,7 +853,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             request,
             "login.html",
             {
-                "error": None,
+                "error": request.query_params.get("err"),
                 "username": "",
                 "flash_ok": request.query_params.get("ok"),
             },
@@ -873,31 +903,62 @@ def create_api_app(lifespan=None) -> FastAPI:
             display = load_web_admin()["username"]
         else:
             # Reseller web credentials (self-serve wizard only — no referral-code login)
+            from app.services.pg_staff_access import (
+                PG_ACCESS_DENIED_MSG,
+                access_by_web_username,
+                enforce_pg_admin_web_gate,
+                resolve_pg_role_id_for_admin,
+            )
+
             result = await session.execute(
                 select(BotUser, ResellerProfile)
                 .join(ResellerProfile, ResellerProfile.user_id == BotUser.id)
                 .where(
                     ResellerProfile.web_username == u.strip().lower(),
-                    ResellerProfile.is_active.is_(True),
                     BotUser.role == Role.RESELLER.value,
                 )
             )
             row = result.first()
             if row:
                 ru, profile = row
-                if not setup_is_complete(profile):
-                    for k in limit_keys:
-                        _login_fail(k)
-                    return render(
-                        request,
-                        "login.html",
-                        {
-                            "error": "راه‌اندازی پنل هنوز کامل نشده. از لینک تلگرام استفاده کنید.",
-                            "username": typed_user,
-                        },
-                        status_code=400,
-                    )
                 if verify_password_hash(p, profile.web_password_hash):
+                    if not profile.is_active:
+                        for k in limit_keys:
+                            _login_fail(k)
+                        return render(
+                            request,
+                            "login.html",
+                            {"error": PG_ACCESS_DENIED_MSG, "username": typed_user},
+                            status_code=403,
+                        )
+                    if not setup_is_complete(profile):
+                        for k in limit_keys:
+                            _login_fail(k)
+                        return render(
+                            request,
+                            "login.html",
+                            {
+                                "error": "راه‌اندازی پنل هنوز کامل نشده. از لینک تلگرام استفاده کنید.",
+                                "username": typed_user,
+                            },
+                            status_code=400,
+                        )
+                    if profile.pg_admin_username:
+                        allowed, deny_msg = await enforce_pg_admin_web_gate(
+                            session, profile.pg_admin_username, revoke_if_missing=True
+                        )
+                        if not allowed:
+                            for k in limit_keys:
+                                _login_fail(k)
+                            return render(
+                                request,
+                                "login.html",
+                                {
+                                    "error": deny_msg or PG_ACCESS_DENIED_MSG,
+                                    "username": typed_user,
+                                },
+                                status_code=403,
+                            )
                     from app.services.pg_access import (
                         map_pg_role_writes,
                         resolve_reseller_pg_features,
@@ -926,17 +987,44 @@ def create_api_app(lifespan=None) -> FastAPI:
                     role_access_limits,
                     role_user_actions,
                 )
-                from app.services.pg_staff_access import (
-                    access_by_web_username,
-                    resolve_pg_role_id_for_admin,
-                )
 
                 staff_row = await access_by_web_username(session, u.strip().lower())
-                if (
-                    staff_row
-                    and staff_row.is_active
-                    and verify_password_hash(p, staff_row.web_password_hash)
-                ):
+                if staff_row and verify_password_hash(p, staff_row.web_password_hash):
+                    if not staff_row.is_active:
+                        for k in limit_keys:
+                            _login_fail(k)
+                        return render(
+                            request,
+                            "login.html",
+                            {"error": PG_ACCESS_DENIED_MSG, "username": typed_user},
+                            status_code=403,
+                        )
+                    allowed, deny_msg = await enforce_pg_admin_web_gate(
+                        session, staff_row.pg_username, revoke_if_missing=True
+                    )
+                    if not allowed:
+                        for k in limit_keys:
+                            _login_fail(k)
+                        return render(
+                            request,
+                            "login.html",
+                            {
+                                "error": deny_msg or PG_ACCESS_DENIED_MSG,
+                                "username": typed_user,
+                            },
+                            status_code=403,
+                        )
+                    # Re-load in case revoke removed the row
+                    staff_row = await access_by_web_username(session, u.strip().lower())
+                    if not staff_row or not staff_row.is_active:
+                        for k in limit_keys:
+                            _login_fail(k)
+                        return render(
+                            request,
+                            "login.html",
+                            {"error": PG_ACCESS_DENIED_MSG, "username": typed_user},
+                            status_code=403,
+                        )
                     role = "pg_staff"
                     display = staff_row.web_username
                     permissions = []
