@@ -191,6 +191,30 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("چند دقیقه", py)
         self.assertNotIn("۲ تا ۳ دقیقه", py)
 
+    def test_modal_typography_locked(self):
+        css = CSS.read_text(encoding="utf-8")
+        panel = re.search(r"(?ms)^\.ui-modal-panel\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(panel)
+        body = panel.group(1)
+        self.assertIn("font-size: 14px", body)
+        self.assertIn("text-size-adjust: 100%", body)
+        self.assertIn("-webkit-text-size-adjust: 100%", body)
+        self.assertIn(".ui-modal-panel p", css)
+        self.assertIn(".ui-modal-panel label", css)
+        self.assertIn(".ui-modal-head .icon-btn", css)
+        # Close control must use SVG, not a raw × glyph that some fonts inflate
+        for rel in (
+            "app/web/templates/resellers.html",
+            "app/web/templates/pg_users.html",
+            "app/web/templates/_settings_backup.html",
+        ):
+            src = (ROOT / rel).read_text(encoding="utf-8")
+            self.assertIn('data-modal-close', src)
+            self.assertIn('class="ico"', src)
+            self.assertNotRegex(src, r'data-modal-close[^>]*>\s*×\s*<')
+        js = JS.read_text(encoding="utf-8")
+        self.assertIn("ui-modal-panel", js)
+
     def test_site_footer_compact_sidebar_footer_restored(self):
         css = CSS.read_text(encoding="utf-8")
         foot = re.search(r"(?ms)^\.site-footer\s*\{([^}]+)\}", css)

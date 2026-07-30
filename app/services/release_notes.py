@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "2.2.6": [
+        "فونت مودال‌ها یکدست با پنل؛ جلوگیری از بزرگ شدن متن روی سایدبار/موبایل",
+    ],
     "2.2.5": [
         "منوی سه‌نقطه بدون اسکرول؛ ارتفاع کامل آیتم‌ها و باز شدن به بالا وقتی پایین جا نیست",
     ],

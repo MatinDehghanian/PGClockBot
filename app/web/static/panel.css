@@ -70,6 +70,8 @@ html, body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   overflow-x: hidden;
 }
 a { color: var(--foreground); text-decoration: none; }
@@ -2443,6 +2445,12 @@ body.modal-open { overflow: hidden; }
   align-items: center;
   justify-content: center;
   padding: calc(16px + var(--safe-top)) calc(16px + var(--safe-right)) calc(16px + var(--safe-bottom)) calc(16px + var(--safe-left));
+  direction: rtl;
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 .ui-modal[hidden] { display: none !important; }
 .ui-modal.open { display: flex; }
@@ -2465,6 +2473,13 @@ body.modal-open { overflow: hidden; }
   background: var(--bg-card);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
   animation: ui-modal-in .16s ease-out;
+  /* Lock typography so body-port + mobile text inflation cannot enlarge copy */
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--foreground);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 .ui-modal-panel-lg { width: min(720px, 100%); }
 .ui-modal-head {
@@ -2474,10 +2489,56 @@ body.modal-open { overflow: hidden; }
   gap: var(--space-2);
   margin-bottom: var(--space-3);
 }
-.ui-modal-head h2 {
+.ui-modal-head h1,
+.ui-modal-head h2,
+.ui-modal-head h3,
+.ui-modal-panel h1,
+.ui-modal-panel h2,
+.ui-modal-panel h3 {
   margin: 0;
   font-size: var(--title-size);
   font-weight: 600;
+  line-height: 1.35;
+  color: var(--foreground);
+}
+.ui-modal-panel p,
+.ui-modal-panel .muted {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.ui-modal-panel small,
+.ui-modal-panel small.muted,
+.ui-modal-panel .muted small {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ui-modal-panel label,
+.ui-modal-panel .form-field {
+  font-size: 13px;
+}
+.ui-modal-panel .btn,
+.ui-modal-panel a.btn,
+.ui-modal-panel .btn-sm,
+.ui-modal-panel a.btn-sm {
+  font-size: 13px;
+}
+.ui-modal-panel .ui-switch-copy strong,
+.ui-modal-panel .ui-switch-section-title,
+.ui-modal-panel strong {
+  font-size: 13px;
+}
+.ui-modal-panel .ui-switch-copy small,
+.ui-modal-panel .ui-switch-section-hint {
+  font-size: 12px;
+}
+.ui-modal-head .icon-btn {
+  flex: 0 0 auto;
+  font-size: 0; /* avoid oversized × glyph from system fonts */
+  line-height: 0;
+}
+.ui-modal-head .icon-btn .ico {
+  width: 16px;
+  height: 16px;
 }
 @keyframes ui-modal-in {
   from { opacity: 0; transform: translateY(6px) scale(.985); }
@@ -2492,6 +2553,7 @@ body.modal-open { overflow: hidden; }
     width: 100%;
     max-height: 86vh;
     border-radius: var(--radius);
+    font-size: 14px;
   }
 }
 

@@ -286,7 +286,11 @@
       el.hidden = false;
       el.classList.add('open');
       document.body.classList.add('modal-open');
-      const focus = el.querySelector('input, select, textarea, button');
+      /* Prefer a non-text control for initial focus to avoid mobile zoom side-effects */
+      const panel = el.querySelector('.ui-modal-panel') || el;
+      const focus =
+        panel.querySelector('input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])') ||
+        panel.querySelector('button:not([disabled]), [href]');
       if (focus) setTimeout(() => focus.focus(), 30);
     }
     document.addEventListener('click', (e) => {

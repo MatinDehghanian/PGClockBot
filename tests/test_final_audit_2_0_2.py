@@ -153,13 +153,13 @@ class RsetupUsernameValidationTests(unittest.TestCase):
 
 
 class VersionBumpTests(unittest.TestCase):
-    def test_version_is_2_2_5(self):
+    def test_version_is_2_2_6(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "2.2.5")
-        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "2.2.5")
+        self.assertEqual(__version__, "2.2.6")
+        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "2.2.6")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"2.2.5"', notes)
+        self.assertIn('"2.2.6"', notes)
 
 
 class PayWithWalletRefundPaymentTests(unittest.IsolatedAsyncioTestCase):
