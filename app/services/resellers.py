@@ -206,13 +206,21 @@ def _rand_username(prefix: str = "res") -> str:
 
 
 async def _unique_web_username(session: AsyncSession, prefix: str = "web") -> str:
+    from app.db.models import PgStaffAccess
+
     for _ in range(12):
         uname = _rand_username(prefix)
         clash = await session.execute(
             select(ResellerProfile).where(ResellerProfile.web_username == uname)
         )
-        if clash.scalar_one_or_none() is None:
-            return uname
+        if clash.scalar_one_or_none() is not None:
+            continue
+        clash_staff = await session.execute(
+            select(PgStaffAccess).where(PgStaffAccess.web_username == uname)
+        )
+        if clash_staff.scalar_one_or_none() is not None:
+            continue
+        return uname
     return f"{prefix}_{secrets.token_hex(6)}"
 
 
@@ -643,6 +651,13 @@ async def complete_reseller_setup(
         )
         if clash.scalar_one_or_none():
             raise ValueError("این نام کاربری قبلاً گرفته شده")
+        from app.db.models import PgStaffAccess
+
+        clash_staff = await session.execute(
+            select(PgStaffAccess).where(PgStaffAccess.web_username == uname)
+        )
+        if clash_staff.scalar_one_or_none():
+            raise ValueError("این نام کاربری قبلاً برای دسترسی وب ادمین پاسارگارد گرفته شده")
         if not password_hash:
             raise ValueError("رمز عبور الزامی است")
         profile.web_username = uname

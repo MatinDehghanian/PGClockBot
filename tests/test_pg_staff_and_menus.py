@@ -110,6 +110,18 @@ class PgStaffAccessServiceTests(unittest.TestCase):
 
         self.assertEqual(PgStaffAccess.__tablename__, "pg_staff_access")
 
+    def test_conflict_helpers_exported(self):
+        from app.services import pg_staff_access as m
+
+        for name in (
+            "grant_web_access",
+            "conflict_message_for_new_grant",
+            "conflict_message_for_reseller_link",
+            "web_access_status_map",
+            "resolve_existing_web_access",
+        ):
+            self.assertTrue(hasattr(m, name), name)
+
 
 if __name__ == "__main__":
     unittest.main()

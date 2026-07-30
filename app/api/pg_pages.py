@@ -847,20 +847,25 @@ def register_pg_pages(
         staff: dict = Depends(require_admin),
         session=Depends(get_db),
     ):
-        from app.services.pg_staff_access import access_map_by_pg
+        from app.services.pg_staff_access import web_access_status_map
 
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         admins = []
         roles = []
-        web_access = {}
+        web_status: dict = {}
         try:
             pg = get_pg()
             admins = await pg.get_admins()
             if not admins:
                 admins = await pg.get_admins_simple()
             roles = await pg.get_admin_roles()
-            web_access = await access_map_by_pg(session)
+            names = [
+                str(a.get("username") or "").strip()
+                for a in (admins or [])
+                if a.get("username")
+            ]
+            web_status = await web_access_status_map(session, names)
         except Exception as e:
             err = str(e)
         return render(
@@ -870,7 +875,7 @@ def register_pg_pages(
                 staff,
                 admins=admins,
                 pg_roles=roles,
-                web_access=web_access,
+                web_status=web_status,
                 flash_err=err,
                 flash_ok=ok,
                 active="pg_admins",
@@ -917,12 +922,17 @@ def register_pg_pages(
         staff: dict = Depends(require_admin),
         session=Depends(get_db),
     ):
-        from app.services.pg_staff_access import upsert_web_access
+        from app.services.pg_staff_access import (
+            access_by_pg_username,
+            grant_web_access,
+            update_web_access,
+        )
 
         form = await request.form()
         web_username = str(form.get("web_username") or "").strip()
         web_password = str(form.get("web_password") or "")
         note = str(form.get("note") or "").strip()
+        mode = str(form.get("mode") or "").strip().lower()
         pg_u = (username or "").strip()
         if not pg_u:
             return RedirectResponse(f"/pg/admins?err={_q('نام ادمین نامعتبر است')}", status_code=303)
@@ -935,17 +945,34 @@ def register_pg_pages(
                 f"/pg/admins?err={_q('این ادمین در پاسارگارد یافت نشد')}",
                 status_code=303,
             )
-        row, err = await upsert_web_access(
-            session,
-            pg_username=pg_u,
-            web_username=web_username,
-            password=web_password,
-            note=note,
-            is_active=True,
-        )
+
+        existing_staff = await access_by_pg_username(session, pg_u)
+        if mode == "update" or existing_staff:
+            if not existing_staff:
+                return RedirectResponse(
+                    f"/pg/admins?err={_q('دسترسی وب برای این ادمین وجود ندارد')}",
+                    status_code=303,
+                )
+            row, err = await update_web_access(
+                session,
+                pg_username=pg_u,
+                web_username=web_username,
+                password=web_password,
+                note=note,
+            )
+            msg = f"دسترسی وب‌پنل «{row.web_username}» به‌روز شد" if row else ""
+        else:
+            row, err = await grant_web_access(
+                session,
+                pg_username=pg_u,
+                web_username=web_username,
+                password=web_password,
+                note=note,
+                is_active=True,
+            )
+            msg = f"دسترسی وب‌پنل برای «{row.web_username}» ساخته شد" if row else ""
         if err:
             return RedirectResponse(f"/pg/admins?err={_q(err)}", status_code=303)
-        msg = f"دسترسی وب‌پنل برای «{row.web_username}» ذخیره شد"
         return RedirectResponse(f"/pg/admins?ok={_q(msg)}", status_code=303)
 
     @app.post("/pg/admins/{username}/web-access/revoke")
@@ -970,7 +997,11 @@ def register_pg_pages(
         staff: dict = Depends(require_admin),
         session=Depends(get_db),
     ):
-        from app.services.pg_staff_access import access_by_pg_username, set_active
+        from app.services.pg_staff_access import (
+            access_by_pg_username,
+            reseller_by_pg_username,
+            set_active,
+        )
 
         row = await access_by_pg_username(session, username)
         if not row:
@@ -978,8 +1009,18 @@ def register_pg_pages(
                 f"/pg/admins?err={_q('دسترسی وب برای این ادمین وجود ندارد')}",
                 status_code=303,
             )
+        if await reseller_by_pg_username(session, username):
+            return RedirectResponse(
+                f"/pg/admins?err={_q('این ادمین به نماینده متصل است؛ از بخش نمایندگان مدیریت کنید')}",
+                status_code=303,
+            )
         was_active = bool(row.is_active)
-        await set_active(session, username, not was_active)
+        ok = await set_active(session, username, not was_active)
+        if not ok:
+            return RedirectResponse(
+                f"/pg/admins?err={_q('تغییر وضعیت ممکن نشد')}",
+                status_code=303,
+            )
         msg = "دسترسی وب غیرفعال شد" if was_active else "دسترسی وب فعال شد"
         return RedirectResponse(f"/pg/admins?ok={_q(msg)}", status_code=303)
 

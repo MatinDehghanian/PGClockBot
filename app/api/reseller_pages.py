@@ -246,6 +246,17 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         profile.pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
         pg_user = str(form.get("pg_admin_username") or "").strip()
+        if pg_user:
+            from app.services.pg_staff_access import conflict_message_for_reseller_link
+
+            link_err = await conflict_message_for_reseller_link(
+                session, pg_user, exclude_profile_id=int(profile.id)
+            )
+            if link_err:
+                return RedirectResponse(
+                    f"/resellers/{user_id}/edit?err={_q(link_err)}",
+                    status_code=303,
+                )
         profile.pg_admin_username = pg_user or None
         from app.services.reseller_access import normalize_telegram_ids_csv
 

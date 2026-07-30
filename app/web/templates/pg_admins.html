@@ -5,7 +5,7 @@
 <div class="page-head">
   <div>
     <h1>ادمین</h1>
-    <p>ادمین‌های پاسارگارد — نقش‌ها را از پنل پاسارگارد تعریف کنید و اینجا نسبت دهید. برای ورود به وب‌پنل، یوزر و رمز جدا بسازید.</p>
+    <p>ادمین‌های پاسارگارد — نقش‌ها را از پنل پاسارگارد تعریف کنید. اگر ادمین از قبل نماینده است یا یوزر وب دارد، دسترسی جدید ساخته نمی‌شود.</p>
   </div>
   <button type="button" class="btn" data-modal-open="modal-pg-admin-create">ساخت ادمین</button>
 </div>
@@ -31,7 +31,8 @@
     {% for a in admins %}
       {% set uname = (a.get('username') or '')|string %}
       {% set key = uname|lower %}
-      {% set wa = (web_access or {}).get(key) %}
+      {% set st = (web_status or {}).get(key) or {} %}
+      {% set src = st.get('source') or 'none' %}
       <tr>
         <td class="mono">{{ a.get('id') or '—' }}</td>
         <td dir="ltr">{{ uname or '—' }}</td>
@@ -42,18 +43,39 @@
           {% if a.get('note') %}<br><small class="muted">{{ a.get('note') }}</small>{% endif %}
         </td>
         <td>
-          {% if wa %}
+          {% if src == 'reseller' %}
           <div class="web-access-cell">
-            <span class="badge {% if wa.is_active %}approved{% else %}neutral{% endif %}">
-              {% if wa.is_active %}فعال{% else %}غیرفعال{% endif %}
+            <span class="badge approved">نماینده</span>
+            {% if st.get('web_username') %}
+            <span class="mono" dir="ltr">{{ st.get('web_username') }}</span>
+            {% else %}
+            <small class="muted">یوزر وب هنوز ساخته نشده</small>
+            {% endif %}
+            {% if not st.get('is_active') and st.get('web_username') %}
+            <span class="badge neutral">غیرفعال</span>
+            {% endif %}
+            <small class="muted">دسترسی جداگانه ساخته نمی‌شود</small>
+            {% if st.get('reseller_user_id') %}
+            <a class="btn btn-sm btn-ghost" href="/resellers/{{ st.get('reseller_user_id') }}/edit">مدیریت نماینده</a>
+            {% endif %}
+          </div>
+          {% elif src == 'owner' %}
+          <div class="web-access-cell">
+            <span class="badge approved">ادمین اصلی</span>
+            <small class="muted">{{ st.get('detail') or 'دسترسی کامل وب‌پنل' }}</small>
+          </div>
+          {% elif src == 'pg_staff' %}
+          <div class="web-access-cell">
+            <span class="badge {% if st.get('is_active') %}approved{% else %}neutral{% endif %}">
+              {% if st.get('is_active') %}فعال{% else %}غیرفعال{% endif %}
             </span>
-            <span class="mono" dir="ltr">{{ wa.web_username }}</span>
+            <span class="mono" dir="ltr">{{ st.get('web_username') }}</span>
             <div class="row-actions">
               <button type="button" class="btn btn-sm btn-ghost"
                 data-modal-open="modal-web-{{ loop.index }}">ویرایش</button>
               <form method="post" action="/pg/admins/{{ uname }}/web-access/toggle">
                 <button class="btn btn-sm btn-ghost" type="submit">
-                  {% if wa.is_active %}غیرفعال{% else %}فعال{% endif %}
+                  {% if st.get('is_active') %}غیرفعال{% else %}فعال{% endif %}
                 </button>
               </form>
               <form method="post" action="/pg/admins/{{ uname }}/web-access/revoke"
@@ -86,21 +108,27 @@
 {% set uname = (a.get('username') or '')|string %}
 {% if uname %}
 {% set key = uname|lower %}
-{% set wa = (web_access or {}).get(key) %}
+{% set st = (web_status or {}).get(key) or {} %}
+{% set src = st.get('source') or 'none' %}
+{% if src == 'pg_staff' or src == 'none' %}
 <div class="ui-modal" id="modal-web-{{ loop.index }}" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>{% if wa %}ویرایش دسترسی وب{% else %}اعطای دسترسی وب‌پنل{% endif %}</h2>
+      <h2>{% if src == 'pg_staff' %}ویرایش دسترسی وب{% else %}اعطای دسترسی وب‌پنل{% endif %}</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن">×</button>
     </div>
     <form method="post" action="/pg/admins/{{ uname }}/web-access" class="form-stack">
+      <input type="hidden" name="mode" value="{% if src == 'pg_staff' %}update{% else %}grant{% endif %}" />
       <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
         — منوی وب‌پنل بر اساس نقش همین ادمین در پاسارگارد محدود می‌شود.</p>
+      {% if src == 'none' %}
+      <p class="muted">اگر این ادمین نماینده باشد یا از قبل یوزر وب داشته باشد، ساخت جدید رد می‌شود.</p>
+      {% endif %}
       <label class="form-field">نام کاربری وب‌پنل
         <small class="muted">فقط برای ورود به این وب‌پنل؛ جدا از یوزر پاسارگارد</small>
         <input name="web_username" required autocomplete="off" dir="ltr"
-          value="{{ wa.web_username if wa else '' }}"
+          value="{{ st.get('web_username') if src == 'pg_staff' else '' }}"
           placeholder="مثلاً staff1" />
       </label>
       <label class="form-field">رمز عبور وب‌پنل
@@ -109,15 +137,16 @@
       </label>
       <label class="form-field">یادداشت
         <small class="muted">اختیاری — فقط در وب‌پنل ذخیره می‌شود</small>
-        <input name="note" value="{{ wa.note if wa and wa.note else '' }}" placeholder="دسترسی محدود فروش" />
+        <input name="note" value="{{ st.get('note') if src == 'pg_staff' and st.get('note') else '' }}" placeholder="دسترسی محدود فروش" />
       </label>
       <div class="actions">
-        <button class="btn" type="submit">ذخیره</button>
+        <button class="btn" type="submit">{% if src == 'pg_staff' %}ذخیره{% else %}اعطای دسترسی{% endif %}</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
       </div>
     </form>
   </div>
 </div>
+{% endif %}
 {% endif %}
 {% endfor %}
 
