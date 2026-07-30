@@ -29,7 +29,7 @@ class ResellerNavSplitTests(unittest.TestCase):
         self.assertIn("home-panel-pg", home)
         self.assertIn("pg_limits", home)
         self.assertIn('href="/dashboard"', home)
-        self.assertIn("page_title('home', 'داشبورد')", home)
+        self.assertIn("page_title('home', 'داشبورد', 'neutral')", home)
 
     def test_home_route_serves_reseller_template(self):
         src = Path("app/api/home_pages.py").read_text(encoding="utf-8")

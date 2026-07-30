@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "2.6.8": [
+        "آیکن داشبورد هم‌رنگ تنظیمات وب پنل (خنثی)",
+        "حذف کپشن زیر تایتل صفحات اصلی",
+    ],
     "2.6.7": [
         "کنار تایتل اصلی هر صفحه، آیکن مرتبط داخل باکس بدون حاشیه",
         "هماهنگ با سایدبار: ربات نارنجی، پاسارگارد آبی، تنظیمات وب پنل خنثی",
