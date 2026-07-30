@@ -13,58 +13,38 @@
 {{ panel_settings_tabs('security') }}
 {% endif %}
 
-{% if ok %}<div class="flash ok">{{ ok }}</div>{% endif %}
-{% if err %}<div class="flash err">{{ err }}</div>{% endif %}
-
 <div class="card settings-card">
-  <h2>نام کاربری وب‌پنل</h2>
+  <h2>تغییر نام کاربری و رمز</h2>
   <p class="muted update-card-caption">
-    همین نام را در صفحه ورود استفاده می‌کنید.
-    {% if staff.role == 'reseller' %}برای نماینده فقط حروف کوچک انگلیسی، عدد و _ مجاز است.{% endif %}
+    برای تغییر، نام کاربری و رمز فعلی را وارد کنید؛ سپس مقادیر جدید را مشخص کنید.
+    {% if staff.role == 'reseller' %}نام کاربری نماینده فقط حروف کوچک انگلیسی، عدد و _ مجاز است.{% else %}نام کاربری فقط حروف انگلیسی، عدد و _ مجاز است.{% endif %}
+    رمز جدید حداقل ۸ کاراکتر با حرف بزرگ و کوچک انگلیسی و یک کاراکتر خاص.
   </p>
-  <form method="post" action="/security/username" class="settings-form" autocomplete="off">
+  {% if ok %}<div class="flash ok">{{ ok }}</div>{% endif %}
+  {% if err %}<div class="flash err">{{ err }}</div>{% endif %}
+  <form method="post" action="/security/credentials" class="settings-form" autocomplete="off" id="security-credentials-form">
     <div class="settings-grid">
       <div class="setting-item">
-        <label>نام کاربری فعلی
-          <input type="text" value="{{ current_username }}" dir="ltr" disabled />
+        <label>یوزر قدیم
+          <input name="old_username" required minlength="3" maxlength="64" dir="ltr"
+                 value="{{ current_username }}" autocomplete="username" />
         </label>
       </div>
       <div class="setting-item">
-        <label>نام کاربری جدید
+        <label>رمز قدیم
+          <div class="pw-field">
+            <input id="sec-old-pass" name="current_password" type="password" required autocomplete="current-password" />
+            <button type="button" class="pw-toggle" data-pw-for="sec-old-pass" aria-label="نمایش رمز" aria-pressed="false">
+              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>یوزر جدید
           <input name="new_username" required minlength="3" maxlength="64" dir="ltr"
-                 placeholder="{{ current_username }}" autocomplete="off" />
-        </label>
-      </div>
-      <div class="setting-item full">
-        <label>رمز فعلی (برای تأیید)
-          <div class="pw-field">
-            <input id="sec-user-pass" name="current_password" type="password" required autocomplete="current-password" />
-            <button type="button" class="pw-toggle" data-pw-for="sec-user-pass" aria-label="نمایش رمز" aria-pressed="false">
-              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
-          </div>
-        </label>
-      </div>
-    </div>
-    <div class="actions sticky-actions">
-      <button class="btn" type="submit">ذخیره نام کاربری</button>
-    </div>
-  </form>
-</div>
-
-<div class="card settings-card">
-  <h2>رمز عبور</h2>
-  <p class="muted update-card-caption">حداقل ۸ کاراکتر، حرف بزرگ و کوچک انگلیسی و یک کاراکتر خاص.</p>
-  <form method="post" action="/security/password" class="settings-form" autocomplete="off">
-    <div class="settings-grid">
-      <div class="setting-item full">
-        <label>رمز فعلی
-          <div class="pw-field">
-            <input id="sec-cur-pass" name="current_password" type="password" required autocomplete="current-password" />
-            <button type="button" class="pw-toggle" data-pw-for="sec-cur-pass" aria-label="نمایش رمز" aria-pressed="false">
-              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
-          </div>
+                 placeholder="{{ current_username }}" autocomplete="off"
+                 pattern="[A-Za-z0-9_]+" title="فقط حروف انگلیسی، عدد و _" />
         </label>
       </div>
       <div class="setting-item">
@@ -77,19 +57,9 @@
           </div>
         </label>
       </div>
-      <div class="setting-item">
-        <label>تکرار رمز جدید
-          <div class="pw-field">
-            <input id="sec-new-pass2" name="new_password2" type="password" required minlength="8" autocomplete="new-password" />
-            <button type="button" class="pw-toggle" data-pw-for="sec-new-pass2" aria-label="نمایش رمز" aria-pressed="false">
-              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
-          </div>
-        </label>
-      </div>
     </div>
     <div class="actions sticky-actions">
-      <button class="btn" type="submit">تغییر رمز عبور</button>
+      <button class="btn" type="submit">ذخیره تغییرات</button>
     </div>
   </form>
 </div>

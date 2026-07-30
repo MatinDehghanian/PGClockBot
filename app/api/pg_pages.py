@@ -25,6 +25,13 @@ def _q(msg: str) -> str:
     return quote(str(msg), safe="")
 
 
+def _pg_form_err(msg: str, *, modal: str, uid: str | int | None = None) -> RedirectResponse:
+    url = f"/pg/users?form_err={_q(msg)}&modal={_q(modal)}"
+    if uid is not None and str(uid).strip():
+        url += f"&uid={_q(str(uid))}"
+    return RedirectResponse(url, status_code=303)
+
+
 def _pg_err(exc: Exception) -> str:
     if isinstance(exc, PasarGuardError):
         return _q(exc.user_message(fallback="خطا در ارتباط با پاسارگارد"))
@@ -188,6 +195,9 @@ def register_pg_pages(
     async def pg_users(request: Request, staff: dict = Depends(require_pg_perm("pg_users"))):
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
+        form_err = request.query_params.get("form_err")
+        form_modal = (request.query_params.get("modal") or "").strip()
+        form_uid = (request.query_params.get("uid") or "").strip()
         q = (request.query_params.get("q") or "").strip()
         users: list[dict] = []
         templates: list[dict] = []
@@ -254,6 +264,9 @@ def register_pg_pages(
                 q=q,
                 flash_err=err,
                 flash_ok=ok,
+                form_err=form_err,
+                form_modal=form_modal,
+                form_uid=form_uid,
                 can_create=actions["create"],
                 can_custom_create=can_custom,
                 can_template_create=can_template,
@@ -289,7 +302,7 @@ def register_pg_pages(
         form = await request.form()
         uname = str(form.get("username") or "").strip()
         if not uname:
-            return RedirectResponse(f"/pg/users?err={_q('نام کاربری الزامی است')}", status_code=303)
+            return _pg_form_err("نام کاربری الزامی است", modal="create")
 
         access = staff.get("pg_access") or {}
         require_template = bool(access.get("require_template")) and not _is_admin(staff)
@@ -304,18 +317,18 @@ def register_pg_pages(
         import re
 
         if not re.fullmatch(r"[A-Za-z0-9_]{3,32}", uname):
-            return RedirectResponse(
-                f"/pg/users?err={_q('نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی، عدد یا _ باشد')}",
-                status_code=303,
+            return _pg_form_err(
+                "نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی، عدد یا _ باشد (بدون فاصله و فارسی)",
+                modal="create",
             )
         try:
             if mode == "template":
                 raw_tid = str(form.get("template_id") or form.get("pg_template_id") or "").strip()
                 if not raw_tid.isdigit():
-                    return RedirectResponse(f"/pg/users?err={_q('تمپلیت نامعتبر')}", status_code=303)
+                    return _pg_form_err("تمپلیت نامعتبر", modal="create")
                 tid = int(raw_tid)
                 if not template_allowed_for_staff(staff, tid):
-                    return RedirectResponse(f"/pg/users?err={_q('این تمپلیت مجاز نیست')}", status_code=303)
+                    return _pg_form_err("این تمپلیت مجاز نیست", modal="create")
                 created = await get_pg().create_user_from_template(
                     {
                         "username": uname,
@@ -325,24 +338,18 @@ def register_pg_pages(
                 )
             else:
                 if require_template:
-                    return RedirectResponse(
-                        f"/pg/users?err={_q('نقش شما فقط ساخت از تمپلیت را مجاز می‌داند')}",
-                        status_code=303,
+                    return _pg_form_err(
+                        "نقش شما فقط ساخت از تمپلیت را مجاز می‌داند",
+                        modal="create",
                     )
                 ids = parse_group_ids_from_form(form)
                 if not ids:
                     # also accept comma field if present
                     ids = parse_group_ids(str(form.get("group_ids") or ""))
                 if not ids:
-                    return RedirectResponse(
-                        f"/pg/users?err={_q('حداقل یک گروه انتخاب کنید')}",
-                        status_code=303,
-                    )
+                    return _pg_form_err("حداقل یک گروه انتخاب کنید", modal="create")
                 if not groups_allowed_for_staff(staff, ids):
-                    return RedirectResponse(
-                        f"/pg/users?err={_q('یکی از گروه‌های انتخاب‌شده مجاز نیست')}",
-                        status_code=303,
-                    )
+                    return _pg_form_err("یکی از گروه‌های انتخاب‌شده مجاز نیست", modal="create")
 
                 gb_raw = str(form.get("data_limit_gb") or "").strip()
                 days_raw = str(form.get("duration_days") or "").strip()
@@ -356,10 +363,7 @@ def register_pg_pages(
                         if gb > 0:
                             data_limit = int(gb * (1024**3))
                     except ValueError:
-                        return RedirectResponse(
-                            f"/pg/users?err={_q('حجم نامعتبر است')}",
-                            status_code=303,
-                        )
+                        return _pg_form_err("حجم نامعتبر است", modal="create")
                 if days_raw:
                     try:
                         days = int(float(days_raw))
@@ -368,10 +372,7 @@ def register_pg_pages(
                         if days > 0:
                             expire_ts = int(time.time()) + days * 86400
                     except ValueError:
-                        return RedirectResponse(
-                            f"/pg/users?err={_q('مدت نامعتبر است')}",
-                            status_code=303,
-                        )
+                        return _pg_form_err("مدت نامعتبر است", modal="create")
 
                 created = await get_pg().create_user(
                     build_user_create_payload(
@@ -392,7 +393,8 @@ def register_pg_pages(
                     except Exception:
                         pass
         except Exception as e:
-            return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
+            msg = e.user_message(fallback="خطا در ساخت کاربر") if isinstance(e, PasarGuardError) else str(e)
+            return _pg_form_err(msg, modal="create")
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ساخته شد')}", status_code=303)
 
     @app.get("/pg/users/{user_id}/link")
@@ -429,14 +431,11 @@ def register_pg_pages(
         if not staff_user_actions(staff)["update"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ویرایش ندارید')}", status_code=303)
         form = await request.form()
-        uname = str(form.get("username") or "").strip()
-        if not uname:
-            return RedirectResponse(f"/pg/users?err={_q('نام کاربری الزامی است')}", status_code=303)
         ids = parse_group_ids_from_form(form, prefix="edit_group_")
         if not ids:
-            return RedirectResponse(f"/pg/users?err={_q('حداقل یک گروه انتخاب کنید')}", status_code=303)
+            return _pg_form_err("حداقل یک گروه انتخاب کنید", modal="edit", uid=user_id)
         if not groups_allowed_for_staff(staff, ids):
-            return RedirectResponse(f"/pg/users?err={_q('یکی از گروه‌های انتخاب‌شده مجاز نیست')}", status_code=303)
+            return _pg_form_err("یکی از گروه‌های انتخاب‌شده مجاز نیست", modal="edit", uid=user_id)
 
         gb_raw = str(form.get("data_limit_gb") or "").strip()
         days_raw = str(form.get("duration_days") or "").strip()
@@ -449,7 +448,7 @@ def register_pg_pages(
                     raise ValueError
                 data_limit = int(gb * (1024**3)) if gb > 0 else 0
             except ValueError:
-                return RedirectResponse(f"/pg/users?err={_q('حجم نامعتبر است')}", status_code=303)
+                return _pg_form_err("حجم نامعتبر است", modal="edit", uid=user_id)
         if days_raw:
             try:
                 days = int(float(days_raw))
@@ -457,22 +456,25 @@ def register_pg_pages(
                     raise ValueError
                 expire_ts = int(time.time()) + days * 86400 if days > 0 else 0
             except ValueError:
-                return RedirectResponse(f"/pg/users?err={_q('مدت نامعتبر است')}", status_code=303)
+                return _pg_form_err("مدت نامعتبر است", modal="edit", uid=user_id)
 
         try:
             current = await _assert_owned_user(staff, user_id)
             if current is None:
                 return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
+            # PasarGuard does not allow changing username after create
             payload = build_user_modify_payload(
-                username=uname,
+                username=None,
                 group_ids=ids,
                 data_limit=data_limit,
                 expire_ts=expire_ts,
                 status=str(current.get("status") or "") or None,
             )
             await get_pg().modify_user_by_id(user_id, payload)
+            uname = str(current.get("username") or user_id)
         except Exception as e:
-            return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
+            msg = e.user_message(fallback="خطا در ویرایش") if isinstance(e, PasarGuardError) else str(e)
+            return _pg_form_err(msg, modal="edit", uid=user_id)
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ویرایش شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/disable")

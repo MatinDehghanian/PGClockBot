@@ -527,10 +527,16 @@
         document.body.removeChild(ta);
       }
       if (btn) {
-        const prev = btn.textContent;
+        const prev = btn.getAttribute('data-copy-label') || btn.textContent;
+        btn.setAttribute('data-copy-label', prev);
         btn.textContent = 'کپی شد';
+        btn.classList.add('btn-ok', 'is-copied');
         btn.disabled = true;
-        setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 1200);
+        setTimeout(() => {
+          btn.textContent = prev;
+          btn.classList.remove('btn-ok', 'is-copied');
+          btn.disabled = false;
+        }, 1200);
       }
     } catch (e) {}
   }

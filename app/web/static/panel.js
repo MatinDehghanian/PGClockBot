@@ -213,6 +213,17 @@
     });
 
     /* Copy helpers (subscription links, etc.) */
+    function markCopied(btn) {
+      if (!btn) return;
+      const prevText = btn.getAttribute('data-copy-label') || btn.textContent;
+      btn.setAttribute('data-copy-label', prevText);
+      btn.textContent = 'کپی شد';
+      btn.classList.add('btn-ok', 'is-copied');
+      setTimeout(() => {
+        btn.textContent = prevText;
+        btn.classList.remove('btn-ok', 'is-copied');
+      }, 1200);
+    }
     document.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-copy]');
       if (!btn) return;
@@ -222,17 +233,24 @@
         alert('لینکی موجود نیست');
         return;
       }
-      const done = () => {
-        const prev = btn.textContent;
-        btn.textContent = 'کپی شد';
-        setTimeout(() => { btn.textContent = prev; }, 1200);
-      };
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(done).catch(() => {
+        navigator.clipboard.writeText(text).then(() => markCopied(btn)).catch(() => {
           window.prompt('کپی کنید:', text);
         });
       } else {
         window.prompt('کپی کنید:', text);
       }
+    });
+
+    /* Upload box file name preview */
+    document.addEventListener('change', (e) => {
+      const input = e.target;
+      if (!input || input.type !== 'file') return;
+      const box = input.closest('.upload-box');
+      if (!box) return;
+      const nameEl = box.querySelector('[data-upload-name]');
+      const file = input.files && input.files[0];
+      if (nameEl) nameEl.textContent = file ? file.name : 'فایلی انتخاب نشده';
+      box.classList.toggle('has-file', !!file);
     });
   })();

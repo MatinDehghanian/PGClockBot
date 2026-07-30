@@ -81,10 +81,10 @@ def register_backup_pages(app, *, render, require_admin, get_db):
         restore_env: str = Form(""),
         confirm: str = Form(""),
     ):
-        if (confirm or "").strip() != "RESTORE":
+        confirm_ok = (confirm or "").strip().upper() in {"1", "YES", "ON", "TRUE", "RESTORE"}
+        if not confirm_ok:
             return RedirectResponse(
-                "/settings?tab=backup&err="
-                + quote("برای تأیید ریستور باید عبارت RESTORE را وارد کنید"),
+                "/settings?tab=backup&err=" + quote("تأیید ریستور انجام نشد"),
                 status_code=303,
             )
         path = get_backup_path(backup_id)

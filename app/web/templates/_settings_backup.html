@@ -37,14 +37,14 @@
 <div class="card settings-card">
   <h2>آپلود بکاپ</h2>
   <p class="muted update-card-caption">فایل ZIP بکاپ قبلی را برای بازیابی یا نگه‌داری آپلود کنید.</p>
-  <form method="post" action="/backup/upload" enctype="multipart/form-data" class="settings-form">
-    <div class="settings-grid">
-      <div class="setting-item full">
-        <label>فایل بکاپ (zip)
-          <input type="file" name="file" accept=".zip,application/zip" required />
-        </label>
-      </div>
-    </div>
+  <form method="post" action="/backup/upload" enctype="multipart/form-data" class="settings-form" id="backup-upload-form">
+    <label class="upload-box">
+      <input type="file" name="file" accept=".zip,application/zip" required />
+      <span class="upload-box-plus" aria-hidden="true">+</span>
+      <span class="upload-box-title">انتخاب فایل بکاپ</span>
+      <span class="upload-box-hint muted">فایل ZIP را انتخاب کنید یا اینجا رها کنید</span>
+      <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
+    </label>
     <div class="actions sticky-actions">
       <button class="btn" type="submit">آپلود</button>
     </div>
@@ -80,33 +80,45 @@
         <form method="post" action="/backup/delete/{{ b.id }}" onsubmit="return confirm('این بکاپ حذف شود؟')">
           <button class="btn btn-ghost btn-sm" type="submit">حذف</button>
         </form>
+        <button type="button" class="btn btn-sm"
+                data-modal-open="modal-backup-restore"
+                data-backup-id="{{ b.id }}"
+                data-backup-name="{{ b.filename }}"
+                data-backup-env="{{ '1' if b.include_env else '0' }}">ریستور</button>
       </div>
-      <form method="post" action="/backup/restore/{{ b.id }}" class="settings-form" style="width:100%;margin:0;border-top:1px solid var(--border);padding-top:10px"
-            onsubmit="return confirm('همه داده‌های فعلی با این بکاپ جایگزین می‌شود. ادامه؟')">
-        <div class="settings-grid">
-          <div class="setting-item">
-            <label>تأیید ریستور — بنویسید <code>RESTORE</code>
-              <input name="confirm" required placeholder="RESTORE" dir="ltr" autocomplete="off" />
-            </label>
-          </div>
-          <div class="setting-item">
-            <label class="support-enabled" style="margin-top:1.2rem">
-              <span>بازیابی .env هم</span>
-              <span class="ui-switch">
-                <input type="checkbox" name="restore_env" value="1" {% if b.include_env %}checked{% endif %} />
-                <span class="ui-switch-track" aria-hidden="true"></span>
-              </span>
-            </label>
-          </div>
-        </div>
-        <div class="actions" style="margin-top:8px">
-          <button class="btn" type="submit">ریستور این بکاپ</button>
-        </div>
-      </form>
     </div>
     {% endfor %}
   </div>
   {% endif %}
+</div>
+
+<div class="ui-modal" id="modal-backup-restore" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="backup-restore-title">
+    <div class="ui-modal-head">
+      <h2 id="backup-restore-title">تأیید ریستور بکاپ</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن">×</button>
+    </div>
+    <form method="post" action="/backup/restore/0" class="form-stack" id="backup-restore-form">
+      <input type="hidden" name="confirm" value="1" />
+      <p class="muted" style="margin:0">
+        همه داده‌های فعلی با بکاپ
+        <strong id="backup-restore-name">—</strong>
+        جایگزین می‌شود. قبل از ریستور یک بکاپ ایمنی خودکار ساخته می‌شود.
+      </p>
+      <label class="support-enabled">
+        <span>بازیابی .env هم</span>
+        <span class="ui-switch">
+          <input type="checkbox" name="restore_env" value="1" id="backup-restore-env" />
+          <span class="ui-switch-track" aria-hidden="true"></span>
+        </span>
+      </label>
+      <div class="actions">
+        <button class="btn btn-danger" type="submit">تأیید ریستور</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <div class="card settings-card">
@@ -118,3 +130,18 @@
     <li class="done"><span class="step-dot"></span><span>از بات ادمین هم می‌توانید بکاپ بسازید و فایل را دریافت کنید.</span></li>
   </ol>
 </div>
+<script>
+(function () {
+  const form = document.getElementById('backup-restore-form');
+  const nameEl = document.getElementById('backup-restore-name');
+  const envEl = document.getElementById('backup-restore-env');
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('[data-modal-open="modal-backup-restore"]');
+    if (!btn || !form) return;
+    const id = btn.getAttribute('data-backup-id') || '';
+    form.action = '/backup/restore/' + id;
+    if (nameEl) nameEl.textContent = btn.getAttribute('data-backup-name') || '—';
+    if (envEl) envEl.checked = btn.getAttribute('data-backup-env') === '1';
+  });
+})();
+</script>

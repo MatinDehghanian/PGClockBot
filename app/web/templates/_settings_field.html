@@ -59,8 +59,12 @@
       </label>
     </div>
     {% endif %}
-    <label class="file-label">آپلود عکس جدید
+    <label class="file-label upload-box">آپلود عکس جدید
       <input name="s_{{ key }}" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+      <span class="upload-box-plus" aria-hidden="true">+</span>
+      <span class="upload-box-title">انتخاب فایل</span>
+      <span class="upload-box-hint muted">PNG، JPG، WEBP یا GIF</span>
+      <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
     </label>
   </div>
   {% else %}

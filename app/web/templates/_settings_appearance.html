@@ -43,7 +43,13 @@
       <div class="setting-item full">
         <label>عکس پروفایل
           <small class="muted">فقط JPG — از API تلگرام روی پروفایل ربات ست می‌شود</small>
+        </label>
+        <label class="upload-box">
           <input name="bot_tg_photo" id="ap-photo" type="file" accept=".jpg,.jpeg,image/jpeg" />
+          <span class="upload-box-plus" aria-hidden="true">+</span>
+          <span class="upload-box-title">انتخاب عکس پروفایل</span>
+          <span class="upload-box-hint muted">فقط JPG</span>
+          <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
         </label>
         {% if ap.get('bot_tg_photo') %}
         <div class="ap-photo-row">

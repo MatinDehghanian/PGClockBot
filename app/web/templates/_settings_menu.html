@@ -4,6 +4,15 @@
     آیتم‌های «منوی فعال» همان دکمه‌هایی هستند که کاربر در ربات می‌بیند.
     از مخزن اضافه کنید، با حذف به مخزن برگردانید، و با بالا/پایین ترتیب را عوض کنید.
   </p>
+  <div class="settings-grid menu-layout-mode">
+    <label class="setting-item">
+      <span>حالت چیدمان</span>
+      <select name="menu_layout_ui" id="menu_layout_select" form="menu-form">
+        <option value="classic" {% if values.get('menu_layout','classic')=='classic' %}selected{% endif %}>کلاسیک — هر دکمه یک ردیف</option>
+        <option value="compact" {% if values.get('menu_layout')=='compact' %}selected{% endif %}>فشرده — دکمه‌ها جفتی</option>
+      </select>
+    </label>
+  </div>
 </div>
 <form method="post" action="/settings?tab=menu" id="menu-form" class="menu-layout-form">
   <input type="hidden" name="menu_order" id="menu_order" value="{{ order_csv }}" />
@@ -48,18 +57,6 @@
         {% endfor %}
         <li class="pool-empty" id="pool-empty" {% if pool %}style="display:none"{% endif %}>همه دکمه‌ها در منو هستند</li>
       </ul>
-    </div>
-  </div>
-  <div class="card settings-card">
-    <h2>حالت چیدمان</h2>
-    <div class="settings-grid">
-      <label class="setting-item">
-        <span>حالت ردیف‌ها</span>
-        <select name="menu_layout_ui" id="menu_layout_select">
-          <option value="classic" {% if values.get('menu_layout','classic')=='classic' %}selected{% endif %}>کلاسیک — هر دکمه یک ردیف</option>
-          <option value="compact" {% if values.get('menu_layout')=='compact' %}selected{% endif %}>فشرده — دکمه‌ها جفتی</option>
-        </select>
-      </label>
     </div>
   </div>
   <div class="actions sticky-actions">

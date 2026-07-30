@@ -298,9 +298,14 @@
         } catch (_) { ok = false; }
       }
       if (ok) {
-        const prev = btn.textContent;
+        const prev = btn.getAttribute('data-copy-label') || btn.textContent;
+        btn.setAttribute('data-copy-label', prev);
         btn.textContent = 'کپی شد';
-        setTimeout(() => { btn.textContent = prev; }, 1200);
+        btn.classList.add('btn-ok', 'is-copied');
+        setTimeout(() => {
+          btn.textContent = prev;
+          btn.classList.remove('btn-ok', 'is-copied');
+        }, 1200);
       } else {
         showErr('کپی انجام نشد — متن را دستی انتخاب کنید.');
       }

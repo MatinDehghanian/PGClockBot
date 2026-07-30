@@ -124,8 +124,16 @@
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن">×</button>
     </div>
     <form method="post" action="/pg/users" class="form-stack" id="pg-user-create-form">
+      {% if form_err and form_modal == 'create' %}
+      <div class="flash err" id="pg-create-form-err">{{ form_err }}</div>
+      {% else %}
+      <div class="flash err" id="pg-create-form-err" hidden></div>
+      {% endif %}
       <label class="form-field">نام کاربری
-        <input name="username" required autocomplete="off" placeholder="user_01" />
+        <input name="username" id="pg-create-username" required autocomplete="off" placeholder="user_01"
+               pattern="[A-Za-z0-9_]{3,32}" maxlength="32" dir="ltr"
+               title="فقط حروف انگلیسی، عدد و _ — بدون فاصله و فارسی" />
+        <small class="muted">۳ تا ۳۲ کاراکتر انگلیسی، عدد یا _ — بدون فاصله و فارسی</small>
       </label>
 
       <label class="form-field">حالت ساخت
@@ -203,8 +211,14 @@
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن">×</button>
     </div>
     <form method="post" action="/pg/users/0/edit" class="form-stack" id="pg-user-edit-form">
+      {% if form_err and form_modal == 'edit' %}
+      <div class="flash err" id="pg-edit-form-err">{{ form_err }}</div>
+      {% else %}
+      <div class="flash err" id="pg-edit-form-err" hidden></div>
+      {% endif %}
       <label class="form-field">نام کاربری
-        <input id="pg-edit-username" name="username" required autocomplete="off" />
+        <input id="pg-edit-username" type="text" readonly disabled dir="ltr" />
+        <small class="muted">در پاسارگارد امکان تغییر نام کاربری وجود ندارد</small>
       </label>
       <div class="form-row">
         <label class="form-field">حجم (گیگابایت)
@@ -260,11 +274,29 @@
 
 <script>
 (function(){
+  const USERNAME_RE = /^[A-Za-z0-9_]{3,32}$/;
+  function showFormErr(el, msg) {
+    if (!el) return;
+    el.hidden = !msg;
+    el.textContent = msg || '';
+  }
+  function markCopied(btn) {
+    if (!btn) return;
+    const prev = btn.textContent;
+    btn.textContent = 'کپی شد';
+    btn.classList.add('btn-ok', 'is-copied');
+    setTimeout(function () {
+      btn.textContent = prev;
+      btn.classList.remove('btn-ok', 'is-copied');
+    }, 1500);
+  }
+
   const mode = document.getElementById('pg-user-mode');
   const custom = document.getElementById('pg-user-mode-custom');
   const tpl = document.getElementById('pg-user-mode-template');
   const tplSelect = document.getElementById('pg-user-template');
   const form = document.getElementById('pg-user-create-form');
+  const createErr = document.getElementById('pg-create-form-err');
   if (mode && custom && tpl) {
     function sync(){
       const isTpl = mode.value === 'template';
@@ -274,20 +306,29 @@
     }
     mode.addEventListener('change', sync);
     sync();
-    if (form) {
-      form.addEventListener('submit', function(e){
-        if (mode.value === 'custom') {
-          const chips = form.querySelectorAll('input[name^="group_"]:checked');
-          if (!chips.length) {
-            e.preventDefault();
-            alert('حداقل یک گروه انتخاب کنید');
-          }
+  }
+  if (form) {
+    form.addEventListener('submit', function(e){
+      const unameEl = document.getElementById('pg-create-username');
+      const uname = ((unameEl && unameEl.value) || '').trim();
+      if (!USERNAME_RE.test(uname)) {
+        e.preventDefault();
+        showFormErr(createErr, 'نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی، عدد یا _ باشد (بدون فاصله و فارسی)');
+        if (unameEl) unameEl.focus();
+        return;
+      }
+      if (mode && mode.value === 'custom') {
+        const chips = form.querySelectorAll('input[name^="group_"]:checked');
+        if (!chips.length) {
+          e.preventDefault();
+          showFormErr(createErr, 'حداقل یک گروه انتخاب کنید');
         }
-      });
-    }
+      }
+    });
   }
 
   const editForm = document.getElementById('pg-user-edit-form');
+  const editErr = document.getElementById('pg-edit-form-err');
   if (editForm) {
     document.addEventListener('click', function(e){
       const btn = e.target.closest('[data-modal-open="modal-pg-user-edit"]');
@@ -304,14 +345,52 @@
       editForm.querySelectorAll('input[name^="edit_group_"]').forEach(function(inp){
         inp.checked = gset.has(String(inp.value));
       });
+      if (editErr && !editErr.dataset.keep) {
+        showFormErr(editErr, '');
+      }
     });
     editForm.addEventListener('submit', function(e){
       const chips = editForm.querySelectorAll('input[name^="edit_group_"]:checked');
       if (!chips.length) {
         e.preventDefault();
-        alert('حداقل یک گروه انتخاب کنید');
+        showFormErr(editErr, 'حداقل یک گروه انتخاب کنید');
       }
     });
+  }
+
+  const formModal = {{ (form_modal|default('', true))|tojson }};
+  const formUid = {{ (form_uid|default('', true))|tojson }};
+  if (formModal === 'create') {
+    const m = document.getElementById('modal-pg-user-create');
+    if (m) {
+      m.hidden = false;
+      m.classList.add('open');
+      document.body.classList.add('modal-open');
+    }
+  } else if (formModal === 'edit' && editForm) {
+    if (editErr) editErr.dataset.keep = '1';
+    const m = document.getElementById('modal-pg-user-edit');
+    if (formUid) {
+      editForm.action = '/pg/users/' + formUid + '/edit';
+      const src = document.querySelector('[data-modal-open="modal-pg-user-edit"][data-uid="' + formUid + '"]');
+      if (src) {
+        const uname = document.getElementById('pg-edit-username');
+        const gb = document.getElementById('pg-edit-gb');
+        const days = document.getElementById('pg-edit-days');
+        if (uname) uname.value = src.getAttribute('data-username') || '';
+        if (gb) gb.value = src.getAttribute('data-gb') || '';
+        if (days) days.value = src.getAttribute('data-days') || '';
+        const gset = new Set((src.getAttribute('data-groups') || '').split(',').filter(Boolean));
+        editForm.querySelectorAll('input[name^="edit_group_"]').forEach(function(inp){
+          inp.checked = gset.has(String(inp.value));
+        });
+      }
+    }
+    if (m) {
+      m.hidden = false;
+      m.classList.add('open');
+      document.body.classList.add('modal-open');
+    }
   }
 
   const linkUserEl = document.getElementById('pg-user-link-user');
@@ -383,9 +462,7 @@
       if (!url) return;
       try {
         await navigator.clipboard.writeText(url);
-        const prev = linkCopyBtn.textContent;
-        linkCopyBtn.textContent = 'کپی شد';
-        setTimeout(function () { linkCopyBtn.textContent = prev; }, 1500);
+        markCopied(linkCopyBtn);
       } catch (err) {
         if (linkUrlEl) {
           linkUrlEl.focus();

@@ -131,6 +131,15 @@
     <div class="card menu-layout-intro">
       <h2>چیدمان دکمه‌های منو</h2>
       <p class="muted update-card-caption">با دکمه‌های بالا/پایین جابه‌جا کنید.</p>
+      <div class="settings-grid menu-layout-mode">
+        <label class="setting-item">
+          <span>حالت چیدمان</span>
+          <select name="menu_layout_ui" id="menu_layout_ui" form="menu-form">
+            <option value="classic" {% if values.get('menu_layout','classic')=='classic' %}selected{% endif %}>کلاسیک (هر دکمه یک ردیف)</option>
+            <option value="compact" {% if values.get('menu_layout')=='compact' %}selected{% endif %}>فشرده (دو ستونه)</option>
+          </select>
+        </label>
+      </div>
     </div>
     <form method="post" action="/shop-settings/menu-layout" id="menu-form" class="menu-layout-form">
       <input type="hidden" name="menu_order" id="menu_order" value="{{ order_csv }}" />
@@ -173,18 +182,6 @@
             </li>
             {% endfor %}
           </ul>
-        </div>
-      </div>
-      <div class="card settings-card">
-        <h2>حالت چیدمان</h2>
-        <div class="settings-grid">
-          <label class="setting-item">
-            <span>حالت</span>
-            <select name="menu_layout_ui" id="menu_layout_ui">
-              <option value="classic" {% if values.get('menu_layout','classic')=='classic' %}selected{% endif %}>کلاسیک (هر دکمه یک ردیف)</option>
-              <option value="compact" {% if values.get('menu_layout')=='compact' %}selected{% endif %}>فشرده (دو ستونه)</option>
-            </select>
-          </label>
         </div>
       </div>
       <div class="actions sticky-actions">

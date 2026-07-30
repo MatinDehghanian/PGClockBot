@@ -32,7 +32,13 @@
       <div class="setting-item full">
         <label>آیکن وب‌اپ
           <small class="muted">PNG یا JPG مربعی — خالی = لوگوی پنل</small>
+        </label>
+        <label class="upload-box">
           <input name="pwa_icon" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" />
+          <span class="upload-box-plus" aria-hidden="true">+</span>
+          <span class="upload-box-title">انتخاب آیکن</span>
+          <span class="upload-box-hint muted">PNG یا JPG مربعی</span>
+          <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
         </label>
         <div class="ap-photo-row" style="margin-top:10px">
           <img src="{{ p.get('icon_preview') }}?v={{ app_version }}" alt="" class="ap-photo-thumb"
