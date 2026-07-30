@@ -74,6 +74,13 @@ class WiringTests(unittest.TestCase):
         self.assertIn("dash-bot-setup-inner", src)
         self.assertIn("home-panel-bot", src)
         self.assertIn("home-panel-pg", src)
+        # Setup warning is exclusive — overview panels only when bot is ready
+        setup_i = src.find("{% if bot_setup_needed %}")
+        else_i = src.find("{% else %}", setup_i)
+        panels_i = src.find("home-panel-bot", else_i)
+        self.assertGreater(setup_i, 0)
+        self.assertGreater(else_i, setup_i)
+        self.assertGreater(panels_i, else_i)
         self.assertNotIn("pg_limits.time", src)
         self.assertNotIn('class="meter"', src)
 
@@ -112,8 +119,17 @@ class WiringTests(unittest.TestCase):
     def test_base_nav_web_panel_for_all(self):
         src = Path("app/web/templates/base.html").read_text(encoding="utf-8")
         self.assertIn("تنظیمات وب پنل", src)
-        # non-admin block links to /security and /dashboard
         self.assertIn('href="/security"', src)
+        # non-admin web block starts after first `{% else %}` under is_admin web section
+        marker = "nav-section-home"
+        parts = src.split(marker)
+        self.assertGreaterEqual(len(parts), 3)  # admin section + non-admin section
+        non_admin_web = parts[2].split("nav-section-bot")[0]
+        self.assertIn('href="/security"', non_admin_web)
+        self.assertNotIn(">داشبورد</span>", non_admin_web)
+        bot = src[src.find("پنل ربات") : src.find("پنل پاسارگارد")]
+        self.assertIn('href="/dashboard"', bot)
+        self.assertIn(">نمای کلی</span>", bot)
 
     def test_dashboard_perm_always_injected(self):
         perms = parse_perms("plans,orders")

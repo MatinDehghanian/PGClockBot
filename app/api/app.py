@@ -1180,6 +1180,31 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         # Fail closed: never fall through to platform/admin aggregates.
         if rid:
+            from app.db.models import ResellerProfile
+            from app.services.resellers import bot_needs_setup
+
+            profile = (
+                await session.execute(
+                    select(ResellerProfile).where(ResellerProfile.user_id == int(rid))
+                )
+            ).scalar_one_or_none()
+            bot_setup_needed = bot_needs_setup(profile)
+            # Until dedicated bot token is set, overview is setup-only (no stats/PG).
+            if bot_setup_needed:
+                return render(
+                    request,
+                    "dashboard.html",
+                    {
+                        "staff": staff,
+                        "stats": stats,
+                        "recent_payments": [],
+                        "recent_orders": [],
+                        "pg_limits": None,
+                        "bot_setup_needed": True,
+                    },
+                )
+
+            perms = staff.get("permissions") or []
             users_count = await session.scalar(
                 select(func.count()).select_from(BotUser).where(BotUser.reseller_id == rid)
             ) or 0
@@ -1219,27 +1244,29 @@ def create_api_app(lifespan=None) -> FastAPI:
                 .join(BotUser, BotUser.id == Ticket.user_id)
                 .where(Ticket.status == "open", BotUser.reseller_id == rid)
             ) or 0
-            recent_payments = list(
-                (
-                    await session.execute(
-                        select(Payment)
-                        .join(BotUser, BotUser.id == Payment.user_id)
-                        .where(BotUser.reseller_id == rid)
-                        .order_by(Payment.id.desc())
-                        .limit(6)
-                    )
-                ).scalars().all()
-            )
-            recent_orders = list(
-                (
-                    await session.execute(
-                        select(Order)
-                        .where(Order.reseller_id == rid)
-                        .order_by(Order.id.desc())
-                        .limit(6)
-                    )
-                ).scalars().all()
-            )
+            if "payments" in perms:
+                recent_payments = list(
+                    (
+                        await session.execute(
+                            select(Payment)
+                            .join(BotUser, BotUser.id == Payment.user_id)
+                            .where(BotUser.reseller_id == rid)
+                            .order_by(Payment.id.desc())
+                            .limit(6)
+                        )
+                    ).scalars().all()
+                )
+            if "orders" in perms:
+                recent_orders = list(
+                    (
+                        await session.execute(
+                            select(Order)
+                            .where(Order.reseller_id == rid)
+                            .order_by(Order.id.desc())
+                            .limit(6)
+                        )
+                    ).scalars().all()
+                )
             stats = {
                 "users": users_count,
                 "orders": orders_count,
@@ -1250,16 +1277,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "tickets": open_tickets,
             }
 
-        if rid:
-            from app.db.models import ResellerProfile
-            from app.services.resellers import bot_needs_setup
-
-            profile = (
-                await session.execute(
-                    select(ResellerProfile).where(ResellerProfile.user_id == int(rid))
-                )
-            ).scalar_one_or_none()
-            bot_setup_needed = bot_needs_setup(profile)
         if staff.get("pg_admin_username"):
             from app.services.pg_overview import build_reseller_pg_overview
 

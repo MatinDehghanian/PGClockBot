@@ -2,10 +2,19 @@
 {% from "macros.html" import ord_status, pay_status %}
 {% block title %}نمای کلی{% endblock %}
 {% block content %}
+{% set perms = staff.get('permissions') or [] %}
+{% set is_admin = staff.role == 'admin' %}
+{% set can_payments = is_admin or 'payments' in perms %}
+{% set can_orders = is_admin or 'orders' in perms %}
+{% set can_tickets = is_admin or 'tickets' in perms %}
+{% set can_plans = is_admin or 'plans' in perms %}
+{% set can_shop = is_admin or 'shop_settings' in perms or staff.role == 'reseller' %}
 <div class="page-head">
   <div>
     <h1>نمای کلی</h1>
+    {% if not bot_setup_needed %}
     <p class="desk-only">خلاصه فروش و دسترسی سریع</p>
+    {% endif %}
   </div>
 </div>
 
@@ -17,7 +26,7 @@
     <a class="btn btn-sm" href="/shop-settings?tab=bot">تنظیمات ربات تلگرام</a>
   </div>
 </div>
-{% endif %}
+{% else %}
 
 <div class="home-panels">
   <section class="home-panel home-panel-bot">
@@ -26,7 +35,9 @@
         <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
         <h2 class="home-panel-h">پنل ربات</h2>
       </div>
+      {% if can_shop %}
       <a class="btn btn-sm btn-ghost" href="/shop-settings">تنظیمات</a>
+      {% endif %}
     </div>
     <div class="home-panel-grid">
       <div class="stat">
@@ -155,20 +166,32 @@
   {% endif %}
 </div>
 
+{% if can_payments or can_orders or can_tickets or can_plans or can_shop %}
 <div class="card">
   <h2>دسترسی سریع</h2>
   <div class="quick-links">
+    {% if can_payments %}
     <a href="/payments">پرداخت‌ها{% if stats.pending %} ({{ stats.pending }}){% endif %}</a>
+    {% endif %}
+    {% if can_orders %}
     <a href="/orders">سفارش‌ها</a>
+    {% endif %}
+    {% if can_tickets %}
     <a href="/tickets">پشتیبانی{% if stats.tickets %} ({{ stats.tickets }}){% endif %}</a>
-    {% if staff.role == 'admin' or 'plans' in (staff.get('permissions') or []) %}
+    {% endif %}
+    {% if can_plans %}
     <a class="desk-only" href="/plans">پلن‌ها</a>
     {% endif %}
+    {% if can_shop %}
     <a href="/shop-settings">تنظیمات ربات</a>
+    {% endif %}
   </div>
 </div>
+{% endif %}
 
+{% if can_payments or can_orders %}
 <div class="dash-cols">
+  {% if can_payments %}
   <div class="card">
     <h2>آخرین پرداخت‌ها</h2>
     {% if recent_payments %}
@@ -195,7 +218,9 @@
     <p class="muted">پرداختی ثبت نشده.</p>
     {% endif %}
   </div>
+  {% endif %}
 
+  {% if can_orders %}
   <div class="card">
     <h2>آخرین سفارش‌ها</h2>
     {% if recent_orders %}
@@ -221,5 +246,9 @@
     <p class="muted">سفارشی ثبت نشده.</p>
     {% endif %}
   </div>
+  {% endif %}
 </div>
+{% endif %}
+
+{% endif %}
 {% endblock %}
