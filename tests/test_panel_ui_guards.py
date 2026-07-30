@@ -127,10 +127,32 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn("M4.5 6L8 3l3.5 3", css)
         self.assertIn("M4.5 10L8 13l3.5-3", css)
-        self.assertIn("background-position: left 12px center", css)
-        self.assertIn("background-color: #09090b", css)
+        sel = re.search(r"(?ms)^select\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(sel)
+        body = sel.group(1)
+        # RTL: chevron on physical left (opposite the value text), with room via padding-inline-end
+        self.assertIn("background-position: left 12px center", body)
+        self.assertIn("padding-inline-end: 36px", body)
+        self.assertNotIn("background-position: right", body)
+        self.assertIn("background-color: #09090b", body)
         # light theme must not wipe the chevron via background shorthand
-        self.assertRegex(css, r"html\[data-theme=\"light\"\]\s+select\s*\{[^}]*background-image:")
+        light = re.search(r'(?ms)html\[data-theme="light"\]\s+select\s*\{([^}]+)\}', css)
+        self.assertIsNotNone(light)
+        self.assertIn("background-image:", light.group(1))
+        self.assertIn("background-position: left 12px center", light.group(1))
+        # shared input padding must not force symmetric padding onto select
+        shared = re.search(r"(?ms)^input,\s*select,\s*textarea\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(shared)
+        self.assertNotRegex(shared.group(1), r"(?m)^\s*padding\s*:")
+
+    def test_theme_caret_not_over_label(self):
+        css = CSS.read_text(encoding="utf-8")
+        caret = re.search(r"(?ms)^\.side-theme-caret\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(caret)
+        body = caret.group(1)
+        self.assertIn("margin-inline-start: auto", body)
+        self.assertNotIn("position: absolute", body)
+        self.assertNotIn("inset-inline-end", body)
 
     def test_kebab_covers_tablet_and_overflow(self):
         css = CSS.read_text(encoding="utf-8")
@@ -143,16 +165,23 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("is-ported", js)
         self.assertIn("rowMenuHomes", js)
 
-    def test_footer_is_compact(self):
+    def test_site_footer_compact_sidebar_footer_restored(self):
         css = CSS.read_text(encoding="utf-8")
         foot = re.search(r"(?ms)^\.site-footer\s*\{([^}]+)\}", css)
         self.assertIsNotNone(foot)
         body = foot.group(1)
         self.assertIn("margin-top: 16px", body)
         self.assertIn("padding-top: 10px", body)
-        star = re.search(r"(?ms)^a\.btn\.btn-star\s*,\s*\.btn-star\s*\{|^\.btn-star,\s*\na\.btn\.btn-star\s*\{|^\.btn-star,\s*a\.btn\.btn-star\s*\{([^}]+)\}", css)
         # star button should be shorter than primary --btn-h
         self.assertIn("min-height: 28px", css)
+        # sidebar footer must stay at the pre-compact sizing
+        side = re.search(r"(?ms)^\.side-foot\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(side)
+        self.assertIn("padding-top: 12px", side.group(1))
+        logout = re.search(r"(?ms)^\.logout-link\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(logout)
+        self.assertIn("font-size: 13px", logout.group(1))
+        self.assertIn("padding: 6px 8px", logout.group(1))
 
     def test_block_button_is_warn_update_is_ok(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
