@@ -135,6 +135,30 @@ async def get_plan(session: AsyncSession, plan_id: int) -> Optional[Plan]:
     return await session.get(Plan, plan_id)
 
 
+async def get_catalog_plan(session: AsyncSession, plan_id: int) -> Optional[Plan]:
+    """Plan visible in the current shop bot context (tenant-scoped)."""
+    from app.services.users import current_shop_reseller_id
+
+    plan = await session.get(Plan, plan_id)
+    if not plan:
+        return None
+    shop_rid = current_shop_reseller_id()
+    if shop_rid:
+        if int(plan.owner_reseller_id or 0) != int(shop_rid):
+            return None
+    elif plan.owner_reseller_id is not None:
+        return None
+    return plan
+
+
+def _shop_reseller_id() -> int | None:
+    """Always attribute orders to the current shop bot, never sticky user.reseller_id."""
+    from app.services.users import current_shop_reseller_id
+
+    rid = current_shop_reseller_id()
+    return int(rid) if rid else None
+
+
 async def apply_discount(session: AsyncSession, code: str | None, amount: int) -> tuple[int, str | None]:
     if not code:
         return 0, None
@@ -150,6 +174,27 @@ async def apply_discount(session: AsyncSession, code: str | None, amount: int) -
     return discount, row.code
 
 
+async def _consume_discount_code(session: AsyncSession, code: str | None) -> None:
+    """Atomically increment used_count, respecting max_uses."""
+    if not code:
+        return
+    from sqlalchemy import or_
+
+    await session.execute(
+        update(DiscountCode)
+        .where(
+            DiscountCode.code == code,
+            DiscountCode.is_active.is_(True),
+            or_(
+                DiscountCode.max_uses.is_(None),
+                DiscountCode.used_count < DiscountCode.max_uses,
+            ),
+        )
+        .values(used_count=DiscountCode.used_count + 1)
+        .execution_options(synchronize_session=False)
+    )
+
+
 async def create_order(
     session: AsyncSession,
     *,
@@ -158,22 +203,14 @@ async def create_order(
     reseller_id: int | None = None,
     discount_code: str | None = None,
 ) -> Order:
-    from app.services.users import current_shop_reseller_id
-
-    plan = await get_plan(session, plan_id)
+    plan = await get_catalog_plan(session, plan_id)
     if not plan or not plan.is_active:
         raise ValueError("پلن یافت نشد")
-    shop_rid = current_shop_reseller_id()
-    if shop_rid:
-        if int(plan.owner_reseller_id or 0) != int(shop_rid):
-            raise ValueError("این پلن در این فروشگاه موجود نیست")
-    elif plan.owner_reseller_id is not None:
-        raise ValueError("این پلن در این فروشگاه موجود نیست")
+    shop_rid = _shop_reseller_id()
+    # Ignore sticky attribution from caller — shop bot context wins.
+    _ = reseller_id
     if plan.is_trial:
         # One free trial per user per shop (prevent callback re-buy)
-        from app.services.users import current_shop_reseller_id
-
-        shop_rid = current_shop_reseller_id()
         trial_q = (
             select(Order.id)
             .join(Plan, Plan.id == Order.plan_id)
@@ -202,7 +239,7 @@ async def create_order(
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
-        reseller_id=reseller_id,
+        reseller_id=shop_rid,
         amount=max(0, plan.price - discount),
         discount_amount=discount,
         discount_code=used_code,
@@ -234,7 +271,7 @@ async def create_custom_order(
     discount_code: str | None = None,
 ) -> Order:
     """Create an order for a user-chosen GB/days combo via an inactive temp Plan."""
-    from app.services.users import current_shop_reseller_id, get_all_settings, on
+    from app.services.users import get_all_settings, on
 
     ui = await get_all_settings(session)
     if not on(ui.get("custom_plan_enabled")):
@@ -267,7 +304,8 @@ async def create_custom_order(
     tpl_raw = (ui.get("custom_plan_template_id") or "").strip()
     tpl_id = int(tpl_raw) if tpl_raw.isdigit() else None
     group_ids = (ui.get("custom_plan_group_ids") or "").strip() or None
-    shop_rid = current_shop_reseller_id()
+    shop_rid = _shop_reseller_id()
+    _ = reseller_id  # sticky user attribution must not override shop context
     if shop_rid:
         # Do not inherit platform PG template/groups for reseller custom plans
         from app.db.models import ResellerSetting
@@ -309,7 +347,7 @@ async def create_custom_order(
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
-        reseller_id=reseller_id,
+        reseller_id=shop_rid,
         amount=max(0, amount - discount),
         discount_amount=discount,
         discount_code=used_code,
@@ -331,28 +369,60 @@ _PAYABLE_ORDER_STATUSES = frozenset(
 )
 
 
+async def _claim_payable_order(
+    session: AsyncSession,
+    order: Order,
+    *,
+    payment_method: str,
+) -> Order:
+    """Atomically claim a payable order → PAID. Prevents double wallet/free pay."""
+    if order.status == OrderStatus.DELIVERED.value:
+        return order
+    order_id = int(order.id)
+    with session.no_autoflush:
+        claim = await session.execute(
+            update(Order)
+            .where(
+                Order.id == order_id,
+                Order.status.in_(tuple(_PAYABLE_ORDER_STATUSES)),
+            )
+            .values(status=OrderStatus.PAID.value, payment_method=payment_method)
+            .execution_options(synchronize_session=False)
+        )
+    if claim.rowcount != 1:
+        fresh = await session.get(Order, order_id)
+        if fresh and fresh.status == OrderStatus.DELIVERED.value:
+            return fresh
+        raise ValueError("این سفارش قابل پرداخت نیست")
+    await session.refresh(order)
+    return order
+
+
 async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     if order.status == OrderStatus.DELIVERED.value:
         return order
     if order.status not in _PAYABLE_ORDER_STATUSES:
         raise ValueError("این سفارش قابل پرداخت با کیف پول نیست")
     payment: Payment | None = None
-    if order.amount > 0:
-        await debit_wallet(session, user, order.amount, f"خرید سفارش #{order.id}")
-    order.payment_method = PaymentMethod.WALLET.value
-    order.status = OrderStatus.PAID.value
-    payment = Payment(
-        order_id=order.id,
-        user_id=user.id,
-        amount=order.amount,
-        method=PaymentMethod.WALLET.value,
-        status=PaymentStatus.APPROVED.value,
+    order = await _claim_payable_order(
+        session, order, payment_method=PaymentMethod.WALLET.value
     )
-    session.add(payment)
-    await session.commit()
-    await session.refresh(order)
-    await session.refresh(payment)
+    if order.status == OrderStatus.DELIVERED.value:
+        return order
     try:
+        if order.amount > 0:
+            await debit_wallet(session, user, order.amount, f"خرید سفارش #{order.id}")
+        payment = Payment(
+            order_id=order.id,
+            user_id=user.id,
+            amount=order.amount,
+            method=PaymentMethod.WALLET.value,
+            status=PaymentStatus.APPROVED.value,
+        )
+        session.add(payment)
+        await session.commit()
+        await session.refresh(order)
+        await session.refresh(payment)
         if order.note and order.note.startswith("reseller_app:"):
             from app.services.resellers import mark_application_paid
 
@@ -385,10 +455,11 @@ async def mark_order_free_paid(session: AsyncSession, order: Order, user_id: int
     """Mark a zero-amount order as paid with an approved payment row."""
     if order.amount > 0:
         raise ValueError("فقط سفارش رایگان قابل علامت‌گذاری رایگان است")
-    if order.status not in _PAYABLE_ORDER_STATUSES:
-        raise ValueError("این سفارش قابل پرداخت نیست")
-    order.status = OrderStatus.PAID.value
-    order.payment_method = PaymentMethod.WALLET.value
+    order = await _claim_payable_order(
+        session, order, payment_method=PaymentMethod.WALLET.value
+    )
+    if order.status == OrderStatus.DELIVERED.value:
+        return order
     session.add(
         Payment(
             order_id=order.id,
@@ -545,13 +616,24 @@ async def reject_payment(session: AsyncSession, payment: Payment, reviewer_tg: i
 
 
 async def deliver_order(session: AsyncSession, order: Order) -> Order:
+    order_id = int(order.id)
     order = (
         await session.execute(
             select(Order)
-            .where(Order.id == order.id)
+            .where(Order.id == order_id)
             .options(selectinload(Order.plan), selectinload(Order.user))
+            .with_for_update()
         )
     ).scalar_one()
+    if order.status == OrderStatus.DELIVERED.value:
+        return order
+    if order.status != OrderStatus.PAID.value:
+        raise ValueError("سفارش قابل تحویل نیست")
+    if order.service_id:
+        order.status = OrderStatus.DELIVERED.value
+        await session.commit()
+        await session.refresh(order)
+        return order
     plan = order.plan
     if not plan:
         raise ValueError("plan missing")
@@ -636,14 +718,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             commission = int(order.amount * profile.commission_percent / 100)
             profile.balance += commission
 
-    if order.discount_code:
-        disc = (
-            await session.execute(
-                select(DiscountCode).where(DiscountCode.code == order.discount_code)
-            )
-        ).scalar_one_or_none()
-        if disc:
-            disc.used_count += 1
+    await _consume_discount_code(session, order.discount_code)
 
     order.service_id = service.id
     order.status = OrderStatus.DELIVERED.value
@@ -680,13 +755,11 @@ async def renew_service_with_plan(
     plan: Plan,
 ) -> Order:
     """Create a pending renewal order. Caller shows pay_methods (or uses pay_with_wallet)."""
-    from app.services.users import current_shop_reseller_id
-
     if not plan or not plan.is_active:
         raise ValueError("پلن یافت نشد")
     if plan.is_trial:
         raise ValueError("پلن تست برای تمدید مجاز نیست")
-    shop_rid = current_shop_reseller_id()
+    shop_rid = _shop_reseller_id()
     if shop_rid:
         if int(plan.owner_reseller_id or 0) != int(shop_rid):
             raise ValueError("این پلن در این فروشگاه موجود نیست")

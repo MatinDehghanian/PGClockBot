@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from aiogram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.db.models import BotUser, ResellerProfile, UserService
 from app.db.session import SessionLocal
@@ -73,7 +73,16 @@ async def check_expiring_services(bot: Bot) -> None:
             if not reseller_ids_with_alerts:
                 return
 
-        result = await session.execute(select(UserService))
+        # Only services that still need at least one alert (skip fully-notified rows).
+        result = await session.execute(
+            select(UserService).where(
+                UserService.subscription_token.is_not(None),
+                or_(
+                    UserService.notified_expire.is_(False),
+                    UserService.notified_traffic.is_(False),
+                ),
+            )
+        )
         services = list(result.scalars().all())
         if not services:
             return
@@ -102,8 +111,6 @@ async def check_expiring_services(bot: Bot) -> None:
         platform_on = on(global_ui.get("user_alert_low_enabled", "0"))
 
         for svc in services:
-            if not svc.subscription_token:
-                continue
             user = users_by_id.get(svc.bot_user_id)
             if not user or user.is_blocked:
                 continue
@@ -115,10 +122,6 @@ async def check_expiring_services(bot: Bot) -> None:
 
             ui = await ui_for(rid)
             if not on(ui.get("user_alert_low_enabled", "0")):
-                continue
-
-            # Skip remote call when both notifications already sent
-            if svc.notified_expire and svc.notified_traffic:
                 continue
 
             try:

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.auth import is_platform_admin as _is_admin
 from app.config import get_settings
 from app.db.models import BotUser, Plan, Role
 from app.services.notifications import NOTIFY_PREFS
@@ -154,14 +155,6 @@ SECTIONS: dict[str, dict] = {
 
 HUB_ORDER = ["shop", "menu", "pay", "support", "service", "notify"]
 
-MENU_VIS: list[Field] = [
-    ("show_wallet", "کیف پول", "toggle"),
-    ("show_support", "پشتیبانی", "toggle"),
-    ("show_guide", "راهنما", "toggle"),
-    ("show_faq", "سوالات", "toggle"),
-    ("show_referral", "دعوت", "toggle"),
-    ("show_miniapp", "مینی‌اپ", "toggle"),
-]
 
 CUSTOM_PRICE: list[Field] = [
     ("custom_plan_price_per_gb", "قیمت هر گیگ", "number"),
@@ -193,10 +186,6 @@ class SettingsStates(StatesGroup):
     trial_gb = State()
 
 
-def _is_admin(user: BotUser) -> bool:
-    return user.role == Role.ADMIN.value or user.telegram_id in get_settings().admin_ids
-
-
 def _field_lookup() -> dict[str, Field]:
     out: dict[str, Field] = {}
     for sec in SECTIONS.values():
@@ -204,7 +193,7 @@ def _field_lookup() -> dict[str, Field]:
             if isinstance(sub[2], list):
                 for f in sub[2]:
                     out[f[0]] = f
-    for f in MENU_VIS + CUSTOM_PRICE:
+    for f in CUSTOM_PRICE:
         out[f[0]] = f
     return out
 
@@ -310,9 +299,6 @@ async def _render_sub(callback: CallbackQuery, session: AsyncSession, sec_id: st
     payload = sub[2]
     back = f"adm:st:sec:{sec_id}"
 
-    if payload == "menu_vis":
-        await _render_fields(callback, session, title=title, fields=MENU_VIS, back_cb=back)
-        return
     if payload == "menu_layout":
         ui = await get_all_settings(session)
         layout = ui.get("menu_layout") or "classic"

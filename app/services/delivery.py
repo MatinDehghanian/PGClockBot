@@ -240,7 +240,10 @@ async def send_subscription_qr_photo(
     try:
         from app.services.notifications import build_qr_caption
 
-        buf = make_subscription_qr(
+        import asyncio
+
+        buf = await asyncio.to_thread(
+            make_subscription_qr,
             sub_url,
             background=(ui.get("qr_background") if ui else None) or None,
         )

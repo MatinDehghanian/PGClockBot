@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.auth import is_platform_admin as _is_admin
 from app.config import get_settings
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Plan, Role, Ticket, UserService
 from app.services.formatting import (
@@ -186,10 +187,6 @@ class AdminStates(StatesGroup):
     revoke_reseller_reason = State()
     broadcast_text = State()
     broadcast_audience = State()
-
-
-def _is_admin(user: BotUser) -> bool:
-    return user.role == Role.ADMIN.value or user.telegram_id in get_settings().admin_ids
 
 
 @router.callback_query(F.data == "adm:home")

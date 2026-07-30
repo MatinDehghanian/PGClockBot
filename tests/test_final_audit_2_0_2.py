@@ -156,10 +156,10 @@ class VersionBumpTests(unittest.TestCase):
     def test_version_is_current(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "2.5.7")
-        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "2.5.7")
+        self.assertEqual(__version__, "2.5.8")
+        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "2.5.8")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"2.5.7"', notes)
+        self.assertIn('"2.5.8"', notes)
 
 
 class PayWithWalletRefundPaymentTests(unittest.IsolatedAsyncioTestCase):
@@ -180,11 +180,21 @@ class PayWithWalletRefundPaymentTests(unittest.IsolatedAsyncioTestCase):
         user = MagicMock()
         user.id = 3
 
+        claim_result = SimpleNamespace(rowcount=1)
         session = AsyncMock()
         session.add = MagicMock(side_effect=lambda obj: payment_holder.setdefault("p", obj))
         session.commit = AsyncMock()
-        session.refresh = AsyncMock()
+
+        async def _refresh(obj):
+            if obj is order:
+                order.status = OrderStatus.PAID.value
+
+        session.refresh = AsyncMock(side_effect=_refresh)
         session.get = AsyncMock(return_value=None)
+        session.execute = AsyncMock(return_value=claim_result)
+        session.no_autoflush = MagicMock()
+        session.no_autoflush.__enter__ = MagicMock(return_value=session)
+        session.no_autoflush.__exit__ = MagicMock(return_value=False)
 
         with (
             patch("app.services.orders.debit_wallet", new=AsyncMock()),

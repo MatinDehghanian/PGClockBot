@@ -13,6 +13,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.bot import keyboards as kb
+from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Role
@@ -40,10 +41,6 @@ class PgUserStates(StatesGroup):
     edit_username = State()
     edit_gb = State()
     edit_days = State()
-
-
-def _is_admin(user: BotUser) -> bool:
-    return user.role == Role.ADMIN.value or user.telegram_id in get_settings().admin_ids
 
 
 def _user_label(u: dict) -> str:

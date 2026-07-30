@@ -33,7 +33,8 @@ backup_runtime() {
   # Preserve config + DB outside of git reset
   RUNTIME_BAK="$(mktemp -d /tmp/pgclock-runtime.XXXXXX)"
   mkdir -p "$RUNTIME_BAK"
-  for item in .env data .venv; do
+  # Never copy .venv — it can be hundreds of MB and slows force-sync badly.
+  for item in .env data; do
     if [[ -e "$item" ]]; then
       cp -a "$item" "$RUNTIME_BAK/" 2>/dev/null || true
     fi
@@ -77,7 +78,8 @@ force_sync_to_remote() {
   local bak="$RUNTIME_BAK"
 
   git remote set-url origin "$REPO_URL" 2>/dev/null || git remote add origin "$REPO_URL" 2>/dev/null || true
-  git fetch --all --tags
+  # Targeted fetch (no tags / no --all) — much faster on weak VPS links
+  git fetch --no-tags --prune origin "$REMOTE_BRANCH" || git fetch --no-tags --prune origin
 
   # Detach local dirty state safely
   git checkout -f -B "$REMOTE_BRANCH" "origin/${REMOTE_BRANCH}"
@@ -96,13 +98,16 @@ git_update() {
 
   info "Updating from GitHub..."
   git remote set-url origin "$REPO_URL" 2>/dev/null || true
-  git fetch --all --tags 2>/dev/null || true
 
   local branch
   branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "$REMOTE_BRANCH")"
   if [[ "$branch" == "HEAD" ]]; then
     branch="$REMOTE_BRANCH"
   fi
+
+  git fetch --no-tags --prune origin "$branch" 2>/dev/null \
+    || git fetch --no-tags --prune origin "$REMOTE_BRANCH" 2>/dev/null \
+    || true
 
   if git pull --ff-only "origin" "$branch" 2>/dev/null \
     || git pull --ff-only 2>/dev/null; then

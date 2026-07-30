@@ -156,6 +156,10 @@ def _has_admin_ids() -> bool:
     return False
 
 
+# Cache only the True outcome — once setup is done it stays done for this process.
+_SETUP_COMPLETE_CACHED = False
+
+
 def is_setup_complete() -> bool:
     """True when first-run wizard is done and required config exists.
 
@@ -163,6 +167,10 @@ def is_setup_complete() -> bool:
     auto-flagged on first check so the wizard never traps them — unless a
     setup session is in progress (partial wizard saves).
     """
+    global _SETUP_COMPLETE_CACHED
+    if _SETUP_COMPLETE_CACHED:
+        return True
+
     # Wizard mid-flight: do not treat partial credentials as "done"
     if SETUP_IN_PROGRESS.exists():
         return False
@@ -175,6 +183,7 @@ def is_setup_complete() -> bool:
     if SETUP_FLAG.exists():
         # Stale flag after wipe / incomplete scaffold → force wizard again
         if ready:
+            _SETUP_COMPLETE_CACHED = True
             return True
         try:
             SETUP_FLAG.unlink()
@@ -186,6 +195,7 @@ def is_setup_complete() -> bool:
         # Prefer also having admin ids, but don't trap old installs without them
         if has_admins or has_pw:
             mark_setup_complete()
+            _SETUP_COMPLETE_CACHED = True
             return True
 
     return False

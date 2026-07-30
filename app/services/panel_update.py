@@ -652,7 +652,7 @@ def _do_update(target_version: str | None) -> None:
             )
             return
 
-        time.sleep(1.2)
+        time.sleep(0.4)
         _finish_ok(
             "آپدیت انجام شد — سرویس در حال راه‌اندازی مجدد است. "
             "ممکن است چند دقیقه طول بکشد؛ از صفحه خارج نشوید و رفرش نکنید. صفحه به‌صورت خودکار تازه می‌شود.",
@@ -758,7 +758,7 @@ def _do_rollback(snapshot_id: str) -> None:
                 restart_required=True,
             )
             return
-        time.sleep(1.2)
+        time.sleep(0.4)
         _finish_ok(
             f"بازگشت به نسخه {new_ver or sha[:7]} انجام شد — سرویس در حال راه‌اندازی مجدد است. "
             "ممکن است چند دقیقه طول بکشد؛ از صفحه خارج نشوید و رفرش نکنید. صفحه به‌صورت خودکار تازه می‌شود.",

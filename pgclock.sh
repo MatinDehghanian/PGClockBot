@@ -251,11 +251,25 @@ ensure_apt_packages() {
     err "apt-get not found."
     return 1
   fi
+  # Core packages required for install/run. nano/certbot are optional (edit/SSL).
+  local required=(python3 python3-venv python3-pip ca-certificates curl git openssl)
+  local missing=()
+  local pkg
+  for pkg in "${required[@]}"; do
+    if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+      missing+=("$pkg")
+    fi
+  done
+  if [[ ${#missing[@]} -eq 0 ]] \
+    && command -v python3 >/dev/null 2>&1 \
+    && command -v curl >/dev/null 2>&1 \
+    && command -v git >/dev/null 2>&1; then
+    ok "Prerequisites already installed (skip apt)"
+    return 0
+  fi
   export DEBIAN_FRONTEND=noninteractive
   sudo_wrap apt-get update -y >/dev/null
-  sudo_wrap apt-get install -y \
-    python3 python3-venv python3-pip ca-certificates curl git openssl nano certbot \
-    >/dev/null
+  sudo_wrap apt-get install -y "${missing[@]}" >/dev/null
   ok "Prerequisites ready"
 }
 

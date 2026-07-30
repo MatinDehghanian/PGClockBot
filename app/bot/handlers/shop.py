@@ -17,6 +17,7 @@ from app.services.orders import (
     calc_custom_plan_price,
     create_custom_order,
     create_order,
+    get_catalog_plan,
     get_plan,
     list_active_plans,
     mark_order_free_paid,
@@ -431,7 +432,7 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
 async def shop_plan(callback: CallbackQuery, session: AsyncSession):
     ui = await get_all_settings(session)
     plan_id = int(callback.data.split(":")[-1])
-    plan = await get_plan(session, plan_id)
+    plan = await get_catalog_plan(session, plan_id)
     if not plan:
         await callback.answer("پلن پیدا نشد", show_alert=True)
         return
@@ -456,7 +457,7 @@ async def shop_plan(callback: CallbackQuery, session: AsyncSession):
 async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     ui = await get_all_settings(session)
     plan_id = int(callback.data.split(":")[-1])
-    plan = await get_plan(session, plan_id)
+    plan = await get_catalog_plan(session, plan_id)
     if not plan:
         await callback.answer("پلن پیدا نشد", show_alert=True)
         return

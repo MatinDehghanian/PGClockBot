@@ -17,9 +17,10 @@ from aiogram.types import (
     Message,
 )
 
+from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
-from app.db.models import BotUser, Role
+from app.db.models import BotUser
 from app.services.backup import (
     create_backup,
     delete_backup,
@@ -36,10 +37,6 @@ router = Router(name="admin_backup")
 class BackupStates(StatesGroup):
     waiting_upload = State()
     confirm_restore = State()
-
-
-def _is_admin(user: BotUser) -> bool:
-    return user.role == Role.ADMIN.value or user.telegram_id in get_settings().admin_ids
 
 
 def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
