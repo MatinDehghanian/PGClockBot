@@ -263,6 +263,19 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         profile.bot_admin_ids = normalize_telegram_ids_csv(
             str(form.get("bot_admin_ids") or "").strip() or None
         )
+        new_pass = str(form.get("web_password") or "").strip()
+        if new_pass:
+            from app.services.web_auth import hash_password, validate_password_strength
+
+            ok, perr = validate_password_strength(new_pass)
+            if not ok:
+                return RedirectResponse(
+                    f"/resellers/{user_id}/edit?err={_q(perr)}",
+                    status_code=303,
+                )
+            profile.web_password_hash = hash_password(new_pass)
+            if profile.web_username and not profile.setup_completed_at:
+                profile.setup_completed_at = datetime.now(timezone.utc)
         if bool(form.get("reissue_setup")):
             from app.services.resellers import new_setup_token
 

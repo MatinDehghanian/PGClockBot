@@ -335,7 +335,11 @@ async def make_reseller(
         profile.setup_token = token
         profile.setup_token_expires = expires
         # Web creds already provisioned → keep login unlocked; token is for bot only
-        if web_username and web_password_hash:
+        has_web = bool(
+            (web_username or profile.web_username)
+            and (web_password_hash or profile.web_password_hash)
+        )
+        if has_web:
             profile.setup_completed_at = datetime.now(timezone.utc)
         else:
             profile.setup_completed_at = None
@@ -800,9 +804,6 @@ async def provision_existing_pg_admin(
     if not plan or not plan.is_active:
         return None, None, "پلن نمایندگی معتبر نیست — ابتدا یک پلن فعال بسازید"
 
-    ok, err = validate_password_strength(password or "")
-    if not ok:
-        return None, None, err
     cleaned, uerr = validate_web_username(web_username, lowercase=True)
     if uerr:
         return None, None, uerr
@@ -824,12 +825,26 @@ async def provision_existing_pg_admin(
         if (row.pg_admin_username or "").strip().lower() == pg_u:
             current = row
             break
+    staff_row = await access_by_pg_username(session, pg_u)
     if current is None:
         conflict = await conflict_message_for_reseller_link(session, pg_u)
         # conflict_message blocks when pg_staff exists — we'll convert that path
-        staff_row = await access_by_pg_username(session, pg_u)
         if conflict and staff_row is None:
             return None, None, conflict
+
+    # Password: empty on edit/upgrade keeps previous hash (reseller or legacy staff).
+    pwd = (password or "").strip()
+    if pwd:
+        ok, err = validate_password_strength(pwd)
+        if not ok:
+            return None, None, err
+        web_hash = hash_password(pwd)
+    else:
+        web_hash = (current.web_password_hash if current else None) or (
+            staff_row.web_password_hash if staff_row else None
+        )
+        if not web_hash:
+            return None, None, "رمز عبور الزامی است"
 
     # Username uniqueness (exclude current profile)
     from app.db.models import PgStaffAccess
@@ -868,7 +883,7 @@ async def provision_existing_pg_admin(
         pg_admin_username=pg_u,
         pg_role_id=role_id,
         web_username=cleaned,
-        web_password_hash=hash_password(password),
+        web_password_hash=web_hash,
         web_permissions=perms,
         bot_permissions=perms,
         plan_id=int(plan.id),

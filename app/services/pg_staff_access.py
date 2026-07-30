@@ -490,10 +490,12 @@ async def update_web_access(
         )
 
     if not (password or "").strip():
-        return None, "رمز عبور الزامی است"
-    ok, err = validate_password_strength(password)
-    if not ok:
-        return None, err
+        # Keep existing password on edit
+        pass
+    else:
+        ok, err = validate_password_strength(password)
+        if not ok:
+            return None, err
     cleaned, uerr = validate_web_username(web_username, lowercase=True)
     if uerr:
         return None, uerr
@@ -502,7 +504,8 @@ async def update_web_access(
         return None, taken
 
     existing.web_username = cleaned
-    existing.web_password_hash = hash_password(password)
+    if (password or "").strip():
+        existing.web_password_hash = hash_password(password)
     if is_active is not None:
         existing.is_active = bool(is_active)
     if note is not None:

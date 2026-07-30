@@ -143,8 +143,8 @@
         <small class="muted">فقط برای ورود به این وب‌پنل؛ جدا از یوزر پاسارگارد</small>
       </label>
       <label class="form-field">رمز عبور وب‌پنل
-        <input name="web_password" type="password" required autocomplete="new-password" placeholder="رمز قوی" />
-        <small class="muted">حداقل ۸ کاراکتر با حرف بزرگ/کوچک و کاراکتر خاص</small>
+        <input name="web_password" type="password" {% if src == 'none' %}required{% endif %} autocomplete="new-password" placeholder="{% if src == 'pg_staff' %}خالی = حفظ رمز فعلی{% else %}رمز قوی{% endif %}" />
+        <small class="muted">{% if src == 'pg_staff' %}اختیاری — اگر خالی بماند همان رمز قبلی می‌ماند{% else %}حداقل ۸ کاراکتر با حرف بزرگ/کوچک و کاراکتر خاص{% endif %}</small>
       </label>
       <label class="form-field">یادداشت
         <input name="note" value="{{ st.get('note') if src == 'pg_staff' and st.get('note') else '' }}" placeholder="دسترسی محدود فروش" />

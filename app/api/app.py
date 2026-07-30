@@ -511,9 +511,12 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.exception_handler(NotAuthenticated)
     async def _unauth(request: Request, exc: NotAuthenticated):
         err = getattr(exc, "login_error", None) or getattr(exc, "message", None)
-        if err:
-            return RedirectResponse(f"/login?err={quote(str(err), safe='')}", status_code=303)
-        return RedirectResponse("/login", status_code=303)
+        # Always clear the session cookie so stale roles (e.g. pg_staff after
+        # conversion to reseller) cannot loop /login ↔ /dashboard.
+        target = f"/login?err={quote(str(err), safe='')}" if err else "/login"
+        resp = RedirectResponse(target, status_code=303)
+        resp.delete_cookie("session", path="/")
+        return resp
 
     @app.exception_handler(NotAdmin)
     async def _not_admin(request: Request, exc: NotAdmin):
@@ -823,22 +826,29 @@ def create_api_app(lifespan=None) -> FastAPI:
     async def login_page(request: Request):
         if not is_setup_complete():
             return RedirectResponse("/", status_code=303)
-        sess = get_session_user(request)
-        if sess:
-            if sess.get("role") == "admin":
-                return RedirectResponse("/home", status_code=303)
-            if sess.get("role") == "pg_staff":
+        err = request.query_params.get("err")
+        # With an error (often after cookie clear), always show the form.
+        if not err:
+            sess = get_session_user(request)
+            if sess:
+                if sess.get("role") == "admin":
+                    return RedirectResponse("/home", status_code=303)
+                # Reseller / pg_staff: only bounce if cookie looks usable; invalid
+                # sessions are cleared by require_staff → NotAuthenticated.
                 return RedirectResponse("/dashboard", status_code=303)
-            return RedirectResponse("/dashboard", status_code=303)
-        return render(
+        page = render(
             request,
             "login.html",
             {
-                "error": request.query_params.get("err"),
+                "error": err,
                 "username": "",
                 "flash_ok": request.query_params.get("ok"),
             },
         )
+        if err:
+            # Belt-and-suspenders: drop any leftover session when showing an auth error.
+            page.delete_cookie("session", path="/")
+        return page
 
     @app.post("/login")
     async def login_submit(

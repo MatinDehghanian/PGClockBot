@@ -50,6 +50,13 @@
     <p class="muted">وب: <code>{{ profile.web_username or 'هنوز ساخته نشده' }}</code>
       · ربات: <code>{% if profile.bot_username %}@{{ profile.bot_username }}{% else %}—{% endif %}</code></p>
 
+    {% if profile.web_username %}
+    <label class="form-field">رمز عبور وب‌پنل
+      <input name="web_password" type="password" autocomplete="new-password" placeholder="خالی = حفظ رمز فعلی" />
+      <small class="muted">اختیاری — فقط در صورت وارد کردن مقدار جدید، رمز عوض می‌شود</small>
+    </label>
+    {% endif %}
+
     <label class="form-field">آیدی ادمین‌های ربات اختصاصی
       
       <input name="bot_admin_ids" value="{{ profile.bot_admin_ids or '' }}" dir="ltr" placeholder="123456789, 987654321" />
