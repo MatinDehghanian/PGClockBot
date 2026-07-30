@@ -260,8 +260,11 @@ def ensure_web_secret() -> str:
 def current_setup_values() -> dict[str, str]:
     """Values for pre-filling the wizard form."""
     creds = load_web_admin()
+    # Only prefill username when credentials already exist (re-running wizard).
+    # Never force-write "admin" into an empty first-time form.
+    has_creds = bool(creds.get("password"))
     return {
-        "username": creds.get("username") or "admin",
+        "username": (creds.get("username") or "") if has_creds else "",
         "BOT_TOKEN": _env_get("BOT_TOKEN"),
         "BOT_USERNAME": _env_get("BOT_USERNAME"),
         "ADMIN_IDS": _env_get("ADMIN_IDS"),

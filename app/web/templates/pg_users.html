@@ -158,12 +158,12 @@
       <div id="pg-user-mode-custom" class="form-stack" {% if default_mode != 'custom' %}style="display:none"{% endif %}>
         <div class="form-row">
           <label class="form-field">حجم (گیگابایت)
-            <input name="data_limit_gb" type="number" min="0" step="0.1" placeholder="خالی = نامحدود" inputmode="decimal" />
+            <input name="data_limit_gb" type="number" min="0" step="0.1" placeholder="مثلاً 50" inputmode="decimal" />
             <small class="muted">۰ یا خالی = نامحدود</small>
           </label>
           <label class="form-field">مدت (روز)
-            <input name="duration_days" type="number" min="0" step="1" placeholder="مثلاً ۲۰ = ۲۰ روز" inputmode="numeric" />
-            <small class="muted">عدد روز از الان — مثلاً ۲۰ یعنی ۲۰ روز. خالی = بدون انقضا</small>
+            <input name="duration_days" type="number" min="0" step="1" placeholder="مثلاً 30" inputmode="numeric" />
+            <small class="muted">از الان محاسبه می‌شود — خالی = بدون انقضا</small>
           </label>
         </div>
         <div class="form-field">
@@ -222,12 +222,12 @@
       </label>
       <div class="form-row">
         <label class="form-field">حجم (گیگابایت)
-          <input id="pg-edit-gb" name="data_limit_gb" type="number" min="0" step="0.1" placeholder="خالی = نامحدود" inputmode="decimal" />
+          <input id="pg-edit-gb" name="data_limit_gb" type="number" min="0" step="0.1" placeholder="مثلاً 50" inputmode="decimal" />
           <small class="muted">۰ یا خالی = نامحدود</small>
         </label>
         <label class="form-field">مدت (روز)
-          <input id="pg-edit-days" name="duration_days" type="number" min="0" step="1" placeholder="مثلاً ۲۰ = ۲۰ روز" inputmode="numeric" />
-          <small class="muted">از الان محاسبه می‌شود — ۲۰ یعنی ۲۰ روز آینده. خالی = بدون انقضا</small>
+          <input id="pg-edit-days" name="duration_days" type="number" min="0" step="1" placeholder="مثلاً 30" inputmode="numeric" />
+          <small class="muted">از الان محاسبه می‌شود — خالی = بدون انقضا</small>
         </label>
       </div>
       <div class="form-field">

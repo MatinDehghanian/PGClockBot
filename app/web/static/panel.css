@@ -35,6 +35,9 @@
   --card-pad: 16px;
   --section-gap: 16px;
   --title-size: 14px;
+  /* Form controls MUST stay ≥16px forever — iOS Safari zooms any focused field under 16px.
+     Do not set input/select/textarea font-size to --title-size or any value < 16px. */
+  --control-fs: 16px;
   /* Notch / status bar / home indicator (PWA + iOS Safari) */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -401,7 +404,13 @@ textarea::placeholder {
   font-weight: 400;
   opacity: 1;
 }
-/* Always ≥16px on touch devices — prevents iOS Safari focus zoom; desktop matches titles */
+/* CRITICAL: keep ≥16px — iOS/Android Safari zoom on focus if smaller. Never use --title-size here. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),
+select,
+textarea,
+[contenteditable="true"] {
+  font-size: var(--control-fs) !important;
+}
 input, select, textarea {
   width: 100%;
   margin-top: 8px;
@@ -411,7 +420,7 @@ input, select, textarea {
   border-radius: var(--radius);
   padding: 0 12px;
   font-family: inherit;
-  font-size: var(--title-size);
+  font-size: var(--control-fs);
   font-weight: 400;
   line-height: 1.25;
   height: var(--btn-h);
@@ -426,7 +435,7 @@ textarea {
   resize: vertical;
 }
 [contenteditable="true"] {
-  font-size: var(--title-size);
+  font-size: var(--control-fs);
 }
 input:focus, select:focus, textarea:focus, button:focus, a:focus {
   outline: none;
@@ -461,7 +470,7 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
   width: auto; min-width: 110px; min-height: var(--btn-h); margin: 0;
   padding-block: 4px;
   padding-inline: 10px 30px;
-  font-size: var(--title-size);
+  font-size: var(--control-fs);
   font-weight: 400;
 }
 
@@ -892,7 +901,7 @@ th {
 }
 tr:last-child td { border-bottom: 0; }
 .mono { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
-input.mono, textarea.mono, select.mono { font-size: var(--title-size); }
+input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 
 .badge {
   display: inline-flex;
@@ -1000,18 +1009,21 @@ input.mono, textarea.mono, select.mono { font-size: var(--title-size); }
 .pw-field {
   position: relative;
   display: block;
+  margin-top: 8px;
 }
 .pw-field input {
   width: 100%;
+  margin-top: 0;
   padding-inline-end: 44px;
 }
 .pw-toggle {
   position: absolute;
   inset-inline-end: 6px;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 0;
+  bottom: 0;
   width: 36px;
-  height: 36px;
+  height: var(--btn-h);
+  margin-block: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1021,11 +1033,12 @@ input.mono, textarea.mono, select.mono { font-size: var(--title-size); }
   color: var(--muted-fg);
   cursor: pointer;
   padding: 0;
+  transform: none;
 }
 .pw-toggle:hover,
 .pw-toggle:focus-visible {
-  color: var(--fg);
-  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
   outline: none;
 }
 .pw-ico {
@@ -1040,8 +1053,10 @@ input.mono, textarea.mono, select.mono { font-size: var(--title-size); }
 .pw-toggle.is-visible::after {
   content: "";
   position: absolute;
+  inset: 0;
   width: 22px;
   height: 1.8px;
+  margin: auto;
   background: currentColor;
   border-radius: 1px;
   transform: rotate(-40deg);
@@ -2842,6 +2857,7 @@ html[data-theme="light"] textarea {
   background: #ffffff;
   color: var(--foreground);
   border-color: var(--border);
+  font-size: var(--control-fs);
 }
 html[data-theme="light"] select option { background: #ffffff; color: #18181b; }
 html[data-theme="light"] .flash.ok {

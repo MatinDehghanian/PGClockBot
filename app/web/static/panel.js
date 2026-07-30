@@ -18,6 +18,26 @@
     if (back) back.addEventListener('click', () => setOpen(false));
     side && side.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setOpen(false)));
 
+    /* Permanent no-zoom: keep focused text controls at ≥16px even if CSS regresses */
+    (function () {
+      const MIN = 16;
+      const SKIP = new Set(['checkbox', 'radio', 'range', 'file', 'hidden', 'submit', 'button', 'reset', 'image']);
+      function enforce(el) {
+        if (!el || !el.style) return;
+        const type = (el.getAttribute('type') || '').toLowerCase();
+        if (SKIP.has(type)) return;
+        const cs = window.getComputedStyle(el);
+        const px = parseFloat(cs.fontSize) || 0;
+        if (px > 0 && px < MIN) el.style.fontSize = MIN + 'px';
+      }
+      document.addEventListener('focusin', (e) => {
+        const t = e.target;
+        if (!t) return;
+        if (t.matches && t.matches('input, select, textarea, [contenteditable="true"]')) enforce(t);
+      }, true);
+      document.querySelectorAll('input, select, textarea, [contenteditable="true"]').forEach(enforce);
+    })();
+
     /* Theme: system | light | dark */
     (function(){
       const KEY = 'panel-theme';

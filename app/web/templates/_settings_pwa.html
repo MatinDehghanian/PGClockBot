@@ -10,28 +10,28 @@
     <div class="settings-grid">
       <div class="setting-item full">
         <label>نام وب‌اپ
-          <small class="muted">روی صفحه نصب و زیر آیکن دیده می‌شود — خالی = {{ 'MrClockBot' }}</small>
+          <small class="muted">روی صفحه نصب و زیر آیکن دیده می‌شود — خالی = برند پنل</small>
           <input name="pwa_name" type="text" maxlength="80" value="{{ p.get('name_raw','') }}"
-                 placeholder="MrClockBot" dir="auto" />
+                 placeholder="مثلاً فروشگاه من" dir="auto" />
         </label>
       </div>
       <div class="setting-item">
         <label>نام کوتاه
           <small class="muted">حداکثر ۴۰ کاراکتر — خالی = همان نام بالا</small>
           <input name="pwa_short_name" type="text" maxlength="40" value="{{ p.get('short_name_raw','') }}"
-                 placeholder="MrClockBot" dir="auto" />
+                 placeholder="مثلاً فروشگاه" dir="auto" />
         </label>
       </div>
       <div class="setting-item">
         <label>توضیح کوتاه
           <small class="muted">اختیاری</small>
           <input name="pwa_description" type="text" maxlength="160" value="{{ p.get('description_raw','') }}"
-                 placeholder="پنل مدیریت فروشگاه" dir="auto" />
+                 placeholder="مثلاً پنل مدیریت فروشگاه" dir="auto" />
         </label>
       </div>
       <div class="setting-item full">
         <label>آیکن وب‌اپ
-          <small class="muted">PNG یا JPG مربعی — خالی = لوگوی پنل</small>
+          <small class="muted">خالی = لوگوی پنل</small>
         </label>
         <label class="upload-box">
           <input name="pwa_icon" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" />
