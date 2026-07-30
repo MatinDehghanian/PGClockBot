@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, pg_tabs %}
+{% from "macros.html" import switch, pg_tabs, row_actions %}
 {% block title %}ادمین{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -17,14 +17,14 @@
   <p class="muted">ادمینی یافت نشد یا دسترسی کافی نیست.</p>
   {% else %}
   <div class="table-wrap">
-  <table>
+  <table class="table-compact">
     <thead>
       <tr>
-        <th>شناسه</th>
+        <th class="col-hide-sm">شناسه</th>
         <th>نام کاربری</th>
-        <th>نقش / جزئیات</th>
+        <th class="col-hide-sm">نقش / جزئیات</th>
         <th>دسترسی وب‌پنل</th>
-        <th></th>
+        <th class="col-actions"></th>
       </tr>
     </thead>
     <tbody>
@@ -34,9 +34,9 @@
       {% set st = (web_status or {}).get(key) or {} %}
       {% set src = st.get('source') or 'none' %}
       <tr>
-        <td class="mono">{{ a.get('id') or '—' }}</td>
+        <td class="mono col-hide-sm">{{ a.get('id') or '—' }}</td>
         <td dir="ltr">{{ uname or '—' }}</td>
-        <td class="mono muted">
+        <td class="mono muted col-hide-sm">
           {% if a.get('role') and a.get('role').get('name') %}{{ a.get('role').get('name') }} · {% endif %}
           {% if a.get('is_sudo') %}sudo · {% endif %}
           {% if a.get('status') %}{{ a.get('status') }}{% endif %}
@@ -55,9 +55,6 @@
             <span class="badge neutral">غیرفعال</span>
             {% endif %}
             <small class="muted">دسترسی جداگانه ساخته نمی‌شود</small>
-            {% if st.get('reseller_user_id') %}
-            <a class="btn btn-sm btn-ghost" href="/resellers/{{ st.get('reseller_user_id') }}/edit">مدیریت نماینده</a>
-            {% endif %}
           </div>
           {% elif src == 'owner' %}
           <div class="web-access-cell">
@@ -70,31 +67,37 @@
               {% if st.get('is_active') %}فعال{% else %}غیرفعال{% endif %}
             </span>
             <span class="mono" dir="ltr">{{ st.get('web_username') }}</span>
-            <div class="row-actions">
-              <button type="button" class="btn btn-sm btn-ghost"
-                data-modal-open="modal-web-{{ loop.index }}">ویرایش</button>
-              <form method="post" action="/pg/admins/{{ uname }}/web-access/toggle">
-                <button class="btn btn-sm btn-ghost" type="submit">
-                  {% if st.get('is_active') %}غیرفعال{% else %}فعال{% endif %}
-                </button>
-              </form>
-              <form method="post" action="/pg/admins/{{ uname }}/web-access/revoke"
-                onsubmit="return confirm('دسترسی وب‌پنل حذف شود؟')">
-                <button class="btn btn-sm btn-ghost" type="submit">حذف دسترسی</button>
-              </form>
-            </div>
           </div>
           {% else %}
-          <button type="button" class="btn btn-sm"
-            data-modal-open="modal-web-{{ loop.index }}">اعطای دسترسی وب</button>
+          <span class="muted">—</span>
           {% endif %}
         </td>
-        <td>
-          {% if uname %}
-          <form method="post" action="/pg/admins/{{ uname }}/delete" onsubmit="return confirm('حذف شود؟')">
-            <button class="btn btn-ghost" type="submit">حذف</button>
-          </form>
-          {% endif %}
+        <td class="col-actions">
+          {% call row_actions() %}
+            {% if src == 'reseller' and st.get('reseller_user_id') %}
+            <a class="btn btn-sm btn-ghost" href="/resellers/{{ st.get('reseller_user_id') }}/edit">مدیریت نماینده</a>
+            {% elif src == 'pg_staff' %}
+            <button type="button" class="btn btn-sm btn-ghost"
+              data-modal-open="modal-web-{{ loop.index }}">ویرایش دسترسی</button>
+            <form method="post" action="/pg/admins/{{ uname }}/web-access/toggle">
+              <button class="btn btn-sm btn-ghost" type="submit">
+                {% if st.get('is_active') %}غیرفعال کردن{% else %}فعال کردن{% endif %}
+              </button>
+            </form>
+            <form method="post" action="/pg/admins/{{ uname }}/web-access/revoke"
+              onsubmit="return confirm('دسترسی وب‌پنل حذف شود؟')">
+              <button class="btn btn-sm btn-danger" type="submit">حذف دسترسی</button>
+            </form>
+            {% elif src == 'none' %}
+            <button type="button" class="btn btn-sm"
+              data-modal-open="modal-web-{{ loop.index }}">اعطای دسترسی وب</button>
+            {% endif %}
+            {% if uname and src != 'owner' %}
+            <form method="post" action="/pg/admins/{{ uname }}/delete" onsubmit="return confirm('حذف شود؟')">
+              <button class="btn btn-sm btn-danger" type="submit">حذف ادمین</button>
+            </form>
+            {% endif %}
+          {% endcall %}
         </td>
       </tr>
     {% endfor %}
@@ -126,18 +129,18 @@
       <p class="muted">اگر این ادمین نماینده باشد یا از قبل یوزر وب داشته باشد، ساخت جدید رد می‌شود.</p>
       {% endif %}
       <label class="form-field">نام کاربری وب‌پنل
-        <small class="muted">فقط برای ورود به این وب‌پنل؛ جدا از یوزر پاسارگارد</small>
         <input name="web_username" required autocomplete="off" dir="ltr"
           value="{{ st.get('web_username') if src == 'pg_staff' else '' }}"
           placeholder="مثلاً staff1" />
+        <small class="muted">فقط برای ورود به این وب‌پنل؛ جدا از یوزر پاسارگارد</small>
       </label>
       <label class="form-field">رمز عبور وب‌پنل
+        <input name="web_password" type="password" required autocomplete="new-password" placeholder="رمز قوی" />
         <small class="muted">حداقل ۸ کاراکتر با حرف بزرگ/کوچک و کاراکتر خاص</small>
-        <input name="web_password" type="password" required autocomplete="new-password" />
       </label>
       <label class="form-field">یادداشت
-        <small class="muted">اختیاری — فقط در وب‌پنل ذخیره می‌شود</small>
         <input name="note" value="{{ st.get('note') if src == 'pg_staff' and st.get('note') else '' }}" placeholder="دسترسی محدود فروش" />
+        <small class="muted">اختیاری — فقط در وب‌پنل ذخیره می‌شود</small>
       </label>
       <div class="actions">
         <button class="btn" type="submit">{% if src == 'pg_staff' %}ذخیره{% else %}اعطای دسترسی{% endif %}</button>
@@ -161,30 +164,30 @@
       <div class="form-row">
         <div>
           <label class="form-field">نام کاربری
-            <input name="username" required autocomplete="off" />
+            <input name="username" required autocomplete="off" placeholder="admin_name" />
           </label>
         </div>
         <div>
           <label class="form-field">رمز عبور
+            <input name="password" type="password" required autocomplete="new-password" placeholder="رمز قوی" />
             <small class="muted">حداقل ۸ کاراکتر با حرف بزرگ/کوچک و کاراکتر خاص</small>
-            <input name="password" type="password" required autocomplete="new-password" />
           </label>
         </div>
         <div>
           <label class="form-field">نقش پاسارگارد
-            <small class="muted">سطح دسترسی — از نقش‌های تعریف‌شده owner</small>
             <select name="role_id">
               <option value="">— بدون نقش (سازگاری قدیم) —</option>
               {% for r in pg_roles or [] %}
               <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}{% if r.get('is_owner') %} (owner){% endif %}</option>
               {% endfor %}
             </select>
+            <small class="muted">سطح دسترسی — از نقش‌های تعریف‌شده owner</small>
           </label>
         </div>
       </div>
       <label class="form-field">یادداشت
-        <small class="muted">اختیاری — فقط در پاسارگارد ذخیره می‌شود</small>
         <input name="note" placeholder="نماینده فروش" />
+        <small class="muted">اختیاری — فقط در پاسارگارد ذخیره می‌شود</small>
       </label>
       <div class="ui-switch-list">
         {{ switch('is_sudo', 'دسترسی sudo', help='فقط پنل‌های قدیمی؛ در نسخه‌های جدید از نقش استفاده کنید') }}

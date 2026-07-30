@@ -10,23 +10,26 @@
     <div class="settings-grid">
       <div class="setting-item full">
         <label>نام وب‌اپ
-          <small class="muted">روی صفحه نصب و زیر آیکن دیده می‌شود — خالی = برند پنل</small>
+          
           <input name="pwa_name" type="text" maxlength="80" value="{{ p.get('name_raw','') }}"
                  placeholder="مثلاً فروشگاه من" dir="auto" />
+        <small class="muted">روی صفحه نصب و زیر آیکن دیده می‌شود — خالی = برند پنل</small>
         </label>
       </div>
       <div class="setting-item">
         <label>نام کوتاه
-          <small class="muted">حداکثر ۴۰ کاراکتر — خالی = همان نام بالا</small>
+          
           <input name="pwa_short_name" type="text" maxlength="40" value="{{ p.get('short_name_raw','') }}"
                  placeholder="مثلاً فروشگاه" dir="auto" />
+        <small class="muted">حداکثر ۴۰ کاراکتر — خالی = همان نام بالا</small>
         </label>
       </div>
       <div class="setting-item">
         <label>توضیح کوتاه
-          <small class="muted">اختیاری</small>
+          
           <input name="pwa_description" type="text" maxlength="160" value="{{ p.get('description_raw','') }}"
                  placeholder="مثلاً پنل مدیریت فروشگاه" dir="auto" />
+        <small class="muted">اختیاری</small>
         </label>
       </div>
       <div class="setting-item full">

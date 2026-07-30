@@ -38,9 +38,10 @@
         رمز حداقل ۸ کاراکتر، با حرف بزرگ، حرف کوچک و یک کاراکتر خاص.
       </p>
       <label>نام کاربری
-        <small class="muted">حروف انگلیسی، عدد و _ — بعداً قابل تغییر است</small>
+        
         <input name="username" value="{{ values.username or '' }}" required autocomplete="off"
                autocapitalize="off" spellcheck="false" placeholder="admin" dir="ltr" />
+        <small class="muted">حروف انگلیسی، عدد و _ — بعداً قابل تغییر است</small>
       </label>
       <label>رمز عبور
         <input name="password" type="password" required autocomplete="new-password" minlength="8" />
@@ -76,12 +77,14 @@
     <form class="auth-form setup-step" data-step="3" method="post" action="/setup/other" hidden novalidate>
       <h2 class="setup-title">۳ · پاسارگارد و وب</h2>
       <label>آدرس پاسارگارد (PG_BASE_URL)
-        <small class="muted">ریشه API — نه مسیر داشبورد (<code dir="ltr">/MrClock</code>)</small>
+        
         <input name="pg_base_url" value="{{ values.PG_BASE_URL or '' }}" required dir="ltr" placeholder="https://panel.example.com" />
+        <small class="muted">ریشه API — نه مسیر داشبورد (<code dir="ltr">/MrClock</code>)</small>
       </label>
       <label>نام کاربری پاسارگارد
-        <small class="muted">یوزر ورود API پاسارگارد</small>
+        
         <input name="pg_username" value="{{ values.PG_USERNAME or '' }}" required dir="ltr" placeholder="pg_user" autocomplete="off" />
+        <small class="muted">یوزر ورود API پاسارگارد</small>
       </label>
       <label>رمز پاسارگارد
         <input name="pg_password" type="password" value="{{ values.PG_PASSWORD or '' }}" required autocomplete="off" />

@@ -102,7 +102,7 @@
             <form method="post" action="/pg/users/{{ uid }}/revoke" onsubmit="return confirm('ابطال سابسکرایب؟')"><button class="btn btn-ghost btn-sm" type="submit">ابطال ساب</button></form>
             {% endif %}
             {% if can_delete and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/delete" onsubmit="return confirm('حذف کاربر؟')"><button class="btn btn-ghost btn-sm" type="submit">حذف</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/delete" onsubmit="return confirm('حذف کاربر؟')"><button class="btn btn-danger btn-sm" type="submit">حذف</button></form>
             {% endif %}
           {% endcall %}
         </td>

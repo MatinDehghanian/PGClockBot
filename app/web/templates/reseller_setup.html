@@ -18,20 +18,23 @@
       <p class="muted" style="margin:0 0 12px">یوزر وب‌پنل شما از قبل ساخته شده: <code>{{ web_username }}</code></p>
       {% else %}
       <label>نام کاربری وب‌پنل
-        <small class="muted">حداقل ۳ کاراکتر انگلیسی</small>
+        
         <input name="username" required minlength="3" maxlength="64" pattern="[A-Za-z0-9_\.\-]+" autocomplete="off" autofocus />
+        <small class="muted">حداقل ۳ کاراکتر انگلیسی</small>
       </label>
       <label>رمز عبور
-        <small class="muted">۸+ کاراکتر، حرف بزرگ/کوچک و کاراکتر خاص</small>
+        
         <input name="password" type="password" required autocomplete="new-password" />
+        <small class="muted">۸+ کاراکتر، حرف بزرگ/کوچک و کاراکتر خاص</small>
       </label>
       <label>تکرار رمز
         <input name="password2" type="password" required autocomplete="new-password" />
       </label>
       {% endif %}
       <label>توکن ربات (@BotFather)
-        <small class="muted">ربات اختصاصی خودتان — به ربات ادمین وصل نمی‌شوید</small>
+        
         <input name="bot_token" required autocomplete="off" placeholder="123456:ABC..." dir="ltr" {% if bot_only %}autofocus{% endif %} />
+        <small class="muted">ربات اختصاصی خودتان — به ربات ادمین وصل نمی‌شوید</small>
       </label>
       <button class="btn" type="submit">تکمیل راه‌اندازی</button>
     </form>

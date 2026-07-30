@@ -32,7 +32,7 @@
           {% call row_actions() %}
           <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>
           <form method="post" action="/resellers/plans/{{ p.id }}/toggle"><button class="btn btn-ghost btn-sm" type="submit">روشن/خاموش</button></form>
-          <form method="post" action="/resellers/plans/{{ p.id }}/delete" onsubmit="return confirm('حذف شود؟')"><button class="btn btn-ghost btn-sm" type="submit">حذف</button></form>
+          <form method="post" action="/resellers/plans/{{ p.id }}/delete" onsubmit="return confirm('حذف شود؟')"><button class="btn btn-danger btn-sm" type="submit">حذف</button></form>
           {% endcall %}
         </td>
       </tr>
@@ -60,8 +60,9 @@
         </div>
         <div>
           <label class="form-field">قیمت (تومان)
-            <small class="muted">۰ = رایگان؛ فقط تأیید ادمین</small>
+            
             <input name="price" type="number" value="0" />
+        <small class="muted">۰ = رایگان؛ فقط تأیید ادمین</small>
           </label>
         </div>
         <div>

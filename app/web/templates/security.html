@@ -28,41 +28,41 @@
     <div class="settings-grid">
       <div class="setting-item">
         <label>یوزر قدیم
-          <small class="muted">همان نام کاربری فعلی ورود</small>
           <input name="old_username" required minlength="3" maxlength="64" dir="ltr"
                  value="" placeholder="user_name" autocomplete="off" autocapitalize="off"
                  autocorrect="off" spellcheck="false" />
+          <small class="muted">همان نام کاربری فعلی ورود</small>
         </label>
       </div>
       <div class="setting-item">
         <label>رمز قدیم
-          <small class="muted">رمز فعلی پنل</small>
           <div class="pw-field">
             <input id="sec-old-pass" name="current_password" type="password" required autocomplete="current-password" placeholder="••••••••" />
             <button type="button" class="pw-toggle" data-pw-for="sec-old-pass" aria-label="نمایش رمز" aria-pressed="false">
               <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
           </div>
+          <small class="muted">رمز فعلی پنل</small>
         </label>
       </div>
       <div class="setting-item">
         <label>یوزر جدید
-          <small class="muted">فقط حروف انگلیسی، عدد و _</small>
           <input name="new_username" required minlength="3" maxlength="64" dir="ltr"
                  value="" placeholder="new_user" autocomplete="off" autocapitalize="off"
                  autocorrect="off" spellcheck="false"
                  pattern="[A-Za-z0-9_]+" title="فقط حروف انگلیسی، عدد و _" />
+          <small class="muted">فقط حروف انگلیسی، عدد و _</small>
         </label>
       </div>
       <div class="setting-item">
         <label>رمز جدید
-          <small class="muted">حداقل ۸ کاراکتر با حرف بزرگ، کوچک و کاراکتر خاص</small>
           <div class="pw-field">
             <input id="sec-new-pass" name="new_password" type="password" required minlength="8" autocomplete="new-password" placeholder="••••••••" />
             <button type="button" class="pw-toggle" data-pw-for="sec-new-pass" aria-label="نمایش رمز" aria-pressed="false">
               <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
           </div>
+          <small class="muted">حداقل ۸ کاراکتر با حرف بزرگ، کوچک و کاراکتر خاص</small>
         </label>
       </div>
     </div>

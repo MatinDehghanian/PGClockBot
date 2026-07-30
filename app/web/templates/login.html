@@ -15,13 +15,12 @@
         راه‌اندازی ذخیره شد — در حال ری‌استارت سرویس…
       </div>
       <label>نام کاربری
-        <small class="muted">نام کاربری ورود به پنل</small>
         <input name="username" value="{{ username or '' }}" required autocomplete="username" autofocus
                inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false"
                placeholder="user_name" readonly onfocus="this.removeAttribute('readonly')" />
+        <small class="muted">نام کاربری ورود به پنل</small>
       </label>
       <label>رمز عبور
-        <small class="muted">رمز وب‌پنل</small>
         <div class="pw-field">
           <input id="login-password" name="password" type="password" required autocomplete="current-password"
                  placeholder="••••••••" readonly onfocus="this.removeAttribute('readonly')" />
@@ -29,6 +28,7 @@
             <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
         </div>
+        <small class="muted">رمز وب‌پنل</small>
       </label>
       <button class="btn" type="submit">ورود به پنل</button>
     </form>

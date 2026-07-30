@@ -29,8 +29,9 @@
         <input name="duration_days" type="number" min="1" value="{{ trial.duration_days if trial else 1 }}" required />
       </label>
       <label class="form-field">حجم (گیگ)
-        <small class="muted">خالی = نامحدود</small>
+        
         <input name="data_limit_gb" type="number" step="0.1" min="0" value="{% if trial and trial.data_limit_gb is not none %}{{ trial.data_limit_gb }}{% endif %}" placeholder="1" />
+        <small class="muted">خالی = نامحدود</small>
       </label>
     </div>
     <label class="form-field">حالت ساخت در پاسارگارد
@@ -145,8 +146,9 @@
         <input name="duration_days" type="number" min="1" value="30" required />
       </label>
       <label class="form-field">حجم (گیگ)
-        <small class="muted">خالی = نامحدود</small>
+        
         <input name="data_limit_gb" type="number" step="0.1" min="0" placeholder="30" />
+        <small class="muted">خالی = نامحدود</small>
       </label>
     </div>
 
@@ -225,7 +227,7 @@
               <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
             </form>
             <form method="post" action="/plans/{{ p.id }}/delete" onsubmit="return confirm('حذف پلن از فروشگاه؟')">
-              <button class="btn btn-ghost btn-sm" type="submit">حذف</button>
+              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
             </form>
           {% endcall %}
         </td>

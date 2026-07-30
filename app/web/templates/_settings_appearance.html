@@ -23,21 +23,24 @@
     <div class="settings-grid">
       <div class="setting-item full">
         <label>نام نمایشی ربات
-          <small class="muted">حداکثر ۶۴ کاراکتر — در هدر چت و پروفایل دیده می‌شود</small>
+          
           <input name="bot_tg_name" id="ap-name" type="text" maxlength="64"
                  value="{{ ap.get('bot_tg_name','') }}" required />
+        <small class="muted">حداکثر ۶۴ کاراکتر — در هدر چت و پروفایل دیده می‌شود</small>
         </label>
       </div>
       <div class="setting-item full">
         <label>کپشن / درباره ربات
-          <small class="muted">حداکثر ۱۲۰ کاراکتر — متن About در صفحه پروفایل و هنگام اشتراک‌گذاری ربات</small>
+          
           <textarea name="bot_tg_short_description" id="ap-caption" rows="3" maxlength="120">{{ ap.get('bot_tg_short_description','') }}</textarea>
+        <small class=\"muted\">حداکثر ۱۲۰ کاراکتر — متن About در صفحه پروفایل و هنگام اشتراک‌گذاری ربات</small>
         </label>
       </div>
       <div class="setting-item full">
         <label>متن وسط صفحه (اولین نمایش)
-          <small class="muted">حداکثر ۵۱۲ کاراکتر — همان متنی که وسط چت خالی قبل از /start دیده می‌شود</small>
+          
           <textarea name="bot_tg_description" id="ap-middle" rows="4" maxlength="512">{{ ap.get('bot_tg_description','') }}</textarea>
+        <small class=\"muted\">حداکثر ۵۱۲ کاراکتر — همان متنی که وسط چت خالی قبل از /start دیده می‌شود</small>
         </label>
       </div>
       <div class="setting-item full">

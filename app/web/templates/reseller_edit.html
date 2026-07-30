@@ -51,8 +51,9 @@
       · ربات: <code>{% if profile.bot_username %}@{{ profile.bot_username }}{% else %}—{% endif %}</code></p>
 
     <label class="form-field">آیدی ادمین‌های ربات اختصاصی
-      <small class="muted">آیدی‌های تلگرام (با ویرگول). فقط روی ربات این نماینده پنل نماینده می‌بینند؛ در ربات اصلی منوی کاربر عادی می‌ماند.</small>
+      
       <input name="bot_admin_ids" value="{{ profile.bot_admin_ids or '' }}" dir="ltr" placeholder="123456789, 987654321" />
+        <small class="muted">آیدی‌های تلگرام (با ویرگول). فقط روی ربات این نماینده پنل نماینده می‌بینند؛ در ربات اصلی منوی کاربر عادی می‌ماند.</small>
     </label>
 
     <div class="ui-switch-list">
@@ -90,8 +91,9 @@
       </div>
     </div>
     <label class="form-field">علت (برای تغییر به کاربر عادی)
-      <small class="muted">در صورت انتخاب نقش کاربر، برای نماینده ارسال می‌شود</small>
+      
       <textarea name="reason" rows="2" placeholder="مثال: تغییر نقش توسط ادمین"></textarea>
+        <small class=\"muted\">در صورت انتخاب نقش کاربر، برای نماینده ارسال می‌شود</small>
     </label>
     <button class="btn" type="submit">اعمال نقش</button>
   </form>
@@ -103,8 +105,9 @@
   <form method="post" action="/resellers/{{ user.id }}/delete" class="form-stack"
         onsubmit="return confirm('نمایندگی حذف شود و علت برای کاربر ارسال شود؟')">
     <label class="form-field">علت حذف
-      <small class="muted">برای نماینده ارسال می‌شود — حداقل ۳ کاراکتر</small>
+      
       <textarea name="reason" required minlength="3" rows="3" placeholder="مثال: نقض قوانین / عدم فعالیت / درخواست خود کاربر"></textarea>
+        <small class=\"muted\">برای نماینده ارسال می‌شود — حداقل ۳ کاراکتر</small>
     </label>
     <button class="btn btn-danger" type="submit">حذف نمایندگی</button>
   </form>

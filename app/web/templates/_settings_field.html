@@ -18,21 +18,20 @@
   </label>
   {% elif kind == 'select' %}
   <label>{{ label }}
-    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
     <select name="s_{{ key }}" {% if key == 'menu_layout' %}id="menu_layout_select"{% endif %}>
       {% for opt_val, opt_label in options %}
       <option value="{{ opt_val }}" {% if val == opt_val %}selected{% endif %}>{{ opt_label }}</option>
       {% endfor %}
     </select>
+    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
   </label>
   {% elif kind == 'textarea' %}
   <label>{{ label }}
-    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
     <textarea name="s_{{ key }}" rows="5">{{ val }}</textarea>
+    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
   </label>
   {% elif kind == 'number' %}
   <label>{{ label }}
-    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
     <input
       name="s_{{ key }}"
       type="number"
@@ -42,11 +41,11 @@
       min="1" max="99" step="1" inputmode="numeric"
       {% endif %}
     />
+    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
   </label>
   {% elif kind == 'image' %}
   <div class="image-setting">
     <strong>{{ label }}</strong>
-    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
     {% if val %}
     <div class="image-preview">
       <img src="/media/{{ val }}" alt="پیش‌نمایش" />
@@ -66,11 +65,12 @@
       <span class="upload-box-hint muted">PNG، JPG، WEBP یا GIF</span>
       <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
     </label>
+    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
   </div>
   {% else %}
   <label>{{ label }}
-    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
     <input name="s_{{ key }}" value="{{ val }}" />
+    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
   </label>
   {% endif %}
 </div>

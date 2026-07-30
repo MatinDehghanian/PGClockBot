@@ -1,5 +1,5 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch_chip, pg_tabs %}
+{% from "macros.html" import switch_chip, pg_tabs, row_actions %}
 {% block title %}تمپلیت‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -19,31 +19,40 @@
   <p class="muted">تمپلیتی نیست.</p>
   {% else %}
   <div class="table-wrap">
-  <table>
+  <table class="table-compact">
     <thead>
-      <tr><th>شناسه</th><th>نام</th><th>حجم</th><th>مدت</th><th>گروه‌ها</th><th></th></tr>
+      <tr>
+        <th class="col-hide-sm">شناسه</th>
+        <th>نام</th>
+        <th>حجم</th>
+        <th class="col-hide-sm">مدت</th>
+        <th class="col-hide-sm">گروه‌ها</th>
+        <th class="col-actions"></th>
+      </tr>
     </thead>
     <tbody>
     {% for t in templates %}
       <tr>
-        <td class="mono">{{ t.get('id') }}</td>
+        <td class="mono col-hide-sm">{{ t.get('id') }}</td>
         <td>{{ t.get('name') or '—' }}</td>
         <td>
           {% if t.get('data_limit') %}
             {{ t.get('data_limit') | bytes }}
           {% else %}نامحدود{% endif %}
         </td>
-        <td>
+        <td class="col-hide-sm">
           {% if t.get('expire_duration') %}
             {{ (t.get('expire_duration') / 86400) | round(0) }} روز
           {% else %}—{% endif %}
         </td>
-        <td class="mono">{{ t.get('group_ids') or '—' }}</td>
-        <td>
+        <td class="mono col-hide-sm">{{ t.get('group_ids') or '—' }}</td>
+        <td class="col-actions">
           {% if can_write %}
+          {% call row_actions() %}
           <form method="post" action="/pg/templates/{{ t.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
-            <button class="icon-btn icon-remove" type="submit" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+            <button class="btn btn-sm btn-danger" type="submit">حذف</button>
           </form>
+          {% endcall %}
           {% endif %}
         </td>
       </tr>

@@ -66,5 +66,57 @@ class PwToggleCssTests(unittest.TestCase):
         self.assertIn("bottom: 0", body)
 
 
+class FieldHintAndPlaceholderTests(unittest.TestCase):
+    def test_placeholder_is_rtl_right_aligned(self):
+        css = CSS.read_text(encoding="utf-8")
+        self.assertIn("input::placeholder", css)
+        block = re.search(r"(?ms)input::placeholder,\s*textarea::placeholder\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(block)
+        body = block.group(1)
+        self.assertIn("text-align: right", body)
+        self.assertIn("direction: rtl", body)
+
+    def test_field_help_ordered_below_control(self):
+        css = CSS.read_text(encoding="utf-8")
+        self.assertIn("order: 10", css)
+        self.assertIn(".form-field > small.muted", css)
+
+    def test_settings_field_help_after_control(self):
+        src = (ROOT / "app/web/templates/_settings_field.html").read_text(encoding="utf-8")
+        # help must appear after the control close for text fields
+        self.assertIn("</select>\n    {% if help %}<small class=\"muted\">{{ help }}</small>{% endif %}", src)
+        self.assertRegex(src, r"<input name=\"s_\{\{ key \}\}\" value=\"\{\{ val \}\}\" />\s*\{% if help %\}")
+
+
+class DeleteButtonAndKebabTests(unittest.TestCase):
+    def test_btn_danger_is_solid_red(self):
+        css = CSS.read_text(encoding="utf-8")
+        block = re.search(r"(?ms)^\.btn-danger\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(block)
+        self.assertIn("background: rgba(220, 38, 38, 0.92)", block.group(1))
+
+    def test_pg_admins_uses_row_actions_macro(self):
+        src = (ROOT / "app/web/templates/pg_admins.html").read_text(encoding="utf-8")
+        self.assertIn("row_actions", src)
+        self.assertIn("{% call row_actions() %}", src)
+        self.assertIn("btn-danger", src)
+        self.assertIn("row-actions-toggle", (ROOT / "app/web/templates/macros.html").read_text(encoding="utf-8"))
+
+    def test_pg_templates_uses_kebab(self):
+        src = (ROOT / "app/web/templates/pg_templates.html").read_text(encoding="utf-8")
+        self.assertIn("{% call row_actions() %}", src)
+        self.assertIn("btn-danger", src)
+
+    def test_common_delete_buttons_are_danger(self):
+        for rel in (
+            "app/web/templates/pg_users.html",
+            "app/web/templates/plans.html",
+            "app/web/templates/_settings_backup.html",
+        ):
+            src = (ROOT / rel).read_text(encoding="utf-8")
+            self.assertIn("btn-danger", src)
+            self.assertNotRegex(src, r'btn-ghost[^>]*>\s*حذف\s*<')
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -24,7 +24,12 @@
   </p>
   <form method="post" action="/resellers/panel-url" class="form-stack" id="reseller-urls-form">
     <label class="form-field">آدرس وب‌پنل ربات (نماینده)
-      <small class="muted">
+      
+      <input name="reseller_panel_base_url"
+             value="{{ custom_panel_url or '' }}"
+             placeholder="{{ default_panel_url }}"
+             dir="ltr" />
+        <small class="muted">
         پیش‌فرض: <code dir="ltr">{{ default_panel_url }}</code>
         · در حال استفاده: <code dir="ltr">{{ panel_url }}</code>
         {% if using_custom_panel_url %}
@@ -33,13 +38,14 @@
         · <span class="badge pending">پیش‌فرض</span>
         {% endif %}
       </small>
-      <input name="reseller_panel_base_url"
-             value="{{ custom_panel_url or '' }}"
-             placeholder="{{ default_panel_url }}"
-             dir="ltr" />
     </label>
     <label class="form-field">آدرس پنل پاسارگارد
-      <small class="muted">
+      
+      <input name="reseller_pg_panel_base_url"
+             value="{{ custom_pg_panel_url or '' }}"
+             placeholder="{{ default_pg_panel_url }}"
+             dir="ltr" />
+        <small class="muted">
         پیش‌فرض از تنظیمات اتصال بات (با path کامل):
         <code dir="ltr">{{ default_pg_panel_url or '— تنظیم نشده —' }}</code>
         · در حال استفاده: <code dir="ltr">{{ pg_panel_url or '—' }}</code>
@@ -49,10 +55,6 @@
         · <span class="badge pending">پیش‌فرض</span>
         {% endif %}
       </small>
-      <input name="reseller_pg_panel_base_url"
-             value="{{ custom_pg_panel_url or '' }}"
-             placeholder="{{ default_pg_panel_url }}"
-             dir="ltr" />
     </label>
     <div class="actions">
       <button class="btn" type="submit">ذخیره آدرس‌ها</button>
@@ -156,8 +158,9 @@
       <div class="form-row">
         <div>
           <label class="form-field">آیدی عددی تلگرام
-            <small class="muted">مثال: 123456789</small>
+            
             <input name="telegram_id" type="number" required />
+        <small class="muted">مثال: 123456789</small>
           </label>
         </div>
         <div>
@@ -167,13 +170,14 @@
         </div>
         <div>
           <label class="form-field">نقش پاسارگارد
-            <small class="muted">دسترسی‌های VPN در وب‌پنل از این نقش می‌آید</small>
+            
             <select name="pg_role_id">
               <option value="">—</option>
               {% for r in pg_roles %}
               <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}</option>
               {% endfor %}
             </select>
+        <small class=\"muted\">دسترسی‌های VPN در وب‌پنل از این نقش می‌آید</small>
           </label>
         </div>
       </div>

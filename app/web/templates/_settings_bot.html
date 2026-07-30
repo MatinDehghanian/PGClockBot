@@ -11,8 +11,9 @@
     <div class="settings-grid">
       <div class="setting-item full">
         <label>توکن ربات (BOT_TOKEN)
-          <small class="muted">خالی بگذارید تا توکن فعلی حفظ شود. فعلی: {{ bot_token_masked or '—' }}</small>
+          
           <input name="BOT_TOKEN" type="password" value="" dir="ltr" autocomplete="off" placeholder="•••• یا توکن جدید" />
+        <small class="muted">خالی بگذارید تا توکن فعلی حفظ شود. فعلی: {{ bot_token_masked or '—' }}</small>
         </label>
       </div>
       <div class="setting-item">
@@ -22,8 +23,9 @@
       </div>
       <div class="setting-item">
         <label>آیدی ادمین‌ها
-          <small class="muted">با کاما جدا کنید</small>
+          
           <input name="ADMIN_IDS" value="{{ env_values.get('ADMIN_IDS','') }}" dir="ltr" required placeholder="123456789" />
+        <small class="muted">با کاما جدا کنید</small>
         </label>
       </div>
     </div>
@@ -34,8 +36,9 @@
     <div class="settings-grid">
       <div class="setting-item full">
         <label>آدرس پنل (PG_BASE_URL)
-          <small class="muted">ریشه API پاسارگارد (نه مسیر داشبورد). مسیرهایی مثل <code dir="ltr">/MrClock</code> یا <code dir="ltr">/dashboard</code> فقط UI هستند و باعث خطای ۴۰۵ می‌شوند. اگر اشتباه وارد شود، ربات خودش ریشه دامنه را هم امتحان می‌کند.</small>
+          
           <input name="PG_BASE_URL" value="{{ env_values.get('PG_BASE_URL','') }}" dir="ltr" required placeholder="https://panel.example.com" />
+        <small class="muted">ریشه API پاسارگارد (نه مسیر داشبورد). مسیرهایی مثل <code dir="ltr">/MrClock</code> یا <code dir="ltr">/dashboard</code> فقط UI هستند و باعث خطای ۴۰۵ می‌شوند. اگر اشتباه وارد شود، ربات خودش ریشه دامنه را هم امتحان می‌کند.</small>
         </label>
       </div>
       <div class="setting-item">
@@ -45,8 +48,9 @@
       </div>
       <div class="setting-item">
         <label>رمز پاسارگارد
-          <small class="muted">خالی = حفظ رمز فعلی</small>
+          
           <input name="PG_PASSWORD" type="password" value="" autocomplete="new-password" placeholder="•••• یا رمز جدید" />
+        <small class="muted">خالی = حفظ رمز فعلی</small>
         </label>
       </div>
     </div>
@@ -67,8 +71,9 @@
       </div>
       <div class="setting-item full">
         <label>آدرس عمومی (PUBLIC_BASE_URL) — اختیاری
-          <small class="muted">برای مینی‌اپ و لینک‌های عمومی</small>
+          
           <input name="PUBLIC_BASE_URL" value="{{ env_values.get('PUBLIC_BASE_URL','') }}" dir="ltr" placeholder="https://bot.example.com" />
+        <small class="muted">برای مینی‌اپ و لینک‌های عمومی</small>
         </label>
       </div>
     </div>

@@ -49,7 +49,7 @@
           </div>
           <div class="support-actions">
             <button class="btn" type="submit">ذخیره</button>
-            <button class="btn btn-ghost" type="submit" formaction="/shop-supports/delete" formmethod="post"
+            <button class="btn btn-danger" type="submit" formaction="/shop-supports/delete" formmethod="post"
                     onclick="return confirm('این پشتیبان حذف شود؟')">حذف</button>
           </div>
         </form>
@@ -102,8 +102,9 @@
         <div class="settings-grid">
           <div class="setting-item full">
             <label>توکن ربات
-              <small class="muted">فعلی: {{ bot_token_masked or '—' }} · یوزرنیم: @{{ bot_username or '—' }}</small>
+              
               <input name="BOT_TOKEN" type="text" value="" dir="ltr" autocomplete="off" required placeholder="123456:ABC..." />
+        <small class="muted">فعلی: {{ bot_token_masked or '—' }} · یوزرنیم: @{{ bot_username or '—' }}</small>
             </label>
           </div>
         </div>
