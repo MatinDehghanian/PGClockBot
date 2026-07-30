@@ -939,12 +939,14 @@ def register_pg_pages(
             purge_orphaned_staff_access,
             web_access_status_map,
         )
+        from app.services.resellers import list_reseller_plans
 
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         admins = []
         roles = []
         web_status: dict = {}
+        reseller_plans = []
         try:
             # Drop web rows for PG admins that no longer exist in PasarGuard
             try:
@@ -962,6 +964,7 @@ def register_pg_pages(
                 if a.get("username")
             ]
             web_status = await web_access_status_map(session, names)
+            reseller_plans = [p for p in await list_reseller_plans(session) if p.is_active]
         except Exception as e:
             err = str(e)
         return render(
@@ -972,6 +975,7 @@ def register_pg_pages(
                 admins=admins,
                 pg_roles=roles,
                 web_status=web_status,
+                reseller_plans=reseller_plans,
                 flash_err=err,
                 flash_ok=ok,
                 active="pg_admins",
@@ -1018,21 +1022,22 @@ def register_pg_pages(
         staff: dict = Depends(require_admin),
         session=Depends(get_db),
     ):
-        from app.services.pg_staff_access import (
-            access_by_pg_username,
-            classify_pg_admin_dict,
-            grant_web_access,
-            update_web_access,
-        )
+        from app.services.pg_staff_access import classify_pg_admin_dict
+        from app.services.resellers import provision_existing_pg_admin
 
         form = await request.form()
         web_username = str(form.get("web_username") or "").strip()
         web_password = str(form.get("web_password") or "")
         note = str(form.get("note") or "").strip()
-        mode = str(form.get("mode") or "").strip().lower()
+        plan_raw = str(form.get("plan_id") or "").strip()
         pg_u = (username or "").strip()
         if not pg_u:
             return RedirectResponse(f"/pg/admins?err={_q('نام ادمین نامعتبر است')}", status_code=303)
+        if not plan_raw.isdigit():
+            return RedirectResponse(
+                f"/pg/admins?err={_q('انتخاب پلن نمایندگی الزامی است')}",
+                status_code=303,
+            )
         try:
             admin = await get_pg().get_admin(pg_u)
         except Exception as e:
@@ -1048,33 +1053,21 @@ def register_pg_pages(
                 status_code=303,
             )
 
-        existing_staff = await access_by_pg_username(session, pg_u)
-        if mode == "update" or existing_staff:
-            if not existing_staff:
-                return RedirectResponse(
-                    f"/pg/admins?err={_q('دسترسی وب برای این ادمین وجود ندارد')}",
-                    status_code=303,
-                )
-            row, err = await update_web_access(
-                session,
-                pg_username=pg_u,
-                web_username=web_username,
-                password=web_password,
-                note=note,
-            )
-            msg = f"دسترسی وب‌پنل «{row.web_username}» به‌روز شد" if row else ""
-        else:
-            row, err = await grant_web_access(
-                session,
-                pg_username=pg_u,
-                web_username=web_username,
-                password=web_password,
-                note=note,
-                is_active=True,
-            )
-            msg = f"دسترسی وب‌پنل برای «{row.web_username}» ساخته شد" if row else ""
+        profile, _hint, err = await provision_existing_pg_admin(
+            session,
+            pg_username=pg_u,
+            web_username=web_username,
+            password=web_password,
+            plan_id=int(plan_raw),
+            note=note,
+        )
         if err:
             return RedirectResponse(f"/pg/admins?err={_q(err)}", status_code=303)
+        uname = profile.web_username if profile else web_username
+        msg = (
+            f"دسترسی وب‌پنل «{uname}» با پلن نمایندگی فعال شد — "
+            "مثل نماینده می‌تواند ربات و فروشگاه را تنظیم کند"
+        )
         return RedirectResponse(f"/pg/admins?ok={_q(msg)}", status_code=303)
 
     @app.post("/pg/admins/{username}/web-access/revoke")

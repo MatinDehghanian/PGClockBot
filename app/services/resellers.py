@@ -712,6 +712,194 @@ async def complete_reseller_setup(
     return profile
 
 
+def _synthetic_telegram_id(pg_username: str) -> int:
+    """Stable negative Telegram id for shop owners linked to an existing PG admin."""
+    import zlib
+
+    h = zlib.crc32((pg_username or "").strip().lower().encode("utf-8")) & 0xFFFFFFFF
+    return -2_100_000_000_000_000 - (h % 900_000_000_000)
+
+
+async def _unique_referral(session: AsyncSession) -> str:
+    from app.services.users import _referral_code
+
+    for _ in range(20):
+        code = _referral_code()
+        exists = (
+            await session.execute(select(BotUser).where(BotUser.referral_code == code))
+        ).scalar_one_or_none()
+        if not exists:
+            return code
+    return _referral_code() + secrets.token_hex(2).upper()
+
+
+async def get_or_create_pg_linked_bot_user(
+    session: AsyncSession, pg_username: str
+) -> BotUser:
+    """BotUser that owns the shop profile for an existing PasarGuard admin."""
+    from app.services.pg_staff_access import reseller_by_pg_username
+
+    existing = await reseller_by_pg_username(session, pg_username)
+    if existing:
+        user = await session.get(BotUser, existing.user_id)
+        if user:
+            return user
+
+    tg_id = _synthetic_telegram_id(pg_username)
+    user = (
+        await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))
+    ).scalar_one_or_none()
+    if user:
+        return user
+
+    user = BotUser(
+        telegram_id=tg_id,
+        username=None,
+        full_name=f"PG admin {pg_username}",
+        role=Role.RESELLER.value,
+        referral_code=await _unique_referral(session),
+    )
+    session.add(user)
+    await session.flush()
+    return user
+
+
+async def provision_existing_pg_admin(
+    session: AsyncSession,
+    *,
+    pg_username: str,
+    web_username: str,
+    password: str,
+    plan_id: int,
+    note: str = "",
+) -> tuple[ResellerProfile | None, str | None, str | None]:
+    """Grant web + shop access to an existing PG admin using a reseller plan.
+
+    Creates/updates a ResellerProfile linked to ``pg_username`` (no new PG admin).
+    Removes any legacy PgStaffAccess row for the same admin.
+    Returns ``(profile, setup_hint, error)``.
+    """
+    from app.services.pg_staff_access import (
+        access_by_pg_username,
+        conflict_message_for_reseller_link,
+        revoke_web_access,
+    )
+    from app.services.pg_staff_access import resolve_pg_role_id_for_admin
+    from app.services.web_auth import (
+        hash_password,
+        load_web_admin,
+        validate_password_strength,
+        validate_web_username,
+    )
+
+    pg_u = (pg_username or "").strip().lower()
+    if not pg_u:
+        return None, None, "نام ادمین پاسارگارد الزامی است"
+
+    plan = await session.get(ResellerPlan, int(plan_id))
+    if not plan or not plan.is_active:
+        return None, None, "پلن نمایندگی معتبر نیست — ابتدا یک پلن فعال بسازید"
+
+    ok, err = validate_password_strength(password or "")
+    if not ok:
+        return None, None, err
+    cleaned, uerr = validate_web_username(web_username, lowercase=True)
+    if uerr:
+        return None, None, uerr
+
+    owner_u = (load_web_admin().get("username") or "").strip().lower()
+    if cleaned == owner_u:
+        return None, None, "این نام کاربری برای ادمین اصلی پنل رزرو است"
+
+    # Allow updating the reseller already linked to THIS pg admin; block other links.
+    linked = (
+        await session.execute(
+            select(ResellerProfile).where(
+                ResellerProfile.pg_admin_username.is_not(None),
+            )
+        )
+    ).scalars().all()
+    current: ResellerProfile | None = None
+    for row in linked:
+        if (row.pg_admin_username or "").strip().lower() == pg_u:
+            current = row
+            break
+    if current is None:
+        conflict = await conflict_message_for_reseller_link(session, pg_u)
+        # conflict_message blocks when pg_staff exists — we'll convert that path
+        staff_row = await access_by_pg_username(session, pg_u)
+        if conflict and staff_row is None:
+            return None, None, conflict
+
+    # Username uniqueness (exclude current profile)
+    from app.db.models import PgStaffAccess
+
+    taken_res = (
+        await session.execute(
+            select(ResellerProfile).where(ResellerProfile.web_username == cleaned)
+        )
+    ).scalar_one_or_none()
+    if taken_res and (current is None or int(taken_res.id) != int(current.id)):
+        return None, None, "این نام کاربری قبلاً برای یک نماینده گرفته شده"
+    taken_staff = (
+        await session.execute(
+            select(PgStaffAccess).where(PgStaffAccess.web_username == cleaned)
+        )
+    ).scalar_one_or_none()
+    # Same PG admin's staff row will be deleted after conversion; other rows block.
+    if taken_staff and (taken_staff.pg_username or "").lower() != pg_u:
+        return None, None, "این نام کاربری قبلاً برای دسترسی وب ادمین پاسارگارد گرفته شده"
+
+    role_id = await resolve_pg_role_id_for_admin(pg_u)
+    perms = normalize_feature_perms(plan.web_permissions or plan.bot_permissions)
+    # Ensure core shop surfaces are always available for secondary admins
+    base = parse_perms(perms)
+    for must in ("dashboard", "shop_settings"):
+        if must not in base:
+            base.append(must)
+    perms = join_perms(base)
+
+    user = await get_or_create_pg_linked_bot_user(session, pg_u)
+    profile = await make_reseller(
+        session,
+        user,
+        commission_percent=int(plan.commission_percent or 0),
+        can_approve_receipts="payments" in parse_perms(perms),
+        pg_admin_username=pg_u,
+        pg_role_id=role_id,
+        web_username=cleaned,
+        web_password_hash=hash_password(password),
+        web_permissions=perms,
+        bot_permissions=perms,
+        plan_id=int(plan.id),
+        issue_setup_token=True,
+    )
+    if note:
+        # Store operator note on profile via unused field if present; else ignore
+        pass
+    profile.is_active = True
+    await session.commit()
+    await session.refresh(profile)
+
+    # Convert legacy pg_staff row away so one-path invariant holds
+    try:
+        await revoke_web_access(session, pg_u)
+    except Exception:
+        pass
+
+    setup_hint = None
+    if not (profile.bot_token or "").strip():
+        setup_hint = "shop-settings?tab=bot"
+    return profile, setup_hint, None
+
+
+def bot_needs_setup(profile: ResellerProfile | None) -> bool:
+    """True when reseller/shop owner has web access but no dedicated Telegram bot yet."""
+    if not profile or not profile.is_active:
+        return False
+    return not bool((profile.bot_token or "").strip())
+
+
 async def approve_application(
     session: AsyncSession,
     app: ResellerApplication,

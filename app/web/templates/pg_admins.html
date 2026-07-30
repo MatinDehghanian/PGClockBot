@@ -5,7 +5,7 @@
 <div class="page-head">
   <div>
     <h1>ادمین</h1>
-    <p>ادمین‌های پاسارگارد — نقش‌ها را از پنل پاسارگارد تعریف کنید. اگر ادمین از قبل نماینده است یا یوزر وب دارد، دسترسی جدید ساخته نمی‌شود.</p>
+    <p>ادمین‌های پاسارگارد — نقش‌ها را از پنل پاسارگارد تعریف کنید. با اعطای دسترسی وب، یک پلن نمایندگی انتخاب می‌شود تا ادمین فرعی مثل نماینده بتواند ربات و فروشگاه را تنظیم کند.</p>
   </div>
   <button type="button" class="btn" data-modal-open="modal-pg-admin-create">ساخت ادمین</button>
 </div>
@@ -118,16 +118,24 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>{% if src == 'pg_staff' %}ویرایش دسترسی وب{% else %}اعطای دسترسی وب‌پنل{% endif %}</h2>
+      <h2>{% if src == 'pg_staff' %}ارتقای دسترسی وب{% else %}اعطای دسترسی وب‌پنل{% endif %}</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/pg/admins/{{ uname }}/web-access" class="form-stack">
-      <input type="hidden" name="mode" value="{% if src == 'pg_staff' %}update{% else %}grant{% endif %}" />
       <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
-        — منوی وب‌پنل بر اساس نقش همین ادمین در پاسارگارد محدود می‌شود.</p>
-      {% if src == 'none' %}
-      <p class="muted">اگر این ادمین نماینده باشد یا از قبل یوزر وب داشته باشد، ساخت جدید رد می‌شود.</p>
+        — منوی پاسارگارد از نقش همین ادمین می‌آید؛ منوی ربات/فروشگاه از پلن نمایندگی.</p>
+      {% if not reseller_plans %}
+      <div class="flash warn">هنوز پلن نمایندگی فعالی ندارید — ابتدا از بخش نمایندگان یک پلن بسازید.</div>
       {% endif %}
+      <label class="form-field">پلن نمایندگی
+        <select name="plan_id" required {% if not reseller_plans %}disabled{% endif %}>
+          <option value="">— انتخاب پلن —</option>
+          {% for p in reseller_plans or [] %}
+          <option value="{{ p.id }}">{{ p.name }}{% if p.commission_percent is not none %} · کمیسیون {{ p.commission_percent }}٪{% endif %}</option>
+          {% endfor %}
+        </select>
+        <small class="muted">دسترسی‌های داشبورد، پلن، سفارش، تنظیمات ربات و… از این پلن کپی می‌شود</small>
+      </label>
       <label class="form-field">نام کاربری وب‌پنل
         <input name="web_username" required autocomplete="off" dir="ltr"
           value="{{ st.get('web_username') if src == 'pg_staff' else '' }}"
@@ -140,10 +148,12 @@
       </label>
       <label class="form-field">یادداشت
         <input name="note" value="{{ st.get('note') if src == 'pg_staff' and st.get('note') else '' }}" placeholder="دسترسی محدود فروش" />
-        <small class="muted">اختیاری — فقط در وب‌پنل ذخیره می‌شود</small>
+        <small class="muted">اختیاری</small>
       </label>
       <div class="actions">
-        <button class="btn" type="submit">{% if src == 'pg_staff' %}ذخیره{% else %}اعطای دسترسی{% endif %}</button>
+        <button class="btn" type="submit" {% if not reseller_plans %}disabled{% endif %}>
+          {% if src == 'pg_staff' %}ذخیره و فعال‌سازی فروشگاه{% else %}اعطای دسترسی{% endif %}
+        </button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
       </div>
     </form>

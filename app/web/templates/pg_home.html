@@ -27,99 +27,53 @@
   </div>
   {% endif %}
   <div class="stats-grid pg-reseller-stats">
+    {% if ov.users %}
+    <div class="stat">
+      <div class="stat-top">
+        <span class="stat-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/></svg>
+        </span>
+        <span>کاربران VPN</span>
+      </div>
+      <strong>{{ ov.users.used_text }}</strong>
+      {% if ov.users.has_limit %}
+      <small class="muted">از {{ ov.users.limit_text }} · باقی‌مانده {{ ov.users.remain_text }}</small>
+      <div class="meter" aria-hidden="true"><i style="width:{{ '%.1f'|format(ov.users.pct or 0) }}%"></i></div>
+      {% else %}
+      <small class="muted">بدون سقف تعداد</small>
+      {% endif %}
+    </div>
+    {% endif %}
     {% if ov.traffic %}
     <div class="stat">
       <div class="stat-top">
         <span class="stat-ico" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
         </span>
-        <span>حجم کل</span>
+        <span>حجم</span>
       </div>
-      <strong>{{ ov.traffic.limit_text if ov.traffic.has_limit else 'نامحدود' }}</strong>
-      {% if not ov.traffic.has_limit and ov.lifetime_text %}
-      <small class="muted">lifetime: {{ ov.lifetime_text }}</small>
-      {% endif %}
-    </div>
-    <div class="stat">
-      <div class="stat-top">
-        <span class="stat-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/><path d="M12 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0" fill="currentColor" stroke="none"/></svg>
-        </span>
-        <span>حجم باقیمانده</span>
-      </div>
-      <strong>{% if ov.traffic.has_limit %}{{ ov.traffic.remain_text }}{% else %}—{% endif %}</strong>
+      <strong>{{ ov.traffic.used_text }}</strong>
       {% if ov.traffic.has_limit %}
-      <small class="muted">مصرف‌شده: {{ ov.traffic.used_text }}</small>
+      <small class="muted">از {{ ov.traffic.limit_text }} · باقی‌مانده {{ ov.traffic.remain_text }}</small>
       <div class="meter" aria-hidden="true"><i style="width:{{ '%.1f'|format(ov.traffic.pct or 0) }}%"></i></div>
       {% else %}
-      <small class="muted">مصرف‌شده: {{ ov.traffic.used_text }}</small>
+      <small class="muted">بدون سقف حجم{% if ov.lifetime_text %} · lifetime {{ ov.lifetime_text }}{% endif %}</small>
       {% endif %}
     </div>
-    {% else %}
-    <div class="stat">
-      <div class="stat-top">
-        <span class="stat-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
-        <span>حجم کل</span>
-      </div>
-      <strong>—</strong>
-    </div>
-    <div class="stat">
-      <div class="stat-top">
-        <span class="stat-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
-        <span>حجم باقیمانده</span>
-      </div>
-      <strong>—</strong>
-    </div>
     {% endif %}
-    {% if ov.time and ov.time.has_limit %}
+    {% for c in ov.constraints or [] %}
     <div class="stat">
       <div class="stat-top">
         <span class="stat-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
         </span>
-        <span>زمان کل</span>
+        <span>{{ c.label }}</span>
       </div>
-      <strong>{{ ov.time.total_text or ov.time.expire_text }}</strong>
-      {% if ov.time.expire_text and ov.time.total_text and ov.time.total_text != ov.time.expire_text %}
-      <small class="muted">انقضا: {{ ov.time.expire_text }}</small>
-      {% endif %}
+      <strong>{{ c.value_text }}</strong>
+      {% if c.hint %}<small class="muted">{{ c.hint }}</small>{% endif %}
     </div>
-    <div class="stat">
-      <div class="stat-top">
-        <span class="stat-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-        </span>
-        <span>زمان باقیمانده</span>
-      </div>
-      <strong>{{ ov.time.remain_text }}</strong>
-      {% if ov.time.pct is not none %}
-      <div class="meter" aria-hidden="true"><i style="width:{{ '%.1f'|format(ov.time.pct or 0) }}%"></i></div>
-      {% endif %}
-    </div>
-    {% else %}
-    <div class="stat">
-      <div class="stat-top">
-        <span class="stat-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
-        <span>زمان کل</span>
-      </div>
-      <strong>نامحدود</strong>
-    </div>
-    <div class="stat">
-      <div class="stat-top">
-        <span class="stat-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
-        <span>زمان باقیمانده</span>
-      </div>
-      <strong>—</strong>
-    </div>
-    {% endif %}
+    {% endfor %}
   </div>
-  {% if ov.users %}
-  <p class="muted pg-users-line">
-    کاربران پنل:
-    <strong>{{ ov.users.used_text }}{% if ov.users.has_limit %} / {{ ov.users.limit_text }}{% endif %}</strong>
-    {% if ov.users.has_limit %} · باقی‌مانده {{ ov.users.remain_text }}{% else %} · بدون سقف{% endif %}
-  </p>
-  {% endif %}
   {% elif ov.error %}
   <div class="flash warn">{{ ov.error }}</div>
   {% endif %}

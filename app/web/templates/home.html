@@ -53,13 +53,13 @@
             <circle class="home-gauge-track" cx="60" cy="60" r="52" />
             <circle class="home-gauge-val" cx="60" cy="60" r="52" pathLength="100" />
           </svg>
-          <div class="home-gauge-center">
-            <strong id="home-mem-val">{% if host.memory_percent is not none %}{{ '%.0f'|format(host.memory_percent) }}٪{% else %}—{% endif %}</strong>
+          <div class="home-gauge-center home-gauge-center-quiet">
             <span>RAM</span>
           </div>
         </div>
         <div class="home-gauge-meta">
           <span class="home-gauge-label">حافظه</span>
+          <strong class="home-gauge-amount" id="home-mem-val">{% if host.memory_percent is not none %}{{ '%.0f'|format(host.memory_percent) }}٪{% else %}—{% endif %}</strong>
           <span class="muted mono" id="home-mem-hint" dir="ltr">{{ host.memory_used_text }} / {{ host.memory_total_text }}</span>
         </div>
       </article>

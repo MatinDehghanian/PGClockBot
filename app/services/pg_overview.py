@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
-from app.services.formatting import format_bytes, format_expire, format_number, parse_expire
+from app.services.formatting import format_bytes, format_number
 from app.services.pasarguard import get_pg
 
 
@@ -58,6 +57,7 @@ def _role_limits(admin: dict | None, role: dict | None) -> dict:
     from app.services.pg_quota import merge_role_limits
 
     return merge_role_limits(admin, role)
+
 
 def _meter(
     *,
@@ -114,6 +114,11 @@ def _format_duration(seconds: float | int | None) -> str:
 
 
 def _time_meter(expire_raw: Any, created_raw: Any = None) -> dict[str, Any] | None:
+    """Legacy helper kept for tests; admin-account time is not shown in UI."""
+    from datetime import datetime, timezone
+
+    from app.services.formatting import format_expire, parse_expire
+
     exp = parse_expire(expire_raw)
     if not exp:
         return None
@@ -167,6 +172,39 @@ def _status_meta(raw: Any) -> tuple[str | None, str | None]:
     return str(raw), "neutral"
 
 
+def _constraint_box(label: str, value_text: str, *, hint: str | None = None) -> dict[str, Any]:
+    return {
+        "label": label,
+        "value_text": value_text,
+        "hint": hint,
+    }
+
+
+def _role_constraint_boxes(limits: dict) -> list[dict[str, Any]]:
+    """Per-user role bounds shown as equal-sized stat boxes (no admin-account time)."""
+    boxes: list[dict[str, Any]] = []
+    dmin = _as_int(limits.get("data_limit_min"))
+    dmax = _as_int(limits.get("data_limit_max"))
+    emin = _as_int(limits.get("expire_min"))
+    emax = _as_int(limits.get("expire_max"))
+    hmin = _as_int(limits.get("min_hwid_per_user"))
+    hmax = _as_int(limits.get("max_hwid_per_user"))
+
+    if dmin is not None and dmin > 0:
+        boxes.append(_constraint_box("حداقل حجم کاربر", format_bytes(dmin), hint="کف حجم هنگام ساخت/ویرایش"))
+    if dmax is not None and dmax > 0:
+        boxes.append(_constraint_box("حداکثر حجم کاربر", format_bytes(dmax), hint="سقف حجم هر کاربر VPN"))
+    if emin is not None and emin > 0:
+        boxes.append(_constraint_box("حداقل مدت کاربر", _format_duration(emin), hint="کف مدت از زمان ساخت"))
+    if emax is not None and emax > 0:
+        boxes.append(_constraint_box("حداکثر مدت کاربر", _format_duration(emax), hint="سقف مدت از زمان ساخت"))
+    if hmin is not None and hmin > 0:
+        boxes.append(_constraint_box("حداقل HWID", format_number(hmin), hint="کف تعداد دستگاه"))
+    if hmax is not None and hmax > 0:
+        boxes.append(_constraint_box("حداکثر HWID", format_number(hmax), hint="سقف تعداد دستگاه"))
+    return boxes
+
+
 async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
     """Metrics for a staff member's own PG admin account (reseller or pg_staff)."""
     owner = str(staff.get("pg_admin_username") or "").strip()
@@ -176,7 +214,8 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
         "error": None,
         "users": None,
         "traffic": None,
-        "time": None,
+        "time": None,  # kept for back-compat; always None (PG has no admin day quota)
+        "constraints": [],
         "status": None,
         "status_label": None,
         "status_badge": None,
@@ -246,7 +285,7 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
             format_value=lambda v: format_number(v) if v is not None else "—",
         )
         out["traffic"] = _meter(
-            label="حجم کل",
+            label="حجم",
             used=used_traffic,
             limit=data_limit,
             used_label="مصرف‌شده",
@@ -256,16 +295,9 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
         if lifetime is not None:
             out["lifetime_text"] = format_bytes(lifetime)
 
-        expire_raw = (
-            admin.get("expire")
-            or admin.get("expire_date")
-            or admin.get("expired_at")
-            or admin.get("expires_at")
-        )
-        out["time"] = _time_meter(
-            expire_raw,
-            admin.get("created_at") or admin.get("created"),
-        )
+        # Admin-account day/expire is not supported by PasarGuard — omit time meter.
+        out["time"] = None
+        out["constraints"] = _role_constraint_boxes(limits)
         return out
     except Exception as e:
         out["error"] = str(e)

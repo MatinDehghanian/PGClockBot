@@ -534,15 +534,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         if role in {"reseller", "pg_staff"}:
             pg = (user or {}).get("pg_permissions") or []
             if role == "pg_staff":
-                for path in (
-                    "/pg" if "pg_overview" in pg else None,
-                    "/pg/users" if "pg_users" in pg else None,
-                    "/pg" if pg else None,
-                ):
-                    if path and path != request.url.path:
-                        return RedirectResponse(path, status_code=303)
-                return RedirectResponse("/logout", status_code=303)
+                return RedirectResponse("/dashboard", status_code=303)
             for path in (
+                "/dashboard",
                 "/pg/users" if "pg_users" in pg else None,
                 "/pg" if pg else None,
             ):
@@ -559,7 +553,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             ):
                 if key in perms and path != request.url.path:
                     return RedirectResponse(path, status_code=303)
-            return RedirectResponse("/logout", status_code=303)
+            return RedirectResponse("/dashboard", status_code=303)
         return RedirectResponse("/dashboard", status_code=303)
 
     register_home_pages(app, render=render, require_admin=require_admin, get_db=get_db)
@@ -821,14 +815,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         if user.get("role") == "admin":
             return RedirectResponse("/home", status_code=303)
         if user.get("role") == "pg_staff":
-            pg = user.get("pg_permissions") or []
-            if "pg_overview" in pg:
-                return RedirectResponse("/pg", status_code=303)
-            if "pg_users" in pg:
-                return RedirectResponse("/pg/users", status_code=303)
-            if pg:
-                return RedirectResponse("/pg", status_code=303)
-            return RedirectResponse("/logout", status_code=303)
+            # Legacy pg_staff without shop profile → PG home; prefer dashboard when possible
+            return RedirectResponse("/dashboard", status_code=303)
         return RedirectResponse("/dashboard", status_code=303)
 
     @app.get("/login", response_class=HTMLResponse)
@@ -840,14 +828,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             if sess.get("role") == "admin":
                 return RedirectResponse("/home", status_code=303)
             if sess.get("role") == "pg_staff":
-                pg = sess.get("pg_permissions") or []
-                if "pg_overview" in pg:
-                    return RedirectResponse("/pg", status_code=303)
-                if "pg_users" in pg:
-                    return RedirectResponse("/pg/users", status_code=303)
-                if pg:
-                    return RedirectResponse("/pg", status_code=303)
-                return RedirectResponse("/logout", status_code=303)
+                return RedirectResponse("/dashboard", status_code=303)
             return RedirectResponse("/dashboard", status_code=303)
         return render(
             request,
@@ -1085,11 +1066,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 payload["pv"] = reseller_pv
         home = "/home" if role == "admin" else "/dashboard"
         if role == "pg_staff":
-            home = "/pg" if "pg_overview" in pg_permissions else (
-                "/pg/users" if "pg_users" in pg_permissions else "/pg"
-            )
+            home = "/dashboard"
         elif role == "reseller":
-            home = ""
+            home = "/dashboard"
             for path, key in (
                 ("/dashboard", "dashboard"),
                 ("/plans", "plans"),
@@ -1131,9 +1110,12 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.get("/dashboard", response_class=HTMLResponse)
     async def dashboard(
         request: Request,
-        staff: dict = Depends(require_perm("dashboard")),
+        staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
+        # Dashboard is always available to every web-panel user.
+        if staff.get("role") == "admin":
+            return RedirectResponse("/home", status_code=303)
         rid = staff.get("bot_user_id") if staff.get("role") == "reseller" else None
         users_q = select(func.count()).select_from(BotUser)
         orders_q = select(func.count()).select_from(Order)
@@ -1189,18 +1171,31 @@ def create_api_app(lifespan=None) -> FastAPI:
         recent_payments = list((await session.execute(pay_q)).scalars().all())
         recent_orders = list((await session.execute(ord_q)).scalars().all())
         pg_limits = None
-        if staff.get("role") == "reseller" and staff.get("pg_admin_username"):
+        bot_setup_needed = False
+        if staff.get("role") == "reseller" and staff.get("bot_user_id"):
+            from app.db.models import ResellerProfile
+            from app.services.resellers import bot_needs_setup
+
+            profile = (
+                await session.execute(
+                    select(ResellerProfile).where(
+                        ResellerProfile.user_id == int(staff["bot_user_id"])
+                    )
+                )
+            ).scalar_one_or_none()
+            bot_setup_needed = bot_needs_setup(profile)
+        if staff.get("pg_admin_username"):
             from app.services.pg_overview import build_reseller_pg_overview
 
             ov = await build_reseller_pg_overview(staff)
             if ov.get("ready"):
                 limited = False
-                for key in ("users", "traffic", "time"):
+                for key in ("users", "traffic"):
                     meter = ov.get(key) or {}
                     if isinstance(meter, dict) and meter.get("has_limit"):
                         limited = True
                         break
-                if limited or ov.get("status_label"):
+                if limited or ov.get("status_label") or ov.get("constraints"):
                     pg_limits = ov
         return render(
             request,
@@ -1219,6 +1214,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "recent_payments": recent_payments,
                 "recent_orders": recent_orders,
                 "pg_limits": pg_limits,
+                "bot_setup_needed": bot_setup_needed,
             },
         )
 

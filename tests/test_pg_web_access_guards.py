@@ -147,8 +147,8 @@ class UiTemplateGuards(unittest.TestCase):
         src = Path("app/web/templates/pg_admins.html").read_text(encoding="utf-8")
         self.assertIn("src == 'reseller'", src)
         self.assertIn("دسترسی جداگانه ساخته نمی‌شود", src)
-        self.assertIn('name="mode"', src)
-        self.assertIn("grant", src)
+        self.assertIn('name="plan_id"', src)
+        self.assertIn("پلن نمایندگی", src)
 
 
 if __name__ == "__main__":
