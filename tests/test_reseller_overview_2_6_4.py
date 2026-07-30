@@ -45,13 +45,13 @@ class ResellerOverviewTests(unittest.TestCase):
 
     def test_reseller_nav_overview_not_web_dashboard_duplicate(self):
         src = Path("app/web/templates/base.html").read_text(encoding="utf-8")
-        # Admin web داشبورد → /home
+        # Admin + reseller web داشبورد → /home; bot نمای کلی → /dashboard
         self.assertIn('href="/home"', src)
         self.assertIn(">داشبورد</span>", src)
-        # Reseller/sub-admin web section has no second داشبورد; bot has نمای کلی
         parts = src.split("nav-section-home")
         non_admin_web = parts[2].split("nav-section-bot")[0]
-        self.assertNotIn(">داشبورد</span>", non_admin_web)
+        self.assertIn(">داشبورد</span>", non_admin_web)
+        self.assertIn('href="/home"', non_admin_web)
         bot = src[src.find("پنل ربات") : src.find("پنل پاسارگارد")]
         self.assertIn(">نمای کلی</span>", bot)
         self.assertIn('href="/dashboard"', bot)

@@ -5,36 +5,143 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import Depends, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models import BotUser, Order, Payment, PaymentStatus, Plan, Ticket, UserService
 from app.services.host_metrics import host_metrics
-from app.services.home_overview import build_home_overview, _tone_class
+from app.services.home_overview import _tone_class, build_home_overview
+from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
 
 
-def register_home_pages(app, *, render, require_admin, get_db):
+async def _reseller_shop_stats(session: AsyncSession, rid: int) -> dict[str, int]:
+    users_count = (
+        await session.scalar(select(func.count()).select_from(BotUser).where(BotUser.reseller_id == rid))
+        or 0
+    )
+    orders_count = (
+        await session.scalar(select(func.count()).select_from(Order).where(Order.reseller_id == rid))
+        or 0
+    )
+    pending_payments = (
+        await session.scalar(
+            select(func.count())
+            .select_from(Payment)
+            .join(BotUser, BotUser.id == Payment.user_id)
+            .where(
+                Payment.status == PaymentStatus.PENDING.value,
+                Payment.receipt_file_id.is_not(None),
+                BotUser.reseller_id == rid,
+            )
+        )
+        or 0
+    )
+    services_count = (
+        await session.scalar(
+            select(func.count())
+            .select_from(UserService)
+            .join(BotUser, BotUser.id == UserService.bot_user_id)
+            .where(BotUser.reseller_id == rid)
+        )
+        or 0
+    )
+    revenue = (
+        await session.scalar(
+            select(func.coalesce(func.sum(Order.amount), 0)).where(
+                Order.status == "delivered",
+                Order.reseller_id == rid,
+            )
+        )
+        or 0
+    )
+    plans_count = (
+        await session.scalar(
+            select(func.count())
+            .select_from(Plan)
+            .where(Plan.is_active.is_(True), Plan.owner_reseller_id == rid)
+        )
+        or 0
+    )
+    open_tickets = (
+        await session.scalar(
+            select(func.count())
+            .select_from(Ticket)
+            .join(BotUser, BotUser.id == Ticket.user_id)
+            .where(Ticket.status == "open", BotUser.reseller_id == rid)
+        )
+        or 0
+    )
+    return {
+        "users": int(users_count),
+        "orders": int(orders_count),
+        "pending": int(pending_payments),
+        "services": int(services_count),
+        "revenue": int(revenue),
+        "plans": int(plans_count),
+        "tickets": int(open_tickets),
+    }
+
+
+def register_home_pages(app, *, render, require_admin, require_staff, get_db):
     @app.get("/home", response_class=HTMLResponse)
     async def home_dashboard(
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        overview = await build_home_overview(session)
-        update = None
-        try:
-            from app.services.updates import check_github_update
-
-            # Use cache when warm; avoid forcing a GitHub round-trip on every home load.
-            update = await check_github_update(force=False)
-        except Exception:
+        # Platform admin: server + both panels.
+        if is_platform_admin(staff):
+            overview = await build_home_overview(session)
             update = None
+            try:
+                from app.services.updates import check_github_update
+
+                update = await check_github_update(force=False)
+            except Exception:
+                update = None
+            return render(
+                request,
+                "home.html",
+                {
+                    "staff": staff,
+                    "overview": overview,
+                    "update": update,
+                },
+            )
+
+        # Reseller / sub-admin web dashboard: bot + PasarGuard summaries.
+        rid = shop_owner_id(staff)
+        if not rid:
+            if staff.get("pg_permissions"):
+                return RedirectResponse("/pg", status_code=303)
+            return RedirectResponse("/security", status_code=303)
+
+        from app.db.models import ResellerProfile
+        from app.services.resellers import bot_needs_setup
+
+        profile = (
+            await session.execute(select(ResellerProfile).where(ResellerProfile.user_id == int(rid)))
+        ).scalar_one_or_none()
+        bot_setup_needed = bot_needs_setup(profile)
+        stats = await _reseller_shop_stats(session, int(rid)) if not bot_setup_needed else empty_shop_stats()
+
+        pg_limits = None
+        if staff.get("pg_admin_username"):
+            from app.services.pg_overview import build_reseller_pg_overview
+
+            ov = await build_reseller_pg_overview(staff)
+            if ov.get("ready"):
+                pg_limits = ov
+
         return render(
             request,
-            "home.html",
+            "reseller_home.html",
             {
                 "staff": staff,
-                "overview": overview,
-                "update": update,
+                "stats": stats,
+                "pg_limits": pg_limits,
+                "bot_setup_needed": bot_setup_needed,
             },
         )
 

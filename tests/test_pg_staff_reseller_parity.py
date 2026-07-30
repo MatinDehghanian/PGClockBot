@@ -48,7 +48,7 @@ class ConstraintBoxesTests(unittest.TestCase):
             self.assertNotIn("hint", b)
 
     def test_templates_omit_constraint_captions(self):
-        for rel in ("app/web/templates/dashboard.html", "app/web/templates/pg_home.html"):
+        for rel in ("app/web/templates/reseller_home.html", "app/web/templates/pg_home.html"):
             src = Path(rel).read_text(encoding="utf-8")
             self.assertNotIn("c.hint", src)
             self.assertIn("باقی‌مانده", src)
@@ -68,21 +68,26 @@ class WiringTests(unittest.TestCase):
         self.assertIn("provision_existing_pg_admin", src)
 
     def test_dashboard_bot_banner(self):
-        src = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
-        self.assertIn("bot_setup_needed", src)
-        self.assertIn("shop-settings?tab=bot", src)
-        self.assertIn("dash-bot-setup-inner", src)
-        self.assertIn("home-panel-bot", src)
-        self.assertIn("home-panel-pg", src)
-        # Setup warning is exclusive — overview panels only when bot is ready
-        setup_i = src.find("{% if bot_setup_needed %}")
-        else_i = src.find("{% else %}", setup_i)
-        panels_i = src.find("home-panel-bot", else_i)
+        # Bot نمای کلی: setup gate + bot panel only (no PG)
+        dash = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
+        self.assertIn("bot_setup_needed", dash)
+        self.assertIn("shop-settings?tab=bot", dash)
+        self.assertIn("dash-bot-setup-inner", dash)
+        self.assertIn("home-panel-bot", dash)
+        self.assertNotIn("home-panel-pg", dash)
+        setup_i = dash.find("{% if bot_setup_needed %}")
+        else_i = dash.find("{% else %}", setup_i)
+        panels_i = dash.find("home-panel-bot", else_i)
         self.assertGreater(setup_i, 0)
         self.assertGreater(else_i, setup_i)
         self.assertGreater(panels_i, else_i)
-        self.assertNotIn("pg_limits.time", src)
-        self.assertNotIn('class="meter"', src)
+        self.assertNotIn('class="meter"', dash)
+        # Web dashboard for reseller keeps bot + PG panels
+        home = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
+        self.assertIn("home-panel-bot", home)
+        self.assertIn("home-panel-pg", home)
+        self.assertNotIn("pg_limits.time", home)
+        self.assertNotIn('class="meter"', home)
 
     def test_pg_home_no_time_boxes(self):
         src = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
@@ -95,7 +100,8 @@ class WiringTests(unittest.TestCase):
         self.assertIn("ratio_text", src)
 
     def test_dashboard_status_is_badge_not_box(self):
-        src = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
+        # Status badge lives on reseller web home / PG overview, not bot نمای کلی
+        src = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
         self.assertIn("pg_limits.status_label", src)
         self.assertIn('class="badge {{ pg_limits.status_badge', src)
         self.assertNotIn("<span>وضعیت</span>", src)
@@ -120,13 +126,12 @@ class WiringTests(unittest.TestCase):
         src = Path("app/web/templates/base.html").read_text(encoding="utf-8")
         self.assertIn("تنظیمات وب پنل", src)
         self.assertIn('href="/security"', src)
-        # non-admin web block starts after first `{% else %}` under is_admin web section
-        marker = "nav-section-home"
-        parts = src.split(marker)
-        self.assertGreaterEqual(len(parts), 3)  # admin section + non-admin section
+        parts = src.split("nav-section-home")
+        self.assertGreaterEqual(len(parts), 3)
         non_admin_web = parts[2].split("nav-section-bot")[0]
         self.assertIn('href="/security"', non_admin_web)
-        self.assertNotIn(">داشبورد</span>", non_admin_web)
+        self.assertIn('href="/home"', non_admin_web)
+        self.assertIn(">داشبورد</span>", non_admin_web)
         bot = src[src.find("پنل ربات") : src.find("پنل پاسارگارد")]
         self.assertIn('href="/dashboard"', bot)
         self.assertIn(">نمای کلی</span>", bot)

@@ -537,9 +537,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         if role in {"reseller", "pg_staff"}:
             pg = (user or {}).get("pg_permissions") or []
             if role == "pg_staff":
-                return RedirectResponse("/dashboard", status_code=303)
+                return RedirectResponse("/pg", status_code=303)
             for path in (
-                "/dashboard",
+                "/home",
                 "/pg/users" if "pg_users" in pg else None,
                 "/pg" if pg else None,
             ):
@@ -547,6 +547,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     return RedirectResponse(path, status_code=303)
             perms = (user or {}).get("permissions") or []
             for path, key in (
+                ("/home", "dashboard"),
                 ("/dashboard", "dashboard"),
                 ("/plans", "plans"),
                 ("/orders", "orders"),
@@ -556,10 +557,16 @@ def create_api_app(lifespan=None) -> FastAPI:
             ):
                 if key in perms and path != request.url.path:
                     return RedirectResponse(path, status_code=303)
-            return RedirectResponse("/dashboard", status_code=303)
-        return RedirectResponse("/dashboard", status_code=303)
+            return RedirectResponse("/home", status_code=303)
+        return RedirectResponse("/home", status_code=303)
 
-    register_home_pages(app, render=render, require_admin=require_admin, get_db=get_db)
+    register_home_pages(
+        app,
+        render=render,
+        require_admin=require_admin,
+        require_staff=require_staff,
+        get_db=get_db,
+    )
     register_pg_pages(
         app,
         render=render,
@@ -818,9 +825,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         if user.get("role") == "admin":
             return RedirectResponse("/home", status_code=303)
         if user.get("role") == "pg_staff":
-            # Legacy pg_staff without shop profile → PG home; prefer dashboard when possible
-            return RedirectResponse("/dashboard", status_code=303)
-        return RedirectResponse("/dashboard", status_code=303)
+            # Legacy pg_staff without shop profile → PG home
+            return RedirectResponse("/pg", status_code=303)
+        # Reseller / sub-admin → web dashboard (bot + PG summaries)
+        return RedirectResponse("/home", status_code=303)
 
     @app.get("/login", response_class=HTMLResponse)
     async def login_page(request: Request):
@@ -833,9 +841,10 @@ def create_api_app(lifespan=None) -> FastAPI:
             if sess:
                 if sess.get("role") == "admin":
                     return RedirectResponse("/home", status_code=303)
-                # Reseller / pg_staff: only bounce if cookie looks usable; invalid
-                # sessions are cleared by require_staff → NotAuthenticated.
-                return RedirectResponse("/dashboard", status_code=303)
+                if sess.get("role") == "pg_staff":
+                    return RedirectResponse("/pg", status_code=303)
+                # Reseller / sub-admin: web dashboard
+                return RedirectResponse("/home", status_code=303)
         page = render(
             request,
             "login.html",
@@ -1074,22 +1083,24 @@ def create_api_app(lifespan=None) -> FastAPI:
                 payload["pg_role_id"] = int(pg_role_id)
             if reseller_pv:
                 payload["pv"] = reseller_pv
-        home = "/home" if role == "admin" else "/dashboard"
+        home = "/home" if role == "admin" else "/home"
         if role == "pg_staff":
-            home = "/dashboard"
+            home = "/pg"
         elif role == "reseller":
-            home = "/dashboard"
-            for path, key in (
-                ("/dashboard", "dashboard"),
-                ("/plans", "plans"),
-                ("/orders", "orders"),
-                ("/payments", "payments"),
-                ("/tickets", "tickets"),
-                ("/shop-settings", "shop_settings"),
-            ):
-                if key in permissions:
-                    home = path
-                    break
+            # Prefer web dashboard; fall back by shop/PG perms.
+            home = "/home"
+            if "dashboard" not in permissions and not pg_permissions:
+                home = ""
+                for path, key in (
+                    ("/plans", "plans"),
+                    ("/orders", "orders"),
+                    ("/payments", "payments"),
+                    ("/tickets", "tickets"),
+                    ("/shop-settings", "shop_settings"),
+                ):
+                    if key in permissions:
+                        home = path
+                        break
             if not home:
                 if "pg_users" in pg_permissions:
                     home = "/pg/users"
@@ -1131,7 +1142,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         stats = empty_shop_stats()
         recent_payments: list = []
         recent_orders: list = []
-        pg_limits = None
         bot_setup_needed = False
 
         if is_platform_admin(staff):
@@ -1173,12 +1183,12 @@ def create_api_app(lifespan=None) -> FastAPI:
                     "stats": stats,
                     "recent_payments": recent_payments,
                     "recent_orders": recent_orders,
-                    "pg_limits": None,
                     "bot_setup_needed": False,
                 },
             )
 
         # Fail closed: never fall through to platform/admin aggregates.
+        # Bot نمای کلی is bot-only (PG lives on /home and /pg).
         if rid:
             from app.db.models import ResellerProfile
             from app.services.resellers import bot_needs_setup
@@ -1189,7 +1199,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 )
             ).scalar_one_or_none()
             bot_setup_needed = bot_needs_setup(profile)
-            # Until dedicated bot token is set, overview is setup-only (no stats/PG).
+            # Until dedicated bot token is set, bot overview is setup-only.
             if bot_setup_needed:
                 return render(
                     request,
@@ -1199,51 +1209,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                         "stats": stats,
                         "recent_payments": [],
                         "recent_orders": [],
-                        "pg_limits": None,
                         "bot_setup_needed": True,
                     },
                 )
 
+            from app.api.home_pages import _reseller_shop_stats
+
             perms = staff.get("permissions") or []
-            users_count = await session.scalar(
-                select(func.count()).select_from(BotUser).where(BotUser.reseller_id == rid)
-            ) or 0
-            orders_count = await session.scalar(
-                select(func.count()).select_from(Order).where(Order.reseller_id == rid)
-            ) or 0
-            pending_payments = await session.scalar(
-                select(func.count())
-                .select_from(Payment)
-                .join(BotUser, BotUser.id == Payment.user_id)
-                .where(
-                    Payment.status == PaymentStatus.PENDING.value,
-                    Payment.receipt_file_id.is_not(None),
-                    BotUser.reseller_id == rid,
-                )
-            ) or 0
-            services_count = await session.scalar(
-                select(func.count())
-                .select_from(UserService)
-                .join(BotUser, BotUser.id == UserService.bot_user_id)
-                .where(BotUser.reseller_id == rid)
-            ) or 0
-            revenue = await session.scalar(
-                select(func.coalesce(func.sum(Order.amount), 0)).where(
-                    Order.status == "delivered",
-                    Order.reseller_id == rid,
-                )
-            ) or 0
-            plans_count = await session.scalar(
-                select(func.count())
-                .select_from(Plan)
-                .where(Plan.is_active.is_(True), Plan.owner_reseller_id == rid)
-            ) or 0
-            open_tickets = await session.scalar(
-                select(func.count())
-                .select_from(Ticket)
-                .join(BotUser, BotUser.id == Ticket.user_id)
-                .where(Ticket.status == "open", BotUser.reseller_id == rid)
-            ) or 0
+            stats = await _reseller_shop_stats(session, int(rid))
             if "payments" in perms:
                 recent_payments = list(
                     (
@@ -1267,22 +1240,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                         )
                     ).scalars().all()
                 )
-            stats = {
-                "users": users_count,
-                "orders": orders_count,
-                "pending": pending_payments,
-                "services": services_count,
-                "revenue": revenue,
-                "plans": plans_count,
-                "tickets": open_tickets,
-            }
 
-        if staff.get("pg_admin_username"):
-            from app.services.pg_overview import build_reseller_pg_overview
-
-            ov = await build_reseller_pg_overview(staff)
-            if ov.get("ready"):
-                pg_limits = ov
         return render(
             request,
             "dashboard.html",
@@ -1291,7 +1249,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "stats": stats,
                 "recent_payments": recent_payments,
                 "recent_orders": recent_orders,
-                "pg_limits": pg_limits,
                 "bot_setup_needed": bot_setup_needed,
             },
         )

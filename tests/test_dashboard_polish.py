@@ -61,16 +61,21 @@ class DashboardPolishSourceTests(unittest.TestCase):
     def test_home_and_dashboard_share_panel_classes(self):
         home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
         dash = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
-        for cls in ("home-panels", "home-panel-bot", "home-panel-pg", "home-panel-grid"):
+        reseller_home = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
+        for cls in ("home-panels", "home-panel-bot", "home-panel-grid"):
             self.assertIn(cls, home)
             self.assertIn(cls, dash)
+            self.assertIn(cls, reseller_home)
+        self.assertIn("home-panel-pg", home)
+        self.assertIn("home-panel-pg", reseller_home)
+        self.assertNotIn("home-panel-pg", dash)
 
     def test_templates_use_ratio_text(self):
-        dash = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
+        reseller_home = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
         pg = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
-        self.assertIn("ratio_text", dash)
+        self.assertIn("ratio_text", reseller_home)
         self.assertIn("ratio_text", pg)
-        self.assertNotIn("used_text }} / {{", dash)
+        self.assertNotIn("used_text }} / {{", reseller_home)
         self.assertNotIn("used_text }} / {{", pg)
 
     def test_web_panel_has_no_vpn_label(self):
