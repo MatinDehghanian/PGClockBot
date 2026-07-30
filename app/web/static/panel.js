@@ -112,13 +112,26 @@
       const can = el.scrollWidth > el.clientWidth + 4;
       el.classList.toggle('is-scrollable', can);
     }
-    function refreshHScroll(){
+    function refreshForceKebab(){
+      /* Measure with inline actions, then collapse when the table would overflow.
+         Only called on load/resize — not from ResizeObserver (avoids toggle loops). */
+      document.querySelectorAll('.table-wrap').forEach(el => {
+        el.classList.remove('force-kebab');
+        const need = el.scrollWidth > el.clientWidth + 2;
+        el.classList.toggle('force-kebab', need);
+      });
+    }
+    function refreshHScrollMarks(){
       document.querySelectorAll('.table-wrap, .section-tabs').forEach(markScrollable);
+    }
+    function refreshHScroll(){
+      refreshForceKebab();
+      refreshHScrollMarks();
     }
     refreshHScroll();
     window.addEventListener('resize', refreshHScroll);
     if (window.ResizeObserver) {
-      const ro = new ResizeObserver(refreshHScroll);
+      const ro = new ResizeObserver(refreshHScrollMarks);
       document.querySelectorAll('.table-wrap, .section-tabs').forEach(el => ro.observe(el));
     }
 
@@ -197,17 +210,34 @@
       closeRowActions();
     }, true);
 
-    /* Lightweight modals */
+    /* Lightweight modals — always render on document.body above sidebar */
+    const modalHomes = new WeakMap();
+    function restoreModalHome(el){
+      const home = modalHomes.get(el);
+      if (!home || !home.parent) return;
+      if (home.next && home.next.parentNode === home.parent) {
+        home.parent.insertBefore(el, home.next);
+      } else {
+        home.parent.appendChild(el);
+      }
+    }
     function closeModal(el){
       if (!el) return;
       el.hidden = true;
       el.classList.remove('open');
-      document.body.classList.remove('modal-open');
+      restoreModalHome(el);
+      if (!document.querySelector('.ui-modal.open')) {
+        document.body.classList.remove('modal-open');
+      }
     }
     function openModal(id){
       const el = document.getElementById(id);
       if (!el) return;
       document.querySelectorAll('.ui-modal.open').forEach(closeModal);
+      if (!modalHomes.has(el)) {
+        modalHomes.set(el, { parent: el.parentNode, next: el.nextSibling });
+      }
+      document.body.appendChild(el);
       el.hidden = false;
       el.classList.add('open');
       document.body.classList.add('modal-open');

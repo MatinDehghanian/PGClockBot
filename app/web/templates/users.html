@@ -52,7 +52,7 @@
               <button class="btn btn-sm" type="submit">اعمال نقش</button>
             </form>
             <form method="post" action="/users/{{ u.id }}/block">
-              <button class="btn btn-sm {% if not u.is_blocked %}btn-danger{% endif %}" type="submit">
+              <button class="btn btn-sm {% if not u.is_blocked %}btn-warn{% endif %}" type="submit">
                 {% if u.is_blocked %}رفع مسدودی{% else %}مسدود{% endif %}
               </button>
             </form>

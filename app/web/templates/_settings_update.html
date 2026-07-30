@@ -86,7 +86,7 @@
   </div>
 
   <div class="actions update-actions">
-    <button type="button" class="btn" id="upd-start"
+    <button type="button" class="btn btn-ok" id="upd-start"
       {% if not available and not has_error and not running and not awaiting %}disabled{% endif %}>
       {% if running or awaiting %}در حال اجرا…
       {% elif has_error %}تلاش دوباره
@@ -325,8 +325,7 @@
     } else if (st.state === 'error' || st.restart_required) {
       showOps(true);
       if (startBtn) {
-        startBtn.classList.remove('btn-ok');
-        startBtn.classList.add('btn');
+        startBtn.classList.add('btn', 'btn-ok');
         startBtn.disabled = false;
         startBtn.textContent = 'تلاش دوباره';
       }

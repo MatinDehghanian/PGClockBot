@@ -95,6 +95,50 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIsNotNone(block)
         self.assertIn("background: rgba(220, 38, 38, 0.92)", block.group(1))
 
+    def test_btn_ok_is_solid_green(self):
+        css = CSS.read_text(encoding="utf-8")
+        block = re.search(r"(?ms)^\.btn-ok\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(block)
+        self.assertIn("background: rgba(22, 163, 74, 0.92)", block.group(1))
+
+    def test_btn_warn_is_solid_yellow(self):
+        css = CSS.read_text(encoding="utf-8")
+        block = re.search(r"(?ms)^\.btn-warn\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(block)
+        self.assertIn("background: rgba(234, 179, 8, 0.95)", block.group(1))
+
+    def test_modal_above_chrome(self):
+        css = CSS.read_text(encoding="utf-8")
+        block = re.search(r"(?ms)^\.ui-modal\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(block)
+        self.assertIn("z-index: 4000", block.group(1))
+        js = JS.read_text(encoding="utf-8")
+        self.assertIn("document.body.appendChild(el)", js)
+        self.assertIn("modalHomes", js)
+
+    def test_select_has_up_down_chevron_opposite_title(self):
+        css = CSS.read_text(encoding="utf-8")
+        self.assertIn("M5 6.2L8 3.5 11 6.2", css)
+        self.assertIn("M5 9.8L8 12.5 11 9.8", css)
+        self.assertIn("background-position: left 12px center", css)
+
+    def test_kebab_covers_tablet_and_overflow(self):
+        css = CSS.read_text(encoding="utf-8")
+        self.assertIn("@media (max-width: 1100px)", css)
+        self.assertIn(".table-wrap.force-kebab .row-actions-toggle", css)
+        js = JS.read_text(encoding="utf-8")
+        self.assertIn("refreshForceKebab", js)
+        self.assertIn("force-kebab", js)
+
+    def test_block_button_is_warn_update_is_ok(self):
+        users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
+        self.assertIn("btn-warn", users)
+        home = (ROOT / "app/web/templates/home.html").read_text(encoding="utf-8")
+        self.assertRegex(home, r'btn-ok[^>]*>\s*آپدیت\s*<')
+        upd = (ROOT / "app/web/templates/_settings_update.html").read_text(encoding="utf-8")
+        self.assertIn('id="upd-start"', upd)
+        self.assertIn("btn-ok", upd)
+
     def test_pg_admins_uses_row_actions_macro(self):
         src = (ROOT / "app/web/templates/pg_admins.html").read_text(encoding="utf-8")
         self.assertIn("row_actions", src)
