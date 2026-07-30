@@ -122,6 +122,12 @@
         {% if has_bot %}
         <div class="nav-section nav-section-bot">
           <span class="nav-label nav-label-bot">پنل ربات</span>
+          {% if is_admin or 'dashboard' in perms %}
+          <a href="/dashboard" class="nav-item nav-item-bot {% if path=='/dashboard' %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+            <span>نمای کلی</span>
+          </a>
+          {% endif %}
           {% if is_admin %}
           <a href="/users" class="nav-item nav-item-bot {% if path.startswith('/users') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>

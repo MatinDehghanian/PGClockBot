@@ -44,11 +44,12 @@ class MapPgRoleTests(unittest.TestCase):
 class SidebarMenuOrderTests(unittest.TestCase):
     def test_bot_sidebar_order_and_labels(self):
         src = Path("app/web/templates/base.html").read_text(encoding="utf-8")
-        # Bot section labels in required order (dashboard lives under «وب پنل»)
+        # Bot section: نمای کلی first, then shop tools
         bot_start = src.find("پنل ربات")
         self.assertGreater(bot_start, 0)
-        chunk = src[bot_start:]
+        chunk = src[bot_start : src.find("پنل پاسارگارد")]
         markers = [
+            ">نمای کلی</span>",
             ">کاربران</span>",
             ">نمایندگان</span>",
             ">سفارشات</span>",
@@ -61,6 +62,7 @@ class SidebarMenuOrderTests(unittest.TestCase):
         positions = [chunk.find(m) for m in markers]
         self.assertTrue(all(p >= 0 for p in positions), positions)
         self.assertEqual(positions, sorted(positions))
+        self.assertIn('href="/dashboard"', chunk)
         self.assertNotIn(">تیکت‌ها</span>", src)
         # Web panel dashboard for everyone
         self.assertIn(">داشبورد</span>", src)
