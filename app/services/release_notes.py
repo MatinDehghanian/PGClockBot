@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "2.6.9": [
+        "داشبورد نماینده/ادمین فرعی: وضعیت اتصال ربات با همان استایل داشبورد ادمین",
+    ],
     "2.6.8": [
         "آیکن داشبورد هم‌رنگ تنظیمات وب پنل (خنثی)",
         "حذف کپشن زیر تایتل صفحات اصلی",

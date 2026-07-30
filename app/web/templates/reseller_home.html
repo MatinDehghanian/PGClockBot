@@ -18,6 +18,28 @@
 </div>
 {% endif %}
 
+<div class="card home-conn-card">
+  <h2>وضعیت اتصال</h2>
+  <div class="home-conn-row">
+    <a class="home-conn {% if bot.ok %}is-ok{% else %}is-err{% endif %}" href="/shop-settings?tab=bot">
+      <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+      <span class="home-conn-text">
+        <span class="home-conn-k">ربات</span>
+        <span class="home-conn-cap muted">
+          {% if bot.ok and bot.username %}<span dir="ltr">@{{ bot.username }}</span>
+          {% elif bot.error %}{{ bot.error }}
+          {% else %}—{% endif %}
+        </span>
+      </span>
+      {% if bot.ok %}
+      <span class="badge ok home-conn-badge">متصل</span>
+      {% else %}
+      <span class="badge danger home-conn-badge">قطع</span>
+      {% endif %}
+    </a>
+  </div>
+</div>
+
 <div class="home-panels">
   <section class="home-panel home-panel-bot">
     <div class="home-panel-head">

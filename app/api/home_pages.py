@@ -118,6 +118,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             return RedirectResponse("/security", status_code=303)
 
         from app.db.models import ResellerProfile
+        from app.services.home_overview import check_bot_connection
         from app.services.resellers import bot_needs_setup
 
         profile = (
@@ -125,6 +126,8 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         ).scalar_one_or_none()
         bot_setup_needed = bot_needs_setup(profile)
         stats = await _reseller_shop_stats(session, int(rid)) if not bot_setup_needed else empty_shop_stats()
+        bot_token = (profile.bot_token if profile else "") or ""
+        bot = await check_bot_connection(bot_token)
 
         pg_limits = None
         if staff.get("pg_admin_username"):
@@ -142,6 +145,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "stats": stats,
                 "pg_limits": pg_limits,
                 "bot_setup_needed": bot_setup_needed,
+                "bot": bot,
             },
         )
 

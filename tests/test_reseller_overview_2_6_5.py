@@ -30,6 +30,10 @@ class ResellerNavSplitTests(unittest.TestCase):
         self.assertIn("pg_limits", home)
         self.assertIn('href="/dashboard"', home)
         self.assertIn("page_title('home', 'داشبورد', 'neutral')", home)
+        self.assertIn("home-conn-card", home)
+        self.assertIn("وضعیت اتصال", home)
+        self.assertIn('href="/shop-settings?tab=bot"', home)
+        self.assertIn("bot.ok", home)
 
     def test_home_route_serves_reseller_template(self):
         src = Path("app/api/home_pages.py").read_text(encoding="utf-8")
@@ -37,6 +41,8 @@ class ResellerNavSplitTests(unittest.TestCase):
         self.assertIn("reseller_home.html", src)
         self.assertIn("is_platform_admin", src)
         self.assertIn("build_reseller_pg_overview", src)
+        self.assertIn("check_bot_connection", src)
+        self.assertIn('"bot": bot', src)
 
     def test_dashboard_route_does_not_fetch_pg_limits(self):
         src = Path("app/api/app.py").read_text(encoding="utf-8")
