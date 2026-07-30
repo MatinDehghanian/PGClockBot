@@ -1,0 +1,24 @@
+{# Telegram chat/menu live preview (shared by admin + reseller settings). #}
+<aside class="tg-preview-wrap" aria-label="پیش‌نمایش تلگرام">
+  <div class="tg-preview">
+    <div class="tg-top">
+      <div class="tg-avatar">ک</div>
+      <div>
+        <strong id="pv-title">{{ values.get('shop_title','کلاک بات') }}</strong>
+        <small>ربات · آنلاین</small>
+      </div>
+    </div>
+    <div class="tg-chat" id="pv-chat">
+      <div class="tg-bubble bot" id="pv-bubble">
+        <div id="pv-text">پیش‌نمایش پیام…</div>
+      </div>
+      <div class="tg-qr-card" id="pv-qr" hidden>
+        <div class="tg-qr-box">QR</div>
+        <div class="tg-qr-cap" id="pv-qr-cap"></div>
+      </div>
+      <div class="tg-keys" id="pv-keys"></div>
+    </div>
+    <div class="tg-composer"><span>پیام…</span></div>
+  </div>
+  <p class="muted tg-preview-hint">پیش‌نمایش زنده — با تغییر فیلدها به‌روز می‌شود (ذخیره لازم نیست).</p>
+</aside>

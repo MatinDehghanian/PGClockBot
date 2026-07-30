@@ -1,0 +1,153 @@
+<script>
+(function(){
+  const form = document.getElementById('settings-form') || document.getElementById('menu-form');
+  const tab = {{ tab|tojson }};
+  const values = {{ values|tojson }};
+  const titleEl = document.getElementById('pv-title');
+  const textEl = document.getElementById('pv-text');
+  const keysEl = document.getElementById('pv-keys');
+  const qrCard = document.getElementById('pv-qr');
+  const qrCap = document.getElementById('pv-qr-cap');
+  let focusKey = null;
+
+  function val(name, fallback){
+    if (!form) return (values[name] || fallback || '');
+    const el = form.querySelector('[name="s_'+name+'"]');
+    if (!el) return (values[name] || fallback || '');
+    if (el.type === 'checkbox') return el.checked ? '1' : '0';
+    return el.value;
+  }
+  function esc(s){
+    return String(s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  }
+  function btn(label){
+    return '<button type="button" class="tg-key">'+esc(label)+'</button>';
+  }
+  function menuOrder(){
+    const mo = document.getElementById('menu_order');
+    if (mo && mo.value) return mo.value.split(',').map(s => s.trim()).filter(Boolean);
+    return String(values.menu_order || 'shop,services,wallet,support,guide,faq,referral,miniapp')
+      .split(',').map(s => s.trim()).filter(Boolean);
+  }
+  function menuLayout(){
+    const sel = document.getElementById('menu_layout_select')
+      || (form && form.querySelector('[name="s_menu_layout"]'))
+      || document.getElementById('menu_layout')
+      || document.getElementById('menu_layout_ui');
+    if (sel && sel.value) return sel.value;
+    return values.menu_layout || 'classic';
+  }
+  function fillVars(text){
+    return String(text||'')
+      .replaceAll('{name}','کاربر')
+      .replaceAll('{order_id}','1024')
+      .replaceAll('{amount}','۵۰٬۰۰۰ تومان')
+      .replaceAll('{code}','CLK42')
+      .replaceAll('{link}','https://t.me/example_bot?start=CLK42')
+      .replaceAll('{card}','6037-****-****-1234')
+      .replaceAll('{holder}','نام دارنده')
+      .replaceAll('{url}','https://example.com/sub/demo');
+  }
+  function render(){
+    const shop = val('shop_title','کلاک بات');
+    if (titleEl) titleEl.textContent = shop || 'کلاک بات';
+    let text = '';
+    let showQr = false;
+    if (tab === 'welcome') {
+      text = fillVars(val('welcome_text','سلام {name} 👋'));
+    } else if (tab === 'messages') {
+      const map = {
+        s_guide_text: 'guide_text',
+        s_faq_text: 'faq_text',
+        s_support_text: 'support_text',
+        s_referral_text: 'referral_text',
+        s_empty_services_text: 'empty_services_text',
+        s_shop_empty_text: 'shop_empty_text',
+        s_delivery_title: 'delivery_title',
+        s_purchase_success_text: 'purchase_success_text',
+        s_wallet_success_text: 'wallet_success_text',
+        s_payment_reject_text: 'payment_reject_text',
+      };
+      const key = map[focusKey] || 'purchase_success_text';
+      if (key === 'delivery_title') {
+        text = fillVars(val('delivery_title','✅ سرویس آماده است')) + '\n\n' +
+          fillVars(val('purchase_success_text','پرداخت تأیید شد'));
+      } else {
+        text = fillVars(val(key, values[key] || 'متن پیام…'));
+      }
+    } else if (tab === 'buttons' || tab === 'menu') {
+      text = fillVars(values.welcome_text || val('welcome_text','سلام {name} 👋'));
+      const order = menuOrder();
+      const map = {
+        shop: values.btn_shop || 'خرید سرویس',
+        services: values.btn_services || 'سرویس‌های من',
+        wallet: values.btn_wallet || 'کیف پول',
+        support: values.btn_support || 'پشتیبانی',
+        guide: values.btn_guide || 'راهنما',
+        faq: values.btn_faq || 'سوالات',
+        referral: values.btn_referral || 'دعوت',
+        reseller_apply: values.btn_reseller_apply || 'درخواست نمایندگی',
+        miniapp: values.btn_miniapp || 'مینی‌اپ',
+      };
+      if (tab === 'buttons') {
+        map.shop = val('btn_shop', map.shop);
+        map.services = val('btn_services', map.services);
+        map.wallet = val('btn_wallet', map.wallet);
+        map.support = val('btn_support', map.support);
+        map.guide = val('btn_guide', map.guide);
+        map.faq = val('btn_faq', map.faq);
+        map.referral = val('btn_referral', map.referral);
+        map.miniapp = val('btn_miniapp', map.miniapp);
+      }
+      const compact = menuLayout() === 'compact';
+      const labels = order.map(k => map[k]).filter(Boolean);
+      if (keysEl) {
+        if (compact) {
+          let html = '';
+          for (let i=0;i<labels.length;i+=2){
+            html += '<div class="tg-key-row">'+btn(labels[i])+(labels[i+1]?btn(labels[i+1]):'')+'</div>';
+          }
+          keysEl.innerHTML = html;
+        } else {
+          keysEl.innerHTML = labels.map(l => '<div class="tg-key-row">'+btn(l)+'</div>').join('');
+        }
+      }
+    } else if (keysEl) {
+      keysEl.innerHTML = '';
+    }
+    if (tab === 'qr') {
+      text = fillVars(val('purchase_success_text','سرویس فعال شد.'));
+      showQr = val('qr_enabled','1') === '1';
+      let cap = fillVars(val('qr_caption','QR اشتراک'));
+      if (val('show_sub_link_in_text','1')==='1') {
+        cap += '\n\n🔗 https://example.com/sub/demo\n📦 ۱۰ گیگ · 📅 ۳۰ روز';
+      }
+      if (qrCap) qrCap.textContent = cap;
+    }
+    if (textEl) textEl.innerHTML = esc(text).replace(/\n/g,'<br>');
+    if (qrCard) qrCard.hidden = !showQr;
+  }
+  if (form) {
+    form.addEventListener('input', render);
+    form.addEventListener('change', render);
+    form.addEventListener('focusin', (e) => {
+      const t = e.target;
+      if (t && t.name) {
+        focusKey = t.name;
+        render();
+      }
+    });
+  }
+  const mo = document.getElementById('menu_order');
+  if (mo) mo.addEventListener('change', render);
+  const ml = document.getElementById('menu_layout')
+    || document.getElementById('menu_layout_select')
+    || document.getElementById('menu_layout_ui');
+  if (ml) ml.addEventListener('change', render);
+  render();
+  const active = document.getElementById('active-list');
+  if (active && window.MutationObserver) {
+    new MutationObserver(render).observe(active, {childList:true, subtree:true});
+  }
+})();
+</script>

@@ -81,7 +81,7 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
         self.assertIn("order: 10", css)
         self.assertIn(".form-field > small.muted", css)
         # Hints under controls need clear gap + theme muted color (not hardcoded grey)
-        self.assertIn("margin-top: 10px", css)
+        self.assertIn("margin-top: 16px", css)
         block = re.search(
             r"(?ms)label > small\.muted,\s*label > \.field-help,\s*\.field-help,\s*\.hint\s*\{([^}]+)\}",
             css,
@@ -130,6 +130,29 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
             pwa,
             r'(?s)<strong>آیکن وب‌اپ</strong>\s*<small class="muted">',
         )
+
+    def test_css_cache_busted_by_app_version(self):
+        src = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
+        self.assertIn('href="/static/panel.css?v={{ app_version }}"', src)
+        self.assertIn('src="/static/panel.js?v={{ app_version }}"', src)
+
+    def test_shop_settings_has_live_preview(self):
+        shop = (ROOT / "app/web/templates/shop_settings.html").read_text(encoding="utf-8")
+        self.assertIn('_tg_preview_appearance.html', shop)
+        self.assertIn('_tg_preview_chat.html', shop)
+        self.assertIn('_tg_preview_appearance_js.html', shop)
+        self.assertIn('_tg_preview_chat_js.html', shop)
+        admin = (ROOT / "app/web/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('_tg_preview_appearance.html', admin)
+        self.assertIn('_tg_preview_chat.html', admin)
+        # Shared partials exist
+        for name in (
+            "_tg_preview_appearance.html",
+            "_tg_preview_chat.html",
+            "_tg_preview_appearance_js.html",
+            "_tg_preview_chat_js.html",
+        ):
+            self.assertTrue((ROOT / "app/web/templates" / name).is_file())
 
 class DeleteButtonAndKebabTests(unittest.TestCase):
     def test_btn_danger_matches_soft_tint_style(self):
@@ -264,7 +287,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIsNotNone(foot)
         body = foot.group(1)
         self.assertIn("margin-top: auto", body)
-        self.assertIn("padding-top: 10px", body)
+        self.assertIn("padding-top: 20px", body)
         # star button should be shorter than primary --btn-h
         self.assertIn("min-height: 28px", css)
         # sidebar footer must stay at the pre-compact sizing

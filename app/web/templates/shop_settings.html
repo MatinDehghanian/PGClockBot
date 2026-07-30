@@ -212,74 +212,17 @@
   </div>
 
   {% if tab == 'appearance' %}
-<script>
-(function(){
-  const form = document.getElementById('appearance-form');
-  if (!form) return;
-  const nameEl = document.getElementById('ap-name');
-  const captionEl = document.getElementById('ap-caption');
-  const middleEl = document.getElementById('ap-middle');
-  const photoEl = document.getElementById('ap-photo');
-  const cmdStart = document.getElementById('ap-cmd-start');
-  const cmdHelp = document.getElementById('ap-cmd-help');
-  const pvName = document.getElementById('ap-pv-name');
-  const pvEmptyName = document.getElementById('ap-pv-empty-name');
-  const pvDesc = document.getElementById('ap-pv-desc');
-  const pvShort = document.getElementById('ap-pv-short');
-  const pvImg = document.getElementById('ap-pv-img');
-  const pvLetter = document.getElementById('ap-pv-letter');
-  const pvCmdStart = document.getElementById('ap-pv-cmd-start');
-  const pvCmdHelp = document.getElementById('ap-pv-cmd-help');
-  let objectUrl = null;
+  {% include "_tg_preview_appearance.html" %}
+  {% elif tab in ['menu','welcome','messages','buttons','qr'] %}
+  {% include "_tg_preview_chat.html" %}
+  {% endif %}
+</div>
 
-  function setAvatar(src, letter){
-    if (pvImg) {
-      if (src) {
-        pvImg.hidden = false;
-        pvImg.src = src;
-        if (pvLetter) pvLetter.hidden = true;
-      } else {
-        pvImg.hidden = true;
-        pvImg.removeAttribute('src');
-        if (pvLetter) {
-          pvLetter.hidden = false;
-          pvLetter.textContent = (letter || 'ر').slice(0, 1);
-        }
-      }
-    }
-  }
-
-  function render(){
-    const name = (nameEl && nameEl.value) || 'نام ربات';
-    if (pvName) pvName.textContent = name;
-    if (pvEmptyName) pvEmptyName.textContent = name;
-    if (pvDesc) pvDesc.textContent = (captionEl && captionEl.value) || 'کپشن / درباره ربات…';
-    if (pvShort) pvShort.textContent = (middleEl && middleEl.value) || 'متن وسط صفحه…';
-    if (pvCmdStart) pvCmdStart.textContent = (cmdStart && cmdStart.value) || '/start';
-    if (pvCmdHelp) pvCmdHelp.textContent = (cmdHelp && cmdHelp.value) || '/help';
-    if (objectUrl) {
-      setAvatar(objectUrl, name);
-    } else if (pvImg && pvImg.getAttribute('src') && !pvImg.hidden) {
-      /* keep current */
-    } else {
-      setAvatar('', name);
-    }
-  }
-
-  form.addEventListener('input', render);
-  form.addEventListener('change', render);
-  if (photoEl) {
-    photoEl.addEventListener('change', () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-      objectUrl = null;
-      const f = photoEl.files && photoEl.files[0];
-      if (f) objectUrl = URL.createObjectURL(f);
-      render();
-    });
-  }
-  render();
-})();
-</script>
+{% if tab == 'appearance' %}
+{% include "_tg_preview_appearance_js.html" %}
+{% endif %}
+{% if tab in ['menu','welcome','messages','buttons','qr'] %}
+{% include "_tg_preview_chat_js.html" %}
 {% endif %}
 {% if tab == 'menu' %}
 <script>

@@ -1,0 +1,35 @@
+{# Telegram appearance live preview (shared by admin + reseller settings). #}
+<aside class="tg-preview-wrap" aria-label="پیش‌نمایش ظاهر ربات">
+  <div class="tg-preview tg-preview-profile" id="ap-preview">
+    <div class="tg-profile-hero">
+      <div class="tg-profile-avatar" id="ap-pv-avatar">
+        {% if appearance and appearance.get('bot_tg_photo') %}
+        <img id="ap-pv-img" src="/media/{{ appearance.bot_tg_photo }}" alt="" />
+        <span id="ap-pv-letter" hidden>{{ (appearance.get('bot_tg_name') or 'ر')[:1] }}</span>
+        {% else %}
+        <img id="ap-pv-img" hidden alt="" />
+        <span id="ap-pv-letter">{{ (appearance.get('bot_tg_name') or 'ر')[:1] }}</span>
+        {% endif %}
+      </div>
+      <strong id="ap-pv-name">{{ appearance.get('bot_tg_name') or 'نام ربات' }}</strong>
+      <small id="ap-pv-user" dir="ltr">@{{ appearance.get('bot_username') or 'bot' }}</small>
+      <span class="tg-profile-badge">ربات</span>
+    </div>
+    <div class="tg-profile-about">
+      <div class="tg-profile-about-label">درباره</div>
+      <div id="ap-pv-desc" class="tg-profile-about-text">{{ appearance.get('bot_tg_short_description') or 'کپشن / درباره ربات…' }}</div>
+    </div>
+    <div class="tg-chat tg-chat-empty">
+      <div class="tg-empty-center">
+        <div class="tg-empty-avatar" id="ap-pv-empty-av"></div>
+        <strong id="ap-pv-empty-name">{{ appearance.get('bot_tg_name') or 'نام ربات' }}</strong>
+        <p id="ap-pv-short">{{ appearance.get('bot_tg_description') or 'متن وسط صفحه…' }}</p>
+      </div>
+    </div>
+    <div class="tg-profile-cmds">
+      <div class="tg-cmd-row"><code>/start</code> <span id="ap-pv-cmd-start">{{ appearance.get('bot_cmd_start') or 'شروع / منو' }}</span></div>
+      <div class="tg-cmd-row"><code>/help</code> <span id="ap-pv-cmd-help">{{ appearance.get('bot_cmd_help') or 'راهنما' }}</span></div>
+    </div>
+  </div>
+  <p class="muted tg-preview-hint">پیش‌نمایش زنده پروفایل و صفحهٔ خالی — ذخیره برای اعمال در تلگرام لازم است.</p>
+</aside>
