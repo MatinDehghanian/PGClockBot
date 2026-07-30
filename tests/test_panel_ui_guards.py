@@ -159,11 +159,30 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("@media (max-width: 1100px)", css)
         self.assertIn(".table-wrap.force-kebab .row-actions-toggle", css)
         self.assertIn(".row-actions-menu.is-ported", css)
+        # Ported kebab must keep a single vertical column even on wide viewports
+        ported = re.search(r"(?ms)^\.row-actions-menu\.is-ported\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(ported)
+        self.assertIn("flex-direction: column", ported.group(1))
+        self.assertIn("flex-wrap: nowrap", ported.group(1))
+        self.assertIn(".row-actions-menu.is-ported .row-actions-stack", css)
+        self.assertIn(".row-actions-menu.is-ported select", css)
         js = JS.read_text(encoding="utf-8")
         self.assertIn("refreshForceKebab", js)
         self.assertIn("force-kebab", js)
         self.assertIn("is-ported", js)
         self.assertIn("rowMenuHomes", js)
+
+    def test_update_warns_stay_on_page(self):
+        upd = (ROOT / "app/web/templates/_settings_update.html").read_text(encoding="utf-8")
+        self.assertIn("upd-stay-warn", upd)
+        self.assertIn("خارج نشوید", upd)
+        self.assertIn("رفرش نکنید", upd)
+        self.assertIn("چند دقیقه", upd)
+        self.assertNotIn("۲ تا ۳ دقیقه", upd)
+        self.assertIn("beforeunload", upd)
+        py = (ROOT / "app/services/panel_update.py").read_text(encoding="utf-8")
+        self.assertIn("چند دقیقه", py)
+        self.assertNotIn("۲ تا ۳ دقیقه", py)
 
     def test_site_footer_compact_sidebar_footer_restored(self):
         css = CSS.read_text(encoding="utf-8")
