@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "2.6.3": [
+        "نمای کلی پنل ربات دوباره داشبورد خود ربات است (نه ریدایرکت به داشبورد وب)",
+        "اعداد رم مثل «هسته» سی‌پی‌یو muted و در دسکتاپ راست‌چین حتی وقتی دو خط می‌شود",
+    ],
     "2.6.2": [
         "بازگشت «نمای کلی» به اول منوی سایدبار پنل ربات (لینک /dashboard)",
     ],

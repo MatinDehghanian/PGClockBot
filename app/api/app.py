@@ -1123,17 +1123,62 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        # Dashboard is always available to every web-panel user.
-        if staff.get("role") == "admin":
-            return RedirectResponse("/home", status_code=303)
+        # Bot overview (/dashboard): platform admin sees bot boxes;
+        # overall web home stays at /home. Resellers stay shop-scoped.
+        from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
 
-        from app.services.shop_scope import empty_shop_stats, shop_owner_id
-
-        # Fail closed: never fall through to platform/admin aggregates.
         rid = shop_owner_id(staff)
         stats = empty_shop_stats()
         recent_payments: list = []
         recent_orders: list = []
+        pg_limits = None
+        bot_setup_needed = False
+
+        if is_platform_admin(staff):
+            from app.services.home_overview import bot_panel_summary
+
+            summary = await bot_panel_summary(session)
+            plans_count = (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(Plan)
+                    .where(Plan.is_active.is_(True), Plan.owner_reseller_id.is_(None))
+                )
+                or 0
+            )
+            stats = {
+                "users": summary["users"],
+                "orders": summary["orders"],
+                "pending": summary["pending"],
+                "services": summary["services"],
+                "revenue": summary["revenue"],
+                "plans": int(plans_count),
+                "tickets": summary["tickets"],
+            }
+            recent_payments = list(
+                (
+                    await session.execute(select(Payment).order_by(Payment.id.desc()).limit(6))
+                ).scalars().all()
+            )
+            recent_orders = list(
+                (
+                    await session.execute(select(Order).order_by(Order.id.desc()).limit(6))
+                ).scalars().all()
+            )
+            return render(
+                request,
+                "dashboard.html",
+                {
+                    "staff": staff,
+                    "stats": stats,
+                    "recent_payments": recent_payments,
+                    "recent_orders": recent_orders,
+                    "pg_limits": None,
+                    "bot_setup_needed": False,
+                },
+            )
+
+        # Fail closed: never fall through to platform/admin aggregates.
         if rid:
             users_count = await session.scalar(
                 select(func.count()).select_from(BotUser).where(BotUser.reseller_id == rid)
@@ -1205,8 +1250,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "tickets": open_tickets,
             }
 
-        pg_limits = None
-        bot_setup_needed = False
         if rid:
             from app.db.models import ResellerProfile
             from app.services.resellers import bot_needs_setup

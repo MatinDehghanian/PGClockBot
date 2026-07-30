@@ -100,9 +100,10 @@ class WiringTests(unittest.TestCase):
 
     def test_ram_percent_in_ring_amount_under_title(self):
         src = Path("app/web/templates/home.html").read_text(encoding="utf-8")
-        # Percent lives in the ring center (like CPU); used/total sits under the title.
+        # Percent lives in the ring center (like CPU); used/total muted like cores.
         self.assertIn('id="home-mem-val"', src)
-        self.assertIn('home-gauge-amount" id="home-mem-hint"', src)
+        self.assertIn('class="muted" id="home-mem-hint" dir="ltr"', src)
+        self.assertNotIn("home-gauge-amount", src)
         self.assertNotIn("home-gauge-center-quiet", src)
         # PG dashboard boxes: users + admins first (no templates slot)
         self.assertIn(">ادمین‌ها</span>", src)
