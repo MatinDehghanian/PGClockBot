@@ -89,23 +89,30 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
 
 
 class DeleteButtonAndKebabTests(unittest.TestCase):
-    def test_btn_danger_is_solid_red(self):
+    def test_btn_danger_matches_soft_tint_style(self):
         css = CSS.read_text(encoding="utf-8")
         block = re.search(r"(?ms)^\.btn-danger\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
-        self.assertIn("background: rgba(220, 38, 38, 0.92)", block.group(1))
+        body = block.group(1)
+        self.assertIn("background: rgba(239, 68, 68, 0.12)", body)
+        self.assertIn("color: var(--destructive-fg)", body)
+        self.assertNotIn("0.92", body)
 
-    def test_btn_ok_is_solid_green(self):
+    def test_btn_ok_matches_soft_tint_style(self):
         css = CSS.read_text(encoding="utf-8")
         block = re.search(r"(?ms)^\.btn-ok\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
-        self.assertIn("background: rgba(22, 163, 74, 0.92)", block.group(1))
+        body = block.group(1)
+        self.assertIn("background: rgba(34, 197, 94, 0.12)", body)
+        self.assertIn("color: var(--ok-fg)", body)
 
-    def test_btn_warn_is_solid_yellow(self):
+    def test_btn_warn_matches_soft_tint_style(self):
         css = CSS.read_text(encoding="utf-8")
         block = re.search(r"(?ms)^\.btn-warn\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
-        self.assertIn("background: rgba(234, 179, 8, 0.95)", block.group(1))
+        body = block.group(1)
+        self.assertIn("background: rgba(234, 179, 8, 0.12)", body)
+        self.assertIn("color: var(--warn-fg)", body)
 
     def test_modal_above_chrome(self):
         css = CSS.read_text(encoding="utf-8")
@@ -118,17 +125,34 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
 
     def test_select_has_up_down_chevron_opposite_title(self):
         css = CSS.read_text(encoding="utf-8")
-        self.assertIn("M5 6.2L8 3.5 11 6.2", css)
-        self.assertIn("M5 9.8L8 12.5 11 9.8", css)
+        self.assertIn("M4.5 6L8 3l3.5 3", css)
+        self.assertIn("M4.5 10L8 13l3.5-3", css)
         self.assertIn("background-position: left 12px center", css)
+        self.assertIn("background-color: #09090b", css)
+        # light theme must not wipe the chevron via background shorthand
+        self.assertRegex(css, r"html\[data-theme=\"light\"\]\s+select\s*\{[^}]*background-image:")
 
     def test_kebab_covers_tablet_and_overflow(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn("@media (max-width: 1100px)", css)
         self.assertIn(".table-wrap.force-kebab .row-actions-toggle", css)
+        self.assertIn(".row-actions-menu.is-ported", css)
         js = JS.read_text(encoding="utf-8")
         self.assertIn("refreshForceKebab", js)
         self.assertIn("force-kebab", js)
+        self.assertIn("is-ported", js)
+        self.assertIn("rowMenuHomes", js)
+
+    def test_footer_is_compact(self):
+        css = CSS.read_text(encoding="utf-8")
+        foot = re.search(r"(?ms)^\.site-footer\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(foot)
+        body = foot.group(1)
+        self.assertIn("margin-top: 16px", body)
+        self.assertIn("padding-top: 10px", body)
+        star = re.search(r"(?ms)^a\.btn\.btn-star\s*,\s*\.btn-star\s*\{|^\.btn-star,\s*\na\.btn\.btn-star\s*\{|^\.btn-star,\s*a\.btn\.btn-star\s*\{([^}]+)\}", css)
+        # star button should be shorter than primary --btn-h
+        self.assertIn("min-height: 28px", css)
 
     def test_block_button_is_warn_update_is_ok(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")

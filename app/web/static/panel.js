@@ -135,49 +135,94 @@
       document.querySelectorAll('.table-wrap, .section-tabs').forEach(el => ro.observe(el));
     }
 
-    /* Mobile row action menus (three-dot) — fixed overlay above cards/tables */
+    /* Mobile row action menus (three-dot) — ported overlay, corner-aligned, inward */
+    const rowMenuHomes = new WeakMap();
+    function restoreRowMenu(menu){
+      if (!menu) return;
+      const home = rowMenuHomes.get(menu);
+      menu.classList.remove('is-ported');
+      menu.style.top = '';
+      menu.style.left = '';
+      menu.style.right = '';
+      menu.style.bottom = '';
+      menu.style.maxHeight = '';
+      if (home && home.parent) {
+        if (home.next && home.next.parentNode === home.parent) {
+          home.parent.insertBefore(menu, home.next);
+        } else {
+          home.parent.appendChild(menu);
+        }
+      }
+    }
     function closeRowActions(){
       document.querySelectorAll('.row-actions.open').forEach(el => {
         el.classList.remove('open');
         const btn = el.querySelector('.row-actions-toggle');
         if (btn) btn.setAttribute('aria-expanded', 'false');
-        const menu = el.querySelector('.row-actions-menu');
-        if (menu) {
-          menu.style.top = '';
-          menu.style.left = '';
-          menu.style.right = '';
-          menu.style.bottom = '';
-        }
       });
+      document.querySelectorAll('.row-actions-menu.is-ported').forEach(restoreRowMenu);
     }
     function placeRowMenu(wrap){
       if (!wrap) return;
       const btn = wrap.querySelector('.row-actions-toggle');
-      const menu = wrap.querySelector('.row-actions-menu');
+      let menu = wrap.querySelector('.row-actions-menu');
+      if (!menu && wrap.dataset.raId) {
+        menu = document.querySelector('.row-actions-menu.is-ported[data-owner="' + wrap.dataset.raId + '"]');
+      }
       if (!btn || !menu) return;
-      const gap = 6;
+      if (!wrap.dataset.raId) {
+        wrap.dataset.raId = 'ra-' + Math.random().toString(36).slice(2, 9);
+      }
+      if (!rowMenuHomes.has(menu)) {
+        rowMenuHomes.set(menu, { parent: menu.parentNode, next: menu.nextSibling });
+      }
+      menu.dataset.owner = wrap.dataset.raId;
+      document.body.appendChild(menu);
+      menu.classList.add('is-ported');
+
+      const gap = 4;
       const pad = 8;
       const rect = btn.getBoundingClientRect();
-      /* measure after display:flex */
+      /* measure while visible */
       menu.style.top = '0px';
       menu.style.left = '0px';
       menu.style.right = 'auto';
       menu.style.bottom = 'auto';
-      const mw = menu.offsetWidth || 176;
-      const mh = menu.offsetHeight || 120;
+      menu.style.maxHeight = '';
+      const mw = Math.max(menu.offsetWidth || 168, 168);
+      let mh = menu.offsetHeight || 120;
       const vw = window.innerWidth;
       const vh = window.innerHeight;
-      let left = rect.right - mw;
+
+      /* Inward: actions sit on the inline-end (physical left in RTL). Open toward table center (right). */
+      let left = rect.left;
+      if (left + mw > vw - pad) {
+        left = rect.right - mw; /* flip if needed */
+      }
       if (left < pad) left = pad;
       if (left + mw > vw - pad) left = Math.max(pad, vw - pad - mw);
+
       const spaceBelow = vh - rect.bottom - gap - pad;
       const spaceAbove = rect.top - gap - pad;
       let top;
-      if (spaceBelow >= Math.min(mh, 160) || spaceBelow >= spaceAbove) {
-        top = Math.min(rect.bottom + gap, vh - pad - Math.min(mh, vh - 2 * pad));
+      const openDown = spaceBelow >= Math.min(mh, 140) || spaceBelow >= spaceAbove;
+      if (openDown) {
+        const avail = Math.max(80, spaceBelow);
+        if (mh > avail) {
+          menu.style.maxHeight = Math.floor(avail) + 'px';
+          mh = menu.offsetHeight || avail;
+        }
+        top = rect.bottom + gap;
       } else {
-        top = Math.max(pad, rect.top - gap - mh);
+        const avail = Math.max(80, spaceAbove);
+        if (mh > avail) {
+          menu.style.maxHeight = Math.floor(avail) + 'px';
+          mh = menu.offsetHeight || avail;
+        }
+        top = rect.top - gap - mh;
       }
+      top = Math.max(pad, Math.min(top, vh - pad - Math.min(mh, vh - 2 * pad)));
+
       menu.style.top = Math.round(top) + 'px';
       menu.style.left = Math.round(left) + 'px';
       menu.style.right = 'auto';
@@ -198,7 +243,7 @@
         }
         return;
       }
-      if (!e.target.closest('.row-actions')) {
+      if (!e.target.closest('.row-actions') && !e.target.closest('.row-actions-menu')) {
         closeRowActions();
       }
     });
