@@ -1,4 +1,4 @@
-"""Account security — change web panel username / password (admin + reseller)."""
+"""Account security — change web panel username / password (admin + reseller + pg_staff)."""
 
 from __future__ import annotations
 
@@ -112,6 +112,33 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
                 return _err(str(e))
             return _refresh_session(request, staff, username=saved)
 
+        if role == "pg_staff":
+            from app.services.pg_staff_access import (
+                access_by_web_username,
+                change_staff_credentials,
+            )
+
+            web_u = (staff.get("username") or "").strip().lower()
+            row = await access_by_web_username(session, web_u)
+            if not row or not row.is_active:
+                return RedirectResponse("/logout", status_code=303)
+            updated, serr = await change_staff_credentials(
+                session,
+                row,
+                old_username=old_u,
+                current_password=cur_pass,
+                new_username=new_u,
+                new_password=new_pass,
+            )
+            if serr:
+                return _err(serr)
+            return _refresh_session(
+                request,
+                staff,
+                username=updated.web_username,
+                pv=(updated.web_password_hash or "")[:24],
+            )
+
         if role != "reseller":
             return RedirectResponse("/logout", status_code=303)
 
@@ -133,6 +160,8 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
             return _err(uerr)
 
         if cleaned != profile.web_username:
+            from app.services.pg_staff_access import access_by_web_username
+
             clash = await session.execute(
                 select(ResellerProfile).where(
                     ResellerProfile.web_username == cleaned,
@@ -140,6 +169,8 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
                 )
             )
             if clash.scalar_one_or_none():
+                return _err("این نام کاربری قبلاً گرفته شده")
+            if await access_by_web_username(session, cleaned):
                 return _err("این نام کاربری قبلاً گرفته شده")
             admin_u = (load_web_admin().get("username") or "").strip().lower()
             if cleaned == admin_u:
@@ -182,6 +213,9 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
                 return _err(str(e))
             return _refresh_session(request, staff, username=saved)
 
+        if role == "pg_staff":
+            return _err("از فرم یکپارچه تغییر یوزر و رمز استفاده کنید")
+
         if role != "reseller":
             return RedirectResponse("/logout", status_code=303)
 
@@ -202,6 +236,10 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
             )
         )
         if clash.scalar_one_or_none():
+            return _err("این نام کاربری قبلاً گرفته شده")
+        from app.services.pg_staff_access import access_by_web_username
+
+        if await access_by_web_username(session, cleaned):
             return _err("این نام کاربری قبلاً گرفته شده")
         admin_u = (load_web_admin().get("username") or "").strip().lower()
         if cleaned == admin_u:
@@ -241,6 +279,9 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
             return _refresh_session(
                 request, staff, username=load_web_admin().get("username") or staff.get("username") or "admin"
             )
+
+        if role == "pg_staff":
+            return _err("از فرم یکپارچه تغییر یوزر و رمز استفاده کنید")
 
         if role != "reseller":
             return RedirectResponse("/logout", status_code=303)

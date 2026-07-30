@@ -842,23 +842,39 @@ def register_pg_pages(
         )
 
     @app.get("/pg/admins", response_class=HTMLResponse)
-    async def pg_admins(request: Request, staff: dict = Depends(require_admin)):
+    async def pg_admins(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session=Depends(get_db),
+    ):
+        from app.services.pg_staff_access import access_map_by_pg
+
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         admins = []
         roles = []
+        web_access = {}
         try:
             pg = get_pg()
             admins = await pg.get_admins()
             if not admins:
                 admins = await pg.get_admins_simple()
             roles = await pg.get_admin_roles()
+            web_access = await access_map_by_pg(session)
         except Exception as e:
             err = str(e)
         return render(
             request,
             "pg_admins.html",
-            _pg_ctx(staff, admins=admins, pg_roles=roles, flash_err=err, flash_ok=ok, active="pg_admins"),
+            _pg_ctx(
+                staff,
+                admins=admins,
+                pg_roles=roles,
+                web_access=web_access,
+                flash_err=err,
+                flash_ok=ok,
+                active="pg_admins",
+            ),
         )
 
     @app.post("/pg/admins")
@@ -894,13 +910,93 @@ def register_pg_pages(
                 return RedirectResponse(f"/pg/admins?err={_q(e)}", status_code=303)
         return RedirectResponse(f"/pg/admins?ok={_q('ادمین پنل ساخته شد')}", status_code=303)
 
+    @app.post("/pg/admins/{username}/web-access")
+    async def pg_admins_web_access(
+        username: str,
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session=Depends(get_db),
+    ):
+        from app.services.pg_staff_access import upsert_web_access
+
+        form = await request.form()
+        web_username = str(form.get("web_username") or "").strip()
+        web_password = str(form.get("web_password") or "")
+        note = str(form.get("note") or "").strip()
+        pg_u = (username or "").strip()
+        if not pg_u:
+            return RedirectResponse(f"/pg/admins?err={_q('نام ادمین نامعتبر است')}", status_code=303)
+        try:
+            admin = await get_pg().get_admin(pg_u)
+        except Exception as e:
+            return RedirectResponse(f"/pg/admins?err={_q(e)}", status_code=303)
+        if not admin:
+            return RedirectResponse(
+                f"/pg/admins?err={_q('این ادمین در پاسارگارد یافت نشد')}",
+                status_code=303,
+            )
+        row, err = await upsert_web_access(
+            session,
+            pg_username=pg_u,
+            web_username=web_username,
+            password=web_password,
+            note=note,
+            is_active=True,
+        )
+        if err:
+            return RedirectResponse(f"/pg/admins?err={_q(err)}", status_code=303)
+        msg = f"دسترسی وب‌پنل برای «{row.web_username}» ذخیره شد"
+        return RedirectResponse(f"/pg/admins?ok={_q(msg)}", status_code=303)
+
+    @app.post("/pg/admins/{username}/web-access/revoke")
+    async def pg_admins_web_access_revoke(
+        username: str,
+        staff: dict = Depends(require_admin),
+        session=Depends(get_db),
+    ):
+        from app.services.pg_staff_access import revoke_web_access
+
+        ok = await revoke_web_access(session, username)
+        if not ok:
+            return RedirectResponse(
+                f"/pg/admins?err={_q('دسترسی وب برای این ادمین وجود نداشت')}",
+                status_code=303,
+            )
+        return RedirectResponse(f"/pg/admins?ok={_q('دسترسی وب‌پنل حذف شد')}", status_code=303)
+
+    @app.post("/pg/admins/{username}/web-access/toggle")
+    async def pg_admins_web_access_toggle(
+        username: str,
+        staff: dict = Depends(require_admin),
+        session=Depends(get_db),
+    ):
+        from app.services.pg_staff_access import access_by_pg_username, set_active
+
+        row = await access_by_pg_username(session, username)
+        if not row:
+            return RedirectResponse(
+                f"/pg/admins?err={_q('دسترسی وب برای این ادمین وجود ندارد')}",
+                status_code=303,
+            )
+        was_active = bool(row.is_active)
+        await set_active(session, username, not was_active)
+        msg = "دسترسی وب غیرفعال شد" if was_active else "دسترسی وب فعال شد"
+        return RedirectResponse(f"/pg/admins?ok={_q(msg)}", status_code=303)
+
     @app.post("/pg/admins/{username}/delete")
     async def pg_admins_delete(
         username: str,
         staff: dict = Depends(require_admin),
+        session=Depends(get_db),
     ):
+        from app.services.pg_staff_access import revoke_web_access
+
         try:
             await get_pg().delete_admin(username)
         except Exception as e:
             return RedirectResponse(f"/pg/admins?err={_q(e)}", status_code=303)
+        try:
+            await revoke_web_access(session, username)
+        except Exception:
+            pass
         return RedirectResponse(f"/pg/admins?ok={_q('حذف شد')}", status_code=303)

@@ -76,25 +76,25 @@
   <a href="/pg" class="{% if active=='pg' %}active{% endif %}">نمای کلی</a>
   {% endif %}
   {% if admin or 'pg_users' in perms %}
-  <a href="/pg/users" class="{% if active=='pg_users' %}active{% endif %}">کاربران پنل</a>
+  <a href="/pg/users" class="{% if active=='pg_users' %}active{% endif %}">کاربران</a>
+  {% endif %}
+  {% if admin %}
+  <a href="/pg/admins" class="{% if active=='pg_admins' %}active{% endif %}">ادمین</a>
+  {% endif %}
+  {% if admin or 'pg_nodes' in perms %}
+  <a href="/pg/nodes" class="{% if active=='pg_nodes' %}active{% endif %}">نود</a>
+  {% endif %}
+  {% if admin or 'pg_groups' in perms %}
+  <a href="/pg/groups" class="{% if active=='pg_groups' %}active{% endif %}">گروه</a>
+  {% endif %}
+  {% if admin or 'pg_hosts' in perms %}
+  <a href="/pg/hosts" class="{% if active=='pg_hosts' %}active{% endif %}">هاست</a>
   {% endif %}
   {% if admin or 'pg_templates' in perms %}
   <a href="/pg/templates" class="{% if active=='pg_templates' %}active{% endif %}">تمپلیت</a>
   {% endif %}
-  {% if admin or 'pg_groups' in perms %}
-  <a href="/pg/groups" class="{% if active=='pg_groups' %}active{% endif %}">گروه‌ها</a>
-  {% endif %}
-  {% if admin or 'pg_hosts' in perms %}
-  <a href="/pg/hosts" class="{% if active=='pg_hosts' %}active{% endif %}">هاست‌ها</a>
-  {% endif %}
   {% if admin or 'pg_inbounds' in perms %}
-  <a href="/pg/inbounds" class="{% if active=='pg_inbounds' %}active{% endif %}">اینباندها</a>
-  {% endif %}
-  {% if admin or 'pg_nodes' in perms %}
-  <a href="/pg/nodes" class="{% if active=='pg_nodes' %}active{% endif %}">نودها</a>
-  {% endif %}
-  {% if admin %}
-  <a href="/pg/admins" class="{% if active=='pg_admins' %}active{% endif %}">ادمین‌ها</a>
+  <a href="/pg/inbounds" class="{% if active=='pg_inbounds' %}active{% endif %}">اینباند</a>
   {% endif %}
 </div>
 {%- endmacro %}

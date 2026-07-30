@@ -9,6 +9,50 @@
   </div>
 </div>
 
+{% if pg_limits and pg_limits.ready %}
+<div class="card">
+  <h2>محدودیت پاسارگارد{% if pg_limits.username %} · <span dir="ltr">{{ pg_limits.username }}</span>{% endif %}</h2>
+  {% if pg_limits.role_name %}
+  <p class="muted">نقش: {{ pg_limits.role_name }}{% if pg_limits.status_label %} · وضعیت: {{ pg_limits.status_label }}{% endif %}</p>
+  {% elif pg_limits.status_label %}
+  <p class="muted">وضعیت: {{ pg_limits.status_label }}</p>
+  {% endif %}
+  <div class="stats-grid" style="margin:0">
+    {% if pg_limits.users and pg_limits.users.has_limit %}
+    <div class="stat">
+      <div class="stat-top"><span>کاربران VPN</span></div>
+      <strong>{{ pg_limits.users.used_text }} / {{ pg_limits.users.limit_text }}</strong>
+      <small class="muted">باقی‌مانده: {{ pg_limits.users.remain_text }}</small>
+      <div class="meter" aria-hidden="true"><i style="width:{{ '%.1f'|format(pg_limits.users.pct or 0) }}%"></i></div>
+    </div>
+    {% endif %}
+    {% if pg_limits.traffic and pg_limits.traffic.has_limit %}
+    <div class="stat">
+      <div class="stat-top"><span>حجم</span></div>
+      <strong>{{ pg_limits.traffic.used_text }} / {{ pg_limits.traffic.limit_text }}</strong>
+      <small class="muted">باقی‌مانده: {{ pg_limits.traffic.remain_text }}</small>
+      <div class="meter" aria-hidden="true"><i style="width:{{ '%.1f'|format(pg_limits.traffic.pct or 0) }}%"></i></div>
+    </div>
+    {% endif %}
+    {% if pg_limits.time and pg_limits.time.has_limit %}
+    <div class="stat">
+      <div class="stat-top"><span>زمان</span></div>
+      <strong>{{ pg_limits.time.remain_text }}</strong>
+      {% if pg_limits.time.expire_text %}
+      <small class="muted">انقضا: {{ pg_limits.time.expire_text }}</small>
+      {% endif %}
+      {% if pg_limits.time.pct is not none %}
+      <div class="meter" aria-hidden="true"><i style="width:{{ '%.1f'|format(pg_limits.time.pct or 0) }}%"></i></div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% if staff.role == 'reseller' and 'pg_overview' in (staff.get('pg_permissions') or []) %}
+  <p class="muted" style="margin-top:.75rem"><a href="/pg">جزئیات در نمای کلی پاسارگارد</a></p>
+  {% endif %}
+</div>
+{% endif %}
+
 <div class="stats-grid">
   <div class="stat">
     <div class="stat-top">
@@ -62,7 +106,7 @@
   <div class="quick-links">
     <a href="/payments">پرداخت‌ها{% if stats.pending %} ({{ stats.pending }}){% endif %}</a>
     <a href="/orders">سفارش‌ها</a>
-    <a href="/tickets">تیکت‌ها{% if stats.tickets %} ({{ stats.tickets }}){% endif %}</a>
+    <a href="/tickets">پشتیبانی{% if stats.tickets %} ({{ stats.tickets }}){% endif %}</a>
     {% if staff.role == 'admin' or 'plans' in (staff.get('permissions') or []) %}
     <a class="desk-only" href="/plans">پلن‌ها</a>
     {% endif %}

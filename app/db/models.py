@@ -335,3 +335,20 @@ class WalletTransaction(Base):
     balance_after: Mapped[int] = mapped_column(Integer)
     reason: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PgStaffAccess(Base):
+    """Web-panel login for an existing PasarGuard admin (owner-granted)."""
+
+    __tablename__ = "pg_staff_access"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pg_username: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    web_username: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    web_password_hash: Mapped[str] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

@@ -24,13 +24,13 @@ PG_ADMIN_ONLY = ("pg_admins",)
 
 PG_FEATURE_LABELS: dict[str, str] = {
     "pg_overview": "نمای کلی",
-    "pg_users": "کاربران VPN",
-    "pg_templates": "تمپلیت‌ها",
-    "pg_groups": "گروه‌ها",
-    "pg_hosts": "هاست‌ها",
-    "pg_inbounds": "اینباندها",
-    "pg_nodes": "نودها",
-    "pg_admins": "ادمین‌ها",
+    "pg_users": "کاربران",
+    "pg_templates": "تمپلیت",
+    "pg_groups": "گروه",
+    "pg_hosts": "هاست",
+    "pg_inbounds": "اینباند",
+    "pg_nodes": "نود",
+    "pg_admins": "ادمین",
 }
 
 # Short-lived cache: role_id → (monotonic_at, features, raw_role)

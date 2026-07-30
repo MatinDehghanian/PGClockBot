@@ -177,7 +177,7 @@ def _status_meta(raw: Any) -> tuple[str | None, str | None]:
 
 
 async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
-    """Metrics for a reseller's own PG admin account."""
+    """Metrics for a staff member's own PG admin account (reseller or pg_staff)."""
     owner = str(staff.get("pg_admin_username") or "").strip()
     out: dict[str, Any] = {
         "username": owner or None,
@@ -190,9 +190,10 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
         "status_label": None,
         "status_badge": None,
         "lifetime_text": None,
+        "role_name": None,
     }
     if not owner:
-        out["error"] = "ادمین پاسارگارد برای این نماینده تنظیم نشده است"
+        out["error"] = "ادمین پاسارگارد برای این حساب تنظیم نشده است"
         return out
 
     try:
@@ -212,11 +213,32 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
                 role = None
 
         limits = _role_limits(admin, role)
-        total_users = _as_int(admin.get("total_users")) or 0
-        max_users = _as_int(limits.get("max_users"))
-        used_traffic = _as_int(admin.get("used_traffic")) or 0
-        data_limit = _as_int(admin.get("data_limit"))
+        total_users = _as_int(admin.get("total_users")) or _as_int(admin.get("users_count")) or 0
+        max_users = (
+            _as_int(limits.get("max_users"))
+            or _as_int(limits.get("users_max"))
+            or _as_int(admin.get("max_users"))
+        )
+        used_traffic = (
+            _as_int(admin.get("used_traffic"))
+            or _as_int(admin.get("traffic_used"))
+            or 0
+        )
+        data_limit = (
+            _as_int(admin.get("data_limit"))
+            or _as_int(limits.get("data_limit"))
+            or _as_int(limits.get("max_traffic"))
+            or _as_int(limits.get("traffic_limit"))
+        )
         lifetime = _as_int(admin.get("lifetime_used_traffic"))
+
+        # Surface role name for UI
+        role_name = None
+        if isinstance(role, dict):
+            role_name = role.get("name") or role.get("title")
+        elif isinstance(admin.get("role"), dict):
+            role_name = admin["role"].get("name") or admin["role"].get("title")
+        out["role_name"] = role_name
 
         out["ready"] = True
         status_raw = admin.get("status") or ("limited" if admin.get("is_limited") else None)

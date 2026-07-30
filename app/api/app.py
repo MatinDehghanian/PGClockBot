@@ -248,7 +248,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ) -> dict:
         user = get_session_user(request)
-        if not user or user.get("role") not in {"admin", "reseller"}:
+        if not user or user.get("role") not in {"admin", "reseller", "pg_staff"}:
             raise NotAuthenticated()
         if user.get("role") == "reseller":
             from sqlalchemy import select
@@ -281,6 +281,33 @@ def create_api_app(lifespan=None) -> FastAPI:
 
                 features, role = await resolve_reseller_pg_features(int(profile.pg_role_id))
                 user = enrich_staff_pg_from_role(user, features, role)
+        elif user.get("role") == "pg_staff":
+            from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
+            from app.services.pg_staff_access import (
+                access_by_web_username,
+                resolve_pg_role_id_for_admin,
+            )
+
+            web_u = (user.get("username") or "").strip().lower()
+            row = await access_by_web_username(session, web_u)
+            if not row or not row.is_active:
+                raise NotAuthenticated()
+            pwd = (row.web_password_hash or "")[:24]
+            if pwd and user.get("pv") != pwd:
+                raise NotAuthenticated()
+            user = dict(user)
+            user["permissions"] = []
+            user["pg_admin_username"] = row.pg_username
+            user["pg_staff_id"] = int(row.id)
+            role_id = await resolve_pg_role_id_for_admin(row.pg_username)
+            if role_id:
+                user["pg_role_id"] = int(role_id)
+            features, role = await resolve_reseller_pg_features(user.get("pg_role_id"))
+            # Owner-equivalent PG admins still get mapped features via is_owner on role
+            user = enrich_staff_pg_from_role(user, features, role)
+            if not (user.get("pg_permissions") or []):
+                # No mapped features → deny panel use
+                raise NotAuthenticated()
         return user
 
     async def require_admin(
@@ -442,13 +469,22 @@ def create_api_app(lifespan=None) -> FastAPI:
                 user = get_signer().loads(cookie, max_age=SESSION_MAX_AGE)
         except Exception:
             user = None
-        if user and user.get("role") == "reseller":
-            pg = user.get("pg_permissions") or []
+        role = (user or {}).get("role")
+        if role in {"reseller", "pg_staff"}:
+            pg = (user or {}).get("pg_permissions") or []
+            if role == "pg_staff":
+                if "pg_overview" in pg:
+                    return RedirectResponse("/pg", status_code=303)
+                if "pg_users" in pg:
+                    return RedirectResponse("/pg/users", status_code=303)
+                if pg:
+                    return RedirectResponse("/pg", status_code=303)
+                return RedirectResponse("/logout", status_code=303)
             if "pg_users" in pg:
                 return RedirectResponse("/pg/users", status_code=303)
             if pg:
                 return RedirectResponse("/pg", status_code=303)
-            perms = user.get("permissions") or []
+            perms = (user or {}).get("permissions") or []
             for path, key in (
                 ("/dashboard", "dashboard"),
                 ("/plans", "plans"),
@@ -720,6 +756,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse("/login", status_code=303)
         if user.get("role") == "admin":
             return RedirectResponse("/home", status_code=303)
+        if user.get("role") == "pg_staff":
+            return RedirectResponse("/pg", status_code=303)
         return RedirectResponse("/dashboard", status_code=303)
 
     @app.get("/login", response_class=HTMLResponse)
@@ -730,6 +768,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         if sess:
             if sess.get("role") == "admin":
                 return RedirectResponse("/home", status_code=303)
+            if sess.get("role") == "pg_staff":
+                return RedirectResponse("/pg", status_code=303)
             return RedirectResponse("/dashboard", status_code=303)
         return render(
             request,
@@ -831,6 +871,46 @@ def create_api_app(lifespan=None) -> FastAPI:
                     pg_writes = map_pg_role_writes(pg_role)
                     pg_role_id = profile.pg_role_id
                     reseller_pv = (profile.web_password_hash or "")[:24]
+            if not role:
+                from app.services.pg_access import (
+                    map_pg_role_writes,
+                    resolve_reseller_pg_features,
+                    role_access_limits,
+                    role_user_actions,
+                )
+                from app.services.pg_staff_access import (
+                    access_by_web_username,
+                    resolve_pg_role_id_for_admin,
+                )
+
+                staff_row = await access_by_web_username(session, u.strip().lower())
+                if (
+                    staff_row
+                    and staff_row.is_active
+                    and verify_password_hash(p, staff_row.web_password_hash)
+                ):
+                    role = "pg_staff"
+                    display = staff_row.web_username
+                    permissions = []
+                    pg_admin_username = staff_row.pg_username
+                    pg_role_id = await resolve_pg_role_id_for_admin(staff_row.pg_username)
+                    pg_permissions, pg_role = await resolve_reseller_pg_features(pg_role_id)
+                    pg_user_actions = role_user_actions(pg_role)
+                    pg_access = role_access_limits(pg_role)
+                    pg_writes = map_pg_role_writes(pg_role)
+                    reseller_pv = (staff_row.web_password_hash or "")[:24]
+                    if not pg_permissions:
+                        for k in limit_keys:
+                            _login_fail(k)
+                        return render(
+                            request,
+                            "login.html",
+                            {
+                                "error": "نقش پاسارگارد این ادمین هیچ دسترسی قابل‌نمایشی در وب‌پنل ندارد.",
+                                "username": typed_user,
+                            },
+                            status_code=400,
+                        )
 
         if not role:
             for k in limit_keys:
@@ -859,7 +939,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             payload["bot_user_id"] = bot_user_id
         if pg_admin_username:
             payload["pg_admin_username"] = pg_admin_username
-        if role == "reseller":
+        if role in {"reseller", "pg_staff"}:
             payload["pg_user_actions"] = pg_user_actions
             payload["pg_access"] = pg_access
             payload["pg_writes"] = pg_writes
@@ -868,7 +948,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             if reseller_pv:
                 payload["pv"] = reseller_pv
         home = "/home" if role == "admin" else "/dashboard"
-        if role == "reseller":
+        if role == "pg_staff":
+            home = "/pg" if "pg_overview" in pg_permissions else (
+                "/pg/users" if "pg_users" in pg_permissions else "/pg"
+            )
+        elif role == "reseller":
             home = ""
             for path, key in (
                 ("/dashboard", "dashboard"),
@@ -968,6 +1052,20 @@ def create_api_app(lifespan=None) -> FastAPI:
             ord_q = ord_q.where(Order.reseller_id == rid)
         recent_payments = list((await session.execute(pay_q)).scalars().all())
         recent_orders = list((await session.execute(ord_q)).scalars().all())
+        pg_limits = None
+        if staff.get("role") == "reseller" and staff.get("pg_admin_username"):
+            from app.services.pg_overview import build_reseller_pg_overview
+
+            ov = await build_reseller_pg_overview(staff)
+            if ov.get("ready"):
+                limited = False
+                for key in ("users", "traffic", "time"):
+                    meter = ov.get(key) or {}
+                    if isinstance(meter, dict) and meter.get("has_limit"):
+                        limited = True
+                        break
+                if limited or ov.get("status_label"):
+                    pg_limits = ov
         return render(
             request,
             "dashboard.html",
@@ -984,6 +1082,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 },
                 "recent_payments": recent_payments,
                 "recent_orders": recent_orders,
+                "pg_limits": pg_limits,
             },
         )
 

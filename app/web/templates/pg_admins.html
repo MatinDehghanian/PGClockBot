@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% from "macros.html" import switch, pg_tabs %}
-{% block title %}ادمین‌ها{% endblock %}
+{% block title %}ادمین{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>ادمین‌ها</h1>
-    <p>ادمین‌های خودِ پاسارگارد — نقش‌ها را از پنل پاسارگارد تعریف کنید و اینجا نسبت دهید</p>
+    <h1>ادمین</h1>
+    <p>ادمین‌های پاسارگارد — نقش‌ها را از پنل پاسارگارد تعریف کنید و اینجا نسبت دهید. برای ورود به وب‌پنل، یوزر و رمز جدا بسازید.</p>
   </div>
   <button type="button" class="btn" data-modal-open="modal-pg-admin-create">ساخت ادمین</button>
 </div>
@@ -18,12 +18,23 @@
   {% else %}
   <div class="table-wrap">
   <table>
-    <thead><tr><th>شناسه</th><th>نام کاربری</th><th>نقش / جزئیات</th><th></th></tr></thead>
+    <thead>
+      <tr>
+        <th>شناسه</th>
+        <th>نام کاربری</th>
+        <th>نقش / جزئیات</th>
+        <th>دسترسی وب‌پنل</th>
+        <th></th>
+      </tr>
+    </thead>
     <tbody>
     {% for a in admins %}
+      {% set uname = (a.get('username') or '')|string %}
+      {% set key = uname|lower %}
+      {% set wa = (web_access or {}).get(key) %}
       <tr>
         <td class="mono">{{ a.get('id') or '—' }}</td>
-        <td>{{ a.get('username') or '—' }}</td>
+        <td dir="ltr">{{ uname or '—' }}</td>
         <td class="mono muted">
           {% if a.get('role') and a.get('role').get('name') %}{{ a.get('role').get('name') }} · {% endif %}
           {% if a.get('is_sudo') %}sudo · {% endif %}
@@ -31,8 +42,34 @@
           {% if a.get('note') %}<br><small class="muted">{{ a.get('note') }}</small>{% endif %}
         </td>
         <td>
-          {% if a.get('username') %}
-          <form method="post" action="/pg/admins/{{ a.get('username') }}/delete" onsubmit="return confirm('حذف شود؟')">
+          {% if wa %}
+          <div class="web-access-cell">
+            <span class="badge {% if wa.is_active %}approved{% else %}neutral{% endif %}">
+              {% if wa.is_active %}فعال{% else %}غیرفعال{% endif %}
+            </span>
+            <span class="mono" dir="ltr">{{ wa.web_username }}</span>
+            <div class="row-actions">
+              <button type="button" class="btn btn-sm btn-ghost"
+                data-modal-open="modal-web-{{ loop.index }}">ویرایش</button>
+              <form method="post" action="/pg/admins/{{ uname }}/web-access/toggle">
+                <button class="btn btn-sm btn-ghost" type="submit">
+                  {% if wa.is_active %}غیرفعال{% else %}فعال{% endif %}
+                </button>
+              </form>
+              <form method="post" action="/pg/admins/{{ uname }}/web-access/revoke"
+                onsubmit="return confirm('دسترسی وب‌پنل حذف شود؟')">
+                <button class="btn btn-sm btn-ghost" type="submit">حذف دسترسی</button>
+              </form>
+            </div>
+          </div>
+          {% else %}
+          <button type="button" class="btn btn-sm"
+            data-modal-open="modal-web-{{ loop.index }}">اعطای دسترسی وب</button>
+          {% endif %}
+        </td>
+        <td>
+          {% if uname %}
+          <form method="post" action="/pg/admins/{{ uname }}/delete" onsubmit="return confirm('حذف شود؟')">
             <button class="btn btn-ghost" type="submit">حذف</button>
           </form>
           {% endif %}
@@ -44,6 +81,45 @@
   </div>
   {% endif %}
 </div>
+
+{% for a in admins or [] %}
+{% set uname = (a.get('username') or '')|string %}
+{% if uname %}
+{% set key = uname|lower %}
+{% set wa = (web_access or {}).get(key) %}
+<div class="ui-modal" id="modal-web-{{ loop.index }}" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true">
+    <div class="ui-modal-head">
+      <h2>{% if wa %}ویرایش دسترسی وب{% else %}اعطای دسترسی وب‌پنل{% endif %}</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن">×</button>
+    </div>
+    <form method="post" action="/pg/admins/{{ uname }}/web-access" class="form-stack">
+      <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
+        — منوی وب‌پنل بر اساس نقش همین ادمین در پاسارگارد محدود می‌شود.</p>
+      <label class="form-field">نام کاربری وب‌پنل
+        <small class="muted">فقط برای ورود به این وب‌پنل؛ جدا از یوزر پاسارگارد</small>
+        <input name="web_username" required autocomplete="off" dir="ltr"
+          value="{{ wa.web_username if wa else '' }}"
+          placeholder="مثلاً staff1" />
+      </label>
+      <label class="form-field">رمز عبور وب‌پنل
+        <small class="muted">حداقل ۸ کاراکتر با حرف بزرگ/کوچک و کاراکتر خاص</small>
+        <input name="web_password" type="password" required autocomplete="new-password" />
+      </label>
+      <label class="form-field">یادداشت
+        <small class="muted">اختیاری — فقط در وب‌پنل ذخیره می‌شود</small>
+        <input name="note" value="{{ wa.note if wa and wa.note else '' }}" placeholder="دسترسی محدود فروش" />
+      </label>
+      <div class="actions">
+        <button class="btn" type="submit">ذخیره</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
 
 <div class="ui-modal" id="modal-pg-admin-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>

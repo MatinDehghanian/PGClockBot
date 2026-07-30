@@ -18,6 +18,9 @@
   {% if ov.username %}
   <div class="pg-admin-head">
     <strong class="pg-admin-name" dir="ltr">{{ ov.username }}</strong>
+    {% if ov.role_name %}
+    <span class="badge neutral">{{ ov.role_name }}</span>
+    {% endif %}
     {% if ov.status_label %}
     <span class="badge {{ ov.status_badge or 'neutral' }}">{{ ov.status_label }}</span>
     {% endif %}

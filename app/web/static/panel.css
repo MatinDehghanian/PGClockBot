@@ -2552,6 +2552,22 @@ body.modal-open { overflow: hidden; }
   color: #93c5fd;
   border-color: rgba(59, 130, 246, 0.35);
 }
+.role-tag-pg {
+  background: rgba(34, 197, 94, 0.14);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.web-access-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.web-access-cell .row-actions {
+  flex-wrap: wrap;
+  gap: 4px;
+}
 
 .pg-admin-head {
   display: flex;
@@ -3011,6 +3027,11 @@ html[data-theme="light"] .role-tag-reseller {
   background: rgba(37, 99, 235, 0.1);
   color: #1d4ed8;
   border-color: rgba(37, 99, 235, 0.3);
+}
+html[data-theme="light"] .role-tag-pg {
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+  border-color: rgba(22, 163, 74, 0.3);
 }
 html[data-theme="light"] .setup-progress span {
   background: rgba(24, 24, 27, 0.12);
