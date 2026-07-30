@@ -215,8 +215,12 @@ async def _load_admin_and_role(staff: dict) -> tuple[dict, dict | None]:
 
 
 def staff_needs_quota_check(staff: dict) -> bool:
-    """Owner web admin (role=admin) acts as sudo — no PG capacity gate."""
-    return staff.get("role") != "admin" and bool(str(staff.get("pg_admin_username") or "").strip())
+    """Owner web admin (role=admin) acts as sudo — no PG capacity gate.
+
+    Any non-admin staff must be checked — even when ``pg_admin_username`` is
+    missing (that case fails closed in ``_load_admin_and_role``).
+    """
+    return staff.get("role") != "admin"
 
 
 async def assert_can_create_user(
@@ -287,10 +291,16 @@ async def assert_reseller_can_deliver(
     expire_ts: int | None = None,
     from_template: bool = False,
 ) -> None:
-    """Quota check for shop delivery assigned to a reseller PG admin."""
+    """Quota check for shop delivery assigned to a reseller PG admin.
+
+    Fail closed when the shop has no PG admin link — otherwise create-as-owner
+    would bypass every role quota.
+    """
     uname = str(pg_admin_username or "").strip()
     if not uname:
-        return
+        raise PgQuotaError(
+            "ادمین پاسارگارد برای این فروشگاه تنظیم نشده است — تحویل ممکن نیست"
+        )
     staff = {
         "role": "reseller",
         "pg_admin_username": uname,
@@ -315,7 +325,9 @@ async def assert_reseller_can_renew(
     """Quota check for shop renewal modifying a reseller-owned user."""
     uname = str(pg_admin_username or "").strip()
     if not uname:
-        return
+        raise PgQuotaError(
+            "ادمین پاسارگارد برای این فروشگاه تنظیم نشده است — تمدید ممکن نیست"
+        )
     staff = {
         "role": "reseller",
         "pg_admin_username": uname,

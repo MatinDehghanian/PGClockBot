@@ -327,6 +327,13 @@ def register_pg_pages(
                 "نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی، عدد یا _ باشد (بدون فاصله و فارسی)",
                 modal="create",
             )
+        # Non-admin must have a PG admin identity — otherwise create-as-owner
+        # bypasses every role quota (max_users / volume / expire).
+        if not _is_admin(staff) and not _pg_owner(staff):
+            return _pg_form_err(
+                "ادمین پاسارگارد برای این حساب تنظیم نشده است",
+                modal="create",
+            )
         try:
             if mode == "template":
                 raw_tid = str(form.get("template_id") or form.get("pg_template_id") or "").strip()
@@ -407,26 +414,35 @@ def register_pg_pages(
             if not _is_admin(staff):
                 owner = _pg_owner(staff)
                 uid = created.get("id") if isinstance(created, dict) else None
-                if owner and uid:
-                    try:
-                        await get_pg().set_owner_by_id(int(uid), owner)
-                    except Exception as e:
+                if not owner:
+                    if uid:
                         try:
                             await get_pg().delete_user_by_id(int(uid))
                         except Exception:
                             pass
-                        msg = (
-                            e.user_message(fallback="خطا در تخصیص مالکیت کاربر")
-                            if isinstance(e, PasarGuardError)
-                            else str(e)
-                        )
-                        return _pg_form_err(
-                            f"کاربر ساخته شد ولی مالکیت ست نشد و حذف شد: {msg}",
-                            modal="create",
-                        )
-                elif owner and not uid:
+                    return _pg_form_err(
+                        "ادمین پاسارگارد برای این حساب تنظیم نشده است",
+                        modal="create",
+                    )
+                if not uid:
                     return _pg_form_err(
                         "کاربر ساخته شد ولی شناسه برگشت داده نشد — مالکیت قابل تنظیم نیست",
+                        modal="create",
+                    )
+                try:
+                    await get_pg().set_owner_by_id(int(uid), owner)
+                except Exception as e:
+                    try:
+                        await get_pg().delete_user_by_id(int(uid))
+                    except Exception:
+                        pass
+                    msg = (
+                        e.user_message(fallback="خطا در تخصیص مالکیت کاربر")
+                        if isinstance(e, PasarGuardError)
+                        else str(e)
+                    )
+                    return _pg_form_err(
+                        f"کاربر ساخته شد ولی مالکیت ست نشد و حذف شد: {msg}",
                         modal="create",
                     )
         except Exception as e:
@@ -841,6 +857,10 @@ def register_pg_pages(
     ):
         if not staff_pg_writes(staff)["hosts"]:
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه ساخت ندارید')}", status_code=303)
+        try:
+            await assert_can_mutate_owned_users(staff)
+        except PgQuotaError as qe:
+            return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
         addrs = _addr_set(address)
         if not addrs:
             return RedirectResponse(f"/pg/hosts?err={_q('آدرس هاست الزامی است')}", status_code=303)
@@ -864,6 +884,10 @@ def register_pg_pages(
         if not staff_pg_writes(staff)["hosts"]:
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه ندارید')}", status_code=303)
         try:
+            await assert_can_mutate_owned_users(staff)
+        except PgQuotaError as qe:
+            return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
+        try:
             host = await get_pg().get_host(host_id)
             disabled = bool(host.get("is_disabled"))
             await get_pg().set_host_disabled(host_id, not disabled)
@@ -875,6 +899,10 @@ def register_pg_pages(
     async def pg_hosts_delete(host_id: int, staff: dict = Depends(require_pg_perm("pg_hosts"))):
         if not staff_pg_writes(staff)["hosts"]:
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه حذف ندارید')}", status_code=303)
+        try:
+            await assert_can_mutate_owned_users(staff)
+        except PgQuotaError as qe:
+            return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
         try:
             await get_pg().delete_host(host_id)
         except Exception as e:
@@ -907,6 +935,10 @@ def register_pg_pages(
 
     @app.post("/pg/nodes/{node_id}/reconnect")
     async def pg_node_reconnect(node_id: int, staff: dict = Depends(require_pg_perm("pg_nodes"))):
+        try:
+            await assert_can_mutate_owned_users(staff)
+        except PgQuotaError as qe:
+            return RedirectResponse(f"/pg/nodes?err={_q(qe.message)}", status_code=303)
         try:
             await get_pg().reconnect_node(node_id)
         except Exception as e:

@@ -43,6 +43,11 @@ class StaffGateTests(unittest.TestCase):
     def test_pg_staff_needs_check(self):
         self.assertTrue(staff_needs_quota_check({"role": "pg_staff", "pg_admin_username": "a1"}))
 
+    def test_reseller_without_pg_link_still_needs_check(self):
+        """Missing PG link must not skip the gate (fail closed later)."""
+        self.assertTrue(staff_needs_quota_check({"role": "reseller"}))
+        self.assertTrue(staff_needs_quota_check({"role": "pg_staff", "pg_admin_username": ""}))
+
 
 class WriteGateTests(unittest.TestCase):
     def test_limited_blocks_write(self):

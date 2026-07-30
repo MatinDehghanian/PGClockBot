@@ -651,7 +651,15 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
 
         expire = int(time.time()) + plan.duration_days * 86400
 
-    if pg_owner:
+    # Reseller shop orders must always quota-check + assign ownership.
+    # Creating as owner without set_owner would bypass PasarGuard max_users.
+    profile: ResellerProfile | None = None
+    if order.reseller_id:
+        profile = (
+            await session.execute(
+                select(ResellerProfile).where(ResellerProfile.user_id == order.reseller_id)
+            )
+        ).scalar_one_or_none()
         try:
             await assert_reseller_can_deliver(
                 pg_admin_username=pg_owner,
@@ -689,11 +697,35 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             )
         )
 
+    pg_uid = pg_user.get("id")
+    # Fail closed: reseller delivery must transfer ownership or roll back the PG user.
+    if order.reseller_id:
+        owner_name = (pg_owner or "").strip()
+        if not owner_name or not pg_uid:
+            if pg_uid:
+                try:
+                    await pg.delete_user_by_id(int(pg_uid))
+                except Exception:
+                    pass
+            raise ValueError(
+                "کاربر ساخته شد ولی مالکیت قابل تنظیم نیست — تحویل لغو شد"
+            )
+        try:
+            await pg.set_owner_by_id(int(pg_uid), owner_name)
+        except Exception as e:
+            try:
+                await pg.delete_user_by_id(int(pg_uid))
+            except Exception:
+                pass
+            raise ValueError(
+                f"کاربر ساخته شد ولی مالکیت ست نشد و حذف شد: {e}"
+            ) from e
+
     sub_url = pg_user.get("subscription_url")
     service = UserService(
         bot_user_id=order.user_id,
         plan_id=plan.id,
-        pg_user_id=pg_user.get("id"),
+        pg_user_id=pg_uid,
         pg_username=pg_user.get("username", username),
         subscription_url=sub_url,
         subscription_token=extract_sub_token(sub_url),
@@ -702,21 +734,9 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
     session.add(service)
     await session.flush()
 
-    # assign owner for reseller if mapped
-    if order.reseller_id and service.pg_user_id:
-        profile = (
-            await session.execute(
-                select(ResellerProfile).where(ResellerProfile.user_id == order.reseller_id)
-            )
-        ).scalar_one_or_none()
-        if profile and profile.pg_admin_username:
-            try:
-                await pg.set_owner_by_id(service.pg_user_id, profile.pg_admin_username)
-            except Exception:
-                pass
-        if profile:
-            commission = int(order.amount * profile.commission_percent / 100)
-            profile.balance += commission
+    if profile is not None:
+        commission = int(order.amount * profile.commission_percent / 100)
+        profile.balance += commission
 
     await _consume_discount_code(session, order.discount_code)
 
@@ -796,7 +816,7 @@ async def apply_renewal(session: AsyncSession, order: Order, service: UserServic
 
         expire = int(time.time()) + plan.duration_days * 86400
 
-    if pg_owner:
+    if order.reseller_id:
         try:
             await assert_reseller_can_renew(
                 pg_admin_username=pg_owner,
