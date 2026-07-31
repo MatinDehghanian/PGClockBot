@@ -195,7 +195,7 @@
       document.body.appendChild(menu);
       menu.classList.add('is-ported');
 
-      const gap = 4;
+      const gap = 8; /* --space-1 */
       const pad = 8;
       const rect = btn.getBoundingClientRect();
       /* Full natural height — never scroll / clamp with max-height */

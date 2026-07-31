@@ -23,7 +23,7 @@ class PlansTitleActionsTests(unittest.TestCase):
 class UploadBoxContrastTests(unittest.TestCase):
     def test_image_setting_matches_body(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        block = css.split(".image-setting {\n  display: flex; flex-direction: column; gap: 8px;", 1)[1]
+        block = css.split(".image-setting {\n  display: flex; flex-direction: column; gap: var(--space-1);", 1)[1]
         block = block.split("}", 1)[0]
         self.assertIn("background: var(--background);", block)
 

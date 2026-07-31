@@ -100,15 +100,15 @@
         if (!data.services.length) html += '<p class="muted">سرویسی ندارید</p>';
         for (const s of data.services) {
           const url = esc(s.subscription_url || '');
-          html += `<div class="row" style="margin:8px 0"><div><strong>${esc(s.username)}</strong><br/><code>${url}</code></div>
-            <button class="btn secondary" style="width:auto;padding:8px 10px" data-svc="${Number(s.id) || 0}">جزئیات</button></div>`;
+          html += `<div class="row" style="margin: var(--space-1) 0"><div><strong>${esc(s.username)}</strong><br/><code>${url}</code></div>
+            <button class="btn secondary" style="width:auto;padding: var(--space-1) var(--space-1)" data-svc="${Number(s.id) || 0}">جزئیات</button></div>`;
         }
         html += '</div><div class="card"><h3>خرید پلن</h3><div class="grid">';
         for (const p of data.plans) {
           html += `<div class="row"><div><strong>${esc(p.name)}</strong><div class="muted">${esc(p.days)} روز · ${esc(p.gb ?? '∞')} GB</div></div>
             <div class="price">${esc(money(p.price))}</div></div>`;
         }
-        html += '</div><p class="muted" style="margin-top:12px">برای خرید از دکمه‌های ربات استفاده کنید؛ مینی‌اپ وضعیت و لینک را سریع نشان می‌دهد.</p></div>';
+        html += '</div><p class="muted" style="margin-top: var(--space-2)">برای خرید از دکمه‌های ربات استفاده کنید؛ مینی‌اپ وضعیت و لینک را سریع نشان می‌دهد.</p></div>';
         html += '<div class="card" id="detail" style="display:none"></div>';
         root.innerHTML = html;
         root.querySelectorAll('[data-svc]').forEach((btn) => {

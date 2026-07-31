@@ -27,11 +27,11 @@ class FooterRestore303Tests(unittest.TestCase):
         self.assertNotIn("--main-pad-", css)
         self.assertNotIn("html:has(.shell)", css)
         self.assertIn(
-            "padding: var(--page-title-gap) 32px calc(16px + var(--safe-bottom));",
+            "padding: var(--page-title-gap) 32px calc(var(--space-3) + var(--safe-bottom));",
             css,
         )
         self.assertIn(
-            "padding: var(--page-title-gap) 14px calc(16px + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-2) calc(var(--space-3) + var(--safe-bottom));",
             css,
         )
 
@@ -39,12 +39,15 @@ class FooterRestore303Tests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         side = css.split(".side {\n", 1)[1].split(".main {", 1)[0]
         self.assertIn("overflow-y: auto;", side)
-        self.assertIn("padding: calc(16px + var(--safe-top)) 12px calc(16px + var(--safe-bottom));", side)
+        self.assertIn(
+            "padding: calc(var(--space-3) + var(--safe-top)) var(--space-2) calc(var(--space-3) + var(--safe-bottom));",
+            side,
+        )
         self.assertNotIn("padding-bottom: var(--chrome-pad-bottom)", css)
 
     def test_site_footer_classic_sticky(self):
         css = CSS.read_text(encoding="utf-8")
-        self.assertIn(".site-footer {\n  margin-top: auto;\n  padding-top: 12px;", css)
+        self.assertIn(".site-footer {\n  margin-top: auto;\n  padding-top: var(--space-2);", css)
         foot = css.split(".site-footer {\n", 1)[1].split("}", 1)[0]
         self.assertNotIn("position: fixed", foot)
         self.assertNotIn("position: sticky", foot)

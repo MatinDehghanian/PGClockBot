@@ -27,7 +27,7 @@
       {{ switch_chip('tag_' ~ loop.index, tag, checked=(tag in selected), value=tag) }}
       {% endfor %}
     </div>
-    <div class="ui-switch-list" style="margin-top:14px">
+    <div class="ui-switch-list" style="margin-top: var(--space-2)">
       {{ switch('is_disabled', 'غیرفعال', checked=edit_group.get('is_disabled')) }}
     </div>
     <div class="actions">
