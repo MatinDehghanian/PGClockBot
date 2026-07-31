@@ -21,12 +21,16 @@ class PlansTitleActionsTests(unittest.TestCase):
 
 
 class UploadBoxContrastTests(unittest.TestCase):
-    def test_outer_matches_body_inner_muted(self):
+    def test_image_setting_matches_body(self):
+        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
+        block = css.split(".image-setting {\n  display: flex; flex-direction: column; gap: 8px;", 1)[1]
+        block = block.split("}", 1)[0]
+        self.assertIn("background: var(--background);", block)
+
+    def test_upload_outer_body_color(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         block = css.split(".upload-box {", 1)[1].split(".upload-box:hover", 1)[0]
         self.assertIn("background: var(--background);", block)
-        plus = css.split(".upload-box-plus {", 1)[1].split("}", 1)[0]
-        self.assertIn("background: var(--muted);", plus)
 
 
 class ForceJoinEntriesTests(unittest.TestCase):
@@ -64,11 +68,10 @@ class ForceJoinEntriesTests(unittest.TestCase):
 
 
 class BroadcastKebabTests(unittest.TestCase):
-    def test_table_compact_and_sync_place(self):
+    def test_direct_delete_no_kebab(self):
         html = Path("app/web/templates/broadcast.html").read_text(encoding="utf-8")
-        self.assertIn('class="table-compact"', html)
-        js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
-        self.assertIn("placeRowMenu(wrap);\n          requestAnimationFrame", js)
+        self.assertNotIn("row_actions", html)
+        self.assertIn("btn-danger", html)
 
 
 class WelcomeImageTests(unittest.TestCase):

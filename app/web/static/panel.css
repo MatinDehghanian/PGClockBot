@@ -1444,7 +1444,7 @@ a.btn.btn-star:hover {
 .image-setting {
   display: flex; flex-direction: column; gap: 8px;
   padding: 12px;
-  background: var(--muted);
+  background: var(--background);
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
@@ -1485,6 +1485,12 @@ a.btn.btn-star:hover {
   border-color: rgba(249, 115, 22, 0.45);
   background: var(--background);
 }
+/* Inside the body-colored image chrome, dashed box gets a slight contrast lift */
+.image-setting .upload-box,
+.image-setting .upload-box:hover,
+.image-setting .upload-box:focus-within {
+  background: color-mix(in srgb, var(--muted) 42%, var(--background));
+}
 .upload-box input[type="file"] {
   position: absolute;
   inset: 0;
@@ -1506,11 +1512,14 @@ a.btn.btn-star:hover {
   height: 40px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: var(--muted);
+  background: color-mix(in srgb, var(--muted) 55%, var(--background));
   color: var(--brand-fg);
   font-size: 26px;
   font-weight: 500;
   line-height: 1;
+}
+.image-setting .upload-box-plus {
+  background: color-mix(in srgb, var(--muted) 72%, var(--background));
 }
 .upload-box-title {
   font-size: var(--title-size);
@@ -3377,9 +3386,20 @@ html[data-theme="light"] .upload-box:focus-within {
   background: var(--background);
   border-color: rgba(249, 115, 22, 0.4);
 }
+html[data-theme="light"] .image-setting {
+  background: var(--background);
+}
+html[data-theme="light"] .image-setting .upload-box,
+html[data-theme="light"] .image-setting .upload-box:hover,
+html[data-theme="light"] .image-setting .upload-box:focus-within {
+  background: color-mix(in srgb, var(--muted) 65%, var(--background));
+}
 html[data-theme="light"] .upload-box-plus {
-  background: var(--muted);
+  background: color-mix(in srgb, var(--muted) 70%, var(--background));
   color: #c2410c;
+}
+html[data-theme="light"] .image-setting .upload-box-plus {
+  background: color-mix(in srgb, var(--muted) 88%, #000 4%);
 }
 html[data-theme="light"] .upload-box.has-file .upload-box-name {
   color: #15803d;

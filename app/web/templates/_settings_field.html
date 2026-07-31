@@ -57,13 +57,10 @@
     {% if val %}
     <div class="image-preview">
       <img src="/media/{{ val }}" alt="پیش‌نمایش" />
-      <label class="ui-switch-row" style="margin-top:10px">
-        <span class="ui-switch-copy"><strong>حذف عکس فعلی</strong></span>
-        <span class="ui-switch">
-          <input type="checkbox" name="s_{{ key }}_clear" value="1" />
-          <span class="ui-switch-track" aria-hidden="true"></span>
-        </span>
-      </label>
+      <button type="submit" name="s_{{ key }}_clear" value="1" class="btn btn-danger btn-sm"
+              onclick="return confirm('فایل آپلودشده حذف شود؟')">
+        حذف فایل آپلودشده
+      </button>
     </div>
     {% endif %}
     <label class="file-label upload-box">آپلود عکس جدید

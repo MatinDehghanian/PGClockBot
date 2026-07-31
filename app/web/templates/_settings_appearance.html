@@ -54,9 +54,9 @@
           {% if ap.get('bot_tg_photo') %}
           <div class="ap-photo-row">
             <img id="ap-photo-current" src="/media/{{ ap.bot_tg_photo }}" alt="عکس فعلی" class="ap-photo-thumb" />
-            <button type="submit" name="bot_tg_photo_clear" value="1" class="btn btn-ghost"
+            <button type="submit" name="bot_tg_photo_clear" value="1" class="btn btn-danger btn-sm"
                     onclick="return confirm('عکس پروفایل ربات از تلگرام حذف شود؟')">
-              حذف عکس پروفایل
+              حذف فایل آپلودشده
             </button>
           </div>
           {% endif %}

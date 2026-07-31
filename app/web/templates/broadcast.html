@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, row_actions %}
+{% from "macros.html" import page_title %}
 {% block title %}پیام گروهی{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -37,7 +37,7 @@
     </div>
     {% if history %}
     <form method="post" action="/broadcast/history/clear" onsubmit="return confirm('همه تاریخچه پیام‌های گروهی پاک شود؟')">
-      <button class="btn btn-ghost btn-sm" type="submit">حذف تاریخچه</button>
+      <button class="btn btn-danger btn-sm" type="submit">حذف تاریخچه</button>
     </form>
     {% endif %}
   </div>
@@ -56,11 +56,9 @@
         <td class="mono cell-tight">{{ row.ok_count }}/{{ row.total }}{% if row.fail_count %} · ناموفق {{ row.fail_count }}{% endif %}</td>
         <td class="muted col-hide-sm">{{ row.created_by or '—' }}</td>
         <td class="col-actions">
-          {% call row_actions() %}
           <form method="post" action="/broadcast/history/{{ row.id }}/delete" onsubmit="return confirm('این رکورد حذف شود؟')">
             <button class="btn btn-danger btn-sm" type="submit">حذف</button>
           </form>
-          {% endcall %}
         </td>
       </tr>
     {% else %}
