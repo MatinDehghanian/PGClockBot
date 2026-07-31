@@ -35,7 +35,12 @@ class PageTitleGapParityTests(unittest.TestCase):
 
     def test_pg_title_gap_identical_to_bot(self):
         css = CSS.read_text(encoding="utf-8")
+        # Title→content uses the same token as bot; tabs sit above title (not between)
         self.assertIn(".pg-head > .page-head {\n  margin-bottom: var(--page-title-gap);\n}", css)
+        self.assertIn(
+            ".pg-head > .pg-tabs,\n.pg-head > .section-tabs {\n  margin-bottom: var(--space-1);\n}",
+            css,
+        )
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn(
             "padding: var(--page-title-gap) var(--space-2) calc(var(--space-3) + var(--safe-bottom));",
@@ -43,8 +48,13 @@ class PageTitleGapParityTests(unittest.TestCase):
         )
         self.assertIn(".page-head { margin-bottom: var(--page-title-gap);", mobile)
         self.assertIn(".pg-head > .page-head { margin-bottom: var(--page-title-gap); }", mobile)
+        self.assertIn(
+            ".pg-head > .pg-tabs,\n  .pg-head > .section-tabs { margin-bottom: var(--space-1); }",
+            mobile,
+        )
 
-    def test_pg_tabs_sit_below_title(self):
+    def test_pg_tabs_sit_above_title(self):
+        """Tabs above title — otherwise they inflate title→content vs bot."""
         pages = sorted(Path("app/web/templates").glob("pg_*.html"))
         self.assertTrue(pages)
         for path in pages:
@@ -59,7 +69,7 @@ class PageTitleGapParityTests(unittest.TestCase):
             title_at = head_only.find('class="page-head"')
             self.assertGreaterEqual(tabs_at, 0, msg=path.name)
             self.assertGreaterEqual(title_at, 0, msg=path.name)
-            self.assertLess(title_at, tabs_at, msg=f"{path.name}: title must be above tabs")
+            self.assertLess(tabs_at, title_at, msg=f"{path.name}: tabs must be above title")
 
 
 class PanelFontUnityTests(unittest.TestCase):

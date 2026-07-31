@@ -289,16 +289,18 @@ a:hover { opacity: 0.8; }
   margin-bottom: var(--page-title-gap);
   flex-wrap: wrap;
 }
-/* PasarGuard uses the same title chrome as bot: equal gap above/below title */
+/* PasarGuard: tabs ABOVE title so title→content gap matches bot list pages.
+   Bot: .page-head { margin-bottom: --page-title-gap } → content.
+   PG must use the same title→content margin; tabs must not sit between them. */
 .pg-head {
   margin-bottom: 0;
 }
-.pg-head > .page-head {
-  margin-bottom: var(--page-title-gap);
-}
 .pg-head > .pg-tabs,
 .pg-head > .section-tabs {
-  margin-bottom: var(--section-gap);
+  margin-bottom: var(--space-1);
+}
+.pg-head > .page-head {
+  margin-bottom: var(--page-title-gap);
 }
 .page-head--stack {
   flex-direction: column;
@@ -2314,9 +2316,9 @@ a.btn.btn-star:hover {
   .footer-actions { justify-content: center; }
   .page-head { margin-bottom: var(--page-title-gap); gap: var(--space-2); }
   .pg-head { margin-bottom: 0; }
-  .pg-head > .page-head { margin-bottom: var(--page-title-gap); }
   .pg-head > .pg-tabs,
-  .pg-head > .section-tabs { margin-bottom: var(--section-gap); }
+  .pg-head > .section-tabs { margin-bottom: var(--space-1); }
+  .pg-head > .page-head { margin-bottom: var(--page-title-gap); }
   .page-title { gap: var(--space-1); }
   .page-title-ico { width: 34px; height: 34px; border-radius: 9px; }
   .page-title-ico svg { width: 17px; height: 17px; }
