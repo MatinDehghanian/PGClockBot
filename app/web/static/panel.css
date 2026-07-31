@@ -34,10 +34,6 @@
   --space-4: 20px;
   --card-pad: 16px;
   --section-gap: 16px;
-  --chrome-pad-x: 12px;
-  --chrome-pad-bottom: calc(16px + var(--safe-bottom));
-  --main-pad-x: 32px;
-  --main-pad-top: 28px;
   --title-size: 14px;
   /* Form controls MUST stay ≥16px forever — iOS Safari zooms any focused field under 16px.
      Do not set input/select/textarea font-size to --title-size or any value < 16px. */
@@ -78,12 +74,6 @@ html, body {
   text-size-adjust: 100%;
   overflow-x: hidden;
 }
-/* Lock document scroll; columns own their scrollports */
-html:has(.shell),
-html:has(.shell) body {
-  height: 100%;
-  overflow: hidden;
-}
 a { color: var(--foreground); text-decoration: none; }
 a:hover { opacity: 0.8; }
 .muted, .link-quiet { color: var(--muted-fg); }
@@ -119,10 +109,11 @@ a:hover { opacity: 0.8; }
   max-height: 100dvh;
   position: relative;
   top: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--bg-card);
   border-left: 1px solid var(--border);
-  padding: calc(16px + var(--safe-top)) var(--chrome-pad-x) 0;
+  padding: calc(16px + var(--safe-top)) 12px calc(16px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -134,33 +125,22 @@ a:hover { opacity: 0.8; }
   min-height: 0;
   height: 100%;
   max-height: 100dvh;
-  /*
-    Scroll the whole column (content + footer). Footer is NOT position:fixed /
-    floating — it lives at the end of the page. .main-shell min-height:100%
-    keeps it at the bottom of the viewport when content is short.
-  */
-  padding: var(--main-pad-top) var(--main-pad-x) var(--chrome-pad-bottom);
+  /* Bottom padding matches sidebar so footers sit on one baseline */
+  padding: 28px 32px calc(16px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
-.main-shell {
-  box-sizing: border-box;
-  width: 100%;
-  flex: 1 0 auto;
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-}
 .main-body {
   flex: 1 0 auto;
   min-width: 0;
+  min-height: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
-  padding-bottom: var(--section-gap);
+  padding-bottom: 12px;
 }
 
 .brand {
@@ -210,16 +190,7 @@ a:hover { opacity: 0.8; }
 .brand-ver-dot-warn { background: #ef4444; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2); }
 
 
-.side-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
+.side-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
 .nav-section {
   margin-top: 10px;
   padding-top: 10px;
@@ -268,9 +239,7 @@ a:hover { opacity: 0.8; }
 
 .side-foot {
   margin-top: auto;
-  flex: 0 0 auto;
   padding-top: 12px;
-  padding-bottom: var(--chrome-pad-bottom);
   border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -315,13 +284,8 @@ a:hover { opacity: 0.8; }
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--space-3);
-  margin-bottom: var(--section-gap);
+  margin-bottom: var(--space-4);
   flex-wrap: wrap;
-}
-/* Title → tabs sits tighter; tabs → content uses the standard section gap */
-.page-head:has(+ .section-tabs),
-.page-head:has(+ .settings-tabs) {
-  margin-bottom: var(--space-2);
 }
 .page-head--stack {
   flex-direction: column;
@@ -512,11 +476,12 @@ a:hover { opacity: 0.8; }
   color: #71717a;
   font-weight: 400;
 }
-/* Major blocks share one vertical rhythm */
-.main-body > .settings-card:last-child,
-.main-body > .update-changelog:last-child,
-.main-body > .flash:last-child {
-  margin-bottom: 0;
+/* Keep next-card titles from colliding with previous card captions/fields */
+.card + .card {
+  margin-top: 4px;
+}
+.card + .card > h2 {
+  margin-top: 2px;
 }
 
 .dash-cols {
@@ -1359,7 +1324,6 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 
 .site-footer {
   margin-top: auto;
-  flex: 0 0 auto;
   padding-top: 12px;
   border-top: 1px solid var(--border);
   display: flex;
@@ -1370,6 +1334,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   color: var(--muted-fg);
   font-size: 12px;
   line-height: 1.35;
+  flex: 0 0 auto;
 }
 .site-footer a { color: var(--muted-fg); text-decoration: none; }
 .site-footer a:hover { color: var(--primary); }
@@ -2212,15 +2177,14 @@ a.btn.btn-star:hover {
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
-    height: 100vh;
-    height: 100dvh;
-    max-height: 100vh;
-    max-height: 100dvh;
-    min-height: 0;
-    overflow: hidden;
+    height: auto;
+    max-height: none;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
   }
 
-  .topbar { display: flex; flex: 0 0 auto; }
+  .topbar { display: flex; }
 
   .side {
     position: fixed;
@@ -2238,41 +2202,24 @@ a.btn.btn-star:hover {
     border-top: 1px solid var(--border);
     grid-area: unset;
     display: flex !important;
-    overflow: hidden;
     padding-top: 10px;
-    padding-bottom: 0;
+    padding-bottom: calc(12px + var(--safe-bottom));
   }
   .side.open { transform: translateX(0); }
 
   .main {
-    --main-pad-x: 14px;
-    --main-pad-top: 22px;
-    padding: var(--main-pad-top) var(--main-pad-x) var(--chrome-pad-bottom);
-    flex: 1 1 auto;
-    width: 100%;
-    min-height: 0;
+    padding: 22px 14px calc(16px + var(--safe-bottom));
+    min-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
     height: auto;
     max-height: none;
-    display: flex;
-    flex-direction: column;
-    overflow-x: hidden;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  .main-shell {
-    flex: 1 0 auto;
-    min-height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-  .main-body {
-    flex: 1 0 auto;
-    min-height: 0;
+    flex: 1 1 auto;
+    width: 100%;
     overflow: visible;
-    padding-bottom: var(--section-gap);
+    display: flex;
+    flex-direction: column;
   }
+  .main-body { flex: 1 0 auto; }
   .site-footer {
-    flex: 0 0 auto;
     flex-direction: column;
     align-items: stretch;
     text-align: center;
@@ -2282,9 +2229,7 @@ a.btn.btn-star:hover {
   }
   .footer-meta { justify-content: center; }
   .footer-actions { justify-content: center; }
-  .page-head { margin-bottom: var(--section-gap); gap: var(--space-2); }
-  .page-head:has(+ .section-tabs),
-  .page-head:has(+ .settings-tabs) { margin-bottom: var(--space-2); }
+  .page-head { margin-bottom: var(--space-3); gap: var(--space-2); }
   .page-title { gap: 10px; }
   .page-title-ico { width: 34px; height: 34px; border-radius: 9px; }
   .page-title-ico svg { width: 17px; height: 17px; }
@@ -3966,7 +3911,7 @@ html[data-theme="light"] .tg-preview-shell {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--section-gap);
-  margin-bottom: var(--section-gap);
+  margin-bottom: var(--space-2);
   align-items: stretch;
 }
 .home-panel {

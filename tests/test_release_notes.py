@@ -70,6 +70,7 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertTrue(parsed["1.8.6"])
         self.assertIn("1.8.5", parsed)
         self.assertTrue(parsed["1.8.5"])
+        self.assertIn("3.1.3", parsed)
         self.assertIn("3.1.2", parsed)
         self.assertIn("3.1.1", parsed)
         self.assertIn("3.1.0", parsed)
@@ -103,6 +104,7 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
+        self.assertIn("3.1.3", parsed)
         self.assertIn("3.1.2", parsed)
         self.assertIn("3.1.1", parsed)
         self.assertIn("3.1.0", parsed)
