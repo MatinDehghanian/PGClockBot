@@ -3,6 +3,7 @@
 {% block title %}تمپلیت‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="pg-head">
+{{ pg_tabs('pg_templates') }}
 <div class="page-head">
   <div>
     {{ page_title('templates', 'تمپلیت‌های کاربر', 'pg') }}
@@ -11,7 +12,6 @@
   <button type="button" class="btn" data-modal-open="modal-pg-template-create">ساخت تمپلیت</button>
   {% endif %}
 </div>
-{{ pg_tabs('pg_templates') }}
 </div>
 <div class="card card-flush">
   <h2>تمپلیت‌های موجود</h2>

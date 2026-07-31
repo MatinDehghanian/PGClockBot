@@ -3,6 +3,7 @@
 {% block title %}گروه‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="pg-head">
+{{ pg_tabs('pg_groups') }}
 <div class="page-head">
   <div>
     {{ page_title('groups', 'گروه‌ها', 'pg') }}
@@ -11,7 +12,6 @@
   <button type="button" class="btn" data-modal-open="modal-pg-group-create">ساخت گروه</button>
   {% endif %}
 </div>
-{{ pg_tabs('pg_groups') }}
 </div>
 {% if edit_group and can_write %}
 <div class="card">

@@ -287,21 +287,21 @@ a:hover { opacity: 0.8; }
   margin-bottom: var(--space-4);
   flex-wrap: wrap;
 }
-/* Title → tabs sits tighter (bot settings / PasarGuard) */
+/* Title → tabs sits tighter (bot settings) */
 .page-head:has(+ .section-tabs),
 .page-head:has(+ .settings-tabs) {
   margin-bottom: var(--space-2);
 }
-/* PasarGuard: title + tabs are one header unit; gap to content matches bot page-head */
+/* PasarGuard: tabs above title so title→content gap matches bot list pages */
 .pg-head {
-  margin-bottom: var(--space-4);
-}
-.pg-head > .page-head {
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 .pg-head > .pg-tabs,
 .pg-head > .section-tabs {
-  margin-bottom: 0;
+  margin-bottom: 8px;
+}
+.pg-head > .page-head {
+  margin-bottom: var(--space-4);
 }
 .page-head--stack {
   flex-direction: column;
@@ -2318,8 +2318,10 @@ a.btn.btn-star:hover {
   .page-head { margin-bottom: var(--space-3); gap: var(--space-2); }
   .page-head:has(+ .section-tabs),
   .page-head:has(+ .settings-tabs) { margin-bottom: var(--space-2); }
-  .pg-head { margin-bottom: var(--space-3); }
-  .pg-head > .page-head { margin-bottom: 6px; }
+  .pg-head { margin-bottom: 0; }
+  .pg-head > .pg-tabs,
+  .pg-head > .section-tabs { margin-bottom: 6px; }
+  .pg-head > .page-head { margin-bottom: var(--space-3); }
   .page-title { gap: 10px; }
   .page-title-ico { width: 34px; height: 34px; border-radius: 9px; }
   .page-title-ico svg { width: 17px; height: 17px; }
