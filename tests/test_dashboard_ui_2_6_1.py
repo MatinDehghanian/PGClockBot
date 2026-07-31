@@ -34,17 +34,26 @@ class PgDashboardCountsTests(unittest.TestCase):
 class FooterAndMobileTests(unittest.TestCase):
     def test_site_footer_matches_side_foot_padding(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn(".site-footer {\n  margin-top: auto;\n  padding-top: 12px;", css)
-        self.assertIn("padding: 28px 32px calc(16px + var(--safe-bottom))", css)
+        self.assertIn(".site-footer {\n  margin-top: auto;", css)
+        self.assertIn("padding-top: 12px;", css)
+        self.assertIn("--chrome-pad-bottom:", css)
+        self.assertIn("padding-bottom: var(--chrome-pad-bottom);", css)
 
-    def test_main_uses_grid_sticky_footer(self):
+    def test_main_body_is_scroll_container(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn("grid-template-rows: 1fr auto;", css)
-        self.assertIn("min-height: min-content;", css)
+        # Footer stays pinned; content scrolls inside .main-body
+        self.assertIn(".main-body {\n  flex: 1 1 auto;", css)
+        self.assertIn("overflow-y: auto;", css)
+        main = css.split(".main {\n", 1)[1].split(".main-body {", 1)[0]
+        self.assertIn("overflow: hidden;", main)
+        self.assertIn("display: flex;", main)
+        side = css.split(".side {\n", 1)[1].split(".main {", 1)[0]
+        self.assertIn("overflow: hidden;", side)
 
     def test_mobile_main_top_gap_increased(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn("padding: 22px 14px calc(16px + var(--safe-bottom))", css)
+        self.assertIn("--main-pad-top: 22px;", css)
+        self.assertIn("--main-pad-x: 14px;", css)
 
 
 class SidebarHoverTests(unittest.TestCase):

@@ -34,6 +34,11 @@
   --space-4: 20px;
   --card-pad: 16px;
   --section-gap: 16px;
+  /* Shared chrome padding so sidebar + main footers share one baseline */
+  --chrome-pad-x: 12px;
+  --chrome-pad-bottom: calc(16px + var(--safe-bottom));
+  --main-pad-x: 32px;
+  --main-pad-top: 28px;
   --title-size: 14px;
   /* Form controls MUST stay ≥16px forever — iOS Safari zooms any focused field under 16px.
      Do not set input/select/textarea font-size to --title-size or any value < 16px. */
@@ -74,6 +79,13 @@ html, body {
   text-size-adjust: 100%;
   overflow-x: hidden;
 }
+/* App shell owns the viewport — prevent document scroll fighting pinned footers */
+html:has(.shell),
+html:has(.shell) body {
+  height: 100%;
+  max-height: 100dvh;
+  overflow: hidden;
+}
 a { color: var(--foreground); text-decoration: none; }
 a:hover { opacity: 0.8; }
 .muted, .link-quiet { color: var(--muted-fg); }
@@ -109,11 +121,11 @@ a:hover { opacity: 0.8; }
   max-height: 100dvh;
   position: relative;
   top: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  /* Nav scrolls; footer stays pinned at the bottom of the column */
+  overflow: hidden;
   background: var(--bg-card);
   border-left: 1px solid var(--border);
-  padding: calc(16px + var(--safe-top)) 12px calc(16px + var(--safe-bottom));
+  padding: calc(16px + var(--safe-top)) var(--chrome-pad-x) 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -125,23 +137,23 @@ a:hover { opacity: 0.8; }
   min-height: 0;
   height: 100%;
   max-height: 100dvh;
-  /* Bottom padding matches sidebar so footers sit on one baseline */
-  padding: 28px 32px calc(16px + var(--safe-bottom));
-  /* Grid pins footer to the bottom on first paint (flex+margin-auto jumped until scroll). */
-  display: grid;
-  grid-template-rows: 1fr auto;
-  align-content: stretch;
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  /* Body scrolls; site-footer stays pinned and baseline-aligned with .side-foot */
+  padding: var(--main-pad-top) var(--main-pad-x) 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .main-body {
+  flex: 1 1 auto;
   min-width: 0;
-  min-height: min-content;
+  min-height: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
-  padding-bottom: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: var(--section-gap);
 }
 
 .brand {
@@ -191,7 +203,16 @@ a:hover { opacity: 0.8; }
 .brand-ver-dot-warn { background: #ef4444; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2); }
 
 
-.side-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .nav-section {
   margin-top: 10px;
   padding-top: 10px;
@@ -240,7 +261,9 @@ a:hover { opacity: 0.8; }
 
 .side-foot {
   margin-top: auto;
+  flex: 0 0 auto;
   padding-top: 12px;
+  padding-bottom: var(--chrome-pad-bottom);
   border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -285,8 +308,13 @@ a:hover { opacity: 0.8; }
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--space-3);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--section-gap);
   flex-wrap: wrap;
+}
+/* Title → tabs sits tighter; tabs → content uses the standard section gap */
+.page-head:has(+ .section-tabs),
+.page-head:has(+ .settings-tabs) {
+  margin-bottom: var(--space-2);
 }
 .page-head--stack {
   flex-direction: column;
@@ -477,12 +505,19 @@ a:hover { opacity: 0.8; }
   color: #71717a;
   font-weight: 400;
 }
-/* Keep next-card titles from colliding with previous card captions/fields */
-.card + .card {
-  margin-top: 4px;
-}
-.card + .card > h2 {
-  margin-top: 2px;
+/* Major blocks share one vertical rhythm */
+.main-body > .card:last-child,
+.main-body > .home-panels:last-child,
+.main-body > .stats-grid:last-child,
+.main-body > .home-panel:last-child,
+.main-body > .dash-cols:last-child,
+.main-body > .settings-layout:last-child,
+.main-body > .update-ops-card:last-child,
+.main-body > .update-rollback-card:last-child,
+.main-body > .update-changelog:last-child,
+.main-body > .update-hero:last-child,
+.main-body > .flash:last-child {
+  margin-bottom: 0;
 }
 
 .dash-cols {
@@ -1325,7 +1360,9 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 
 .site-footer {
   margin-top: auto;
+  flex: 0 0 auto;
   padding-top: 12px;
+  padding-bottom: var(--chrome-pad-bottom);
   border-top: 1px solid var(--border);
   display: flex;
   flex-wrap: wrap;
@@ -1335,7 +1372,6 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   color: var(--muted-fg);
   font-size: 12px;
   line-height: 1.35;
-  flex: 0 0 auto;
 }
 .site-footer a { color: var(--muted-fg); text-decoration: none; }
 .site-footer a:hover { color: var(--primary); }
@@ -2317,14 +2353,15 @@ a.btn.btn-star:hover {
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
-    height: auto;
-    max-height: none;
-    min-height: 100vh;
-    min-height: 100dvh;
-    overflow: visible;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
   }
 
-  .topbar { display: flex; }
+  .topbar { display: flex; flex: 0 0 auto; }
 
   .side {
     position: fixed;
@@ -2342,35 +2379,48 @@ a.btn.btn-star:hover {
     border-top: 1px solid var(--border);
     grid-area: unset;
     display: flex !important;
+    overflow: hidden;
     padding-top: 10px;
-    padding-bottom: calc(12px + var(--safe-bottom));
+    padding-bottom: 0;
   }
   .side.open { transform: translateX(0); }
 
   .main {
-    padding: 22px 14px calc(16px + var(--safe-bottom));
-    min-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
-    height: auto;
-    max-height: none;
+    --main-pad-x: 14px;
+    --main-pad-top: 22px;
+    padding: var(--main-pad-top) var(--main-pad-x) 0;
     flex: 1 1 auto;
     width: 100%;
-    overflow: visible;
-    display: grid;
-    grid-template-rows: 1fr auto;
-    align-content: stretch;
+    min-height: 0;
+    height: auto;
+    max-height: none;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
-  .main-body { min-height: min-content; }
+  .main-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: var(--section-gap);
+  }
   .site-footer {
+    flex: 0 0 auto;
     flex-direction: column;
     align-items: stretch;
     text-align: center;
     margin-top: auto;
     padding-top: 12px;
+    padding-bottom: var(--chrome-pad-bottom);
     gap: 8px;
   }
   .footer-meta { justify-content: center; }
   .footer-actions { justify-content: center; }
-  .page-head { margin-bottom: var(--space-3); gap: var(--space-2); }
+  .page-head { margin-bottom: var(--section-gap); gap: var(--space-2); }
+  .page-head:has(+ .section-tabs),
+  .page-head:has(+ .settings-tabs) { margin-bottom: var(--space-2); }
   .page-title { gap: 10px; }
   .page-title-ico { width: 34px; height: 34px; border-radius: 9px; }
   .page-title-ico svg { width: 17px; height: 17px; }
@@ -4052,7 +4102,7 @@ html[data-theme="light"] .tg-preview-shell {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--section-gap);
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--section-gap);
   align-items: stretch;
 }
 .home-panel {
@@ -4072,7 +4122,7 @@ html[data-theme="light"] .tg-preview-shell {
   background: color-mix(in srgb, #3d8fd1 10%, var(--bg-card));
 }
 .pg-stats-panel {
-  margin-top: var(--section-gap);
+  margin-top: 0;
   margin-bottom: var(--section-gap);
 }
 .home-panel-head {
