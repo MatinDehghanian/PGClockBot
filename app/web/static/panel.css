@@ -284,23 +284,36 @@ a:hover { opacity: 0.8; }
 .page-head {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-3);
   margin-bottom: var(--page-title-gap);
   flex-wrap: wrap;
 }
-/* PasarGuard: tabs ABOVE title so title→content gap matches bot list pages.
-   Bot: .page-head { margin-bottom: --page-title-gap } → content.
-   PG must use the same title→content margin; tabs must not sit between them. */
+/* Title + action button must stay ONE row. flex:1 1 auto on the title
+   wrapper was growing to full width and pushing .actions onto a second
+   row — that alone added ~button height + gap under the title and made
+   PasarGuard look much looser than bot list pages. */
+.page-head:has(> .actions),
+.page-head:has(> .btn) {
+  flex-wrap: nowrap;
+}
+/* PasarGuard header unit: tabs above title, ONE gap below the unit.
+   Bot:  .page-head { margin-bottom: var(--page-title-gap) } → content
+   PG:   .pg-head   { margin-bottom: var(--page-title-gap) } → content
+   Nested .page-head must NOT also carry margin-bottom (that was either
+   swallowed by the flex item BFC or stacked with wrap-gap from actions). */
 .pg-head {
-  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--page-title-gap);
 }
 .pg-head > .pg-tabs,
 .pg-head > .section-tabs {
-  margin-bottom: var(--space-1);
+  margin-bottom: 0;
 }
 .pg-head > .page-head {
-  margin-bottom: var(--page-title-gap);
+  margin-bottom: 0;
 }
 .page-head--stack {
   flex-direction: column;
@@ -1042,7 +1055,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   align-self: center;
 }
 .page-head > div:has(> .page-title) {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-width: 0;
 }
 .quick-links {
@@ -1087,8 +1100,10 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .card.card-flush { padding: 0; }
 .card.card-flush > .card-head,
 .card.card-flush > h2 { padding: var(--card-pad) var(--card-pad) var(--space-1); margin: 0; }
+/* Flush search: top pad = --space-1 (same cell pad as mobile th), not an
+   extra --card-pad that made title→first-content look ~2× bot thead gap. */
 .card.card-flush > .search-bar {
-  padding: var(--card-pad) var(--card-pad) 0;
+  padding: var(--space-1) var(--card-pad) 0;
   margin-bottom: var(--space-2);
 }
 .card.card-flush > p.muted,
@@ -2314,11 +2329,13 @@ a.btn.btn-star:hover {
   }
   .footer-meta { justify-content: center; }
   .footer-actions { justify-content: center; }
-  .page-head { margin-bottom: var(--page-title-gap); gap: var(--space-2); }
-  .pg-head { margin-bottom: 0; }
+  .page-head { margin-bottom: var(--page-title-gap); gap: var(--space-2); align-items: center; }
+  .page-head:has(> .actions),
+  .page-head:has(> .btn) { flex-wrap: nowrap; }
+  .pg-head { margin-bottom: var(--page-title-gap); gap: var(--space-1); }
   .pg-head > .pg-tabs,
-  .pg-head > .section-tabs { margin-bottom: var(--space-1); }
-  .pg-head > .page-head { margin-bottom: var(--page-title-gap); }
+  .pg-head > .section-tabs { margin-bottom: 0; }
+  .pg-head > .page-head { margin-bottom: 0; }
   .page-title { gap: var(--space-1); }
   .page-title-ico { width: 34px; height: 34px; border-radius: 9px; }
   .page-title-ico svg { width: 17px; height: 17px; }

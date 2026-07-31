@@ -35,23 +35,18 @@ class PageTitleGapParityTests(unittest.TestCase):
 
     def test_pg_title_gap_identical_to_bot(self):
         css = CSS.read_text(encoding="utf-8")
-        # Title→content uses the same token as bot; tabs sit above title (not between)
-        self.assertIn(".pg-head > .page-head {\n  margin-bottom: var(--page-title-gap);\n}", css)
-        self.assertIn(
-            ".pg-head > .pg-tabs,\n.pg-head > .section-tabs {\n  margin-bottom: var(--space-1);\n}",
-            css,
-        )
+        # .pg-head owns the same gap token as bot .page-head; nested title has no extra mb
+        pg = css.split(".pg-head {\n", 1)[1].split("}", 1)[0]
+        self.assertIn("margin-bottom: var(--page-title-gap);", pg)
+        self.assertIn(".pg-head > .page-head {\n  margin-bottom: 0;\n}", css)
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn(
             "padding: var(--page-title-gap) var(--space-2) calc(var(--space-3) + var(--safe-bottom));",
             mobile,
         )
         self.assertIn(".page-head { margin-bottom: var(--page-title-gap);", mobile)
-        self.assertIn(".pg-head > .page-head { margin-bottom: var(--page-title-gap); }", mobile)
-        self.assertIn(
-            ".pg-head > .pg-tabs,\n  .pg-head > .section-tabs { margin-bottom: var(--space-1); }",
-            mobile,
-        )
+        self.assertIn(".pg-head { margin-bottom: var(--page-title-gap);", mobile)
+        self.assertIn(".pg-head > .page-head { margin-bottom: 0; }", mobile)
 
     def test_pg_tabs_sit_above_title(self):
         """Tabs above title — otherwise they inflate title→content vs bot."""

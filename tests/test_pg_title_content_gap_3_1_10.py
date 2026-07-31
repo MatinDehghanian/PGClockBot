@@ -20,13 +20,10 @@ class PgTitleContentGapTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         bot = css.split(".page-head {\n", 1)[1].split("}", 1)[0]
         self.assertIn("margin-bottom: var(--page-title-gap);", bot)
-        self.assertIn(".pg-head {\n  margin-bottom: 0;\n}", css)
-        self.assertIn(".pg-head > .page-head {\n  margin-bottom: var(--page-title-gap);\n}", css)
-        # Tabs→title is tight; must NOT use --section-gap (that was the inflate)
-        self.assertIn(
-            ".pg-head > .pg-tabs,\n.pg-head > .section-tabs {\n  margin-bottom: var(--space-1);\n}",
-            css,
-        )
+        # .pg-head itself owns the title→content gap (same token as bot)
+        pg = css.split(".pg-head {\n", 1)[1].split("}", 1)[0]
+        self.assertIn("margin-bottom: var(--page-title-gap);", pg)
+        self.assertIn(".pg-head > .page-head {\n  margin-bottom: 0;\n}", css)
         self.assertNotIn(
             ".pg-head > .pg-tabs,\n.pg-head > .section-tabs {\n  margin-bottom: var(--section-gap);\n}",
             css,
