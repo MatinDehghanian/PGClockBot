@@ -23,6 +23,11 @@
       <div class="tg-empty-center">
         <div class="tg-empty-avatar" id="ap-pv-empty-av"></div>
         <strong id="ap-pv-empty-name">{{ appearance.get('bot_tg_name') or 'نام ربات' }}</strong>
+        {% if appearance and appearance.get('welcome_image') %}
+        <img id="ap-pv-welcome" class="tg-empty-welcome-img" src="/media/{{ appearance.welcome_image }}" alt="" />
+        {% else %}
+        <img id="ap-pv-welcome" class="tg-empty-welcome-img" hidden alt="" />
+        {% endif %}
         <p id="ap-pv-short">{{ appearance.get('bot_tg_description') or 'متن وسط صفحه…' }}</p>
       </div>
     </div>

@@ -370,6 +370,94 @@
       box.classList.toggle('has-file', !!file);
     });
 
+    /* Multipart forms: progress bar inside upload boxes + success toast */
+    (function initUploadProgress(){
+      function ensureProgress(box){
+        let barWrap = box.querySelector('.upload-box-progress');
+        if (!barWrap) {
+          barWrap = document.createElement('span');
+          barWrap.className = 'upload-box-progress';
+          barWrap.hidden = true;
+          barWrap.setAttribute('aria-hidden', 'true');
+          barWrap.innerHTML = '<i class="upload-box-progress-bar"></i>';
+          box.appendChild(barWrap);
+        }
+        return barWrap;
+      }
+      function setProgress(box, pct){
+        const wrap = ensureProgress(box);
+        const bar = wrap.querySelector('.upload-box-progress-bar');
+        wrap.hidden = false;
+        if (bar) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+        box.classList.add('is-uploading');
+      }
+      function clearProgress(box){
+        const wrap = box.querySelector('.upload-box-progress');
+        const bar = wrap && wrap.querySelector('.upload-box-progress-bar');
+        if (wrap) wrap.hidden = true;
+        if (bar) bar.style.width = '0%';
+        box.classList.remove('is-uploading');
+      }
+      function showToast(msg){
+        document.querySelectorAll('.upload-toast').forEach((el) => el.remove());
+        const toast = document.createElement('div');
+        toast.className = 'upload-toast';
+        toast.setAttribute('role', 'status');
+        toast.textContent = msg;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2800);
+      }
+      document.addEventListener('submit', (e) => {
+        const form = e.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        if ((form.getAttribute('enctype') || '').toLowerCase() !== 'multipart/form-data') return;
+        if (form.dataset.uploadXhr === '1') return;
+        const fileInputs = [...form.querySelectorAll('input[type="file"]')];
+        const activeBoxes = [];
+        fileInputs.forEach((inp) => {
+          if (inp.files && inp.files.length) {
+            const box = inp.closest('.upload-box');
+            if (box) activeBoxes.push(box);
+          }
+        });
+        if (!activeBoxes.length) return;
+        e.preventDefault();
+        form.dataset.uploadXhr = '1';
+        activeBoxes.forEach((box) => setProgress(box, 4));
+        const fd = new FormData(form);
+        const submitter = e.submitter;
+        if (submitter && submitter.name) {
+          fd.append(submitter.name, submitter.value || '1');
+        }
+        const xhr = new XMLHttpRequest();
+        xhr.open((form.method || 'POST').toUpperCase(), form.action || window.location.href, true);
+        xhr.upload.onprogress = (ev) => {
+          if (!ev.lengthComputable) return;
+          const pct = Math.round((ev.loaded / ev.total) * 100);
+          activeBoxes.forEach((box) => setProgress(box, pct));
+        };
+        xhr.onload = () => {
+          activeBoxes.forEach((box) => setProgress(box, 100));
+          const ok = xhr.status >= 200 && xhr.status < 400;
+          if (ok) {
+            showToast('آپلود با موفقیت انجام شد');
+            const next = xhr.responseURL || form.action || window.location.href;
+            setTimeout(() => { window.location.href = next; }, 450);
+          } else {
+            activeBoxes.forEach(clearProgress);
+            delete form.dataset.uploadXhr;
+            showToast('آپلود ناموفق بود — دوباره تلاش کنید');
+          }
+        };
+        xhr.onerror = () => {
+          activeBoxes.forEach(clearProgress);
+          delete form.dataset.uploadXhr;
+          showToast('خطا در ارسال فایل');
+        };
+        xhr.send(fd);
+      }, true);
+    })();
+
     /* Force-join channels: one row each + optional required toggle */
     (function initForceChannels(){
       function parseEntries(raw){

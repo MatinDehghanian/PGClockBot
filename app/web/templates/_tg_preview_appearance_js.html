@@ -6,6 +6,7 @@
   const captionEl = document.getElementById('ap-caption');
   const middleEl = document.getElementById('ap-middle');
   const photoEl = document.getElementById('ap-photo');
+  const welcomeEl = document.getElementById('ap-welcome-image');
   const cmdStart = document.getElementById('ap-cmd-start');
   const cmdHelp = document.getElementById('ap-cmd-help');
   const pvName = document.getElementById('ap-pv-name');
@@ -14,9 +15,11 @@
   const pvShort = document.getElementById('ap-pv-short');
   const pvImg = document.getElementById('ap-pv-img');
   const pvLetter = document.getElementById('ap-pv-letter');
+  const pvWelcome = document.getElementById('ap-pv-welcome');
   const pvCmdStart = document.getElementById('ap-pv-cmd-start');
   const pvCmdHelp = document.getElementById('ap-pv-cmd-help');
   let objectUrl = null;
+  let welcomeObjectUrl = null;
 
   function setAvatar(src, letter){
     if (pvImg) {
@@ -35,6 +38,17 @@
     }
   }
 
+  function setWelcome(src){
+    if (!pvWelcome) return;
+    if (src) {
+      pvWelcome.hidden = false;
+      pvWelcome.src = src;
+    } else {
+      pvWelcome.hidden = true;
+      pvWelcome.removeAttribute('src');
+    }
+  }
+
   function render(){
     const name = (nameEl && nameEl.value) || 'نام ربات';
     if (pvName) pvName.textContent = name;
@@ -50,6 +64,11 @@
     } else {
       setAvatar('', name);
     }
+    if (welcomeObjectUrl) {
+      setWelcome(welcomeObjectUrl);
+    } else if (pvWelcome && pvWelcome.getAttribute('src') && !pvWelcome.hidden) {
+      /* keep current */
+    }
   }
 
   form.addEventListener('input', render);
@@ -60,6 +79,15 @@
       objectUrl = null;
       const f = photoEl.files && photoEl.files[0];
       if (f) objectUrl = URL.createObjectURL(f);
+      render();
+    });
+  }
+  if (welcomeEl) {
+    welcomeEl.addEventListener('change', () => {
+      if (welcomeObjectUrl) URL.revokeObjectURL(welcomeObjectUrl);
+      welcomeObjectUrl = null;
+      const f = welcomeEl.files && welcomeEl.files[0];
+      if (f) welcomeObjectUrl = URL.createObjectURL(f);
       render();
     });
   }

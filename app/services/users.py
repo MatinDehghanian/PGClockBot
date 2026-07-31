@@ -510,12 +510,6 @@ SETTING_GROUPS = {
             "textarea",
             "اولین پیامی که کاربر بعد از استارت می‌بیند. متغیر: {name}",
         ),
-        (
-            "welcome_image",
-            "عکس پیام وسط صفحه",
-            "image",
-            "اختیاری — اگر تنظیم شود همراه متن خوش‌آمد به‌صورت عکس ارسال می‌شود",
-        ),
     ],
     "متن پیام‌ها": [
         ("guide_text", "متن راهنما", "textarea", "دکمه راهنما در منوی کاربر"),
@@ -706,6 +700,9 @@ IMAGE_KEYS = {
     for fields in SETTING_GROUPS.values()
     for item in fields
     if len(item) >= 3 and item[2] == "image"
+} | {
+    # Managed on appearance tab (not a SETTING_GROUPS image field)
+    "welcome_image",
 }
 
 

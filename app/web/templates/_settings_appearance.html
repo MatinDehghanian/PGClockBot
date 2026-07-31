@@ -39,6 +39,30 @@
           <textarea name="bot_tg_description" id="ap-middle" rows="4" maxlength="512">{{ ap.get('bot_tg_description','') }}</textarea>
           <small class="muted">حداکثر ۵۱۲ کاراکتر — همان متنی که وسط چت خالی قبل از /start دیده می‌شود</small>
         </label>
+        <div class="image-setting" style="margin-top:12px">
+          <strong>عکس پیام وسط / خوش‌آمد</strong>
+          <label class="file-label upload-box">
+            <input name="welcome_image" id="ap-welcome-image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+            <span class="upload-box-plus" aria-hidden="true">+</span>
+            <span class="upload-box-title">آپلود عکس جدید</span>
+            <span class="upload-box-hint muted">PNG، JPG، WEBP یا GIF</span>
+            <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
+            <span class="upload-box-progress" hidden aria-hidden="true"><i class="upload-box-progress-bar"></i></span>
+          </label>
+          <small class="muted">
+            تلگرام در کارت «این ربات چه کاری می‌کند؟» فقط متن نشان می‌دهد.
+            این عکس بعد از زدن Start همراه پیام خوش‌آمد ارسال می‌شود.
+          </small>
+          {% if ap.get('welcome_image') %}
+          <div class="ap-photo-row">
+            <img id="ap-welcome-current" src="/media/{{ ap.welcome_image }}" alt="عکس فعلی" class="ap-photo-thumb" />
+            <button type="submit" name="welcome_image_clear" value="1" class="btn btn-danger btn-sm"
+                    onclick="return confirm('عکس پیام وسط حذف شود؟')">
+              حذف فایل آپلودشده
+            </button>
+          </div>
+          {% endif %}
+        </div>
       </div>
       <div class="setting-item full">
         <div class="image-setting">
@@ -49,6 +73,7 @@
             <span class="upload-box-title">انتخاب عکس پروفایل</span>
             <span class="upload-box-hint muted">فقط JPG</span>
             <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
+            <span class="upload-box-progress" hidden aria-hidden="true"><i class="upload-box-progress-bar"></i></span>
           </label>
           <small class="muted">فقط JPG — از API تلگرام روی پروفایل ربات ست می‌شود</small>
           {% if ap.get('bot_tg_photo') %}

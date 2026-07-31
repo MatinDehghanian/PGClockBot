@@ -82,10 +82,15 @@ class WelcomeImageTests(unittest.TestCase):
         self.assertIn("welcome_image", IMAGE_KEYS)
         welcome_fields = SETTING_GROUPS["خوش‌آمد و هویت"]
         keys = [f[0] for f in welcome_fields]
-        self.assertIn("welcome_image", keys)
+        self.assertNotIn("welcome_image", keys)
+        ap = Path("app/web/templates/_settings_appearance.html").read_text(encoding="utf-8")
+        self.assertIn('name="welcome_image"', ap)
+        self.assertIn("متن وسط صفحه", ap)
         src = Path("app/bot/handlers/start.py").read_text(encoding="utf-8")
         self.assertIn("welcome_image", src)
         self.assertIn("answer_photo", src)
+        appearance = Path("app/services/bot_appearance.py").read_text(encoding="utf-8")
+        self.assertIn("welcome_image", appearance)
 
 
 if __name__ == "__main__":

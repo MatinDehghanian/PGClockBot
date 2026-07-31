@@ -73,19 +73,33 @@ async def render_home(
         markup = kb.main_menu(effective_role, has_services=has, ui=ui)
         rel = (ui.get("welcome_image") or "").strip()
         if rel:
-            candidate = DATA_DIR / rel
-            if candidate.is_file():
+            candidate = (DATA_DIR / rel).resolve()
+            uploads_root = (DATA_DIR / "uploads").resolve()
+            try:
+                candidate.relative_to(uploads_root)
+            except ValueError:
+                candidate = None  # type: ignore[assignment]
+            if candidate is not None and candidate.is_file():
                 photo_path = candidate
+
+    def _clip_caption(html: str, limit: int = 1024) -> str:
+        if len(html) <= limit:
+            return html
+        return html[: max(0, limit - 1)] + "…"
 
     async def _send_home() -> None:
         if photo_path is not None:
-            await message.answer_photo(
-                FSInputFile(photo_path),
-                caption=text,
-                reply_markup=markup,
-            )
-        else:
-            await message.answer(text, reply_markup=markup)
+            try:
+                await message.answer_photo(
+                    FSInputFile(photo_path),
+                    caption=_clip_caption(text),
+                    reply_markup=markup,
+                )
+                return
+            except Exception:
+                # Fall through to text if Telegram rejects the photo/caption
+                pass
+        await message.answer(text, reply_markup=markup)
 
     if edit:
         from aiogram.exceptions import TelegramBadRequest

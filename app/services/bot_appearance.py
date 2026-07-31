@@ -27,6 +27,7 @@ APPEARANCE_SETTING_KEYS = (
     "bot_tg_photo",
     "bot_cmd_start",
     "bot_cmd_help",
+    "welcome_image",
 )
 
 
@@ -204,12 +205,15 @@ async def apply_appearance(
         await bot.session.close()
 
 
-def appearance_to_form_dict(app: BotAppearance, *, local_photo: str = "") -> dict[str, str]:
+def appearance_to_form_dict(
+    app: BotAppearance, *, local_photo: str = "", welcome_image: str = ""
+) -> dict[str, str]:
     return {
         "bot_tg_name": app.name or "",
         "bot_tg_description": app.description or "",
         "bot_tg_short_description": app.short_description or "",
         "bot_tg_photo": local_photo or app.photo_url or "",
+        "welcome_image": welcome_image or "",
         "bot_cmd_start": app.cmd_start or DEFAULT_CMD_START,
         "bot_cmd_help": app.cmd_help or DEFAULT_CMD_HELP,
         "bot_username": app.username or "",
@@ -228,9 +232,12 @@ async def load_appearance_context(
 
     values = await get_all_settings(session, reseller_id=reseller_id)
     local_photo = (values.get("bot_tg_photo") or "").strip()
+    welcome_image = (values.get("welcome_image") or "").strip()
     fetched = await fetch_appearance(token, local_photo=local_photo)
     if fetched.ok:
-        form = appearance_to_form_dict(fetched, local_photo=local_photo)
+        form = appearance_to_form_dict(
+            fetched, local_photo=local_photo, welcome_image=welcome_image
+        )
         # Prefer Telegram values; keep local photo for panel preview
         return {
             "appearance": form,
@@ -243,6 +250,7 @@ async def load_appearance_context(
         "bot_tg_description": values.get("bot_tg_description") or "",
         "bot_tg_short_description": values.get("bot_tg_short_description") or "",
         "bot_tg_photo": local_photo,
+        "welcome_image": welcome_image,
         "bot_cmd_start": values.get("bot_cmd_start") or DEFAULT_CMD_START,
         "bot_cmd_help": values.get("bot_cmd_help") or DEFAULT_CMD_HELP,
         "bot_username": fallback_username or "",
@@ -333,5 +341,29 @@ async def save_appearance_from_form(
         dest = uploads / dest_name
         dest.write_bytes(photo_bytes)
         await set_setting(session, "bot_tg_photo", f"uploads/{dest_name}", reseller_id=reseller_id)
+
+    # Welcome / middle-message photo (local only — Telegram empty-chat card is text-only)
+    clear_welcome = str(form.get("welcome_image_clear") or "") in {"1", "on", "true", "yes"}
+    welcome_upload = form.get("welcome_image")
+    if clear_welcome and not (
+        isinstance(welcome_upload, UploadFile) and welcome_upload.filename
+    ):
+        await set_setting(session, "welcome_image", "", reseller_id=reseller_id)
+    elif isinstance(welcome_upload, UploadFile) and welcome_upload.filename:
+        fname = welcome_upload.filename.lower()
+        ext = Path(fname).suffix
+        if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+            return False, "فرمت عکس پیام وسط پشتیبانی نمی‌شود"
+        content = await welcome_upload.read()
+        if content:
+            uploads = DATA_DIR / "uploads"
+            uploads.mkdir(parents=True, exist_ok=True)
+            prefix = upload_prefix or ("r" + str(reseller_id) if reseller_id else "main")
+            dest_name = f"{prefix}_welcome_image_{uuid.uuid4().hex[:10]}{ext}"
+            dest = uploads / dest_name
+            dest.write_bytes(content)
+            await set_setting(
+                session, "welcome_image", f"uploads/{dest_name}", reseller_id=reseller_id
+            )
 
     return True, "ظاهر ربات در تلگرام اعمال شد"
