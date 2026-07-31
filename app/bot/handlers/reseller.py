@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import func, select
@@ -215,10 +217,12 @@ async def res_user_view(
         return
     await callback.answer()
     blocked = "بله" if user.is_blocked else "خیر"
+    display = html.escape(user.full_name or user.username or "—")
+    uname = html.escape(user.username or "—")
     text = (
-        f"👤 <b>{user.full_name or user.username or '—'}</b>\n\n"
+        f"👤 <b>{display}</b>\n\n"
         f"آیدی: <code>{user.telegram_id}</code>\n"
-        f"یوزرنیم: @{user.username or '—'}\n"
+        f"یوزرنیم: @{uname}\n"
         f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
         f"مسدود: {blocked}"
     )
@@ -487,14 +491,13 @@ async def resapply_plan(
     if owner_id or db_user.role in (Role.RESELLER.value, Role.ADMIN.value):
         await callback.answer("اجازه درخواست نمایندگی ندارید", show_alert=True)
         return
-    ui = await get_all_settings(session)
     plan_id = int(callback.data.split(":")[-1])
     plans = {p.id: p for p in await list_active_reseller_plans(session)}
     plan = plans.get(plan_id)
     if not plan:
         await callback.answer("پلن یافت نشد", show_alert=True)
         return
-    desc = plan.description or "بدون توضیح"
+    desc = html.escape(plan.description or "بدون توضیح")
     body = (
         f"{desc}\n\n"
         f"قیمت: <b>{format_toman(plan.price, get_settings().currency) if plan.price else 'رایگان'}</b>\n"

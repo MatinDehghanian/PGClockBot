@@ -126,7 +126,13 @@ def register_backup_pages(app, *, render, require_admin, get_db):
         staff: dict = Depends(require_admin),
         file: UploadFile = File(...),
     ):
-        raw = await file.read()
+        max_bytes = 500 * 1024 * 1024
+        raw = await file.read(max_bytes + 1)
+        if len(raw) > max_bytes:
+            return RedirectResponse(
+                "/settings?tab=backup&err=" + quote("حجم بکاپ بیش از ۵۰۰ مگابایت است"),
+                status_code=303,
+            )
         result = await asyncio.to_thread(
             save_uploaded_backup,
             raw,

@@ -64,6 +64,24 @@
       tg.setHeaderColor('#1f6f5b');
     }
     const initData = tg?.initData || '';
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+    function safeUrl(u) {
+      const s = String(u || '').trim();
+      if (!s) return '';
+      try {
+        const low = s.toLowerCase();
+        if (low.startsWith('javascript:') || low.startsWith('data:') || low.startsWith('vbscript:')) {
+          return '';
+        }
+        return s;
+      } catch (_) {
+        return '';
+      }
+    }
     async function api(path) {
       const res = await fetch(path, { headers: { 'X-Telegram-Init-Data': initData } });
       if (!res.ok) throw new Error(await res.text());
@@ -81,34 +99,65 @@
         let html = '<div class="card"><h3>سرویس‌های من</h3>';
         if (!data.services.length) html += '<p class="muted">سرویسی ندارید</p>';
         for (const s of data.services) {
-          html += `<div class="row" style="margin:8px 0"><div><strong>${s.username}</strong><br/><code>${s.subscription_url || ''}</code></div>
-            <button class="btn secondary" style="width:auto;padding:8px 10px" onclick="showSvc(${s.id})">جزئیات</button></div>`;
+          const url = esc(s.subscription_url || '');
+          html += `<div class="row" style="margin:8px 0"><div><strong>${esc(s.username)}</strong><br/><code>${url}</code></div>
+            <button class="btn secondary" style="width:auto;padding:8px 10px" data-svc="${Number(s.id) || 0}">جزئیات</button></div>`;
         }
         html += '</div><div class="card"><h3>خرید پلن</h3><div class="grid">';
         for (const p of data.plans) {
-          html += `<div class="row"><div><strong>${p.name}</strong><div class="muted">${p.days} روز · ${p.gb ?? '∞'} GB</div></div>
-            <div class="price">${money(p.price)}</div></div>`;
+          html += `<div class="row"><div><strong>${esc(p.name)}</strong><div class="muted">${esc(p.days)} روز · ${esc(p.gb ?? '∞')} GB</div></div>
+            <div class="price">${esc(money(p.price))}</div></div>`;
         }
         html += '</div><p class="muted" style="margin-top:12px">برای خرید از دکمه‌های ربات استفاده کنید؛ مینی‌اپ وضعیت و لینک را سریع نشان می‌دهد.</p></div>';
         html += '<div class="card" id="detail" style="display:none"></div>';
         root.innerHTML = html;
+        root.querySelectorAll('[data-svc]').forEach((btn) => {
+          btn.addEventListener('click', () => showSvc(Number(btn.getAttribute('data-svc'))));
+        });
       } catch (e) {
-        root.innerHTML = `<div class="error">برای استفاده ابتدا ربات را /start کنید.<br/>${e.message}</div>`;
+        root.textContent = '';
+        const err = document.createElement('div');
+        err.className = 'error';
+        err.appendChild(document.createTextNode('برای استفاده ابتدا ربات را /start کنید.'));
+        err.appendChild(document.createElement('br'));
+        err.appendChild(document.createTextNode(String(e.message || e)));
+        root.appendChild(err);
       }
     }
     async function showSvc(id) {
       const box = document.getElementById('detail');
       box.style.display = 'block';
-      box.innerHTML = 'در حال دریافت…';
+      box.textContent = 'در حال دریافت…';
       try {
         const data = await api('/api/mini/service/' + id);
         const i = data.info || {};
-        box.innerHTML = `<h3>${data.service.username}</h3>
-          <div class="muted">وضعیت: ${i.status || '—'} · مصرف: ${i.used_traffic ?? '—'} / ${i.data_limit ?? '∞'}</div>
-          <p><code>${data.service.url || ''}</code></p>
-          <button class="btn" onclick="tg && tg.openLink(data.service.url)">باز کردن لینک</button>`;
+        const url = safeUrl(data.service.url || '');
+        box.textContent = '';
+        const h3 = document.createElement('h3');
+        h3.textContent = data.service.username || '';
+        const muted = document.createElement('div');
+        muted.className = 'muted';
+        muted.textContent = `وضعیت: ${i.status || '—'} · مصرف: ${i.used_traffic ?? '—'} / ${i.data_limit ?? '∞'}`;
+        const p = document.createElement('p');
+        const code = document.createElement('code');
+        code.textContent = url;
+        p.appendChild(code);
+        box.appendChild(h3);
+        box.appendChild(muted);
+        box.appendChild(p);
+        if (url) {
+          const btn = document.createElement('button');
+          btn.className = 'btn';
+          btn.textContent = 'باز کردن لینک';
+          btn.addEventListener('click', () => { if (tg) tg.openLink(url); });
+          box.appendChild(btn);
+        }
       } catch (e) {
-        box.innerHTML = `<div class="error">${e.message}</div>`;
+        box.textContent = '';
+        const err = document.createElement('div');
+        err.className = 'error';
+        err.textContent = String(e.message || e);
+        box.appendChild(err);
       }
     }
     load();

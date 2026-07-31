@@ -11,8 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
-from app.config import get_settings
-from app.db.models import BotUser, Plan, Role
+from app.db.models import BotUser, Plan
 from app.services.notifications import NOTIFY_PREFS
 from app.services.pasarguard import get_pg
 from app.services.support_contacts import (

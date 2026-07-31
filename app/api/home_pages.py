@@ -16,70 +16,70 @@ from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_ow
 
 
 async def _reseller_shop_stats(session: AsyncSession, rid: int) -> dict[str, int]:
-    users_count = (
-        await session.scalar(select(func.count()).select_from(BotUser).where(BotUser.reseller_id == rid))
-        or 0
+    """Single round-trip aggregate counts for a reseller shop dashboard."""
+    users_expr = (
+        select(func.count()).select_from(BotUser).where(BotUser.reseller_id == rid).scalar_subquery()
     )
-    orders_count = (
-        await session.scalar(select(func.count()).select_from(Order).where(Order.reseller_id == rid))
-        or 0
+    orders_expr = (
+        select(func.count()).select_from(Order).where(Order.reseller_id == rid).scalar_subquery()
     )
-    pending_payments = (
-        await session.scalar(
-            select(func.count())
-            .select_from(Payment)
-            .join(BotUser, BotUser.id == Payment.user_id)
-            .where(
-                Payment.status == PaymentStatus.PENDING.value,
-                Payment.receipt_file_id.is_not(None),
-                BotUser.reseller_id == rid,
+    pending_expr = (
+        select(func.count())
+        .select_from(Payment)
+        .join(BotUser, BotUser.id == Payment.user_id)
+        .where(
+            Payment.status == PaymentStatus.PENDING.value,
+            Payment.receipt_file_id.is_not(None),
+            BotUser.reseller_id == rid,
+        )
+        .scalar_subquery()
+    )
+    services_expr = (
+        select(func.count())
+        .select_from(UserService)
+        .join(BotUser, BotUser.id == UserService.bot_user_id)
+        .where(BotUser.reseller_id == rid)
+        .scalar_subquery()
+    )
+    revenue_expr = (
+        select(func.coalesce(func.sum(Order.amount), 0))
+        .where(Order.status == "delivered", Order.reseller_id == rid)
+        .scalar_subquery()
+    )
+    plans_expr = (
+        select(func.count())
+        .select_from(Plan)
+        .where(Plan.is_active.is_(True), Plan.owner_reseller_id == rid)
+        .scalar_subquery()
+    )
+    tickets_expr = (
+        select(func.count())
+        .select_from(Ticket)
+        .join(BotUser, BotUser.id == Ticket.user_id)
+        .where(Ticket.status == "open", BotUser.reseller_id == rid)
+        .scalar_subquery()
+    )
+    row = (
+        await session.execute(
+            select(
+                users_expr,
+                orders_expr,
+                pending_expr,
+                services_expr,
+                revenue_expr,
+                plans_expr,
+                tickets_expr,
             )
         )
-        or 0
-    )
-    services_count = (
-        await session.scalar(
-            select(func.count())
-            .select_from(UserService)
-            .join(BotUser, BotUser.id == UserService.bot_user_id)
-            .where(BotUser.reseller_id == rid)
-        )
-        or 0
-    )
-    revenue = (
-        await session.scalar(
-            select(func.coalesce(func.sum(Order.amount), 0)).where(
-                Order.status == "delivered",
-                Order.reseller_id == rid,
-            )
-        )
-        or 0
-    )
-    plans_count = (
-        await session.scalar(
-            select(func.count())
-            .select_from(Plan)
-            .where(Plan.is_active.is_(True), Plan.owner_reseller_id == rid)
-        )
-        or 0
-    )
-    open_tickets = (
-        await session.scalar(
-            select(func.count())
-            .select_from(Ticket)
-            .join(BotUser, BotUser.id == Ticket.user_id)
-            .where(Ticket.status == "open", BotUser.reseller_id == rid)
-        )
-        or 0
-    )
+    ).one()
     return {
-        "users": int(users_count),
-        "orders": int(orders_count),
-        "pending": int(pending_payments),
-        "services": int(services_count),
-        "revenue": int(revenue),
-        "plans": int(plans_count),
-        "tickets": int(open_tickets),
+        "users": int(row[0] or 0),
+        "orders": int(row[1] or 0),
+        "pending": int(row[2] or 0),
+        "services": int(row[3] or 0),
+        "revenue": int(row[4] or 0),
+        "plans": int(row[5] or 0),
+        "tickets": int(row[6] or 0),
     }
 
 

@@ -223,6 +223,7 @@ def _shop_reseller_id() -> int | None:
 
 
 async def apply_discount(session: AsyncSession, code: str | None, amount: int) -> tuple[int, str | None]:
+    """Read-only discount preview (does not consume uses)."""
     if not code:
         return 0, None
     result = await session.execute(
@@ -237,16 +238,27 @@ async def apply_discount(session: AsyncSession, code: str | None, amount: int) -
     return discount, row.code
 
 
-async def _consume_discount_code(session: AsyncSession, code: str | None) -> None:
-    """Atomically increment used_count, respecting max_uses."""
+async def _reserve_discount_code(
+    session: AsyncSession, code: str | None, amount: int
+) -> tuple[int, str | None]:
+    """Atomically reserve one use at order creation (prevents max_uses races)."""
     if not code:
-        return
+        return 0, None
     from sqlalchemy import or_
 
-    await session.execute(
+    normalized = code.upper().strip()
+    result = await session.execute(
+        select(DiscountCode).where(DiscountCode.code == normalized, DiscountCode.is_active.is_(True))
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        return 0, None
+    if row.max_uses is not None and row.used_count >= row.max_uses:
+        return 0, None
+    claim = await session.execute(
         update(DiscountCode)
         .where(
-            DiscountCode.code == code,
+            DiscountCode.id == row.id,
             DiscountCode.is_active.is_(True),
             or_(
                 DiscountCode.max_uses.is_(None),
@@ -256,6 +268,10 @@ async def _consume_discount_code(session: AsyncSession, code: str | None) -> Non
         .values(used_count=DiscountCode.used_count + 1)
         .execution_options(synchronize_session=False)
     )
+    if claim.rowcount != 1:
+        return 0, None
+    discount = int(amount * row.percent / 100)
+    return discount, row.code
 
 
 async def create_order(
@@ -298,7 +314,7 @@ async def create_order(
         prior = await session.execute(trial_q.limit(1))
         if prior.scalar_one_or_none() is not None:
             raise ValueError("پلن تست رایگان را قبلاً دریافت کرده‌اید")
-    discount, used_code = await apply_discount(session, discount_code, plan.price)
+    discount, used_code = await _reserve_discount_code(session, discount_code, plan.price)
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
@@ -421,7 +437,7 @@ async def create_custom_order(
     session.add(plan)
     await session.flush()
 
-    discount, used_code = await apply_discount(session, discount_code, amount)
+    discount, used_code = await _reserve_discount_code(session, discount_code, amount)
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
@@ -482,6 +498,7 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     if order.status not in _PAYABLE_ORDER_STATUSES:
         raise ValueError("این سفارش قابل پرداخت با کیف پول نیست")
     payment: Payment | None = None
+    debited = False
     order = await _claim_payable_order(
         session, order, payment_method=PaymentMethod.WALLET.value
     )
@@ -490,6 +507,7 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     try:
         if order.amount > 0:
             await debit_wallet(session, user, order.amount, f"خرید سفارش #{order.id}")
+            debited = True
         payment = Payment(
             order_id=order.id,
             user_id=user.id,
@@ -519,7 +537,8 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
             return await apply_renewal(session, order, service, plan)
         return await deliver_order(session, order)
     except Exception:
-        if order.amount > 0:
+        # Only refund when we actually debited — never mint balance on debit failure.
+        if debited and order.amount > 0:
             await credit_wallet(session, user, order.amount, f"برگشت خرید ناموفق #{order.id}")
         order.status = OrderStatus.PENDING.value
         if payment is not None:
@@ -815,8 +834,6 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
     if profile is not None:
         commission = int(order.amount * profile.commission_percent / 100)
         profile.balance += commission
-
-    await _consume_discount_code(session, order.discount_code)
 
     order.service_id = service.id
     order.status = OrderStatus.DELIVERED.value

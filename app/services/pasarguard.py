@@ -567,6 +567,23 @@ def extract_sub_token(subscription_url: str | None) -> str | None:
     return token or None
 
 
+def _sanitize_subscription_url(raw: str) -> str | None:
+    """Reject executable browser schemes; allow http(s) and common VPN URI schemes."""
+    url = (raw or "").strip()
+    if not url:
+        return None
+    low = url.lower()
+    if low.startswith(("javascript:", "data:", "vbscript:", "file:")):
+        return None
+    # Relative /sub/ paths and absolute http(s) / known schemes
+    if low.startswith(("/", "http://", "https://", "vless://", "vmess://", "trojan://", "ss://", "ssr://", "hy2://", "hysteria2://", "tuic://", "wireguard://")):
+        return url
+    # Bare host-ish tokens are rejected
+    if "://" in low:
+        return None
+    return url
+
+
 def user_subscription_url(user: dict | None) -> str | None:
     """Best-effort subscription URL from a PG user payload."""
     if not isinstance(user, dict):
@@ -581,27 +598,37 @@ def user_subscription_url(user: dict | None) -> str | None:
     ):
         raw = user.get(key)
         if isinstance(raw, str) and raw.strip():
-            return raw.strip()
+            cleaned = _sanitize_subscription_url(raw)
+            if cleaned:
+                return cleaned
         if isinstance(raw, dict):
             for k in ("url", "subscription_url", "link", "href"):
                 v = raw.get(k)
                 if isinstance(v, str) and v.strip():
-                    return v.strip()
+                    cleaned = _sanitize_subscription_url(v)
+                    if cleaned:
+                        return cleaned
     links = user.get("links")
     if isinstance(links, dict):
         for k in ("subscription", "subscription_url", "url", "sub"):
             v = links.get(k)
             if isinstance(v, str) and v.strip():
-                return v.strip()
+                cleaned = _sanitize_subscription_url(v)
+                if cleaned:
+                    return cleaned
     if isinstance(links, list):
         for item in links:
             if isinstance(item, str) and ("/sub/" in item or item.startswith("http")):
-                return item.strip()
+                cleaned = _sanitize_subscription_url(item)
+                if cleaned:
+                    return cleaned
             if isinstance(item, dict):
                 for k in ("url", "link", "href"):
                     v = item.get(k)
                     if isinstance(v, str) and v.strip():
-                        return v.strip()
+                        cleaned = _sanitize_subscription_url(v)
+                        if cleaned:
+                            return cleaned
     token = (
         user.get("subscription_token")
         or user.get("token")

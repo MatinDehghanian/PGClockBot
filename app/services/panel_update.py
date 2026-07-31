@@ -28,18 +28,7 @@ _THREAD: threading.Thread | None = None
 MAX_SNAPSHOTS = 1
 
 # systemd often has a short PATH — resolve absolute binaries
-_EXTRA_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-
-
-def _which(name: str) -> str | None:
-    found = shutil.which(name)
-    if found:
-        return found
-    for prefix in ("/usr/bin", "/bin", "/usr/local/bin"):
-        candidate = Path(prefix) / name
-        if candidate.exists() and os.access(candidate, os.X_OK):
-            return str(candidate)
-    return None
+from app.util_which import which as _which
 
 
 def _repo_root() -> Path:
@@ -371,12 +360,24 @@ def _update_via_archive(root: Path) -> None:
         raise RuntimeError(f"دانلود آرشیو ناموفق: {e}") from e
     if not data or len(data) < 1000:
         raise RuntimeError("آرشیو دانلودشده خالی یا ناقص است")
+    if len(data) > 200 * 1024 * 1024:
+        raise RuntimeError("آرشیو آپدیت بیش از حد بزرگ است")
 
     preserve_top = {".env", "data", ".venv", ".git"}
     with tempfile.TemporaryDirectory(prefix="pgclock-upd-") as tmp:
         zpath = Path(tmp) / "src.zip"
         zpath.write_bytes(data)
         with zipfile.ZipFile(zpath, "r") as zf:
+            # Reject zip-slip / oversized archives before extraction
+            max_uncompressed = 512 * 1024 * 1024
+            total = 0
+            for info in zf.infolist():
+                name = info.filename.replace("\\", "/")
+                if name.startswith("/") or ".." in name.split("/"):
+                    raise RuntimeError("آرشیو آپدیت مسیر ناامن دارد")
+                total += max(0, int(info.file_size or 0))
+                if total > max_uncompressed:
+                    raise RuntimeError("حجم آرشیو آپدیت بیش از حد مجاز است")
             zf.extractall(tmp)
         extracted = [p for p in Path(tmp).iterdir() if p.is_dir() and p.name != "__MACOSX"]
         if not extracted:

@@ -114,9 +114,9 @@ class Order(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
-    plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("plans.id"), nullable=True)
+    plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("plans.id"), nullable=True, index=True)
     reseller_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("bot_users.id"), nullable=True
+        ForeignKey("bot_users.id"), nullable=True, index=True
     )
     amount: Mapped[int] = mapped_column(Integer)
     discount_amount: Mapped[int] = mapped_column(Integer, default=0)
@@ -125,7 +125,7 @@ class Order(Base):
     discount_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     service_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("user_services.id"), nullable=True
+        ForeignKey("user_services.id"), nullable=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -141,7 +141,7 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True)
+    order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
     amount: Mapped[int] = mapped_column(Integer)
     method: Mapped[str] = mapped_column(String(32), default=PaymentMethod.CARD.value)

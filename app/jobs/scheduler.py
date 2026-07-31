@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -14,6 +15,9 @@ from app.services.pasarguard import get_pg
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
+
+# Bound concurrent PG subscription lookups during expiry scan
+_PG_FETCH_CONCURRENCY = 8
 
 
 def _as_int(val, default: int) -> int:
@@ -110,6 +114,7 @@ async def check_expiring_services(bot: Bot) -> None:
         now = datetime.now(timezone.utc)
         platform_on = on(global_ui.get("user_alert_low_enabled", "0"))
 
+        eligible: list[tuple[UserService, BotUser, dict, int, int]] = []
         for svc in services:
             user = users_by_id.get(svc.bot_user_id)
             if not user or user.is_blocked:
@@ -124,13 +129,30 @@ async def check_expiring_services(bot: Bot) -> None:
             if not on(ui.get("user_alert_low_enabled", "0")):
                 continue
 
-            try:
-                info = await pg.subscription_info(svc.subscription_token)
-            except Exception:
-                continue
-
             traffic_pct = max(1, min(99, _as_int(ui.get("user_alert_low_traffic_pct"), 20)))
             time_pct = max(1, min(99, _as_int(ui.get("user_alert_low_time_pct"), 20)))
+            eligible.append((svc, user, ui, traffic_pct, time_pct))
+
+        if not eligible:
+            return
+
+        sem = asyncio.Semaphore(_PG_FETCH_CONCURRENCY)
+
+        async def _fetch_info(token: str):
+            async with sem:
+                try:
+                    return await asyncio.wait_for(pg.subscription_info(token), timeout=12)
+                except Exception:
+                    logger.debug("subscription_info failed for token prefix=%s", (token or "")[:8], exc_info=True)
+                    return None
+
+        infos = await asyncio.gather(
+            *[_fetch_info(svc.subscription_token) for svc, *_rest in eligible]
+        )
+
+        for (svc, user, _ui, traffic_pct, time_pct), info in zip(eligible, infos):
+            if not info:
+                continue
             send_bot = _resolve_send_bot(bot, user.reseller_id, profile_by_user)
 
             # --- remaining TIME percent ---
@@ -154,7 +176,9 @@ async def check_expiring_services(bot: Bot) -> None:
                                 )
                                 svc.notified_expire = True
                             except Exception:
-                                pass
+                                logger.debug(
+                                    "expire alert send failed tg=%s", user.telegram_id, exc_info=True
+                                )
 
             # --- remaining TRAFFIC percent ---
             if not svc.notified_traffic:
@@ -177,7 +201,9 @@ async def check_expiring_services(bot: Bot) -> None:
                                 )
                                 svc.notified_traffic = True
                             except Exception:
-                                pass
+                                logger.debug(
+                                    "traffic alert send failed tg=%s", user.telegram_id, exc_info=True
+                                )
 
         await session.commit()
 
@@ -185,6 +211,15 @@ async def check_expiring_services(bot: Bot) -> None:
 def start_scheduler(bot: Bot) -> None:
     if scheduler.running:
         return
-    scheduler.add_job(check_expiring_services, "interval", hours=6, args=[bot], id="expiry")
+    scheduler.add_job(
+        check_expiring_services,
+        "interval",
+        hours=6,
+        args=[bot],
+        id="expiry",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
     scheduler.start()
     logger.info("Scheduler started")

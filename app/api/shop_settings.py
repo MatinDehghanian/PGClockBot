@@ -21,7 +21,6 @@ from app.services.users import (
     SETTING_GROUPS,
     get_all_settings,
     keys_for_tab,
-    set_setting,
 )
 
 
@@ -279,14 +278,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             known = known | {"menu_order"}
             known.discard("show_reseller_apply")
 
+        payload: dict[str, str] = {}
         for key in TOGGLE_KEYS:
             if key in known:
-                await set_setting(
-                    session,
-                    key,
-                    "1" if form.get(f"s_{key}") else "0",
-                    reseller_id=rid,
-                )
+                payload[key] = "1" if form.get(f"s_{key}") else "0"
         for key in known:
             if key in TOGGLE_KEYS or key in IMAGE_KEYS:
                 continue
@@ -301,15 +296,16 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                     from app.services.users import normalize_force_join_channel_value
 
                     val = normalize_force_join_channel_value(val)
-                await set_setting(session, key, val, reseller_id=rid)
+                payload[key] = val
 
         uploads = DATA_DIR / "uploads"
         uploads.mkdir(parents=True, exist_ok=True)
+        max_image_bytes = 5 * 1024 * 1024
         for key in IMAGE_KEYS:
             if key not in known:
                 continue
             if form.get(f"s_{key}_clear"):
-                await set_setting(session, key, "", reseller_id=rid)
+                payload[key] = ""
                 continue
             upload = form.get(f"s_{key}")
             if isinstance(upload, UploadFile) and upload.filename:
@@ -319,13 +315,18 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                     continue
                 dest_name = f"r{rid}_{key}_{uuid.uuid4().hex[:10]}{ext}"
                 dest = uploads / dest_name
-                content = await upload.read()
+                content = await upload.read(max_image_bytes + 1)
+                if len(content) > max_image_bytes:
+                    continue
                 if content:
                     dest.write_bytes(content)
-                    await set_setting(session, key, f"uploads/{dest_name}", reseller_id=rid)
+                    payload[key] = f"uploads/{dest_name}"
 
         # Always keep apply button off on reseller shops
-        await set_setting(session, "show_reseller_apply", "0", reseller_id=rid)
+        payload["show_reseller_apply"] = "0"
+        from app.services.users import set_settings_bulk
+
+        await set_settings_bulk(session, payload, reseller_id=rid)
         return RedirectResponse(f"/shop-settings?tab={tab}&saved=1", status_code=303)
 
     @app.post("/shop-settings/menu-layout")

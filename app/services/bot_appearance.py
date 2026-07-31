@@ -268,7 +268,6 @@ async def save_appearance_from_form(
     from starlette.datastructures import UploadFile
 
     from app.config import DATA_DIR
-    from app.services.users import set_setting
 
     name = clip(str(form.get("bot_tg_name") or ""), NAME_MAX)
     description = clip(str(form.get("bot_tg_description") or ""), DESCRIPTION_MAX)
@@ -295,7 +294,9 @@ async def save_appearance_from_form(
         ext = Path(fname).suffix
         if ext not in {".jpg", ".jpeg"}:
             return False, "عکس پروفایل باید JPG باشد"
-        content = await upload.read()
+        content = await upload.read(5 * 1024 * 1024 + 1)
+        if len(content) > 5 * 1024 * 1024:
+            return False, "حجم عکس پروفایل بیش از ۵ مگابایت است"
         if content:
             photo_bytes = content
             photo_filename = Path(fname).name
@@ -315,16 +316,19 @@ async def save_appearance_from_form(
     if not result.ok:
         return False, result.error or "اعمال در تلگرام ناموفق"
 
-    await set_setting(session, "bot_tg_name", name, reseller_id=reseller_id)
-    await set_setting(session, "bot_tg_description", description, reseller_id=reseller_id)
-    await set_setting(
-        session, "bot_tg_short_description", short_description, reseller_id=reseller_id
-    )
-    await set_setting(session, "bot_cmd_start", cmd_start, reseller_id=reseller_id)
-    await set_setting(session, "bot_cmd_help", cmd_help, reseller_id=reseller_id)
+    from app.services.users import set_settings_bulk
+
+    payload: dict[str, str] = {
+        "bot_tg_name": name,
+        "bot_tg_description": description,
+        "bot_tg_short_description": short_description,
+        "bot_cmd_start": cmd_start,
+        "bot_cmd_help": cmd_help,
+        "welcome_image": "",
+    }
 
     if remove_photo and not photo_bytes:
-        await set_setting(session, "bot_tg_photo", "", reseller_id=reseller_id)
+        payload["bot_tg_photo"] = ""
     elif photo_bytes:
         uploads = DATA_DIR / "uploads"
         uploads.mkdir(parents=True, exist_ok=True)
@@ -332,9 +336,8 @@ async def save_appearance_from_form(
         dest_name = f"{prefix}_bot_tg_photo_{uuid.uuid4().hex[:10]}.jpg"
         dest = uploads / dest_name
         dest.write_bytes(photo_bytes)
-        await set_setting(session, "bot_tg_photo", f"uploads/{dest_name}", reseller_id=reseller_id)
+        payload["bot_tg_photo"] = f"uploads/{dest_name}"
 
-    # Drop legacy welcome/middle photo setting if still present
-    await set_setting(session, "welcome_image", "", reseller_id=reseller_id)
+    await set_settings_bulk(session, payload, reseller_id=reseller_id)
 
     return True, "ظاهر ربات در تلگرام اعمال شد"

@@ -128,48 +128,54 @@ def _summarize_nodes(nodes: list | None) -> dict[str, Any]:
 
 
 async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
-    users = await session.scalar(select(func.count()).select_from(BotUser)) or 0
-    orders = await session.scalar(select(func.count()).select_from(Order)) or 0
-    services = await session.scalar(select(func.count()).select_from(UserService)) or 0
-    pending = (
-        await session.scalar(
-            select(func.count())
-            .select_from(Payment)
-            .where(
-                Payment.status == PaymentStatus.PENDING.value,
-                Payment.receipt_file_id.is_not(None),
+    """Single round-trip aggregate counts for the bot dashboard."""
+    pending_expr = (
+        select(func.count())
+        .select_from(Payment)
+        .where(
+            Payment.status == PaymentStatus.PENDING.value,
+            Payment.receipt_file_id.is_not(None),
+        )
+        .scalar_subquery()
+    )
+    revenue_expr = (
+        select(func.coalesce(func.sum(Order.amount), 0))
+        .where(Order.status == "delivered")
+        .scalar_subquery()
+    )
+    tickets_expr = (
+        select(func.count())
+        .select_from(Ticket)
+        .where(Ticket.status == "open")
+        .scalar_subquery()
+    )
+    resellers_expr = (
+        select(func.count())
+        .select_from(ResellerProfile)
+        .where(ResellerProfile.is_active.is_(True))
+        .scalar_subquery()
+    )
+    row = (
+        await session.execute(
+            select(
+                select(func.count()).select_from(BotUser).scalar_subquery(),
+                select(func.count()).select_from(Order).scalar_subquery(),
+                select(func.count()).select_from(UserService).scalar_subquery(),
+                pending_expr,
+                revenue_expr,
+                tickets_expr,
+                resellers_expr,
             )
         )
-        or 0
-    )
-    revenue = (
-        await session.scalar(
-            select(func.coalesce(func.sum(Order.amount), 0)).where(Order.status == "delivered")
-        )
-        or 0
-    )
-    tickets = (
-        await session.scalar(
-            select(func.count()).select_from(Ticket).where(Ticket.status == "open")
-        )
-        or 0
-    )
-    resellers = (
-        await session.scalar(
-            select(func.count())
-            .select_from(ResellerProfile)
-            .where(ResellerProfile.is_active.is_(True))
-        )
-        or 0
-    )
+    ).one()
     return {
-        "users": int(users),
-        "orders": int(orders),
-        "services": int(services),
-        "pending": int(pending),
-        "revenue": int(revenue),
-        "tickets": int(tickets),
-        "resellers": int(resellers),
+        "users": int(row[0] or 0),
+        "orders": int(row[1] or 0),
+        "services": int(row[2] or 0),
+        "pending": int(row[3] or 0),
+        "revenue": int(row[4] or 0),
+        "tickets": int(row[5] or 0),
+        "resellers": int(row[6] or 0),
     }
 
 

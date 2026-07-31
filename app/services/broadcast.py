@@ -54,12 +54,13 @@ async def delete_broadcast_log(session: AsyncSession, log_id: int) -> bool:
 
 
 async def clear_broadcast_history(session: AsyncSession) -> int:
-    result = await session.execute(select(BroadcastLog))
-    rows = list(result.scalars().all())
-    for row in rows:
-        await session.delete(row)
-    await session.commit()
-    return len(rows)
+    from sqlalchemy import delete, func, select
+
+    count = await session.scalar(select(func.count()).select_from(BroadcastLog)) or 0
+    if count:
+        await session.execute(delete(BroadcastLog))
+        await session.commit()
+    return int(count)
 
 
 async def send_broadcast(

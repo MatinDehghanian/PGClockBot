@@ -35,11 +35,8 @@ from app.db.session import SessionLocal
 from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.pasarguard import get_pg
 from app.services.resellers import (
-    get_reseller_profile,
-    make_reseller,
     parse_perms,
     setup_is_complete,
-    with_shop_settings,
     DEFAULT_FEATURE_PERMS,
 )
 from app.services.setup_wizard import (
@@ -494,11 +491,15 @@ def create_api_app(lifespan=None) -> FastAPI:
         response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
         # Panel pages only; keep CSP moderate so inline preview/scripts still work
         if not request.url.path.startswith("/static") and not request.url.path.startswith("/media"):
+            script_src = "script-src 'self' 'unsafe-inline'"
+            # Mini App needs Telegram WebApp SDK
+            if request.url.path.startswith("/miniapp"):
+                script_src = "script-src 'self' 'unsafe-inline' https://telegram.org"
             response.headers.setdefault(
                 "Content-Security-Policy",
                 "default-src 'self'; img-src 'self' data: blob:; "
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-                "script-src 'self' 'unsafe-inline'; "
+                f"{script_src}; "
                 "font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; "
                 "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
             )
@@ -2477,7 +2478,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.notifications import NOTIFY_PREFS, get_notify_prefs
-        from app.services.updates import check_github_update, clear_update_cache, local_version
+        from app.services.updates import clear_update_cache, local_version
 
         tab = (request.query_params.get("tab") or "welcome").strip()
         valid = {t[0] for t in SETTINGS_TABS} | PANEL_SETTINGS_KEYS
@@ -2779,9 +2780,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         if tab == "menu":
             known = known | {"menu_order"}
 
+        payload: dict[str, str] = {}
         for key in TOGGLE_KEYS:
             if key in known:
-                await set_setting(session, key, "1" if form.get(f"s_{key}") else "0")
+                payload[key] = "1" if form.get(f"s_{key}") else "0"
         for key in known:
             if key in TOGGLE_KEYS or key in IMAGE_KEYS:
                 continue
@@ -2796,14 +2798,15 @@ def create_api_app(lifespan=None) -> FastAPI:
                     from app.services.users import normalize_force_join_channel_value
 
                     val = normalize_force_join_channel_value(val)
-                await set_setting(session, key, val)
+                payload[key] = val
         uploads = DATA_DIR / "uploads"
         uploads.mkdir(parents=True, exist_ok=True)
+        max_image_bytes = 5 * 1024 * 1024
         for key in IMAGE_KEYS:
             if key not in known:
                 continue
             if form.get(f"s_{key}_clear"):
-                await set_setting(session, key, "")
+                payload[key] = ""
                 continue
             upload = form.get(f"s_{key}")
             if isinstance(upload, UploadFile) and upload.filename:
@@ -2813,10 +2816,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                     continue
                 dest_name = f"{key}_{uuid.uuid4().hex[:10]}{ext}"
                 dest = uploads / dest_name
-                content = await upload.read()
+                content = await upload.read(max_image_bytes + 1)
+                if len(content) > max_image_bytes:
+                    continue
                 if content:
                     dest.write_bytes(content)
-                    await set_setting(session, key, f"uploads/{dest_name}")
+                    payload[key] = f"uploads/{dest_name}"
+        if payload:
+            await set_settings_bulk(session, payload)
         return RedirectResponse(f"/settings?tab={tab}&saved=1", status_code=303)
 
     @app.get("/tickets", response_class=HTMLResponse)

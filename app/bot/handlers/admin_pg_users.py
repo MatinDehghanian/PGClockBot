@@ -15,8 +15,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.tg_utils import safe_edit_text
-from app.config import get_settings
-from app.db.models import BotUser, Role
+from app.db.models import BotUser
 from app.services.formatting import format_message, service_card
 from app.services.pasarguard import (
     as_list,

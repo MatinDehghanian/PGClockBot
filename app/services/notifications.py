@@ -19,7 +19,7 @@ from app.services.formatting import (
     info_block,
     kv_line,
 )
-from app.services.users import get_all_settings, on, set_setting
+from app.services.users import get_all_settings, on, set_settings_bulk
 
 # (setting_key, title, description, default "1"|"0")
 NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
@@ -68,9 +68,11 @@ async def get_notify_prefs(session: AsyncSession) -> dict[str, bool]:
 
 
 async def save_notify_prefs(session: AsyncSession, form: dict[str, Any]) -> None:
-    for key, _, _, _ in NOTIFY_PREFS:
-        raw = form.get(f"s_{key}")
-        await set_setting(session, key, "1" if raw in {"1", "on", "true", True} else "0")
+    payload = {
+        key: ("1" if form.get(f"s_{key}") in {"1", "on", "true", True} else "0")
+        for key, _, _, _ in NOTIFY_PREFS
+    }
+    await set_settings_bulk(session, payload)
 
 
 async def notify_enabled(session: AsyncSession, key: str) -> bool:

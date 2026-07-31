@@ -19,7 +19,6 @@ from aiogram.types import (
 
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.tg_utils import safe_edit_text
-from app.config import get_settings
 from app.db.models import BotUser
 from app.services.backup import (
     create_backup,

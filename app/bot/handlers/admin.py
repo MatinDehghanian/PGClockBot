@@ -21,7 +21,6 @@ from app.services.formatting import (
 )
 from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.pasarguard import get_pg
-from app.services.resellers import make_reseller
 from app.services.tickets import get_ticket, list_open_tickets, reply_ticket
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.updates import local_version
@@ -300,14 +299,15 @@ async def adm_order_view(callback: CallbackQuery, session: AsyncSession, db_user
             select(Payment).where(Payment.order_id == order_id).order_by(Payment.id.desc()).limit(1)
         )
     ).scalar_one_or_none()
-    who = (user.full_name or user.username or str(order.user_id)) if user else str(order.user_id)
+    who = html.escape((user.full_name or user.username or str(order.user_id)) if user else str(order.user_id))
+    plan_name = html.escape(plan.name) if plan and plan.name else (order.plan_id or "—")
     text = (
         f"🛒 <b>سفارش #{order.id}</b>\n\n"
         f"وضعیت: <b>{order_status_fa(order.status)}</b>\n"
         f"کاربر: {who}\n"
-        f"پلن: {plan.name if plan else (order.plan_id or '—')}\n"
+        f"پلن: {plan_name}\n"
         f"مبلغ: {format_toman(order.amount, get_settings().currency)}\n"
-        f"روش: {order.payment_method or '—'}\n"
+        f"روش: {html.escape(order.payment_method or '—')}\n"
     )
     if pay:
         text += f"پرداخت: #{pay.id} ({pay.status})\n"
@@ -395,11 +395,6 @@ async def order_approve_cb(callback: CallbackQuery, session: AsyncSession, db_us
         await callback.answer(str(e), show_alert=True)
         return
     await session.refresh(order)
-    pay = (
-        await session.execute(
-            select(Payment).where(Payment.order_id == order_id).order_by(Payment.id.desc()).limit(1)
-        )
-    ).scalar_one_or_none()
     text = f"🛒 سفارش #{order.id}\nوضعیت: <b>{order_status_fa(order.status)}</b>\n✅ انجام شد"
     if callback.message:
         try:

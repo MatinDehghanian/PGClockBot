@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import event
 
 from app.config import get_settings
 from app.db import Base
@@ -13,6 +14,14 @@ if _db_url.startswith("sqlite"):
 engine = create_async_engine(_db_url, **_engine_kwargs)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
+if _db_url.startswith("sqlite"):
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _sqlite_on_connect(dbapi_conn, _connection_record) -> None:
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
 
 async def init_db() -> None:
     async with engine.begin() as conn:
@@ -24,6 +33,8 @@ async def init_db() -> None:
             await conn.execute(text("PRAGMA journal_mode=WAL"))
             await conn.execute(text("PRAGMA busy_timeout=30000"))
             await conn.execute(text("PRAGMA synchronous=NORMAL"))
+            await conn.execute(text("PRAGMA foreign_keys=ON"))
+            await conn.run_sync(_ensure_indexes)
 
 
 def _migrate_sqlite(sync_conn) -> None:
@@ -129,3 +140,21 @@ def _append_core_reseller_perms_csv(raw: str | None) -> str:
         if p not in seen:
             seen.append(p)
     return ",".join(seen)
+
+
+def _ensure_indexes(sync_conn) -> None:
+    """Additive indexes for frequent dashboard / payment filters."""
+    from sqlalchemy import text
+
+    statements = (
+        "CREATE INDEX IF NOT EXISTS ix_orders_reseller_id ON orders (reseller_id)",
+        "CREATE INDEX IF NOT EXISTS ix_orders_plan_id ON orders (plan_id)",
+        "CREATE INDEX IF NOT EXISTS ix_orders_service_id ON orders (service_id)",
+        "CREATE INDEX IF NOT EXISTS ix_payments_order_id ON payments (order_id)",
+        "CREATE INDEX IF NOT EXISTS ix_discount_codes_code ON discount_codes (code)",
+    )
+    for stmt in statements:
+        try:
+            sync_conn.execute(text(stmt))
+        except Exception:
+            pass

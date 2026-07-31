@@ -162,7 +162,6 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
                 "app.services.orders.assert_reseller_can_deliver",
                 new=AsyncMock(),
             ),
-            patch("app.services.orders._consume_discount_code", new=AsyncMock()),
             patch(
                 "app.services.orders.UserService",
                 side_effect=lambda **kw: SimpleNamespace(id=1, **kw),

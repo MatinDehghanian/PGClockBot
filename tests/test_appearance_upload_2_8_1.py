@@ -20,8 +20,8 @@ class WelcomePhotoRemovedTests(unittest.TestCase):
         self.assertNotIn("answer_photo", start)
         self.assertIn("edit_text", start)
         appearance = Path("app/services/bot_appearance.py").read_text(encoding="utf-8")
-        # Cleared on save, but no upload field
-        self.assertIn('set_setting(session, "welcome_image", ""', appearance)
+        # Cleared on save (bulk), but no upload field
+        self.assertIn('"welcome_image": ""', appearance)
 
     def test_edit_recovers_legacy_photo_menu(self):
         src = Path("app/bot/handlers/start.py").read_text(encoding="utf-8")

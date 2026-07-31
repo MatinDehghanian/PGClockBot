@@ -158,10 +158,23 @@ def read_manifest(zip_path: Path) -> dict[str, Any] | None:
 def validate_backup_archive(zip_path: Path) -> tuple[bool, str, dict[str, Any] | None]:
     if not zip_path.is_file():
         return False, "فایل بکاپ یافت نشد", None
+    max_members = 5000
+    max_uncompressed = 2 * 1024 * 1024 * 1024  # 2 GiB expanded
     try:
         with zipfile.ZipFile(zip_path, "r") as zf:
             if zf.testzip() is not None:
                 return False, "آرشیو آسیب دیده است", None
+            infos = zf.infolist()
+            if len(infos) > max_members:
+                return False, "تعداد فایل‌های بکاپ بیش از حد مجاز است", None
+            total_uncompressed = 0
+            for info in infos:
+                name = info.filename.replace("\\", "/")
+                if name.startswith("/") or ".." in name.split("/"):
+                    return False, "مسیر ناامن داخل بکاپ", None
+                total_uncompressed += max(0, int(info.file_size or 0))
+                if total_uncompressed > max_uncompressed:
+                    return False, "حجم uncompressed بکاپ بیش از حد مجاز است", None
             names = set(zf.namelist())
             if MANIFEST_NAME not in names:
                 return False, "manifest.json موجود نیست", None
@@ -170,6 +183,21 @@ def validate_backup_archive(zip_path: Path) -> tuple[bool, str, dict[str, Any] |
                 return False, "فرمت بکاپ نامعتبر است", None
             if "data/bot.db" not in names:
                 return False, "دیتابیس داخل بکاپ نیست", None
+            # Verify declared file hashes when present (newer backups)
+            files_meta = manifest.get("files")
+            if isinstance(files_meta, list):
+                for entry in files_meta:
+                    if not isinstance(entry, dict):
+                        continue
+                    rel = str(entry.get("path") or "").replace("\\", "/")
+                    expect = str(entry.get("sha256") or "").strip().lower()
+                    if not rel or not expect or rel == MANIFEST_NAME:
+                        continue
+                    if rel not in names:
+                        return False, f"فایل اعلام‌شده در بکاپ نیست: {rel}", None
+                    digest = hashlib.sha256(zf.read(rel)).hexdigest()
+                    if digest != expect:
+                        return False, f"هش فایل بکاپ نامعتبر است: {rel}", None
             return True, "ok", manifest
     except zipfile.BadZipFile:
         return False, "فایل ZIP معتبر نیست", None
