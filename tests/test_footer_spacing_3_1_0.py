@@ -1,4 +1,4 @@
-"""Pinned footers + uniform section spacing (3.1.0)."""
+"""Pinned footers + uniform section spacing (3.1.0 / refined in 3.1.1)."""
 
 from __future__ import annotations
 
@@ -16,35 +16,30 @@ class PinnedFooterTests(unittest.TestCase):
         self.assertIn("--chrome-pad-bottom:", css)
         self.assertIn("--section-gap: 16px;", css)
 
-    def test_side_and_main_do_not_scroll_as_wholes(self):
+    def test_side_nav_scrolls_inside_column(self):
         css = CSS.read_text(encoding="utf-8")
         side = re.search(r"(?ms)^\.side\s*\{([^}]+)\}", css)
-        main = re.search(r"(?ms)^\.main\s*\{([^}]+)\}", css)
-        self.assertIsNotNone(side)
-        self.assertIsNotNone(main)
-        self.assertIn("overflow: hidden;", side.group(1))
-        self.assertIn("overflow: hidden;", main.group(1))
-        self.assertIn("display: flex;", main.group(1))
-
-    def test_scroll_lives_in_nav_and_main_body(self):
-        css = CSS.read_text(encoding="utf-8")
         nav = re.search(r"(?ms)^\.side-nav\s*\{([^}]+)\}", css)
-        body = re.search(r"(?ms)^\.main-body\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(side)
         self.assertIsNotNone(nav)
-        self.assertIsNotNone(body)
+        self.assertIn("overflow: hidden;", side.group(1))
         self.assertIn("overflow-y: auto;", nav.group(1))
-        self.assertIn("overflow-y: auto;", body.group(1))
-        self.assertIn("min-height: 0;", nav.group(1))
-        self.assertIn("min-height: 0;", body.group(1))
 
-    def test_both_footers_share_bottom_padding(self):
+    def test_main_uses_end_of_page_shell(self):
+        css = CSS.read_text(encoding="utf-8")
+        main = re.search(r"(?ms)^\.main\s*\{([^}]+)\}", css)
+        shell = re.search(r"(?ms)^\.main-shell\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(main)
+        self.assertIsNotNone(shell)
+        self.assertIn("overflow-y: auto;", main.group(1))
+        self.assertIn("min-height: 100%;", shell.group(1))
+
+    def test_both_footers_share_top_rule(self):
         css = CSS.read_text(encoding="utf-8")
         site = re.search(r"(?ms)^\.site-footer\s*\{([^}]+)\}", css)
         side = re.search(r"(?ms)^\.side-foot\s*\{([^}]+)\}", css)
         self.assertIsNotNone(site)
         self.assertIsNotNone(side)
-        self.assertIn("padding-bottom: var(--chrome-pad-bottom);", site.group(1))
-        self.assertIn("padding-bottom: var(--chrome-pad-bottom);", side.group(1))
         self.assertIn("padding-top: 12px;", site.group(1))
         self.assertIn("padding-top: 12px;", side.group(1))
         self.assertIn("margin-top: auto;", site.group(1))

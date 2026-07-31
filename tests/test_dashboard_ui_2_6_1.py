@@ -37,18 +37,15 @@ class FooterAndMobileTests(unittest.TestCase):
         self.assertIn(".site-footer {\n  margin-top: auto;", css)
         self.assertIn("padding-top: 12px;", css)
         self.assertIn("--chrome-pad-bottom:", css)
-        self.assertIn("padding-bottom: var(--chrome-pad-bottom);", css)
 
-    def test_main_body_is_scroll_container(self):
+    def test_main_end_of_page_footer_shell(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        # Footer stays pinned; content scrolls inside .main-body
-        self.assertIn(".main-body {\n  flex: 1 1 auto;", css)
-        self.assertIn("overflow-y: auto;", css)
-        main = css.split(".main {\n", 1)[1].split(".main-body {", 1)[0]
-        self.assertIn("overflow: hidden;", main)
-        self.assertIn("display: flex;", main)
-        side = css.split(".side {\n", 1)[1].split(".main {", 1)[0]
-        self.assertIn("overflow: hidden;", side)
+        html = Path("app/web/templates/base.html").read_text(encoding="utf-8")
+        self.assertIn("main-shell", html)
+        self.assertIn(".main-shell {\n  box-sizing: border-box;", css)
+        self.assertIn("min-height: 100%;", css)
+        main = css.split(".main {\n", 1)[1].split(".main-shell {", 1)[0]
+        self.assertIn("overflow-y: auto;", main)
 
     def test_mobile_main_top_gap_increased(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")

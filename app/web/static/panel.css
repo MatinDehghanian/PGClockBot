@@ -34,7 +34,6 @@
   --space-4: 20px;
   --card-pad: 16px;
   --section-gap: 16px;
-  /* Shared chrome padding so sidebar + main footers share one baseline */
   --chrome-pad-x: 12px;
   --chrome-pad-bottom: calc(16px + var(--safe-bottom));
   --main-pad-x: 32px;
@@ -79,11 +78,10 @@ html, body {
   text-size-adjust: 100%;
   overflow-x: hidden;
 }
-/* App shell owns the viewport — prevent document scroll fighting pinned footers */
+/* Lock document scroll; columns own their scrollports */
 html:has(.shell),
 html:has(.shell) body {
   height: 100%;
-  max-height: 100dvh;
   overflow: hidden;
 }
 a { color: var(--foreground); text-decoration: none; }
@@ -121,7 +119,6 @@ a:hover { opacity: 0.8; }
   max-height: 100dvh;
   position: relative;
   top: 0;
-  /* Nav scrolls; footer stays pinned at the bottom of the column */
   overflow: hidden;
   background: var(--bg-card);
   border-left: 1px solid var(--border);
@@ -137,22 +134,32 @@ a:hover { opacity: 0.8; }
   min-height: 0;
   height: 100%;
   max-height: 100dvh;
-  /* Body scrolls; site-footer stays pinned and baseline-aligned with .side-foot */
-  padding: var(--main-pad-top) var(--main-pad-x) 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.main-body {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-  width: 100%;
+  /*
+    Scroll the whole column (content + footer). Footer is NOT position:fixed /
+    floating — it lives at the end of the page. .main-shell min-height:100%
+    keeps it at the bottom of the viewport when content is short.
+  */
+  padding: var(--main-pad-top) var(--main-pad-x) var(--chrome-pad-bottom);
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+}
+.main-shell {
+  box-sizing: border-box;
+  width: 100%;
+  flex: 1 0 auto;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.main-body {
+  flex: 1 0 auto;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
   padding-bottom: var(--section-gap);
 }
 
@@ -1362,7 +1369,6 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   margin-top: auto;
   flex: 0 0 auto;
   padding-top: 12px;
-  padding-bottom: var(--chrome-pad-bottom);
   border-top: 1px solid var(--border);
   display: flex;
   flex-wrap: wrap;
@@ -2388,22 +2394,28 @@ a.btn.btn-star:hover {
   .main {
     --main-pad-x: 14px;
     --main-pad-top: 22px;
-    padding: var(--main-pad-top) var(--main-pad-x) 0;
+    padding: var(--main-pad-top) var(--main-pad-x) var(--chrome-pad-bottom);
     flex: 1 1 auto;
     width: 100%;
     min-height: 0;
     height: auto;
     max-height: none;
-    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .main-shell {
+    flex: 1 0 auto;
+    min-height: 100%;
     display: flex;
     flex-direction: column;
   }
   .main-body {
-    flex: 1 1 auto;
+    flex: 1 0 auto;
     min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: visible;
     padding-bottom: var(--section-gap);
   }
   .site-footer {
@@ -2413,7 +2425,6 @@ a.btn.btn-star:hover {
     text-align: center;
     margin-top: auto;
     padding-top: 12px;
-    padding-bottom: var(--chrome-pad-bottom);
     gap: 8px;
   }
   .footer-meta { justify-content: center; }
