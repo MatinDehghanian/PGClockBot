@@ -75,22 +75,19 @@ class BroadcastKebabTests(unittest.TestCase):
 
 
 class WelcomeImageTests(unittest.TestCase):
-    def test_setting_and_handler(self):
+    def test_welcome_image_removed(self):
         from app.services.users import DEFAULT_SETTINGS, IMAGE_KEYS, SETTING_GROUPS
 
-        self.assertIn("welcome_image", DEFAULT_SETTINGS)
-        self.assertIn("welcome_image", IMAGE_KEYS)
+        self.assertNotIn("welcome_image", DEFAULT_SETTINGS)
+        self.assertNotIn("welcome_image", IMAGE_KEYS)
         welcome_fields = SETTING_GROUPS["خوش‌آمد و هویت"]
         keys = [f[0] for f in welcome_fields]
         self.assertNotIn("welcome_image", keys)
         ap = Path("app/web/templates/_settings_appearance.html").read_text(encoding="utf-8")
-        self.assertIn('name="welcome_image"', ap)
-        self.assertIn("متن وسط صفحه", ap)
+        self.assertNotIn('name="welcome_image"', ap)
         src = Path("app/bot/handlers/start.py").read_text(encoding="utf-8")
-        self.assertIn("welcome_image", src)
-        self.assertIn("answer_photo", src)
-        appearance = Path("app/services/bot_appearance.py").read_text(encoding="utf-8")
-        self.assertIn("welcome_image", appearance)
+        self.assertNotIn("welcome_image", src)
+        self.assertNotIn("answer_photo", src)
 
 
 if __name__ == "__main__":

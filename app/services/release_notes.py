@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "2.8.2": [
+        "حذف کامل عکس پیام وسط / خوش‌آمد از پنل و ربات",
+        "رفع پرش منو به پیام جدید: بازگشت به edit_text روی همان پیام",
+        "پیام‌های عکس قدیمی یک‌بار با منوی متنی جایگزین می‌شوند",
+    ],
     "2.8.1": [
         "عکس پیام وسط به تنظیمات ظاهر ربات (زیر متن وسط) منتقل شد",
         "ارسال امن عکس بعد از /start؛ کارت قبل از Start در تلگرام فقط متن است",

@@ -2533,15 +2533,6 @@ a.btn.btn-star:hover {
   white-space: pre-wrap;
   word-break: break-word;
 }
-.tg-empty-welcome-img {
-  display: block;
-  width: min(160px, 70%);
-  max-height: 120px;
-  object-fit: cover;
-  border-radius: 10px;
-  margin: 8px auto 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
 .tg-profile-cmds {
   padding: 10px 12px 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);

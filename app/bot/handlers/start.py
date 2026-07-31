@@ -35,11 +35,6 @@ async def render_home(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    from pathlib import Path
-
-    from aiogram.types import FSInputFile
-
-    from app.config import DATA_DIR
     from app.services.formatting import format_message
     from app.services.reseller_access import effective_menu_role
 
@@ -54,7 +49,6 @@ async def render_home(
         reseller_owner_id=reseller_owner_id,
     )
 
-    photo_path: Path | None = None
     if effective_role == "admin":
         text = format_message(
             f"🛠 {ui.get('shop_title', 'کلاک')}",
@@ -71,62 +65,29 @@ async def render_home(
         text = format_message(f"✨ {title}", body)
         has = await _has_services(session, db_user.id)
         markup = kb.main_menu(effective_role, has_services=has, ui=ui)
-        rel = (ui.get("welcome_image") or "").strip()
-        if rel:
-            candidate = (DATA_DIR / rel).resolve()
-            uploads_root = (DATA_DIR / "uploads").resolve()
-            try:
-                candidate.relative_to(uploads_root)
-            except ValueError:
-                candidate = None  # type: ignore[assignment]
-            if candidate is not None and candidate.is_file():
-                photo_path = candidate
-
-    def _clip_caption(html: str, limit: int = 1024) -> str:
-        if len(html) <= limit:
-            return html
-        return html[: max(0, limit - 1)] + "…"
-
-    async def _send_home() -> None:
-        if photo_path is not None:
-            try:
-                await message.answer_photo(
-                    FSInputFile(photo_path),
-                    caption=_clip_caption(text),
-                    reply_markup=markup,
-                )
-                return
-            except Exception:
-                # Fall through to text if Telegram rejects the photo/caption
-                pass
-        await message.answer(text, reply_markup=markup)
 
     if edit:
         from aiogram.exceptions import TelegramBadRequest
 
-        has_photo = bool(getattr(message, "photo", None))
         try:
-            if photo_path is not None and has_photo:
-                await message.edit_caption(caption=text, reply_markup=markup)
-                return
-            if photo_path is None and not has_photo:
-                await message.edit_text(text, reply_markup=markup)
-                return
+            await message.edit_text(text, reply_markup=markup)
+            return
         except TelegramBadRequest as e:
             if "message is not modified" in str(e).lower():
                 return
+            # Legacy photo home messages cannot be edit_text'd — replace once
+            if getattr(message, "photo", None):
+                try:
+                    await message.delete()
+                except Exception:
+                    pass
+                await message.answer(text, reply_markup=markup)
+                return
         except Exception:
             pass
-        # Media/text mismatch — replace the message
-        try:
-            await message.delete()
-        except Exception:
-            pass
-        await _send_home()
-        return
 
     # One message: welcome + inline menu (Telegram cannot mix reply+inline markups)
-    await _send_home()
+    await message.answer(text, reply_markup=markup)
 
     if seed_reply_kb:
         await seed_persistent_reply_kb(message)

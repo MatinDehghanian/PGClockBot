@@ -341,7 +341,6 @@ DEFAULT_SETTINGS = {
     "support_contacts": "[]",
     "force_join_channel": "",
     "force_join_enabled": "0",
-    "welcome_image": "",
     "trial_enabled": "0",
     "referral_bonus": "0",
     "auto_approve_payments": "0",
@@ -700,9 +699,6 @@ IMAGE_KEYS = {
     for fields in SETTING_GROUPS.values()
     for item in fields
     if len(item) >= 3 and item[2] == "image"
-} | {
-    # Managed on appearance tab (not a SETTING_GROUPS image field)
-    "welcome_image",
 }
 
 

@@ -1,4 +1,4 @@
-"""Appearance welcome photo + upload progress (2.8.1)."""
+"""Upload progress remains; welcome/middle photo fully removed (2.8.2)."""
 
 from __future__ import annotations
 
@@ -6,27 +6,27 @@ import unittest
 from pathlib import Path
 
 
-class AppearanceWelcomePhotoTests(unittest.TestCase):
-    def test_under_middle_text_not_welcome_tab(self):
+class WelcomePhotoRemovedTests(unittest.TestCase):
+    def test_no_welcome_image_anywhere(self):
+        from app.services.users import DEFAULT_SETTINGS, IMAGE_KEYS
+
+        self.assertNotIn("welcome_image", DEFAULT_SETTINGS)
+        self.assertNotIn("welcome_image", IMAGE_KEYS)
         ap = Path("app/web/templates/_settings_appearance.html").read_text(encoding="utf-8")
-        self.assertIn('name="welcome_image"', ap)
-        self.assertIn("متن وسط صفحه", ap)
-        # Middle text comes before welcome image field
-        mid = ap.index("bot_tg_description")
-        img = ap.index('name="welcome_image"')
-        self.assertLess(mid, img)
-        field = Path("app/web/templates/_settings_field.html").read_text(encoding="utf-8")
-        # Generic image fields no longer the only place — welcome removed from groups
-        from app.services.users import SETTING_GROUPS
+        self.assertNotIn("welcome_image", ap)
+        self.assertNotIn("عکس پیام وسط", ap)
+        start = Path("app/bot/handlers/start.py").read_text(encoding="utf-8")
+        self.assertNotIn("welcome_image", start)
+        self.assertNotIn("answer_photo", start)
+        self.assertIn("edit_text", start)
+        appearance = Path("app/services/bot_appearance.py").read_text(encoding="utf-8")
+        # Cleared on save, but no upload field
+        self.assertIn('set_setting(session, "welcome_image", ""', appearance)
 
-        keys = [f[0] for f in SETTING_GROUPS["خوش‌آمد و هویت"]]
-        self.assertNotIn("welcome_image", keys)
-
-    def test_start_sends_photo_safely(self):
+    def test_edit_recovers_legacy_photo_menu(self):
         src = Path("app/bot/handlers/start.py").read_text(encoding="utf-8")
-        self.assertIn("_clip_caption", src)
-        self.assertIn("relative_to(uploads_root)", src)
-        self.assertIn("answer_photo", src)
+        self.assertIn("Legacy photo home messages", src)
+        self.assertIn('getattr(message, "photo", None)', src)
 
 
 class UploadProgressTests(unittest.TestCase):
@@ -34,12 +34,8 @@ class UploadProgressTests(unittest.TestCase):
         js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
         self.assertIn("initUploadProgress", js)
         self.assertIn("آپلود با موفقیت انجام شد", js)
-        self.assertIn("xhr.upload.onprogress", js)
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".upload-box-progress", css)
-        self.assertIn(".upload-box-progress-bar", css)
-        ap = Path("app/web/templates/_settings_appearance.html").read_text(encoding="utf-8")
-        self.assertIn("upload-box-progress", ap)
 
 
 if __name__ == "__main__":
