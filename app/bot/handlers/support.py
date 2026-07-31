@@ -106,7 +106,7 @@ async def support_subject(message: Message, state: FSMContext):
         return
     await state.update_data(subject=subject)
     await state.set_state(SupportStates.body)
-    await message.answer("متن پیام را بنویسید:")
+    await message.answer("متن پیام را بنویسید:", reply_markup=kb.cancel_reply())
 
 
 @router.message(SupportStates.body)

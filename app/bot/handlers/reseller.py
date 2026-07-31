@@ -161,18 +161,17 @@ async def res_users_list(
         .limit(RES_USERS_PAGE)
     )
     users = list(result.scalars().all())
-    rows: list[list[InlineKeyboardButton]] = []
+    buttons: list[InlineKeyboardButton] = []
     for u in users:
-        name = (u.full_name or u.username or str(u.telegram_id))[:36]
+        name = (u.full_name or u.username or str(u.telegram_id))[:18]
         flag = "🚫" if u.is_blocked else "👤"
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{flag} {name}",
-                    callback_data=f"res:user:{u.id}",
-                )
-            ]
+        buttons.append(
+            InlineKeyboardButton(
+                text=f"{flag} {name}",
+                callback_data=f"res:user:{u.id}",
+            )
         )
+    rows: list[list[InlineKeyboardButton]] = kb.chunk_buttons(buttons, cols=2)
     nav: list[InlineKeyboardButton] = []
     if page > 0:
         nav.append(InlineKeyboardButton(text="◀️ قبل", callback_data=f"res:users:{page - 1}"))
@@ -181,9 +180,13 @@ async def res_users_list(
     if nav:
         rows.append(nav)
     rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="res:home")])
-    text = f"👥 <b>مشتریان من</b>\nصفحه {page + 1} — {total} نفر"
+    text = (
+        f"👥 <b>مشتریان من</b>\n"
+        f"صفحه {page + 1} از {max(1, (total + RES_USERS_PAGE - 1) // RES_USERS_PAGE)}"
+        f" · {total} نفر"
+    )
     if not users:
-        text += "\n\nمشتری ثبت‌شده‌ای نیست."
+        text += "\n\nهنوز مشتری ثبت‌شده‌ای ندارید."
     if callback.message:
         await safe_edit_text(
             callback.message,

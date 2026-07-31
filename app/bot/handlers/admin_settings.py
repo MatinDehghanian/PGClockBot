@@ -695,7 +695,10 @@ async def support_title_msg(message: Message, state: FSMContext):
         return
     await state.update_data(support_title=text)
     await state.set_state(SettingsStates.support_telegram)
-    await message.answer("یوزرنیم یا آیدی تلگرام (@user یا عدد):")
+    await message.answer(
+        "یوزرنیم یا آیدی تلگرام را بفرستید:\n<code>@user</code> یا عدد",
+        reply_markup=kb.cancel_reply(),
+    )
 
 
 @router.message(SettingsStates.support_telegram)

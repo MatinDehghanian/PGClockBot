@@ -338,7 +338,8 @@ def node_status_fa(status: str | None) -> str:
 
 
 def format_toman(amount: int, currency: str = "تومان") -> str:
-    return f"{format_number(amount)} {currency}"
+    """Persian money string; leading RLM keeps Telegram RTL for numeric lines."""
+    return f"\u200f{format_number(amount)} {currency}"
 
 
 def progress_bar(used: float, total: float | None, width: int = 10) -> str:
@@ -430,8 +431,8 @@ def status_label(status: str | None) -> str:
 
 
 def kv_line(emoji: str, label: str, value: str) -> str:
-    """One labeled row for Telegram HTML cards."""
-    return f"{emoji} <b>{label}:</b> {value}"
+    """One labeled row for Telegram HTML cards (RTL-safe)."""
+    return f"\u200f{emoji} <b>{label}:</b> {value}"
 
 
 def info_block(lines: list[str]) -> str:
@@ -463,12 +464,21 @@ def service_card(info: dict, currency_note: str = "") -> str:
     return "\n".join(lines)
 
 
+def rtl_text(text: str) -> str:
+    """Prefix each line with RLM so numeric-leading rows stay right-aligned in Telegram."""
+    if not text:
+        return text
+    return "\n".join(("\u200f" + line) if line else line for line in str(text).split("\n"))
+
+
 def format_message(title: str, body: str = "") -> str:
     """Pretty Telegram HTML card — bold title, soft divider, spaced body."""
     title = (title or "").strip()
     body = (body or "").strip()
     if not body:
-        return f"<b>{title}</b>" if title else ""
-    if not title:
-        return body
-    return f"<b>{title}</b>\n┄┄┄┄┄┄┄┄┄┄\n{body}"
+        out = f"<b>{title}</b>" if title else ""
+    elif not title:
+        out = body
+    else:
+        out = f"<b>{title}</b>\n━━━━━━━━━━━━\n{body}"
+    return rtl_text(out)

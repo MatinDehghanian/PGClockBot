@@ -137,18 +137,18 @@ async def _render_users_list(
         return
 
     rows: list[list[InlineKeyboardButton]] = []
+    buttons: list[InlineKeyboardButton] = []
     for u in users:
         uid = u.get("id")
         if uid is None:
             continue
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=_user_label(u),
-                    callback_data=f"adm:pg:u:{int(uid)}",
-                )
-            ]
+        buttons.append(
+            InlineKeyboardButton(
+                text=_user_label(u),
+                callback_data=f"adm:pg:u:{int(uid)}",
+            )
         )
+    rows = kb.chunk_buttons(buttons, cols=2)
 
     nav: list[InlineKeyboardButton] = []
     if page > 0:

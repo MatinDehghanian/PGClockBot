@@ -34,10 +34,9 @@ def _plan_line(p: Plan) -> str:
         link = f"گروه {p.pg_group_ids}"
     else:
         link = "⚠️ بدون اتصال پاسارگارد"
-    gb = f"{p.data_limit_gb:g}گ" if p.data_limit_gb is not None else "∞"
     return (
-        f"{flag} #{p.id} {p.name} — {format_toman(p.price, get_settings().currency)} "
-        f"| {p.duration_days}ر / {gb} | {link}"
+        f"{flag} <b>#{p.id} {html.escape(p.name)}</b>\n"
+        f"💰 {format_toman(p.price, get_settings().currency)} · {link}"
     )
 
 
@@ -48,11 +47,11 @@ def _plan_needs_link(p: Plan) -> bool:
 async def _render_plans_list(callback: CallbackQuery, session: AsyncSession) -> None:
     result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
     plans = list(result.scalars().all())
-    lines = ["📦 <b>پلن‌ها</b>\n"]
     if not plans:
-        lines.append("پلنی نیست.")
+        text = "📦 <b>پلن‌های فروش</b>\n\nهنوز پلنی ثبت نشده است."
     else:
-        lines.extend(_plan_line(p) for p in plans[:20])
+        cards = "\n\n".join(_plan_line(p) for p in plans[:20])
+        text = f"📦 <b>پلن‌های فروش</b>\n\n{cards}"
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text="➕ پلن جدید", callback_data="adm:plan:add")],
     ]
@@ -75,7 +74,7 @@ async def _render_plans_list(callback: CallbackQuery, session: AsyncSession) -> 
     rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")])
     if callback.message:
         await callback.message.edit_text(
-            "\n".join(lines),
+            text,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
@@ -196,7 +195,9 @@ async def adm_home(callback: CallbackQuery, db_user: BotUser):
     await callback.answer()
     if callback.message:
         await callback.message.edit_text(
-            f"🛠 <b>پنل ادمین</b>\n<code>{local_version()}</code>",
+            f"🛠 <b>پنل ادمین</b>\n"
+            f"<code>v{local_version()}</code>\n\n"
+            "از منوی زیر بخش موردنظر را انتخاب کنید.",
             reply_markup=kb.admin_home(),
         )
 
@@ -221,13 +222,14 @@ async def adm_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     ) or 0
     services = await session.scalar(select(func.count()).select_from(UserService)) or 0
     text = (
-        "📊 <b>داشبورد</b>\n\n"
-        f"👥 کاربران: {users_count}\n"
-        f"🛒 سفارش‌ها: {orders_count}\n"
-        f"⏳ سفارش منتظر تأیید: {pending_orders}\n"
-        f"🧾 رسید معلق: {pending_pay}\n"
-        f"📦 سرویس‌ها: {services}\n"
-        f"🔢 نسخه: {local_version()}"
+        "📊 <b>داشبورد</b>\n"
+        "━━━━━━━━━━━━\n"
+        f"👥 کاربران: <b>{users_count}</b>\n"
+        f"🛒 سفارش‌ها: <b>{orders_count}</b>\n"
+        f"⏳ منتظر تأیید: <b>{pending_orders}</b>\n"
+        f"🧾 رسید معلق: <b>{pending_pay}</b>\n"
+        f"📦 سرویس‌ها: <b>{services}</b>\n"
+        f"🔢 نسخه: <code>v{local_version()}</code>"
     )
     rows = [
         [
@@ -525,55 +527,58 @@ async def adm_plan_add(callback: CallbackQuery, state: FSMContext, db_user: BotU
 async def plan_name(message: Message, state: FSMContext):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
         return
     await state.update_data(name=(message.text or "").strip())
     await state.set_state(AdminStates.add_plan_price)
-    await message.answer("قیمت به تومان:")
+    await message.answer("قیمت به تومان را بفرستید:", reply_markup=kb.cancel_reply())
 
 
 @router.message(AdminStates.add_plan_price)
 async def plan_price(message: Message, state: FSMContext):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
         return
     try:
         price = int((message.text or "").replace(",", "").replace("٬", ""))
     except ValueError:
-        await message.answer("عدد معتبر بفرستید")
+        await message.answer("یک عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
         return
     await state.update_data(price=price)
     await state.set_state(AdminStates.add_plan_days)
-    await message.answer("مدت به روز:")
+    await message.answer("مدت اعتبار به روز را بفرستید:", reply_markup=kb.cancel_reply())
 
 
 @router.message(AdminStates.add_plan_days)
 async def plan_days(message: Message, state: FSMContext):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
         return
     try:
         days = int(message.text or "30")
     except ValueError:
-        await message.answer("عدد معتبر")
+        await message.answer("یک عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
         return
     await state.update_data(days=days)
     await state.set_state(AdminStates.add_plan_gb)
-    await message.answer("حجم به گیگ (برای نامحدود 0):")
+    await message.answer(
+        "حجم به گیگ را بفرستید:\n<code>0</code> = نامحدود",
+        reply_markup=kb.cancel_reply(),
+    )
 
 
 @router.message(AdminStates.add_plan_gb)
 async def plan_gb(message: Message, state: FSMContext):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
         return
     try:
         gb = float(message.text or "0")
     except ValueError:
-        await message.answer("عدد معتبر")
+        await message.answer("یک عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
         return
     await state.update_data(gb=None if gb <= 0 else gb)
     await state.set_state(AdminStates.add_plan_link)
@@ -1118,7 +1123,7 @@ async def adm_users_list(callback: CallbackQuery, session: AsyncSession, db_user
     users = list(result.scalars().all())
     rows = []
     for u in users:
-        name = (u.full_name or u.username or str(u.telegram_id))[:28]
+        name = (u.full_name or u.username or str(u.telegram_id))[:18]
         flag = "🚫" if u.is_blocked else ("🤝" if u.role == Role.RESELLER.value else "👤")
         rows.append(
             [
@@ -1132,7 +1137,8 @@ async def adm_users_list(callback: CallbackQuery, session: AsyncSession, db_user
     has_next = (page + 1) * USERS_PAGE_SIZE < total
     text = (
         f"👥 <b>لیست کاربران</b>\n"
-        f"صفحه {page + 1} — {total} نفر\n"
+        f"صفحه {page + 1} از {max(1, (total + USERS_PAGE_SIZE - 1) // USERS_PAGE_SIZE)}"
+        f" · {total} نفر\n"
         f"<i>برای جزئیات روی کاربر بزنید.</i>"
     )
     if callback.message:
@@ -1451,7 +1457,7 @@ async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_
     users = list(result.scalars().all())
     rows = []
     for u in users:
-        name = (u.full_name or u.username or str(u.telegram_id))[:28]
+        name = (u.full_name or u.username or str(u.telegram_id))[:18]
         rows.append(
             [
                 InlineKeyboardButton(
@@ -1462,7 +1468,11 @@ async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_
         )
     has_prev = page > 0
     has_next = (page + 1) * RESELLERS_PAGE_SIZE < total
-    text = f"🤝 <b>لیست نمایندگان</b>\nصفحه {page + 1} — {total} نفر"
+    text = (
+        f"🤝 <b>لیست نمایندگان</b>\n"
+        f"صفحه {page + 1} از {max(1, (total + RESELLERS_PAGE_SIZE - 1) // RESELLERS_PAGE_SIZE)}"
+        f" · {total} نفر"
+    )
     if not users:
         text += "\n\nنماینده‌ای ثبت نشده."
     if callback.message:

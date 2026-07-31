@@ -12,7 +12,7 @@ from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, PaymentMethod, UserService
 from app.services.delivery import send_delivery_to_user
-from app.services.formatting import format_message, format_toman
+from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import (
     calc_custom_plan_price,
     create_custom_order,
@@ -419,8 +419,8 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
 
     text = format_message(
         f"🧾 سفارش #{order.id}",
-        f"پلن دلخواه — {gb:g} گیگ / {days} روز\n"
-        f"مبلغ قابل پرداخت:\n<b>{format_toman(order.amount, get_settings().currency)}</b>\n\n"
+        f"پلن دلخواه — <b>{gb:g}</b> گیگ / <b>{days}</b> روز\n"
+        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}\n\n"
         "روش پرداخت را انتخاب کنید:",
     )
     if callback.message:
@@ -509,7 +509,7 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
 
     text = format_message(
         f"🧾 سفارش #{order.id}",
-        f"مبلغ قابل پرداخت:\n<b>{format_toman(order.amount, get_settings().currency)}</b>\n\n"
+        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}\n\n"
         "روش پرداخت را انتخاب کنید:",
     )
     if callback.message:

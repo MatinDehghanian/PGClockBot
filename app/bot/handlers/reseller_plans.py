@@ -277,43 +277,46 @@ async def res_plan_name(
         return
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.reseller_home(profile))
+        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
         return
     await state.update_data(name=(message.text or "").strip(), owner_id=owner_id)
     await state.set_state(ResellerPlanStates.price)
-    await message.answer("قیمت به تومان:")
+    await message.answer("قیمت به تومان را بفرستید:", reply_markup=kb.cancel_reply())
 
 
 @router.message(ResellerPlanStates.price)
 async def res_plan_price(message: Message, state: FSMContext, db_user: BotUser):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.")
+        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
         return
     try:
         price = int((message.text or "").replace(",", "").replace("٬", ""))
     except ValueError:
-        await message.answer("عدد معتبر بفرستید")
+        await message.answer("یک عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
         return
     await state.update_data(price=price)
     await state.set_state(ResellerPlanStates.days)
-    await message.answer("مدت به روز:")
+    await message.answer("مدت اعتبار به روز را بفرستید:", reply_markup=kb.cancel_reply())
 
 
 @router.message(ResellerPlanStates.days)
 async def res_plan_days(message: Message, state: FSMContext):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.")
+        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
         return
     try:
         days = max(1, int(message.text or "30"))
     except ValueError:
-        await message.answer("عدد معتبر بفرستید")
+        await message.answer("یک عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
         return
     await state.update_data(days=days)
     await state.set_state(ResellerPlanStates.gb)
-    await message.answer("حجم به گیگ (یا 0 برای نامحدود):")
+    await message.answer(
+        "حجم به گیگ را بفرستید:\n<code>0</code> = نامحدود",
+        reply_markup=kb.cancel_reply(),
+    )
 
 
 @router.message(ResellerPlanStates.gb)
@@ -323,7 +326,7 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
 ):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.")
+        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
         return
     raw = (message.text or "").strip().replace(",", ".")
     try:

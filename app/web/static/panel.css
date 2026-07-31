@@ -1731,16 +1731,16 @@ a.btn.btn-star:hover {
 .plan-naming-preview { margin-top: 8px; }
 
 .sticky-actions {
-  position: sticky;
-  bottom: calc(12px + var(--safe-bottom));
+  /* Stay in document flow at end of content — never float over the form */
+  position: static;
   background: var(--bg-card);
   padding: 12px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
   margin: 16px 0 12px;
-  z-index: 5;
+  z-index: auto;
 }
-/* Inside cards sticky overlaps the last field — keep normal flow there */
+/* Inside cards keep the same non-floating layout */
 .card .sticky-actions,
 .settings-card .sticky-actions {
   position: static;
@@ -2246,7 +2246,7 @@ a.btn.btn-star:hover {
     min-height: var(--btn-h);
   }
 
-  .sticky-actions { bottom: calc(10px + var(--safe-bottom)); }
+  .sticky-actions { margin: 14px 0 10px; }
   body.nav-open { overflow: hidden; }
 
   .notify-row { flex-direction: row; }

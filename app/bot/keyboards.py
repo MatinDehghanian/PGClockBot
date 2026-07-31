@@ -37,6 +37,20 @@ def _t(ui: dict | None, key: str) -> str:
     return DEFAULT_SETTINGS.get(key, key)
 
 
+def chunk_buttons(
+    buttons: list[InlineKeyboardButton],
+    *,
+    cols: int = 2,
+) -> list[list[InlineKeyboardButton]]:
+    """Pack inline buttons into N-column rows."""
+    if cols < 1:
+        cols = 1
+    rows: list[list[InlineKeyboardButton]] = []
+    for i in range(0, len(buttons), cols):
+        rows.append(buttons[i : i + cols])
+    return rows
+
+
 def _menu_order(ui: dict | None) -> list[str]:
     """Active menu keys from menu_order only (no re-inject of removed items)."""
     raw = _t(ui, "menu_order")
@@ -525,7 +539,9 @@ def admin_users_list_keyboard(
         nav.append(InlineKeyboardButton(text="◀️ قبل", callback_data=f"adm:users:list:{page - 1}"))
     if has_next:
         nav.append(InlineKeyboardButton(text="بعد ▶️", callback_data=f"adm:users:list:{page + 1}"))
-    kb_rows = list(rows)
+    # Flatten single-button rows then pack into 2 columns
+    flat = [btn for row in rows for btn in row]
+    kb_rows = chunk_buttons(flat, cols=2)
     if nav:
         kb_rows.append(nav)
     kb_rows.append([InlineKeyboardButton(text="🔎 جستجو", callback_data="adm:users:search")])
@@ -556,7 +572,8 @@ def admin_resellers_list_keyboard(
         nav.append(InlineKeyboardButton(text="◀️ قبل", callback_data=f"adm:resellers:list:{page - 1}"))
     if has_next:
         nav.append(InlineKeyboardButton(text="بعد ▶️", callback_data=f"adm:resellers:list:{page + 1}"))
-    kb_rows = list(rows)
+    flat = [btn for row in rows for btn in row]
+    kb_rows = chunk_buttons(flat, cols=2)
     if nav:
         kb_rows.append(nav)
     kb_rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:resellers")])

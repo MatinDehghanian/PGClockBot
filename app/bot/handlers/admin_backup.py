@@ -17,6 +17,7 @@ from aiogram.types import (
     Message,
 )
 
+from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
@@ -303,7 +304,8 @@ async def backup_upload_ask(callback: CallbackQuery, db_user: BotUser, state: FS
     await state.set_state(BackupStates.waiting_upload)
     if callback.message:
         await callback.message.answer(
-            "فایل ZIP بکاپ را در همین گفتگو بفرستید.\nبرای انصراف: انصراف"
+            "فایل ZIP بکاپ را در همین گفتگو بفرستید.",
+            reply_markup=kb.cancel_reply(),
         )
 
 

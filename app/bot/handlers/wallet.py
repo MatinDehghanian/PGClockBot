@@ -105,14 +105,18 @@ async def wallet_topup_amount(message: Message, state: FSMContext, session: Asyn
         if amount < 1000:
             raise ValueError
     except ValueError:
-        await message.answer(format_message("⚠️ خطا", "مبلغ معتبر وارد کنید (حداقل ۱۰۰۰)."))
+        await message.answer(
+            format_message("⚠️ خطا", "مبلغ معتبر وارد کنید (حداقل ۱٬۰۰۰)."),
+            reply_markup=kb.cancel_reply(),
+        )
         return
     await state.set_state(WalletStates.choose_method)
     await state.update_data(topup_amount=amount)
     await message.answer(
         format_message(
             "➕ شارژ کیف پول",
-            f"مبلغ: <b>{format_toman(amount, get_settings().currency)}</b>\nروش واریز را انتخاب کنید:",
+            f"{kv_line('💰', 'مبلغ', f'<b>{format_toman(amount, get_settings().currency)}</b>')}\n\n"
+            "روش واریز را انتخاب کنید:",
         ),
         reply_markup=kb.topup_pay_methods(ui),
     )
