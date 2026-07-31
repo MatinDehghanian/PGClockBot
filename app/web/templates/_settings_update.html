@@ -97,28 +97,24 @@
     از میان ۳ نسخهٔ اخیر گیت‌هاب یکی را انتخاب کنید و به همان نسخه برگردید.
   </p>
   {% if rollback_versions %}
-  <div class="settings-grid" id="rollback-root">
-    <div class="setting-item">
-      <label>نسخه مقصد
-        <select id="rollback-version" dir="ltr">
-          {% set ns = namespace(picked=false) %}
-          {% for v in rollback_versions %}
-          {% set is_current = v.version == local_version %}
-          {% if is_current %}
-          <option value="{{ v.version }}" disabled>v{{ v.version }} — نسخه فعلی</option>
-          {% elif not ns.picked %}
-          <option value="{{ v.version }}" selected>v{{ v.version }}</option>
-          {% set ns.picked = true %}
-          {% else %}
-          <option value="{{ v.version }}">v{{ v.version }}</option>
-          {% endif %}
-          {% endfor %}
-        </select>
-      </label>
-    </div>
-  </div>
-  <div class="actions sticky-actions">
-    <button type="button" class="btn btn-warn" id="rollback-start"
+  <div class="rollback-row" id="rollback-root">
+    <label class="rollback-field">نسخه مقصد
+      <select id="rollback-version" dir="ltr">
+        {% set ns = namespace(picked=false) %}
+        {% for v in rollback_versions %}
+        {% set is_current = v.version == local_version %}
+        {% if is_current %}
+        <option value="{{ v.version }}" disabled>v{{ v.version }} — نسخه فعلی</option>
+        {% elif not ns.picked %}
+        <option value="{{ v.version }}" selected>v{{ v.version }}</option>
+        {% set ns.picked = true %}
+        {% else %}
+        <option value="{{ v.version }}">v{{ v.version }}</option>
+        {% endif %}
+        {% endfor %}
+      </select>
+    </label>
+    <button type="button" class="btn btn-danger" id="rollback-start"
       {% if rollback_versions|length == 1 and rollback_versions[0].version == local_version %}disabled{% endif %}>
       بازگشت به این نسخه
     </button>

@@ -64,10 +64,25 @@ class UpdateUiSourceTests(unittest.TestCase):
         self.assertIn('id="rollback-version"', src)
         self.assertIn("settings-card", src)
         self.assertIn("progress-wrap", src)
+        self.assertIn("rollback-row", src)
+        self.assertIn('id="rollback-start"', src)
+        self.assertIn("btn-danger", src)
         self.assertNotIn("update-details", src)
         self.assertNotIn("جزئیات عملیات", src)
         self.assertNotIn("روش جایگزین", src)
         self.assertNotIn("cmd-copy", src)
+
+    def test_rollback_button_beside_select_is_danger(self):
+        src = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
+        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn('class="rollback-row"', src)
+        self.assertLess(src.find('id="rollback-version"'), src.find('id="rollback-start"'))
+        btn = src.split('id="rollback-start"', 1)[0][-120:]
+        self.assertIn("btn-danger", btn)
+        self.assertIn(".rollback-row", css)
+        self.assertIn(".rollback-field", css)
+        self.assertIn("M4.5 6L8 3l3.5 3", css)
+        self.assertIn("M4.5 10L8 13l3.5-3", css)
 
     def test_context_exposes_rollback_versions(self):
         src = Path("app/services/panel_update.py").read_text(encoding="utf-8")

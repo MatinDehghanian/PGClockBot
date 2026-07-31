@@ -287,6 +287,11 @@ a:hover { opacity: 0.8; }
   margin-bottom: var(--space-4);
   flex-wrap: wrap;
 }
+/* Title → tabs sits tighter (bot settings / PasarGuard), like bot list pages’ title→content rhythm */
+.page-head:has(+ .section-tabs),
+.page-head:has(+ .settings-tabs) {
+  margin-bottom: var(--space-2);
+}
 .page-head--stack {
   flex-direction: column;
   align-items: stretch;
@@ -1061,6 +1066,19 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .card.card-flush { padding: 0; }
 .card.card-flush > .card-head,
 .card.card-flush > h2 { padding: 14px 16px 10px; margin: 0; }
+.card.card-flush > .search-bar {
+  padding: 14px 16px 0;
+  margin-bottom: var(--space-2);
+}
+.card.card-flush > p.muted,
+.card.card-flush > .card-flush-note {
+  padding: 12px 16px 16px;
+  margin: 0;
+  font-size: 12px;
+}
+.card.card-flush > .checks {
+  padding: 4px 16px 12px;
+}
 .card.card-flush > .table-wrap table th:first-child,
 .card.card-flush > .table-wrap table td:first-child { padding-inline-start: 14px; }
 .card.card-flush > .table-wrap table th:last-child,
@@ -1857,6 +1875,14 @@ a.btn.btn-star:hover {
   border: 0;
   background: transparent;
 }
+/* Match bot pages: first content block after tabs hugs the header stack */
+.section-tabs + .card,
+.section-tabs + .stats-grid,
+.section-tabs + .flash,
+.section-tabs + .home-panels,
+.section-tabs + .pg-admin-head {
+  margin-top: 0;
+}
 .section-tabs a {
   display: inline-flex;
   align-items: center;
@@ -2055,6 +2081,34 @@ a.btn.btn-star:hover {
   font-size: 13px;
   line-height: 1.5;
 }
+.rollback-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-top: 4px;
+}
+.rollback-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 200px;
+  min-width: 180px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted-fg);
+}
+.rollback-field select {
+  width: 100%;
+  margin-top: 0;
+}
+.rollback-row > .btn {
+  flex: 0 0 auto;
+  align-self: flex-end;
+}
+@media (max-width: 560px) {
+  .rollback-row > .btn { width: 100%; }
+}
 .snap-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .snap-row {
   display: flex;
@@ -2230,6 +2284,8 @@ a.btn.btn-star:hover {
   .footer-meta { justify-content: center; }
   .footer-actions { justify-content: center; }
   .page-head { margin-bottom: var(--space-3); gap: var(--space-2); }
+  .page-head:has(+ .section-tabs),
+  .page-head:has(+ .settings-tabs) { margin-bottom: var(--space-2); }
   .page-title { gap: 10px; }
   .page-title-ico { width: 34px; height: 34px; border-radius: 9px; }
   .page-title-ico svg { width: 17px; height: 17px; }

@@ -9,7 +9,7 @@
 </div>
 {{ pg_tabs('pg_inbounds') }}
 
-<div class="card">
+<div class="card card-flush">
   <h2>تگ‌های اینباند</h2>
   {% if not inbounds %}
   <p class="muted">اینباندی نیست.</p>
@@ -20,13 +20,13 @@
     {% endfor %}
   </div>
   {% endif %}
-  <p class="muted" style="margin-top:16px;font-size:12px">
+  <p class="muted card-flush-note">
     برای ساخت گروه و هاست از همین تگ‌ها استفاده کنید.
   </p>
 </div>
 
 {% if details %}
-<div class="card">
+<div class="card card-flush">
   <h2>جزئیات</h2>
   <div class="table-wrap">
   {% if details is mapping %}
