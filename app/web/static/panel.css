@@ -2101,6 +2101,11 @@ a.btn.btn-star:hover {
 .rollback-field select {
   width: 100%;
   margin-top: 0;
+  /* LTR digits stay readable; value sits on the right so it clears the left chevron */
+  text-align: right;
+  padding-left: 36px;
+  padding-right: 12px;
+  background-position: left 12px center;
 }
 .rollback-row > .btn {
   flex: 0 0 auto;
