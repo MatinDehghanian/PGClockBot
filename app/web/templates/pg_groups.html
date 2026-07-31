@@ -2,6 +2,7 @@
 {% from "macros.html" import switch, switch_chip, pg_tabs, row_actions, page_title %}
 {% block title %}گروه‌های پاسارگارد{% endblock %}
 {% block content %}
+<div class="pg-head">
 <div class="page-head">
   <div>
     {{ page_title('groups', 'گروه‌ها', 'pg') }}
@@ -11,7 +12,7 @@
   {% endif %}
 </div>
 {{ pg_tabs('pg_groups') }}
-
+</div>
 {% if edit_group and can_write %}
 <div class="card">
   <h2>ویرایش گروه #{{ edit_group.get('id') }}</h2>

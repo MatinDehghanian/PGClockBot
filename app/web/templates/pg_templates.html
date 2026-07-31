@@ -2,6 +2,7 @@
 {% from "macros.html" import switch_chip, pg_tabs, row_actions, page_title %}
 {% block title %}تمپلیت‌های پاسارگارد{% endblock %}
 {% block content %}
+<div class="pg-head">
 <div class="page-head">
   <div>
     {{ page_title('templates', 'تمپلیت‌های کاربر', 'pg') }}
@@ -11,7 +12,7 @@
   {% endif %}
 </div>
 {{ pg_tabs('pg_templates') }}
-
+</div>
 <div class="card card-flush">
   <h2>تمپلیت‌های موجود</h2>
   {% if not templates %}

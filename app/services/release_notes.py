@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.1.6": [
+        "پنل پاسارگارد: فاصله تایتل تا محتوا مثل وب‌پنل ربات (تب‌ها داخل هدر یکپارچه)",
+    ],
     "3.1.5": [
         "منوی بازگشت نسخه: متن نسخه سمت راست تا روی فلش بالا/پایین نیفتد",
     ],

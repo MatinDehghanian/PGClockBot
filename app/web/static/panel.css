@@ -287,10 +287,21 @@ a:hover { opacity: 0.8; }
   margin-bottom: var(--space-4);
   flex-wrap: wrap;
 }
-/* Title → tabs sits tighter (bot settings / PasarGuard), like bot list pages’ title→content rhythm */
+/* Title → tabs sits tighter (bot settings / PasarGuard) */
 .page-head:has(+ .section-tabs),
 .page-head:has(+ .settings-tabs) {
   margin-bottom: var(--space-2);
+}
+/* PasarGuard: title + tabs are one header unit; gap to content matches bot page-head */
+.pg-head {
+  margin-bottom: var(--space-4);
+}
+.pg-head > .page-head {
+  margin-bottom: 8px;
+}
+.pg-head > .pg-tabs,
+.pg-head > .section-tabs {
+  margin-bottom: 0;
 }
 .page-head--stack {
   flex-direction: column;
@@ -1023,6 +1034,17 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   flex-wrap: wrap;
   margin-top: 12px;
   align-items: center;
+}
+/* Keep header actions on the title row (don't inherit .actions margin-top) */
+.page-head > .actions,
+.page-head > .btn {
+  margin-top: 0;
+  flex: 0 0 auto;
+  align-self: center;
+}
+.page-head > div:has(> .page-title) {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .quick-links {
   display: grid;
@@ -1875,12 +1897,17 @@ a.btn.btn-star:hover {
   border: 0;
   background: transparent;
 }
-/* Match bot pages: first content block after tabs hugs the header stack */
+/* Match bot pages: first content block after header stack hugs the chrome */
 .section-tabs + .card,
 .section-tabs + .stats-grid,
 .section-tabs + .flash,
 .section-tabs + .home-panels,
-.section-tabs + .pg-admin-head {
+.section-tabs + .pg-admin-head,
+.pg-head + .card,
+.pg-head + .stats-grid,
+.pg-head + .flash,
+.pg-head + .home-panels,
+.pg-head + .pg-admin-head {
   margin-top: 0;
 }
 .section-tabs a {
@@ -2291,6 +2318,8 @@ a.btn.btn-star:hover {
   .page-head { margin-bottom: var(--space-3); gap: var(--space-2); }
   .page-head:has(+ .section-tabs),
   .page-head:has(+ .settings-tabs) { margin-bottom: var(--space-2); }
+  .pg-head { margin-bottom: var(--space-3); }
+  .pg-head > .page-head { margin-bottom: 6px; }
   .page-title { gap: 10px; }
   .page-title-ico { width: 34px; height: 34px; border-radius: 9px; }
   .page-title-ico svg { width: 17px; height: 17px; }

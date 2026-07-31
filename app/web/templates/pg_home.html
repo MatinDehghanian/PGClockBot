@@ -2,6 +2,7 @@
 {% from "macros.html" import pg_tabs, page_title %}
 {% block title %}مدیر پاسارگارد{% endblock %}
 {% block content %}
+<div class="pg-head">
 <div class="page-head">
   <div>
     {{ page_title('overview', 'پنل پاسارگارد', 'pg') }}
@@ -9,6 +10,7 @@
 </div>
 
 {{ pg_tabs('pg') }}
+</div>
 
 {% if not is_admin %}
   {% set ov = reseller_overview or {} %}
