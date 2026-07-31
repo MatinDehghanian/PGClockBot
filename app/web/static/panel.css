@@ -34,6 +34,8 @@
   --space-4: 20px;
   --card-pad: 16px;
   --section-gap: 16px;
+  /* Equal space above & below page title+icon (bot and PasarGuard identical) */
+  --page-title-gap: 16px;
   --title-size: 14px;
   /* Form controls MUST stay ≥16px forever — iOS Safari zooms any focused field under 16px.
      Do not set input/select/textarea font-size to --title-size or any value < 16px. */
@@ -43,8 +45,8 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
-  --font: "Vazirmatn", ui-sans-serif, system-ui, sans-serif;
-  --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  /* Single UI typeface — no secondary families in the web panel */
+  --font: "Vazirmatn", sans-serif;
 
   --bg: var(--background);
   --bg-card: #0c0c0e;
@@ -125,8 +127,8 @@ a:hover { opacity: 0.8; }
   min-height: 0;
   height: 100%;
   max-height: 100dvh;
-  /* Bottom padding matches sidebar so footers sit on one baseline */
-  padding: 28px 32px calc(16px + var(--safe-bottom));
+  /* Top pad == page-head margin-bottom (--page-title-gap); footers share bottom pad with sidebar */
+  padding: var(--page-title-gap) 32px calc(16px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
@@ -284,24 +286,19 @@ a:hover { opacity: 0.8; }
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--space-3);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--page-title-gap);
   flex-wrap: wrap;
 }
-/* Title → tabs sits tighter (bot settings) */
-.page-head:has(+ .section-tabs),
-.page-head:has(+ .settings-tabs) {
-  margin-bottom: var(--space-2);
-}
-/* PasarGuard: tabs above title so title→content gap matches bot list pages */
+/* PasarGuard uses the same title chrome as bot: equal gap above/below title */
 .pg-head {
   margin-bottom: 0;
 }
+.pg-head > .page-head {
+  margin-bottom: var(--page-title-gap);
+}
 .pg-head > .pg-tabs,
 .pg-head > .section-tabs {
-  margin-bottom: 8px;
-}
-.pg-head > .page-head {
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--section-gap);
 }
 .page-head--stack {
   flex-direction: column;
@@ -356,7 +353,7 @@ a:hover { opacity: 0.8; }
 .page-title h1 {
   margin: 0;
   font-size: 22px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.25;
   animation: page-title-text-in 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -449,7 +446,7 @@ a:hover { opacity: 0.8; }
 .stat strong,
 .stat .stat-value {
   font-size: clamp(12px, 2.6vw, 20px);
-  font-weight: 650;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: right;
   display: block;
@@ -869,7 +866,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   display: block;
   margin: 0 0 6px;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--foreground);
 }
 .ui-switch-section-hint {
@@ -1126,7 +1123,7 @@ th {
   white-space: nowrap;
 }
 tr:last-child td { border-bottom: 0; }
-.mono { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--font); font-size: 12px; font-variant-numeric: tabular-nums; }
 input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 
 .badge {
@@ -1208,7 +1205,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 .auth-brand h1 {
   margin: 0;
   font-size: 24px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.03em;
   color: var(--brand-fg);
 }
@@ -2022,7 +2019,7 @@ a.btn.btn-star:hover {
   max-height: 220px;
   overflow: auto;
   white-space: pre;
-  font-family: var(--mono);
+  font-family: var(--font);
   font-size: 11px;
   direction: ltr;
   text-align: left;
@@ -2294,7 +2291,7 @@ a.btn.btn-star:hover {
   .side.open { transform: translateX(0); }
 
   .main {
-    padding: 22px 14px calc(16px + var(--safe-bottom));
+    padding: var(--page-title-gap) 14px calc(16px + var(--safe-bottom));
     min-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
     height: auto;
     max-height: none;
@@ -2315,13 +2312,11 @@ a.btn.btn-star:hover {
   }
   .footer-meta { justify-content: center; }
   .footer-actions { justify-content: center; }
-  .page-head { margin-bottom: var(--space-3); gap: var(--space-2); }
-  .page-head:has(+ .section-tabs),
-  .page-head:has(+ .settings-tabs) { margin-bottom: var(--space-2); }
+  .page-head { margin-bottom: var(--page-title-gap); gap: var(--space-2); }
   .pg-head { margin-bottom: 0; }
+  .pg-head > .page-head { margin-bottom: var(--page-title-gap); }
   .pg-head > .pg-tabs,
-  .pg-head > .section-tabs { margin-bottom: 6px; }
-  .pg-head > .page-head { margin-bottom: var(--space-3); }
+  .pg-head > .section-tabs { margin-bottom: var(--section-gap); }
   .page-title { gap: 10px; }
   .page-title-ico { width: 34px; height: 34px; border-radius: 9px; }
   .page-title-ico svg { width: 17px; height: 17px; }
@@ -2453,7 +2448,7 @@ a.btn.btn-star:hover {
   overflow: hidden;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
   color: var(--tg-text);
-  font-family: "Vazirmatn", "Tahoma", sans-serif;
+  font-family: var(--font);
   min-height: 520px;
   display: flex;
   flex-direction: column;
@@ -3736,7 +3731,7 @@ html[data-theme="light"] .tg-preview-shell {
   gap: 4px;
   min-width: 0;
 }
-.home-update-copy strong { font-size: 13px; font-weight: 650; }
+.home-update-copy strong { font-size: 13px; font-weight: 600; }
 .home-update-copy .muted { font-size: 12px; }
 .home-top {
   margin-bottom: var(--section-gap);
@@ -3863,7 +3858,7 @@ html[data-theme="light"] .tg-preview-shell {
 }
 .dash-bot-setup-inner strong {
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.4;
 }
 .dash-bot-setup-inner .muted {
@@ -3908,7 +3903,7 @@ html[data-theme="light"] .tg-preview-shell {
 }
 .pg-admin-name-inline {
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.2;
   flex: 0 1 auto;
   min-width: 0;
@@ -4240,7 +4235,7 @@ html[data-theme="light"] .home-panel-pg a.btn:hover {
   display: inline-block;
   margin-bottom: 8px;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
 }
 .update-changelog-list {
   margin: 0;

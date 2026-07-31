@@ -35,11 +35,17 @@ class FooterAndMobileTests(unittest.TestCase):
     def test_site_footer_matches_side_foot_padding(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".site-footer {\n  margin-top: auto;\n  padding-top: 12px;", css)
-        self.assertIn("padding: 28px 32px calc(16px + var(--safe-bottom))", css)
+        self.assertIn(
+            "padding: var(--page-title-gap) 32px calc(16px + var(--safe-bottom));",
+            css,
+        )
 
     def test_mobile_main_top_gap_increased(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn("padding: 22px 14px calc(16px + var(--safe-bottom))", css)
+        self.assertIn(
+            "padding: var(--page-title-gap) 14px calc(16px + var(--safe-bottom));",
+            css,
+        )
 
 
 class SidebarHoverTests(unittest.TestCase):

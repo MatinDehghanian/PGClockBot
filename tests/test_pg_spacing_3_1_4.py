@@ -1,4 +1,4 @@
-"""PasarGuard panel spacing aligned with bot panel (3.1.4)."""
+"""PasarGuard list pages use flush cards (3.1.4); title gaps unified in 3.1.8."""
 
 from __future__ import annotations
 
@@ -6,17 +6,7 @@ import unittest
 from pathlib import Path
 
 
-CSS = Path("app/web/static/panel.css")
-
-
 class PgSpacingAlignTests(unittest.TestCase):
-    def test_title_to_tabs_is_tight(self):
-        css = CSS.read_text(encoding="utf-8")
-        self.assertIn(".page-head:has(+ .section-tabs)", css)
-        self.assertIn(".page-head:has(+ .settings-tabs)", css)
-        block = css.split(".page-head:has(+ .section-tabs)", 1)[1].split("}", 1)[0]
-        self.assertIn("margin-bottom: var(--space-2)", block)
-
     def test_pg_list_pages_use_flush_cards(self):
         pages = [
             "app/web/templates/pg_users.html",

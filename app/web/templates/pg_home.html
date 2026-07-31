@@ -3,12 +3,12 @@
 {% block title %}مدیر پاسارگارد{% endblock %}
 {% block content %}
 <div class="pg-head">
-{{ pg_tabs('pg') }}
 <div class="page-head">
   <div>
     {{ page_title('overview', 'پنل پاسارگارد', 'pg') }}
   </div>
 </div>
+{{ pg_tabs('pg') }}
 </div>
 
 {% if not is_admin %}

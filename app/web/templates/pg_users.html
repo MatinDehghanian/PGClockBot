@@ -3,7 +3,6 @@
 {% block title %}کاربران پنل{% endblock %}
 {% block content %}
 <div class="pg-head">
-{{ pg_tabs('pg_users') }}
 <div class="page-head">
   <div>
     {{ page_title('user', 'کاربران پنل', 'pg') }}
@@ -14,6 +13,7 @@
     {% endif %}
   </div>
 </div>
+{{ pg_tabs('pg_users') }}
 </div>
 <div class="card card-flush">
   <form method="get" action="/pg/users" class="search-bar">

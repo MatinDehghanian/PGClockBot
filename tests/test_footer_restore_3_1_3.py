@@ -26,8 +26,14 @@ class FooterRestore303Tests(unittest.TestCase):
         self.assertNotIn("--chrome-pad", css)
         self.assertNotIn("--main-pad-", css)
         self.assertNotIn("html:has(.shell)", css)
-        self.assertIn("padding: 28px 32px calc(16px + var(--safe-bottom))", css)
-        self.assertIn("padding: 22px 14px calc(16px + var(--safe-bottom))", css)
+        self.assertIn(
+            "padding: var(--page-title-gap) 32px calc(16px + var(--safe-bottom));",
+            css,
+        )
+        self.assertIn(
+            "padding: var(--page-title-gap) 14px calc(16px + var(--safe-bottom));",
+            css,
+        )
 
     def test_side_scrolls_as_a_column(self):
         css = CSS.read_text(encoding="utf-8")

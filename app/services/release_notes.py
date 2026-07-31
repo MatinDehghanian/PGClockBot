@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.1.8": [
+        "فاصله بالا و پایین تایتل+آیکن در همه صفحات یکسان (ربات و پاسارگارد دقیق یکی)",
+        "حذف فونت‌های اضافه؛ کل وب‌پنل فقط Vazirmatn",
+    ],
     "3.1.7": [
         "پنل پاسارگارد: تب‌ها بالای تایتل؛ فاصله تایتل تا محتوا دقیقاً مثل وب‌پنل ربات",
     ],
