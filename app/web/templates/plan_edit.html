@@ -73,6 +73,15 @@
       </label>
     </div>
 
+    {% set naming_prefix = plan.pg_username_prefix or '' %}
+    {% set naming_suffix = plan.pg_username_suffix or '' %}
+    {% set naming_pattern = plan.pg_username_pattern or '' %}
+    {% set naming_preview_id = 'edit-naming-sample' %}
+    {% set global_prefix = (values or {}).get('pg_username_prefix','clk') if values is defined else 'clk' %}
+    {% set global_suffix = (values or {}).get('pg_username_suffix','') if values is defined else '' %}
+    {% set global_pattern = (values or {}).get('pg_username_pattern','{prefix}_{random}{suffix}') if values is defined else '{prefix}_{random}{suffix}' %}
+    {% include "_plan_naming_fields.html" %}
+
     <div class="actions">
       <button class="btn" type="submit">ذخیره تغییرات</button>
       <a class="btn btn-ghost" href="/plans">انصراف</a>
@@ -92,6 +101,35 @@
   }
   mode.addEventListener('change', sync);
   sync();
+  (function namingPreview(){
+    const root = document.querySelector('[data-plan-naming]');
+    if (!root) return;
+    function rnd(){ return Math.random().toString(36).slice(2, 10); }
+    function render(){
+      const sample = root.querySelector('[data-naming-sample]');
+      if (!sample) return;
+      const gPrefix = root.getAttribute('data-global-prefix') || 'clk';
+      const gSuffix = root.getAttribute('data-global-suffix') || '';
+      const gPattern = root.getAttribute('data-global-pattern') || '{prefix}_{random}{suffix}';
+      const prefix = ((root.querySelector('[data-naming-prefix]') || {}).value || '').trim() || gPrefix || 'clk';
+      const suffix = ((root.querySelector('[data-naming-suffix]') || {}).value || '').trim() || gSuffix || '';
+      const pattern = ((root.querySelector('[data-naming-pattern]') || {}).value || '').trim() || gPattern || '{prefix}_{random}{suffix}';
+      let out;
+      try {
+        out = pattern
+          .replaceAll('{prefix}', prefix)
+          .replaceAll('{suffix}', suffix)
+          .replaceAll('{random}', rnd())
+          .replaceAll('{id}', '42');
+      } catch (e) {
+        out = prefix + '_' + rnd() + suffix;
+      }
+      sample.textContent = out;
+    }
+    root.addEventListener('input', render);
+    root.addEventListener('change', render);
+    render();
+  })();
 })();
 </script>
 {% endblock %}

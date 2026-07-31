@@ -111,6 +111,14 @@
           </select>
         </label>
       </div>
+      {% set naming_prefix = trial.pg_username_prefix if trial else '' %}
+      {% set naming_suffix = trial.pg_username_suffix if trial else '' %}
+      {% set naming_pattern = trial.pg_username_pattern if trial else '' %}
+      {% set naming_preview_id = 'trial-naming-sample' %}
+      {% set global_prefix = values.get('pg_username_prefix','clk') %}
+      {% set global_suffix = values.get('pg_username_suffix','') %}
+      {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
+      {% include "_plan_naming_fields.html" %}
       <div class="actions">
         <button class="btn" type="submit">ذخیره پلن تست</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
@@ -181,9 +189,19 @@
           </select>
         </label>
       </div>
+      {% set naming_prefix = values.get('custom_plan_username_prefix','') %}
+      {% set naming_suffix = values.get('custom_plan_username_suffix','') %}
+      {% set naming_pattern = values.get('custom_plan_username_pattern','') %}
+      {% set naming_prefix_name = 'custom_plan_username_prefix' %}
+      {% set naming_suffix_name = 'custom_plan_username_suffix' %}
+      {% set naming_pattern_name = 'custom_plan_username_pattern' %}
+      {% set naming_preview_id = 'custom-naming-sample' %}
+      {% set global_prefix = values.get('pg_username_prefix','clk') %}
+      {% set global_suffix = values.get('pg_username_suffix','') %}
+      {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
+      {% include "_plan_naming_fields.html" %}
       <div class="actions">
         <button class="btn" type="submit">ذخیره پلن دلخواه</button>
-        <a class="btn btn-ghost" href="/settings?tab=naming">نام‌گذاری سرویس</a>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
       </div>
     </form>
@@ -250,6 +268,17 @@
           </select>
         </label>
       </div>
+      {% set naming_prefix = '' %}
+      {% set naming_suffix = '' %}
+      {% set naming_pattern = '' %}
+      {% set naming_prefix_name = 'pg_username_prefix' %}
+      {% set naming_suffix_name = 'pg_username_suffix' %}
+      {% set naming_pattern_name = 'pg_username_pattern' %}
+      {% set naming_preview_id = 'create-naming-sample' %}
+      {% set global_prefix = values.get('pg_username_prefix','clk') %}
+      {% set global_suffix = values.get('pg_username_suffix','') %}
+      {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
+      {% include "_plan_naming_fields.html" %}
       <div class="actions">
         <button class="btn" type="submit">ذخیره پلن</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
@@ -276,6 +305,34 @@
   bindMode('plan-mode', 'mode-custom', 'mode-template');
   bindMode('trial-mode', 'trial-mode-custom', 'trial-mode-template');
   bindMode('custom-mode', 'custom-mode-groups', 'custom-mode-template');
+
+  function rnd(){ return Math.random().toString(36).slice(2, 10); }
+  function renderNaming(root){
+    const sample = root.querySelector('[data-naming-sample]');
+    if (!sample) return;
+    const gPrefix = root.getAttribute('data-global-prefix') || 'clk';
+    const gSuffix = root.getAttribute('data-global-suffix') || '';
+    const gPattern = root.getAttribute('data-global-pattern') || '{prefix}_{random}{suffix}';
+    const prefix = ((root.querySelector('[data-naming-prefix]') || {}).value || '').trim() || gPrefix || 'clk';
+    const suffix = ((root.querySelector('[data-naming-suffix]') || {}).value || '').trim() || gSuffix || '';
+    const pattern = ((root.querySelector('[data-naming-pattern]') || {}).value || '').trim() || gPattern || '{prefix}_{random}{suffix}';
+    let out;
+    try {
+      out = pattern
+        .replaceAll('{prefix}', prefix)
+        .replaceAll('{suffix}', suffix)
+        .replaceAll('{random}', rnd())
+        .replaceAll('{id}', '42');
+    } catch (e) {
+      out = prefix + '_' + rnd() + suffix;
+    }
+    sample.textContent = out;
+  }
+  document.querySelectorAll('[data-plan-naming]').forEach((root) => {
+    root.addEventListener('input', () => renderNaming(root));
+    root.addEventListener('change', () => renderNaming(root));
+    renderNaming(root);
+  });
 })();
 </script>
 {% endblock %}

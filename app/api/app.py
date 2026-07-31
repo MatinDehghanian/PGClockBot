@@ -1394,6 +1394,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                         status_code=303,
                     )
 
+        from app.services.orders import parse_naming_form
+
+        uname_prefix, uname_suffix, uname_pattern = parse_naming_form(form)
+
         session.add(
             Plan(
                 name=name.strip(),
@@ -1402,6 +1406,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 data_limit_gb=gb,
                 pg_template_id=tpl,
                 pg_group_ids=group_csv,
+                pg_username_prefix=uname_prefix,
+                pg_username_suffix=uname_suffix,
+                pg_username_pattern=uname_pattern,
                 owner_reseller_id=owner_id,
                 description=description or None,
                 is_active=True,
@@ -1473,6 +1480,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 )
             group_csv = ",".join(str(i) for i in ids) if ids else None
 
+        from app.services.orders import parse_naming_form
+
+        uname_prefix, uname_suffix, uname_pattern = parse_naming_form(form)
+
         q = select(Plan).where(Plan.is_trial.is_(True))
         if owner_id:
             q = q.where(Plan.owner_reseller_id == owner_id)
@@ -1488,6 +1499,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 data_limit_gb=gb,
                 pg_template_id=tpl,
                 pg_group_ids=group_csv,
+                pg_username_prefix=uname_prefix,
+                pg_username_suffix=uname_suffix,
+                pg_username_pattern=uname_pattern,
                 owner_reseller_id=owner_id,
                 is_trial=True,
                 is_active=enabled,
@@ -1501,6 +1515,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             trial.data_limit_gb = gb
             trial.pg_template_id = tpl
             trial.pg_group_ids = group_csv
+            trial.pg_username_prefix = uname_prefix
+            trial.pg_username_suffix = uname_suffix
+            trial.pg_username_pattern = uname_pattern
             trial.is_active = enabled
         await session.commit()
         return RedirectResponse(
@@ -1568,6 +1585,23 @@ def create_api_app(lifespan=None) -> FastAPI:
                 reseller_id=owner_id,
             )
             await set_setting(session, "custom_plan_template_id", "", reseller_id=owner_id)
+        from app.services.orders import parse_naming_form
+
+        c_prefix, c_suffix, c_pattern = parse_naming_form(
+            form,
+            prefix_key="custom_plan_username_prefix",
+            suffix_key="custom_plan_username_suffix",
+            pattern_key="custom_plan_username_pattern",
+        )
+        await set_setting(
+            session, "custom_plan_username_prefix", c_prefix or "", reseller_id=owner_id
+        )
+        await set_setting(
+            session, "custom_plan_username_suffix", c_suffix or "", reseller_id=owner_id
+        )
+        await set_setting(
+            session, "custom_plan_username_pattern", c_pattern or "", reseller_id=owner_id
+        )
         return RedirectResponse(
             f"/plans?ok={quote('تنظیمات پلن دلخواه ذخیره شد')}",
             status_code=303,
@@ -1598,12 +1632,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.plans_catalog import get_owned_plan
+        from app.services.plans_catalog import catalog_owner_id, get_owned_plan
+        from app.services.shop_scope import is_platform_admin
 
         plan = await get_owned_plan(session, plan_id, staff)
         if not plan:
             return RedirectResponse("/plans?err=" + quote("پلن یافت نشد"), status_code=303)
-        ctx = await _plans_context(session, request, staff, {"plan": plan})
+        rid = catalog_owner_id(staff)
+        if not is_platform_admin(staff) and not rid:
+            values = {}
+        else:
+            values = await get_all_settings(session, reseller_id=rid)
+        ctx = await _plans_context(session, request, staff, {"plan": plan, "values": values})
         return render(request, "plan_edit.html", ctx)
 
     @app.post("/plans/{plan_id}/edit")
@@ -1671,6 +1711,12 @@ def create_api_app(lifespan=None) -> FastAPI:
         plan.sort_order = sort_order
         plan.pg_template_id = tpl
         plan.pg_group_ids = group_csv
+        from app.services.orders import parse_naming_form
+
+        uname_prefix, uname_suffix, uname_pattern = parse_naming_form(form)
+        plan.pg_username_prefix = uname_prefix
+        plan.pg_username_suffix = uname_suffix
+        plan.pg_username_pattern = uname_pattern
         await session.commit()
         return RedirectResponse(
             f"/plans?ok={quote('پلن به‌روزرسانی شد')}",

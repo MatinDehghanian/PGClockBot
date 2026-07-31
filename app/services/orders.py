@@ -82,24 +82,87 @@ def _random_username(
     return f"{base}{suffix}" if suffix else base
 
 
+def resolve_username_naming(
+    settings: dict[str, str],
+    *,
+    plan_prefix: str | None = None,
+    plan_suffix: str | None = None,
+    plan_pattern: str | None = None,
+) -> tuple[str, str, str]:
+    """Merge optional per-plan overrides with global settings.
+
+    Empty / None plan fields inherit the matching global setting.
+    """
+
+    def _pick(plan_val: str | None, key: str, default: str) -> str:
+        raw = (plan_val or "").strip()
+        if raw:
+            return raw
+        return (settings.get(key) or default).strip() or default
+
+    prefix = _pick(plan_prefix, "pg_username_prefix", "clk") or "clk"
+    suffix = _pick(plan_suffix, "pg_username_suffix", "")
+    pattern = _pick(
+        plan_pattern,
+        "pg_username_pattern",
+        "{prefix}_{random}{suffix}",
+    ) or "{prefix}_{random}{suffix}"
+    if not pattern.strip():
+        pattern = (settings.get("pg_username_vars") or "").strip() or "{prefix}_{random}{suffix}"
+    return prefix, suffix, pattern
+
+
+def naming_from_plan(plan: object | None) -> tuple[str | None, str | None, str | None]:
+    if plan is None:
+        return None, None, None
+    return (
+        getattr(plan, "pg_username_prefix", None),
+        getattr(plan, "pg_username_suffix", None),
+        getattr(plan, "pg_username_pattern", None),
+    )
+
+
+def parse_naming_form(
+    form,
+    *,
+    prefix_key: str = "pg_username_prefix",
+    suffix_key: str = "pg_username_suffix",
+    pattern_key: str = "pg_username_pattern",
+) -> tuple[str | None, str | None, str | None]:
+    """Read naming fields from a web form; blank → None (inherit global)."""
+
+    def _one(key: str, maxlen: int) -> str | None:
+        raw = str(form.get(key) or "").strip()[:maxlen]
+        return raw or None
+
+    return _one(prefix_key, 64), _one(suffix_key, 64), _one(pattern_key, 255)
+
+
 async def generate_pg_username(
     session: AsyncSession,
     *,
     user_id: int | None = None,
+    plan: object | None = None,
+    plan_prefix: str | None = None,
+    plan_suffix: str | None = None,
+    plan_pattern: str | None = None,
 ) -> str:
-    """Read username prefix/suffix/pattern from settings and generate a name."""
+    """Generate a Pasarguard username using plan overrides when set, else globals."""
     from app.services.users import get_all_settings
 
     ui = await get_all_settings(session)
-    prefix = ui.get("pg_username_prefix") or "clk"
-    suffix = ui.get("pg_username_suffix") or ""
-    pattern = ui.get("pg_username_pattern") or "{prefix}_{random}{suffix}"
-    if not pattern:
-        pattern = ui.get("pg_username_vars") or ""
+    if plan is not None and plan_prefix is None and plan_suffix is None and plan_pattern is None:
+        plan_prefix, plan_suffix, plan_pattern = naming_from_plan(plan)
+    prefix, suffix, pattern = resolve_username_naming(
+        ui,
+        plan_prefix=plan_prefix,
+        plan_suffix=plan_suffix,
+        plan_pattern=plan_pattern,
+    )
     return _random_username(
-        prefix=prefix or "clk",
-        suffix=suffix or "",
-        pattern=pattern or None,
+        prefix=prefix,
+        suffix=suffix,
+        pattern=pattern,
         user_id=user_id,
     )
 
@@ -304,6 +367,9 @@ async def create_custom_order(
     tpl_raw = (ui.get("custom_plan_template_id") or "").strip()
     tpl_id = int(tpl_raw) if tpl_raw.isdigit() else None
     group_ids = (ui.get("custom_plan_group_ids") or "").strip() or None
+    name_prefix = (ui.get("custom_plan_username_prefix") or "").strip() or None
+    name_suffix = (ui.get("custom_plan_username_suffix") or "").strip() or None
+    name_pattern = (ui.get("custom_plan_username_pattern") or "").strip() or None
     shop_rid = _shop_reseller_id()
     _ = reseller_id  # sticky user attribution must not override shop context
     if shop_rid:
@@ -314,7 +380,13 @@ async def create_custom_order(
             select(ResellerSetting).where(
                 ResellerSetting.reseller_user_id == int(shop_rid),
                 ResellerSetting.key.in_(
-                    ("custom_plan_template_id", "custom_plan_group_ids")
+                    (
+                        "custom_plan_template_id",
+                        "custom_plan_group_ids",
+                        "custom_plan_username_prefix",
+                        "custom_plan_username_suffix",
+                        "custom_plan_username_pattern",
+                    )
                 ),
             )
         )
@@ -322,6 +394,9 @@ async def create_custom_order(
         tpl_raw = own_map.get("custom_plan_template_id") or ""
         group_ids = own_map.get("custom_plan_group_ids") or None
         tpl_id = int(tpl_raw) if tpl_raw.isdigit() else None
+        name_prefix = own_map.get("custom_plan_username_prefix") or None
+        name_suffix = own_map.get("custom_plan_username_suffix") or None
+        name_pattern = own_map.get("custom_plan_username_pattern") or None
         if not tpl_id and not group_ids:
             raise ValueError(
                 "برای پلن دلخواه، تمپلیت یا گروه پاسارگارد اختصاصی فروشگاه را در تنظیمات مشخص کنید"
@@ -335,6 +410,9 @@ async def create_custom_order(
         data_limit_gb=gb,
         pg_template_id=tpl_id,
         pg_group_ids=group_ids,
+        pg_username_prefix=name_prefix,
+        pg_username_suffix=name_suffix,
+        pg_username_pattern=name_pattern,
         owner_reseller_id=shop_rid,
         is_active=False,
         is_trial=False,
@@ -639,7 +717,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         raise ValueError("plan missing")
 
     pg = get_pg()
-    username = await generate_pg_username(session, user_id=order.user_id)
+    username = await generate_pg_username(session, user_id=order.user_id, plan=plan)
 
     pg_owner, pg_role_id = await _reseller_pg_link(session, order.reseller_id)
     data_limit = None

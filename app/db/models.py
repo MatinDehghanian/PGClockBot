@@ -95,6 +95,10 @@ class Plan(Base):
     data_limit_gb: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     pg_template_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     pg_group_ids: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Optional per-plan username naming; NULL/empty → fall back to global settings
+    pg_username_prefix: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    pg_username_suffix: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    pg_username_pattern: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # NULL = platform (admin) catalog; set for reseller-owned shop plans
     owner_reseller_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bot_users.id"), nullable=True, index=True

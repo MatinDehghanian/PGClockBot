@@ -441,6 +441,9 @@ DEFAULT_SETTINGS = {
     "custom_plan_max_days": "365",
     "custom_plan_template_id": "",
     "custom_plan_group_ids": "",
+    "custom_plan_username_prefix": "",
+    "custom_plan_username_suffix": "",
+    "custom_plan_username_pattern": "",
     # Payment methods
     "pay_wallet_enabled": "1",
     "pay_card_enabled": "1",

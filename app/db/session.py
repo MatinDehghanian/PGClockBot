@@ -37,6 +37,12 @@ def _migrate_sqlite(sync_conn) -> None:
         sync_conn.execute(text("ALTER TABLE plans ADD COLUMN pg_group_ids VARCHAR(255)"))
     if "owner_reseller_id" not in cols:
         sync_conn.execute(text("ALTER TABLE plans ADD COLUMN owner_reseller_id INTEGER"))
+    if "pg_username_prefix" not in cols:
+        sync_conn.execute(text("ALTER TABLE plans ADD COLUMN pg_username_prefix VARCHAR(64)"))
+    if "pg_username_suffix" not in cols:
+        sync_conn.execute(text("ALTER TABLE plans ADD COLUMN pg_username_suffix VARCHAR(64)"))
+    if "pg_username_pattern" not in cols:
+        sync_conn.execute(text("ALTER TABLE plans ADD COLUMN pg_username_pattern VARCHAR(255)"))
 
     if insp.has_table("reseller_profiles"):
         rcols = {c["name"] for c in insp.get_columns("reseller_profiles")}
