@@ -70,6 +70,7 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertTrue(parsed["1.8.6"])
         self.assertIn("1.8.5", parsed)
         self.assertTrue(parsed["1.8.5"])
+        self.assertIn("3.0.5", parsed)
         self.assertIn("3.0.4", parsed)
 
     def test_unknown_local_falls_back_to_newest(self):
@@ -84,11 +85,20 @@ class ReleaseNotesTests(unittest.TestCase):
     def test_update_template_simplified(self):
         src = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
         self.assertIn("update-changelog", src)
-        self.assertIn("get.sh", src)
-        self.assertIn("گزینه ۲", src)
-        self.assertNotIn("گیت‌هاب", src)
+        self.assertIn("rollback-version", src)
+        self.assertIn("update-ops-card", src)
+        self.assertNotIn("روش جایگزین", src)
+        self.assertNotIn("get.sh", src)
         self.assertNotIn("upd-clear", src)
         self.assertNotIn("پاک‌سازی وضعیت", src)
+
+    def test_parse_includes_latest_notes(self):
+        from app.services.release_notes import parse_release_notes_source
+
+        src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        parsed = parse_release_notes_source(src)
+        self.assertIn("3.0.5", parsed)
+        self.assertIn("3.0.4", parsed)
 
     def test_home_no_manual_refresh(self):
         src = Path("app/web/templates/home.html").read_text(encoding="utf-8")

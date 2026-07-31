@@ -3,26 +3,31 @@
 {% set has_error = status.state == 'error' or status.restart_required %}
 {% set awaiting = status.awaiting_restart %}
 {% set show_ops = show_ops if show_ops is defined else (running or has_error or awaiting) %}
+{% set rollback_versions = rollback_versions if rollback_versions is defined else [] %}
 
-<div class="update-tab-head">
-  <div class="version-box" style="margin-bottom:14px">
-    <span class="ver-num">نسخه فعلی {{ local_version }}</span>
-    {% if update_info.remote_version %}
-    <span class="ver-badge {{ update_info.tone }}">آخرین نسخه: {{ update_info.remote_version }}</span>
+<div class="update-hero card">
+  <div class="update-hero-main">
+    <div class="update-hero-versions">
+      <div class="update-ver-chip">
+        <span class="muted">نسخه فعلی</span>
+        <strong dir="ltr">v{{ local_version }}</strong>
+      </div>
+      {% if update_info.remote_version %}
+      <div class="update-ver-chip update-ver-chip-{{ update_info.tone or 'ok' }}">
+        <span class="muted">آخرین نسخه</span>
+        <strong dir="ltr">v{{ update_info.remote_version }}</strong>
+      </div>
+      {% endif %}
+    </div>
+    {% if available %}
+    <p class="update-hero-copy">نسخه <strong dir="ltr">{{ update_info.remote_version }}</strong> آماده نصب است.</p>
+    {% elif update_info.checked %}
+    <p class="update-hero-copy muted">شما روی آخرین نسخه منتشرشده هستید.</p>
+    {% else %}
+    <p class="update-hero-copy muted">{{ update_info.label }}</p>
     {% endif %}
   </div>
 </div>
-
-{% if available %}
-<div class="flash err">
-  <strong>نسخه جدید آماده است:</strong>
-  {{ update_info.version }} → {{ update_info.remote_version }}
-</div>
-{% elif update_info.checked %}
-<div class="flash ok">شما روی آخرین نسخه منتشرشده هستید.</div>
-{% else %}
-<div class="flash warn">{{ update_info.label }}</div>
-{% endif %}
 
 {% set cl = changelog if changelog is defined else none %}
 {% if cl and cl.get('has_notes') %}
@@ -41,7 +46,7 @@
 </div>
 {% endif %}
 
-<div class="card" id="upd-root"
+<div class="card update-ops-card" id="upd-root"
      data-remote="{{ update_info.remote_version or '' }}"
      data-can-start="{{ '1' if available else '0' }}"
      data-running="{{ '1' if running else '0' }}"
@@ -49,82 +54,109 @@
      data-awaiting-restart="{{ '1' if awaiting else '0' }}"
      data-pre-boot="{{ status.pre_boot_id or '' }}"
      data-show-ops="{{ '1' if show_ops else '0' }}">
-  <h2>وضعیت عملیات</h2>
-
-  <p class="muted update-idle-hint" {% if show_ops %}hidden{% endif %}>
-    الان آپدیتی در صف نیست. برای بررسی نسخهٔ جدید از دکمه زیر استفاده کنید.
-  </p>
+  <div class="update-ops-head">
+    <div>
+      <h2>عملیات آپدیت</h2>
+      <p class="muted update-card-caption" id="upd-idle-caption" {% if show_ops %}hidden{% endif %}>
+        {% if available %}
+        با شروع آپدیت، کد از گیت‌هاب دریافت می‌شود و سرویس دوباره راه‌اندازی می‌گردد.
+        {% else %}
+        نسخه‌ای برای نصب نیست. می‌توانید دوباره وضعیت را بررسی کنید.
+        {% endif %}
+      </p>
+    </div>
+    <div class="update-ops-actions" id="upd-actions-idle" {% if show_ops %}hidden{% endif %}>
+      <button type="button" class="btn btn-ok" id="upd-start"
+        {% if not available and not has_error and not running and not awaiting %}disabled{% endif %}>
+        {% if running or awaiting %}در حال اجرا…
+        {% elif has_error %}تلاش دوباره
+        {% elif available %}شروع آپدیت
+        {% else %}آپدیتی نیست{% endif %}
+      </button>
+      <button type="button" class="btn btn-ghost" id="upd-refresh">بررسی دوباره</button>
+    </div>
+  </div>
 
   <div id="upd-ops" class="update-ops" {% if not show_ops %}hidden{% endif %}>
     <div class="flash warn update-stay-warn" id="upd-stay-warn" role="status">
-      لطفاً تا پایان عملیات از این صفحه خارج نشوید و صفحه را رفرش نکنید. ممکن است چند دقیقه طول بکشد.
-    </div>
-    <div class="update-meta">
-      <div><span class="muted">از</span> <strong id="upd-from">{{ status.from_version or local_version }}</strong></div>
-      <div><span class="muted">به</span> <strong id="upd-to">{{ status.to_version or update_info.remote_version or '—' }}</strong></div>
-      <div><span class="muted">وضعیت</span> <strong id="upd-state-label">{{ status.message if show_ops else 'آماده' }}</strong></div>
+      تا پایان عملیات از این صفحه خارج نشوید و رفرش نکنید. ممکن است چند دقیقه طول بکشد.
     </div>
 
-    <div class="progress-wrap" aria-label="نوار پیشرفت">
-      <div class="progress-bar">
-        <div class="progress-fill" id="upd-fill" style="width: {{ (status.percent or 0) if show_ops else 0 }}%"></div>
+    <div class="update-progress-card">
+      <div class="update-progress-top">
+        <div>
+          <span class="muted">وضعیت</span>
+          <strong id="upd-state-label">{{ status.message if show_ops else 'آماده' }}</strong>
+        </div>
+        <div class="update-progress-vers" dir="ltr">
+          <span id="upd-from">{{ status.from_version or local_version }}</span>
+          <span class="muted">→</span>
+          <span id="upd-to">{{ status.to_version or update_info.remote_version or '—' }}</span>
+        </div>
       </div>
-      <div class="progress-meta">
-        <span id="upd-step">{{ status.step if show_ops else 'آماده' }}</span>
-        <strong id="upd-percent">{{ (status.percent or 0) if show_ops else 0 }}٪</strong>
+      <div class="progress-wrap" aria-label="نوار پیشرفت">
+        <div class="progress-bar">
+          <div class="progress-fill" id="upd-fill" style="width: {{ (status.percent or 0) if show_ops else 0 }}%"></div>
+        </div>
+        <div class="progress-meta">
+          <span id="upd-step">{{ status.step if show_ops else 'آماده' }}</span>
+          <strong id="upd-percent">{{ (status.percent or 0) if show_ops else 0 }}٪</strong>
+        </div>
       </div>
+      <ol class="update-steps" id="upd-steps">
+        {% for s in steps %}
+        <li data-key="{{ s.key }}" class="{% if show_ops and status.step_key == s.key %}current{% endif %}">
+          <span class="step-dot"></span>
+          <span>{{ s.label }}</span>
+        </li>
+        {% endfor %}
+      </ol>
     </div>
 
-    <ol class="update-steps" id="upd-steps">
-      {% for s in steps %}
-      <li data-key="{{ s.key }}" class="{% if show_ops and status.step_key == s.key %}current{% endif %}">
-        <span class="step-dot"></span>
-        <span>{{ s.label }}</span>
-      </li>
-      {% endfor %}
-    </ol>
-
-    <pre class="update-log" id="upd-log"{% if not show_ops or not (status.log or []) %} hidden{% endif %}>{% if show_ops %}{% for line in status.log or [] %}{{ line }}
+    <details class="update-details" id="upd-details" {% if show_ops and (status.log or []) %}open{% endif %}>
+      <summary>جزئیات عملیات</summary>
+      <pre class="update-log" id="upd-log"{% if not show_ops or not (status.log or []) %} hidden{% endif %}>{% if show_ops %}{% for line in status.log or [] %}{{ line }}
 {% endfor %}{% endif %}</pre>
-  </div>
+    </details>
 
-  <div class="actions update-actions">
-    <button type="button" class="btn btn-ok" id="upd-start"
-      {% if not available and not has_error and not running and not awaiting %}disabled{% endif %}>
-      {% if running or awaiting %}در حال اجرا…
-      {% elif has_error %}تلاش دوباره
-      {% elif available %}شروع آپدیت
-      {% else %}آپدیتی نیست{% endif %}
-    </button>
-    <button type="button" class="btn btn-ghost" id="upd-refresh">بررسی دوباره</button>
+    <div class="actions update-actions" id="upd-actions-busy">
+      <button type="button" class="btn btn-ok" id="upd-start-busy" hidden>تلاش دوباره</button>
+      <button type="button" class="btn btn-ghost" id="upd-refresh-busy">بررسی دوباره</button>
+    </div>
   </div>
 </div>
 
-<div class="card">
+<div class="card update-rollback-card">
   <h2>راه برگشت</h2>
   <p class="muted update-card-caption">
-    فقط آخرین نسخه قبل از آپدیت نگه داشته می‌شود. اگر از نسخه جدید راضی نبودید، از اینجا برگردید.
+    از میان ۳ نسخهٔ اخیر منتشرشده در گیت‌هاب یکی را انتخاب کنید و به همان نسخه برگردید.
   </p>
-  {% if snapshots %}
-  <div class="snap-list" id="snap-list">
-    {% for s in snapshots[:1] %}
-    <div class="snap-row">
-      <div>
-        <strong>{{ s.label or (s.version ~ ' · ' ~ s.short_sha) }}</strong>
-        <small>
-          {{ s.created_at or '' }}
-          {% if s.reason == 'before_update' %} · قبل از آپدیت{% elif s.reason == 'before_rollback' %} · قبل از بازگشت{% endif %}
-        </small>
-      </div>
-      <button type="button" class="btn btn-ghost btn-sm snap-rollback" data-id="{{ s.id }}"
-        data-label="{{ s.label }}">
-        بازگشت به این نسخه
-      </button>
-    </div>
-    {% endfor %}
+  {% if rollback_versions %}
+  <div class="update-rollback-form" id="rollback-root">
+    <label class="update-rollback-field">
+      <span>نسخه مقصد</span>
+      <select id="rollback-version" dir="ltr">
+        {% set ns = namespace(picked=false) %}
+        {% for v in rollback_versions %}
+        {% set is_current = v.version == local_version %}
+        {% if is_current %}
+        <option value="{{ v.version }}" disabled>v{{ v.version }} — نسخه فعلی</option>
+        {% elif not ns.picked %}
+        <option value="{{ v.version }}" selected>v{{ v.version }}</option>
+        {% set ns.picked = true %}
+        {% else %}
+        <option value="{{ v.version }}">v{{ v.version }}</option>
+        {% endif %}
+        {% endfor %}
+      </select>
+    </label>
+    <button type="button" class="btn btn-warn" id="rollback-start"
+      {% if rollback_versions|length == 1 and rollback_versions[0].version == local_version %}disabled{% endif %}>
+      بازگشت به این نسخه
+    </button>
   </div>
   {% else %}
-  <p class="muted">هنوز نقطه بازگشتی نیست. بعد از اولین آپدیت از پنل، اینجا ظاهر می‌شود.</p>
+  <p class="muted">لیست نسخه‌های گیت‌هاب در دسترس نیست. بعداً دوباره بررسی کنید.</p>
   {% endif %}
 </div>
 
@@ -132,18 +164,23 @@
 (function(){
   const root = document.getElementById('upd-root');
   const startBtn = document.getElementById('upd-start');
+  const startBusy = document.getElementById('upd-start-busy');
   const refreshBtn = document.getElementById('upd-refresh');
+  const refreshBusy = document.getElementById('upd-refresh-busy');
   const fill = document.getElementById('upd-fill');
   const percentEl = document.getElementById('upd-percent');
   const stepEl = document.getElementById('upd-step');
   const stateEl = document.getElementById('upd-state-label');
   const logEl = document.getElementById('upd-log');
+  const detailsEl = document.getElementById('upd-details');
   const toEl = document.getElementById('upd-to');
   const fromEl = document.getElementById('upd-from');
   const ops = document.getElementById('upd-ops');
-  const idleHint = document.querySelector('.update-idle-hint');
+  const idleCaption = document.getElementById('upd-idle-caption');
+  const actionsIdle = document.getElementById('upd-actions-idle');
   const steps = Array.from(document.querySelectorAll('#upd-steps li'));
-  const rollbackBtns = () => Array.from(document.querySelectorAll('.snap-rollback'));
+  const rollbackBtn = document.getElementById('rollback-start');
+  const rollbackSelect = document.getElementById('rollback-version');
   let timer = null;
   let waitingRestart = false;
   let sawDown = false;
@@ -169,17 +206,36 @@
 
   function showOps(on){
     if (ops) ops.hidden = !on;
-    if (idleHint) idleHint.hidden = !!on;
+    if (idleCaption) idleCaption.hidden = !!on;
+    if (actionsIdle) actionsIdle.hidden = !!on;
     if (root) root.dataset.showOps = on ? '1' : '0';
     if (!on) setBlockLeave(false);
   }
 
+  function setRollbackBusy(busy){
+    if (rollbackBtn) rollbackBtn.disabled = !!busy;
+    if (rollbackSelect) rollbackSelect.disabled = !!busy;
+  }
+
+  function syncStartButtons(busy, label){
+    [startBtn, startBusy].forEach(function(btn){
+      if (!btn) return;
+      if (busy) {
+        btn.disabled = true;
+        btn.textContent = label || 'در حال اجرا…';
+        btn.hidden = (btn === startBusy);
+      } else {
+        const retry = label === 'تلاش دوباره';
+        btn.disabled = !canStart && !retry;
+        btn.textContent = retry ? 'تلاش دوباره' : (canStart ? 'شروع آپدیت' : 'آپدیتی نیست');
+        if (btn === startBusy) btn.hidden = !retry;
+      }
+    });
+  }
+
   function setBusy(busy, label){
-    if (!startBtn) return;
-    startBtn.disabled = busy || (!canStart && startBtn.textContent !== 'تلاش دوباره');
-    if (busy) startBtn.textContent = label || 'در حال اجرا…';
-    else startBtn.textContent = canStart ? 'شروع آپدیت' : 'آپدیتی نیست';
-    rollbackBtns().forEach(b => { b.disabled = busy; });
+    syncStartButtons(busy, label);
+    setRollbackBusy(busy);
     if (busy) setBlockLeave(true);
   }
 
@@ -211,7 +267,6 @@
     waitingRestart = false;
     setBlockLeave(false);
     showOps(false);
-    if (idleHint) idleHint.hidden = false;
     if (stateEl) stateEl.textContent = 'آماده';
     if (logEl) { logEl.textContent = ''; logEl.hidden = true; }
     clearInterval(timer); timer = null;
@@ -253,7 +308,6 @@
     restartStartedAt = Date.now();
     markRestartUi();
 
-    // Prefer server-recorded pre-restart boot id; otherwise capture current process.
     if (st && st.pre_boot_id) {
       baselineBoot = String(st.pre_boot_id);
     }
@@ -261,7 +315,6 @@
     if (!baselineBoot && h0 && h0.boot_id) baselineBoot = String(h0.boot_id);
     if (h0 && h0.pid) baselinePid = Number(h0.pid);
 
-    // If server already stored pre_boot and current boot differs + version ok → done.
     if (st && st.pre_boot_id && h0 && processChanged(h0) && versionMatches(h0)) {
       finishReload(h0.version || expectedVersion);
       return;
@@ -276,14 +329,12 @@
     if (st.pre_boot_id && !baselineBoot) baselineBoot = String(st.pre_boot_id);
 
     if (waitingRestart) {
-      // Server cleared awaiting (resolved stale) → stop waiting UI.
       if (!st.awaiting_restart && st.state !== 'running') {
         if (st.state === 'error' || st.restart_required) {
           waitingRestart = false;
           showOps(true);
-          setBusy(false);
+          setBusy(false, 'تلاش دوباره');
           if (stateEl) stateEl.textContent = st.message || st.error || 'خطا';
-          if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'تلاش دوباره'; }
           canStart = true;
           clearInterval(timer); timer = null;
           return;
@@ -324,6 +375,7 @@
       const lines = st.log || [];
       logEl.textContent = lines.join('\n');
       logEl.hidden = lines.length === 0;
+      if (detailsEl && lines.length) detailsEl.open = true;
       logEl.scrollTop = logEl.scrollHeight;
     }
     let seenCurrent = false;
@@ -342,13 +394,8 @@
       showOps(true);
     } else if (st.state === 'error' || st.restart_required) {
       showOps(true);
-      if (startBtn) {
-        startBtn.classList.add('btn', 'btn-ok');
-        startBtn.disabled = false;
-        startBtn.textContent = 'تلاش دوباره';
-      }
       canStart = true;
-      rollbackBtns().forEach(b => { b.disabled = false; });
+      setBusy(false, 'تلاش دوباره');
     } else {
       setBusy(false);
     }
@@ -377,7 +424,6 @@
           (expectedVersion ? ('نسخه هدف: ' + expectedVersion + ' · ') : '') +
           'ممکن است چند دقیقه طول بکشد. از صفحه خارج نشوید و رفرش نکنید.'
         );
-        // Also refresh server status in case it timed out / cleared.
         try {
           const res = await fetch('/update/status', { credentials: 'same-origin', cache: 'no-store' });
           if (res.ok) {
@@ -418,7 +464,6 @@
       if (data.state === 'running' || data.awaiting_restart) return;
       clearInterval(timer); timer = null;
     } catch (e) {
-      // Network blip during normal poll — do not fake a restart wait.
       if (stateEl) stateEl.textContent = 'خطا در دریافت وضعیت؛ دوباره تلاش می‌شود…';
     }
   }
@@ -429,8 +474,7 @@
     poll();
   }
 
-  if (startBtn) startBtn.addEventListener('click', async () => {
-    const isRetry = /تلاش دوباره/.test(startBtn.textContent || '');
+  async function beginUpdate(isRetry){
     showOps(true);
     setBusy(true, 'شروع…');
     waitingRestart = false;
@@ -448,56 +492,64 @@
       const data = await res.json();
       if (!data.ok) {
         if (stateEl) stateEl.textContent = data.error || 'شروع آپدیت ممکن نشد';
-        if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'تلاش دوباره'; }
         canStart = true;
+        setBusy(false, 'تلاش دوباره');
         return;
       }
       if (data.status) applyStatus(data.status);
       startPolling();
     } catch (e) {
       if (stateEl) stateEl.textContent = 'خطا در شروع آپدیت';
-      if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'تلاش دوباره'; }
       canStart = true;
+      setBusy(false, 'تلاش دوباره');
     }
-  });
+  }
 
-  document.getElementById('snap-list') && document.getElementById('snap-list').addEventListener('click', async (ev) => {
-    const btn = ev.target.closest('.snap-rollback');
-    if (!btn) return;
-    const id = btn.dataset.id;
-    const label = btn.dataset.label || id;
-    if (!confirm('بازگشت به «' + label + '»؟\nوضعیت فعلی هم ذخیره می‌شود تا اگر اشتباه بود دوباره برگردید.')) return;
-    showOps(true);
-    setBusy(true, 'شروع بازگشت…');
-    waitingRestart = false;
-    sawDown = false;
-    baselineBoot = null;
-    baselinePid = null;
-    expectedVersion = '';
-    try {
-      const res = await fetch('/update/rollback', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ snapshot_id: id })
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        if (stateEl) stateEl.textContent = data.error || 'بازگشت ممکن نشد';
-        setBusy(false);
-        return;
-      }
-      if (data.status) applyStatus(data.status);
-      startPolling();
-    } catch (e) {
-      if (stateEl) stateEl.textContent = 'خطا در شروع بازگشت';
-      setBusy(false);
-    }
+  if (startBtn) startBtn.addEventListener('click', () => {
+    beginUpdate(/تلاش دوباره/.test(startBtn.textContent || ''));
   });
+  if (startBusy) startBusy.addEventListener('click', () => beginUpdate(true));
 
-  if (refreshBtn) refreshBtn.addEventListener('click', () => {
+  function refreshPage(){
     location.href = '/settings?tab=update&force=1';
-  });
+  }
+  if (refreshBtn) refreshBtn.addEventListener('click', refreshPage);
+  if (refreshBusy) refreshBusy.addEventListener('click', refreshPage);
+
+  if (rollbackBtn && rollbackSelect) {
+    rollbackBtn.addEventListener('click', async () => {
+      const ver = (rollbackSelect.value || '').trim();
+      if (!ver) return;
+      if (!confirm('بازگشت به نسخه v' + ver + '؟\nسرویس بعد از اعمال، دوباره راه‌اندازی می‌شود.')) return;
+      showOps(true);
+      setBusy(true, 'شروع بازگشت…');
+      waitingRestart = false;
+      sawDown = false;
+      baselineBoot = null;
+      baselinePid = null;
+      expectedVersion = ver;
+      if (toEl) toEl.textContent = ver;
+      try {
+        const res = await fetch('/update/rollback', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ version: ver })
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          if (stateEl) stateEl.textContent = data.error || 'بازگشت ممکن نشد';
+          setBusy(false);
+          return;
+        }
+        if (data.status) applyStatus(data.status);
+        startPolling();
+      } catch (e) {
+        if (stateEl) stateEl.textContent = 'خطا در شروع بازگشت';
+        setBusy(false);
+      }
+    });
+  }
 
   if (root && root.dataset.running === '1') startPolling();
   const params = new URLSearchParams(location.search);
@@ -508,57 +560,5 @@
       pre_boot_id: root.dataset.preBoot || ''
     });
   }
-})();
-</script>
-
-<div class="card settings-card" style="margin-top:14px">
-  <h2>روش جایگزین (ترمینال)</h2>
-  <p class="muted update-card-caption">
-    اگر آپدیت از پنل ممکن نبود، روی سرور اسکریپت نصب را اجرا کنید و در منو
-    <strong>گزینه ۲ (Update)</strong> را بزنید:
-  </p>
-  {% set install_cmd = install_script_cmd if install_script_cmd is defined and install_script_cmd else 'bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)' %}
-  <div class="cmd-copy">
-    <pre class="update-log" dir="ltr">{{ install_cmd }}</pre>
-    <button type="button" class="btn btn-ghost btn-sm cmd-copy-btn"
-      data-copy="{{ install_cmd }}">کپی</button>
-  </div>
-</div>
-<script>
-(function(){
-  async function copyText(text, btn){
-    const value = (text || '').trim();
-    if (!value) return;
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(value);
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = value;
-        ta.setAttribute('readonly', '');
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      if (btn) {
-        const prev = btn.getAttribute('data-copy-label') || btn.textContent;
-        btn.setAttribute('data-copy-label', prev);
-        btn.textContent = 'کپی شد';
-        btn.classList.add('btn-ok', 'is-copied');
-        btn.disabled = true;
-        setTimeout(() => {
-          btn.textContent = prev;
-          btn.classList.remove('btn-ok', 'is-copied');
-          btn.disabled = false;
-        }, 1200);
-      }
-    } catch (e) {}
-  }
-  document.querySelectorAll('.cmd-copy-btn').forEach(btn => {
-    btn.addEventListener('click', () => copyText(btn.getAttribute('data-copy') || '', btn));
-  });
 })();
 </script>

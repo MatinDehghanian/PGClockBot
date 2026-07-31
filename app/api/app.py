@@ -2326,16 +2326,22 @@ def create_api_app(lifespan=None) -> FastAPI:
         request: Request,
         staff: dict = Depends(require_admin),
     ):
-        from app.services.panel_update import start_rollback
+        from app.services.panel_update import start_rollback, start_rollback_to_version
+        from app.services.updates import fetch_recent_versions
 
         body = {}
         try:
             body = await request.json()
         except Exception:
             body = {}
+        version = str((body or {}).get("version") or "").strip()
+        if version:
+            recent = await fetch_recent_versions(limit=3, force=True)
+            allowed = [str(x.get("version") or "") for x in recent]
+            return start_rollback_to_version(version, allowed=allowed)
         snapshot_id = str((body or {}).get("snapshot_id") or "").strip()
         if not snapshot_id:
-            return {"ok": False, "error": "نقطه بازگشت مشخص نشده"}
+            return {"ok": False, "error": "نسخه بازگشت مشخص نشده"}
         return start_rollback(snapshot_id)
 
     @app.get("/notifications", response_class=HTMLResponse)
