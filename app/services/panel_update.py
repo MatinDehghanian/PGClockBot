@@ -28,7 +28,7 @@ _THREAD: threading.Thread | None = None
 MAX_SNAPSHOTS = 1
 
 # systemd often has a short PATH — resolve absolute binaries
-from app.util_which import which as _which
+from app.util_which import env_with_path, which as _which
 
 
 def _repo_root() -> Path:
@@ -51,13 +51,10 @@ def _repo_root() -> Path:
 
 
 def _env_with_path() -> dict[str, str]:
-    env = dict(os.environ)
-    path = env.get("PATH") or ""
-    if _EXTRA_PATH not in path:
-        env["PATH"] = f"{_EXTRA_PATH}:{path}" if path else _EXTRA_PATH
-    env["DEBIAN_FRONTEND"] = "noninteractive"
-    env["GIT_TERMINAL_PROMPT"] = "0"
-    return env
+    return env_with_path(
+        DEBIAN_FRONTEND="noninteractive",
+        GIT_TERMINAL_PROMPT="0",
+    )
 
 STEPS = [
     ("prepare", "آماده‌سازی", 5),

@@ -25,6 +25,22 @@ class VersionCompareTests(unittest.TestCase):
         self.assertFalse(is_same_or_newer("1.7.33", "1.7.34"))
 
 
+class PanelUpdatePathEnvTests(unittest.TestCase):
+    def test_env_with_path_includes_system_bins(self):
+        env = pu._env_with_path()
+        self.assertIn("/usr/bin", env.get("PATH", ""))
+        self.assertEqual(env.get("GIT_TERMINAL_PROMPT"), "0")
+
+    def test_run_works_with_short_path(self):
+        import os
+        import sys
+
+        with patch.dict(os.environ, {"PATH": "/nonexistent"}, clear=False):
+            code, out = pu._run([sys.executable, "-c", "print('ok')"], timeout=10)
+        self.assertEqual(code, 0)
+        self.assertIn("ok", out)
+
+
 class StaleUpdateStatusTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
