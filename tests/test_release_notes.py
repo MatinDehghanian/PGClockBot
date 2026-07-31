@@ -70,6 +70,7 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertTrue(parsed["1.8.6"])
         self.assertIn("1.8.5", parsed)
         self.assertTrue(parsed["1.8.5"])
+        self.assertIn("3.1.2", parsed)
         self.assertIn("3.1.1", parsed)
         self.assertIn("3.1.0", parsed)
         self.assertIn("3.0.5", parsed)
@@ -88,17 +89,21 @@ class ReleaseNotesTests(unittest.TestCase):
         src = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
         self.assertIn("update-changelog", src)
         self.assertIn("rollback-version", src)
-        self.assertIn("update-ops-card", src)
+        self.assertIn("settings-card", src)
+        self.assertIn("upd-start", src)
+        self.assertNotIn("update-details", src)
+        self.assertNotIn("جزئیات عملیات", src)
+        self.assertNotIn("upd-log", src)
+        self.assertNotIn("upd-steps", src)
         self.assertNotIn("روش جایگزین", src)
         self.assertNotIn("get.sh", src)
-        self.assertNotIn("upd-clear", src)
-        self.assertNotIn("پاک‌سازی وضعیت", src)
 
     def test_parse_includes_latest_notes(self):
         from app.services.release_notes import parse_release_notes_source
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
+        self.assertIn("3.1.2", parsed)
         self.assertIn("3.1.1", parsed)
         self.assertIn("3.1.0", parsed)
         self.assertIn("3.0.5", parsed)

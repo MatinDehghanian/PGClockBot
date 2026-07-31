@@ -513,16 +513,8 @@ a:hover { opacity: 0.8; }
   font-weight: 400;
 }
 /* Major blocks share one vertical rhythm */
-.main-body > .card:last-child,
-.main-body > .home-panels:last-child,
-.main-body > .stats-grid:last-child,
-.main-body > .home-panel:last-child,
-.main-body > .dash-cols:last-child,
-.main-body > .settings-layout:last-child,
-.main-body > .update-ops-card:last-child,
-.main-body > .update-rollback-card:last-child,
+.main-body > .settings-card:last-child,
 .main-body > .update-changelog:last-child,
-.main-body > .update-hero:last-child,
 .main-body > .flash:last-child {
   margin-bottom: 0;
 }
@@ -1926,142 +1918,6 @@ a.btn.btn-star:hover {
 }
 
 /* Update page helpers */
-.update-hero {
-  margin-bottom: var(--section-gap);
-}
-.update-hero-versions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.update-ver-chip {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 120px;
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.02);
-}
-.update-ver-chip .muted {
-  font-size: 11px;
-}
-.update-ver-chip strong {
-  font-size: 15px;
-  font-weight: 650;
-}
-.update-ver-chip-err {
-  border-color: color-mix(in srgb, var(--destructive) 35%, var(--border));
-  background: color-mix(in srgb, var(--destructive) 8%, transparent);
-}
-.update-ver-chip-ok {
-  border-color: color-mix(in srgb, var(--ok) 30%, var(--border));
-}
-.update-ver-chip-warn {
-  border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
-}
-.update-hero-copy {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
-}
-.update-ops-card > .update-ops-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px 18px;
-  margin-bottom: 4px;
-}
-.update-ops-card > .update-ops-head h2 {
-  margin: 0 0 6px;
-}
-.update-ops-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-.update-progress-card {
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.02);
-  margin-bottom: 12px;
-}
-.update-progress-top {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 10px 16px;
-  margin-bottom: 14px;
-}
-.update-progress-top .muted {
-  display: block;
-  font-size: 11px;
-  margin-bottom: 4px;
-}
-.update-progress-top strong {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.5;
-}
-.update-progress-vers {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-}
-.update-details {
-  margin: 0 0 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-card);
-  overflow: hidden;
-}
-.update-details > summary {
-  cursor: pointer;
-  list-style: none;
-  padding: 10px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--muted-fg);
-  user-select: none;
-}
-.update-details > summary::-webkit-details-marker { display: none; }
-.update-details[open] > summary {
-  border-bottom: 1px solid var(--border);
-  color: var(--foreground);
-}
-.update-details .update-log {
-  margin: 0;
-  border: 0;
-  border-radius: 0;
-  max-height: 220px;
-}
-.update-rollback-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: flex-end;
-  margin-top: 4px;
-}
-.update-rollback-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1 1 200px;
-  min-width: 180px;
-  margin: 0;
-  font-size: 13px;
-  color: var(--muted-fg);
-}
-.update-rollback-field select {
-  width: 100%;
-}
 .update-meta {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2225,12 +2081,9 @@ a.btn.btn-star:hover {
   .cmd-copy { grid-template-columns: 1fr; }
   .cmd-copy-btn { width: 100%; }
 }
-.update-actions { margin-top: 12px; }
-.update-ops[hidden],
-.update-idle-hint[hidden],
-.update-log[hidden],
-.update-ops-actions[hidden],
-#upd-idle-caption[hidden] { display: none !important; }
+.update-actions { margin-top: 4px; }
+.update-ops[hidden] { display: none !important; }
+.update-ops .progress-wrap { margin-top: 4px; margin-bottom: 12px; }
 .update-stay-warn {
   margin: 0 0 12px;
   text-align: center;

@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.1.2": [
+        "صفحه آپدیت: بازطراحی هم‌سبک کارت‌های تنظیمات؛ بدون جزئیات و مراحل عملیات",
+    ],
     "3.1.1": [
         "فوتر صفحه: بازگشت به انتهای صفحه (نه شناور)؛ در صفحات کوتاه پایین ویوپورت می‌ماند",
         "فوتر سایدبار و صفحه اصلی دوباره هم‌تراز با فاصله قبلی",

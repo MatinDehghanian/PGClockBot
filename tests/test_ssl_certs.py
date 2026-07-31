@@ -43,7 +43,8 @@ class UpdateCopyTests(unittest.TestCase):
         self.assertIn("upd-start", src)
         self.assertIn("/update/status", src)
         self.assertIn("rollback-version", src)
-        self.assertIn("update-progress-card", src)
+        self.assertIn("progress-wrap", src)
+        self.assertNotIn("update-details", src)
         self.assertNotIn("get.sh", src)
 
 

@@ -62,9 +62,10 @@ class UpdateUiSourceTests(unittest.TestCase):
     def test_update_page_has_rollback_select_no_terminal(self):
         src = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
         self.assertIn('id="rollback-version"', src)
-        self.assertIn("update-ops-card", src)
-        self.assertIn("update-progress-card", src)
-        self.assertIn("update-details", src)
+        self.assertIn("settings-card", src)
+        self.assertIn("progress-wrap", src)
+        self.assertNotIn("update-details", src)
+        self.assertNotIn("جزئیات عملیات", src)
         self.assertNotIn("روش جایگزین", src)
         self.assertNotIn("cmd-copy", src)
 
