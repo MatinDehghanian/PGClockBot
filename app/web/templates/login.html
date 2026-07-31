@@ -8,7 +8,7 @@
       <h1 dir="ltr">MrClockBot</h1>
       <p>ورود به پنل مدیریت فروش و پاسارگارد</p>
     </div>
-    <form class="auth-form" method="post" action="/login" autocomplete="off">
+    <form class="auth-form" method="post" action="/login" autocomplete="on">
       {% if error %}<div class="error" style="margin:0">{{ error }}</div>{% endif %}
       {% if flash_ok %}<div class="flash ok" style="margin:0">{{ flash_ok }}</div>{% endif %}
       <div id="login-restart" class="flash warn" style="margin:0" {% if not request.query_params.get('restarting') %}hidden{% endif %}>
@@ -17,13 +17,13 @@
       <label>نام کاربری
         <input name="username" value="{{ username or '' }}" required autocomplete="username" autofocus
                inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false"
-               placeholder="user_name" readonly onfocus="this.removeAttribute('readonly')" />
+               placeholder="user_name" />
         <small class="muted">نام کاربری ورود به پنل</small>
       </label>
       <label>رمز عبور
         <div class="pw-field">
           <input id="login-password" name="password" type="password" required autocomplete="current-password"
-                 placeholder="••••••••" readonly onfocus="this.removeAttribute('readonly')" />
+                 placeholder="••••••••" />
           <button type="button" class="pw-toggle" id="pw-toggle" aria-label="نمایش رمز" aria-pressed="false" title="نمایش / مخفی کردن رمز">
             <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>

@@ -43,6 +43,8 @@ class ResellerNavSplitTests(unittest.TestCase):
         self.assertIn("build_reseller_pg_overview", src)
         self.assertIn("check_bot_connection", src)
         self.assertIn('"bot": bot', src)
+        self.assertIn("main_token and bot_token == main_token", src)
+        self.assertNotIn("check_bot_connection()", src)
 
     def test_dashboard_route_does_not_fetch_pg_limits(self):
         src = Path("app/api/app.py").read_text(encoding="utf-8")

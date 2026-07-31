@@ -147,6 +147,26 @@ class SourceGuardTests(unittest.TestCase):
 
         self.assertTrue(Path("app/services/shop_scope.py").is_file())
 
+    def test_check_bot_connection_has_no_platform_fallback(self):
+        from pathlib import Path
+
+        src = Path("app/services/home_overview.py").read_text(encoding="utf-8")
+        # Silent fallback leaked main admin bot status to reseller dashboards
+        self.assertNotIn(
+            'token or current_setup_values().get("BOT_TOKEN")',
+            src,
+        )
+        self.assertIn("Never falls back to the platform admin BOT_TOKEN", src)
+
+    def test_reseller_home_blocks_main_token_probe(self):
+        from pathlib import Path
+
+        src = Path("app/api/home_pages.py").read_text(encoding="utf-8")
+        self.assertIn("main_token and bot_token == main_token", src)
+        self.assertIn("check_bot_connection(bot_token)", src)
+        # Must not call check_bot_connection() bare (would historically fall back)
+        self.assertNotIn("check_bot_connection()", src)
+
 
 if __name__ == "__main__":
     unittest.main()

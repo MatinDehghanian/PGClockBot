@@ -117,6 +117,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 return RedirectResponse("/pg", status_code=303)
             return RedirectResponse("/security", status_code=303)
 
+        from app.config import get_settings
         from app.db.models import ResellerProfile
         from app.services.home_overview import check_bot_connection
         from app.services.resellers import bot_needs_setup
@@ -126,8 +127,18 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         ).scalar_one_or_none()
         bot_setup_needed = bot_needs_setup(profile)
         stats = await _reseller_shop_stats(session, int(rid)) if not bot_setup_needed else empty_shop_stats()
-        bot_token = (profile.bot_token if profile else "") or ""
-        bot = await check_bot_connection(bot_token)
+        # Tenant bot only — never probe platform BOT_TOKEN (empty must stay unset).
+        bot_token = ((profile.bot_token if profile else None) or "").strip()
+        main_token = (get_settings().bot_token or "").strip()
+        if not bot_token or (main_token and bot_token == main_token):
+            bot = {
+                "ok": False,
+                "error": "توکن تنظیم نشده" if not bot_token else "توکن نامعتبر",
+                "username": None,
+                "name": None,
+            }
+        else:
+            bot = await check_bot_connection(bot_token)
 
         pg_limits = None
         if staff.get("pg_admin_username"):

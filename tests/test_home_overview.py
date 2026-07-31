@@ -52,10 +52,31 @@ class HomeOverviewHelpersTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(_tone_class(None), "neutral")
 
     async def test_bot_connection_missing_token(self):
-        with patch("app.services.home_overview.current_setup_values", return_value={"BOT_TOKEN": ""}):
-            st = await check_bot_connection("")
+        st = await check_bot_connection("")
         self.assertFalse(st["ok"])
         self.assertIn("توکن", st["error"])
+        self.assertIsNone(st.get("username"))
+
+    async def test_bot_connection_never_falls_back_to_platform_token(self):
+        """Empty/missing token must NOT probe platform BOT_TOKEN (tenant isolation)."""
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+        mock_client.get = AsyncMock()
+        with (
+            patch(
+                "app.services.home_overview.current_setup_values",
+                return_value={"BOT_TOKEN": "999999:PLATFORM_MAIN_TOKEN"},
+            ),
+            patch("app.services.home_overview.httpx.AsyncClient", return_value=mock_client),
+        ):
+            st_empty = await check_bot_connection("")
+            st_none = await check_bot_connection(None)
+        self.assertFalse(st_empty["ok"])
+        self.assertFalse(st_none["ok"])
+        self.assertIsNone(st_empty.get("username"))
+        self.assertIsNone(st_none.get("username"))
+        mock_client.get.assert_not_called()
 
     async def test_bot_connection_ok(self):
         mock_resp = MagicMock()
@@ -71,6 +92,10 @@ class HomeOverviewHelpersTests(unittest.IsolatedAsyncioTestCase):
             st = await check_bot_connection("123:ABC")
         self.assertTrue(st["ok"])
         self.assertEqual(st["username"], "demo_bot")
+        mock_client.get.assert_awaited()
+        called_url = mock_client.get.await_args.args[0]
+        self.assertIn("123:ABC", called_url)
+        self.assertNotIn("PLATFORM", called_url)
 
 
 if __name__ == "__main__":

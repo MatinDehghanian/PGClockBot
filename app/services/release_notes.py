@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "2.6.11": [
+        "رفع نشتی وضعیت ربات ادمین اصلی به داشبورد نماینده/ادمین فرعی",
+        "ورود: سازگاری autofill رمز؛ دیگر خطای JSON خام برای فیلد خالی نشان داده نمی‌شود",
+    ],
     "2.6.10": [
         "داشبورد نماینده: ردیف وضعیت اتصال ربات تمام‌عرض وقتی فقط یک آیتم است",
     ],

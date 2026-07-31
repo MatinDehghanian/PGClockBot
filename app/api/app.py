@@ -862,8 +862,8 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.post("/login")
     async def login_submit(
         request: Request,
-        username: str = Form(...),
-        password: str = Form(...),
+        username: str = Form(""),
+        password: str = Form(""),
         session: AsyncSession = Depends(get_db),
     ):
         if not is_setup_complete():
@@ -888,6 +888,17 @@ def create_api_app(lifespan=None) -> FastAPI:
         display = (username or "").strip()
         u = display
         p = password or ""
+        # Autofill / password-managers sometimes omit fields — never return raw 422 JSON.
+        if not typed_user or not p:
+            return render(
+                request,
+                "login.html",
+                {
+                    "error": "نام کاربری و رمز دسترسی الزامی است.",
+                    "username": typed_user,
+                },
+                status_code=400,
+            )
         permissions: list[str] = []
         pg_permissions: list[str] = []
         pg_user_actions: dict = {}

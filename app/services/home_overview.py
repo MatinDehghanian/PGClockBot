@@ -49,7 +49,12 @@ def _tone_class(pct: float | None) -> str:
 
 
 async def check_bot_connection(token: str | None = None) -> dict[str, Any]:
-    token = (token or current_setup_values().get("BOT_TOKEN") or "").strip()
+    """Probe Telegram getMe for the given token only.
+
+    Never falls back to the platform admin BOT_TOKEN. Callers that need the
+    main bot must pass that token explicitly — empty/missing means unset.
+    """
+    token = (token or "").strip()
     if not token:
         return {"ok": False, "error": "توکن تنظیم نشده", "username": None, "name": None}
     try:
@@ -240,7 +245,8 @@ async def pg_home_bundle() -> tuple[dict[str, Any], dict[str, Any]]:
 
 async def build_home_overview(session: AsyncSession) -> dict[str, Any]:
     metrics_task = asyncio.to_thread(host_metrics, wait_cpu=0.0)
-    bot_task = check_bot_connection()
+    # Platform admin overview only — pass main token explicitly (no silent fallback).
+    bot_task = check_bot_connection(current_setup_values().get("BOT_TOKEN"))
     bot_sum_task = bot_panel_summary(session)
     pg_task = pg_home_bundle()
 
