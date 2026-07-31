@@ -429,12 +429,19 @@ async def settings_edit_ask(
         return
     with _Scoped(profile.user_id):
         cur = await get_setting(session, key, reseller_id=profile.user_id)
+    if key == "force_join_channel":
+        from app.services.users import format_force_join_for_edit
+
+        cur = format_force_join_for_edit(cur)
     await callback.answer()
     await state.set_state(ResellerSettingsStates.edit_value)
     await state.update_data(edit_key=key, reseller_id=profile.user_id)
+    hint = "متن جدید را بفرستید.\nبرای انصراف: انصراف"
+    if key == "force_join_channel":
+        hint = "هر خط یک کانال (@channel یا آیدی).\nعضویت همه الزامی ذخیره می‌شود.\nبرای انصراف: انصراف"
     if callback.message:
         await callback.message.answer(
-            f"<b>{meta[1]}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\nمتن جدید را بفرستید.\nبرای انصراف: انصراف",
+            f"<b>{meta[1]}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}",
             reply_markup=kb.cancel_reply(),
         )
 
@@ -458,6 +465,10 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
             reply_markup=_kb([[InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="res:st:hub")]]),
         )
         return
+    if key == "force_join_channel":
+        from app.services.users import normalize_force_join_channel_value
+
+        text = normalize_force_join_channel_value(text)
     await set_setting(session, key, text, reseller_id=profile.user_id)
     await state.clear()
     await message.answer(

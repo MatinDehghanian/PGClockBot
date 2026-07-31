@@ -1,16 +1,16 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% from "macros.html" import switch, switch_chip, page_title %}
 {% from "macros.html" import row_actions %}
 {% block title %}پلن‌های فروش{% endblock %}
 {% block content %}
-<div class="page-head">
+<div class="page-head page-head--stack">
   <div>
     {{ page_title('plans', 'پلن‌های فروش') }}
-  </div>
-  <div class="actions">
-    <button type="button" class="btn btn-ghost" data-modal-open="modal-trial">پلن تست</button>
-    <button type="button" class="btn btn-ghost" data-modal-open="modal-custom">پلن دلخواه</button>
-    <button type="button" class="btn" data-modal-open="modal-plan-create">افزودن پلن</button>
+    <div class="page-title-actions actions">
+      <button type="button" class="btn btn-ghost" data-modal-open="modal-trial">پلن تست</button>
+      <button type="button" class="btn btn-ghost" data-modal-open="modal-custom">پلن دلخواه</button>
+      <button type="button" class="btn" data-modal-open="modal-plan-create">افزودن پلن</button>
+    </div>
   </div>
 </div>
 

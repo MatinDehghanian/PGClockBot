@@ -93,11 +93,11 @@ class BotListParityTests(unittest.TestCase):
 
 
 class UploadBoxThemeTests(unittest.TestCase):
-    def test_upload_outer_transparent(self):
+    def test_upload_outer_body_color(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".upload-box {\n  position: relative;", css)
         block = css.split(".upload-box {", 1)[1].split(".upload-box:hover", 1)[0]
-        self.assertIn("background: transparent;", block)
+        self.assertIn("background: var(--background);", block)
 
 
 if __name__ == "__main__":

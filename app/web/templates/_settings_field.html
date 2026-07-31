@@ -4,7 +4,7 @@
 {% set help = field[3] if field|length > 3 else '' %}
 {% set options = field[4] if field|length > 4 else [] %}
 {% set val = values.get(key, '') %}
-<div class="setting-item {% if kind in ['textarea', 'image', 'toggle'] %}full{% endif %}">
+<div class="setting-item {% if kind in ['textarea', 'image', 'toggle', 'force_channels'] %}full{% endif %}">
   {% if kind == 'toggle' %}
   <label class="toggle-row ui-switch-row">
     <span class="ui-switch-copy">
@@ -25,6 +25,14 @@
     </select>
     {% if help %}<small class="muted">{{ help }}</small>{% endif %}
   </label>
+  {% elif kind == 'force_channels' %}
+  <div class="force-channels" data-force-channels>
+    <strong>{{ label }}</strong>
+    {% if help %}<small class="muted" style="display:block;margin-top:4px">{{ help }}</small>{% endif %}
+    <input type="hidden" name="s_{{ key }}" value="{{ val }}" data-force-channels-json />
+    <div class="force-channels-list" data-force-channels-list></div>
+    <button type="button" class="btn btn-ghost btn-sm force-channels-add" data-force-channels-add>+ افزودن کانال</button>
+  </div>
   {% elif kind == 'textarea' %}
   <label>{{ label }}
     <textarea name="s_{{ key }}" rows="5">{{ val }}</textarea>

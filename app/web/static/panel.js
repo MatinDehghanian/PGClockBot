@@ -254,6 +254,8 @@
         if (wrap && !open) {
           wrap.classList.add('open');
           toggle.setAttribute('aria-expanded', 'true');
+          /* Port immediately so fixed menu is not trapped by .table-wrap overflow */
+          placeRowMenu(wrap);
           requestAnimationFrame(() => placeRowMenu(wrap));
         }
         return;
@@ -367,4 +369,118 @@
       if (nameEl) nameEl.textContent = file ? file.name : 'فایلی انتخاب نشده';
       box.classList.toggle('has-file', !!file);
     });
+
+    /* Force-join channels: one row each + optional required toggle */
+    (function initForceChannels(){
+      function parseEntries(raw){
+        const s = (raw || '').trim();
+        if (!s) return [];
+        if (s.charAt(0) === '[') {
+          try {
+            const data = JSON.parse(s);
+            if (Array.isArray(data)) {
+              const out = [];
+              const seen = {};
+              data.forEach((item) => {
+                let id = '';
+                let required = true;
+                if (typeof item === 'string') id = item.trim();
+                else if (item && typeof item === 'object') {
+                  id = String(item.id || item.channel || '').trim();
+                  required = item.required !== false && item.required !== 0 && item.required !== '0';
+                }
+                if (!id) return;
+                const key = id.toLowerCase();
+                if (seen[key]) return;
+                seen[key] = 1;
+                out.push({ id, required: !!required });
+              });
+              return out;
+            }
+          } catch (e) {}
+        }
+        return s.replace(/,/g, '\n').split('\n')
+          .map((p) => p.trim())
+          .filter(Boolean)
+          .filter((ch, i, arr) => arr.findIndex((x) => x.toLowerCase() === ch.toLowerCase()) === i)
+          .map((id) => ({ id, required: true }));
+      }
+      function rowHtml(entry){
+        const id = entry && entry.id ? String(entry.id) : '';
+        const req = !entry || entry.required !== false;
+        return (
+          '<div class="force-channel-row">' +
+            '<input type="text" class="force-channel-id" dir="ltr" placeholder="@channel یا آیدی عددی" value="' +
+              id.replace(/"/g, '&quot;') + '" />' +
+            '<label class="force-channel-req ui-switch-row">' +
+              '<span class="ui-switch-copy"><strong>عضویت الزامی</strong></span>' +
+              '<span class="ui-switch">' +
+                '<input type="checkbox" class="force-channel-required" value="1"' + (req ? ' checked' : '') + ' />' +
+                '<span class="ui-switch-track" aria-hidden="true"></span>' +
+              '</span>' +
+            '</label>' +
+            '<button type="button" class="btn btn-ghost btn-sm force-channel-remove" aria-label="حذف">حذف</button>' +
+          '</div>'
+        );
+      }
+      function sync(root){
+        const hidden = root.querySelector('[data-force-channels-json]');
+        const list = root.querySelector('[data-force-channels-list]');
+        if (!hidden || !list) return;
+        const entries = [];
+        const seen = {};
+        list.querySelectorAll('.force-channel-row').forEach((row) => {
+          const id = (row.querySelector('.force-channel-id') || {}).value || '';
+          const ch = String(id).trim();
+          if (!ch) return;
+          const key = ch.toLowerCase();
+          if (seen[key]) return;
+          seen[key] = 1;
+          const reqInput = row.querySelector('.force-channel-required');
+          entries.push({ id: ch, required: !!(reqInput && reqInput.checked) });
+        });
+        hidden.value = JSON.stringify(entries);
+      }
+      function ensureRows(root, entries){
+        const list = root.querySelector('[data-force-channels-list]');
+        if (!list) return;
+        const items = entries && entries.length ? entries : [{ id: '', required: true }];
+        list.innerHTML = items.map(rowHtml).join('');
+        sync(root);
+      }
+      document.querySelectorAll('[data-force-channels]').forEach((root) => {
+        const hidden = root.querySelector('[data-force-channels-json]');
+        ensureRows(root, parseEntries(hidden ? hidden.value : ''));
+        root.addEventListener('click', (e) => {
+          if (e.target.closest('[data-force-channels-add]')) {
+            e.preventDefault();
+            const list = root.querySelector('[data-force-channels-list]');
+            if (!list) return;
+            list.insertAdjacentHTML('beforeend', rowHtml({ id: '', required: true }));
+            const inputs = list.querySelectorAll('.force-channel-id');
+            const last = inputs[inputs.length - 1];
+            if (last) last.focus();
+            sync(root);
+            return;
+          }
+          const remove = e.target.closest('.force-channel-remove');
+          if (remove) {
+            e.preventDefault();
+            const row = remove.closest('.force-channel-row');
+            const list = root.querySelector('[data-force-channels-list]');
+            if (row && list) {
+              row.remove();
+              if (!list.querySelector('.force-channel-row')) {
+                list.insertAdjacentHTML('beforeend', rowHtml({ id: '', required: true }));
+              }
+              sync(root);
+            }
+          }
+        });
+        root.addEventListener('input', () => sync(root));
+        root.addEventListener('change', () => sync(root));
+        const form = root.closest('form');
+        if (form) form.addEventListener('submit', () => sync(root));
+      });
+    })();
   })();

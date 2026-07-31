@@ -2746,6 +2746,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     from app.services.users import clamp_alert_percent
 
                     val = clamp_alert_percent(val)
+                if key == "force_join_channel":
+                    from app.services.users import normalize_force_join_channel_value
+
+                    val = normalize_force_join_channel_value(val)
                 await set_setting(session, key, val)
         uploads = DATA_DIR / "uploads"
         uploads.mkdir(parents=True, exist_ok=True)

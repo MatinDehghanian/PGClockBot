@@ -287,6 +287,17 @@ a:hover { opacity: 0.8; }
   margin-bottom: var(--space-4);
   flex-wrap: wrap;
 }
+.page-head--stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+.page-title-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
 .page-title {
   display: flex;
   align-items: center;
@@ -1464,7 +1475,7 @@ a.btn.btn-star:hover {
   padding: 20px 16px;
   border: 1px dashed var(--border);
   border-radius: var(--radius);
-  background: transparent;
+  background: var(--background);
   cursor: pointer;
   text-align: center;
   transition: border-color .15s ease, background .15s ease;
@@ -1472,7 +1483,7 @@ a.btn.btn-star:hover {
 .upload-box:hover,
 .upload-box:focus-within {
   border-color: rgba(249, 115, 22, 0.45);
-  background: transparent;
+  background: var(--background);
 }
 .upload-box input[type="file"] {
   position: absolute;
@@ -1495,7 +1506,7 @@ a.btn.btn-star:hover {
   height: 40px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--muted) 88%, #000);
+  background: var(--muted);
   color: var(--brand-fg);
   font-size: 26px;
   font-weight: 500;
@@ -1528,6 +1539,49 @@ a.btn.btn-star:hover {
 .file-label.upload-box {
   gap: 6px;
   font-size: inherit;
+}
+
+.force-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.force-channels-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.force-channel-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--muted);
+}
+.force-channel-row .force-channel-id {
+  flex: 1 1 180px;
+  min-width: 140px;
+}
+.force-channel-req {
+  flex: 1 1 200px;
+  margin: 0 !important;
+  padding: 8px 10px !important;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  min-height: 44px;
+}
+.force-channel-req .ui-switch { margin-inline-start: auto; }
+.force-channels-add { align-self: flex-start; margin-top: 2px; }
+.broadcast-snippet {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .notify-form { padding: 4px; }
@@ -3316,15 +3370,15 @@ html[data-theme="light"] .btn-star:hover {
   color: #c2410c !important;
 }
 html[data-theme="light"] .upload-box {
-  background: transparent;
+  background: var(--background);
 }
 html[data-theme="light"] .upload-box:hover,
 html[data-theme="light"] .upload-box:focus-within {
-  background: transparent;
+  background: var(--background);
   border-color: rgba(249, 115, 22, 0.4);
 }
 html[data-theme="light"] .upload-box-plus {
-  background: #e4e4e7;
+  background: var(--muted);
   color: #c2410c;
 }
 html[data-theme="light"] .upload-box.has-file .upload-box-name {

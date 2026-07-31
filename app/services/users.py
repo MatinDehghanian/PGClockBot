@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import secrets
 import string
 import time
 from contextvars import ContextVar
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,8 +30,7 @@ def clear_settings_cache(reseller_id: int | None = None) -> None:
     _SETTINGS_CACHE.pop(int(reseller_id), None)
 
 
-def parse_force_join_channels(raw: str | None) -> list[str]:
-    """Split force-join setting into unique channels (one per line or comma)."""
+def _split_channel_tokens(raw: str | None) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
     for part in (raw or "").replace(",", "\n").splitlines():
@@ -42,6 +43,84 @@ def parse_force_join_channels(raw: str | None) -> list[str]:
         seen.add(key)
         out.append(ch)
     return out
+
+
+def parse_force_join_entries(raw: str | None) -> list[dict[str, Any]]:
+    """Parse force-join setting into [{id, required}, ...].
+
+    Accepts JSON array (new) or legacy line/comma-separated channels (all required).
+    """
+    s = (raw or "").strip()
+    if not s:
+        return []
+    if s.startswith("["):
+        try:
+            data = json.loads(s)
+        except Exception:
+            data = None
+        if isinstance(data, list):
+            out: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            for item in data:
+                if isinstance(item, str):
+                    ch = item.strip()
+                    required = True
+                elif isinstance(item, dict):
+                    ch = str(item.get("id") or item.get("channel") or "").strip()
+                    req = item.get("required", True)
+                    if isinstance(req, str):
+                        required = req.strip().lower() in {"1", "true", "yes", "on"}
+                    else:
+                        required = bool(req)
+                else:
+                    continue
+                if not ch:
+                    continue
+                key = ch.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append({"id": ch, "required": required})
+            return out
+    return [{"id": ch, "required": True} for ch in _split_channel_tokens(s)]
+
+
+def parse_force_join_channels(raw: str | None) -> list[str]:
+    """Channel ids that must be joined (required=true) before using the bot."""
+    return [e["id"] for e in parse_force_join_entries(raw) if e.get("required", True)]
+
+
+def serialize_force_join_entries(entries: list[dict[str, Any]] | None) -> str:
+    """Normalize entries to a compact JSON string for storage."""
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in entries or []:
+        if not isinstance(item, dict):
+            continue
+        ch = str(item.get("id") or "").strip()
+        if not ch:
+            continue
+        key = ch.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        req = item.get("required", True)
+        if isinstance(req, str):
+            required = req.strip().lower() in {"1", "true", "yes", "on"}
+        else:
+            required = bool(req)
+        normalized.append({"id": ch, "required": required})
+    return json.dumps(normalized, ensure_ascii=False)
+
+
+def format_force_join_for_edit(raw: str | None) -> str:
+    """Human-editable multi-line preview (one channel per line) for bot settings."""
+    return "\n".join(e["id"] for e in parse_force_join_entries(raw))
+
+
+def normalize_force_join_channel_value(raw: str | None) -> str:
+    """Accept JSON or legacy lines; always store JSON entries (required defaults true)."""
+    return serialize_force_join_entries(parse_force_join_entries(raw))
 
 
 def set_shop_reseller_id(reseller_user_id: int | None):
@@ -262,6 +341,7 @@ DEFAULT_SETTINGS = {
     "support_contacts": "[]",
     "force_join_channel": "",
     "force_join_enabled": "0",
+    "welcome_image": "",
     "trial_enabled": "0",
     "referral_bonus": "0",
     "auto_approve_payments": "0",
@@ -427,6 +507,12 @@ SETTING_GROUPS = {
             "textarea",
             "اولین پیامی که کاربر بعد از استارت می‌بیند. متغیر: {name}",
         ),
+        (
+            "welcome_image",
+            "عکس پیام وسط صفحه",
+            "image",
+            "اختیاری — اگر تنظیم شود همراه متن خوش‌آمد به‌صورت عکس ارسال می‌شود",
+        ),
     ],
     "متن پیام‌ها": [
         ("guide_text", "متن راهنما", "textarea", "دکمه راهنما در منوی کاربر"),
@@ -568,7 +654,12 @@ SETTING_GROUPS = {
     ],
     "کانال اجباری": [
         ("force_join_enabled", "عضویت اجباری کانال", "toggle", "قبل از استفاده از ربات"),
-        ("force_join_channel", "کانال‌ها", "textarea", "هر خط یک کانال — @channel یا آیدی عددی. عضویت در همه الزامی است"),
+        (
+            "force_join_channel",
+            "کانال‌ها",
+            "force_channels",
+            "هر کانال را جدا وارد کنید. با + کانال جدید اضافه کنید و برای هر کدام الزامی بودن عضویت را تعیین کنید",
+        ),
     ],
 }
 

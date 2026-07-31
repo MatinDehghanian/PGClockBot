@@ -42,19 +42,19 @@
     {% endif %}
   </div>
   <div class="table-wrap">
-  <table>
+  <table class="table-compact">
     <thead>
-      <tr><th>#</th><th>زمان</th><th>مخاطب</th><th>متن</th><th>نتیجه</th><th>توسط</th><th class="col-actions"></th></tr>
+      <tr><th>#</th><th>زمان</th><th class="col-hide-sm">مخاطب</th><th>متن</th><th>نتیجه</th><th class="col-hide-sm">توسط</th><th class="col-actions"></th></tr>
     </thead>
     <tbody>
     {% for row in history %}
       <tr>
-        <td class="mono">{{ row.id }}</td>
-        <td class="mono muted">{{ row.created_at }}</td>
-        <td>{{ audience_labels.get(row.audience, row.audience) }}</td>
-        <td style="max-width:280px;white-space:pre-wrap;word-break:break-word">{{ row.text[:180] }}{% if row.text|length > 180 %}…{% endif %}</td>
-        <td class="mono">{{ row.ok_count }}/{{ row.total }}{% if row.fail_count %} · ناموفق {{ row.fail_count }}{% endif %}</td>
-        <td class="muted">{{ row.created_by or '—' }}</td>
+        <td class="mono cell-tight">{{ row.id }}</td>
+        <td class="mono muted cell-tight">{{ row.created_at }}</td>
+        <td class="col-hide-sm">{{ audience_labels.get(row.audience, row.audience) }}</td>
+        <td class="broadcast-snippet">{{ row.text[:120] }}{% if row.text|length > 120 %}…{% endif %}</td>
+        <td class="mono cell-tight">{{ row.ok_count }}/{{ row.total }}{% if row.fail_count %} · ناموفق {{ row.fail_count }}{% endif %}</td>
+        <td class="muted col-hide-sm">{{ row.created_by or '—' }}</td>
         <td class="col-actions">
           {% call row_actions() %}
           <form method="post" action="/broadcast/history/{{ row.id }}/delete" onsubmit="return confirm('این رکورد حذف شود؟')">

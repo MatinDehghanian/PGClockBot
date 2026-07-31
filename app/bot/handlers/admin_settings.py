@@ -562,11 +562,17 @@ async def settings_edit_ask(
     label = meta[1] if meta else key
     kind = meta[2] if meta else "text"
     cur = await get_setting(session, key)
+    if key == "force_join_channel":
+        from app.services.users import format_force_join_for_edit
+
+        cur = format_force_join_for_edit(cur)
     loc = _owner_screen_for_key(key)
     await callback.answer()
     await state.set_state(SettingsStates.edit_value)
     await state.update_data(edit_key=key, edit_loc=loc)
     hint = "عدد بفرستید." if kind == "number" else "متن جدید را بفرستید.\nبرای انصراف: انصراف"
+    if key == "force_join_channel":
+        hint = "هر خط یک کانال (@channel یا آیدی).\nعضویت همه الزامی ذخیره می‌شود.\nبرای انصراف: انصراف"
     if callback.message:
         await callback.message.answer(
             f"<b>{label}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}",
@@ -597,6 +603,10 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
             await message.answer("عدد معتبر بفرستید")
             return
         text = raw
+    if key == "force_join_channel":
+        from app.services.users import normalize_force_join_channel_value
+
+        text = normalize_force_join_channel_value(text)
     await set_setting(session, key, text)
     await state.clear()
     jump = "adm:settings"
