@@ -85,8 +85,8 @@ class UpdateUiSourceTests(unittest.TestCase):
         self.assertIn("M4.5 10L8 13l3.5-3", css)
         field = css.split(".rollback-field select {", 1)[1].split("}", 1)[0]
         self.assertIn("text-align: right", field)
-        self.assertIn("padding-left: 36px", field)
-        self.assertIn("background-position: left 12px center", field)
+        self.assertIn("padding-left: var(--space-4)", field)
+        self.assertIn("background-position: left var(--space-2) center", field)
 
     def test_context_exposes_rollback_versions(self):
         src = Path("app/services/panel_update.py").read_text(encoding="utf-8")

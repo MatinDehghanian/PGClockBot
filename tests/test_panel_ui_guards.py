@@ -81,7 +81,7 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
         self.assertIn("order: 10", css)
         self.assertIn(".form-field > small.muted", css)
         # Hints under controls need clear gap + theme muted color (not hardcoded grey)
-        self.assertIn("margin-top: var(--space-3)", css)
+        self.assertIn("margin-top: var(--space-1)", css)
         block = re.search(
             r"(?ms)label > small\.muted,\s*label > \.field-help,\s*\.field-help,\s*\.hint\s*\{([^}]+)\}",
             css,
@@ -197,15 +197,15 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIsNotNone(sel)
         body = sel.group(1)
         # RTL: chevron on physical left (opposite the value text), with room via padding-inline-end
-        self.assertIn("background-position: left 12px center", body)
-        self.assertIn("padding-inline-end: 36px", body)
+        self.assertIn("background-position: left var(--space-2) center", body)
+        self.assertIn("padding-inline-end: var(--space-4)", body)
         self.assertNotIn("background-position: right", body)
         self.assertIn("background-color: #09090b", body)
         # light theme must not wipe the chevron via background shorthand
         light = re.search(r'(?ms)html\[data-theme="light"\]\s+select\s*\{([^}]+)\}', css)
         self.assertIsNotNone(light)
         self.assertIn("background-image:", light.group(1))
-        self.assertIn("background-position: left 12px center", light.group(1))
+        self.assertIn("background-position: left var(--space-2) center", light.group(1))
         # shared input padding must not force symmetric padding onto select
         shared = re.search(r"(?ms)^input,\s*select,\s*textarea\s*\{([^}]+)\}", css)
         self.assertIsNotNone(shared)

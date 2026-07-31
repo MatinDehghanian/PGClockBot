@@ -52,8 +52,8 @@ class UpdateTabUiTests(unittest.TestCase):
         field = css.split(".rollback-field select {", 1)[1].split("}", 1)[0]
         self.assertIn("direction: rtl", field)
         self.assertIn("text-align: right", field)
-        self.assertIn("padding-left: 36px", field)
-        self.assertIn("background-position: left 12px center", field)
+        self.assertIn("padding-left: var(--space-4)", field)
+        self.assertIn("background-position: left var(--space-2) center", field)
 
 
 class TitleGapParityTests(unittest.TestCase):
@@ -69,7 +69,7 @@ class TitleGapParityTests(unittest.TestCase):
     def test_bot_title_above_and_below_use_same_token(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(
-            "padding: var(--page-title-gap) 32px calc(var(--space-3) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-4) calc(var(--space-2) + var(--safe-bottom));",
             css,
         )
         head = css.split(".page-head {\n", 1)[1].split("}", 1)[0]

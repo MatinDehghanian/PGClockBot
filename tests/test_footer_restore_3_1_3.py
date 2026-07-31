@@ -27,7 +27,7 @@ class FooterRestore303Tests(unittest.TestCase):
         self.assertNotIn("--main-pad-", css)
         self.assertNotIn("html:has(.shell)", css)
         self.assertIn(
-            "padding: var(--page-title-gap) 32px calc(var(--space-3) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-4) calc(var(--space-2) + var(--safe-bottom));",
             css,
         )
         # Mobile bottom pad matches .side drawer (space-2) so footers share one baseline
@@ -41,7 +41,7 @@ class FooterRestore303Tests(unittest.TestCase):
         side = css.split(".side {\n", 1)[1].split(".main {", 1)[0]
         self.assertIn("overflow-y: auto;", side)
         self.assertIn(
-            "padding: calc(var(--space-3) + var(--safe-top)) var(--space-2) calc(var(--space-3) + var(--safe-bottom));",
+            "padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) calc(var(--space-2) + var(--safe-bottom));",
             side,
         )
         self.assertNotIn("padding-bottom: var(--chrome-pad-bottom)", css)

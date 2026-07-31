@@ -1,14 +1,17 @@
-"""Unified spacing system — single scale via design tokens (3.1.9).
+"""Unified spacing system — strict 8-point grid via design tokens.
 
-Scale (existing tokens only):
+Scale:
+  --space-0: 4px
   --space-1: 8px
-  --space-2: 12px
-  --space-3: 16px
-  --space-4: 20px
-  --card-pad / --section-gap / --page-title-gap: 16px
+  --space-2: 16px
+  --space-3: 24px
+  --space-4: 32px
+  --space-5: 48px
+  --space-6: 64px
+  --card-pad / --page-title-gap: 16px
+  --section-gap: 24px
 
 Spacing props (margin/padding/gap) must not use off-scale raw px.
-Structural exceptions: 24/32/36 page gutters and chevron room.
 """
 
 from __future__ import annotations
@@ -32,14 +35,18 @@ INLINE_SPACE_RE = re.compile(
     re.I,
 )
 
-ALLOWED_RAW_PX = {24, 32, 36}
+# Raw px only allowed if on the 8-point grid (prefer tokens; 0 is fine)
+ALLOWED_RAW_PX = {4, 8, 16, 24, 32, 48, 64}
 TOKEN_DEFS = (
+    "--space-0: 4px;",
     "--space-1: 8px;",
-    "--space-2: 12px;",
-    "--space-3: 16px;",
-    "--space-4: 20px;",
+    "--space-2: 16px;",
+    "--space-3: 24px;",
+    "--space-4: 32px;",
+    "--space-5: 48px;",
+    "--space-6: 64px;",
     "--card-pad: 16px;",
-    "--section-gap: 16px;",
+    "--section-gap: 24px;",
     "--page-title-gap: 16px;",
 )
 
@@ -62,7 +69,7 @@ class SpacingTokenDefsTests(unittest.TestCase):
         for line in TOKEN_DEFS:
             self.assertIn(line, css)
 
-    def test_no_new_spacing_token_names(self):
+    def test_no_unexpected_spacing_token_names(self):
         css = CSS.read_text(encoding="utf-8")
         root = css.split(":root {", 1)[1].split("}", 1)[0]
         space_vars = re.findall(
@@ -70,10 +77,13 @@ class SpacingTokenDefsTests(unittest.TestCase):
             root,
         )
         allowed = {
+            "--space-0:",
             "--space-1:",
             "--space-2:",
             "--space-3:",
             "--space-4:",
+            "--space-5:",
+            "--space-6:",
             "--card-pad:",
             "--section-gap:",
             "--page-title-gap:",
@@ -85,10 +95,13 @@ class SpacingTokenDefsTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         root = css.split(":root {", 1)[1].split("}", 1)[0]
         for name in (
+            "--space-0:",
             "--space-1:",
             "--space-2:",
             "--space-3:",
             "--space-4:",
+            "--space-5:",
+            "--space-6:",
             "--card-pad:",
             "--section-gap:",
             "--page-title-gap:",
@@ -100,11 +113,12 @@ class SpacingLiteralBanTests(unittest.TestCase):
     def test_css_spacing_props_use_tokens_only(self):
         css = CSS.read_text(encoding="utf-8")
         bad = _raw_px_in_spacing(css)
-        # Allow calc(... * -1) style negatives that reference tokens only
+        # Allow calc(... * -1) proximity pulls that reference space tokens
         bad = [
             b
             for b in bad
-            if not re.search(r"calc\(\s*var\(--space-[1-4]\)\s*\*\s*-1\s*\)", b[1])
+            if not re.search(r"calc\(\s*(?:-1\s*\*\s*)?var\(--space-[0-6]\)(?:\s*\*\s*-1)?\s*\)", b[1])
+            and not re.search(r"calc\(\s*var\(--space-[0-6]\)\s*\*\s*-1\s*\)", b[1])
         ]
         self.assertEqual(
             bad,
@@ -116,6 +130,15 @@ class SpacingLiteralBanTests(unittest.TestCase):
         offenders: list[str] = []
         for path in TEMPLATES.rglob("*.html"):
             text = path.read_text(encoding="utf-8")
+            # Skip miniapp self-contained style block token defs (values are the scale)
+            if path.name == "miniapp.html":
+                # Only check style="" attributes in miniapp, not the <style> token defs
+                for sm in STYLE_RE.finditer(text):
+                    for m in INLINE_SPACE_RE.finditer(sm.group(1)):
+                        val = m.group(2)
+                        if re.search(r"\d+px|\d+(?:\.\d+)?rem", val):
+                            offenders.append(f"{path.name}: {m.group(1)}: {val.strip()}")
+                continue
             for sm in STYLE_RE.finditer(text):
                 for m in INLINE_SPACE_RE.finditer(sm.group(1)):
                     val = m.group(2)
@@ -132,7 +155,7 @@ class SpacingSemanticParityTests(unittest.TestCase):
     def test_page_title_gaps_use_token(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(
-            "padding: var(--page-title-gap) 32px calc(var(--space-3) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-4) calc(var(--space-2) + var(--safe-bottom));",
             css,
         )
         self.assertIn(
@@ -147,6 +170,7 @@ class SpacingSemanticParityTests(unittest.TestCase):
         self.assertIn(".card {\n  padding: var(--card-pad);\n  margin-bottom: var(--section-gap);", css)
         self.assertIn("gap: var(--section-gap);", css)
         self.assertIn("margin-bottom: var(--section-gap);", css)
+        self.assertIn("--section-gap: 24px;", css)
 
     def test_form_label_input_and_help_use_scale(self):
         css = CSS.read_text(encoding="utf-8")
@@ -156,7 +180,13 @@ class SpacingSemanticParityTests(unittest.TestCase):
             css,
         )
         self.assertIsNotNone(help_block)
-        self.assertIn("margin-top: var(--space-3)", help_block.group(1))
+        # Help sits close to its control (Law of Proximity)
+        self.assertIn("margin-top: var(--space-1)", help_block.group(1))
+
+    def test_title_caption_proximity(self):
+        css = CSS.read_text(encoding="utf-8")
+        self.assertIn(".card h2 + p.muted,", css)
+        self.assertIn("margin-top: calc(-1 * var(--space-1));", css)
 
 
 if __name__ == "__main__":
