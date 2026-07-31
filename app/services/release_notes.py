@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.1.12": [
+        "تگ‌ها و بج‌ها: استایل یکدست و ظریف‌تر در کل پنل (badge / ver / role)",
+    ],
     "3.1.11": [
         "ریشه فاصله تیتر→محتوا در پاسارگارد: جلوگیری از رفتن دکمه زیر تیتر؛ فاصله واحد روی .pg-head مثل ربات",
     ],

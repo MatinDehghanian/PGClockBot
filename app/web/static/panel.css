@@ -1143,45 +1143,65 @@ tr:last-child td { border-bottom: 0; }
 .mono { font-family: var(--font); font-size: 12px; font-variant-numeric: tabular-nums; }
 input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 
-.badge {
+/* Unified chip tags — compact, soft, one rhythm for badge / ver / role */
+.badge,
+.ver-badge,
+.role-tag {
   display: inline-flex;
   align-items: center;
-  padding: var(--space-1);
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 20px;
+  padding: 0 var(--space-1);
   border-radius: 999px;
-  background: var(--muted);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--muted-fg);
-  border: 1px solid var(--border);
   font-size: 11px;
-  font-weight: 550;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
   white-space: nowrap;
+  vertical-align: middle;
 }
-.badge.ok, .badge.active, .badge.approved, .badge.delivered, .badge.answered {
-  background: rgba(34, 197, 94, 0.12); color: #4ade80; border-color: rgba(34, 197, 94, 0.28);
+.badge {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted-fg);
+  border-color: rgba(255, 255, 255, 0.08);
 }
-.badge.warn, .badge.pending, .badge.awaiting, .badge.open {
-  background: rgba(234, 179, 8, 0.12); color: #facc15; border-color: rgba(234, 179, 8, 0.28);
+.badge.ok, .badge.active, .badge.approved, .badge.delivered, .badge.answered,
+.badge.node-online, .badge.connected, .badge.healthy {
+  background: rgba(34, 197, 94, 0.1);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.22);
 }
-.badge.danger, .badge.bad, .badge.rejected, .badge.blocked, .badge.cancelled, .badge.failed {
-  background: rgba(239, 68, 68, 0.12); color: #f87171; border-color: rgba(239, 68, 68, 0.28);
+.badge.warn, .badge.pending, .badge.awaiting, .badge.open,
+.badge.connecting {
+  background: rgba(234, 179, 8, 0.1);
+  color: #fde047;
+  border-color: rgba(234, 179, 8, 0.22);
 }
-.badge.info, .badge.paid {
-  background: rgba(59, 130, 246, 0.12); color: #60a5fa; border-color: rgba(59, 130, 246, 0.28);
+.badge.danger, .badge.bad, .badge.rejected, .badge.blocked, .badge.cancelled, .badge.failed,
+.badge.node-offline, .badge.error, .badge.unhealthy {
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.22);
 }
-.badge.role-admin { background: var(--muted); color: var(--foreground); border-color: var(--border); }
+.badge.info, .badge.paid,
 .badge.role-reseller {
-  background: rgba(59, 130, 246, 0.12); color: #60a5fa; border-color: rgba(59, 130, 246, 0.28);
+  background: rgba(59, 130, 246, 0.1);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.22);
+}
+.badge.role-admin {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--foreground);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 .badge.role-user, .badge.fixed, .badge.neutral {
-  background: var(--muted); color: var(--muted-fg); border-color: var(--border);
-}
-.badge.node-online, .badge.connected, .badge.healthy {
-  background: rgba(34, 197, 94, 0.12); color: #4ade80; border-color: rgba(34, 197, 94, 0.28);
-}
-.badge.node-offline, .badge.error, .badge.unhealthy {
-  background: rgba(239, 68, 68, 0.12); color: #f87171; border-color: rgba(239, 68, 68, 0.28);
-}
-.badge.connecting {
-  background: rgba(234, 179, 8, 0.12); color: #facc15; border-color: rgba(234, 179, 8, 0.28);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted-fg);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .flash {
@@ -1439,21 +1459,21 @@ a.btn.btn-star:hover {
   gap: var(--space-1);
 }
 .ver-num { font-size: 12px; font-weight: 500; color: var(--muted-fg); }
-.ver-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 var(--space-1);
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 550;
-  border: 1px solid var(--border);
-  background: var(--muted);
-  color: var(--muted-fg);
+.ver-badge.ok {
+  background: rgba(34, 197, 94, 0.1);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.22);
 }
-.ver-badge.ok { background: rgba(34, 197, 94, 0.12); color: #4ade80; border-color: rgba(34, 197, 94, 0.28); }
-.ver-badge.err { background: rgba(239, 68, 68, 0.12); color: #f87171; border-color: rgba(239, 68, 68, 0.28); }
-.ver-badge.warn { background: rgba(234, 179, 8, 0.12); color: #facc15; border-color: rgba(234, 179, 8, 0.28); }
+.ver-badge.err {
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.22);
+}
+.ver-badge.warn {
+  background: rgba(234, 179, 8, 0.1);
+  color: #fde047;
+  border-color: rgba(234, 179, 8, 0.22);
+}
 
 .settings-grid {
   display: grid;
@@ -2220,9 +2240,9 @@ a.btn.btn-star:hover {
   font-variant-numeric: tabular-nums;
 }
 .topbar-version .ver-badge {
-  font-size: 9px;
+  min-height: 18px;
+  font-size: 10px;
   padding: 0 var(--space-1);
-  line-height: 1.5;
 }
 .menu-toggle {
   width: var(--btn-h);
@@ -2637,12 +2657,19 @@ a.btn.btn-star:hover {
   font-size: 12px;
 }
 .tg-profile-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
   margin-top: var(--space-1);
-  font-size: 11px;
-  color: #8eb6d8;
-  background: rgba(43, 82, 120, 0.45);
-  padding: var(--space-1);
+  padding: 0 var(--space-1);
   border-radius: 999px;
+  border: 1px solid rgba(142, 182, 216, 0.22);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #8eb6d8;
+  background: rgba(43, 82, 120, 0.35);
 }
 .tg-profile-about {
   padding: var(--space-2);
@@ -3158,31 +3185,21 @@ body.modal-open { overflow: hidden; }
 }
 
 
-.role-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 var(--space-1);
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  border: 1px solid var(--border);
-  line-height: 1.5;
-}
+.role-tag { font-size: 11px; }
 .role-tag-admin {
-  background: rgba(249, 115, 22, 0.14);
+  background: rgba(249, 115, 22, 0.1);
   color: #fdba74;
-  border-color: rgba(249, 115, 22, 0.35);
+  border-color: rgba(249, 115, 22, 0.22);
 }
 .role-tag-reseller {
-  background: rgba(59, 130, 246, 0.14);
+  background: rgba(59, 130, 246, 0.1);
   color: #93c5fd;
-  border-color: rgba(59, 130, 246, 0.35);
+  border-color: rgba(59, 130, 246, 0.22);
 }
 .role-tag-pg {
-  background: rgba(34, 197, 94, 0.14);
+  background: rgba(34, 197, 94, 0.1);
   color: #86efac;
-  border-color: rgba(34, 197, 94, 0.35);
+  border-color: rgba(34, 197, 94, 0.22);
 }
 
 .web-access-cell {
@@ -3650,7 +3667,14 @@ html[data-theme="light"] .auth-panel {
 }
 html[data-theme="light"] th { color: var(--muted-fg); }
 
-/* Badges / tags — readable on light surfaces */
+/* Badges / tags — readable on light surfaces (same compact chip metrics) */
+html[data-theme="light"] .badge,
+html[data-theme="light"] .ver-badge,
+html[data-theme="light"] .role-tag {
+  border-color: rgba(24, 24, 27, 0.1);
+  background: rgba(24, 24, 27, 0.04);
+  color: var(--muted-fg);
+}
 html[data-theme="light"] .badge.ok,
 html[data-theme="light"] .badge.active,
 html[data-theme="light"] .badge.approved,
@@ -3658,19 +3682,21 @@ html[data-theme="light"] .badge.delivered,
 html[data-theme="light"] .badge.answered,
 html[data-theme="light"] .badge.node-online,
 html[data-theme="light"] .badge.connected,
-html[data-theme="light"] .badge.healthy {
-  background: rgba(22, 163, 74, 0.12);
+html[data-theme="light"] .badge.healthy,
+html[data-theme="light"] .ver-badge.ok {
+  background: rgba(22, 163, 74, 0.1);
   color: #15803d;
-  border-color: rgba(22, 163, 74, 0.28);
+  border-color: rgba(22, 163, 74, 0.22);
 }
 html[data-theme="light"] .badge.warn,
 html[data-theme="light"] .badge.pending,
 html[data-theme="light"] .badge.awaiting,
 html[data-theme="light"] .badge.open,
-html[data-theme="light"] .badge.connecting {
-  background: rgba(202, 138, 4, 0.12);
+html[data-theme="light"] .badge.connecting,
+html[data-theme="light"] .ver-badge.warn {
+  background: rgba(202, 138, 4, 0.1);
   color: #a16207;
-  border-color: rgba(202, 138, 4, 0.28);
+  border-color: rgba(202, 138, 4, 0.22);
 }
 html[data-theme="light"] .badge.danger,
 html[data-theme="light"] .badge.bad,
@@ -3680,47 +3706,34 @@ html[data-theme="light"] .badge.cancelled,
 html[data-theme="light"] .badge.failed,
 html[data-theme="light"] .badge.node-offline,
 html[data-theme="light"] .badge.error,
-html[data-theme="light"] .badge.unhealthy {
-  background: rgba(220, 38, 38, 0.1);
+html[data-theme="light"] .badge.unhealthy,
+html[data-theme="light"] .ver-badge.err {
+  background: rgba(220, 38, 38, 0.08);
   color: #b91c1c;
-  border-color: rgba(220, 38, 38, 0.28);
+  border-color: rgba(220, 38, 38, 0.22);
 }
 html[data-theme="light"] .badge.info,
 html[data-theme="light"] .badge.paid,
-html[data-theme="light"] .badge.role-reseller {
-  background: rgba(37, 99, 235, 0.1);
+html[data-theme="light"] .badge.role-reseller,
+html[data-theme="light"] .role-tag-reseller {
+  background: rgba(37, 99, 235, 0.08);
   color: #1d4ed8;
-  border-color: rgba(37, 99, 235, 0.28);
+  border-color: rgba(37, 99, 235, 0.22);
 }
-html[data-theme="light"] .ver-badge.ok {
-  background: rgba(22, 163, 74, 0.12);
-  color: #15803d;
-  border-color: rgba(22, 163, 74, 0.28);
-}
-html[data-theme="light"] .ver-badge.err {
-  background: rgba(220, 38, 38, 0.1);
-  color: #b91c1c;
-  border-color: rgba(220, 38, 38, 0.28);
-}
-html[data-theme="light"] .ver-badge.warn {
-  background: rgba(202, 138, 4, 0.12);
-  color: #a16207;
-  border-color: rgba(202, 138, 4, 0.28);
+html[data-theme="light"] .badge.role-admin {
+  background: rgba(24, 24, 27, 0.06);
+  color: var(--foreground);
+  border-color: rgba(24, 24, 27, 0.12);
 }
 html[data-theme="light"] .role-tag-admin {
-  background: rgba(234, 88, 12, 0.12);
+  background: rgba(234, 88, 12, 0.1);
   color: #c2410c;
-  border-color: rgba(234, 88, 12, 0.32);
-}
-html[data-theme="light"] .role-tag-reseller {
-  background: rgba(37, 99, 235, 0.1);
-  color: #1d4ed8;
-  border-color: rgba(37, 99, 235, 0.3);
+  border-color: rgba(234, 88, 12, 0.22);
 }
 html[data-theme="light"] .role-tag-pg {
-  background: rgba(22, 163, 74, 0.1);
+  background: rgba(22, 163, 74, 0.08);
   color: #15803d;
-  border-color: rgba(22, 163, 74, 0.3);
+  border-color: rgba(22, 163, 74, 0.22);
 }
 html[data-theme="light"] .setup-progress span {
   background: rgba(24, 24, 27, 0.12);
