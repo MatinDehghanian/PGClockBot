@@ -122,6 +122,116 @@ async def res_dash(
         await safe_edit_text(callback.message, text, reply_markup=kb.reseller_home(profile))
 
 
+RES_USERS_PAGE = 10
+
+
+@router.callback_query(F.data.startswith("res:users:"))
+async def res_users_list(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    if not has_bot_perm(profile, "dashboard"):
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
+    try:
+        page = int((callback.data or "").rsplit(":", 1)[-1])
+    except ValueError:
+        page = 0
+    page = max(0, page)
+    await callback.answer()
+    total = await session.scalar(
+        select(func.count()).select_from(BotUser).where(BotUser.reseller_id == owner_id)
+    ) or 0
+    result = await session.execute(
+        select(BotUser)
+        .where(BotUser.reseller_id == owner_id)
+        .order_by(BotUser.id.desc())
+        .offset(page * RES_USERS_PAGE)
+        .limit(RES_USERS_PAGE)
+    )
+    users = list(result.scalars().all())
+    rows: list[list[InlineKeyboardButton]] = []
+    for u in users:
+        name = (u.full_name or u.username or str(u.telegram_id))[:36]
+        flag = "🚫" if u.is_blocked else "👤"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{flag} {name}",
+                    callback_data=f"res:user:{u.id}",
+                )
+            ]
+        )
+    nav: list[InlineKeyboardButton] = []
+    if page > 0:
+        nav.append(InlineKeyboardButton(text="◀️ قبل", callback_data=f"res:users:{page - 1}"))
+    if (page + 1) * RES_USERS_PAGE < total:
+        nav.append(InlineKeyboardButton(text="بعد ▶️", callback_data=f"res:users:{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="res:home")])
+    text = f"👥 <b>مشتریان من</b>\nصفحه {page + 1} — {total} نفر"
+    if not users:
+        text += "\n\nمشتری ثبت‌شده‌ای نیست."
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
+@router.callback_query(F.data.startswith("res:user:"))
+async def res_user_view(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    try:
+        uid = int((callback.data or "").rsplit(":", 1)[-1])
+    except ValueError:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    user = await session.get(BotUser, uid)
+    if not user or int(user.reseller_id or 0) != int(owner_id):
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
+    await callback.answer()
+    blocked = "بله" if user.is_blocked else "خیر"
+    text = (
+        f"👤 <b>{user.full_name or user.username or '—'}</b>\n\n"
+        f"آیدی: <code>{user.telegram_id}</code>\n"
+        f"یوزرنیم: @{user.username or '—'}\n"
+        f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
+        f"مسدود: {blocked}"
+    )
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ لیست مشتریان", callback_data="res:users:0")],
+            [InlineKeyboardButton(text="🏠 خانه نماینده", callback_data="res:home")],
+        ]
+    )
+    if callback.message:
+        await safe_edit_text(callback.message, text, reply_markup=markup)
+
+
 @router.callback_query(F.data == "res:stats")
 async def res_stats(
     callback: CallbackQuery,

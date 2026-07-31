@@ -1093,10 +1093,60 @@ async def adm_users(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         f"کل: {total}\n"
         f"مسدود: {blocked}\n"
         f"سفارش‌ها: {orders}\n\n"
-        "<i>حذف کاربر و نمایندگی از همینجا (جستجو) یا وب‌پنل → کاربران / نمایندگان.</i>"
+        "لیست صفحه‌بندی‌شده یا جستجو با آیدی تلگرام."
     )
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.admin_users_keyboard())
+
+
+USERS_PAGE_SIZE = 10
+
+
+@router.callback_query(F.data.startswith("adm:users:list:"))
+async def adm_users_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    try:
+        page = int((callback.data or "").rsplit(":", 1)[-1])
+    except ValueError:
+        page = 0
+    page = max(0, page)
+    await callback.answer()
+    total = await session.scalar(select(func.count()).select_from(BotUser)) or 0
+    result = await session.execute(
+        select(BotUser)
+        .order_by(BotUser.id.desc())
+        .offset(page * USERS_PAGE_SIZE)
+        .limit(USERS_PAGE_SIZE)
+    )
+    users = list(result.scalars().all())
+    rows = []
+    for u in users:
+        name = (u.full_name or u.username or str(u.telegram_id))[:28]
+        flag = "🚫" if u.is_blocked else ("🤝" if u.role == Role.RESELLER.value else "👤")
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{flag} {name}",
+                    callback_data=f"adm:users:view:{u.id}",
+                )
+            ]
+        )
+    has_prev = page > 0
+    has_next = (page + 1) * USERS_PAGE_SIZE < total
+    text = (
+        f"👥 <b>لیست کاربران</b>\n"
+        f"صفحه {page + 1} — {total} نفر\n"
+        f"<i>برای جزئیات روی کاربر بزنید.</i>"
+    )
+    if callback.message:
+        await callback.message.edit_text(
+            text,
+            reply_markup=kb.admin_users_list_keyboard(
+                page=page, has_prev=has_prev, has_next=has_next, rows=rows
+            ),
+        )
 
 
 @router.callback_query(F.data == "adm:users:webhint")
@@ -1126,9 +1176,10 @@ async def adm_users_search_start(callback: CallbackQuery, state: FSMContext, db_
 
 @router.message(AdminStates.user_search)
 async def adm_users_search(message: Message, state: FSMContext, session: AsyncSession):
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_users_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
+        await message.answer("👥 کاربران", reply_markup=kb.admin_users_keyboard())
         return
     try:
         tg_id = int((message.text or "").strip())
@@ -1138,6 +1189,9 @@ async def adm_users_search(message: Message, state: FSMContext, session: AsyncSe
     result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))
     user = result.scalar_one_or_none()
     await state.clear()
+    from app.bot.tg_utils import seed_persistent_reply_kb
+
+    await seed_persistent_reply_kb(message)
     if not user:
         await message.answer(
             "کاربری با این آیدی یافت نشد.",
@@ -1370,8 +1424,58 @@ async def adm_resellers(callback: CallbackQuery, db_user: BotUser):
     await callback.answer()
     if callback.message:
         await callback.message.edit_text(
-            "🤝 <b>نمایندگان</b>\nدرخواست‌ها را تأیید/رد کنید یا نماینده دستی بسازید.",
+            "🤝 <b>نمایندگان</b>\nلیست فعال، درخواست‌ها، یا افزودن دستی.",
             reply_markup=kb.admin_resellers_menu(),
+        )
+
+
+RESELLERS_PAGE_SIZE = 10
+
+
+@router.callback_query(F.data.startswith("adm:resellers:list:"))
+async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    try:
+        page = int((callback.data or "").rsplit(":", 1)[-1])
+    except ValueError:
+        page = 0
+    page = max(0, page)
+    await callback.answer()
+    total = await session.scalar(
+        select(func.count()).select_from(BotUser).where(BotUser.role == Role.RESELLER.value)
+    ) or 0
+    result = await session.execute(
+        select(BotUser)
+        .where(BotUser.role == Role.RESELLER.value)
+        .order_by(BotUser.id.desc())
+        .offset(page * RESELLERS_PAGE_SIZE)
+        .limit(RESELLERS_PAGE_SIZE)
+    )
+    users = list(result.scalars().all())
+    rows = []
+    for u in users:
+        name = (u.full_name or u.username or str(u.telegram_id))[:28]
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"🤝 {name}",
+                    callback_data=f"adm:users:view:{u.id}",
+                )
+            ]
+        )
+    has_prev = page > 0
+    has_next = (page + 1) * RESELLERS_PAGE_SIZE < total
+    text = f"🤝 <b>لیست نمایندگان</b>\nصفحه {page + 1} — {total} نفر"
+    if not users:
+        text += "\n\nنماینده‌ای ثبت نشده."
+    if callback.message:
+        await callback.message.edit_text(
+            text,
+            reply_markup=kb.admin_resellers_list_keyboard(
+                page=page, has_prev=has_prev, has_next=has_next, rows=rows
+            ),
         )
 
 

@@ -156,10 +156,10 @@ class VersionBumpTests(unittest.TestCase):
     def test_version_is_current(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "2.6.11")
-        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "2.6.11")
+        self.assertEqual(__version__, "2.6.12")
+        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "2.6.12")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"2.6.11"', notes)
+        self.assertIn('"2.6.12"', notes)
 
 
 class PayWithWalletRefundPaymentTests(unittest.IsolatedAsyncioTestCase):

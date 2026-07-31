@@ -135,6 +135,21 @@
       document.querySelectorAll('.table-wrap, .section-tabs').forEach(el => ro.observe(el));
     }
 
+    /* Keep active settings/section tab visible in horizontal mobile scroll */
+    function scrollActiveTabIntoView(){
+      document.querySelectorAll('.section-tabs').forEach(nav => {
+        const active = nav.querySelector('a.active');
+        if (!active || typeof active.scrollIntoView !== 'function') return;
+        try {
+          active.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'instant' in window ? 'instant' : 'auto' });
+        } catch (_) {
+          try { active.scrollIntoView(false); } catch (e) {}
+        }
+      });
+    }
+    scrollActiveTabIntoView();
+    requestAnimationFrame(scrollActiveTabIntoView);
+
     /* Mobile row action menus (three-dot) — ported overlay, corner-aligned, inward */
     const rowMenuHomes = new WeakMap();
     function restoreRowMenu(menu){

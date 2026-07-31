@@ -28,6 +28,22 @@ def clear_settings_cache(reseller_id: int | None = None) -> None:
     _SETTINGS_CACHE.pop(int(reseller_id), None)
 
 
+def parse_force_join_channels(raw: str | None) -> list[str]:
+    """Split force-join setting into unique channels (one per line or comma)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for part in (raw or "").replace(",", "\n").splitlines():
+        ch = part.strip()
+        if not ch:
+            continue
+        key = ch.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(ch)
+    return out
+
+
 def set_shop_reseller_id(reseller_user_id: int | None):
     return _shop_reseller_id.set(reseller_user_id)
 
@@ -552,7 +568,7 @@ SETTING_GROUPS = {
     ],
     "کانال اجباری": [
         ("force_join_enabled", "عضویت اجباری کانال", "toggle", "قبل از استفاده از ربات"),
-        ("force_join_channel", "آدرس کانال", "text", "@channel یا لینک عمومی"),
+        ("force_join_channel", "کانال‌ها", "textarea", "هر خط یک کانال — @channel یا آیدی عددی. عضویت در همه الزامی است"),
     ],
 }
 

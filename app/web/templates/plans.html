@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% from "macros.html" import switch, switch_chip, page_title %}
 {% from "macros.html" import row_actions %}
 {% block title %}پلن‌های فروش{% endblock %}
@@ -7,200 +7,18 @@
   <div>
     {{ page_title('plans', 'پلن‌های فروش') }}
   </div>
+  <div class="actions">
+    <button type="button" class="btn btn-ghost" data-modal-open="modal-trial">پلن تست</button>
+    <button type="button" class="btn btn-ghost" data-modal-open="modal-custom">پلن دلخواه</button>
+    <button type="button" class="btn" data-modal-open="modal-plan-create">افزودن پلن</button>
+  </div>
 </div>
 
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 {% if pg_error %}<div class="flash warn">پاسارگارد: {{ pg_error }} — پلن‌ها را می‌توانید ذخیره کنید ولی تحویل نیاز به اتصال دارد.</div>{% endif %}
 
-<div class="card">
-  <h2>پلن تست رایگان</h2>
-  <p class="muted update-card-caption">حجم، مدت و اتصال پاسارگارد برای تست — از فروشگاه فقط یک‌بار به کاربر نشان داده می‌شود.</p>
-  <form method="post" action="/plans/trial" class="form-stack">
-    <div class="ui-switch-list">
-      {{ switch('trial_enabled', 'نمایش پلن تست در فروشگاه', checked=(values.get('trial_enabled') in ['1','true','yes','on'])) }}
-    </div>
-    <div class="form-row">
-      <label class="form-field">نام
-        <input name="name" value="{{ trial.name if trial else 'تست رایگان' }}" required />
-      </label>
-      <label class="form-field">مدت (روز)
-        <input name="duration_days" type="number" min="1" value="{{ trial.duration_days if trial else 1 }}" required />
-      </label>
-      <label class="form-field">حجم (گیگ)
-        
-        <input name="data_limit_gb" type="number" step="0.1" min="0" value="{% if trial and trial.data_limit_gb is not none %}{{ trial.data_limit_gb }}{% endif %}" placeholder="1" />
-        <small class="muted">خالی = نامحدود</small>
-      </label>
-    </div>
-    <label class="form-field">حالت ساخت در پاسارگارد
-      <select name="mode" id="trial-mode">
-        <option value="custom" {% if not trial or not trial.pg_template_id %}selected{% endif %}>سفارشی (گروه + حجم + مدت)</option>
-        <option value="template" {% if trial and trial.pg_template_id %}selected{% endif %}>از تمپلیت آماده</option>
-      </select>
-    </label>
-    <div id="trial-mode-custom" class="form-stack">
-      <div class="form-field">
-        <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد</span>
-        <div class="ui-switch-grid">
-          {% for g in groups %}
-          {% set gid = g.get('id')|string %}
-          {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), checked=(gid in trial_group_ids), value=g.get('id')) }}
-          {% else %}
-          <span class="muted">گروهی نیست.</span>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-    <div id="trial-mode-template" class="form-stack" style="display:none">
-      <label class="form-field">تمپلیت پاسارگارد
-        <select name="pg_template_id">
-          <option value="">— انتخاب کنید —</option>
-          {% for t in templates %}
-          <option value="{{ t.get('id') }}" {% if trial and trial.pg_template_id == t.get('id') %}selected{% endif %}>#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
-          {% endfor %}
-        </select>
-      </label>
-    </div>
-    <div class="actions">
-      <button class="btn" type="submit">ذخیره پلن تست</button>
-    </div>
-  </form>
-</div>
-
-<div class="card">
-  <h2>پلن دلخواه کاربر</h2>
-  <p class="muted update-card-caption">کاربر در بات حجم و روز دلخواه می‌چیند؛ قیمت از روی هر گیگ/روز حساب می‌شود.</p>
-  <form method="post" action="/plans/custom" class="form-stack">
-    <div class="ui-switch-list">
-      {{ switch('custom_plan_enabled', 'فعال‌سازی پلن دلخواه در فروشگاه', checked=(values.get('custom_plan_enabled') in ['1','true','yes','on'])) }}
-    </div>
-    <div class="form-row">
-      <label class="form-field">قیمت هر گیگ (تومان)
-        <input name="custom_plan_price_per_gb" type="number" min="0" value="{{ values.get('custom_plan_price_per_gb','1000') }}" />
-      </label>
-      <label class="form-field">قیمت هر روز (تومان)
-        <input name="custom_plan_price_per_day" type="number" min="0" value="{{ values.get('custom_plan_price_per_day','500') }}" />
-      </label>
-      <label class="form-field">حداقل / حداکثر گیگ
-        <div class="form-row" style="margin:0">
-          <input name="custom_plan_min_gb" type="number" min="1" value="{{ values.get('custom_plan_min_gb','1') }}" />
-          <input name="custom_plan_max_gb" type="number" min="1" value="{{ values.get('custom_plan_max_gb','500') }}" />
-        </div>
-      </label>
-      <label class="form-field">حداقل / حداکثر روز
-        <div class="form-row" style="margin:0">
-          <input name="custom_plan_min_days" type="number" min="1" value="{{ values.get('custom_plan_min_days','1') }}" />
-          <input name="custom_plan_max_days" type="number" min="1" value="{{ values.get('custom_plan_max_days','365') }}" />
-        </div>
-      </label>
-    </div>
-    <label class="form-field">اتصال پاسارگارد
-      <select name="mode" id="custom-mode">
-        <option value="custom" {% if not values.get('custom_plan_template_id') %}selected{% endif %}>گروه اینباند</option>
-        <option value="template" {% if values.get('custom_plan_template_id') %}selected{% endif %}>تمپلیت</option>
-      </select>
-    </label>
-    <div id="custom-mode-groups" class="form-stack">
-      <div class="form-field">
-        <span class="muted" style="font-size:12px;font-weight:500">گروه‌ها</span>
-        <div class="ui-switch-grid">
-          {% for g in groups %}
-          {% set gid = g.get('id')|string %}
-          {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), checked=(gid in custom_group_ids), value=g.get('id')) }}
-          {% else %}
-          <span class="muted">گروهی نیست.</span>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-    <div id="custom-mode-template" class="form-stack" style="display:none">
-      <label class="form-field">تمپلیت
-        <select name="custom_plan_template_id">
-          <option value="">— انتخاب کنید —</option>
-          {% for t in templates %}
-          <option value="{{ t.get('id') }}" {% if values.get('custom_plan_template_id')|string == t.get('id')|string %}selected{% endif %}>#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
-          {% endfor %}
-        </select>
-      </label>
-    </div>
-    <div class="actions">
-      <button class="btn" type="submit">ذخیره پلن دلخواه</button>
-      <a class="btn btn-ghost" href="/settings?tab=naming">نام‌گذاری سرویس در پاسارگارد</a>
-    </div>
-  </form>
-</div>
-
-<div class="card">
-  <h2>افزودن پلن ثابت</h2>
-  <form method="post" action="/plans" class="form-stack">
-    <div class="form-row">
-      <label class="form-field">نام پلن
-        <input name="name" required placeholder="مثلاً ویژه ۴۰ گیگ" />
-      </label>
-      <label class="form-field">قیمت (تومان)
-        <input name="price" type="number" min="0" required placeholder="150000" />
-      </label>
-      <label class="form-field">مدت (روز)
-        <input name="duration_days" type="number" min="1" value="30" required />
-      </label>
-      <label class="form-field">حجم (گیگ)
-        
-        <input name="data_limit_gb" type="number" step="0.1" min="0" placeholder="30" />
-        <small class="muted">خالی = نامحدود</small>
-      </label>
-    </div>
-
-    <label class="form-field">توضیح کوتاه
-      <input name="description" placeholder="نمایش در بات" />
-    </label>
-
-    <label class="form-field">حالت ساخت در پاسارگارد
-      <select name="mode" id="plan-mode">
-        <option value="custom">سفارشی (گروه + حجم + مدت)</option>
-        <option value="template">از تمپلیت آماده پاسارگارد</option>
-      </select>
-    </label>
-
-    <div id="mode-custom" class="form-stack">
-      <div class="form-field">
-        <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد (حداقل یکی)</span>
-        <div class="ui-switch-grid">
-          {% for g in groups %}
-          {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
-          {% else %}
-          <span class="muted">گروهی نیست — از منوی پاسارگارد → گروه‌ها بسازید.</span>
-          {% endfor %}
-        </div>
-      </div>
-      <div class="ui-switch-list">
-        {% if can_create_template is not defined or can_create_template %}
-        {{ switch('also_create_template', 'همزمان تمپلیت مشابه در پاسارگارد هم ساخته شود') }}
-        {% endif %}
-      </div>
-    </div>
-
-    <div id="mode-template" class="form-stack" style="display:none">
-      <label class="form-field">تمپلیت پاسارگارد
-        <select name="pg_template_id">
-          <option value="">— انتخاب کنید —</option>
-          {% for t in templates %}
-          <option value="{{ t.get('id') }}">#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
-          {% endfor %}
-        </select>
-      </label>
-    </div>
-
-    <div class="actions">
-      <button class="btn" type="submit">ذخیره پلن</button>
-      <a class="btn btn-ghost" href="/pg/templates">مدیریت تمپلیت‌ها</a>
-      <a class="btn btn-ghost" href="/pg/groups">مدیریت گروه‌ها</a>
-    </div>
-  </form>
-</div>
-
 <div class="card card-flush">
-  <h2>پلن‌های ثابت فروشگاه</h2>
   <div class="table-wrap">
   <table class="table-compact">
     <thead>
@@ -232,10 +50,211 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">پلنی نیست.</td></tr>
+      <tr><td colspan="7" class="muted">پلنی نیست — از «افزودن پلن» بسازید.</td></tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
+</div>
+
+{# —— Trial modal —— #}
+<div class="ui-modal" id="modal-trial" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
+    <div class="ui-modal-head">
+      <h2>پلن تست رایگان</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <p class="muted update-card-caption">حجم، مدت و اتصال پاسارگارد برای تست — از فروشگاه فقط یک‌بار به کاربر نشان داده می‌شود.</p>
+    <form method="post" action="/plans/trial" class="form-stack">
+      <div class="ui-switch-list">
+        {{ switch('trial_enabled', 'نمایش پلن تست در فروشگاه', checked=(values.get('trial_enabled') in ['1','true','yes','on'])) }}
+      </div>
+      <div class="form-row">
+        <label class="form-field">نام
+          <input name="name" value="{{ trial.name if trial else 'تست رایگان' }}" required />
+        </label>
+        <label class="form-field">مدت (روز)
+          <input name="duration_days" type="number" min="1" value="{{ trial.duration_days if trial else 1 }}" required />
+        </label>
+        <label class="form-field">حجم (گیگ)
+          <input name="data_limit_gb" type="number" step="0.1" min="0" value="{% if trial and trial.data_limit_gb is not none %}{{ trial.data_limit_gb }}{% endif %}" placeholder="1" />
+          <small class="muted">خالی = نامحدود</small>
+        </label>
+      </div>
+      <label class="form-field">حالت ساخت در پاسارگارد
+        <select name="mode" id="trial-mode">
+          <option value="custom" {% if not trial or not trial.pg_template_id %}selected{% endif %}>سفارشی (گروه + حجم + مدت)</option>
+          <option value="template" {% if trial and trial.pg_template_id %}selected{% endif %}>از تمپلیت آماده</option>
+        </select>
+      </label>
+      <div id="trial-mode-custom" class="form-stack">
+        <div class="form-field">
+          <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد</span>
+          <div class="ui-switch-grid">
+            {% for g in groups %}
+            {% set gid = g.get('id')|string %}
+            {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), checked=(gid in trial_group_ids), value=g.get('id')) }}
+            {% else %}
+            <span class="muted">گروهی نیست.</span>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div id="trial-mode-template" class="form-stack" style="display:none">
+        <label class="form-field">تمپلیت پاسارگارد
+          <select name="pg_template_id">
+            <option value="">— انتخاب کنید —</option>
+            {% for t in templates %}
+            <option value="{{ t.get('id') }}" {% if trial and trial.pg_template_id == t.get('id') %}selected{% endif %}>#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit">ذخیره پلن تست</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# —— Custom plan modal —— #}
+<div class="ui-modal" id="modal-custom" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
+    <div class="ui-modal-head">
+      <h2>پلن دلخواه کاربر</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <p class="muted update-card-caption">کاربر در بات حجم و روز دلخواه می‌چیند؛ قیمت از روی هر گیگ/روز حساب می‌شود.</p>
+    <form method="post" action="/plans/custom" class="form-stack">
+      <div class="ui-switch-list">
+        {{ switch('custom_plan_enabled', 'فعال‌سازی پلن دلخواه در فروشگاه', checked=(values.get('custom_plan_enabled') in ['1','true','yes','on'])) }}
+      </div>
+      <div class="form-row">
+        <label class="form-field">قیمت هر گیگ (تومان)
+          <input name="custom_plan_price_per_gb" type="number" min="0" value="{{ values.get('custom_plan_price_per_gb','1000') }}" />
+        </label>
+        <label class="form-field">قیمت هر روز (تومان)
+          <input name="custom_plan_price_per_day" type="number" min="0" value="{{ values.get('custom_plan_price_per_day','500') }}" />
+        </label>
+        <label class="form-field">حداقل / حداکثر گیگ
+          <div class="form-row" style="margin:0">
+            <input name="custom_plan_min_gb" type="number" min="1" value="{{ values.get('custom_plan_min_gb','1') }}" />
+            <input name="custom_plan_max_gb" type="number" min="1" value="{{ values.get('custom_plan_max_gb','500') }}" />
+          </div>
+        </label>
+        <label class="form-field">حداقل / حداکثر روز
+          <div class="form-row" style="margin:0">
+            <input name="custom_plan_min_days" type="number" min="1" value="{{ values.get('custom_plan_min_days','1') }}" />
+            <input name="custom_plan_max_days" type="number" min="1" value="{{ values.get('custom_plan_max_days','365') }}" />
+          </div>
+        </label>
+      </div>
+      <label class="form-field">اتصال پاسارگارد
+        <select name="mode" id="custom-mode">
+          <option value="custom" {% if not values.get('custom_plan_template_id') %}selected{% endif %}>گروه اینباند</option>
+          <option value="template" {% if values.get('custom_plan_template_id') %}selected{% endif %}>تمپلیت</option>
+        </select>
+      </label>
+      <div id="custom-mode-groups" class="form-stack">
+        <div class="form-field">
+          <span class="muted" style="font-size:12px;font-weight:500">گروه‌ها</span>
+          <div class="ui-switch-grid">
+            {% for g in groups %}
+            {% set gid = g.get('id')|string %}
+            {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), checked=(gid in custom_group_ids), value=g.get('id')) }}
+            {% else %}
+            <span class="muted">گروهی نیست.</span>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div id="custom-mode-template" class="form-stack" style="display:none">
+        <label class="form-field">تمپلیت
+          <select name="custom_plan_template_id">
+            <option value="">— انتخاب کنید —</option>
+            {% for t in templates %}
+            <option value="{{ t.get('id') }}" {% if values.get('custom_plan_template_id')|string == t.get('id')|string %}selected{% endif %}>#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit">ذخیره پلن دلخواه</button>
+        <a class="btn btn-ghost" href="/settings?tab=naming">نام‌گذاری سرویس</a>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# —— Create fixed plan modal —— #}
+<div class="ui-modal" id="modal-plan-create" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
+    <div class="ui-modal-head">
+      <h2>افزودن پلن ثابت</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form method="post" action="/plans" class="form-stack">
+      <div class="form-row">
+        <label class="form-field">نام پلن
+          <input name="name" required placeholder="مثلاً ویژه ۴۰ گیگ" />
+        </label>
+        <label class="form-field">قیمت (تومان)
+          <input name="price" type="number" min="0" required placeholder="150000" />
+        </label>
+        <label class="form-field">مدت (روز)
+          <input name="duration_days" type="number" min="1" value="30" required />
+        </label>
+        <label class="form-field">حجم (گیگ)
+          <input name="data_limit_gb" type="number" step="0.1" min="0" placeholder="30" />
+          <small class="muted">خالی = نامحدود</small>
+        </label>
+      </div>
+      <label class="form-field">توضیح کوتاه
+        <input name="description" placeholder="نمایش در بات" />
+      </label>
+      <label class="form-field">حالت ساخت در پاسارگارد
+        <select name="mode" id="plan-mode">
+          <option value="custom">سفارشی (گروه + حجم + مدت)</option>
+          <option value="template">از تمپلیت آماده پاسارگارد</option>
+        </select>
+      </label>
+      <div id="mode-custom" class="form-stack">
+        <div class="form-field">
+          <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد (حداقل یکی)</span>
+          <div class="ui-switch-grid">
+            {% for g in groups %}
+            {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
+            {% else %}
+            <span class="muted">گروهی نیست — از منوی پاسارگارد → گروه‌ها بسازید.</span>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="ui-switch-list">
+          {% if can_create_template is not defined or can_create_template %}
+          {{ switch('also_create_template', 'همزمان تمپلیت مشابه در پاسارگارد هم ساخته شود') }}
+          {% endif %}
+        </div>
+      </div>
+      <div id="mode-template" class="form-stack" style="display:none">
+        <label class="form-field">تمپلیت پاسارگارد
+          <select name="pg_template_id">
+            <option value="">— انتخاب کنید —</option>
+            {% for t in templates %}
+            <option value="{{ t.get('id') }}">#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit">ذخیره پلن</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
   </div>
 </div>
 

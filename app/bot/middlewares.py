@@ -114,6 +114,25 @@ _FORCE_JOIN_MEMBER_CACHE: dict[tuple[int, str], tuple[float, bool | None]] = {}
 _FORCE_JOIN_MEMBER_TTL = 120.0
 
 
+async def check_force_join_all(
+    bot: Bot, telegram_id: int, channels: list[str]
+) -> tuple[list[str], list[str]]:
+    """Check membership for every channel.
+
+    Returns (missing, unverified). missing = left/kicked; unverified = API errors.
+    Caller should require missing empty; unverified may allow-through to avoid lockouts.
+    """
+    missing: list[str] = []
+    unverified: list[str] = []
+    for ch in channels:
+        joined = await check_force_join_member(bot, telegram_id, ch)
+        if joined is False:
+            missing.append(ch)
+        elif joined is None:
+            unverified.append(ch)
+    return missing, unverified
+
+
 class DbSessionMiddleware(BaseMiddleware):
     async def __call__(
         self,
@@ -229,13 +248,13 @@ class ForceJoinMiddleware(BaseMiddleware):
         if _extract_start_payload(event) is not None or _is_bare_start(event):
             return await handler(event, data)
 
-        from app.services.users import get_all_settings, on
+        from app.services.users import get_all_settings, on, parse_force_join_channels
         from app.services.reseller_access import effective_menu_role
 
         ui = await get_all_settings(session)
         enabled = ui.get("force_join_enabled")
-        channel = (ui.get("force_join_channel") or "").strip()
-        if not on(enabled) or not channel:
+        channels = parse_force_join_channels(ui.get("force_join_channel"))
+        if not on(enabled) or not channels:
             return await handler(event, data)
 
         role = await effective_menu_role(
@@ -248,11 +267,15 @@ class ForceJoinMiddleware(BaseMiddleware):
         if role != "user":
             return await handler(event, data)
 
-        joined = await check_force_join_member(bot, int(db_user.telegram_id), channel)
-        if joined is False:
+        missing, _unverified = await check_force_join_all(
+            bot, int(db_user.telegram_id), channels
+        )
+        if missing:
             msg = _reply_message(event)
+            listed = "\n".join(f"• {c}" for c in missing)
             text = (
-                f"برای ادامه، ابتدا در کانال {channel} عضو شوید، سپس دوباره /start بزنید."
+                "برای ادامه، ابتدا در همه کانال‌های زیر عضو شوید، سپس دوباره /start بزنید:\n"
+                f"{listed}"
             )
             if msg:
                 try:
@@ -264,11 +287,11 @@ class ForceJoinMiddleware(BaseMiddleware):
             )
             if cq is not None:
                 try:
-                    await cq.answer("ابتدا در کانال عضو شوید", show_alert=True)
+                    await cq.answer("ابتدا در همه کانال‌ها عضو شوید", show_alert=True)
                 except Exception:
                     pass
             return None
-        # joined True or None (unverifiable) → allow through
+        # All definitive checks passed (or only unverifiable) → allow through
 
         return await handler(event, data)
 

@@ -96,8 +96,9 @@ async def support_new(callback: CallbackQuery, state: FSMContext):
 @router.message(SupportStates.subject)
 async def support_subject(message: Message, state: FSMContext):
     if kb.is_cancel_text(message.text):
-        await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.back_home())
+        from app.bot.tg_utils import clear_fsm_with_reply
+
+        await clear_fsm_with_reply(message, state)
         return
     subject = (message.text or "").strip()
     if not subject:
@@ -111,8 +112,9 @@ async def support_subject(message: Message, state: FSMContext):
 @router.message(SupportStates.body)
 async def support_body(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
     if kb.is_cancel_text(message.text):
-        await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.back_home())
+        from app.bot.tg_utils import clear_fsm_with_reply
+
+        await clear_fsm_with_reply(message, state)
         return
     body = (message.text or "").strip()
     if not body:

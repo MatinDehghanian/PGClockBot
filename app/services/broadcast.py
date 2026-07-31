@@ -44,6 +44,24 @@ async def list_broadcast_history(session: AsyncSession, *, limit: int = 50) -> l
     return list(result.scalars().all())
 
 
+async def delete_broadcast_log(session: AsyncSession, log_id: int) -> bool:
+    row = await session.get(BroadcastLog, int(log_id))
+    if not row:
+        return False
+    await session.delete(row)
+    await session.commit()
+    return True
+
+
+async def clear_broadcast_history(session: AsyncSession) -> int:
+    result = await session.execute(select(BroadcastLog))
+    rows = list(result.scalars().all())
+    for row in rows:
+        await session.delete(row)
+    await session.commit()
+    return len(rows)
+
+
 async def send_broadcast(
     bot: Bot,
     session: AsyncSession,

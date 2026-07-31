@@ -2854,6 +2854,29 @@ def create_api_app(lifespan=None) -> FastAPI:
         msg = f"ارسال شد: {result['ok']} موفق از {result['total']} (ناموفق: {result['fail']})"
         return _redirect_msg("/broadcast", ok=msg)
 
+    @app.post("/broadcast/history/clear")
+    async def broadcast_history_clear(
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.broadcast import clear_broadcast_history
+
+        n = await clear_broadcast_history(session)
+        return _redirect_msg("/broadcast", ok=f"{n} رکورد تاریخچه حذف شد")
+
+    @app.post("/broadcast/history/{log_id}/delete")
+    async def broadcast_history_delete(
+        log_id: int,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.broadcast import delete_broadcast_log
+
+        ok = await delete_broadcast_log(session, log_id)
+        if not ok:
+            return _redirect_msg("/broadcast", err="رکورد یافت نشد")
+        return _redirect_msg("/broadcast", ok="رکورد حذف شد")
+
     # -------- Mini App pages & API --------
 
     @app.get("/miniapp/", response_class=HTMLResponse)

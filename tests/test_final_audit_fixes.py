@@ -59,13 +59,15 @@ class OrderPayableGateTests(unittest.TestCase):
 class ForceJoinTests(unittest.TestCase):
     def test_start_checks_membership(self):
         src = Path("app/bot/handlers/start.py").read_text(encoding="utf-8")
-        self.assertIn("check_force_join_member", src)
-        self.assertIn("joined is False", src)
+        self.assertIn("check_force_join_all", src)
+        self.assertIn("parse_force_join_channels", src)
+        self.assertIn("missing", src)
 
     def test_middleware_allows_on_api_error(self):
         src = Path("app/bot/middlewares.py").read_text(encoding="utf-8")
-        self.assertIn("joined is False", src)
+        self.assertIn("check_force_join_all", src)
         self.assertIn("check_force_join_member", src)
+        self.assertIn("missing", src)
 
     def test_check_force_join_member_left(self):
         import asyncio

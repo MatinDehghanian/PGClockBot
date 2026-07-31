@@ -132,9 +132,16 @@ async def cmd_start(
         )
         return
     ui = await get_all_settings(session)
-    channel = (ui.get("force_join_channel") or "").strip()
+    channels = []
+    try:
+        from app.services.users import parse_force_join_channels
+
+        channels = parse_force_join_channels(ui.get("force_join_channel"))
+    except Exception:
+        ch = (ui.get("force_join_channel") or "").strip()
+        channels = [ch] if ch else []
     enabled = ui.get("force_join_enabled")
-    from app.bot.middlewares import check_force_join_member
+    from app.bot.middlewares import check_force_join_all
     from app.services.reseller_access import effective_menu_role
 
     role_for_force = await effective_menu_role(
@@ -143,11 +150,15 @@ async def cmd_start(
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
-    if on(enabled) and channel and role_for_force == "user":
-        joined = await check_force_join_member(message.bot, int(db_user.telegram_id), channel)
-        if joined is False:
+    if on(enabled) and channels and role_for_force == "user":
+        missing, _ = await check_force_join_all(
+            message.bot, int(db_user.telegram_id), channels
+        )
+        if missing:
+            listed = "\n".join(f"• {c}" for c in missing)
             await message.answer(
-                f"برای استفاده، ابتدا در کانال {channel} عضو شوید سپس دوباره /start بزنید.",
+                "برای استفاده، ابتدا در همه کانال‌های زیر عضو شوید سپس دوباره /start بزنید:\n"
+                f"{listed}",
                 reply_markup=kb.persistent_reply_keyboard(),
             )
             return
@@ -220,16 +231,43 @@ async def cmd_menu(
     )
 
 
+@router.message(Command("help"))
+async def cmd_help(message: Message, session: AsyncSession):
+    """Telegram /help menu command — same content as دکمه راهنما (guide_text in settings)."""
+    from app.services.formatting import format_message
+
+    ui = await get_all_settings(session)
+    body = (ui.get("guide_text") or "").strip() or "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، فیلد «متن راهنما» را پر کنید."
+    await message.answer(
+        format_message("📘 راهنما", body),
+        reply_markup=kb.back_home(ui),
+    )
+
+
+@router.message(F.text.func(kb.is_cancel_text))
+async def orphan_cancel(message: Message, state: FSMContext):
+    """When انصراف is pressed outside an FSM prompt, clear sticky cancel keyboard."""
+    cur = await state.get_state()
+    if cur:
+        # Let state-specific handlers process cancel; if none do, still clear below next tick
+        return
+    await message.answer(
+        "عملیاتی برای انصراف نیست.",
+        reply_markup=kb.persistent_reply_keyboard(),
+    )
+
+
 @router.callback_query(F.data == "help:guide")
 async def help_guide(callback: CallbackQuery, session: AsyncSession):
     from app.services.formatting import format_message
 
     await callback.answer()
     ui = await get_all_settings(session)
+    body = (ui.get("guide_text") or "").strip() or "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، فیلد «متن راهنما» را پر کنید."
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("📘 راهنما", ui.get("guide_text") or ""),
+            format_message("📘 راهنما", body),
             reply_markup=kb.back_home(ui),
         )
 

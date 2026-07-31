@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_title, row_actions %}
 {% block title %}پیام گروهی{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -9,7 +9,8 @@
 </div>
 
 <div class="card">
-  <form method="post" action="/broadcast">
+  <h2>ارسال پیام</h2>
+  <form method="post" action="/broadcast" class="form-stack">
     <label class="form-field">مخاطبان
       <select name="audience">
         <option value="all">همه کاربران فعال</option>
@@ -30,11 +31,20 @@
 </div>
 
 <div class="card">
-  <h2>تاریخچه ارسال</h2>
+  <div class="page-head" style="margin-bottom:var(--space-3)">
+    <div>
+      <h2 style="margin:0">تاریخچه ارسال</h2>
+    </div>
+    {% if history %}
+    <form method="post" action="/broadcast/history/clear" onsubmit="return confirm('همه تاریخچه پیام‌های گروهی پاک شود؟')">
+      <button class="btn btn-ghost btn-sm" type="submit">حذف تاریخچه</button>
+    </form>
+    {% endif %}
+  </div>
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>#</th><th>زمان</th><th>مخاطب</th><th>متن</th><th>نتیجه</th><th>توسط</th></tr>
+      <tr><th>#</th><th>زمان</th><th>مخاطب</th><th>متن</th><th>نتیجه</th><th>توسط</th><th class="col-actions"></th></tr>
     </thead>
     <tbody>
     {% for row in history %}
@@ -45,9 +55,16 @@
         <td style="max-width:280px;white-space:pre-wrap;word-break:break-word">{{ row.text[:180] }}{% if row.text|length > 180 %}…{% endif %}</td>
         <td class="mono">{{ row.ok_count }}/{{ row.total }}{% if row.fail_count %} · ناموفق {{ row.fail_count }}{% endif %}</td>
         <td class="muted">{{ row.created_by or '—' }}</td>
+        <td class="col-actions">
+          {% call row_actions() %}
+          <form method="post" action="/broadcast/history/{{ row.id }}/delete" onsubmit="return confirm('این رکورد حذف شود؟')">
+            <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+          </form>
+          {% endcall %}
+        </td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="muted">هنوز پیامی ارسال نشده</td></tr>
+      <tr><td colspan="7" class="muted">هنوز پیامی ارسال نشده</td></tr>
     {% endfor %}
     </tbody>
   </table>

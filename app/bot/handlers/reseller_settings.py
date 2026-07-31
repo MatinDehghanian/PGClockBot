@@ -121,7 +121,7 @@ SECTIONS: dict[str, dict] = {
             ]),
             ("force", "کانال اجباری", [
                 ("force_join_enabled", "فعال", "toggle"),
-                ("force_join_channel", "آدرس کانال", "text"),
+                ("force_join_channel", "کانال‌ها (هر خط یکی)", "text"),
             ]),
         ],
     },

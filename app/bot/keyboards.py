@@ -500,6 +500,7 @@ def admin_home() -> InlineKeyboardMarkup:
 def admin_users_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text="📋 لیست کاربران", callback_data="adm:users:list:0")],
             [InlineKeyboardButton(text="🔎 جستجو با آیدی تلگرام", callback_data="adm:users:search")],
             [
                 InlineKeyboardButton(
@@ -510,6 +511,56 @@ def admin_users_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
         ]
     )
+
+
+def admin_users_list_keyboard(
+    *,
+    page: int,
+    has_prev: bool,
+    has_next: bool,
+    rows: list[list[InlineKeyboardButton]],
+) -> InlineKeyboardMarkup:
+    nav: list[InlineKeyboardButton] = []
+    if has_prev:
+        nav.append(InlineKeyboardButton(text="◀️ قبل", callback_data=f"adm:users:list:{page - 1}"))
+    if has_next:
+        nav.append(InlineKeyboardButton(text="بعد ▶️", callback_data=f"adm:users:list:{page + 1}"))
+    kb_rows = list(rows)
+    if nav:
+        kb_rows.append(nav)
+    kb_rows.append([InlineKeyboardButton(text="🔎 جستجو", callback_data="adm:users:search")])
+    kb_rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:users")])
+    return InlineKeyboardMarkup(inline_keyboard=kb_rows)
+
+
+def admin_resellers_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📋 لیست نمایندگان", callback_data="adm:resellers:list:0")],
+            [InlineKeyboardButton(text="📋 درخواست‌های منتظر", callback_data="adm:resapp:list")],
+            [InlineKeyboardButton(text="➕ افزودن دستی", callback_data="adm:resellers:add")],
+            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
+        ]
+    )
+
+
+def admin_resellers_list_keyboard(
+    *,
+    page: int,
+    has_prev: bool,
+    has_next: bool,
+    rows: list[list[InlineKeyboardButton]],
+) -> InlineKeyboardMarkup:
+    nav: list[InlineKeyboardButton] = []
+    if has_prev:
+        nav.append(InlineKeyboardButton(text="◀️ قبل", callback_data=f"adm:resellers:list:{page - 1}"))
+    if has_next:
+        nav.append(InlineKeyboardButton(text="بعد ▶️", callback_data=f"adm:resellers:list:{page + 1}"))
+    kb_rows = list(rows)
+    if nav:
+        kb_rows.append(nav)
+    kb_rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:resellers")])
+    return InlineKeyboardMarkup(inline_keyboard=kb_rows)
 
 
 def admin_user_actions(
@@ -597,6 +648,7 @@ def reseller_home(profile=None) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if profile is None or has_bot_perm(profile, "dashboard"):
         rows.append([InlineKeyboardButton(text="🏠 خانه نماینده", callback_data="res:dash")])
+        rows.append([InlineKeyboardButton(text="👥 مشتریان من", callback_data="res:users:0")])
     if profile is None or has_bot_perm(profile, "stats"):
         rows.append([InlineKeyboardButton(text="📊 آمار و کمیسیون", callback_data="res:stats")])
     if profile is not None and has_bot_perm(profile, "plans"):
@@ -625,16 +677,6 @@ def reseller_app_review(app_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🔴❌ رد", callback_data=f"adm:resapp:no:{app_id}"),
             ],
             [InlineKeyboardButton(text="⬅️ درخواست‌ها", callback_data="adm:resapp:list")],
-        ]
-    )
-
-
-def admin_resellers_menu() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📋 درخواست‌های در انتظار", callback_data="adm:resapp:list")],
-            [InlineKeyboardButton(text="➕ افزودن دستی نماینده", callback_data="adm:resellers:add")],
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
         ]
     )
 

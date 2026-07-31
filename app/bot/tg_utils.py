@@ -63,3 +63,11 @@ async def seed_persistent_reply_kb(message: Message) -> None:
         await tip.delete()
     except Exception:
         pass
+
+
+async def clear_fsm_with_reply(message: Message, state, *, note: str = "لغو شد.") -> None:
+    """Clear FSM and replace sticky انصراف keyboard with persistent شروع مجدد."""
+    from app.bot import keyboards as kb
+
+    await state.clear()
+    await message.answer(note, reply_markup=kb.persistent_reply_keyboard())
