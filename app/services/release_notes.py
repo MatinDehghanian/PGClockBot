@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Keep short and scannable — UI shows only the latest version block.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.0.2": [
+        "پلن‌های فروش: دکمه‌های پلن تست / دلخواه / ثابت هم‌رنگ (استایل افزودن)",
+        "عنوان دکمه «افزودن پلن» به «پلن ثابت» تغییر کرد",
+        "فاصله تیتر نام‌گذاری سرویس از خط جداکننده در مودال‌ها و ویرایش پلن",
+    ],
     "3.0.1": [
         "رفع فوری آپدیت از وب‌پنل: خطای _EXTRA_PATH بعد از بازنویسی جستجوی PATH",
         "آپدیتر دوباره git/pip/restart را با PATH صحیح systemd اجرا می‌کند",
