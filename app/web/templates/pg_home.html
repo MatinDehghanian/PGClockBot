@@ -6,7 +6,6 @@
   <div>
     {{ page_title('overview', 'پنل پاسارگارد', 'pg') }}
   </div>
-  <a class="btn btn-ghost" href="/pg">بروزرسانی</a>
 </div>
 
 {{ pg_tabs('pg') }}
@@ -124,9 +123,14 @@
 </div>
 
 {% if stats_rows %}
-<div class="card">
-  <h2>آمار پنل</h2>
-  <div class="stats-grid" style="margin:0">
+<section class="home-panel home-panel-pg pg-stats-panel">
+  <div class="home-panel-head">
+    <div class="home-panel-title">
+      <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+      <h2 class="home-panel-h">آمار پنل</h2>
+    </div>
+  </div>
+  <div class="home-panel-grid">
     {% for key, val in stats_rows %}
     <div class="stat">
       <div class="stat-top">
@@ -139,7 +143,7 @@
     </div>
     {% endfor %}
   </div>
-</div>
+</section>
 {% endif %}
 
 {% if nodes is defined %}

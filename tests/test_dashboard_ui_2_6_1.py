@@ -37,6 +37,11 @@ class FooterAndMobileTests(unittest.TestCase):
         self.assertIn(".site-footer {\n  margin-top: auto;\n  padding-top: 12px;", css)
         self.assertIn("padding: 28px 32px calc(16px + var(--safe-bottom))", css)
 
+    def test_main_uses_grid_sticky_footer(self):
+        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn("grid-template-rows: 1fr auto;", css)
+        self.assertIn("min-height: min-content;", css)
+
     def test_mobile_main_top_gap_increased(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn("padding: 22px 14px calc(16px + var(--safe-bottom))", css)

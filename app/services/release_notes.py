@@ -9,13 +9,18 @@ from typing import Any
 
 import httpx
 
-from app.services.updates import is_newer, local_version
+from app.services.updates import _parse_ver, is_newer, local_version
 from app.version import GITHUB_RELEASE_NOTES_URL
 
 logger = logging.getLogger(__name__)
 
-# Newest first. Keep short and scannable — UI shows only the latest version block.
+# Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.0.4": [
+        "صفحه آپدیت: نمایش چنج‌لاگ همه نسخه‌های بین نسخهٔ فعلی و نسخهٔ هدف",
+        "نمای کلی پاسارگارد: حذف دکمه بروزرسانی؛ باکس آمار پنل هم‌سبک داشبورد",
+        "رفع پرش فوتر هنگام ورود به صفحه (جایگاه درست بدون نیاز به اسکرول)",
+    ],
     "3.0.3": [
         "وب‌پنل: دکمه‌های ذخیره تنظیمات دیگر شناور نیستند و در انتهای محتوا می‌مانند",
         "ربات: حذف نمایش کوتاه «۳۰ر / ۳۰گ» از لیست پلن‌ها",
@@ -384,36 +389,76 @@ async def fetch_remote_release_notes(
         return dict(cached) if isinstance(cached, dict) else None
 
 
+def _merge_notes_tables(
+    remote_notes: dict[str, list[str]] | None = None,
+) -> dict[str, list[str]]:
+    """Local notes plus remote overlay (remote wins for the same version)."""
+    table: dict[str, list[str]] = {
+        str(k).strip().lstrip("vV"): list(v)
+        for k, v in RELEASE_NOTES_FA.items()
+        if v
+    }
+    if remote_notes:
+        for k, v in remote_notes.items():
+            key = str(k).strip().lstrip("vV")
+            notes = [str(x) for x in (v or []) if str(x).strip()]
+            if notes:
+                table[key] = notes
+    return table
+
+
+def _versions_after_through(
+    *,
+    local: str,
+    remote: str,
+    table: dict[str, list[str]],
+) -> list[str]:
+    """Versions strictly newer than local and <= remote, newest first."""
+    local_v = local.strip().lstrip("vV")
+    remote_v = remote.strip().lstrip("vV")
+    found: list[str] = []
+    for ver in table:
+        if is_newer(ver, local_v) and not is_newer(ver, remote_v):
+            found.append(ver)
+    found.sort(key=_parse_ver, reverse=True)
+    return found
+
+
 def changelog_for_update_page(
     *,
     local: str | None = None,
     remote: str | None = None,
     remote_notes: dict[str, list[str]] | None = None,
 ) -> dict:
-    """Show changelog for the version the panel will update *to* when available."""
+    """Changelog from versions after *local* through *remote* (inclusive), newest first."""
     local = (local or local_version() or "").strip()
     remote = (remote or "").strip() or None
     upgrading = bool(remote and is_newer(remote, local))
+    table = _merge_notes_tables(remote_notes)
 
     if upgrading:
-        ver = remote.lstrip("vV")
-        # Prefer remote notes (what you are updating to); local may not have them yet.
-        notes = notes_for_version(ver, remote_notes) or notes_for_version(ver)
-        if notes:
-            block = {"version": ver, "notes": notes}
+        remote_v = remote.lstrip("vV")
+        local_v = local.lstrip("vV")
+        versions = _versions_after_through(local=local_v, remote=remote_v, table=table)
+        blocks: list[dict[str, object]] = []
+        for ver in versions:
+            notes = list(table.get(ver) or [])
+            if notes:
+                blocks.append({"version": ver, "notes": notes})
+        if not blocks:
+            blocks = [{
+                "version": remote_v,
+                "notes": ["جزئیات این نسخه پس از دریافت از گیت‌هاب نمایش داده می‌شود."],
+            }]
+        if len(blocks) == 1:
+            title = f"تغییرات نسخه {blocks[0]['version']}"
         else:
-            block = latest_notes_block(remote_notes) or {"version": ver, "notes": [
-                "جزئیات این نسخه پس از دریافت از گیت‌هاب نمایش داده می‌شود."
-            ]}
-            # If fallback picked a different version, keep target version label when notes empty for it
-            if block.get("version") != ver and not notes_for_version(ver, remote_notes):
-                # Still OK to show newest remote block (usually same as target)
-                pass
+            title = f"تغییرات از {local_v} تا {remote_v}"
     else:
         ver = local.lstrip("vV")
-        notes = notes_for_version(ver)
-        block = {"version": ver, "notes": notes} if notes else latest_notes_block()
+        notes = notes_for_version(ver, table)
+        block = {"version": ver, "notes": notes} if notes else latest_notes_block(table)
+        blocks = [block] if block else []
+        title = f"تغییرات نسخه {block['version']}" if block else "چنج‌لاگ"
 
-    blocks = [block] if block else []
-    title = f"تغییرات نسخه {block['version']}" if block else "چنج‌لاگ"
     return {"title": title, "blocks": blocks, "has_notes": bool(blocks)}
