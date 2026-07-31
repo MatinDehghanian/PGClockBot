@@ -298,7 +298,8 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         logout = re.search(r"(?ms)^\.logout-link\s*\{([^}]+)\}", css)
         self.assertIsNotNone(logout)
         self.assertIn("font-size: 13px", logout.group(1))
-        self.assertIn("padding: var(--space-1)", logout.group(1))
+        self.assertIn("height: 28px", logout.group(1))
+        self.assertIn("padding: 0 var(--space-1)", logout.group(1))
 
     def test_block_button_is_warn_update_is_ok(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")

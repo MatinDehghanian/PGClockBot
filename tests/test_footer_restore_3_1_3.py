@@ -30,8 +30,9 @@ class FooterRestore303Tests(unittest.TestCase):
             "padding: var(--page-title-gap) 32px calc(var(--space-3) + var(--safe-bottom));",
             css,
         )
+        # Mobile bottom pad matches .side drawer (space-2) so footers share one baseline
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--space-3) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-2) calc(var(--space-2) + var(--safe-bottom));",
             css,
         )
 

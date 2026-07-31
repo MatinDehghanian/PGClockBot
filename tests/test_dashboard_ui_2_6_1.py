@@ -43,7 +43,7 @@ class FooterAndMobileTests(unittest.TestCase):
     def test_mobile_main_top_gap_increased(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--space-3) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-2) calc(var(--space-2) + var(--safe-bottom));",
             css,
         )
 

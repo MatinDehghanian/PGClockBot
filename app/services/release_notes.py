@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.1.13": [
+        "صفحه آپدیت: منوی نسخه راست‌چین؛ چنج‌لاگ زیر پیام آپدیت؛ رنگ باکس نسخه فعلی/جدید",
+        "پاسارگارد و ربات: فاصله تب→تیتر و تیتر→محتوا یکسان (--page-title-gap)",
+        "فوتر صفحه و فوتر سایدبار هم‌تراز روی یک خط",
+    ],
     "3.1.12": [
         "تگ‌ها و بج‌ها: استایل یکدست و ظریف‌تر در کل پنل (badge / ver / role)",
     ],

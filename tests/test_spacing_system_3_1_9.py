@@ -136,7 +136,7 @@ class SpacingSemanticParityTests(unittest.TestCase):
             css,
         )
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--space-3) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-2) calc(var(--space-2) + var(--safe-bottom));",
             css,
         )
         head = css.split(".page-head {\n", 1)[1].split("}", 1)[0]

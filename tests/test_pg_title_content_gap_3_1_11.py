@@ -29,12 +29,13 @@ class PgTitleContentGapRootTests(unittest.TestCase):
         pg = css.split(".pg-head {\n", 1)[1].split("}", 1)[0]
         self.assertIn("margin-bottom: var(--page-title-gap);", pg)
         self.assertIn("flex-direction: column;", pg)
-        self.assertIn("gap: var(--space-1);", pg)
+        # tabs→title gap equals title→content (same token as bot)
+        self.assertIn("gap: var(--page-title-gap);", pg)
 
-        # Nested title must not add a second gap
+        # Nested title must not add a second gap; tabs must not keep mobile pad-bottom
         self.assertIn(".pg-head > .page-head {\n  margin-bottom: 0;\n}", css)
         self.assertIn(
-            ".pg-head > .pg-tabs,\n.pg-head > .section-tabs {\n  margin-bottom: 0;\n}",
+            ".pg-head > .pg-tabs,\n.pg-head > .section-tabs {\n  margin-bottom: 0;\n  padding-bottom: 0;\n}",
             css,
         )
 

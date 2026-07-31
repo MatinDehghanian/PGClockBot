@@ -136,13 +136,12 @@ a:hover { opacity: 0.8; }
   -webkit-overflow-scrolling: touch;
 }
 .main-body {
-  flex: 1 0 auto;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
-  padding-bottom: var(--space-2);
 }
 
 .brand {
@@ -247,6 +246,9 @@ a:hover { opacity: 0.8; }
   align-items: center;
   justify-content: space-between;
   gap: var(--space-1);
+  /* Shared with .site-footer so both tops sit on one baseline */
+  min-height: calc(var(--space-2) + 28px + var(--space-1));
+  box-sizing: border-box;
 }
 .side-foot-user {
   display: flex;
@@ -270,7 +272,11 @@ a:hover { opacity: 0.8; }
   color: var(--destructive-fg) !important;
   font-size: 13px;
   font-weight: 500;
-  padding: var(--space-1);
+  /* Match .btn-star height so side-foot & site-footer share one baseline */
+  height: 28px;
+  min-height: 28px;
+  padding: 0 var(--space-1);
+  box-sizing: border-box;
   border-radius: var(--radius);
   border: 1px solid rgba(239, 68, 68, 0.35);
   background: rgba(239, 68, 68, 0.1);
@@ -297,20 +303,20 @@ a:hover { opacity: 0.8; }
 .page-head:has(> .btn) {
   flex-wrap: nowrap;
 }
-/* PasarGuard header unit: tabs above title, ONE gap below the unit.
-   Bot:  .page-head { margin-bottom: var(--page-title-gap) } → content
-   PG:   .pg-head   { margin-bottom: var(--page-title-gap) } → content
-   Nested .page-head must NOT also carry margin-bottom (that was either
-   swallowed by the flex item BFC or stacked with wrap-gap from actions). */
+/* PasarGuard header unit: tabs above title.
+   Gap tabs→title MUST equal gap title→content (--page-title-gap), same as
+   bot main-pad-top / page-head margin-bottom. Mobile section-tabs must not
+   add padding-bottom inside this stack (that made the green gap look 2×). */
 .pg-head {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--page-title-gap);
   margin-bottom: var(--page-title-gap);
 }
 .pg-head > .pg-tabs,
 .pg-head > .section-tabs {
   margin-bottom: 0;
+  padding-bottom: 0;
 }
 .pg-head > .page-head {
   margin-bottom: 0;
@@ -1409,6 +1415,9 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   font-size: 12px;
   line-height: 1.35;
   flex: 0 0 auto;
+  /* Match .side-foot baseline height so both footer tops sit on one line */
+  min-height: calc(var(--space-2) + 28px + var(--space-1));
+  box-sizing: border-box;
 }
 .site-footer a { color: var(--muted-fg); text-decoration: none; }
 .site-footer a:hover { color: var(--primary); }
@@ -1976,12 +1985,27 @@ a.btn.btn-star:hover {
   gap: var(--space-2);
   margin-bottom: var(--section-gap);
 }
-.update-meta > div {
+.update-meta > div,
+.update-meta-box {
   padding: var(--space-2);
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.02);
 }
+.update-meta-box.update-meta-ok {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.28);
+  color: #86efac;
+}
+.update-meta-box.update-meta-ok .muted { color: #86efac; }
+.update-meta-box.update-meta-ok strong { color: #86efac; }
+.update-meta-box.update-meta-warn {
+  background: rgba(234, 179, 8, 0.1);
+  border-color: rgba(234, 179, 8, 0.28);
+  color: #fde047;
+}
+.update-meta-box.update-meta-warn .muted { color: #fde047; }
+.update-meta-box.update-meta-warn strong { color: #fde047; }
 .update-meta .muted {
   display: block;
   font-size: 11px;
@@ -2162,8 +2186,10 @@ a.btn.btn-star:hover {
 .rollback-field select {
   width: 100%;
   margin-top: 0;
-  /* LTR digits stay readable; value sits on the right so it clears the left chevron */
+  /* RTL panel: value on the right (start), chevron on the opposite (physical left) */
+  direction: rtl;
   text-align: right;
+  text-align-last: right;
   padding-left: 36px;
   padding-right: var(--space-2);
   background-position: left 12px center;
@@ -2328,7 +2354,8 @@ a.btn.btn-star:hover {
   .side.open { transform: translateX(0); }
 
   .main {
-    padding: var(--page-title-gap) var(--space-2) calc(var(--space-3) + var(--safe-bottom));
+    /* Bottom pad matches .side drawer so site-footer & side-foot share one baseline */
+    padding: var(--page-title-gap) var(--space-2) calc(var(--space-2) + var(--safe-bottom));
     min-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
     height: auto;
     max-height: none;
@@ -2338,23 +2365,27 @@ a.btn.btn-star:hover {
     display: flex;
     flex-direction: column;
   }
-  .main-body { flex: 1 0 auto; }
+  .main-body { flex: 1 1 auto; }
   .site-footer {
-    flex-direction: column;
-    align-items: stretch;
+    /* Keep one row like .side-foot so both footer tops sit on the same line */
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
     text-align: center;
     margin-top: auto;
     padding-top: var(--space-2);
     gap: var(--space-1);
+    min-height: calc(var(--space-2) + 28px + var(--space-1));
   }
   .footer-meta { justify-content: center; }
   .footer-actions { justify-content: center; }
   .page-head { margin-bottom: var(--page-title-gap); gap: var(--space-2); align-items: center; }
   .page-head:has(> .actions),
   .page-head:has(> .btn) { flex-wrap: nowrap; }
-  .pg-head { margin-bottom: var(--page-title-gap); gap: var(--space-1); }
+  .pg-head { margin-bottom: var(--page-title-gap); gap: var(--page-title-gap); }
   .pg-head > .pg-tabs,
-  .pg-head > .section-tabs { margin-bottom: 0; }
+  .pg-head > .section-tabs { margin-bottom: 0; padding-bottom: 0; }
   .pg-head > .page-head { margin-bottom: 0; }
   .page-title { gap: var(--space-1); }
   .page-title-ico { width: 34px; height: 34px; border-radius: 9px; }
@@ -3410,6 +3441,20 @@ html[data-theme="light"] .row-actions-menu {
   background: var(--bg-card);
   border-color: var(--border);
 }
+html[data-theme="light"] .update-meta-box.update-meta-ok {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(22, 163, 74, 0.35);
+  color: #15803d;
+}
+html[data-theme="light"] .update-meta-box.update-meta-ok .muted,
+html[data-theme="light"] .update-meta-box.update-meta-ok strong { color: #15803d; }
+html[data-theme="light"] .update-meta-box.update-meta-warn {
+  background: rgba(234, 179, 8, 0.12);
+  border-color: rgba(202, 138, 4, 0.4);
+  color: #a16207;
+}
+html[data-theme="light"] .update-meta-box.update-meta-warn .muted,
+html[data-theme="light"] .update-meta-box.update-meta-warn strong { color: #a16207; }
 html[data-theme="light"] .nav-item:hover { background: var(--bg-hover); }
 html[data-theme="light"] .nav-item.active {
   background: var(--muted);
@@ -4257,7 +4302,20 @@ html[data-theme="light"] .home-panel-pg a.btn:hover {
   .home-panel-grid { grid-template-columns: 1fr 1fr; }
 }
 
-.update-changelog { margin-bottom: var(--section-gap); }
+/* Changelog sits under the update flash inside the same card */
+.update-changelog {
+  margin: 0 0 var(--section-gap);
+  padding: var(--space-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+.update-changelog-title {
+  margin: 0 0 var(--space-2);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
 .update-changelog-block + .update-changelog-block {
   margin-top: var(--space-2);
   padding-top: var(--space-2);

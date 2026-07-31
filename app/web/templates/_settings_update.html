@@ -18,15 +18,15 @@
   </p>
 
   <div class="update-meta">
-    <div>
+    <div class="update-meta-box {% if available %}update-meta-warn{% else %}update-meta-ok{% endif %}">
       <span class="muted">نسخه فعلی</span>
       <strong dir="ltr">v{{ local_version }}</strong>
     </div>
-    <div>
+    <div class="update-meta-box {% if available %}update-meta-ok{% endif %}">
       <span class="muted">آخرین نسخه</span>
       <strong dir="ltr">{% if update_info.remote_version %}v{{ update_info.remote_version }}{% else %}—{% endif %}</strong>
     </div>
-    <div>
+    <div class="update-meta-box">
       <span class="muted">وضعیت</span>
       <strong id="upd-state-label">
         {% if show_ops %}{{ status.message or 'در حال اجرا…' }}
@@ -43,6 +43,23 @@
   <div class="flash ok">شما روی آخرین نسخه منتشرشده هستید.</div>
   {% elif not update_info.checked and not show_ops %}
   <div class="flash warn">{{ update_info.label }}</div>
+  {% endif %}
+
+  {% set cl = changelog if changelog is defined else none %}
+  {% if cl and cl.get('has_notes') %}
+  <div class="update-changelog">
+    <h3 class="update-changelog-title">{{ cl.get('title') or 'تغییرات نسخه جدید' }}</h3>
+    {% for block in cl.get('blocks') or [] %}
+    <div class="update-changelog-block">
+      <strong class="update-changelog-ver" dir="ltr">v{{ block.version }}</strong>
+      <ul class="update-changelog-list">
+        {% for note in block.notes %}
+        <li>{{ note }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </div>
   {% endif %}
 
   <div id="upd-ops" class="update-ops" {% if not show_ops %}hidden{% endif %}>
@@ -74,22 +91,6 @@
   </div>
 </div>
 
-{% set cl = changelog if changelog is defined else none %}
-{% if cl and cl.get('has_notes') %}
-<div class="card settings-card update-changelog">
-  <h2>{{ cl.get('title') or 'چنج‌لاگ' }}</h2>
-  {% for block in cl.get('blocks') or [] %}
-  <div class="update-changelog-block">
-    <strong class="update-changelog-ver" dir="ltr">v{{ block.version }}</strong>
-    <ul class="update-changelog-list">
-      {% for note in block.notes %}
-      <li>{{ note }}</li>
-      {% endfor %}
-    </ul>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
 
 <div class="card settings-card">
   <h2>راه برگشت</h2>
@@ -99,7 +100,7 @@
   {% if rollback_versions %}
   <div class="rollback-row" id="rollback-root">
     <label class="rollback-field">نسخه مقصد
-      <select id="rollback-version" dir="ltr">
+      <select id="rollback-version">
         {% set ns = namespace(picked=false) %}
         {% for v in rollback_versions %}
         {% set is_current = v.version == local_version %}
