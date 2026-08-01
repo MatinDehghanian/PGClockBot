@@ -2523,14 +2523,15 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["notify_items"] = NOTIFY_PREFS
         elif tab == "update":
             from app.services.panel_update import clear_idle_status, update_page_context
+            from app.services.updates import clear_update_cache
 
-            force = request.query_params.get("force") == "1"
-            if force:
-                clear_update_cache()
+            # Always re-check GitHub on the update tab (CDN + in-process cache
+            # otherwise hide a just-published release for several minutes).
+            clear_update_cache()
             # Success flash after confirmed restart — wipe progress UI
             if request.query_params.get("ok"):
                 clear_idle_status()
-            ctx.update(await update_page_context(force_check=force))
+            ctx.update(await update_page_context(force_check=True))
         elif tab == "pwa":
             from app.services.pwa import load_pwa_settings
 

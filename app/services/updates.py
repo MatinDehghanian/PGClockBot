@@ -71,9 +71,48 @@ def _valid_version(value: str | None) -> bool:
     return bool(_VER_RE.match(value.strip()))
 
 
+async def _fetch_remote_version_candidates(
+    client: httpx.AsyncClient,
+) -> list[str]:
+    """Collect version strings from VERSION file and latest GitHub release.
+
+    Always cache-busts the raw VERSION URL (CDN max-age is 300s). Releases API
+    is a fallback when raw.githubusercontent.com is blocked or stale.
+    """
+    found: list[str] = []
+    bust = {"_": str(int(time.time()))}
+    headers = {
+        "User-Agent": "PGClockBot-Panel",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    }
+    try:
+        resp = await client.get(GITHUB_VERSION_URL, headers=headers, params=bust)
+        if resp.status_code == 200:
+            remote = (resp.text or "").strip().splitlines()[0].strip()
+            if _valid_version(remote):
+                found.append(remote.lstrip("vV"))
+    except Exception as e:
+        logger.debug("github VERSION fetch failed: %s", e)
+
+    try:
+        resp = await client.get(GITHUB_RELEASES_API + "/latest", headers=_github_headers())
+        if resp.status_code == 200:
+            payload = resp.json()
+            tag = normalize_version_tag(
+                (payload or {}).get("tag_name") or (payload or {}).get("name")
+            )
+            if tag:
+                found.append(tag)
+    except Exception as e:
+        logger.debug("github releases/latest fetch failed: %s", e)
+
+    return found
+
+
 async def check_github_update(*, timeout: float = 4.0, force: bool = False) -> dict[str, Any]:
     """
-    Compare local app version with GitHub main/VERSION.
+    Compare local app version with GitHub (VERSION file + latest release).
     Returns: version, remote_version, update_available, label, tone (ok|warn|err)
     """
     now = time.monotonic()
@@ -98,34 +137,22 @@ async def check_github_update(*, timeout: float = 4.0, force: bool = False) -> d
     ok = False
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            resp = await client.get(
-                GITHUB_VERSION_URL,
-                headers={
-                    "User-Agent": "PGClockBot-Panel",
-                    "Cache-Control": "no-cache",
-                    "Pragma": "no-cache",
-                },
-                params={"_": str(int(time.time()))} if force else None,
-            )
-            if resp.status_code != 200:
-                result["label"] = "بررسی آپدیت ناموفق"
-                result["tone"] = "warn"
+            candidates = await _fetch_remote_version_candidates(client)
+        if not candidates:
+            result["label"] = "بررسی آپدیت ناموفق"
+            result["tone"] = "warn"
+        else:
+            remote = max(candidates, key=_parse_ver)
+            result["remote_version"] = remote
+            result["checked"] = True
+            ok = True
+            if is_newer(remote, local):
+                result["update_available"] = True
+                result["label"] = f"آپدیت {remote} آماده است"
+                result["tone"] = "err"
             else:
-                remote = (resp.text or "").strip().splitlines()[0].strip()
-                if not _valid_version(remote):
-                    result["label"] = "نسخهٔ ریموت نامعتبر"
-                    result["tone"] = "warn"
-                else:
-                    result["remote_version"] = remote
-                    result["checked"] = True
-                    ok = True
-                    if is_newer(remote, local):
-                        result["update_available"] = True
-                        result["label"] = f"آپدیت {remote} آماده است"
-                        result["tone"] = "err"
-                    else:
-                        result["label"] = "آخرین نسخه"
-                        result["tone"] = "ok"
+                result["label"] = "آخرین نسخه"
+                result["tone"] = "ok"
     except Exception as e:
         logger.debug("github version check failed: %s", e)
         result["label"] = "بررسی آپدیت ناموفق"
