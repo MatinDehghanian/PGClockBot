@@ -337,8 +337,10 @@ a:hover { opacity: 0.8; }
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--space-1);
   margin-top: var(--space-1);
+  width: 100%;
 }
 .page-title {
   display: flex;
@@ -2400,6 +2402,8 @@ a.btn.btn-star:hover {
   .footer-meta { justify-content: center; }
   .footer-actions { justify-content: center; }
   .page-head { margin-bottom: var(--page-title-gap); gap: var(--space-2); align-items: center; }
+  /* Keep stacked heads full-width — do not inherit align-items:center above */
+  .page-head.page-head--stack { align-items: stretch; }
   .page-head:has(> .actions),
   .page-head:has(> .btn) { flex-wrap: nowrap; }
   .pg-head { margin-bottom: var(--page-title-gap); gap: var(--page-title-gap); }
