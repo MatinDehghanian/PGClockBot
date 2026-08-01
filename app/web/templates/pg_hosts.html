@@ -1,8 +1,7 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import pg_tabs, row_actions, page_title %}
+{% from "macros.html" import row_actions, page_title %}
 {% block title %}هاست‌های پاسارگارد{% endblock %}
 {% block content %}
-<div class="pg-head">
 <div class="page-head">
   <div>
     {{ page_title('hosts', 'هاست‌ها', 'pg') }}
@@ -10,8 +9,6 @@
   {% if can_write %}
   <button type="button" class="btn" data-modal-open="modal-pg-host-create">ساخت هاست</button>
   {% endif %}
-</div>
-{{ pg_tabs('pg_hosts') }}
 </div>
 <div class="card card-flush">
   <h2>لیست هاست‌ها</h2>

@@ -35,36 +35,24 @@ class PageTitleGapParityTests(unittest.TestCase):
 
     def test_pg_title_gap_identical_to_bot(self):
         css = CSS.read_text(encoding="utf-8")
-        # .pg-head owns the same gap token as bot .page-head; nested title has no extra mb
-        pg = css.split(".pg-head {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("margin-bottom: var(--page-title-gap);", pg)
-        self.assertIn(".pg-head > .page-head {\n  margin-bottom: 0;\n}", css)
+        # PG pages use the same .page-head gap token as bot (no separate stack)
+        head = css.split(".page-head {\n", 1)[1].split("}", 1)[0]
+        self.assertIn("margin-bottom: var(--page-title-gap);", head)
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn(
             "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));",
             mobile,
         )
         self.assertIn(".page-head { margin-bottom: var(--page-title-gap);", mobile)
-        self.assertIn("margin-bottom: var(--page-title-gap);", mobile.split(".pg-head {", 1)[1].split("}", 1)[0])
-        self.assertIn(".pg-head > .page-head { margin-bottom: 0; }", mobile)
 
-    def test_pg_title_sits_before_tabs_like_bot(self):
-        """Title first — same top Y as bot; tabs tight underneath."""
+    def test_pg_pages_use_plain_page_head_like_bot(self):
         pages = sorted(Path("app/web/templates").glob("pg_*.html"))
         self.assertTrue(pages)
         for path in pages:
             src = path.read_text(encoding="utf-8")
-            head = src.split('class="pg-head"', 1)[1]
-            head_only = re.split(
-                r'<div class="card|<div class="home-panels|<div class="stats-grid|<div class="flash|<div class="pg-admin-head|{%\s*if\s+not\s+is_admin',
-                head,
-                maxsplit=1,
-            )[0]
-            tabs_at = head_only.find("pg_tabs(")
-            title_at = head_only.find('class="page-head"')
-            self.assertGreaterEqual(tabs_at, 0, msg=path.name)
-            self.assertGreaterEqual(title_at, 0, msg=path.name)
-            self.assertLess(title_at, tabs_at, msg=f"{path.name}: title must be before tabs")
+            self.assertIn('class="page-head"', src, msg=path.name)
+            self.assertNotIn('class="pg-head"', src, msg=path.name)
+            self.assertNotIn("pg_tabs(", src, msg=path.name)
 
 
 class PanelFontUnityTests(unittest.TestCase):

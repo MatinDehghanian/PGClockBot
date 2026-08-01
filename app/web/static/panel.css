@@ -314,18 +314,14 @@ a:hover { opacity: 0.8; }
 .page-head:has(> .btn) {
   flex-wrap: nowrap;
 }
-/* PasarGuard header — mirror bot page rhythm exactly:
-   .main pad (--page-title-gap) → title box → … → content.
-   Title FIRST (same Y as bot). Tabs sit tight under the title
-   (gap: --space-1), then ONE --page-title-gap to page content —
-   same token bot uses under .page-head. Never negative margin-top
-   (clips out of .main). Never a second --page-title-gap as flex gap. */
+/* Legacy .pg-head wrapper — PG pages now use plain .page-head like bot
+   (section nav lives in the sidebar). Keep rules harmless if any remnant markup appears. */
 .pg-head {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 0;
   margin-top: 0;
-  margin-bottom: var(--page-title-gap);
+  margin-bottom: 0;
 }
 .pg-head > .pg-tabs,
 .pg-head > .section-tabs {
@@ -333,7 +329,7 @@ a:hover { opacity: 0.8; }
   padding-bottom: 0;
 }
 .pg-head > .page-head {
-  margin-bottom: 0;
+  margin-bottom: var(--page-title-gap);
 }
 .page-head--stack {
   flex-direction: column;
@@ -2702,12 +2698,12 @@ a.btn.btn-star:hover {
   .page-head:has(> .btn) { flex-wrap: nowrap; }
   .pg-head {
     margin-top: 0;
-    margin-bottom: var(--page-title-gap);
-    gap: var(--space-1);
+    margin-bottom: 0;
+    gap: 0;
   }
   .pg-head > .pg-tabs,
   .pg-head > .section-tabs { margin-bottom: 0; padding-bottom: 0; }
-  .pg-head > .page-head { margin-bottom: 0; }
+  .pg-head > .page-head { margin-bottom: var(--page-title-gap); }
   .page-title { gap: var(--space-1); }
   .page-title-ico { width: 34px; height: 34px; border-radius: 9px; }
   .page-title-ico svg { width: 17px; height: 17px; }

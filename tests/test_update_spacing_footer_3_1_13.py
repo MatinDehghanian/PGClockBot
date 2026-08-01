@@ -61,19 +61,6 @@ class UpdateTabUiTests(unittest.TestCase):
 
 
 class TitleGapParityTests(unittest.TestCase):
-    def test_pg_head_gap_matches_page_title_gap(self):
-        css = CSS.read_text(encoding="utf-8")
-        pg = css.split(".pg-head {\n", 1)[1].split("}", 1)[0]
-        # Sole header→content spacer matches bot; title→tabs stays tight
-        self.assertIn("gap: var(--space-1);", pg)
-        self.assertNotIn("gap: var(--page-title-gap);", pg)
-        self.assertIn("margin-bottom: var(--page-title-gap);", pg)
-        self.assertIn("margin-top: 0;", pg)
-        self.assertNotIn("margin-top: calc(", pg)
-        tabs = css.split(".pg-head > .pg-tabs,\n.pg-head > .section-tabs {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("margin-bottom: 0;", tabs)
-        self.assertIn("padding-bottom: 0;", tabs)
-
     def test_bot_title_above_and_below_use_same_token(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(
@@ -82,6 +69,11 @@ class TitleGapParityTests(unittest.TestCase):
         )
         head = css.split(".page-head {\n", 1)[1].split("}", 1)[0]
         self.assertIn("margin-bottom: var(--page-title-gap);", head)
+        # PG pages share this same .page-head token (no separate inflated stack)
+        self.assertNotIn(
+            "margin-top: calc(-1 * (var(--btn-h) + var(--space-1)));",
+            css,
+        )
 
 
 class FooterBaselineTests(unittest.TestCase):

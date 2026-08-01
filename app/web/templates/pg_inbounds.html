@@ -1,14 +1,11 @@
 {% extends "base.html" %}
-{% from "macros.html" import pg_tabs, page_title %}
+{% from "macros.html" import page_title %}
 {% block title %}اینباندهای پاسارگارد{% endblock %}
 {% block content %}
-<div class="pg-head">
 <div class="page-head">
   <div>
     {{ page_title('inbounds', 'اینباندها', 'pg') }}
   </div>
-</div>
-{{ pg_tabs('pg_inbounds') }}
 </div>
 <div class="card card-flush">
   <h2>تگ‌های اینباند</h2>

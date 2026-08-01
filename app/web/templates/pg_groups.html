@@ -1,8 +1,7 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch, switch_chip, pg_tabs, row_actions, page_title %}
+{% from "macros.html" import switch, switch_chip, row_actions, page_title %}
 {% block title %}گروه‌های پاسارگارد{% endblock %}
 {% block content %}
-<div class="pg-head">
 <div class="page-head">
   <div>
     {{ page_title('groups', 'گروه‌ها', 'pg') }}
@@ -10,8 +9,6 @@
   {% if can_write and not edit_group %}
   <button type="button" class="btn" data-modal-open="modal-pg-group-create">ساخت گروه</button>
   {% endif %}
-</div>
-{{ pg_tabs('pg_groups') }}
 </div>
 {% if edit_group and can_write %}
 <div class="card">

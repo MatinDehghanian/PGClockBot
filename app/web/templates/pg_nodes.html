@@ -1,14 +1,11 @@
 {% extends "base.html" %}
-{% from "macros.html" import pg_tabs, row_actions, page_title %}
+{% from "macros.html" import row_actions, page_title %}
 {% block title %}نودهای پاسارگارد{% endblock %}
 {% block content %}
-<div class="pg-head">
 <div class="page-head">
   <div>
     {{ page_title('nodes', 'نودها', 'pg') }}
   </div>
-</div>
-{{ pg_tabs('pg_nodes') }}
 </div>
 <div class="card card-flush">
   {% if not nodes %}
