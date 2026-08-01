@@ -221,7 +221,11 @@ def register_pg_pages(
         if not _is_admin(staff) and staff.get("role") in {"reseller", "pg_staff"}:
             from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
 
-            ticket_alert = await panel_ticket_dashboard_alert(session, staff)
+            ticket_alert = await panel_ticket_dashboard_alert(
+                session,
+                staff,
+                unread=getattr(request.state, "panel_tickets_unread", None),
+            )
 
         return render(
             request,

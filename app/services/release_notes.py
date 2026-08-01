@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.2.20": [
+        "پاک‌سازی کدهای اضافی تیکت پنل و حذف بارگذاری پیام‌ها در لیست",
+        "کاهش کوئری‌های تکراری خوانده‌نشده در داشبورد و صفحه پشتیبانی",
+        "حذف شمارش تیکت از مسیرهای نظرسنجی JSON (مثل متریک داشبورد) برای لود سبک‌تر",
+    ],
     "3.2.19": [
         "منوهای بازشو: فاصله فلش بالا/پایین از لبه برابر فاصله تیتر از کناره‌ها",
     ],

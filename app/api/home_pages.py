@@ -102,7 +102,11 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 update = None
             from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
 
-            ticket_alert = await panel_ticket_dashboard_alert(session, staff)
+            ticket_alert = await panel_ticket_dashboard_alert(
+                session,
+                staff,
+                unread=getattr(request.state, "panel_tickets_unread", None),
+            )
             return render(
                 request,
                 "home.html",
@@ -154,7 +158,11 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
 
         from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
 
-        ticket_alert = await panel_ticket_dashboard_alert(session, staff)
+        ticket_alert = await panel_ticket_dashboard_alert(
+            session,
+            staff,
+            unread=getattr(request.state, "panel_tickets_unread", None),
+        )
         return render(
             request,
             "reseller_home.html",

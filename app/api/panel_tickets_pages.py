@@ -16,8 +16,6 @@ from app.services.panel_tickets import (
     STATUS_BADGE,
     STATUS_LABELS,
     can_access_panel_tickets,
-    count_answered_unread,
-    count_owner_unread,
     create_ticket,
     get_ticket,
     list_tickets,
@@ -26,6 +24,7 @@ from app.services.panel_tickets import (
     save_ticket_attachment,
     set_status,
     sidebar_unread_count,
+    unread_from_tickets,
 )
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 
@@ -75,19 +74,23 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                 )
 
         active_ticket = None
+        tickets_unread = int(getattr(request.state, "panel_tickets_unread", 0) or 0)
         if view is not None:
             active_ticket = await get_ticket(session, staff, int(view))
             if active_ticket is not None:
-                await mark_viewed(session, staff, int(view))
-                active_ticket = await get_ticket(session, staff, int(view))
-                # Refresh list so unread badges match after mark_viewed
-                panel_tickets = await list_tickets(session, staff, limit=150)
+                changed = await mark_viewed(session, staff, active_ticket)
+                if changed:
+                    # Sync list-row flags in memory — no second list query
+                    for row in panel_tickets:
+                        if row.id == active_ticket.id:
+                            row.answered_unread = active_ticket.answered_unread
+                            row.owner_unread = active_ticket.owner_unread
+                            break
+                    tickets_unread = unread_from_tickets(panel_tickets, staff)
+                    request.state.panel_tickets_unread = tickets_unread
 
         ok_key = (request.query_params.get("ok") or "").strip()
         flash_ok = _OK_FLASH.get(ok_key, ok_key or None)
-        # Recompute after mark_viewed so sidebar dot clears on this response
-        tickets_unread = await sidebar_unread_count(session, staff)
-        request.state.panel_tickets_unread = tickets_unread
 
         return render(
             request,
@@ -113,7 +116,6 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
 
     @app.post("/tickets/panel/create")
     async def tickets_panel_create(
-        request: Request,
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
         subject: str = Form(...),
@@ -145,7 +147,6 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
 
     @app.post("/tickets/panel/{ticket_id}/reply")
     async def tickets_panel_reply(
-        request: Request,
         ticket_id: int,
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
@@ -166,7 +167,6 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
 
     @app.post("/tickets/panel/{ticket_id}/status")
     async def tickets_panel_status(
-        request: Request,
         ticket_id: int,
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
@@ -184,28 +184,34 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             )
 
 
-async def panel_ticket_dashboard_alert(session: AsyncSession, staff: dict) -> dict | None:
-    """Banner data for dashboards — links to list only (no auto-open modal)."""
-    from app.services.shop_scope import is_platform_admin
+async def panel_ticket_dashboard_alert(
+    session: AsyncSession,
+    staff: dict,
+    *,
+    unread: int | None = None,
+) -> dict | None:
+    """Banner data for dashboards — links to list only (no auto-open modal).
+
+    Pass ``unread`` from ``request.state.panel_tickets_unread`` to avoid a second COUNT.
+    """
+    if unread is None:
+        n = await sidebar_unread_count(session, staff)
+    else:
+        n = int(unread or 0)
+    if n <= 0:
+        return None
 
     if is_platform_admin(staff):
-        n = await count_owner_unread(session, staff)
-        if n <= 0:
-            return None
         return {
             "title": f"{n} تیکت خوانده‌نشده" if n > 1 else "یک تیکت خوانده‌نشده",
             "detail": "نماینده یا ادمین فرعی پیام جدیدی فرستاده است.",
             "href": "/tickets",
-            "count": n,
         }
 
-    n = await count_answered_unread(session, staff)
-    if n <= 0:
-        return None
     if n == 1:
         title = "پاسخ جدید برای تیکت پشتیبانی"
         detail = "ادمین اصلی به تیکت شما پاسخ داده است."
     else:
         title = f"{n} تیکت پاسخ‌داده‌شده دارید"
         detail = "پاسخ‌های جدید در صفحه پشتیبانی منتظر مشاهده‌اند."
-    return {"title": title, "detail": detail, "href": "/tickets", "count": n}
+    return {"title": title, "detail": detail, "href": "/tickets"}

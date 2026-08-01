@@ -18,7 +18,6 @@ from app.db.models import (
     PanelTicketMessage,
     PanelTicketPriority,
     PanelTicketStatus,
-    ResellerProfile,
 )
 
 STATUS_LABELS = {
@@ -49,13 +48,6 @@ PRIORITY_BADGE = {
     PanelTicketPriority.URGENT.value: "danger",
 }
 
-OWNER_STATUSES = (
-    PanelTicketStatus.OPEN.value,
-    PanelTicketStatus.IN_PROGRESS.value,
-    PanelTicketStatus.ANSWERED.value,
-    PanelTicketStatus.CLOSED.value,
-)
-
 # Attachments: images, docs, archives — keep modest for panel use
 MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024
 ALLOWED_ATTACHMENT_EXT = {
@@ -78,17 +70,18 @@ ALLOWED_ATTACHMENT_EXT = {
 }
 _SAFE_NAME_RE = re.compile(r"[^\w.\-()+ ]+", re.UNICODE)
 
+# JSON/poll endpoints that never render the sidebar — skip unread COUNT.
+SKIP_UNREAD_PATHS = frozenset(
+    {
+        "/home/metrics",
+        "/update/status",
+        "/settings/ssl/progress",
+    }
+)
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def status_label(code: str) -> str:
-    return STATUS_LABELS.get(code, code or "نامشخص")
-
-
-def priority_label(code: str) -> str:
-    return PRIORITY_LABELS.get(code, code or "نامشخص")
 
 
 def normalize_priority(raw: str | None) -> str:
@@ -141,12 +134,12 @@ def actor_from_staff(staff: dict) -> dict[str, Any]:
 
 
 def can_access_panel_tickets(staff: dict) -> bool:
-    role = staff.get("role")
-    return role in {"admin", "reseller", "pg_staff"}
+    return staff.get("role") in {"admin", "reseller", "pg_staff"}
 
 
 def _scope_query(actor: dict) -> Select[tuple[PanelTicket]]:
-    q = select(PanelTicket).options(selectinload(PanelTicket.messages))
+    """List/detail scope without messages — callers add selectinload when needed."""
+    q = select(PanelTicket)
     if actor["is_owner"]:
         return q.order_by(PanelTicket.updated_at.desc(), PanelTicket.id.desc())
     if actor["role"] == "reseller" and actor["reseller_user_id"]:
@@ -204,9 +197,10 @@ async def save_ticket_attachment(
 
 
 async def list_tickets(session: AsyncSession, staff: dict, *, limit: int = 100) -> list[PanelTicket]:
+    """Ticket rows for the list table — no messages (keeps list payloads small)."""
     actor = actor_from_staff(staff)
     q = _scope_query(actor).limit(limit)
-    return list((await session.execute(q)).scalars().unique().all())
+    return list((await session.execute(q)).scalars().all())
 
 
 async def get_ticket(
@@ -282,7 +276,7 @@ async def create_ticket(
         )
     )
     await session.commit()
-    return await get_ticket(session, staff, int(ticket.id))  # type: ignore[return-value]
+    return ticket
 
 
 async def reply_ticket(
@@ -327,7 +321,7 @@ async def reply_ticket(
         ticket.owner_unread = True
     ticket.updated_at = _utcnow()
     await session.commit()
-    return await get_ticket(session, staff, ticket_id)  # type: ignore[return-value]
+    return ticket
 
 
 async def set_status(
@@ -345,10 +339,7 @@ async def set_status(
     if not new_status:
         raise ValueError("وضعیت نامعتبر است")
 
-    if actor["is_owner"]:
-        if new_status not in OWNER_STATUSES:
-            raise ValueError("وضعیت نامعتبر است")
-    else:
+    if not actor["is_owner"]:
         if new_status != PanelTicketStatus.CLOSED.value:
             raise PermissionError("شما فقط می‌توانید تیکت را ببندید")
 
@@ -365,15 +356,16 @@ async def set_status(
         if actor["is_owner"]:
             ticket.answered_unread = False
     await session.commit()
-    return await get_ticket(session, staff, ticket_id)  # type: ignore[return-value]
+    return ticket
 
 
-async def mark_viewed(session: AsyncSession, staff: dict, ticket_id: int) -> None:
-    """Clear unread flags when the relevant party opens the ticket."""
+async def mark_viewed(
+    session: AsyncSession,
+    staff: dict,
+    ticket: PanelTicket,
+) -> bool:
+    """Clear unread flags on an already-loaded ticket. Returns True if changed."""
     actor = actor_from_staff(staff)
-    ticket = await get_ticket(session, staff, ticket_id)
-    if not ticket:
-        return
     changed = False
     if actor["is_owner"] and ticket.owner_unread:
         ticket.owner_unread = False
@@ -383,6 +375,20 @@ async def mark_viewed(session: AsyncSession, staff: dict, ticket_id: int) -> Non
         changed = True
     if changed:
         await session.commit()
+    return changed
+
+
+def unread_from_tickets(tickets: list[PanelTicket], staff: dict) -> int:
+    """Derive unread count from an already-loaded list (same scope as sidebar)."""
+    try:
+        actor = actor_from_staff(staff)
+    except PermissionError:
+        return 0
+    if actor["is_owner"]:
+        return sum(1 for t in tickets if t.owner_unread)
+    if actor["is_opener"]:
+        return sum(1 for t in tickets if t.answered_unread)
+    return 0
 
 
 async def count_answered_unread(session: AsyncSession, staff: dict) -> int:
@@ -402,21 +408,6 @@ async def count_answered_unread(session: AsyncSession, staff: dict) -> int:
     return int(n or 0)
 
 
-async def first_answered_unread_id(session: AsyncSession, staff: dict) -> Optional[int]:
-    actor = actor_from_staff(staff)
-    if actor["is_owner"] or not actor["is_opener"]:
-        return None
-    q = select(PanelTicket.id).where(PanelTicket.answered_unread.is_(True))
-    if actor["role"] == "reseller" and actor["reseller_user_id"]:
-        q = q.where(PanelTicket.opener_reseller_user_id == int(actor["reseller_user_id"]))
-    elif actor["role"] == "pg_staff" and actor["pg_staff_id"]:
-        q = q.where(PanelTicket.opener_pg_staff_id == int(actor["pg_staff_id"]))
-    else:
-        return None
-    q = q.order_by(PanelTicket.updated_at.desc()).limit(1)
-    return (await session.execute(q)).scalar_one_or_none()
-
-
 async def count_owner_unread(session: AsyncSession, staff: dict) -> int:
     actor = actor_from_staff(staff)
     if not actor["is_owner"]:
@@ -429,13 +420,8 @@ async def count_owner_unread(session: AsyncSession, staff: dict) -> int:
     return int(n or 0)
 
 
-async def count_owner_waiting(session: AsyncSession, staff: dict) -> int:
-    """Backward-compatible alias: unread for owner (new messages awaiting review)."""
-    return await count_owner_unread(session, staff)
-
-
 async def sidebar_unread_count(session: AsyncSession, staff: dict) -> int:
-    """Dot badge count next to پشتیبانی in the sidebar."""
+    """Unread count for sidebar badge / dashboard reuse."""
     try:
         actor = actor_from_staff(staff)
     except PermissionError:
@@ -445,22 +431,3 @@ async def sidebar_unread_count(session: AsyncSession, staff: dict) -> int:
     if actor["is_opener"]:
         return await count_answered_unread(session, staff)
     return 0
-
-
-async def enrich_opener_label(session: AsyncSession, ticket: PanelTicket) -> str:
-    if ticket.opener_label:
-        return ticket.opener_label
-    if ticket.opener_reseller_user_id:
-        prof = (
-            await session.execute(
-                select(ResellerProfile).where(
-                    ResellerProfile.user_id == int(ticket.opener_reseller_user_id)
-                )
-            )
-        ).scalar_one_or_none()
-        if prof and prof.web_username:
-            return prof.web_username
-        return f"نماینده #{ticket.opener_reseller_user_id}"
-    if ticket.opener_pg_staff_id:
-        return f"ادمین فرعی #{ticket.opener_pg_staff_id}"
-    return "—"

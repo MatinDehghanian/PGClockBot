@@ -340,10 +340,14 @@ def create_api_app(lifespan=None) -> FastAPI:
             if not (user.get("pg_permissions") or []):
                 # No mapped features → deny panel use
                 raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
+        # Skip unread COUNT on JSON poll routes that never render the sidebar.
         try:
-            from app.services.panel_tickets import sidebar_unread_count
+            from app.services.panel_tickets import SKIP_UNREAD_PATHS, sidebar_unread_count
 
-            request.state.panel_tickets_unread = await sidebar_unread_count(session, user)
+            if request.url.path in SKIP_UNREAD_PATHS:
+                request.state.panel_tickets_unread = 0
+            else:
+                request.state.panel_tickets_unread = await sidebar_unread_count(session, user)
         except Exception:
             request.state.panel_tickets_unread = 0
         return user

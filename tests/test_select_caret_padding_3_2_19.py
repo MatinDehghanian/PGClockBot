@@ -10,10 +10,12 @@ CSS = ROOT / "app/web/static/panel.css"
 
 
 class SelectCaretPaddingTests(unittest.TestCase):
-    def test_version(self):
+    def test_version_at_least_3_2_19(self):
+        from app.services.release_notes import RELEASE_NOTES_FA
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.2.19")
+        self.assertGreaterEqual(tuple(int(x) for x in __version__.split(".")), (3, 2, 19))
+        self.assertIn("3.2.19", RELEASE_NOTES_FA)
 
     def test_ui_select_symmetric_padding(self):
         css = CSS.read_text(encoding="utf-8")
