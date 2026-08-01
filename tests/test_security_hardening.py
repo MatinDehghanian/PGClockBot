@@ -27,12 +27,16 @@ class SignerSecretTests(unittest.TestCase):
 
 
 class HealthLeakTests(unittest.TestCase):
-    def test_health_does_not_expose_admin_username(self):
+    def test_public_health_is_minimal(self):
         src = Path("app/api/app.py").read_text(encoding="utf-8")
-        start = src.index("async def health")
-        end = src.index("@app.", start + 1)
+        start = src.index("async def health():")
+        end = src.index("@app.get(\"/health/detail\")", start + 1)
         body = src[start:end]
+        self.assertIn('{"ok":True}', body.replace(" ", ""))
         self.assertNotIn("admin_username", body)
+        self.assertNotIn("boot_id", body)
+        self.assertNotIn("local_version", body)
+        self.assertNotIn("PID", body)
 
 
 class RenewTenancyTests(unittest.IsolatedAsyncioTestCase):

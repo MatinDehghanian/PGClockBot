@@ -67,7 +67,10 @@ class UploadTests(unittest.TestCase):
         src = (ROOT / "app/web/templates/tickets.html").read_text(encoding="utf-8")
         self.assertIn('enctype="multipart/form-data"', src)
         self.assertIn('name="attachment"', src)
-        self.assertIn("/media/", src)
+        # Attachments are served via authenticated route, not public /media/
+        self.assertIn("/tickets/panel/", src)
+        self.assertIn("/attachment/", src)
+        self.assertNotIn("/media/", src)
 
     def test_service_helpers(self):
         from app.services.panel_tickets import ALLOWED_ATTACHMENT_EXT, MAX_ATTACHMENT_BYTES, sanitize_filename

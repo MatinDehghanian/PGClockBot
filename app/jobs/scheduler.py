@@ -154,7 +154,7 @@ async def check_expiring_services(bot: Bot) -> None:
                 try:
                     return await asyncio.wait_for(pg.subscription_info(token), timeout=12)
                 except Exception:
-                    logger.debug("subscription_info failed for token prefix=%s", (token or "")[:8], exc_info=True)
+                    logger.debug("subscription_info failed for service fetch", exc_info=True)
                     return None
 
         infos = await asyncio.gather(

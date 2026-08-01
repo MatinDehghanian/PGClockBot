@@ -170,8 +170,14 @@ def _scope_query(actor: dict) -> Select[tuple[PanelTicket]]:
 
 
 def _tickets_upload_dir() -> Path:
-    d = DATA_DIR / "uploads" / "tickets"
+    """Private attachment store — never under the public /media/uploads mount."""
+    d = DATA_DIR / "private" / "tickets"
     d.mkdir(parents=True, exist_ok=True)
+    try:
+        d.chmod(0o700)
+        (DATA_DIR / "private").chmod(0o700)
+    except OSError:
+        pass
     return d
 
 
@@ -179,6 +185,25 @@ def sanitize_filename(name: str | None) -> str:
     raw = (name or "file").strip().replace("\\", "/").split("/")[-1]
     cleaned = _SAFE_NAME_RE.sub("_", raw).strip(" ._")
     return (cleaned or "file")[:180]
+
+
+def resolve_ticket_attachment_path(rel_path: str | None) -> Path | None:
+    """Resolve a stored relative path to an absolute file under DATA_DIR (no traversal)."""
+    if not rel_path:
+        return None
+    raw = str(rel_path).replace("\\", "/").lstrip("/")
+    if ".." in raw.split("/"):
+        return None
+    # New private store + legacy public store (pre-hardening)
+    allowed_prefixes = ("private/tickets/", "uploads/tickets/")
+    if not any(raw.startswith(p) for p in allowed_prefixes):
+        return None
+    full = (DATA_DIR / raw).resolve()
+    try:
+        full.relative_to(DATA_DIR.resolve())
+    except ValueError:
+        return None
+    return full if full.is_file() else None
 
 
 async def save_ticket_attachment(
@@ -205,10 +230,14 @@ async def save_ticket_attachment(
         raise ValueError("حجم فایل حداکثر ۱۲ مگابایت است")
 
     mime = (getattr(upload, "content_type", None) or "application/octet-stream").strip()[:128]
-    stem = f"t{ticket_id or 0}_{uuid.uuid4().hex[:12]}{ext}"
+    stem = f"t{ticket_id or 0}_{uuid.uuid4().hex[:24]}{ext}"
     dest = _tickets_upload_dir() / stem
     dest.write_bytes(content)
-    rel = f"uploads/tickets/{stem}"
+    try:
+        dest.chmod(0o600)
+    except OSError:
+        pass
+    rel = f"private/tickets/{stem}"
     return rel, display, mime
 
 

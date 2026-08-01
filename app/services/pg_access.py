@@ -134,26 +134,36 @@ def role_user_actions(role: dict | None) -> dict[str, bool]:
     }
 
 
-def map_pg_role_writes(role: dict | None) -> dict[str, bool]:
-    """Which PG resources the role may mutate (create/update/delete)."""
-    keys = ("users", "templates", "groups", "hosts", "nodes")
-    empty = {k: False for k in keys}
+def map_pg_role_actions(role: dict | None) -> dict[str, dict[str, bool]]:
+    """Exact PasarGuard action matrix per resource (create/update/delete/reconnect)."""
+    resources = {
+        "users": ("create", "update", "delete"),
+        "templates": ("create", "update", "delete"),
+        "groups": ("create", "update", "delete"),
+        "hosts": ("create", "update", "delete"),
+        "nodes": ("create", "update", "reconnect"),
+    }
+    empty = {res: {act: False for act in acts} for res, acts in resources.items()}
     if not role:
         return empty
     if role.get("is_owner"):
-        return {k: True for k in keys}
+        return {res: {act: True for act in acts} for res, acts in resources.items()}
     raw = role.get("permissions") or {}
     if hasattr(raw, "model_dump"):
         raw = raw.model_dump()
     if not isinstance(raw, dict):
         return empty
-    return {
-        "users": _resource_allows(raw, "users", "create", "update", "delete"),
-        "templates": _resource_allows(raw, "templates", "create", "update", "delete"),
-        "groups": _resource_allows(raw, "groups", "create", "update", "delete"),
-        "hosts": _resource_allows(raw, "hosts", "create", "update"),
-        "nodes": _resource_allows(raw, "nodes", "reconnect", "create", "update"),
-    }
+    out: dict[str, dict[str, bool]] = {}
+    for res, acts in resources.items():
+        block = raw.get(res) if isinstance(raw.get(res), dict) else {}
+        out[res] = {act: _action_allowed(block.get(act)) for act in acts}
+    return out
+
+
+def map_pg_role_writes(role: dict | None) -> dict[str, bool]:
+    """Which PG resources the role may mutate (any of create/update/delete/reconnect)."""
+    actions = map_pg_role_actions(role)
+    return {res: any(flags.values()) for res, flags in actions.items()}
 
 
 def role_access_limits(role: dict | None) -> dict:
@@ -207,6 +217,7 @@ def enrich_staff_pg_from_role(user: dict, features: list[str], role: dict | None
     out["pg_permissions"] = list(features or [])
     if role:
         out["pg_writes"] = map_pg_role_writes(role)
+        out["pg_actions"] = map_pg_role_actions(role)
         out["pg_user_actions"] = role_user_actions(role)
         out["pg_access"] = role_access_limits(role)
     return out
@@ -223,6 +234,18 @@ def staff_pg_writes(staff: dict) -> dict[str, bool]:
         "hosts": bool(raw.get("hosts")),
         "nodes": bool(raw.get("nodes")),
     }
+
+
+def staff_pg_action(staff: dict, resource: str, action: str) -> bool:
+    """True when staff may perform the exact PG action on a resource."""
+    if staff.get("role") == "admin":
+        return True
+    matrix = staff.get("pg_actions") or {}
+    block = matrix.get(resource) if isinstance(matrix, dict) else None
+    if isinstance(block, dict) and action in block:
+        return bool(block.get(action))
+    # Legacy cookies without pg_actions: fail closed for mutations
+    return False
 
 
 def staff_user_actions(staff: dict) -> dict[str, bool]:

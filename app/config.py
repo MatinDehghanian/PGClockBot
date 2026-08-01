@@ -22,7 +22,8 @@ def normalize_pg_base_url(raw: str) -> str:
     """Normalize PG panel URL while preserving path.
 
     Trims whitespace, adds https:// if scheme is missing, drops query/fragment,
-    keeps scheme://host[:port]/path exactly as configured (trailing slash removed).
+    strips userinfo (credentials must not live in the URL), keeps
+    scheme://host[:port]/path (trailing slash removed).
     """
     from urllib.parse import urlparse, urlunparse
 
@@ -34,8 +35,15 @@ def normalize_pg_base_url(raw: str) -> str:
     parsed = urlparse(s)
     if not parsed.scheme or not parsed.netloc:
         return s
+    # Reject credential embedding — prevents accidental secret leakage via logs/SSRF
+    host = parsed.hostname or ""
+    if not host:
+        return s
+    netloc = host
+    if parsed.port:
+        netloc = f"{host}:{parsed.port}"
     path = (parsed.path or "").rstrip("/")
-    return urlunparse((parsed.scheme, parsed.netloc, path, "", "", "")).rstrip("/")
+    return urlunparse((parsed.scheme, netloc, path, "", "", "")).rstrip("/")
 
 
 def pg_api_base_candidates(raw: str) -> list[str]:

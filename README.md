@@ -140,11 +140,12 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-nano .env
+# Leave BOT_TOKEN / passwords empty — finish setup via the gated browser wizard
+chmod 600 .env
 python run.py
 ```
 
-Quote secrets with special characters:
+Do **not** put example passwords in `.env`. Quote real secrets with special characters:
 
 ```env
 WEB_ADMIN_PASSWORD="MyPass!A"

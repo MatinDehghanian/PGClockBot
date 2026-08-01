@@ -150,13 +150,22 @@ async def reseller_can_review_payment(
     reviewer: BotUser,
     payment: Payment,
 ) -> bool:
-    """Admins (main bot): yes. Shop owner / dedicated-bot admins: payments perm + ownership."""
+    """Admins (main bot): yes. Shop owner / dedicated-bot admins: payments perm + tenancy.
+
+    Wallet top-ups credit a global balance — only platform admins may approve/reject them.
+    Order payments must belong to the reviewer's shop (``Order.reseller_id``), not merely
+    sticky customer attribution (which would allow cross-tenant approval).
+    """
     from app.services.reseller_access import resolve_reseller_owner_id
     from app.services.users import current_shop_reseller_id
 
     shop_rid = current_shop_reseller_id()
     if reviewer.role == Role.ADMIN.value and shop_rid is None:
         return True
+
+    # Global wallet must never be mintable by a tenant reviewer.
+    if payment.is_wallet_topup:
+        return False
 
     owner_id = await resolve_reseller_owner_id(
         session,
@@ -169,7 +178,12 @@ async def reseller_can_review_payment(
     profile = await get_reseller_profile(session, owner_id)
     if not has_bot_perm(profile, "payments"):
         return False
-    return await reseller_owns_user(session, owner_id, payment.user_id)
+    if not payment.order_id:
+        return False
+    order = await session.get(Order, payment.order_id)
+    if not order or order.reseller_id != owner_id:
+        return False
+    return True
 
 
 def _rand_password(length: int = 14) -> str:

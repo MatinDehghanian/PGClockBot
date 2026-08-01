@@ -70,17 +70,18 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
         pg.delete_user_by_id = AsyncMock()
 
         session = AsyncMock()
+        session.commit = AsyncMock()
         session.execute = AsyncMock(
             side_effect=[
-                # with_for_update order load
-                MagicMock(scalar_one=MagicMock(return_value=order)),
-                # ResellerProfile lookup
+                MagicMock(rowcount=1),  # atomic DELIVERING claim
+                MagicMock(scalar_one=MagicMock(return_value=order)),  # reload
                 MagicMock(scalar_one_or_none=MagicMock(return_value=SimpleNamespace(
                     pg_admin_username="res_admin",
                     commission_percent=10,
                     balance=0,
                     user_id=42,
                 ))),
+                MagicMock(rowcount=1),  # release claim on failure
             ]
         )
 
@@ -102,7 +103,7 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("مالکیت", str(ctx.exception))
         pg.set_owner_by_id.assert_awaited_once_with(555, "res_admin")
         pg.delete_user_by_id.assert_awaited_once_with(555)
-        session.commit.assert_not_awaited()
+        self.assertGreaterEqual(session.commit.await_count, 1)
 
     async def test_success_assigns_owner_before_commit(self):
         from app.services.orders import deliver_order
@@ -146,6 +147,7 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
         session.refresh = AsyncMock()
         session.execute = AsyncMock(
             side_effect=[
+                MagicMock(rowcount=1),  # atomic DELIVERING claim
                 MagicMock(scalar_one=MagicMock(return_value=order)),
                 MagicMock(scalar_one_or_none=MagicMock(return_value=profile)),
             ]
@@ -196,7 +198,8 @@ class SourceWiringGuards(unittest.TestCase):
         self.assertGreater(hosts_idx, 0)
         self.assertGreater(nodes_idx, 0)
         self.assertIn("assert_can_mutate_owned_users", src[hosts_idx : hosts_idx + 800])
-        self.assertIn("assert_can_mutate_owned_users", src[nodes_idx : nodes_idx + 500])
+        self.assertIn("assert_can_mutate_owned_users", src[nodes_idx : nodes_idx + 700])
+        self.assertIn('staff_pg_action(staff, "nodes", "reconnect")', src[nodes_idx : nodes_idx + 700])
 
     def test_bot_pg_users_still_platform_admin_only(self):
         src = Path("app/bot/handlers/admin_pg_users.py").read_text(encoding="utf-8")

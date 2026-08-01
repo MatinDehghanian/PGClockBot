@@ -5,6 +5,7 @@ import string
 from typing import Optional
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,6 +19,7 @@ from app.db.models import (
     PaymentStatus,
     Plan,
     ResellerProfile,
+    TrialClaim,
     UserService,
 )
 from app.services.pasarguard import extract_sub_token, get_pg
@@ -289,31 +291,17 @@ async def create_order(
     # Ignore sticky attribution from caller — shop bot context wins.
     _ = reseller_id
     if plan.is_trial:
-        # One free trial per user per shop (prevent callback re-buy)
-        trial_q = (
-            select(Order.id)
-            .join(Plan, Plan.id == Order.plan_id)
-            .where(
-                Order.user_id == user_id,
-                Plan.is_trial.is_(True),
-                Order.status.in_(
-                    [
-                        OrderStatus.PAID.value,
-                        OrderStatus.DELIVERED.value,
-                        OrderStatus.AWAITING_APPROVAL.value,
-                        OrderStatus.AWAITING_RECEIPT.value,
-                    ]
-                ),
-            )
-        )
-        if shop_rid is not None:
-            trial_q = trial_q.where(Order.reseller_id == int(shop_rid))
-        else:
-            # Platform shop: only platform-owned trial plans
-            trial_q = trial_q.where(Plan.owner_reseller_id.is_(None))
-        prior = await session.execute(trial_q.limit(1))
-        if prior.scalar_one_or_none() is not None:
-            raise ValueError("پلن تست رایگان را قبلاً دریافت کرده‌اید")
+        # One free trial per user per shop — unique claim closes the race window.
+        shop_key = str(int(shop_rid)) if shop_rid is not None else "platform"
+        if shop_rid is None and plan.owner_reseller_id is not None:
+            raise ValueError("پلن تست این فروشگاه در دسترس نیست")
+        claim = TrialClaim(user_id=user_id, shop_key=shop_key)
+        session.add(claim)
+        try:
+            await session.flush()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise ValueError("پلن تست رایگان را قبلاً دریافت کرده‌اید") from exc
     discount, used_code = await _reserve_discount_code(session, discount_code, plan.price)
     order = Order(
         user_id=user_id,
@@ -325,6 +313,19 @@ async def create_order(
         status=OrderStatus.PENDING.value,
     )
     session.add(order)
+    await session.flush()
+    if plan.is_trial:
+        shop_key = str(int(shop_rid)) if shop_rid is not None else "platform"
+        row = (
+            await session.execute(
+                select(TrialClaim).where(
+                    TrialClaim.user_id == user_id,
+                    TrialClaim.shop_key == shop_key,
+                )
+            )
+        ).scalar_one_or_none()
+        if row is not None:
+            row.order_id = order.id
     await session.commit()
     await session.refresh(order)
     return order
@@ -629,12 +630,36 @@ def stars_amount_for_toman(amount_toman: int, toman_per_star: int) -> int:
     return max(1, (int(amount_toman) + rate - 1) // rate)
 
 async def attach_receipt(session: AsyncSession, payment: Payment, file_id: str) -> Payment:
-    payment.receipt_file_id = file_id
-    payment.status = PaymentStatus.PENDING.value
+    """Attach receipt only while payment is still pending (never overwrite approved/rejected)."""
+    payment_id = int(payment.id)
+    with session.no_autoflush:
+        claim = await session.execute(
+            update(Payment)
+            .where(
+                Payment.id == payment_id,
+                Payment.status == PaymentStatus.PENDING.value,
+            )
+            .values(receipt_file_id=file_id, status=PaymentStatus.PENDING.value)
+            .execution_options(synchronize_session=False)
+        )
+    if claim.rowcount != 1:
+        raise ValueError("این پرداخت قابل بروزرسانی نیست")
     if payment.order_id:
-        order = await session.get(Order, payment.order_id)
-        if order:
-            order.status = OrderStatus.AWAITING_APPROVAL.value
+        await session.execute(
+            update(Order)
+            .where(
+                Order.id == payment.order_id,
+                Order.status.in_(
+                    [
+                        OrderStatus.PENDING.value,
+                        OrderStatus.AWAITING_RECEIPT.value,
+                        OrderStatus.AWAITING_APPROVAL.value,
+                    ]
+                ),
+            )
+            .values(status=OrderStatus.AWAITING_APPROVAL.value)
+            .execution_options(synchronize_session=False)
+        )
     await session.commit()
     await session.refresh(payment)
     return payment
@@ -675,11 +700,48 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
     if not order:
         await session.commit()
         return None
-    if order.status == OrderStatus.DELIVERED.value:
+    if order.status in {OrderStatus.DELIVERED.value, OrderStatus.DELIVERING.value}:
         await session.commit()
         return order
-    order.status = OrderStatus.PAID.value
+    # Reject other pending payments for the same order to prevent double delivery
+    await session.execute(
+        update(Payment)
+        .where(
+            Payment.order_id == order.id,
+            Payment.id != payment_id,
+            Payment.status == PaymentStatus.PENDING.value,
+        )
+        .values(
+            status=PaymentStatus.REJECTED.value,
+            review_note="superseded by approved payment",
+        )
+        .execution_options(synchronize_session=False)
+    )
+    # Atomic PAID claim — only one approval moves the order forward
+    paid_claim = await session.execute(
+        update(Order)
+        .where(
+            Order.id == order.id,
+            Order.status.in_(
+                [
+                    OrderStatus.PENDING.value,
+                    OrderStatus.AWAITING_RECEIPT.value,
+                    OrderStatus.AWAITING_APPROVAL.value,
+                    OrderStatus.PAID.value,
+                ]
+            ),
+        )
+        .values(status=OrderStatus.PAID.value)
+        .execution_options(synchronize_session=False)
+    )
     await session.commit()
+    await session.refresh(order)
+    if paid_claim.rowcount != 1 and order.status not in {
+        OrderStatus.PAID.value,
+        OrderStatus.DELIVERING.value,
+        OrderStatus.DELIVERED.value,
+    }:
+        raise ValueError("این سفارش قابل تأیید نیست")
     # Reseller application fee — no VPN delivery; move application to review queue.
     if order.note and order.note.startswith("reseller_app:"):
         from app.services.resellers import mark_application_paid
@@ -702,144 +764,210 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
 
 
 async def reject_payment(session: AsyncSession, payment: Payment, reviewer_tg: int, note: str = "") -> None:
-    payment.status = PaymentStatus.REJECTED.value
-    payment.reviewed_by = reviewer_tg
-    payment.review_note = note
+    payment_id = int(payment.id)
+    with session.no_autoflush:
+        claim = await session.execute(
+            update(Payment)
+            .where(
+                Payment.id == payment_id,
+                Payment.status == PaymentStatus.PENDING.value,
+            )
+            .values(
+                status=PaymentStatus.REJECTED.value,
+                reviewed_by=reviewer_tg,
+                review_note=note,
+            )
+            .execution_options(synchronize_session=False)
+        )
+    if claim.rowcount != 1:
+        raise ValueError("این پرداخت قابل رد نیست")
     if payment.order_id:
-        order = await session.get(Order, payment.order_id)
-        if order:
-            order.status = OrderStatus.REJECTED.value
+        await session.execute(
+            update(Order)
+            .where(
+                Order.id == payment.order_id,
+                Order.status.in_(
+                    [
+                        OrderStatus.PENDING.value,
+                        OrderStatus.AWAITING_RECEIPT.value,
+                        OrderStatus.AWAITING_APPROVAL.value,
+                    ]
+                ),
+            )
+            .values(status=OrderStatus.REJECTED.value)
+            .execution_options(synchronize_session=False)
+        )
     await session.commit()
 
 
 async def deliver_order(session: AsyncSession, order: Order) -> Order:
     order_id = int(order.id)
+    # Atomic delivery claim (SQLite has no real row locks — status flip is the mutex)
+    with session.no_autoflush:
+        claim = await session.execute(
+            update(Order)
+            .where(
+                Order.id == order_id,
+                Order.status == OrderStatus.PAID.value,
+                Order.service_id.is_(None),
+            )
+            .values(status=OrderStatus.DELIVERING.value)
+            .execution_options(synchronize_session=False)
+        )
+    if claim.rowcount != 1:
+        order = (
+            await session.execute(
+                select(Order)
+                .where(Order.id == order_id)
+                .options(selectinload(Order.plan), selectinload(Order.user))
+            )
+        ).scalar_one()
+        if order.status == OrderStatus.DELIVERED.value:
+            return order
+        if order.service_id:
+            order.status = OrderStatus.DELIVERED.value
+            await session.commit()
+            await session.refresh(order)
+            return order
+        raise ValueError("سفارش قابل تحویل نیست")
+    await session.commit()
     order = (
         await session.execute(
             select(Order)
             .where(Order.id == order_id)
             .options(selectinload(Order.plan), selectinload(Order.user))
-            .with_for_update()
         )
     ).scalar_one()
-    if order.status == OrderStatus.DELIVERED.value:
-        return order
-    if order.status != OrderStatus.PAID.value:
-        raise ValueError("سفارش قابل تحویل نیست")
-    if order.service_id:
-        order.status = OrderStatus.DELIVERED.value
-        await session.commit()
-        await session.refresh(order)
-        return order
     plan = order.plan
     if not plan:
+        order.status = OrderStatus.PAID.value
+        await session.commit()
         raise ValueError("plan missing")
 
-    pg = get_pg()
-    username = await generate_pg_username(session, user_id=order.user_id, plan=plan)
-
-    pg_owner, pg_role_id = await _reseller_pg_link(session, order.reseller_id)
-    data_limit = None
-    expire = None
-    if plan.data_limit_gb is not None:
-        data_limit = int(plan.data_limit_gb * (1024**3))
-    if plan.duration_days:
-        import time
-
-        expire = int(time.time()) + plan.duration_days * 86400
-
-    # Reseller shop orders must always quota-check + assign ownership.
-    # Creating as owner without set_owner would bypass PasarGuard max_users.
-    profile: ResellerProfile | None = None
-    if order.reseller_id:
-        profile = (
-            await session.execute(
-                select(ResellerProfile).where(ResellerProfile.user_id == order.reseller_id)
+    async def _release_delivery_claim() -> None:
+        await session.execute(
+            update(Order)
+            .where(
+                Order.id == order_id,
+                Order.status == OrderStatus.DELIVERING.value,
             )
-        ).scalar_one_or_none()
-        try:
-            await assert_reseller_can_deliver(
-                pg_admin_username=pg_owner,
-                pg_role_id=pg_role_id,
-                data_limit=data_limit,
-                expire_ts=expire,
-                from_template=bool(plan.pg_template_id),
-            )
-        except PgQuotaError as e:
-            raise ValueError(e.message) from e
-
-    pg_user: dict
-    if plan.pg_template_id:
-        payload = {
-            "username": username,
-            "user_template_id": plan.pg_template_id,
-            "note": f"PGClockBot order #{order.id}",
-        }
-        pg_user = await pg.create_user_from_template(payload)
-    else:
-        from app.services.pasarguard import build_user_create_payload, parse_group_ids
-
-        group_ids = parse_group_ids(getattr(plan, "pg_group_ids", None))
-        if not group_ids:
-            raise ValueError(
-                "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
-            )
-        pg_user = await pg.create_user(
-            build_user_create_payload(
-                username=username,
-                group_ids=group_ids,
-                data_limit=data_limit,
-                expire_ts=expire,
-                note=f"PGClockBot order #{order.id}",
-            )
+            .values(status=OrderStatus.PAID.value)
+            .execution_options(synchronize_session=False)
         )
+        await session.commit()
 
-    pg_uid = pg_user.get("id")
-    # Fail closed: reseller delivery must transfer ownership or roll back the PG user.
-    if order.reseller_id:
-        owner_name = (pg_owner or "").strip()
-        if not owner_name or not pg_uid:
-            if pg_uid:
+    try:
+        pg = get_pg()
+        username = await generate_pg_username(session, user_id=order.user_id, plan=plan)
+
+        pg_owner, pg_role_id = await _reseller_pg_link(session, order.reseller_id)
+        data_limit = None
+        expire = None
+        if plan.data_limit_gb is not None:
+            data_limit = int(plan.data_limit_gb * (1024**3))
+        if plan.duration_days:
+            import time
+
+            expire = int(time.time()) + plan.duration_days * 86400
+
+        # Reseller shop orders must always quota-check + assign ownership.
+        # Creating as owner without set_owner would bypass PasarGuard max_users.
+        profile: ResellerProfile | None = None
+        if order.reseller_id:
+            profile = (
+                await session.execute(
+                    select(ResellerProfile).where(ResellerProfile.user_id == order.reseller_id)
+                )
+            ).scalar_one_or_none()
+            try:
+                await assert_reseller_can_deliver(
+                    pg_admin_username=pg_owner,
+                    pg_role_id=pg_role_id,
+                    data_limit=data_limit,
+                    expire_ts=expire,
+                    from_template=bool(plan.pg_template_id),
+                )
+            except PgQuotaError as e:
+                raise ValueError(e.message) from e
+
+        pg_user: dict
+        if plan.pg_template_id:
+            payload = {
+                "username": username,
+                "user_template_id": plan.pg_template_id,
+                "note": f"PGClockBot order #{order.id}",
+            }
+            pg_user = await pg.create_user_from_template(payload)
+        else:
+            from app.services.pasarguard import build_user_create_payload, parse_group_ids
+
+            group_ids = parse_group_ids(getattr(plan, "pg_group_ids", None))
+            if not group_ids:
+                raise ValueError(
+                    "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
+                )
+            pg_user = await pg.create_user(
+                build_user_create_payload(
+                    username=username,
+                    group_ids=group_ids,
+                    data_limit=data_limit,
+                    expire_ts=expire,
+                    note=f"PGClockBot order #{order.id}",
+                )
+            )
+
+        pg_uid = pg_user.get("id")
+        # Fail closed: reseller delivery must transfer ownership or roll back the PG user.
+        if order.reseller_id:
+            owner_name = (pg_owner or "").strip()
+            if not owner_name or not pg_uid:
+                if pg_uid:
+                    try:
+                        await pg.delete_user_by_id(int(pg_uid))
+                    except Exception:
+                        pass
+                raise ValueError(
+                    "کاربر ساخته شد ولی مالکیت قابل تنظیم نیست — تحویل لغو شد"
+                )
+            try:
+                await pg.set_owner_by_id(int(pg_uid), owner_name)
+            except Exception as e:
                 try:
                     await pg.delete_user_by_id(int(pg_uid))
                 except Exception:
                     pass
-            raise ValueError(
-                "کاربر ساخته شد ولی مالکیت قابل تنظیم نیست — تحویل لغو شد"
-            )
+                raise ValueError(
+                    f"کاربر ساخته شد ولی مالکیت ست نشد و حذف شد: {e}"
+                ) from e
+
+        sub_url = pg_user.get("subscription_url")
+        service = UserService(
+            bot_user_id=order.user_id,
+            plan_id=plan.id,
+            pg_user_id=pg_uid,
+            pg_username=pg_user.get("username", username),
+            subscription_url=sub_url,
+            subscription_token=extract_sub_token(sub_url),
+            remark=f"order:{order.id}",
+        )
+        session.add(service)
+        await session.flush()
+
+        if profile is not None:
+            commission = int(order.amount * profile.commission_percent / 100)
+            profile.balance += commission
+
+        order.service_id = service.id
+        order.status = OrderStatus.DELIVERED.value
+        await session.commit()
+        await session.refresh(order)
+        return order
+    except Exception:
         try:
-            await pg.set_owner_by_id(int(pg_uid), owner_name)
-        except Exception as e:
-            try:
-                await pg.delete_user_by_id(int(pg_uid))
-            except Exception:
-                pass
-            raise ValueError(
-                f"کاربر ساخته شد ولی مالکیت ست نشد و حذف شد: {e}"
-            ) from e
-
-    sub_url = pg_user.get("subscription_url")
-    service = UserService(
-        bot_user_id=order.user_id,
-        plan_id=plan.id,
-        pg_user_id=pg_uid,
-        pg_username=pg_user.get("username", username),
-        subscription_url=sub_url,
-        subscription_token=extract_sub_token(sub_url),
-        remark=f"order:{order.id}",
-    )
-    session.add(service)
-    await session.flush()
-
-    if profile is not None:
-        commission = int(order.amount * profile.commission_percent / 100)
-        profile.balance += commission
-
-    order.service_id = service.id
-    order.status = OrderStatus.DELIVERED.value
-    await session.commit()
-    await session.refresh(order)
-    return order
+            await _release_delivery_claim()
+        except Exception:
+            pass
+        raise
 
 
 async def create_wallet_topup(

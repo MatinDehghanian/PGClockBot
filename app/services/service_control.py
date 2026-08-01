@@ -103,7 +103,7 @@ def ensure_restart_helper() -> tuple[bool, str]:
 
             sudoers = tmp_path / "sudoers"
             sudoers.write_text(
-                "# Managed by PGClockBot — passwordless service control\n"
+                "# Managed by PGClockBot — passwordless service control via constrained helper only\n"
                 f"{user} ALL=(root) NOPASSWD: {HELPER_INSTALL_PATH} *\n"
                 f"{user} ALL=(root) NOPASSWD: "
                 f"/bin/systemctl restart {SERVICE_NAME}, "
@@ -111,8 +111,7 @@ def ensure_restart_helper() -> tuple[bool, str]:
                 f"/bin/systemctl try-restart {SERVICE_NAME}, "
                 f"/usr/bin/systemctl try-restart {SERVICE_NAME}, "
                 f"/bin/systemctl is-active {SERVICE_NAME}, "
-                f"/usr/bin/systemctl is-active {SERVICE_NAME}, "
-                f"/usr/bin/certbot, /bin/certbot\n",
+                f"/usr/bin/systemctl is-active {SERVICE_NAME}\n",
                 encoding="utf-8",
             )
             sudoers.chmod(0o440)

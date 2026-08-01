@@ -307,6 +307,7 @@ ORDER_STATUS_FA = {
     "awaiting_receipt": "منتظر رسید",
     "awaiting_approval": "منتظر تأیید",
     "paid": "پرداخت‌شده",
+    "delivering": "در حال تحویل",
     "delivered": "تحویل‌شده",
     "rejected": "ردشده",
     "cancelled": "لغوشده",

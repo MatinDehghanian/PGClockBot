@@ -34,11 +34,16 @@ def hash_password(password: str) -> str:
 
 def validate_password_strength(password: str) -> tuple[bool, str]:
     """Return (ok, persian_error). Empty error string when ok."""
+    from app.services.security_policy import is_placeholder_password
+
     p = password or ""
     if len(p) < 8:
         return False, "رمز عبور باید حداقل ۸ کاراکتر باشد."
-    if len(p) > 72:
-        return False, "رمز عبور حداکثر ۷۲ کاراکتر باشد."
+    # bcrypt truncates at 72 bytes — enforce the real limit, not just char count
+    if len(p.encode("utf-8")) > 72:
+        return False, "رمز عبور حداکثر ۷۲ بایت باشد."
+    if is_placeholder_password(p):
+        return False, "این رمز عبور نمونه/ضعیف است؛ رمز قوی‌تری انتخاب کنید."
     if not any(c.isupper() for c in p):
         return False, "رمز عبور باید حداقل یک حرف بزرگ انگلیسی داشته باشد."
     if not any(c.islower() for c in p):
@@ -91,14 +96,15 @@ def load_web_admin() -> dict[str, str]:
             token = _clean_secret(str(data.get("token", "")))
         return {"username": username or "admin", "password": password, "token": token}
 
-    # Fallback for old installs: migrate from .env once
+    # Fallback for old installs: migrate from .env once (never import example placeholders)
     from app.config import get_settings
+    from app.services.security_policy import is_placeholder_password
 
     get_settings.cache_clear()
     settings = get_settings()
     user = _clean_secret(settings.web_admin_user) or "admin"
     password = _clean_secret(settings.web_admin_password)
-    if password:
+    if password and not is_placeholder_password(password):
         save_web_admin(user, password)
         return load_web_admin()
     return {"username": "admin", "password": "", "token": ""}
@@ -199,12 +205,13 @@ def repair_web_admin_from_env() -> dict[str, str]:
             return data
 
     from app.config import get_settings
+    from app.services.security_policy import is_placeholder_password
 
     get_settings.cache_clear()
     settings = get_settings()
     user = _clean_secret(settings.web_admin_user) or "admin"
     password = _clean_secret(settings.web_admin_password)
-    if not password:
+    if not password or is_placeholder_password(password):
         return load_web_admin()
     save_web_admin(user, password)
     return load_web_admin()

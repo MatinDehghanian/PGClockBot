@@ -470,7 +470,24 @@ def _certbot_issue(domain: str, email: str, *, force: bool = False) -> tuple[boo
             )
 
         _set_progress(pct=50, stage="challenge", message="درخواست گواهی از Let's Encrypt…", done=False)
-        cmd = _with_sudo([*base, "--webroot", "-w", str(WEBROOT_DIR)])
+        # Prefer constrained ctl helper (no raw certbot sudo). Fall back only if helper missing.
+        from app.services.service_control import HELPER_INSTALL_PATH, ensure_restart_helper
+
+        ensure_restart_helper()
+        ctl = HELPER_INSTALL_PATH if HELPER_INSTALL_PATH.is_file() else None
+        if ctl is not None:
+            cmd = _with_sudo(
+                [
+                    str(ctl),
+                    "certbot-certonly",
+                    domain,
+                    email,
+                    str(WEBROOT_DIR),
+                    *(["--force"] if force else []),
+                ]
+            )
+        else:
+            cmd = _with_sudo([*base, "--webroot", "-w", str(WEBROOT_DIR)])
         code, out = _run(cmd, timeout=240)
         if code == 0:
             return True, out

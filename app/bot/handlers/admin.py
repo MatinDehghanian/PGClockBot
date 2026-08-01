@@ -524,7 +524,11 @@ async def adm_plan_add(callback: CallbackQuery, state: FSMContext, db_user: BotU
 
 
 @router.message(AdminStates.add_plan_name)
-async def plan_name(message: Message, state: FSMContext):
+async def plan_name(message: Message, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer("ادمین نیستید")
+        return
     if (message.text or "").strip() == "انصراف":
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
@@ -535,7 +539,11 @@ async def plan_name(message: Message, state: FSMContext):
 
 
 @router.message(AdminStates.add_plan_price)
-async def plan_price(message: Message, state: FSMContext):
+async def plan_price(message: Message, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer("ادمین نیستید")
+        return
     if (message.text or "").strip() == "انصراف":
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
@@ -551,7 +559,11 @@ async def plan_price(message: Message, state: FSMContext):
 
 
 @router.message(AdminStates.add_plan_days)
-async def plan_days(message: Message, state: FSMContext):
+async def plan_days(message: Message, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer("ادمین نیستید")
+        return
     if (message.text or "").strip() == "انصراف":
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
@@ -570,7 +582,11 @@ async def plan_days(message: Message, state: FSMContext):
 
 
 @router.message(AdminStates.add_plan_gb)
-async def plan_gb(message: Message, state: FSMContext):
+async def plan_gb(message: Message, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer("ادمین نیستید")
+        return
     if (message.text or "").strip() == "انصراف":
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
@@ -1176,7 +1192,13 @@ async def adm_users_search_start(callback: CallbackQuery, state: FSMContext, db_
 
 
 @router.message(AdminStates.user_search)
-async def adm_users_search(message: Message, state: FSMContext, session: AsyncSession):
+async def adm_users_search(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer("ادمین نیستید")
+        return
     if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
@@ -1640,7 +1662,13 @@ async def adm_resapp_no(callback: CallbackQuery, session: AsyncSession, db_user:
 
 
 @router.message(AdminStates.make_reseller)
-async def make_res(message: Message, state: FSMContext, session: AsyncSession):
+async def make_res(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer("ادمین نیستید")
+        return
     if (message.text or "").strip() == "انصراف":
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.admin_home())

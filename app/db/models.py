@@ -32,6 +32,7 @@ class OrderStatus(str, Enum):
     AWAITING_RECEIPT = "awaiting_receipt"
     AWAITING_APPROVAL = "awaiting_approval"
     PAID = "paid"
+    DELIVERING = "delivering"
     DELIVERED = "delivered"
     REJECTED = "rejected"
     CANCELLED = "cancelled"
@@ -426,3 +427,16 @@ class PgStaffAccess(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class TrialClaim(Base):
+    """One free trial per user per shop — unique constraint closes the race window."""
+
+    __tablename__ = "trial_claims"
+    __table_args__ = (UniqueConstraint("user_id", "shop_key", name="uq_trial_claims_user_shop"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    shop_key: Mapped[str] = mapped_column(String(64))  # "platform" or str(reseller_id)
+    order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

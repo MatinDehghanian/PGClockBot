@@ -580,7 +580,13 @@ async def settings_edit_ask(
 
 
 @router.message(SettingsStates.edit_value)
-async def settings_edit_save(message: Message, state: FSMContext, session: AsyncSession):
+async def settings_edit_save(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer("ادمین نیستید")
+        return
     data = await state.get_data()
     key = data.get("edit_key")
     loc = data.get("edit_loc")
@@ -684,7 +690,11 @@ async def support_add_start(callback: CallbackQuery, state: FSMContext, db_user:
 
 
 @router.message(SettingsStates.support_title)
-async def support_title_msg(message: Message, state: FSMContext):
+async def support_title_msg(message: Message, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer("ادمین نیستید")
+        return
     text = (message.text or "").strip()
     if text == "انصراف":
         await state.clear()
@@ -702,7 +712,13 @@ async def support_title_msg(message: Message, state: FSMContext):
 
 
 @router.message(SettingsStates.support_telegram)
-async def support_telegram_msg(message: Message, state: FSMContext, session: AsyncSession):
+async def support_telegram_msg(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer("ادمین نیستید")
+        return
     text = (message.text or "").strip()
     if text == "انصراف":
         await state.clear()
@@ -869,7 +885,13 @@ async def trial_ask_name(callback: CallbackQuery, state: FSMContext, db_user: Bo
 
 
 @router.message(SettingsStates.trial_name)
-async def trial_save_name(message: Message, state: FSMContext, session: AsyncSession):
+async def trial_save_name(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer("ادمین نیستید")
+        return
     text = (message.text or "").strip()
     if text == "انصراف":
         await state.clear()
@@ -900,7 +922,13 @@ async def trial_ask_days(callback: CallbackQuery, state: FSMContext, db_user: Bo
 
 
 @router.message(SettingsStates.trial_days)
-async def trial_save_days(message: Message, state: FSMContext, session: AsyncSession):
+async def trial_save_days(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer("ادمین نیستید")
+        return
     text = (message.text or "").strip()
     if text == "انصراف":
         await state.clear()
@@ -936,7 +964,13 @@ async def trial_ask_gb(callback: CallbackQuery, state: FSMContext, db_user: BotU
 
 
 @router.message(SettingsStates.trial_gb)
-async def trial_save_gb(message: Message, state: FSMContext, session: AsyncSession):
+async def trial_save_gb(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer("ادمین نیستید")
+        return
     text = (message.text or "").strip()
     if text == "انصراف":
         await state.clear()

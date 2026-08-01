@@ -168,7 +168,7 @@
         </header>
         {% if m.body %}<p class="ticket-msg-body">{{ m.body }}</p>{% endif %}
         {% if m.attachment_path %}
-        <a class="ticket-attach" href="/media/{{ m.attachment_path }}" target="_blank" rel="noopener">
+        <a class="ticket-attach" href="/tickets/panel/{{ t.id }}/attachment/{{ m.id }}" rel="noopener">
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3h5v5M19 3l-9 9"/><path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/></svg>
           <span>{{ m.attachment_name or 'دانلود پیوست' }}</span>
         </a>

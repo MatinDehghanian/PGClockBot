@@ -226,8 +226,9 @@ class PasarGuardClient:
         last_base = candidates[0] if candidates else self.base_url
         for base in candidates:
             last_base = base
+            # Never follow redirects on credential POSTs (prevents auth-forwarding SSRF)
             async with httpx.AsyncClient(
-                base_url=base, timeout=30.0, follow_redirects=True
+                base_url=base, timeout=30.0, follow_redirects=False
             ) as probe:
                 for data in attempts:
                     last = await probe.post("/api/admin/token", data=data)

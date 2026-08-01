@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
 
@@ -224,10 +225,19 @@ def main() -> None:
 
         @api.post(settings.webhook_path)
         async def telegram_webhook(request: Request):
+            import secrets as _secrets
+
+            from app.services.security_policy import WEBHOOK_MAX_BODY_BYTES, content_length_ok
+
             header = (request.headers.get("X-Telegram-Bot-Api-Secret-Token") or "").strip()
-            if not header or header != webhook_secret:
+            if not header or not _secrets.compare_digest(header, webhook_secret):
                 return JSONResponse({"ok": False}, status_code=403)
-            data = await request.json()
+            if not content_length_ok(request.headers.get("content-length"), WEBHOOK_MAX_BODY_BYTES):
+                return JSONResponse({"ok": False}, status_code=413)
+            body = await request.body()
+            if len(body) > WEBHOOK_MAX_BODY_BYTES:
+                return JSONResponse({"ok": False}, status_code=413)
+            data = json.loads(body)
             update = Update.model_validate(data, context={"bot": bot})
             await dp.feed_update(bot, update)
             return {"ok": True}
@@ -249,10 +259,11 @@ def main() -> None:
     entry = f"{scheme}://{host_hint}:{settings.web_port}/"
     if not creds.get("password") or not is_setup_complete():
         gate = ensure_setup_gate_token()
+        # Log only a short suffix — full token lives in data/setup_gate.token (mode 0600)
         logger.warning(
-            "First-run wizard pending — open gated URL: %s?gate=%s",
+            "First-run wizard pending — open %s?gate=<token from data/setup_gate.token> (suffix …%s)",
             entry.rstrip("/"),
-            gate,
+            gate[-6:],
         )
     else:
         logger.info(

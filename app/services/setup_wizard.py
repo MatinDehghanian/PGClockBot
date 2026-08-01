@@ -68,6 +68,17 @@ def ensure_setup_gate_token() -> str:
     return token
 
 
+def rotate_setup_gate_token() -> str:
+    """Invalidate the current gate token and issue a new one (URL → cookie exchange)."""
+    _ensure_data_dir()
+    try:
+        if SETUP_GATE_FILE.exists():
+            SETUP_GATE_FILE.unlink()
+    except OSError:
+        pass
+    return ensure_setup_gate_token()
+
+
 def setup_gate_ok(provided: str | None) -> bool:
     if is_setup_complete():
         return True
@@ -134,12 +145,25 @@ def _env_get(key: str) -> str:
 
 
 def _has_web_password() -> bool:
+    """True when a real (non-placeholder) panel password is configured."""
+    from app.services.security_policy import is_placeholder_password
+    from app.services.web_auth import _is_bcrypt_hash
+
     creds = load_web_admin()
-    return bool((creds.get("password") or "").strip())
+    stored = (creds.get("password") or "").strip()
+    if not stored:
+        return False
+    # Hashed passwords are always treated as real (placeholders are never hashed in).
+    if _is_bcrypt_hash(stored):
+        return True
+    return not is_placeholder_password(stored)
 
 
 def _has_bot_token() -> bool:
-    return bool(_env_get("BOT_TOKEN"))
+    from app.services.security_policy import is_placeholder_bot_token
+
+    token = _env_get("BOT_TOKEN")
+    return bool(token) and not is_placeholder_bot_token(token)
 
 
 def _has_admin_ids() -> bool:
@@ -192,7 +216,8 @@ def is_setup_complete() -> bool:
         return False
 
     if ready:
-        # Prefer also having admin ids, but don't trap old installs without them
+        # Prefer also having admin ids, but don't trap old installs without them.
+        # Never auto-complete from empty/placeholder example credentials.
         if has_admins or has_pw:
             mark_setup_complete()
             _SETUP_COMPLETE_CACHED = True

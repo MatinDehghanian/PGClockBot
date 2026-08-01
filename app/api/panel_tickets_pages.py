@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,7 @@ from app.services.panel_tickets import (
     list_tickets,
     mark_viewed,
     reply_ticket,
+    resolve_ticket_attachment_path,
     save_ticket_attachment,
     set_status,
     sidebar_unread_count,
@@ -146,6 +147,35 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                 status_code=303,
             )
 
+    @app.get("/tickets/panel/{ticket_id}/attachment/{message_id}")
+    async def tickets_panel_attachment(
+        ticket_id: int,
+        message_id: int,
+        staff: dict = Depends(require_staff),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if not can_access_panel_tickets(staff):
+            raise HTTPException(403, "forbidden")
+        ticket = await get_ticket(session, staff, ticket_id)
+        if not ticket:
+            raise HTTPException(404, "not found")
+        msg = next((m for m in (ticket.messages or []) if int(m.id) == int(message_id)), None)
+        if not msg or not msg.attachment_path:
+            raise HTTPException(404, "not found")
+        path = resolve_ticket_attachment_path(msg.attachment_path)
+        if not path:
+            raise HTTPException(404, "not found")
+        return FileResponse(
+            path,
+            filename=msg.attachment_name or path.name,
+            media_type=msg.attachment_mime or "application/octet-stream",
+            content_disposition_type="attachment",
+            headers={
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
     @app.post("/tickets/panel/{ticket_id}/reply")
     async def tickets_panel_reply(
         ticket_id: int,
@@ -156,11 +186,23 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
     ):
         if not can_access_panel_tickets(staff):
             return RedirectResponse("/tickets?err=" + quote("دسترسی ندارید"), status_code=303)
+        # Authorize ticket access before writing any bytes to disk
+        existing = await get_ticket(session, staff, ticket_id)
+        if not existing:
+            return RedirectResponse("/tickets?err=" + quote("تیکت یافت نشد"), status_code=303)
+        att = None
         try:
             att = await save_ticket_attachment(attachment, ticket_id=ticket_id)
             await reply_ticket(session, staff, ticket_id, body=body, attachment=att)
             return RedirectResponse(f"/tickets?ok=replied&view={ticket_id}", status_code=303)
         except Exception as exc:
+            if att and att[0]:
+                path = resolve_ticket_attachment_path(att[0])
+                if path:
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
             return RedirectResponse(
                 f"/tickets?err={quote(str(exc))}&view={ticket_id}",
                 status_code=303,

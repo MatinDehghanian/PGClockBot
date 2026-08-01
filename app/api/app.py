@@ -47,8 +47,14 @@ from app.services.setup_wizard import (
     mark_setup_complete,
     panel_url_hint,
     parse_admin_ids,
+    rotate_setup_gate_token,
     setup_gate_ok,
     update_env_keys,
+)
+from app.services.security_policy import (
+    PUBLIC_FORM_MAX_BODY_BYTES,
+    content_length_ok,
+    request_host_allowed,
 )
 from app.services.updates import local_version
 from app.services.users import (
@@ -206,12 +212,27 @@ def create_api_app(lifespan=None) -> FastAPI:
                 response.headers.setdefault("Cache-Control", "public, max-age=604800, immutable")
             return response
 
+    class _PublicUploads(StaticFiles):
+        """Public shop media only — never serve private ticket attachments."""
+
+        async def get_response(self, path, scope):  # type: ignore[override]
+            rel = (path or "").lstrip("/").replace("\\", "/")
+            if rel == "tickets" or rel.startswith("tickets/"):
+                from starlette.responses import Response
+
+                return Response(status_code=404)
+            return await super().get_response(path, scope)
+
     app.mount("/static", _CachedStatic(directory=str(WEB_DIR / "static")), name="static")
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        DATA_DIR.chmod(0o700)
+    except OSError:
+        pass
     uploads_dir = DATA_DIR / "uploads"
     uploads_dir.mkdir(parents=True, exist_ok=True)
     # CRITICAL: never mount DATA_DIR itself — that would expose bot.db, backups, web_admin.json
-    app.mount("/media/uploads", StaticFiles(directory=str(uploads_dir)), name="media_uploads")
+    app.mount("/media/uploads", _PublicUploads(directory=str(uploads_dir)), name="media_uploads")
     try:
         from app.services.ssl_certs import WEBROOT_DIR, ensure_dirs as ensure_ssl_dirs
 
@@ -438,12 +459,16 @@ def create_api_app(lifespan=None) -> FastAPI:
         if needs_gate:
             gate_q = (request.query_params.get("gate") or "").strip()
             gate_c = (request.cookies.get("setup_gate") or "").strip()
-            if setup_gate_ok(gate_q) or setup_gate_ok(gate_c):
+            q_ok = bool(gate_q) and setup_gate_ok(gate_q)
+            c_ok = bool(gate_c) and setup_gate_ok(gate_c)
+            if q_ok or c_ok:
                 response = await call_next(request)
-                if setup_gate_ok(gate_q) and not setup_gate_ok(gate_c):
+                # Exchange URL token for cookie and rotate so the URL cannot be reused
+                if q_ok and not c_ok:
+                    new_tok = rotate_setup_gate_token()
                     response.set_cookie(
                         "setup_gate",
-                        ensure_setup_gate_token(),
+                        new_tok,
                         httponly=True,
                         samesite="strict",
                         secure=_cookie_secure(request),
@@ -458,14 +483,35 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "<title>Setup gate</title></head><body style='font-family:sans-serif;"
                 "max-width:40rem;margin:3rem auto;padding:0 1rem;line-height:1.7'>"
                 "<h1>دسترسی ویزارد قفل است</h1>"
-                "<p>برای امنیت نصب اول، لینک یک‌بارمصرف را از لاگ سرور بردارید:</p>"
+                "<p>برای امنیت نصب اول، لینک یک‌بارمصرف را از لاگ سرور بردارید "
+                "یا فایل <code>data/setup_gate.token</code> را روی سرور بخوانید.</p>"
                 "<pre style='background:#111;color:#eee;padding:12px;border-radius:8px;"
                 "direction:ltr;text-align:left;overflow:auto'>journalctl -u pgclockbot -n 50 | grep -i gate</pre>"
-                "<p style='color:#666;font-size:13px'>توکن gate در "
-                f"<code>data/setup_gate.token</code> هم ذخیره می‌شود "
-                f"(…{token[-6:]}).</p></body></html>",
+                "<p style='color:#666;font-size:13px'>پسوند توکن: "
+                f"<code>…{token[-6:]}</code></p></body></html>",
                 status_code=403,
             )
+        return await call_next(request)
+
+    @app.middleware("http")
+    async def csrf_origin_guard(request: Request, call_next):
+        """Reject cross-site unsafe requests that carry a session cookie (defense-in-depth)."""
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            has_session = bool(request.cookies.get("session") or request.cookies.get("setup_gate"))
+            if has_session:
+                origin = request.headers.get("origin")
+                referer = request.headers.get("referer")
+                host = request.headers.get("host")
+                if origin or referer:
+                    if not (
+                        request_host_allowed(host, origin)
+                        or request_host_allowed(host, referer)
+                    ):
+                        return HTMLResponse("CSRF rejected", status_code=403)
+        path = request.url.path
+        if request.method == "POST" and path in {"/login", "/setup", "/setup/save", "/"}:
+            if not content_length_ok(request.headers.get("content-length"), PUBLIC_FORM_MAX_BODY_BYTES):
+                return HTMLResponse("Request too large", status_code=413)
         return await call_next(request)
 
     @app.middleware("http")
@@ -490,6 +536,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; "
                 "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
             )
+        path = request.url.path
+        if path in {"/login", "/setup", "/security"} or path.startswith("/setup/") or path.startswith("/rsetup/"):
+            response.headers["Cache-Control"] = "no-store, private"
+            response.headers["Pragma"] = "no-cache"
         if _cookie_secure(request):
             response.headers.setdefault(
                 "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
@@ -606,6 +656,11 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.get("/health")
     async def health():
+        # Public probe only — no operational metadata
+        return {"ok": True}
+
+    @app.get("/health/detail")
+    async def health_detail(staff: dict = Depends(require_admin)):
         from app.runtime import BOOT_AT, BOOT_ID, PID
         from app.services.updates import local_version
 
@@ -619,6 +674,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             "boot_id": BOOT_ID,
             "boot_at": BOOT_AT,
             "pid": PID,
+            "staff": staff.get("username"),
         }
 
     @app.get("/manifest.webmanifest")
@@ -1953,10 +2009,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                         or "محدوده فروشگاه مشخص نیست",
                     },
                 )
+            # Shop-scoped order payments only — wallet top-ups are platform-admin only
             q = (
                 select(Payment)
-                .join(BotUser, BotUser.id == Payment.user_id)
-                .where(BotUser.reseller_id == rid)
+                .join(Order, Order.id == Payment.order_id)
+                .where(
+                    Order.reseller_id == rid,
+                    Payment.is_wallet_topup.is_(False),
+                )
                 .order_by(Payment.id.desc())
                 .limit(100)
             )
@@ -1987,14 +2047,19 @@ def create_api_app(lifespan=None) -> FastAPI:
         if not payment:
             return _redirect_msg("/payments", err="پرداخت یافت نشد")
         if staff.get("role") != "admin":
-            from app.services.resellers import reseller_owns_user
             from app.services.shop_scope import ShopScopeError, require_shop_owner_id
 
+            # Wallet top-ups mint global balance — tenant reviewers cannot approve them.
+            if payment.is_wallet_topup:
+                return _redirect_msg("/payments", err="شارژ کیف پول فقط توسط مدیر اصلی تأیید می‌شود")
             try:
                 rid = require_shop_owner_id(staff)
             except ShopScopeError as e:
                 return _redirect_msg("/payments", err=e.message)
-            if not await reseller_owns_user(session, rid, payment.user_id):
+            if not payment.order_id:
+                return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
+            order_row = await session.get(Order, payment.order_id)
+            if not order_row or order_row.reseller_id != rid:
                 return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
         if payment.status != PaymentStatus.PENDING.value:
             return _redirect_msg("/payments", err="این پرداخت قابل تأیید نیست")
@@ -2044,14 +2109,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         if not payment:
             return _redirect_msg("/payments", err="پرداخت یافت نشد")
         if staff.get("role") != "admin":
-            from app.services.resellers import reseller_owns_user
             from app.services.shop_scope import ShopScopeError, require_shop_owner_id
 
+            if payment.is_wallet_topup:
+                return _redirect_msg("/payments", err="شارژ کیف پول فقط توسط مدیر اصلی رد می‌شود")
             try:
                 rid = require_shop_owner_id(staff)
             except ShopScopeError as e:
                 return _redirect_msg("/payments", err=e.message)
-            if not await reseller_owns_user(session, rid, payment.user_id):
+            if not payment.order_id:
+                return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
+            order_row = await session.get(Order, payment.order_id)
+            if not order_row or order_row.reseller_id != rid:
                 return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
         try:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
@@ -2920,15 +2989,23 @@ def create_api_app(lifespan=None) -> FastAPI:
         calc = hmac.new(secret, data_check.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(calc, received_hash):
             raise HTTPException(401, "bad initData")
-        auth_date = int(parsed.get("auth_date", "0"))
-        if time.time() - auth_date > 86400:
+        try:
+            auth_date = int(parsed.get("auth_date", "0"))
+        except (TypeError, ValueError):
+            raise HTTPException(401, "bad auth_date")
+        now = time.time()
+        # Reject future skew (>5m) and stale initData (>10m)
+        if auth_date <= 0 or auth_date > now + 300 or now - auth_date > 600:
             raise HTTPException(401, "expired")
         user = json.loads(parsed.get("user", "{}"))
         return user
 
     @app.get("/api/mini/me")
     async def mini_me(request: Request, session: AsyncSession = Depends(get_db)):
-        init_data = request.headers.get("X-Telegram-Init-Data") or request.query_params.get("initData", "")
+        from fastapi.responses import JSONResponse
+
+        # Header only — never accept initData in query strings (logs/history leakage)
+        init_data = request.headers.get("X-Telegram-Init-Data") or ""
         if not init_data:
             raise HTTPException(401, "no initData")
         tg_user = _validate_init_data(init_data)
@@ -2949,7 +3026,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             )
         plans_result = await session.execute(plans_q.order_by(Plan.sort_order))
         plans = list(plans_result.scalars().all())
-        return {
+        payload = {
             "user": {
                 "id": user.id,
                 "name": user.full_name,
@@ -2975,10 +3052,17 @@ def create_api_app(lifespan=None) -> FastAPI:
                 for p in plans
             ],
         }
+        resp = JSONResponse(payload)
+        resp.headers["Cache-Control"] = "no-store, private"
+        return resp
 
     @app.get("/api/mini/service/{service_id}")
     async def mini_service(service_id: int, request: Request, session: AsyncSession = Depends(get_db)):
+        from fastapi.responses import JSONResponse
+
         init_data = request.headers.get("X-Telegram-Init-Data") or ""
+        if not init_data:
+            raise HTTPException(401, "no initData")
         tg_user = _validate_init_data(init_data)
         result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_user.get("id")))
         user = result.scalar_one_or_none()
@@ -2989,8 +3073,12 @@ def create_api_app(lifespan=None) -> FastAPI:
         if svc.subscription_token:
             try:
                 info = await get_pg().subscription_info(svc.subscription_token)
-            except Exception as e:
-                info = {"error": str(e)}
-        return {"service": {"id": svc.id, "username": svc.pg_username, "url": svc.subscription_url}, "info": info}
+            except Exception:
+                info = {"error": "upstream_unavailable"}
+        resp = JSONResponse(
+            {"service": {"id": svc.id, "username": svc.pg_username, "url": svc.subscription_url}, "info": info}
+        )
+        resp.headers["Cache-Control"] = "no-store, private"
+        return resp
 
     return app

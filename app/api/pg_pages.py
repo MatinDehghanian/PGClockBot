@@ -19,7 +19,7 @@ from app.services.pasarguard import (
     user_group_ids,
     user_subscription_url,
 )
-from app.services.pg_access import staff_pg_writes, staff_user_actions
+from app.services.pg_access import staff_pg_action, staff_pg_writes, staff_user_actions
 from app.services.pg_quota import (
     PgQuotaError,
     assert_can_create_user,
@@ -707,7 +707,7 @@ def register_pg_pages(
         expire_days: str = Form("30"),
         staff: dict = Depends(require_pg_perm("pg_templates")),
     ):
-        if not staff_pg_writes(staff)["templates"]:
+        if not staff_pg_action(staff, "templates", "create"):
             return RedirectResponse(f"/pg/templates?err={_q('اجازه ساخت ندارید')}", status_code=303)
         try:
             await assert_can_mutate_owned_users(staff)
@@ -739,7 +739,7 @@ def register_pg_pages(
 
     @app.post("/pg/templates/{template_id}/delete")
     async def pg_templates_delete(template_id: int, staff: dict = Depends(require_pg_perm("pg_templates"))):
-        if not staff_pg_writes(staff)["templates"]:
+        if not staff_pg_action(staff, "templates", "delete"):
             return RedirectResponse(f"/pg/templates?err={_q('اجازه حذف ندارید')}", status_code=303)
         from app.services.plans_catalog import template_allowed_for_staff
 
@@ -802,7 +802,7 @@ def register_pg_pages(
         name: str = Form(...),
         staff: dict = Depends(require_pg_perm("pg_groups")),
     ):
-        if not staff_pg_writes(staff)["groups"]:
+        if not staff_pg_action(staff, "groups", "create"):
             return RedirectResponse(f"/pg/groups?err={_q('اجازه ساخت ندارید')}", status_code=303)
         try:
             await assert_can_mutate_owned_users(staff)
@@ -825,7 +825,7 @@ def register_pg_pages(
         name: str = Form(...),
         staff: dict = Depends(require_pg_perm("pg_groups")),
     ):
-        if not staff_pg_writes(staff)["groups"]:
+        if not staff_pg_action(staff, "groups", "update"):
             return RedirectResponse(f"/pg/groups?err={_q('اجازه ویرایش ندارید')}", status_code=303)
         from app.services.plans_catalog import groups_allowed_for_staff
 
@@ -849,7 +849,7 @@ def register_pg_pages(
 
     @app.post("/pg/groups/{group_id}/delete")
     async def pg_groups_delete(group_id: int, staff: dict = Depends(require_pg_perm("pg_groups"))):
-        if not staff_pg_writes(staff)["groups"]:
+        if not staff_pg_action(staff, "groups", "delete"):
             return RedirectResponse(f"/pg/groups?err={_q('اجازه حذف ندارید')}", status_code=303)
         from app.services.plans_catalog import groups_allowed_for_staff
 
@@ -900,7 +900,7 @@ def register_pg_pages(
         priority: int = Form(0),
         staff: dict = Depends(require_pg_perm("pg_hosts")),
     ):
-        if not staff_pg_writes(staff)["hosts"]:
+        if not staff_pg_action(staff, "hosts", "create"):
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه ساخت ندارید')}", status_code=303)
         try:
             await assert_can_mutate_owned_users(staff)
@@ -926,7 +926,7 @@ def register_pg_pages(
 
     @app.post("/pg/hosts/{host_id}/toggle")
     async def pg_hosts_toggle(host_id: int, staff: dict = Depends(require_pg_perm("pg_hosts"))):
-        if not staff_pg_writes(staff)["hosts"]:
+        if not staff_pg_action(staff, "hosts", "update"):
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه ندارید')}", status_code=303)
         try:
             await assert_can_mutate_owned_users(staff)
@@ -942,7 +942,11 @@ def register_pg_pages(
 
     @app.post("/pg/hosts/{host_id}/delete")
     async def pg_hosts_delete(host_id: int, staff: dict = Depends(require_pg_perm("pg_hosts"))):
-        if not staff_pg_writes(staff)["hosts"]:
+        # PasarGuard host ACL often exposes update without a distinct delete bit
+        if not (
+            staff_pg_action(staff, "hosts", "delete")
+            or staff_pg_action(staff, "hosts", "update")
+        ):
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه حذف ندارید')}", status_code=303)
         try:
             await assert_can_mutate_owned_users(staff)
@@ -972,14 +976,15 @@ def register_pg_pages(
                 nodes=nodes,
                 flash_err=err,
                 flash_ok=ok,
-                # Anyone who can open nodes may reconnect
-                can_reconnect=True,
+                can_reconnect=staff_pg_action(staff, "nodes", "reconnect"),
                 active="pg_nodes",
             ),
         )
 
     @app.post("/pg/nodes/{node_id}/reconnect")
     async def pg_node_reconnect(node_id: int, staff: dict = Depends(require_pg_perm("pg_nodes"))):
+        if not staff_pg_action(staff, "nodes", "reconnect"):
+            return RedirectResponse(f"/pg/nodes?err={_q('اجازه اتصال مجدد ندارید')}", status_code=303)
         try:
             await assert_can_mutate_owned_users(staff)
         except PgQuotaError as qe:

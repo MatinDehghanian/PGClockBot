@@ -264,10 +264,12 @@ def create_backup(
                         }
                     )
 
-            # uploads tree
-            uploads = DATA_DIR / "uploads"
-            if uploads.is_dir():
-                for path in uploads.rglob("*"):
+            # uploads + private attachment trees
+            for tree_name in ("uploads", "private"):
+                tree = DATA_DIR / tree_name
+                if not tree.is_dir():
+                    continue
+                for path in tree.rglob("*"):
                     if not path.is_file():
                         continue
                     rel = path.relative_to(DATA_DIR)
@@ -326,6 +328,17 @@ def create_backup(
         manifest["archive_sha256"] = archive_sha
         manifest["archive_size"] = out_path.stat().st_size
         sidecar.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        for p in (out_path, sidecar):
+            try:
+                p.chmod(0o600)
+            except OSError:
+                pass
+        try:
+            backups_root = out_path.parent
+            backups_root.chmod(0o700)
+            DATA_DIR.chmod(0o700)
+        except OSError:
+            pass
 
         _prune_old_backups()
 
@@ -476,6 +489,10 @@ def restore_backup(
                 auth_src = tmp_root / "data" / "web_admin.json"
                 if auth_src.is_file():
                     shutil.copy2(auth_src, DATA_DIR / "web_admin.json")
+                    try:
+                        (DATA_DIR / "web_admin.json").chmod(0o600)
+                    except OSError:
+                        pass
 
                 # flags
                 for flag_name in ("setup_complete.flag", "setup_in_progress.flag"):
@@ -483,10 +500,14 @@ def restore_backup(
                     dest = DATA_DIR / flag_name
                     if src.is_file():
                         shutil.copy2(src, dest)
+                        try:
+                            dest.chmod(0o600)
+                        except OSError:
+                            pass
                     elif flag_name == "setup_in_progress.flag" and dest.exists():
                         dest.unlink(missing_ok=True)
 
-                # uploads: replace tree
+                # uploads + private attachments: replace trees
                 _set_restore_status(
                     {
                         "state": "running",
@@ -497,16 +518,25 @@ def restore_backup(
                         "safety_id": safety_id,
                     }
                 )
-                uploads_src = tmp_root / "data" / "uploads"
-                uploads_dest = DATA_DIR / "uploads"
-                if uploads_src.is_dir():
-                    if uploads_dest.exists():
-                        shutil.rmtree(uploads_dest)
-                    shutil.copytree(uploads_src, uploads_dest)
-                elif uploads_dest.exists():
-                    # Backup had no uploads — clear existing to match snapshot
-                    shutil.rmtree(uploads_dest)
-                    uploads_dest.mkdir(parents=True, exist_ok=True)
+                for tree_name in ("uploads", "private"):
+                    tree_src = tmp_root / "data" / tree_name
+                    tree_dest = DATA_DIR / tree_name
+                    if tree_src.is_dir():
+                        if tree_dest.exists():
+                            shutil.rmtree(tree_dest)
+                        shutil.copytree(tree_src, tree_dest)
+                    elif tree_name == "uploads" and tree_dest.exists():
+                        # Backup had no uploads — clear existing to match snapshot
+                        shutil.rmtree(tree_dest)
+                        tree_dest.mkdir(parents=True, exist_ok=True)
+                try:
+                    DATA_DIR.chmod(0o700)
+                    priv = DATA_DIR / "private"
+                    if priv.is_dir():
+                        priv.chmod(0o700)
+                    live_db.chmod(0o600)
+                except OSError:
+                    pass
 
                 env_restored = False
                 env_src = tmp_root / "env" / ".env"
@@ -526,6 +556,10 @@ def restore_backup(
                     if env_dest.exists():
                         shutil.copy2(env_dest, bak)
                     shutil.copy2(env_src, env_dest)
+                    try:
+                        env_dest.chmod(0o600)
+                    except OSError:
+                        pass
                     env_restored = True
 
             result = {

@@ -411,7 +411,7 @@ install_restart_helper() {
   cat > "$tmp_sudoers" <<EOF
 # Managed by PGClockBot — passwordless service control for panel SSL/updates
 ${service_user} ALL=(root) NOPASSWD: ${ctl_dst} *
-${service_user} ALL=(root) NOPASSWD: /bin/systemctl restart ${SERVICE_NAME}, /usr/bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl try-restart ${SERVICE_NAME}, /usr/bin/systemctl try-restart ${SERVICE_NAME}, /bin/systemctl is-active ${SERVICE_NAME}, /usr/bin/systemctl is-active ${SERVICE_NAME}, /usr/bin/certbot, /bin/certbot
+${service_user} ALL=(root) NOPASSWD: /bin/systemctl restart ${SERVICE_NAME}, /usr/bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl try-restart ${SERVICE_NAME}, /usr/bin/systemctl try-restart ${SERVICE_NAME}, /bin/systemctl is-active ${SERVICE_NAME}, /usr/bin/systemctl is-active ${SERVICE_NAME}
 EOF
   chmod 440 "$tmp_sudoers"
   sudo_wrap install -d -m 755 /usr/local/lib/pgclockbot
@@ -510,7 +510,11 @@ cmd_install() {
   fi
 
   step "systemd service"
-  install_systemd "$(whoami)" || true
+  svc_user="$(whoami)"
+  if [[ "$svc_user" == "root" ]]; then
+    warn "Installing as root is discouraged — prefer a dedicated non-root user for the panel service"
+  fi
+  install_systemd "$svc_user" || true
   if service_installed; then
     sudo_wrap systemctl enable --now "$SERVICE_NAME" || true
     if service_active; then
