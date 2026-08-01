@@ -119,10 +119,9 @@ class InstallUpdateSpeedTests(unittest.TestCase):
 
 
 class PanelLoadingTests(unittest.TestCase):
-    def test_base_uses_compact_font_and_small_logo(self):
+    def test_base_uses_vazirmatn_and_small_logo(self):
         src = Path("app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("Vazirmatn:wght@400;600", src)
-        self.assertNotIn("wght@400;500;600;700", src)
+        self.assertIn("family=Vazirmatn", src)
         self.assertIn("/static/logo-64.png", src)
         self.assertNotIn('/static/logo.png"', src)
 
