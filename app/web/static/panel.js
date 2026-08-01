@@ -457,6 +457,15 @@
         home.parent.appendChild(el);
       }
     }
+    function ensureModalPorted(el){
+      if (!el) return;
+      if (!modalHomes.has(el)) {
+        modalHomes.set(el, { parent: el.parentNode, next: el.nextSibling });
+      }
+      if (el.parentNode !== document.body) {
+        document.body.appendChild(el);
+      }
+    }
     function closeModal(el){
       if (!el) return;
       el.hidden = true;
@@ -466,14 +475,19 @@
         document.body.classList.remove('modal-open');
       }
     }
+    function modalEscapeHref(el){
+      if (!el) return null;
+      const attr = el.getAttribute('data-modal-escape-href');
+      if (attr) return attr;
+      const nav = el.querySelector('[data-modal-close-nav]');
+      if (!nav) return null;
+      return nav.getAttribute('data-modal-close-nav') || '/tickets';
+    }
     function openModal(id){
       const el = document.getElementById(id);
       if (!el) return;
       document.querySelectorAll('.ui-modal.open').forEach(closeModal);
-      if (!modalHomes.has(el)) {
-        modalHomes.set(el, { parent: el.parentNode, next: el.nextSibling });
-      }
-      document.body.appendChild(el);
+      ensureModalPorted(el);
       el.hidden = false;
       el.classList.add('open');
       document.body.classList.add('modal-open');
@@ -484,11 +498,26 @@
         panel.querySelector('button:not([disabled]), [href]');
       if (focus) setTimeout(() => focus.focus(), 30);
     }
+    /* SSR-open modals (e.g. ticket view/create) — portal like button-opened modals */
+    document.querySelectorAll('.ui-modal.open').forEach((el) => {
+      ensureModalPorted(el);
+      el.hidden = false;
+      document.body.classList.add('modal-open');
+      const thread = el.querySelector('.ticket-thread');
+      if (thread) thread.scrollTop = thread.scrollHeight;
+    });
     document.addEventListener('click', (e) => {
       const openBtn = e.target.closest('[data-modal-open]');
       if (openBtn) {
         e.preventDefault();
         openModal(openBtn.getAttribute('data-modal-open'));
+        return;
+      }
+      const navClose = e.target.closest('[data-modal-close-nav]');
+      if (navClose) {
+        e.preventDefault();
+        const href = navClose.getAttribute('data-modal-close-nav') || '/tickets';
+        window.location.href = href;
         return;
       }
       const closer = e.target.closest('[data-modal-close]');
@@ -497,9 +526,15 @@
       }
     });
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        document.querySelectorAll('.ui-modal.open').forEach(closeModal);
+      if (e.key !== 'Escape') return;
+      const open = document.querySelector('.ui-modal.open');
+      if (!open) return;
+      const href = modalEscapeHref(open);
+      if (href) {
+        window.location.href = href;
+        return;
       }
+      document.querySelectorAll('.ui-modal.open').forEach(closeModal);
     });
 
     /* Copy helpers (subscription links, etc.) */

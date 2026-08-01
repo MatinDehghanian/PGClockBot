@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.3.0": [
+        "مودال تیکت مثل بقیه مودال‌ها روی body پورت می‌شود تا زیر سایدبار نرود",
+        "پاک‌سازی اسکریپت جداگانهٔ مودال تیکت — رفتار یکسان با سیستم مودال مشترک",
+    ],
     "3.2.20": [
         "پاک‌سازی کدهای اضافی تیکت پنل و حذف بارگذاری پیام‌ها در لیست",
         "کاهش کوئری‌های تکراری خوانده‌نشده در داشبورد و صفحه پشتیبانی",
