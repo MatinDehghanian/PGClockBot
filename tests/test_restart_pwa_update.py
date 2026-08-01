@@ -62,6 +62,10 @@ class UpdateWiringTests(unittest.TestCase):
         self.assertNotIn("آپدیت از داخل پنل حذف شده است", src)
         tpl = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
         self.assertIn("/update/start", tpl)
+        # Restart confirmation needs version/boot_id/pid — public /health is minimal
+        self.assertIn("/health/detail", tpl)
+        self.assertNotIn("fetch('/health?", tpl)
+        self.assertNotIn('fetch("/health?', tpl)
         self.assertIn("upd-start", tpl)
         self.assertIn("rollback-version", tpl)
         self.assertIn("/update/rollback", tpl)

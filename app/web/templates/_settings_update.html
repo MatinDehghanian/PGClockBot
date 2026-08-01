@@ -192,8 +192,10 @@
   }
 
   async function probeHealth(){
+    // Use authenticated diagnostics — public /health is intentionally minimal ({ok:true})
+    // and does not expose version/boot_id/pid needed to confirm a successful restart.
     try {
-      const r = await fetch('/health?_=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' });
+      const r = await fetch('/health/detail?_=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' });
       if (!r.ok) return null;
       return await r.json();
     } catch (_) { return null; }
