@@ -60,8 +60,10 @@ class ForceJoinRedesignTests(unittest.TestCase):
         js = JS.read_text(encoding="utf-8")
         self.assertIn("force-channels-head", html)
         self.assertIn("force-channels-title", html)
-        self.assertIn("+ افزودن کانال", html)
-        self.assertIn("max-width: 240px;", css)
+        self.assertNotIn("force-channels-footer", html)
+        self.assertIn("force-channel-add", js)
+        self.assertIn("addTileHtml", js)
+        self.assertIn("grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));", css)
         self.assertNotIn("force-channel-fields", js)
         self.assertIn("form-field force-channel-id-wrap", js)
 

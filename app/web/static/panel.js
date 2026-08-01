@@ -649,17 +649,27 @@
                 id.replace(/"/g, '&quot;') + '" autocomplete="off" />' +
               '<small class="muted">@username یا آیدی عددی کانال/گروه</small>' +
             '</label>' +
-            '<label class="force-channel-req ui-switch-row">' +
-              '<span class="ui-switch-copy"><strong>عضویت الزامی</strong></span>' +
-              '<span class="ui-switch">' +
-                '<input type="checkbox" class="force-channel-required" value="1"' + (req ? ' checked' : '') + ' />' +
-                '<span class="ui-switch-track" aria-hidden="true"></span>' +
-              '</span>' +
-            '</label>' +
-            '<div class="force-channel-actions">' +
-              '<button type="button" class="btn btn-danger btn-sm force-channel-remove" aria-label="حذف کانال">حذف</button>' +
+            '<div class="force-channel-foot">' +
+              '<label class="force-channel-req ui-switch-row">' +
+                '<span class="ui-switch-copy"><strong>عضویت الزامی</strong></span>' +
+                '<span class="ui-switch">' +
+                  '<input type="checkbox" class="force-channel-required" value="1"' + (req ? ' checked' : '') + ' />' +
+                  '<span class="ui-switch-track" aria-hidden="true"></span>' +
+                '</span>' +
+              '</label>' +
+              '<div class="force-channel-actions">' +
+                '<button type="button" class="btn btn-danger btn-sm force-channel-remove" aria-label="حذف کانال">حذف</button>' +
+              '</div>' +
             '</div>' +
           '</div>'
+        );
+      }
+      function addTileHtml(){
+        return (
+          '<button type="button" class="force-channel-add" data-force-channels-add aria-label="افزودن کانال">' +
+            '<span class="force-channel-add-plus" aria-hidden="true">+</span>' +
+            '<span>افزودن کانال</span>' +
+          '</button>'
         );
       }
       function sync(root){
@@ -683,8 +693,8 @@
       function ensureRows(root, entries){
         const list = root.querySelector('[data-force-channels-list]');
         if (!list) return;
-        const items = entries && entries.length ? entries : [{ id: '', required: true }];
-        list.innerHTML = items.map(rowHtml).join('');
+        const items = entries && entries.length ? entries : [];
+        list.innerHTML = items.map(rowHtml).join('') + addTileHtml();
         sync(root);
       }
       document.querySelectorAll('[data-force-channels]').forEach((root) => {
@@ -695,7 +705,9 @@
             e.preventDefault();
             const list = root.querySelector('[data-force-channels-list]');
             if (!list) return;
-            list.insertAdjacentHTML('beforeend', rowHtml({ id: '', required: true }));
+            const add = list.querySelector('[data-force-channels-add]');
+            if (add) add.insertAdjacentHTML('beforebegin', rowHtml({ id: '', required: true }));
+            else list.insertAdjacentHTML('beforeend', rowHtml({ id: '', required: true }));
             const inputs = list.querySelectorAll('.force-channel-id');
             const last = inputs[inputs.length - 1];
             if (last) last.focus();
@@ -709,8 +721,8 @@
             const list = root.querySelector('[data-force-channels-list]');
             if (row && list) {
               row.remove();
-              if (!list.querySelector('.force-channel-row')) {
-                list.insertAdjacentHTML('beforeend', rowHtml({ id: '', required: true }));
+              if (!list.querySelector('[data-force-channels-add]')) {
+                list.insertAdjacentHTML('beforeend', addTileHtml());
               }
               sync(root);
             }

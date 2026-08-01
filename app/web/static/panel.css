@@ -510,6 +510,11 @@ a:hover { opacity: 0.8; }
   width: 100%;
   overflow: visible;
 }
+.card.card-flush {
+  padding: 0;
+  /* Clip table thead/body to the card’s rounded frame */
+  overflow: hidden;
+}
 .card h2 {
   margin: 0 0 var(--space-2);
   font-size: var(--title-size);
@@ -1272,8 +1277,19 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   border: 0;
   border-radius: 0;
   background: transparent;
+  /* Radius + overflow on the SAME box so sticky thead cannot square-paint past corners */
+  overflow: auto;
+  max-width: 100%;
 }
-.card.card-flush { padding: 0; }
+.card.card-flush > .table-wrap:first-child {
+  border-start-start-radius: var(--radius);
+  border-start-end-radius: var(--radius);
+}
+.card.card-flush > .table-wrap:last-child {
+  border-end-start-radius: var(--radius);
+  border-end-end-radius: var(--radius);
+}
+.card.card-flush { padding: 0; overflow: hidden; }
 .card.card-flush > .card-head,
 .card.card-flush > h2 { padding: var(--card-pad) var(--card-pad) var(--space-1); margin: 0; }
 /* Flush search: top pad = --space-1 (same cell pad as mobile th), not an
@@ -1299,7 +1315,8 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 table {
   width: 100%;
   min-width: 560px;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   table-layout: auto;
 }
 th, td {
@@ -1322,7 +1339,26 @@ thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  box-shadow: inset 0 -1px 0 var(--border);
+  border-bottom: 1px solid var(--border);
+}
+/* Keep header corners inside the rounded table/card frame (RTL-aware) */
+.table-wrap > table > thead > tr > th:first-child {
+  border-start-start-radius: calc(var(--radius) - 1px);
+}
+.table-wrap > table > thead > tr > th:last-child {
+  border-start-end-radius: calc(var(--radius) - 1px);
+}
+/* Flush: no inner border — match full card radius; clip comes from .table-wrap overflow */
+.card.card-flush > .table-wrap:first-child > table > thead > tr > th:first-child {
+  border-start-start-radius: var(--radius);
+}
+.card.card-flush > .table-wrap:first-child > table > thead > tr > th:last-child {
+  border-start-end-radius: var(--radius);
+}
+.card.card-flush > .table-wrap:not(:first-child) > table > thead > tr > th:first-child,
+.card.card-flush > .table-wrap:not(:first-child) > table > thead > tr > th:last-child {
+  border-start-start-radius: 0;
+  border-start-end-radius: 0;
 }
 tbody tr:hover td {
   background: color-mix(in srgb, var(--muted-fg) 8%, transparent);
@@ -1887,30 +1923,33 @@ a.btn.btn-star:hover {
   line-height: 1.5;
 }
 .force-channels-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: var(--space-2);
+  width: 100%;
+  align-items: stretch;
 }
 .force-channel-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--space-2);
-  align-items: end;
-  justify-content: flex-start;
+  justify-content: space-between;
+  min-height: 168px;
   padding: var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-card);
+  box-sizing: border-box;
 }
 .force-channel-id-wrap {
   display: flex;
   flex-direction: column;
   gap: 0;
   margin: 0;
-  flex: 0 1 240px;
   width: 100%;
-  max-width: 240px;
+  max-width: none;
   min-width: 0;
+  flex: 1 1 auto;
   font-size: 13px;
   font-weight: 600;
   color: var(--foreground);
@@ -1925,11 +1964,19 @@ a.btn.btn-star:hover {
   font-size: 11px;
   font-weight: 400;
 }
+.force-channel-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  margin-top: auto;
+}
 .force-channel-req {
   display: inline-flex !important;
   flex-direction: row !important;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-1) !important;
   margin: 0 !important;
   padding: 0 !important;
@@ -1939,7 +1986,8 @@ a.btn.btn-star:hover {
   background: transparent !important;
   color: var(--foreground) !important;
   white-space: nowrap;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .force-channel-req .ui-switch { margin-inline-start: var(--space-1); flex: 0 0 auto; }
 .force-channel-actions {
@@ -1947,24 +1995,53 @@ a.btn.btn-star:hover {
   gap: var(--space-1);
   align-items: center;
   flex: 0 0 auto;
-  align-self: end;
 }
-.force-channels-footer {
+/* shadcn-style dashed “add” tile beside (mobile: below) channel cards */
+.force-channel-add {
   display: flex;
-  justify-content: flex-start;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 168px;
+  width: 100%;
+  padding: var(--space-2);
+  box-sizing: border-box;
+  border: 1px dashed color-mix(in srgb, var(--muted-fg) 45%, var(--border));
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted-fg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.force-channel-add:hover {
+  background: var(--bg-hover);
+  border-color: var(--muted-fg);
+  color: var(--foreground);
+  opacity: 1;
+}
+.force-channel-add-plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  border: 1px dashed color-mix(in srgb, var(--muted-fg) 45%, var(--border));
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1;
+}
+.force-channel-add:hover .force-channel-add-plus {
+  border-color: currentColor;
 }
 @media (max-width: 720px) {
-  .force-channel-row {
-    flex-direction: column;
-    align-items: stretch;
+  .force-channels-list {
+    grid-template-columns: 1fr;
   }
-  .force-channel-id-wrap {
-    max-width: none;
-    flex: 1 1 auto;
-  }
-  .force-channel-actions { width: 100%; }
-  .force-channel-actions .btn { width: 100%; justify-content: center; }
-  .force-channel-req { width: 100%; justify-content: space-between; }
 }
 
 .field-hint-stack {
@@ -3595,9 +3672,11 @@ body.modal-open { overflow: hidden; }
 /* —— Theme switcher (sidebar top) —— */
 .side-theme {
   position: relative;
-  /* No horizontal pad — theme control matches nav-section box width */
-  padding: 0 0 var(--space-1);
-  margin-bottom: 0;
+  /* Air below theme control → separator = same as theme control → brand line above
+     (brand margin-bottom + .side gap ≈ --space-2) */
+  padding: 0 0 var(--space-2);
+  /* + .side gap (--space-1) ⇒ --space-2 between separator and first nav box */
+  margin-bottom: var(--space-1);
   border-bottom: 1px solid var(--border);
 }
 /* Cancel stacked margin under theme line (gap from .side already = padding-bottom) */

@@ -15,7 +15,7 @@ class ThemeMenuWidthTests(unittest.TestCase):
     def test_theme_menu_matches_nav_box_width(self):
         css = CSS.read_text(encoding="utf-8")
         theme = css.split(".side-theme {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("padding: 0 0 var(--space-1);", theme)
+        self.assertIn("padding: 0 0 var(--space-2);", theme)
         menu = css.split(".side-theme-menu {\n", 1)[1].split("}", 1)[0]
         self.assertIn("inset-inline: 0;", menu)
         self.assertNotIn("inset-inline: var(--space-1);", menu)
@@ -36,11 +36,13 @@ class ForceJoinCompactTests(unittest.TestCase):
         js = JS.read_text(encoding="utf-8")
         row = css.split(".force-channel-row {\n", 1)[1].split("}", 1)[0]
         self.assertIn("display: flex;", row)
-        self.assertIn("align-items: end;", row)
+        self.assertIn("flex-direction: column;", row)
         wrap = css.split(".force-channel-id-wrap {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("max-width: 240px;", wrap)
+        self.assertIn("width: 100%;", wrap)
         self.assertIn("btn-danger", js)
         self.assertIn("force-channel-remove", js)
+        self.assertIn("force-channel-add", js)
+        self.assertIn("addTileHtml", js)
 
 
 if __name__ == "__main__":
