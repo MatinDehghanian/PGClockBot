@@ -54,7 +54,8 @@ class TableActionsTests(unittest.TestCase):
 
     def test_force_kebab_checks_action_height(self):
         js = JS.read_text(encoding="utf-8")
-        self.assertIn("offsetHeight > 40", js)
+        self.assertIn("offsetHeight > 44", js)
+        self.assertIn("items.length > 1", js)
         self.assertIn("scrollWidth > menu.clientWidth", js)
 
 

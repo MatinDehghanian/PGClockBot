@@ -100,11 +100,14 @@ class UpdateUiSourceTests(unittest.TestCase):
         js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn("force-channels-footer", html)
-        self.assertIn("force-channel-fields", js)
+        self.assertIn("force-channels-head", html)
+        self.assertIn("force-channels-title", html)
         self.assertIn("force-channel-id-wrap", js)
-        self.assertIn("btn-danger", js)
-        self.assertIn(".force-channel-fields", css)
+        self.assertIn("force-channel-row", js)
+        self.assertIn("force-channel-remove", js)
+        self.assertIn(".force-channel-row", css)
         self.assertIn(".force-channels-footer", css)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) auto auto", css)
 
 
 if __name__ == "__main__":

@@ -27,11 +27,14 @@
   </label>
   {% elif kind == 'force_channels' %}
   <div class="force-channels" data-force-channels>
-    {% if help %}<p class="muted force-channels-help">{{ help }}</p>{% endif %}
+    <div class="force-channels-head">
+      <strong class="force-channels-title">{{ label }}</strong>
+      {% if help %}<p class="muted force-channels-help">{{ help }}</p>{% endif %}
+    </div>
     <input type="hidden" name="s_{{ key }}" value="{{ val }}" data-force-channels-json />
     <div class="force-channels-list" data-force-channels-list></div>
     <div class="force-channels-footer">
-      <button type="button" class="btn btn-ghost" data-force-channels-add>افزودن کانال</button>
+      <button type="button" class="btn btn-ghost" data-force-channels-add>+ افزودن کانال</button>
     </div>
   </div>
   {% elif kind == 'textarea' %}

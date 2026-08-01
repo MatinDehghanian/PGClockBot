@@ -113,19 +113,25 @@
       el.classList.toggle('is-scrollable', can);
     }
     function refreshForceKebab(){
-      /* Measure with inline actions, then collapse when the table would overflow
-         or when action buttons would wrap/stack (tall rows).
-         Only called on load/resize — not from ResizeObserver (avoids toggle loops). */
+      /* Prefer «عملیات» whenever multiple action controls share a cell —
+         prevents buttons stacking/overlapping (e.g. نقش + ویرایش + حذف). */
       document.querySelectorAll('.table-wrap').forEach(el => {
         el.classList.remove('force-kebab');
         let need = el.scrollWidth > el.clientWidth + 2;
         if (!need) {
           el.querySelectorAll('.row-actions-menu').forEach(menu => {
             if (need) return;
-            /* nowrap menus: overflow means buttons do not fit one line */
+            const items = [...menu.children].filter((n) => n.nodeType === 1);
+            if (items.length > 1) {
+              need = true;
+              return;
+            }
+            if (menu.querySelector('select, .ui-select')) {
+              need = true;
+              return;
+            }
             if (menu.scrollWidth > menu.clientWidth + 2) need = true;
-            /* stacked forms/buttons taller than a single control row */
-            else if (menu.offsetHeight > 40) need = true;
+            else if (menu.offsetHeight > 44) need = true;
           });
         }
         el.classList.toggle('force-kebab', need);
@@ -638,22 +644,20 @@
         const req = !entry || entry.required !== false;
         return (
           '<div class="force-channel-row">' +
-            '<div class="force-channel-fields">' +
-              '<label class="force-channel-id-wrap">شناسه کانال' +
-                '<input type="text" class="force-channel-id" dir="ltr" placeholder="@channel یا 123456789" value="' +
-                  id.replace(/"/g, '&quot;') + '" />' +
-                '<small class="muted">@username یا آیدی عددی</small>' +
-              '</label>' +
-              '<label class="force-channel-req ui-switch-row">' +
-                '<span class="ui-switch-copy"><strong>عضویت الزامی</strong></span>' +
-                '<span class="ui-switch">' +
-                  '<input type="checkbox" class="force-channel-required" value="1"' + (req ? ' checked' : '') + ' />' +
-                  '<span class="ui-switch-track" aria-hidden="true"></span>' +
-                '</span>' +
-              '</label>' +
-            '</div>' +
+            '<label class="form-field force-channel-id-wrap">شناسه کانال' +
+              '<input type="text" class="force-channel-id" dir="ltr" placeholder="@channel یا 123456789" value="' +
+                id.replace(/"/g, '&quot;') + '" autocomplete="off" />' +
+              '<small class="muted">@username یا آیدی عددی کانال/گروه</small>' +
+            '</label>' +
+            '<label class="force-channel-req ui-switch-row">' +
+              '<span class="ui-switch-copy"><strong>عضویت الزامی</strong></span>' +
+              '<span class="ui-switch">' +
+                '<input type="checkbox" class="force-channel-required" value="1"' + (req ? ' checked' : '') + ' />' +
+                '<span class="ui-switch-track" aria-hidden="true"></span>' +
+              '</span>' +
+            '</label>' +
             '<div class="force-channel-actions">' +
-              '<button type="button" class="btn btn-danger btn-sm force-channel-remove" aria-label="حذف">حذف</button>' +
+              '<button type="button" class="btn btn-ghost btn-sm force-channel-remove" aria-label="حذف کانال">حذف</button>' +
             '</div>' +
           '</div>'
         );
