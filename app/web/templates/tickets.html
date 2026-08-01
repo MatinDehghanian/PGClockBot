@@ -121,9 +121,13 @@
         <textarea name="body" rows="5" placeholder="شرح مشکل یا درخواست…"></textarea>
         <small class="muted">متن یا فایل پیوست — حداقل یکی لازم است</small>
       </label>
-      <label class="form-field">پیوست (اختیاری)
+      <label class="file-label upload-box">پیوست (اختیاری)
         <input type="file" name="attachment" accept=".png,.jpg,.jpeg,.webp,.gif,.pdf,.txt,.zip,.rar,.7z,.doc,.docx,.xls,.xlsx,.csv,.log,image/*" />
-        <small class="muted">حداکثر ۱۲ مگابایت — تصویر، PDF، ZIP، متن یا آفیس</small>
+        <span class="upload-box-plus" aria-hidden="true">+</span>
+        <span class="upload-box-title">انتخاب فایل</span>
+        <span class="upload-box-hint muted">تصویر، PDF، ZIP، متن یا آفیس — تا ۱۲ مگابایت</span>
+        <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
+        <span class="upload-box-progress" hidden aria-hidden="true"><i class="upload-box-progress-bar"></i></span>
       </label>
       <div class="ui-modal-actions">
         <button type="submit" class="btn">ثبت تیکت</button>
@@ -178,8 +182,13 @@
       <label class="form-field">پاسخ
         <textarea name="body" rows="3" placeholder="متن پاسخ…"></textarea>
       </label>
-      <label class="form-field">پیوست (اختیاری)
+      <label class="file-label upload-box">پیوست (اختیاری)
         <input type="file" name="attachment" accept=".png,.jpg,.jpeg,.webp,.gif,.pdf,.txt,.zip,.rar,.7z,.doc,.docx,.xls,.xlsx,.csv,.log,image/*" />
+        <span class="upload-box-plus" aria-hidden="true">+</span>
+        <span class="upload-box-title">انتخاب فایل</span>
+        <span class="upload-box-hint muted">تصویر، PDF، ZIP، متن یا آفیس — تا ۱۲ مگابایت</span>
+        <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
+        <span class="upload-box-progress" hidden aria-hidden="true"><i class="upload-box-progress-bar"></i></span>
       </label>
       <div class="ui-modal-actions">
         <button type="submit" class="btn">ارسال پاسخ</button>

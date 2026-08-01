@@ -9,15 +9,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class VersionTests(unittest.TestCase):
-    def test_version(self):
+    def test_version_at_least_3_2_17_notes(self):
+        from app.services.release_notes import RELEASE_NOTES_FA
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.2.17")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.2.17")
-
-    def test_notes(self):
-        from app.services.release_notes import RELEASE_NOTES_FA
-
+        self.assertGreaterEqual(tuple(int(x) for x in __version__.split(".")), (3, 2, 17))
         blob = " ".join(RELEASE_NOTES_FA["3.2.17"])
         self.assertIn("داشبورد", blob)
         self.assertIn("پیوست", blob)

@@ -273,11 +273,37 @@
       document.querySelectorAll('.ui-select.open').forEach(wrap => {
         if (except && wrap === except) return;
         wrap.classList.remove('open');
+        wrap.classList.remove('drop-up');
         const btn = wrap.querySelector('.ui-select-toggle');
         if (btn) btn.setAttribute('aria-expanded', 'false');
         const menu = wrap.querySelector('.ui-select-menu');
         if (menu) menu.hidden = true;
       });
+    }
+    function placeUiSelectMenu(wrap){
+      if (!wrap) return;
+      const toggle = wrap.querySelector('.ui-select-toggle');
+      const menu = wrap.querySelector('.ui-select-menu');
+      if (!toggle || !menu || menu.hidden) return;
+      const gap = 8;
+      const pad = 8;
+      const rect = toggle.getBoundingClientRect();
+      const mh = menu.offsetHeight || 120;
+      const vh = window.innerHeight;
+      const spaceBelow = vh - rect.bottom - gap - pad;
+      const spaceAbove = rect.top - gap - pad;
+      /* Prefer upward so وضعیت / selects near the bottom stay visible */
+      let openUp;
+      if (wrap.closest('.ticket-status-form, .ticket-status-actions, .ui-modal')) {
+        openUp = true;
+      } else if (spaceAbove >= mh) {
+        openUp = true;
+      } else if (spaceBelow >= mh) {
+        openUp = false;
+      } else {
+        openUp = spaceAbove >= spaceBelow;
+      }
+      wrap.classList.toggle('drop-up', openUp);
     }
     function enhanceSelect(sel){
       if (!sel || sel.dataset.uiSelect === '1' || sel.multiple || sel.size > 1) return;
@@ -362,6 +388,8 @@
           wrap.classList.add('open');
           toggle.setAttribute('aria-expanded', 'true');
           menu.hidden = false;
+          placeUiSelectMenu(wrap);
+          requestAnimationFrame(() => placeUiSelectMenu(wrap));
         }
       });
       sel.addEventListener('change', syncLabel);
