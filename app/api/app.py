@@ -28,7 +28,6 @@ from app.db.models import (
     Plan,
     ResellerProfile,
     Role,
-    Ticket,
     UserService,
 )
 from app.db.session import SessionLocal
@@ -600,6 +599,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         get_db=get_db,
         get_signer=get_signer,
         cookie_secure=_cookie_secure,
+    )
+    from app.api.panel_tickets_pages import register_panel_tickets_pages
+
+    register_panel_tickets_pages(
+        app,
+        render=render,
+        require_staff=require_staff,
+        get_db=get_db,
     )
 
     @app.get("/settings/ssl/progress")
@@ -2832,38 +2839,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         if payload:
             await set_settings_bulk(session, payload)
         return RedirectResponse(f"/settings?tab={tab}&saved=1", status_code=303)
-
-    @app.get("/tickets", response_class=HTMLResponse)
-    async def tickets_page(
-        request: Request,
-        staff: dict = Depends(require_perm("tickets")),
-        session: AsyncSession = Depends(get_db),
-    ):
-        q = select(Ticket).order_by(Ticket.id.desc()).limit(100)
-        from app.services.shop_scope import is_platform_admin, shop_owner_id
-
-        if not is_platform_admin(staff):
-            rid = shop_owner_id(staff)
-            if not rid:
-                return render(
-                    request,
-                    "tickets.html",
-                    {
-                        "staff": staff,
-                        "tickets": [],
-                        "flash_err": "محدوده فروشگاه مشخص نیست",
-                    },
-                )
-            q = (
-                select(Ticket)
-                .join(BotUser, BotUser.id == Ticket.user_id)
-                .where(BotUser.reseller_id == rid)
-                .order_by(Ticket.id.desc())
-                .limit(100)
-            )
-        result = await session.execute(q)
-        tickets = list(result.scalars().all())
-        return render(request, "tickets.html", {"staff": staff, "tickets": tickets})
 
     @app.get("/broadcast", response_class=HTMLResponse)
     async def broadcast_page(

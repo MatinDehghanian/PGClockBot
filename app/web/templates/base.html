@@ -117,6 +117,12 @@
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M4.9 7.1l1.6 1.6M17.5 15.3l1.6 1.6M3.5 12h2.2M18.3 12h2.2M4.9 16.9l1.6-1.6M17.5 8.7l1.6-1.6"/></svg>
             <span>تنظیمات وب پنل</span>
           </a>
+          {% if is_pg_staff %}
+          <a href="/tickets" class="nav-item nav-item-home {% if path.startswith('/tickets') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
+            <span>پشتیبانی</span>
+          </a>
+          {% endif %}
         </div>
         {% endif %}
         {% if has_bot %}
@@ -156,7 +162,7 @@
             <span>پلن‌ها</span>
           </a>
           {% endif %}
-          {% if is_admin or 'tickets' in perms %}
+          {% if is_admin or is_reseller or 'tickets' in perms %}
           <a href="/tickets" class="nav-item nav-item-bot {% if path.startswith('/tickets') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
             <span>پشتیبانی</span>

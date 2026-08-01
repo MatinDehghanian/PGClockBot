@@ -57,6 +57,22 @@ class TicketStatus(str, Enum):
     CLOSED = "closed"
 
 
+class PanelTicketStatus(str, Enum):
+    """Internal panel tickets (reseller / pg_staff ↔ platform admin)."""
+
+    OPEN = "open"  # منتظر پاسخ صاحب
+    IN_PROGRESS = "in_progress"  # در حال بررسی
+    ANSWERED = "answered"  # پاسخ داده شد
+    CLOSED = "closed"
+
+
+class PanelTicketPriority(str, Enum):
+    LOW = "low"
+    NORMAL = "normal"
+    HIGH = "high"
+    URGENT = "urgent"
+
+
 class BotUser(Base):
     __tablename__ = "bot_users"
 
@@ -202,6 +218,55 @@ class TicketMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     ticket: Mapped["Ticket"] = relationship(back_populates="messages")
+
+
+class PanelTicket(Base):
+    """Web-panel support thread: reseller / pg_staff → platform admin (owner)."""
+
+    __tablename__ = "panel_tickets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    subject: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(
+        String(32), default=PanelTicketStatus.OPEN.value, index=True
+    )
+    priority: Mapped[str] = mapped_column(
+        String(32), default=PanelTicketPriority.NORMAL.value, index=True
+    )
+    # opener_role: "reseller" | "pg_staff"
+    opener_role: Mapped[str] = mapped_column(String(32), index=True)
+    opener_reseller_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    opener_pg_staff_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("pg_staff_access.id"), nullable=True, index=True
+    )
+    opener_label: Mapped[str] = mapped_column(String(128), default="")
+    # True when owner replied and opener has not viewed since
+    answered_unread: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    messages: Mapped[list["PanelTicketMessage"]] = relationship(
+        back_populates="ticket", order_by="PanelTicketMessage.id"
+    )
+
+
+class PanelTicketMessage(Base):
+    __tablename__ = "panel_ticket_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("panel_tickets.id"), index=True)
+    # sender_role: "admin" | "reseller" | "pg_staff"
+    sender_role: Mapped[str] = mapped_column(String(32))
+    sender_label: Mapped[str] = mapped_column(String(128), default="")
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    ticket: Mapped["PanelTicket"] = relationship(back_populates="messages")
 
 
 class DiscountCode(Base):

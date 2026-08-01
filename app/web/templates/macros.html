@@ -22,6 +22,26 @@
 {%- endif -%}
 {%- endmacro %}
 
+{% macro panel_tkt_status(s) -%}
+{%- if s == 'open' -%}باز
+{%- elif s == 'in_progress' -%}در حال بررسی
+{%- elif s == 'answered' -%}پاسخ‌داده‌شده
+{%- elif s == 'closed' -%}بسته
+{%- elif s -%}{{ s }}
+{%- else -%}نامشخص
+{%- endif -%}
+{%- endmacro %}
+
+{% macro panel_tkt_priority(s) -%}
+{%- if s == 'low' -%}کم
+{%- elif s == 'normal' -%}عادی
+{%- elif s == 'high' -%}بالا
+{%- elif s == 'urgent' -%}فوری
+{%- elif s -%}{{ s }}
+{%- else -%}نامشخص
+{%- endif -%}
+{%- endmacro %}
+
 {% macro pay_status(s) -%}
 {%- if s == 'pending' -%}در انتظار
 {%- elif s == 'approved' -%}تأییدشده

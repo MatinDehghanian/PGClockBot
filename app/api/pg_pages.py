@@ -7,6 +7,7 @@ from urllib.parse import quote
 
 from fastapi import Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.formatting import data_limit_to_gb, expire_remaining_days, format_stat_row
 from app.services.pasarguard import (
@@ -143,7 +144,11 @@ def register_pg_pages(
     get_db,
 ):
     @app.get("/pg", response_class=HTMLResponse)
-    async def pg_home(request: Request, staff: dict = Depends(require_pg_perm("pg_overview"))):
+    async def pg_home(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_overview")),
+        session: AsyncSession = Depends(get_db),
+    ):
         from app.services.pg_overview import build_reseller_pg_overview, is_server_stat_key
 
         err = None
@@ -212,6 +217,12 @@ def register_pg_pages(
                 # Keep overview.error in template; don't blank the page via flash_err
         except Exception as e:
             err = str(e)
+        ticket_alert = None
+        if not _is_admin(staff) and staff.get("role") in {"reseller", "pg_staff"}:
+            from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
+
+            ticket_alert = await panel_ticket_dashboard_alert(session, staff)
+
         return render(
             request,
             "pg_home.html",
@@ -223,6 +234,7 @@ def register_pg_pages(
                 reseller_overview=reseller_overview,
                 flash_err=err,
                 active="pg",
+                ticket_alert=ticket_alert,
             ),
         )
 

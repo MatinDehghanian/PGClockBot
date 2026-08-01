@@ -100,6 +100,9 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 update = await check_github_update(force=False)
             except Exception:
                 update = None
+            from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
+
+            ticket_alert = await panel_ticket_dashboard_alert(session, staff)
             return render(
                 request,
                 "home.html",
@@ -107,6 +110,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "staff": staff,
                     "overview": overview,
                     "update": update,
+                    "ticket_alert": ticket_alert,
                 },
             )
 
@@ -148,6 +152,9 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             if ov.get("ready"):
                 pg_limits = ov
 
+        from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
+
+        ticket_alert = await panel_ticket_dashboard_alert(session, staff)
         return render(
             request,
             "reseller_home.html",
@@ -157,6 +164,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "pg_limits": pg_limits,
                 "bot_setup_needed": bot_setup_needed,
                 "bot": bot,
+                "ticket_alert": ticket_alert,
             },
         )
 
