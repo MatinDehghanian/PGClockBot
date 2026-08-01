@@ -38,7 +38,7 @@
   --card-pad: 16px;
   --section-gap: 24px;
   /* Equal space above & below page title+icon (bot and PasarGuard identical) */
-  --page-title-gap: 16px;
+  --page-title-gap: 24px;
   --title-size: 14px;
   /* Form controls MUST stay ≥16px forever — iOS Safari zooms any focused field under 16px.
      Do not set input/select/textarea font-size to --title-size or any value < 16px. */
@@ -139,9 +139,10 @@ a:hover { opacity: 0.8; }
   -webkit-overflow-scrolling: touch;
 }
 .main-body {
-  flex: 1 1 auto;
+  /* flex-shrink:0 — long pages must grow so .main scrolls content+footer together.
+     flex-shrink:1 + min-height:0 pinned the footer over overflowing content. */
+  flex: 1 0 auto;
   min-width: 0;
-  min-height: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -555,6 +556,7 @@ label {
 /* Labels that wrap a real control: stack title → control → hint (below box) */
 label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"])),
 label:has(> select),
+label:has(> .ui-select),
 label:has(> textarea),
 label:has(> .pw-field) {
   display: flex;
@@ -574,20 +576,22 @@ label > .field-help,
   line-height: 1.5;
 }
 /* Force help under the input/select/textarea even if HTML still has it under the title */
-label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]), > select, > textarea, > .pw-field) > small.muted,
-label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]), > select, > textarea, > .pw-field) > .field-help,
+label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]), > select, > .ui-select, > textarea, > .pw-field) > small.muted,
+label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]), > select, > .ui-select, > textarea, > .pw-field) > .field-help,
 .form-field > small.muted,
 .form-field > .field-help {
   order: 10;
   margin-top: var(--space-1);
   margin-bottom: 0;
 }
-label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]), > select, > textarea, > .pw-field) > input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]), > select, > .ui-select, > textarea, > .pw-field) > input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
 label:has(> select) > select,
+label:has(> .ui-select) > .ui-select,
 label:has(> textarea) > textarea,
 label:has(> .pw-field) > .pw-field,
 .form-field > input,
 .form-field > select,
+.form-field > .ui-select,
 .form-field > textarea,
 .form-field > .pw-field {
   order: 5;
@@ -692,6 +696,145 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
   background-size: 12px 12px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4.5 6L8 3l3.5 3' stroke='%23a1a1aa' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M4.5 10L8 13l3.5-3' stroke='%23a1a1aa' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
+}
+
+/* Custom select (non-native popup) — matches theme / kebab menus */
+.ui-select {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin-top: var(--space-1);
+}
+.ui-select-sm,
+.actions .ui-select {
+  width: auto;
+  min-width: 110px;
+  margin-top: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+.ui-select-native {
+  position: absolute !important;
+  inset-inline-start: 0 !important;
+  inset-block-start: 0 !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.ui-select-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-1);
+  width: 100%;
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+  padding-inline-start: var(--space-2);
+  padding-inline-end: var(--space-4);
+  box-sizing: border-box;
+  border-radius: var(--radius);
+  border: 1px solid var(--input);
+  background: #09090b;
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--control-fs) !important;
+  font-weight: 400;
+  line-height: 1.25;
+  text-align: right;
+  cursor: pointer;
+}
+.ui-select-sm .ui-select-toggle,
+.actions .ui-select .ui-select-toggle {
+  padding-inline-start: var(--space-1);
+  padding-inline-end: var(--space-3);
+  min-width: 110px;
+}
+.ui-select-toggle:hover { background: var(--bg-hover); }
+.ui-select.open .ui-select-toggle {
+  border-color: #3f3f46;
+  background: var(--bg-hover);
+}
+.ui-select.is-disabled .ui-select-toggle,
+.ui-select-toggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ui-select-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-select-caret {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  stroke: var(--muted-fg);
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.9;
+}
+.ui-select-sm .ui-select-caret { width: 12px; height: 12px; }
+.ui-select-menu {
+  position: absolute;
+  z-index: 3400;
+  top: calc(100% + var(--space-0));
+  inset-inline: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: min(280px, 50vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--space-1);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated, var(--bg-card));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
+  min-width: 100%;
+}
+.ui-select-menu[hidden] { display: none !important; }
+.ui-select-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 var(--space-1);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-fg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: right;
+  cursor: pointer;
+}
+.ui-select-menu button:hover {
+  background: var(--bg-hover);
+  color: var(--foreground);
+}
+.ui-select-menu button.active {
+  background: var(--muted);
+  color: var(--foreground);
+  font-weight: 600;
+}
+.ui-select-menu button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 input[type=number]::-webkit-outer-spin-button,
@@ -2386,7 +2529,7 @@ a.btn.btn-star:hover {
     display: flex;
     flex-direction: column;
   }
-  .main-body { flex: 1 1 auto; padding-bottom: var(--page-title-gap); }
+  .main-body { flex: 1 0 auto; padding-bottom: var(--page-title-gap); }
   .site-footer {
     /* Keep one row like .side-foot so both footer tops sit on the same line */
     flex-direction: row;
@@ -3053,21 +3196,27 @@ body.modal-open { overflow: hidden; }
   background: linear-gradient(90deg, #f59e0b, #ea580c);
 }
 
-/* —— Compact tables + mobile kebab actions —— */
+/* —— Compact tables + mobile kebab / desktop «عملیات» actions —— */
 .table-compact { min-width: 0; }
+.table-compact th,
+.table-compact td {
+  padding: var(--space-1) var(--space-2);
+}
 .cell-tight { white-space: nowrap; }
-.col-actions { width: 1%; white-space: nowrap; text-align: end; }
+.col-actions { width: 1%; white-space: nowrap; text-align: end; vertical-align: middle; }
 .row-actions {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-1);
+  max-width: 100%;
 }
 .row-actions-toggle {
   display: none;
   align-items: center;
   justify-content: center;
+  gap: var(--space-1);
   width: 34px;
   height: 34px;
   padding: 0;
@@ -3076,16 +3225,56 @@ body.modal-open { overflow: hidden; }
   background: rgba(255, 255, 255, 0.04);
   color: var(--foreground);
   cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.row-actions-toggle--label {
+  width: auto;
+  min-width: 0;
+  padding: 0 var(--space-2);
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+}
+.row-actions-toggle--label .ico-caret {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.7;
 }
 .row-actions-toggle .ico { width: 16px; height: 16px; fill: currentColor; stroke: none; }
 .row-actions-menu {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--space-1);
   justify-content: flex-end;
+  max-width: 100%;
 }
 .row-actions-menu form { margin: 0; }
+/* Inline desktop actions stay one row tall — never wrap into tall cells */
+.row-actions-menu .btn,
+.row-actions-menu button,
+.row-actions-menu a.btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.row-actions-menu .btn-sm,
+.row-actions-menu a.btn.btn-sm,
+.row-actions-menu button.btn-sm {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 var(--space-1);
+  font-size: 12px;
+}
 
 /* Kebab: mobile/small-tablet media + overflow-driven .force-kebab */
 @media (max-width: 1100px) {
@@ -3108,7 +3297,8 @@ body.modal-open { overflow: hidden; }
   }
   .table-wrap.is-scrollable::after { display: none; }
 
-  .row-actions-toggle { display: inline-flex; }
+  .row-actions-toggle--icon { display: inline-flex; }
+  .row-actions-toggle--label { display: none !important; }
   .row-actions-menu {
     display: none;
     position: fixed;
@@ -3150,7 +3340,8 @@ body.modal-open { overflow: hidden; }
 }
 
 /* Any viewport: collapse row actions when the table would scroll horizontally */
-.table-wrap.force-kebab .row-actions-toggle { display: inline-flex; }
+.table-wrap.force-kebab .row-actions-toggle--icon { display: none; }
+.table-wrap.force-kebab .row-actions-toggle--label { display: inline-flex; }
 .table-wrap.force-kebab .row-actions-menu {
   display: none;
   position: fixed;
@@ -3190,6 +3381,12 @@ body.modal-open { overflow: hidden; }
   overflow: visible;
 }
 .table-wrap.force-kebab.is-scrollable::after { display: none; }
+
+/* On narrow viewports prefer icon kebab even when force-kebab is on */
+@media (max-width: 1100px) {
+  .table-wrap.force-kebab .row-actions-toggle--icon { display: inline-flex; }
+  .table-wrap.force-kebab .row-actions-toggle--label { display: none !important; }
+}
 
 /* Body-ported kebab: keep full single-column layout (ancestor .force-kebab is lost) */
 .row-actions-menu.is-ported {
@@ -3304,9 +3501,18 @@ body.modal-open { overflow: hidden; }
 /* —— Theme switcher (sidebar top) —— */
 .side-theme {
   position: relative;
+  /* Equal air above/below the separator: padding-bottom == .side gap to first nav box */
   padding: 0 var(--space-1) var(--space-1);
-  margin-bottom: var(--space-1);
+  margin-bottom: 0;
   border-bottom: 1px solid var(--border);
+}
+/* Cancel stacked margin under theme line (gap from .side already = padding-bottom) */
+.side-nav > .nav-section:first-child,
+.side-nav > .nav-section-home:first-child,
+.side-nav > .nav-section-bot:first-child,
+.side-nav > .nav-section-pg:first-child,
+.side-nav > .nav-section-panel:first-child {
+  margin-top: 0;
 }
 .side-theme-btn {
   position: relative;
@@ -3627,6 +3833,22 @@ html[data-theme="light"] select.select-sm {
   background-size: 12px 12px;
 }
 html[data-theme="light"] select option { background: #ffffff; color: #18181b; }
+html[data-theme="light"] .ui-select-toggle {
+  background: #ffffff;
+  color: var(--foreground);
+  border-color: var(--border);
+}
+html[data-theme="light"] .ui-select.open .ui-select-toggle,
+html[data-theme="light"] .ui-select-toggle:hover {
+  background: var(--bg-hover);
+}
+html[data-theme="light"] .ui-select-menu {
+  background: #ffffff;
+  box-shadow: 0 12px 32px rgba(24, 24, 27, 0.14);
+}
+html[data-theme="light"] .row-actions-toggle {
+  background: #ffffff;
+}
 html[data-theme="light"] .flash.ok {
   background: rgba(22, 163, 74, 0.1);
   border-color: rgba(22, 163, 74, 0.28);

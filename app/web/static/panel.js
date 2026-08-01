@@ -113,11 +113,21 @@
       el.classList.toggle('is-scrollable', can);
     }
     function refreshForceKebab(){
-      /* Measure with inline actions, then collapse when the table would overflow.
+      /* Measure with inline actions, then collapse when the table would overflow
+         or when action buttons would wrap/stack (tall rows).
          Only called on load/resize — not from ResizeObserver (avoids toggle loops). */
       document.querySelectorAll('.table-wrap').forEach(el => {
         el.classList.remove('force-kebab');
-        const need = el.scrollWidth > el.clientWidth + 2;
+        let need = el.scrollWidth > el.clientWidth + 2;
+        if (!need) {
+          el.querySelectorAll('.row-actions-menu').forEach(menu => {
+            if (need) return;
+            /* nowrap menus: overflow means buttons do not fit one line */
+            if (menu.scrollWidth > menu.clientWidth + 2) need = true;
+            /* stacked forms/buttons taller than a single control row */
+            else if (menu.offsetHeight > 40) need = true;
+          });
+        }
         el.classList.toggle('force-kebab', need);
       });
     }
@@ -172,19 +182,27 @@
     function closeRowActions(){
       document.querySelectorAll('.row-actions.open').forEach(el => {
         el.classList.remove('open');
-        const btn = el.querySelector('.row-actions-toggle');
-        if (btn) btn.setAttribute('aria-expanded', 'false');
+        el.querySelectorAll('.row-actions-toggle').forEach(btn => {
+          btn.setAttribute('aria-expanded', 'false');
+        });
       });
       document.querySelectorAll('.row-actions-menu.is-ported').forEach(restoreRowMenu);
     }
     function placeRowMenu(wrap){
       if (!wrap) return;
-      const btn = wrap.querySelector('.row-actions-toggle');
+      const btn = wrap.querySelector('.row-actions-toggle--label:not([style*="display: none"]), .row-actions-toggle--icon:not([style*="display: none"]), .row-actions-toggle');
+      /* Prefer the visible toggle (label on desktop force-kebab, icon on mobile) */
+      let anchor = null;
+      wrap.querySelectorAll('.row-actions-toggle').forEach(t => {
+        const st = window.getComputedStyle(t);
+        if (st.display !== 'none' && st.visibility !== 'hidden') anchor = t;
+      });
+      if (!anchor) anchor = btn;
       let menu = wrap.querySelector('.row-actions-menu');
       if (!menu && wrap.dataset.raId) {
         menu = document.querySelector('.row-actions-menu.is-ported[data-owner="' + wrap.dataset.raId + '"]');
       }
-      if (!btn || !menu) return;
+      if (!anchor || !menu) return;
       if (!wrap.dataset.raId) {
         wrap.dataset.raId = 'ra-' + Math.random().toString(36).slice(2, 9);
       }
@@ -197,7 +215,7 @@
 
       const gap = 8; /* --space-1 */
       const pad = 8;
-      const rect = btn.getBoundingClientRect();
+      const rect = anchor.getBoundingClientRect();
       /* Full natural height — never scroll / clamp with max-height */
       menu.style.top = '0px';
       menu.style.left = '0px';
@@ -243,6 +261,122 @@
       menu.style.maxHeight = 'none';
       menu.style.overflow = 'visible';
     }
+
+    /* Custom selects — replace native Windows/macOS popups with panel-styled menus */
+    function closeUiSelects(except){
+      document.querySelectorAll('.ui-select.open').forEach(wrap => {
+        if (except && wrap === except) return;
+        wrap.classList.remove('open');
+        const btn = wrap.querySelector('.ui-select-toggle');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+        const menu = wrap.querySelector('.ui-select-menu');
+        if (menu) menu.hidden = true;
+      });
+    }
+    function enhanceSelect(sel){
+      if (!sel || sel.dataset.uiSelect === '1' || sel.multiple || sel.size > 1) return;
+      if (sel.closest('.ui-select')) return;
+      sel.dataset.uiSelect = '1';
+      const wrap = document.createElement('div');
+      wrap.className = 'ui-select' + (sel.classList.contains('select-sm') || (sel.closest('.actions') && !sel.classList.contains('select-block')) ? ' ui-select-sm' : '');
+      if (sel.disabled) wrap.classList.add('is-disabled');
+      sel.parentNode.insertBefore(wrap, sel);
+      wrap.appendChild(sel);
+      sel.classList.add('ui-select-native');
+      sel.tabIndex = -1;
+      sel.setAttribute('aria-hidden', 'true');
+
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'ui-select-toggle';
+      toggle.setAttribute('aria-haspopup', 'listbox');
+      toggle.setAttribute('aria-expanded', 'false');
+      if (sel.disabled) toggle.disabled = true;
+      const label = document.createElement('span');
+      label.className = 'ui-select-label';
+      toggle.appendChild(label);
+      const caret = document.createElement('span');
+      caret.innerHTML = '<svg class="ui-select-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6L8 3l3.5 3"/><path d="M4.5 10L8 13l3.5-3"/></svg>';
+      toggle.appendChild(caret.firstChild);
+      wrap.appendChild(toggle);
+
+      const menu = document.createElement('div');
+      menu.className = 'ui-select-menu';
+      menu.setAttribute('role', 'listbox');
+      menu.hidden = true;
+      wrap.appendChild(menu);
+
+      function syncLabel(){
+        const opt = sel.options[sel.selectedIndex];
+        label.textContent = opt ? opt.textContent : (sel.getAttribute('placeholder') || '—');
+        menu.querySelectorAll('[role="option"]').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.value === sel.value);
+          btn.setAttribute('aria-selected', btn.dataset.value === sel.value ? 'true' : 'false');
+        });
+      }
+      function rebuildOptions(){
+        menu.innerHTML = '';
+        Array.from(sel.options).forEach(opt => {
+          if (opt.disabled && opt.value === '' && !opt.textContent.trim()) return;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.setAttribute('role', 'option');
+          btn.dataset.value = opt.value;
+          btn.textContent = opt.textContent;
+          if (opt.disabled) btn.disabled = true;
+          if (opt.value === sel.value) {
+            btn.classList.add('active');
+            btn.setAttribute('aria-selected', 'true');
+          } else {
+            btn.setAttribute('aria-selected', 'false');
+          }
+          btn.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (opt.disabled) return;
+            sel.value = opt.value;
+            sel.dispatchEvent(new Event('input', { bubbles: true }));
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+            syncLabel();
+            closeUiSelects();
+          });
+          menu.appendChild(btn);
+        });
+        syncLabel();
+      }
+      rebuildOptions();
+      toggle.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (sel.disabled) return;
+        const open = wrap.classList.contains('open');
+        closeUiSelects();
+        closeRowActions();
+        if (!open) {
+          wrap.classList.add('open');
+          toggle.setAttribute('aria-expanded', 'true');
+          menu.hidden = false;
+        }
+      });
+      sel.addEventListener('change', syncLabel);
+      /* Keep in sync if options are rewritten (e.g. settings scripts) */
+      const mo = new MutationObserver(() => rebuildOptions());
+      mo.observe(sel, { childList: true, subtree: true, characterData: true });
+    }
+    function enhanceAllSelects(){
+      document.querySelectorAll('select').forEach(enhanceSelect);
+    }
+    enhanceAllSelects();
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeUiSelects();
+    });
+    window.addEventListener('resize', () => closeUiSelects());
+    window.addEventListener('scroll', (e) => {
+      if (!document.querySelector('.ui-select.open')) return;
+      if (e.target && e.target.closest && e.target.closest('.ui-select-menu')) return;
+      closeUiSelects();
+    }, true);
+
     document.addEventListener('click', (e) => {
       const toggle = e.target.closest('.row-actions-toggle');
       if (toggle) {
@@ -251,9 +385,12 @@
         const wrap = toggle.closest('.row-actions');
         const open = wrap && wrap.classList.contains('open');
         closeRowActions();
+        closeUiSelects();
         if (wrap && !open) {
           wrap.classList.add('open');
-          toggle.setAttribute('aria-expanded', 'true');
+          wrap.querySelectorAll('.row-actions-toggle').forEach(btn => {
+            btn.setAttribute('aria-expanded', 'true');
+          });
           /* Port immediately so fixed menu is not trapped by .table-wrap overflow */
           placeRowMenu(wrap);
           requestAnimationFrame(() => placeRowMenu(wrap));
@@ -262,6 +399,9 @@
       }
       if (!e.target.closest('.row-actions') && !e.target.closest('.row-actions-menu')) {
         closeRowActions();
+      }
+      if (!e.target.closest('.ui-select')) {
+        closeUiSelects();
       }
     });
     window.addEventListener('resize', closeRowActions);

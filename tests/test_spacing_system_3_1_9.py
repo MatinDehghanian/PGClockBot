@@ -8,7 +8,7 @@ Scale:
   --space-4: 32px
   --space-5: 48px
   --space-6: 64px
-  --card-pad / --page-title-gap: 16px
+  --card-pad / --page-title-gap: 24px
   --section-gap: 24px
 
 Spacing props (margin/padding/gap) must not use off-scale raw px.
@@ -47,7 +47,7 @@ TOKEN_DEFS = (
     "--space-6: 64px;",
     "--card-pad: 16px;",
     "--section-gap: 24px;",
-    "--page-title-gap: 16px;",
+    "--page-title-gap: 24px;",
 )
 
 

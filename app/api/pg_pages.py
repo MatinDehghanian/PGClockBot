@@ -163,12 +163,38 @@ def register_pg_pages(
                     return_exceptions=True,
                 )
                 if isinstance(raw, dict):
+                    # Keys already shown in the merged overview counts — skip duplicates
+                    _count_dup_keys = {
+                        "total_user",
+                        "total_users",
+                        "users",
+                        "users_total",
+                        "total_admin",
+                        "admins_total",
+                        "total_admins",
+                        "admins",
+                        "total_node",
+                        "nodes_total",
+                        "total_nodes",
+                        "nodes",
+                        "total_group",
+                        "groups_total",
+                        "total_groups",
+                        "groups",
+                        "total_host",
+                        "hosts_total",
+                        "total_hosts",
+                        "hosts",
+                    }
                     for key, val in raw.items():
                         if isinstance(val, (dict, list)):
                             continue
-                        if is_server_stat_key(str(key)):
+                        k = str(key)
+                        if is_server_stat_key(k):
                             continue
-                        stats_rows.append(format_stat_row(str(key), val))
+                        if k.lower() in _count_dup_keys:
+                            continue
+                        stats_rows.append(format_stat_row(k, val))
                     for key in ("total_user", "users_active", "users", "total_users"):
                         if key in raw and isinstance(raw[key], (int, float)):
                             counts["users"] = int(raw[key])

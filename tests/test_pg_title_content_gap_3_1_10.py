@@ -37,7 +37,7 @@ class PgTitleContentGapTests(unittest.TestCase):
             self.assertIn('class="pg-head"', src, msg=path.name)
             head = src.split('class="pg-head"', 1)[1]
             head_only = re.split(
-                r'<div class="card|<div class="stats-grid|<div class="flash|<div class="pg-admin-head|{%\s*if\s+not\s+is_admin',
+                r'<div class="card|<div class="home-panels|<div class="stats-grid|<div class="flash|<div class="pg-admin-head|{%\s*if\s+not\s+is_admin',
                 head,
                 maxsplit=1,
             )[0]

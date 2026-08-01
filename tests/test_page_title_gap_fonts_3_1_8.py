@@ -18,7 +18,7 @@ BASE = Path("app/web/templates/base.html")
 class PageTitleGapParityTests(unittest.TestCase):
     def test_page_title_gap_token(self):
         css = CSS.read_text(encoding="utf-8")
-        self.assertIn("--page-title-gap: 16px;", css)
+        self.assertIn("--page-title-gap: 24px;", css)
 
     def test_main_top_matches_page_head_bottom(self):
         css = CSS.read_text(encoding="utf-8")
@@ -56,7 +56,7 @@ class PageTitleGapParityTests(unittest.TestCase):
             src = path.read_text(encoding="utf-8")
             head = src.split('class="pg-head"', 1)[1]
             head_only = re.split(
-                r'<div class="card|<div class="stats-grid|<div class="flash|<div class="pg-admin-head|{%\s*if\s+not\s+is_admin',
+                r'<div class="card|<div class="home-panels|<div class="stats-grid|<div class="flash|<div class="pg-admin-head|{%\s*if\s+not\s+is_admin',
                 head,
                 maxsplit=1,
             )[0]
