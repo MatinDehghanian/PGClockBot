@@ -22,7 +22,7 @@
         <td class="mono">{{ n.get('address') or n.get('host') or '—' }}</td>
         <td>
           {% set st = (n.get('status') or n.get('connection_status') or '')|string|lower %}
-          <span class="badge {% if st in ['connected','online','healthy'] %}connected{% elif 'connect' in st %}connecting{% elif st in ['error','offline','unhealthy','disabled','disconnected'] %}error{% else %}neutral{% endif %}">
+          <span class="badge {% if st in ['connected','online','healthy'] %}connected{% elif 'connect' in st %}connecting{% elif st in ['error','offline','unhealthy','disabled','disconnected'] %}danger{% else %}neutral{% endif %}">
             {{ n.get('status') or n.get('connection_status') or '—' }}
           </span>
         </td>

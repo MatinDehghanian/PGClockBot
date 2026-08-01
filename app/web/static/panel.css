@@ -153,6 +153,11 @@ a:hover { opacity: 0.8; }
 .main-body > :last-child {
   margin-bottom: 0;
 }
+/* Dashboard wraps panels in .home-dash — zero the inner last block so
+   content→footer equals one --section-gap (same as other pages), not 2× */
+.home-dash > :last-child {
+  margin-bottom: 0;
+}
 
 .brand {
   display: flex;
@@ -1611,7 +1616,8 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   width: 100%;
   margin: 0;
 }
-.error {
+/* Auth/form error blocks only — never override compact .badge chips */
+.error:not(.badge) {
   background: rgba(239, 68, 68, 0.1);
   color: #fca5a5;
   border: 1px solid rgba(239, 68, 68, 0.28);

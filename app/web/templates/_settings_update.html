@@ -38,7 +38,7 @@
   </div>
 
   {% if available and not show_ops %}
-  <div class="flash err">نسخه جدید آماده است: {{ local_version }} → {{ update_info.remote_version }}</div>
+  <div class="flash warn">نسخه جدید آماده است: {{ local_version }} → {{ update_info.remote_version }}</div>
   {% elif update_info.checked and not available and not show_ops %}
   <div class="flash ok">شما روی آخرین نسخه منتشرشده هستید.</div>
   {% elif not update_info.checked and not show_ops %}

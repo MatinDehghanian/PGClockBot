@@ -78,7 +78,7 @@
     </section>
   </div>
   {% elif ov.error %}
-  <div class="flash warn">{{ ov.error }}</div>
+  <div class="flash err">{{ ov.error }}</div>
   {% endif %}
 
 {% else %}
@@ -179,7 +179,7 @@
         <td>{{ n.get('name') or n.get('address') or '—' }}</td>
         <td>
           {% set st = (n.get('status') or n.get('connection_status') or '')|string|lower %}
-          <span class="badge {% if st in ['connected','online','healthy'] %}connected{% elif 'connect' in st %}connecting{% elif st in ['error','offline','unhealthy','disabled'] %}error{% else %}neutral{% endif %}">
+          <span class="badge {% if st in ['connected','online','healthy'] %}connected{% elif 'connect' in st %}connecting{% elif st in ['error','offline','unhealthy','disabled'] %}danger{% else %}neutral{% endif %}">
             {{ n.get('status') or n.get('connection_status') or '—' }}
           </span>
         </td>
