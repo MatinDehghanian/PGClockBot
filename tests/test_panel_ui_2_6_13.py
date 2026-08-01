@@ -7,15 +7,22 @@ from pathlib import Path
 
 
 class PlansTitleActionsTests(unittest.TestCase):
-    def test_buttons_on_title_row(self):
-        """Plans actions sit beside the title like other list pages (not stacked/centered)."""
+    def test_buttons_under_title_stacked(self):
+        """Plans actions sit under the title (3.2.4 layout) with 3.2.3 spacing tokens."""
         html = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
+        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         head = html.split("{% block content %}", 1)[1].split("{% if flash_ok %}", 1)[0]
-        self.assertNotIn("page-head--stack", head)
-        self.assertNotIn("page-title-actions", head)
-        self.assertIn('class="page-head"', head)
-        self.assertIn('<div class="actions">', head)
+        self.assertIn("page-head--stack", head)
+        self.assertIn("page-title-actions", head)
         self.assertIn('data-modal-open="modal-trial"', head)
+        # stacked actions are inside the title column, not a sibling .actions row
+        self.assertNotIn(
+            '</div>\n  <div class="actions">\n    <button type="button" class="btn" data-modal-open="modal-trial"',
+            head,
+        )
+        actions = css.split(".page-title-actions {", 1)[1].split("}", 1)[0]
+        self.assertIn("var(--space-1)", actions)
+        self.assertIn("margin-top: var(--space-1)", actions)
 
 
 class UploadBoxContrastTests(unittest.TestCase):

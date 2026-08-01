@@ -25,13 +25,14 @@ class UpdateTabUiTests(unittest.TestCase):
         self.assertIn("update-changelog-title", src)
         self.assertNotIn('class="card settings-card update-changelog"', src)
 
-    def test_version_boxes_use_ok_and_warn_states(self):
+    def test_version_boxes_use_ok_and_err_states(self):
         src = UPD.read_text(encoding="utf-8")
         self.assertIn("update-meta-ok", src)
-        self.assertIn("update-meta-warn", src)
-        # current: warn when update available, else ok
+        self.assertIn("update-meta-err", src)
+        self.assertNotIn("update-meta-warn", src)
+        # current: danger/err when update available, else ok
         self.assertIn(
-            'class="update-meta-box {% if available %}update-meta-warn{% else %}update-meta-ok{% endif %}"',
+            'class="update-meta-box {% if available %}update-meta-err{% else %}update-meta-ok{% endif %}"',
             src,
         )
         # latest: ok when update available
@@ -41,7 +42,10 @@ class UpdateTabUiTests(unittest.TestCase):
         )
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(".update-meta-box.update-meta-ok", css)
-        self.assertIn(".update-meta-box.update-meta-warn", css)
+        self.assertIn(".update-meta-box.update-meta-err", css)
+        err = css.split(".update-meta-box.update-meta-err {", 1)[1].split("}", 1)[0]
+        self.assertIn("239, 68, 68", err)
+        self.assertNotIn("234, 179, 8", err)
 
     def test_rollback_select_is_rtl_right_aligned(self):
         src = UPD.read_text(encoding="utf-8")

@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.2.5": [
+        "ریلیز مجدد روی پایه ۳.۲.۳؛ نسخه ۳.۲.۴ لغو شد",
+        "صفحه آپدیت: باکس نسخه قدیمی با رنگ اخطار (قرمز) به‌جای هشدار زرد",
+        "صفحه پلن‌ها: دکمه‌ها زیر تیتر با فاصله و اندازه هماهنگ ۳.۲.۳",
+    ],
     "3.2.3": [
         "تشخیص آپدیت: خواندن همزمان VERSION و آخرین ریلیز گیت‌هاب + حذف کش CDN",
         "صفحه آپدیت هر بار نسخه را تازه از گیت‌هاب چک می‌کند",
