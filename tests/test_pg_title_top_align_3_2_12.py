@@ -1,10 +1,13 @@
-"""3.2.11 — PG title→content gap parity with bot (tabs above title).
+"""3.2.12 — PG title box Y aligns with bot (above + below parity).
+
+Tabs stay ABOVE the title (so title→content = --page-title-gap like bot).
+.pg-head pulls up by (tab row + tabs→title gap) into .main’s top padding
+so the icon+title box starts at the same Y as bot titles.
 
 Do NOT regress by:
+- removing the pull-up (title drops below bot)
 - putting tabs between title and content
-- stacking a second --page-title-gap as .pg-head gap
-- changing page-title / icon sizes
-- changing .main padding-top above titles
+- changing .main padding-top / icon / title size
 """
 
 from __future__ import annotations
@@ -18,43 +21,38 @@ ROOT = Path(__file__).resolve().parents[1]
 CSS = ROOT / "app/web/static/panel.css"
 
 
-class PgTitleContentParity3211Tests(unittest.TestCase):
-    def test_title_to_content_token_parity(self):
+class PgTitleTopAlign3212Tests(unittest.TestCase):
+    def test_pg_head_pulls_up_to_align_title_with_bot(self):
         css = CSS.read_text(encoding="utf-8")
-        bot = css.split(".page-head {\n", 1)[1].split("}", 1)[0]
         pg = css.split(".pg-head {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("margin-bottom: var(--page-title-gap);", bot)
-        self.assertIn("margin-bottom: var(--page-title-gap);", pg)
-        self.assertIn("gap: var(--space-1);", pg)
-        self.assertNotIn("gap: var(--page-title-gap);", pg)
-        # Pull tabs into main top pad so title Y matches bot
         self.assertIn(
             "margin-top: calc(-1 * (var(--btn-h) + var(--space-1)));",
             pg,
         )
-        # Icon / title size untouched
-        ico = css.split(".page-title-ico {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("width: 40px;", ico)
-        self.assertIn("height: 40px;", ico)
-        self.assertIn("--page-title-gap: 24px;", css)
+        self.assertIn("margin-bottom: var(--page-title-gap);", pg)
+        self.assertIn("gap: var(--space-1);", pg)
+        # .main top pad unchanged (bot + PG share it)
         main = css.split(".main {\n", 1)[1]
         self.assertIn(
             "padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));",
             main,
         )
+        ico = css.split(".page-title-ico {\n", 1)[1].split("}", 1)[0]
+        self.assertIn("width: 40px;", ico)
+        self.assertIn("height: 40px;", ico)
 
-    def test_mobile_pg_head_gap_is_tight(self):
+    def test_mobile_same_pull_up(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
-        self.assertIn("margin-top: calc(-1 * (var(--btn-h) + var(--space-1)));", mobile)
+        block = mobile.split(".pg-head {", 1)[1].split("}", 1)[0]
         self.assertIn(
-            ".pg-head {\n    margin-top: calc(-1 * (var(--btn-h) + var(--space-1)));\n"
-            "    margin-bottom: var(--page-title-gap);\n    gap: var(--space-1);\n  }",
-            mobile,
+            "margin-top: calc(-1 * (var(--btn-h) + var(--space-1)));",
+            block,
         )
-        self.assertNotIn("gap: var(--page-title-gap);", mobile.split(".pg-head {", 1)[1].split("}", 1)[0])
+        self.assertIn("margin-bottom: var(--page-title-gap);", block)
+        self.assertIn("gap: var(--space-1);", block)
 
-    def test_all_pg_pages_tabs_above_title(self):
+    def test_tabs_still_above_title(self):
         pages = sorted((ROOT / "app/web/templates").glob("pg_*.html"))
         self.assertEqual(len(pages), 8)
         for path in pages:
@@ -68,7 +66,7 @@ class PgTitleContentParity3211Tests(unittest.TestCase):
             self.assertLess(
                 head_only.find("pg_tabs("),
                 head_only.find('class="page-head"'),
-                msg=f"{path.name}: tabs must be above title",
+                msg=path.name,
             )
 
 

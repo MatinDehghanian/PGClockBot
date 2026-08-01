@@ -317,12 +317,16 @@ a:hover { opacity: 0.8; }
 /* PasarGuard header: tabs ABOVE title so title→content equals bot
    (.page-head margin-bottom / --page-title-gap). Tabs between title and
    content was the recurring bug that made PG look looser than bot.
-   gap: tight tabs→title only — do NOT use --page-title-gap here (that
-   inflated air above the title without fixing title→content). */
+   gap: tight tabs→title only — do NOT use --page-title-gap here.
+   margin-top: pull the tab row into .main’s top padding so the title
+   box sits on the same Y as bot titles (above = below = --page-title-gap).
+   Without this pull-up, tabs above the title push the whole page down —
+   the mistake previous agents kept making. */
 .pg-head {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  margin-top: calc(-1 * (var(--btn-h) + var(--space-1)));
   margin-bottom: var(--page-title-gap);
 }
 .pg-head > .pg-tabs,
@@ -2698,7 +2702,11 @@ a.btn.btn-star:hover {
   .page-head.page-head--stack { align-items: stretch; }
   .page-head:has(> .actions),
   .page-head:has(> .btn) { flex-wrap: nowrap; }
-  .pg-head { margin-bottom: var(--page-title-gap); gap: var(--space-1); }
+  .pg-head {
+    margin-top: calc(-1 * (var(--btn-h) + var(--space-1)));
+    margin-bottom: var(--page-title-gap);
+    gap: var(--space-1);
+  }
   .pg-head > .pg-tabs,
   .pg-head > .section-tabs { margin-bottom: 0; padding-bottom: 0; }
   .pg-head > .page-head { margin-bottom: 0; }

@@ -68,6 +68,10 @@ class TitleGapParityTests(unittest.TestCase):
         self.assertIn("gap: var(--space-1);", pg)
         self.assertNotIn("gap: var(--page-title-gap);", pg)
         self.assertIn("margin-bottom: var(--page-title-gap);", pg)
+        self.assertIn(
+            "margin-top: calc(-1 * (var(--btn-h) + var(--space-1)));",
+            pg,
+        )
         tabs = css.split(".pg-head > .pg-tabs,\n.pg-head > .section-tabs {\n", 1)[1].split("}", 1)[0]
         self.assertIn("margin-bottom: 0;", tabs)
         self.assertIn("padding-bottom: 0;", tabs)

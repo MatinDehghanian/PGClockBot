@@ -34,6 +34,10 @@ class PgTitleContentGapRootTests(unittest.TestCase):
         # tabs→title is tight — NOT a second --page-title-gap
         self.assertIn("gap: var(--space-1);", pg)
         self.assertNotIn("gap: var(--page-title-gap);", pg)
+        self.assertIn(
+            "margin-top: calc(-1 * (var(--btn-h) + var(--space-1)));",
+            pg,
+        )
 
         # Nested title must not add a second gap; tabs must not keep mobile pad-bottom
         self.assertIn(".pg-head > .page-head {\n  margin-bottom: 0;\n}", css)

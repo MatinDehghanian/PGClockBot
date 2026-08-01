@@ -45,7 +45,7 @@ class PageTitleGapParityTests(unittest.TestCase):
             mobile,
         )
         self.assertIn(".page-head { margin-bottom: var(--page-title-gap);", mobile)
-        self.assertIn(".pg-head { margin-bottom: var(--page-title-gap);", mobile)
+        self.assertIn("margin-bottom: var(--page-title-gap);", mobile.split(".pg-head {", 1)[1].split("}", 1)[0])
         self.assertIn(".pg-head > .page-head { margin-bottom: 0; }", mobile)
 
     def test_pg_tabs_sit_above_title(self):
