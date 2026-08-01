@@ -23,6 +23,9 @@ class PgTitleContentGapTests(unittest.TestCase):
         # .pg-head itself owns the title→content gap (same token as bot)
         pg = css.split(".pg-head {\n", 1)[1].split("}", 1)[0]
         self.assertIn("margin-bottom: var(--page-title-gap);", pg)
+        # tabs→title is tight; do not stack a second --page-title-gap
+        self.assertIn("gap: var(--space-1);", pg)
+        self.assertNotIn("gap: var(--page-title-gap);", pg)
         self.assertIn(".pg-head > .page-head {\n  margin-bottom: 0;\n}", css)
         self.assertNotIn(
             ".pg-head > .pg-tabs,\n.pg-head > .section-tabs {\n  margin-bottom: var(--section-gap);\n}",
@@ -45,7 +48,7 @@ class PgTitleContentGapTests(unittest.TestCase):
             title_at = head_only.find('class="page-head"')
             self.assertGreaterEqual(tabs_at, 0, msg=path.name)
             self.assertGreaterEqual(title_at, 0, msg=path.name)
-            self.assertLess(title_at, tabs_at, msg=f"{path.name}: tabs must be below title")
+            self.assertLess(tabs_at, title_at, msg=f"{path.name}: tabs must be above title")
 
 
 if __name__ == "__main__":

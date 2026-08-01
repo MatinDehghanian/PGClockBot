@@ -314,13 +314,15 @@ a:hover { opacity: 0.8; }
 .page-head:has(> .btn) {
   flex-wrap: nowrap;
 }
-/* PasarGuard header unit: title first (like settings / bot), then tabs.
-   Gap title→tabs == tabs→content (--page-title-gap). Mobile section-tabs
-   must not add padding-bottom inside this stack. */
+/* PasarGuard header: tabs ABOVE title so title→content equals bot
+   (.page-head margin-bottom / --page-title-gap). Tabs between title and
+   content was the recurring bug that made PG look looser than bot.
+   gap: tight tabs→title only — do NOT use --page-title-gap here (that
+   inflated air above the title without fixing title→content). */
 .pg-head {
   display: flex;
   flex-direction: column;
-  gap: var(--page-title-gap);
+  gap: var(--space-1);
   margin-bottom: var(--page-title-gap);
 }
 .pg-head > .pg-tabs,
@@ -2696,7 +2698,7 @@ a.btn.btn-star:hover {
   .page-head.page-head--stack { align-items: stretch; }
   .page-head:has(> .actions),
   .page-head:has(> .btn) { flex-wrap: nowrap; }
-  .pg-head { margin-bottom: var(--page-title-gap); gap: var(--page-title-gap); }
+  .pg-head { margin-bottom: var(--page-title-gap); gap: var(--space-1); }
   .pg-head > .pg-tabs,
   .pg-head > .section-tabs { margin-bottom: 0; padding-bottom: 0; }
   .pg-head > .page-head { margin-bottom: 0; }

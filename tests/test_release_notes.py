@@ -109,6 +109,7 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
+        self.assertIn("3.2.11", parsed)
         self.assertIn("3.2.10", parsed)
         self.assertIn("3.2.9", parsed)
         self.assertIn("3.2.8", parsed)

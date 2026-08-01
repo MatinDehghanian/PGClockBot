@@ -1,12 +1,14 @@
-"""PasarGuard title→content gap — root-cause fix (3.1.11).
+"""PasarGuard title→content gap — root-cause fix (3.1.11 / restored 3.2.11).
 
 Root causes that made PG look looser than bot even when --page-title-gap matched:
-1) .pg-head nested .page-head also carried margin-bottom (unclear ownership)
-2) .page-head title wrapper flex:1 1 auto + wrap pushed .actions under the title
-3) card-flush search-bar used --card-pad top, so first content sat extra 16px
+1) tabs between title and content (adds tab-row height + extra gap)
+2) .pg-head nested .page-head also carried margin-bottom (double gap)
+3) .page-head title wrapper flex:1 1 auto + wrap pushed .actions under the title
+4) card-flush search-bar used --card-pad top, so first content sat extra 16px
    below the card edge (bot thead sits on the card edge)
 
-Fix: .pg-head owns the single --page-title-gap; actions stay on the title row;
+Fix: tabs ABOVE title; .pg-head owns the single --page-title-gap below the
+title; tabs→title uses --space-1 only; actions stay on the title row;
 flush search top pad uses --space-1.
 """
 
@@ -29,8 +31,9 @@ class PgTitleContentGapRootTests(unittest.TestCase):
         pg = css.split(".pg-head {\n", 1)[1].split("}", 1)[0]
         self.assertIn("margin-bottom: var(--page-title-gap);", pg)
         self.assertIn("flex-direction: column;", pg)
-        # tabs→title gap equals title→content (same token as bot)
-        self.assertIn("gap: var(--page-title-gap);", pg)
+        # tabs→title is tight — NOT a second --page-title-gap
+        self.assertIn("gap: var(--space-1);", pg)
+        self.assertNotIn("gap: var(--page-title-gap);", pg)
 
         # Nested title must not add a second gap; tabs must not keep mobile pad-bottom
         self.assertIn(".pg-head > .page-head {\n  margin-bottom: 0;\n}", css)
@@ -67,7 +70,7 @@ class PgTitleContentGapRootTests(unittest.TestCase):
             )[0]
             tabs_at = head_only.find("pg_tabs(")
             title_at = head_only.find('class="page-head"')
-            self.assertLess(title_at, tabs_at, msg=f"{path.name}: tabs must be below title")
+            self.assertLess(tabs_at, title_at, msg=f"{path.name}: tabs must be above title")
 
 
 if __name__ == "__main__":
