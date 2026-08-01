@@ -9,11 +9,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class VersionTests(unittest.TestCase):
-    def test_version(self):
+    def test_version_at_least_3_3_0(self):
+        from app.services.release_notes import RELEASE_NOTES_FA
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.3.0")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.3.0")
+        self.assertGreaterEqual(tuple(int(x) for x in __version__.split(".")), (3, 3, 0))
+        self.assertIn("3.3.0", RELEASE_NOTES_FA)
 
 
 class ModalPortalTests(unittest.TestCase):

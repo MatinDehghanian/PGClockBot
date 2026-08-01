@@ -245,10 +245,10 @@
 
       const spaceBelow = vh - rect.bottom - gap - pad;
       const spaceAbove = rect.top - gap - pad;
-      /* Prefer upward so table «عملیات» menus stay on-screen above the row */
+      /* Prefer down when it fits; flip up only when below is short */
       let openDown;
-      if (spaceAbove >= mh) openDown = false;
-      else if (spaceBelow >= mh) openDown = true;
+      if (spaceBelow >= mh) openDown = true;
+      else if (spaceAbove >= mh) openDown = false;
       else openDown = spaceBelow >= spaceAbove;
 
       let top;
@@ -292,16 +292,16 @@
       const vh = window.innerHeight;
       const spaceBelow = vh - rect.bottom - gap - pad;
       const spaceAbove = rect.top - gap - pad;
-      /* Prefer upward so وضعیت / selects near the bottom stay visible */
+      /* Ticket status only: always open up. Everywhere else: auto by available space. */
       let openUp;
-      if (wrap.closest('.ticket-status-form, .ticket-status-actions, .ui-modal')) {
-        openUp = true;
-      } else if (spaceAbove >= mh) {
+      if (wrap.closest('.ticket-status-form, .ticket-status-actions')) {
         openUp = true;
       } else if (spaceBelow >= mh) {
         openUp = false;
+      } else if (spaceAbove >= mh) {
+        openUp = true;
       } else {
-        openUp = spaceAbove >= spaceBelow;
+        openUp = spaceAbove > spaceBelow;
       }
       wrap.classList.toggle('drop-up', openUp);
     }

@@ -196,9 +196,9 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         sel = re.search(r"(?ms)^select\s*\{([^}]+)\}", css)
         self.assertIsNotNone(sel)
         body = sel.group(1)
-        # RTL: chevron on physical left (opposite the value text), with room via padding-inline-end
+        # RTL: chevron on physical left (opposite the value text); inset matches title
         self.assertIn("background-position: left var(--space-2) center", body)
-        self.assertIn("padding-inline-end: var(--space-4)", body)
+        self.assertIn("padding-inline-end: calc(var(--space-2) + 14px)", body)
         self.assertNotIn("background-position: right", body)
         self.assertIn("background-color: #09090b", body)
         # light theme must not wipe the chevron via background shorthand

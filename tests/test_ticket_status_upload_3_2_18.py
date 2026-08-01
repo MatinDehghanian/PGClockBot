@@ -18,12 +18,17 @@ class VersionTests(unittest.TestCase):
 
 
 class UiSelectDropUpTests(unittest.TestCase):
-    def test_js_prefers_up_in_modal(self):
+    def test_js_ticket_status_up_others_auto(self):
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
         self.assertIn("function placeUiSelectMenu", js)
-        self.assertIn("ticket-status-form", js)
         self.assertIn("drop-up", js)
-        self.assertIn("placeUiSelectMenu(wrap)", js)
+        place = js[js.find("function placeUiSelectMenu") : js.find("function enhanceSelect")]
+        # Only ticket status forced up — not every modal select
+        self.assertIn("ticket-status-form, .ticket-status-actions", place)
+        self.assertNotIn(".ui-modal", place)
+        # Auto: prefer down when space allows
+        self.assertIn("spaceBelow >= mh", place)
+        self.assertLess(place.find("ticket-status-form"), place.find("spaceBelow >= mh"))
 
     def test_css_drop_up(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")

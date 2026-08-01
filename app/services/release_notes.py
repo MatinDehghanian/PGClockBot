@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.3.1": [
+        "منوهای بازشو: باز شدن خودکار بر اساس فضای صفحه — فقط وضعیت تیکت همیشه رو به بالا",
+    ],
     "3.3.0": [
         "مودال تیکت مثل بقیه مودال‌ها روی body پورت می‌شود تا زیر سایدبار نرود",
         "پاک‌سازی اسکریپت جداگانهٔ مودال تیکت — رفتار یکسان با سیستم مودال مشترک",

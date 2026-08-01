@@ -51,14 +51,14 @@ class NavDotTests(unittest.TestCase):
 
 
 class DropupTests(unittest.TestCase):
-    def test_prefer_open_upward(self):
+    def test_row_actions_prefer_down_auto_flip(self):
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
-        self.assertIn("Prefer upward", js)
-        # Prefer above when it fits
-        self.assertIn("if (spaceAbove >= mh) openDown = false;", js)
+        self.assertIn("Prefer down when it fits", js)
+        # Prefer below when it fits; flip up only when short
+        self.assertIn("if (spaceBelow >= mh) openDown = true;", js)
         self.assertLess(
-            js.find("if (spaceAbove >= mh) openDown = false;"),
-            js.find("else if (spaceBelow >= mh) openDown = true;"),
+            js.find("if (spaceBelow >= mh) openDown = true;"),
+            js.find("else if (spaceAbove >= mh) openDown = false;"),
         )
 
 
