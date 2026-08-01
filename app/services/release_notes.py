@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.2.19": [
+        "منوهای بازشو: فاصله فلش بالا/پایین از لبه برابر فاصله تیتر از کناره‌ها",
+    ],
     "3.2.18": [
         "تیکت: منوی وضعیت رو به بالا باز می‌شود",
         "تیکت: باکس آپلود پیوست هم‌شکل بقیه پنل (upload-box)",

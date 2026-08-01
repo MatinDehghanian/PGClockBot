@@ -14,11 +14,12 @@ class VersionThreeConsistencyTests(unittest.TestCase):
     def test_version_files_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.2.18")
-        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "3.2.18")
+        self.assertEqual(__version__, "3.2.19")
+        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "3.2.19")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         first = notes.split("RELEASE_NOTES_FA", 1)[1]
         self.assertNotIn('"3.2.4"', first)
+        self.assertLess(first.find('"3.2.19"'), first.find('"3.2.18"'))
         self.assertLess(first.find('"3.2.18"'), first.find('"3.2.17"'))
         self.assertLess(first.find('"3.2.17"'), first.find('"3.2.16"'))
         self.assertLess(first.find('"3.2.16"'), first.find('"3.2.15"'))
