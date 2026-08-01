@@ -311,9 +311,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
             web_u = (user.get("username") or "").strip().lower()
             row = await access_by_web_username(session, web_u)
-            if not row:
-                raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
-            if not row.is_active:
+            if not row or not row.is_active:
                 raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
             pwd = (row.web_password_hash or "")[:24]
             if pwd and user.get("pv") != pwd:
@@ -322,11 +320,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 session, row.pg_username, revoke_if_missing=True
             )
             if not allowed:
+                # Gate may have revoked the row — deny without a second DB round-trip
                 raise NotAuthenticated(login_error=deny_msg)
-            # Row may have been revoked if PG admin was deleted
-            row = await access_by_web_username(session, web_u)
-            if not row or not row.is_active:
-                raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
             user = dict(user)
             user["permissions"] = []
             user["pg_admin_username"] = row.pg_username
@@ -340,11 +335,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             if not (user.get("pg_permissions") or []):
                 # No mapped features → deny panel use
                 raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
-        # Skip unread COUNT on JSON poll routes that never render the sidebar.
+        # Skip unread COUNT on mutations / JSON polls that never render the sidebar.
         try:
-            from app.services.panel_tickets import SKIP_UNREAD_PATHS, sidebar_unread_count
+            from app.services.panel_tickets import should_skip_unread_count, sidebar_unread_count
 
-            if request.url.path in SKIP_UNREAD_PATHS:
+            if should_skip_unread_count(request.url.path, request.method):
                 request.state.panel_tickets_unread = 0
             else:
                 request.state.panel_tickets_unread = await sidebar_unread_count(session, user)
@@ -395,7 +390,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         return "/logout"
 
     def require_pg_perm(perm: str):
-        """Admin always; reseller needs mapped PG feature from their role."""
+        """Admin always; reseller/pg_staff need mapped PG feature (already on staff)."""
 
         async def _dep(
             request: Request,
@@ -404,30 +399,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             user = await require_staff(request, session)
             if user.get("role") == "admin":
                 return user
-            from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
-
-            pg_role_id = user.get("pg_role_id")
-            features, role = await resolve_reseller_pg_features(pg_role_id)
+            # require_staff already resolved + enriched pg_permissions — reuse it
+            features = user.get("pg_permissions") or []
             if perm not in features:
                 raise NotAdmin(redirect=_live_pg_home(features))
-            return enrich_staff_pg_from_role(user, features, role)
-
-        return _dep
-
-    def require_pg_any():
-        async def _dep(
-            request: Request,
-            session: AsyncSession = Depends(get_db),
-        ) -> dict:
-            user = await require_staff(request, session)
-            if user.get("role") == "admin":
-                return user
-            from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
-
-            features, role = await resolve_reseller_pg_features(user.get("pg_role_id"))
-            if not features:
-                raise NotAdmin(redirect="/logout")
-            return enrich_staff_pg_from_role(user, features, role)
+            return user
 
         return _dep
 
@@ -584,7 +560,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         render=render,
         require_admin=require_admin,
         require_pg_perm=require_pg_perm,
-        require_pg_any=require_pg_any,
         get_db=get_db,
     )
     from app.api.reseller_pages import register_reseller_pages

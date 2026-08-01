@@ -30,12 +30,12 @@
         const px = parseFloat(cs.fontSize) || 0;
         if (px > 0 && px < MIN) el.style.fontSize = MIN + 'px';
       }
+      /* Enforce on focus only — avoids getComputedStyle scan of every control on load */
       document.addEventListener('focusin', (e) => {
         const t = e.target;
         if (!t) return;
         if (t.matches && t.matches('input, select, textarea, [contenteditable="true"]')) enforce(t);
       }, true);
-      document.querySelectorAll('input, select, textarea, [contenteditable="true"]').forEach(enforce);
     })();
 
     /* Theme: system | light | dark */
@@ -141,19 +141,25 @@
       document.querySelectorAll('.table-wrap, .section-tabs').forEach(markScrollable);
     }
     function refreshHScroll(){
+      if (!document.querySelector('.table-wrap, .section-tabs')) return;
       refreshForceKebab();
       refreshHScrollMarks();
     }
-    refreshHScroll();
-    window.addEventListener('resize', refreshHScroll);
-    if (window.ResizeObserver) {
-      const ro = new ResizeObserver(refreshHScrollMarks);
-      document.querySelectorAll('.table-wrap, .section-tabs').forEach(el => ro.observe(el));
+    const _hScrollRoots = document.querySelectorAll('.table-wrap, .section-tabs');
+    if (_hScrollRoots.length) {
+      refreshHScroll();
+      window.addEventListener('resize', refreshHScroll);
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(refreshHScrollMarks);
+        _hScrollRoots.forEach(el => ro.observe(el));
+      }
     }
 
     /* Keep active settings/section tab visible in horizontal mobile scroll */
     function scrollActiveTabIntoView(){
-      document.querySelectorAll('.section-tabs').forEach(nav => {
+      const tabs = document.querySelectorAll('.section-tabs');
+      if (!tabs.length) return;
+      tabs.forEach(nav => {
         const active = nav.querySelector('a.active');
         if (!active || typeof active.scrollIntoView !== 'function') return;
         try {
@@ -163,8 +169,10 @@
         }
       });
     }
-    scrollActiveTabIntoView();
-    requestAnimationFrame(scrollActiveTabIntoView);
+    if (document.querySelector('.section-tabs')) {
+      scrollActiveTabIntoView();
+      requestAnimationFrame(scrollActiveTabIntoView);
+    }
 
     /* Mobile row action menus (three-dot) — ported overlay, corner-aligned, inward */
     const rowMenuHomes = new WeakMap();
@@ -196,14 +204,13 @@
     }
     function placeRowMenu(wrap){
       if (!wrap) return;
-      const btn = wrap.querySelector('.row-actions-toggle--label:not([style*="display: none"]), .row-actions-toggle--icon:not([style*="display: none"]), .row-actions-toggle');
       /* Prefer the visible toggle (label on desktop force-kebab, icon on mobile) */
       let anchor = null;
       wrap.querySelectorAll('.row-actions-toggle').forEach(t => {
         const st = window.getComputedStyle(t);
         if (st.display !== 'none' && st.visibility !== 'hidden') anchor = t;
       });
-      if (!anchor) anchor = btn;
+      if (!anchor) anchor = wrap.querySelector('.row-actions-toggle');
       let menu = wrap.querySelector('.row-actions-menu');
       if (!menu && wrap.dataset.raId) {
         menu = document.querySelector('.row-actions-menu.is-ported[data-owner="' + wrap.dataset.raId + '"]');
@@ -393,9 +400,11 @@
         }
       });
       sel.addEventListener('change', syncLabel);
-      /* Keep in sync if options are rewritten (e.g. settings scripts) */
-      const mo = new MutationObserver(() => rebuildOptions());
-      mo.observe(sel, { childList: true, subtree: true, characterData: true });
+      /* Keep in sync if options are rewritten (settings / dynamic forms only) */
+      if (sel.closest('.settings-form, form[data-ui-select-watch], [data-ui-select-watch]')) {
+        const mo = new MutationObserver(() => rebuildOptions());
+        mo.observe(sel, { childList: true, subtree: true, characterData: true });
+      }
     }
     function enhanceAllSelects(){
       document.querySelectorAll('select').forEach(enhanceSelect);

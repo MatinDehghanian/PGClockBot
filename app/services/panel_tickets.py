@@ -76,8 +76,24 @@ SKIP_UNREAD_PATHS = frozenset(
         "/home/metrics",
         "/update/status",
         "/settings/ssl/progress",
+        "/backup/status",
+        "/tickets",  # derived from list_tickets via unread_from_tickets
     }
 )
+
+
+def should_skip_unread_count(path: str, method: str = "GET") -> bool:
+    """True when this request will not render the sidebar HTML."""
+    m = (method or "GET").upper()
+    if m != "GET":
+        return True
+    p = path or ""
+    if p in SKIP_UNREAD_PATHS:
+        return True
+    # Dynamic JSON routes (path params) — no sidebar
+    if p.startswith("/pg/users/") and p.endswith("/link"):
+        return True
+    return False
 
 
 def _utcnow() -> datetime:
@@ -204,16 +220,17 @@ async def list_tickets(session: AsyncSession, staff: dict, *, limit: int = 100) 
 
 
 async def get_ticket(
-    session: AsyncSession, staff: dict, ticket_id: int
+    session: AsyncSession,
+    staff: dict,
+    ticket_id: int,
+    *,
+    load_messages: bool = True,
 ) -> Optional[PanelTicket]:
     actor = actor_from_staff(staff)
-    row = (
-        await session.execute(
-            select(PanelTicket)
-            .options(selectinload(PanelTicket.messages))
-            .where(PanelTicket.id == int(ticket_id))
-        )
-    ).scalar_one_or_none()
+    q = select(PanelTicket).where(PanelTicket.id == int(ticket_id))
+    if load_messages:
+        q = q.options(selectinload(PanelTicket.messages))
+    row = (await session.execute(q)).scalar_one_or_none()
     if not row:
         return None
     if actor["is_owner"]:
@@ -288,7 +305,7 @@ async def reply_ticket(
     attachment: tuple[str, str, str] | None = None,
 ) -> PanelTicket:
     actor = actor_from_staff(staff)
-    ticket = await get_ticket(session, staff, ticket_id)
+    ticket = await get_ticket(session, staff, ticket_id, load_messages=False)
     if not ticket:
         raise PermissionError("تیکت پیدا نشد")
     if ticket.status == PanelTicketStatus.CLOSED.value:
@@ -332,7 +349,7 @@ async def set_status(
     status: str,
 ) -> PanelTicket:
     actor = actor_from_staff(staff)
-    ticket = await get_ticket(session, staff, ticket_id)
+    ticket = await get_ticket(session, staff, ticket_id, load_messages=False)
     if not ticket:
         raise PermissionError("تیکت پیدا نشد")
     new_status = normalize_status(status)

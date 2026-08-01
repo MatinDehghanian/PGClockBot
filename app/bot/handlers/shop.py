@@ -88,6 +88,24 @@ async def _custom_available_for_users(
     return bool(catalog)
 
 
+async def _custom_gate(
+    session: AsyncSession,
+    ui: dict,
+    state: FSMContext | None = None,
+    *,
+    plans: list | None = None,
+) -> bool:
+    """Reuse FSM gate after first full check — steppers skip catalog re-query."""
+    if state is not None:
+        data = await state.get_data()
+        if data.get("custom_gate_ok") and on(ui.get("custom_plan_enabled")):
+            return True
+    ok = await _custom_available_for_users(session, ui, plans=plans)
+    if ok and state is not None:
+        await state.update_data(custom_gate_ok=True)
+    return ok
+
+
 @router.callback_query(F.data == "shop:list")
 async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     await callback.answer()
@@ -130,7 +148,7 @@ async def custom_noop(callback: CallbackQuery):
 @router.callback_query(F.data == "shop:custom")
 async def custom_start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
-    if not await _custom_available_for_users(session, ui):
+    if not await _custom_gate(session, ui, state):
         await callback.answer(
             "پلن دلخواه در دسترس نیست (پلنی تعریف نشده یا غیرفعال است).",
             show_alert=True,
@@ -141,7 +159,7 @@ async def custom_start(callback: CallbackQuery, session: AsyncSession, state: FS
     data = await state.get_data()
     gb = int(data.get("custom_gb") or min_gb)
     gb = max(min_gb, min(max_gb, gb))
-    await state.update_data(custom_gb=gb, custom_days=data.get("custom_days"))
+    await state.update_data(custom_gb=gb, custom_days=data.get("custom_days"), custom_gate_ok=True)
     text = format_message(
         "✨ پلن دلخواه — حجم",
         f"حجم سرویس را انتخاب کنید ({min_gb} تا {max_gb} گیگ):\n"
@@ -154,7 +172,7 @@ async def custom_start(callback: CallbackQuery, session: AsyncSession, state: FS
 @router.callback_query(F.data.in_({"shop:custom:gb:+", "shop:custom:gb:-"}))
 async def custom_gb_step(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
-    if not await _custom_available_for_users(session, ui):
+    if not await _custom_gate(session, ui, state):
         await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     min_gb, max_gb, _, _, _, _ = _custom_bounds(ui)
@@ -178,7 +196,7 @@ async def custom_gb_step(callback: CallbackQuery, session: AsyncSession, state: 
 @router.callback_query(F.data == "shop:custom:gb:input")
 async def custom_gb_ask(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
-    if not await _custom_available_for_users(session, ui):
+    if not await _custom_gate(session, ui, state):
         await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     await callback.answer()
@@ -221,7 +239,7 @@ async def custom_gb_entered(message: Message, state: FSMContext, session: AsyncS
 @router.callback_query(F.data == "shop:custom:gb:next")
 async def custom_days_start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
-    if not await _custom_available_for_users(session, ui):
+    if not await _custom_gate(session, ui, state):
         await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     await callback.answer()
@@ -244,7 +262,7 @@ async def custom_days_start(callback: CallbackQuery, session: AsyncSession, stat
 @router.callback_query(F.data.in_({"shop:custom:days:+", "shop:custom:days:-"}))
 async def custom_days_step(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
-    if not await _custom_available_for_users(session, ui):
+    if not await _custom_gate(session, ui, state):
         await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     _, _, min_days, max_days, _, _ = _custom_bounds(ui)
@@ -270,7 +288,7 @@ async def custom_days_step(callback: CallbackQuery, session: AsyncSession, state
 @router.callback_query(F.data == "shop:custom:days:input")
 async def custom_days_ask(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
-    if not await _custom_available_for_users(session, ui):
+    if not await _custom_gate(session, ui, state):
         await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     await callback.answer()
@@ -315,7 +333,7 @@ async def custom_days_entered(message: Message, state: FSMContext, session: Asyn
 @router.callback_query(F.data == "shop:custom:confirm")
 async def custom_confirm(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
-    if not await _custom_available_for_users(session, ui):
+    if not await _custom_gate(session, ui, state):
         await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
     data = await state.get_data()

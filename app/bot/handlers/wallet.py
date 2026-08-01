@@ -122,8 +122,14 @@ async def wallet_topup_amount(message: Message, state: FSMContext, session: Asyn
     )
 
 
-async def _topup_instructions(session: AsyncSession, payment: Payment, method: str) -> tuple[str, InlineKeyboardMarkup]:
-    ui = await get_all_settings(session)
+async def _topup_instructions(
+    session: AsyncSession,
+    payment: Payment,
+    method: str,
+    ui: dict | None = None,
+) -> tuple[str, InlineKeyboardMarkup]:
+    if ui is None:
+        ui = await get_all_settings(session)
     amount = format_toman(payment.amount, get_settings().currency)
     rows: list[list[InlineKeyboardButton]] = []
     if method == PaymentMethod.CARD.value:
@@ -190,7 +196,7 @@ async def wtop_choose_method(
         return
     payment = await create_wallet_topup(session, db_user.id, amount, method=method)
     await callback.answer()
-    text, markup = await _topup_instructions(session, payment, method)
+    text, markup = await _topup_instructions(session, payment, method, ui=ui)
     await state.set_state(WalletStates.waiting_receipt)
     await state.update_data(payment_id=payment.id, topup_amount=None)
     if callback.message:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Awaitable, Callable, Dict
 
@@ -122,10 +123,14 @@ async def check_force_join_all(
     Returns (missing, unverified). missing = left/kicked; unverified = API errors.
     Caller should require missing empty; unverified may allow-through to avoid lockouts.
     """
+    if not channels:
+        return [], []
+    results = await asyncio.gather(
+        *[check_force_join_member(bot, telegram_id, ch) for ch in channels]
+    )
     missing: list[str] = []
     unverified: list[str] = []
-    for ch in channels:
-        joined = await check_force_join_member(bot, telegram_id, ch)
+    for ch, joined in zip(channels, results):
         if joined is False:
             missing.append(ch)
         elif joined is None:

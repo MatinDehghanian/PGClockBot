@@ -19,9 +19,6 @@ PG_FEATURE_KEYS = (
     "pg_nodes",
 )
 
-# Admin-only PG areas (never for resellers)
-PG_ADMIN_ONLY = ("pg_admins",)
-
 PG_FEATURE_LABELS: dict[str, str] = {
     "pg_overview": "نمای کلی",
     "pg_users": "کاربران",
@@ -36,13 +33,6 @@ PG_FEATURE_LABELS: dict[str, str] = {
 # Short-lived cache: role_id → (monotonic_at, features, raw_role)
 _ROLE_CACHE: dict[int, tuple[float, list[str], dict]] = {}
 _ROLE_CACHE_TTL = 60.0
-
-
-def clear_role_cache(role_id: int | None = None) -> None:
-    if role_id is None:
-        _ROLE_CACHE.clear()
-    else:
-        _ROLE_CACHE.pop(int(role_id), None)
 
 
 def _action_allowed(value: Any) -> bool:
@@ -220,12 +210,6 @@ def enrich_staff_pg_from_role(user: dict, features: list[str], role: dict | None
         out["pg_user_actions"] = role_user_actions(role)
         out["pg_access"] = role_access_limits(role)
     return out
-
-
-def staff_has_pg(staff: dict, key: str) -> bool:
-    if staff.get("role") == "admin":
-        return True
-    return key in (staff.get("pg_permissions") or [])
 
 
 def staff_pg_writes(staff: dict) -> dict[str, bool]:

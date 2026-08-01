@@ -20,16 +20,6 @@ CMD_DESC_MAX = 256
 DEFAULT_CMD_START = "شروع / منو"
 DEFAULT_CMD_HELP = "راهنما"
 
-APPEARANCE_SETTING_KEYS = (
-    "bot_tg_name",
-    "bot_tg_description",
-    "bot_tg_short_description",
-    "bot_tg_photo",
-    "bot_cmd_start",
-    "bot_cmd_help",
-)
-
-
 @dataclass
 class BotAppearance:
     name: str = ""

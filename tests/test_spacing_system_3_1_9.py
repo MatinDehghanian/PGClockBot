@@ -176,7 +176,7 @@ class SpacingSemanticParityTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn("input, select, textarea {\n  width: 100%;\n  margin-top: var(--space-1);", css)
         help_block = re.search(
-            r"(?ms)label > small\.muted,\s*label > \.field-help,\s*\.field-help,\s*\.hint\s*\{([^}]+)\}",
+            r"(?ms)label > small\.muted,\s*\.hint\s*\{([^}]+)\}",
             css,
         )
         self.assertIsNotNone(help_block)

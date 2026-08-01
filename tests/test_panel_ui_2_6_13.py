@@ -67,9 +67,12 @@ class ForceJoinEntriesTests(unittest.TestCase):
 
     def test_settings_field_ui(self):
         html = Path("app/web/templates/_settings_field.html").read_text(encoding="utf-8")
+        js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
         self.assertIn("force_channels", html)
-        self.assertIn("data-force-channels-add", html)
-        self.assertIn("عضویت الزامی", Path("app/web/static/panel.js").read_text(encoding="utf-8"))
+        self.assertIn("data-force-channels", html)
+        # Add button is injected by panel.js (not static HTML)
+        self.assertIn("data-force-channels-add", js)
+        self.assertIn("عضویت الزامی", js)
 
 
 class BroadcastKebabTests(unittest.TestCase):

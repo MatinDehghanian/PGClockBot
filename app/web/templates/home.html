@@ -290,6 +290,7 @@
     return Math.round(n) + '٪';
   }
   async function tick() {
+    if (document.hidden) return;
     try {
       var r = await fetch('/home/metrics?_=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' });
       if (!r.ok) return;
@@ -305,6 +306,9 @@
   }
   setInterval(tick, 5000);
   setTimeout(tick, 2500);
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) tick();
+  });
 })();
 </script>
 {% endblock %}

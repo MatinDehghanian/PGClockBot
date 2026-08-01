@@ -83,7 +83,7 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
         # Hints under controls need clear gap + theme muted color (not hardcoded grey)
         self.assertIn("margin-top: var(--space-1)", css)
         block = re.search(
-            r"(?ms)label > small\.muted,\s*label > \.field-help,\s*\.field-help,\s*\.hint\s*\{([^}]+)\}",
+            r"(?ms)label > small\.muted,\s*\.hint\s*\{([^}]+)\}",
             css,
         )
         self.assertIsNotNone(block)

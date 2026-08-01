@@ -34,20 +34,24 @@ async def render_home(
     seed_reply_kb: bool = False,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
+    ui: dict | None = None,
+    effective_role: str | None = None,
 ):
     from app.services.formatting import format_message
     from app.services.reseller_access import effective_menu_role
 
-    ui = await get_all_settings(session)
+    if ui is None:
+        ui = await get_all_settings(session)
     # Dedicated reseller bot: owner + bot_admin_ids → reseller panel;
     # platform admins/other resellers → shop user menu.
     # Main bot: bot_admin_ids stay normal users.
-    effective_role = await effective_menu_role(
-        session,
-        db_user,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-    )
+    if effective_role is None:
+        effective_role = await effective_menu_role(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
 
     if effective_role == "admin":
         text = format_message(
@@ -178,6 +182,8 @@ async def cmd_start(
         seed_reply_kb=True,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
+        ui=ui,
+        effective_role=role_for_force,
     )
 
 

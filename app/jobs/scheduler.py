@@ -62,31 +62,43 @@ async def check_expiring_services(bot: Bot) -> None:
         global_ui = await ui_for(None)
         # Fast path: if platform alerts are off, only bother when a reseller shop enables them.
         reseller_ids_with_alerts: set[int] = set()
-        if not on(global_ui.get("user_alert_low_enabled", "0")):
-            profiles_settings = (
+        platform_on = on(global_ui.get("user_alert_low_enabled", "0"))
+        if not platform_on:
+            from app.db.models import ResellerSetting
+
+            # One query for the alert flag — avoid N× full get_all_settings just to discover shops
+            rows = (
                 await session.execute(
-                    select(ResellerProfile.user_id).where(ResellerProfile.is_active.is_(True))
+                    select(ResellerSetting.reseller_user_id, ResellerSetting.value).where(
+                        ResellerSetting.key == "user_alert_low_enabled",
+                        ResellerSetting.reseller_user_id.in_(
+                            select(ResellerProfile.user_id).where(
+                                ResellerProfile.is_active.is_(True)
+                            )
+                        ),
+                    )
                 )
             ).all()
-            for (uid,) in profiles_settings:
-                if uid is None:
-                    continue
-                ui = await ui_for(int(uid))
-                if on(ui.get("user_alert_low_enabled", "0")):
-                    reseller_ids_with_alerts.add(int(uid))
+            for rid, raw in rows:
+                if rid is not None and on(raw or "0"):
+                    reseller_ids_with_alerts.add(int(rid))
             if not reseller_ids_with_alerts:
                 return
 
         # Only services that still need at least one alert (skip fully-notified rows).
-        result = await session.execute(
-            select(UserService).where(
-                UserService.subscription_token.is_not(None),
-                or_(
-                    UserService.notified_expire.is_(False),
-                    UserService.notified_traffic.is_(False),
-                ),
-            )
+        svc_q = select(UserService).where(
+            UserService.subscription_token.is_not(None),
+            or_(
+                UserService.notified_expire.is_(False),
+                UserService.notified_traffic.is_(False),
+            ),
         )
+        if not platform_on and reseller_ids_with_alerts:
+            # Narrow to shops that actually have alerts on before PG fan-out
+            svc_q = svc_q.join(BotUser, BotUser.id == UserService.bot_user_id).where(
+                BotUser.reseller_id.in_(reseller_ids_with_alerts)
+            )
+        result = await session.execute(svc_q)
         services = list(result.scalars().all())
         if not services:
             return
@@ -112,7 +124,6 @@ async def check_expiring_services(bot: Bot) -> None:
 
         pg = get_pg()
         now = datetime.now(timezone.utc)
-        platform_on = on(global_ui.get("user_alert_low_enabled", "0"))
 
         eligible: list[tuple[UserService, BotUser, dict, int, int]] = []
         for svc in services:

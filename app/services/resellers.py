@@ -33,16 +33,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("shop_settings", "تنظیمات ربات فروشگاه"),
 ]
 
-# Back-compat aliases used by older templates
-WEB_PERM_OPTIONS = FEATURE_PERMS
-BOT_PERM_OPTIONS = [
-    ("stats", "آمار نماینده"),
-    ("payments", "تأیید رسید مشتریان"),
-]
-
 DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings"
-DEFAULT_WEB_PERMS = DEFAULT_FEATURE_PERMS
-DEFAULT_BOT_PERMS = DEFAULT_FEATURE_PERMS
 
 # Tabs a reseller may edit for their own shop bot
 RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
@@ -134,10 +125,6 @@ def has_perm(profile: ResellerProfile | None, key: str, *, role: str | None = No
         return False
     perms = with_shop_settings(parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS))
     return key in perms
-
-
-def has_web_perm(profile: ResellerProfile | None, key: str, *, role: str | None = None) -> bool:
-    return has_perm(profile, key, role=role)
 
 
 def has_bot_perm(profile: ResellerProfile | None, key: str) -> bool:

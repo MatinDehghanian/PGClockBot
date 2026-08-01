@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.3.2": [
+        "ممیزی کامل پنل و ربات: حذف کدهای مرده و کوئری‌های تکراری",
+        "سبک‌تر شدن احراز هویت وب (بدون COUNT اضافی در POST/JSON و بدون resolve دوبارهٔ نقش PG)",
+        "ربات: کانال اجباری موازی، گیت پلن دلخواه در FSM، زمان‌بند هشدار سبک‌تر",
+        "فرانت: توقف نظرسنجی در تب مخفی و حذف CSS/اسکن‌های بلااستفاده برای لود سریع‌تر",
+    ],
     "3.3.1": [
         "منوهای بازشو: باز شدن خودکار بر اساس فضای صفحه — فقط وضعیت تیکت همیشه رو به بالا",
     ],
@@ -443,10 +449,6 @@ RELEASE_NOTES_FA: dict[str, list[str]] = {
         "پاک‌سازی مسیر آپدیت و بهینه‌سازی صفحه خانه",
     ],
 }
-
-INSTALL_SCRIPT_CMD = (
-    "bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)"
-)
 
 _REMOTE_NOTES_CACHE: dict[str, Any] = {"at": 0.0, "data": None, "ok": False}
 _REMOTE_NOTES_TTL_OK = 300.0

@@ -26,7 +26,7 @@ class NavItemGapTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         section = css.split(".nav-section {\n", 1)[1].split("}", 1)[0]
         self.assertIn("gap: var(--space-0);", section)
-        colored = css.split(".nav-section-bot,\n.nav-section-pg,\n.nav-section-home,\n.nav-section-panel {\n", 1)[1].split("}", 1)[0]
+        colored = css.split(".nav-section-bot,\n.nav-section-pg,\n.nav-section-home {\n", 1)[1].split("}", 1)[0]
         self.assertIn("gap: var(--space-0);", colored)
 
 

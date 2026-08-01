@@ -13,7 +13,7 @@ class BadgeChipUnityTests(unittest.TestCase):
     def test_badge_ver_role_share_compact_base(self):
         css = CSS.read_text(encoding="utf-8")
         base = css.split("/* Unified chip tags", 1)[1].split(".badge {", 1)[0]
-        self.assertIn(".badge,\n.ver-badge,\n.role-tag {", css)
+        self.assertIn(".badge,\n.role-tag {", css)
         self.assertIn("min-height: 20px;", base)
         self.assertIn("padding: 0 var(--space-1);", base)
         self.assertIn("font-weight: 500;", base)

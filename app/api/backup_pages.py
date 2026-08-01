@@ -12,7 +12,6 @@ from app.services.backup import (
     create_backup,
     delete_backup,
     get_backup_path,
-    read_restore_status,
     restore_backup,
     save_uploaded_backup,
 )
@@ -148,7 +147,3 @@ def register_backup_pages(app, *, render, require_admin, get_db):
             + quote(f"بکاپ آپلود شد: {result.get('filename')}"),
             status_code=303,
         )
-
-    @app.get("/backup/status")
-    async def backup_status(staff: dict = Depends(require_admin)):
-        return read_restore_status()

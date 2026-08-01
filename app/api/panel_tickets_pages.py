@@ -74,7 +74,6 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                 )
 
         active_ticket = None
-        tickets_unread = int(getattr(request.state, "panel_tickets_unread", 0) or 0)
         if view is not None:
             active_ticket = await get_ticket(session, staff, int(view))
             if active_ticket is not None:
@@ -86,8 +85,10 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                             row.answered_unread = active_ticket.answered_unread
                             row.owner_unread = active_ticket.owner_unread
                             break
-                    tickets_unread = unread_from_tickets(panel_tickets, staff)
-                    request.state.panel_tickets_unread = tickets_unread
+
+        # Derive from the list we already loaded (middleware skips COUNT on /tickets)
+        tickets_unread = unread_from_tickets(panel_tickets, staff)
+        request.state.panel_tickets_unread = tickets_unread
 
         ok_key = (request.query_params.get("ok") or "").strip()
         flash_ok = _OK_FLASH.get(ok_key, ok_key or None)

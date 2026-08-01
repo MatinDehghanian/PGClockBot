@@ -44,17 +44,6 @@ def _write_status(payload: dict[str, Any]) -> None:
         logger.debug("restart status write failed", exc_info=True)
 
 
-def get_restart_status() -> dict[str, Any]:
-    try:
-        if STATUS_PATH.is_file():
-            data = json.loads(STATUS_PATH.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                return data
-    except Exception:
-        logger.debug("restart status read failed", exc_info=True)
-    return {"state": "idle"}
-
-
 def service_user() -> str:
     return (
         os.environ.get("PGCLOCKBOT_SERVICE_USER")

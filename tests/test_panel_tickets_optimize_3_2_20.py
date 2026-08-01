@@ -46,10 +46,11 @@ class PollSkipTests(unittest.TestCase):
         self.assertIn("/home/metrics", SKIP_UNREAD_PATHS)
         self.assertIn("/update/status", SKIP_UNREAD_PATHS)
         self.assertIn("/settings/ssl/progress", SKIP_UNREAD_PATHS)
+        self.assertIn("/tickets", SKIP_UNREAD_PATHS)
 
     def test_require_staff_skips_polls(self):
         app_src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn("SKIP_UNREAD_PATHS", app_src)
+        self.assertIn("should_skip_unread_count", app_src)
 
 
 class UnreadReuseTests(unittest.TestCase):

@@ -140,7 +140,6 @@ def register_pg_pages(
     render,
     require_admin,
     require_pg_perm,
-    require_pg_any,
     get_db,
 ):
     @app.get("/pg", response_class=HTMLResponse)

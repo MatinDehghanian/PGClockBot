@@ -176,7 +176,7 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
         if (msg) msg.textContent = action === 'renew' ? 'در حال تمدید…' : 'در حال دریافت گواهی…';
         if (bar) bar.style.width = '6%';
         if (pctEl) pctEl.textContent = '6%';
-        timer = setInterval(poll, 800);
+        timer = setInterval(function () { if (!document.hidden) poll(); }, 800);
       }
       if (action === 'enable') {
         if (!confirm('بعد از فعال‌سازی، پنل با HTTPS ری‌استارت می‌شود.\\nاز این لحظه با آدرس https://دامنه وارد شوید (نه IP با http).')) {
@@ -187,8 +187,11 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
   }
   {% if st.running or (st.progress and not st.progress.done) %}
   setBusy(true);
-  timer = setInterval(poll, 800);
+  timer = setInterval(function () { if (!document.hidden) poll(); }, 800);
   poll();
   {% endif %}
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && timer) poll();
+  });
 })();
 </script>

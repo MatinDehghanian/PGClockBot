@@ -361,9 +361,15 @@
 
   function startPolling(){
     if (timer) return;
-    timer = setInterval(poll, 1500);
+    timer = setInterval(function () {
+      if (document.hidden) return;
+      poll();
+    }, 1500);
     poll();
   }
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && timer) poll();
+  });
 
   async function beginUpdate(isRetry){
     showOps(true);
