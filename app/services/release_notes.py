@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
-    "3.1.14": [
+    "3.2.0": [
         "فاصله‌گذاری وب‌پنل روی گرید ۸نقطه‌ای (۴/۸/۱۶/۲۴/۳۲/۴۸/۶۴)؛ حذف فاصله‌های غیر استاندارد",
         "نزدیکی منطقی: عنوان+توضیح نزدیک‌تر؛ فاصله بین سکشن‌ها (--section-gap) واضح‌تر",
         "یکسان‌سازی line-height و پدینگ کنترل‌ها/جداول با توکن‌های فاصله",
