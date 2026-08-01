@@ -4886,3 +4886,40 @@ html[data-theme="light"] .ticket-msg--opener {
 html[data-theme="light"] tr.is-unread td {
   background: rgba(234, 179, 8, 0.08);
 }
+.ticket-attach {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--foreground);
+  font-size: 12px;
+  text-decoration: none;
+  max-width: 100%;
+}
+.ticket-attach:hover { background: var(--bg-hover); }
+.ticket-attach .ico {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ticket-attach span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[data-theme="light"] .nav-dot {
+  background: #d97706;
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.18);
+}
+html[data-theme="light"] .ticket-attach {
+  background: rgba(0, 0, 0, 0.02);
+}
