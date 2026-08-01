@@ -253,6 +253,21 @@ a:hover { opacity: 0.8; }
   border-color: transparent;
   font-weight: 600;
 }
+.nav-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.nav-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.22);
+  flex: 0 0 auto;
+}
 
 .side-foot {
   margin-top: auto;

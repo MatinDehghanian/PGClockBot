@@ -1,0 +1,85 @@
+"""Panel tickets UX 3.2.17 — no auto-modal from dashboard, nav dot, upload, dropup."""
+
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class VersionTests(unittest.TestCase):
+    def test_version(self):
+        from app.version import __version__
+
+        self.assertEqual(__version__, "3.2.17")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.2.17")
+
+    def test_notes(self):
+        from app.services.release_notes import RELEASE_NOTES_FA
+
+        blob = " ".join(RELEASE_NOTES_FA["3.2.17"])
+        self.assertIn("داشبورد", blob)
+        self.assertIn("پیوست", blob)
+
+
+class DashboardLinkTests(unittest.TestCase):
+    def test_alert_href_is_list_only(self):
+        src = (ROOT / "app/api/panel_tickets_pages.py").read_text(encoding="utf-8")
+        self.assertIn('"href": "/tickets"', src)
+        # Dashboard alert must not deep-link into modal via ?view=
+        self.assertNotIn('href = f"/tickets?view=', src)
+        self.assertNotIn('f"/tickets?view={tid}"', src)
+
+    def test_templates_use_alert_href(self):
+        for name in ("reseller_home.html", "pg_home.html", "home.html"):
+            src = (ROOT / "app/web/templates" / name).read_text(encoding="utf-8")
+            self.assertIn('href="{{ ticket_alert.href }}"', src)
+
+
+class NavDotTests(unittest.TestCase):
+    def test_sidebar_dot_markup(self):
+        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
+        self.assertIn("nav-dot", base)
+        self.assertIn("tickets_unread", base)
+        self.assertGreaterEqual(base.count("nav-dot"), 2)
+
+    def test_nav_dot_css(self):
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn(".nav-dot {", css)
+
+    def test_owner_unread_model(self):
+        src = (ROOT / "app/db/models.py").read_text(encoding="utf-8")
+        self.assertIn("owner_unread", src)
+        self.assertIn("attachment_path", src)
+
+
+class DropupTests(unittest.TestCase):
+    def test_prefer_open_upward(self):
+        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
+        self.assertIn("Prefer upward", js)
+        # Prefer above when it fits
+        self.assertIn("if (spaceAbove >= mh) openDown = false;", js)
+        self.assertLess(
+            js.find("if (spaceAbove >= mh) openDown = false;"),
+            js.find("else if (spaceBelow >= mh) openDown = true;"),
+        )
+
+
+class UploadTests(unittest.TestCase):
+    def test_forms_multipart(self):
+        src = (ROOT / "app/web/templates/tickets.html").read_text(encoding="utf-8")
+        self.assertIn('enctype="multipart/form-data"', src)
+        self.assertIn('name="attachment"', src)
+        self.assertIn("/media/", src)
+
+    def test_service_helpers(self):
+        from app.services.panel_tickets import ALLOWED_ATTACHMENT_EXT, MAX_ATTACHMENT_BYTES, sanitize_filename
+
+        self.assertIn(".pdf", ALLOWED_ATTACHMENT_EXT)
+        self.assertGreaterEqual(MAX_ATTACHMENT_BYTES, 1024 * 1024)
+        self.assertEqual(sanitize_filename("../../evil.pdf"), "evil.pdf")
+
+
+if __name__ == "__main__":
+    unittest.main()

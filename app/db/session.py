@@ -87,6 +87,24 @@ def _migrate_sqlite(sync_conn) -> None:
                 text("ALTER TABLE reseller_plans ADD COLUMN share_pg_panel_url BOOLEAN DEFAULT 0")
             )
 
+    if insp.has_table("panel_tickets"):
+        tcols = {c["name"] for c in insp.get_columns("panel_tickets")}
+        if "owner_unread" not in tcols:
+            sync_conn.execute(
+                text("ALTER TABLE panel_tickets ADD COLUMN owner_unread BOOLEAN DEFAULT 1")
+            )
+
+    if insp.has_table("panel_ticket_messages"):
+        mcols = {c["name"] for c in insp.get_columns("panel_ticket_messages")}
+        alters_msg = {
+            "attachment_path": "VARCHAR(512)",
+            "attachment_name": "VARCHAR(255)",
+            "attachment_mime": "VARCHAR(128)",
+        }
+        for col, typ in alters_msg.items():
+            if col not in mcols:
+                sync_conn.execute(text(f"ALTER TABLE panel_ticket_messages ADD COLUMN {col} {typ}"))
+
     # Ensure core shop perms exist on legacy reseller profiles / plans (1.7+)
     # Skip after a successful one-time migration (new rows already get core perms).
     marker = None

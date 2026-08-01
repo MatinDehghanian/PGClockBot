@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, Form, Request
+from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,13 +17,15 @@ from app.services.panel_tickets import (
     STATUS_LABELS,
     can_access_panel_tickets,
     count_answered_unread,
+    count_owner_unread,
     create_ticket,
-    first_answered_unread_id,
     get_ticket,
     list_tickets,
     mark_viewed,
     reply_ticket,
+    save_ticket_attachment,
     set_status,
+    sidebar_unread_count,
 )
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 
@@ -77,11 +79,15 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             active_ticket = await get_ticket(session, staff, int(view))
             if active_ticket is not None:
                 await mark_viewed(session, staff, int(view))
-                # Refresh after mark_viewed commit
                 active_ticket = await get_ticket(session, staff, int(view))
+                # Refresh list so unread badges match after mark_viewed
+                panel_tickets = await list_tickets(session, staff, limit=150)
 
         ok_key = (request.query_params.get("ok") or "").strip()
         flash_ok = _OK_FLASH.get(ok_key, ok_key or None)
+        # Recompute after mark_viewed so sidebar dot clears on this response
+        tickets_unread = await sidebar_unread_count(session, staff)
+        request.state.panel_tickets_unread = tickets_unread
 
         return render(
             request,
@@ -101,6 +107,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                 "can_create": staff.get("role") in {"reseller", "pg_staff"},
                 "flash_ok": flash_ok,
                 "flash_err": request.query_params.get("err"),
+                "tickets_unread": tickets_unread,
             },
         )
 
@@ -110,18 +117,24 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
         subject: str = Form(...),
-        body: str = Form(...),
+        body: str = Form(""),
         priority: str = Form("normal"),
+        attachment: UploadFile | None = File(None),
     ):
         if staff.get("role") not in {"reseller", "pg_staff"}:
-            return RedirectResponse("/tickets?err=" + quote("فقط نماینده / ادمین فرعی می‌تواند تیکت بسازد"), status_code=303)
+            return RedirectResponse(
+                "/tickets?err=" + quote("فقط نماینده / ادمین فرعی می‌تواند تیکت بسازد"),
+                status_code=303,
+            )
         try:
+            att = await save_ticket_attachment(attachment)
             ticket = await create_ticket(
                 session,
                 staff,
                 subject=subject,
                 body=body,
                 priority=priority,
+                attachment=att,
             )
             return RedirectResponse(f"/tickets?ok=created&view={ticket.id}", status_code=303)
         except Exception as exc:
@@ -136,12 +149,14 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
         ticket_id: int,
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
-        body: str = Form(...),
+        body: str = Form(""),
+        attachment: UploadFile | None = File(None),
     ):
         if not can_access_panel_tickets(staff):
             return RedirectResponse("/tickets?err=" + quote("دسترسی ندارید"), status_code=303)
         try:
-            await reply_ticket(session, staff, ticket_id, body=body)
+            att = await save_ticket_attachment(attachment, ticket_id=ticket_id)
+            await reply_ticket(session, staff, ticket_id, body=body, attachment=att)
             return RedirectResponse(f"/tickets?ok=replied&view={ticket_id}", status_code=303)
         except Exception as exc:
             return RedirectResponse(
@@ -170,17 +185,16 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
 
 
 async def panel_ticket_dashboard_alert(session: AsyncSession, staff: dict) -> dict | None:
-    """Banner data for dashboards: answered-unread (openers) or waiting (owner)."""
-    from app.services.panel_tickets import count_owner_waiting
+    """Banner data for dashboards — links to list only (no auto-open modal)."""
     from app.services.shop_scope import is_platform_admin
 
     if is_platform_admin(staff):
-        n = await count_owner_waiting(session, staff)
+        n = await count_owner_unread(session, staff)
         if n <= 0:
             return None
         return {
-            "title": f"{n} تیکت در انتظار بررسی" if n > 1 else "یک تیکت در انتظار بررسی",
-            "detail": "نماینده یا ادمین فرعی منتظر پاسخ شماست.",
+            "title": f"{n} تیکت خوانده‌نشده" if n > 1 else "یک تیکت خوانده‌نشده",
+            "detail": "نماینده یا ادمین فرعی پیام جدیدی فرستاده است.",
             "href": "/tickets",
             "count": n,
         }
@@ -188,13 +202,10 @@ async def panel_ticket_dashboard_alert(session: AsyncSession, staff: dict) -> di
     n = await count_answered_unread(session, staff)
     if n <= 0:
         return None
-    tid = await first_answered_unread_id(session, staff)
-    if n == 1 and tid:
+    if n == 1:
         title = "پاسخ جدید برای تیکت پشتیبانی"
         detail = "ادمین اصلی به تیکت شما پاسخ داده است."
-        href = f"/tickets?view={tid}"
     else:
         title = f"{n} تیکت پاسخ‌داده‌شده دارید"
         detail = "پاسخ‌های جدید در صفحه پشتیبانی منتظر مشاهده‌اند."
-        href = f"/tickets?view={tid}" if tid else "/tickets"
-    return {"title": title, "detail": detail, "href": href, "count": n}
+    return {"title": title, "detail": detail, "href": "/tickets", "count": n}

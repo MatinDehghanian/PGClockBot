@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import re
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import DATA_DIR
 from app.db.models import (
     PanelTicket,
     PanelTicketMessage,
@@ -51,6 +55,28 @@ OWNER_STATUSES = (
     PanelTicketStatus.ANSWERED.value,
     PanelTicketStatus.CLOSED.value,
 )
+
+# Attachments: images, docs, archives — keep modest for panel use
+MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024
+ALLOWED_ATTACHMENT_EXT = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".gif",
+    ".pdf",
+    ".txt",
+    ".zip",
+    ".rar",
+    ".7z",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".csv",
+    ".log",
+}
+_SAFE_NAME_RE = re.compile(r"[^\w.\-()+ ]+", re.UNICODE)
 
 
 def _utcnow() -> datetime:
@@ -116,13 +142,7 @@ def actor_from_staff(staff: dict) -> dict[str, Any]:
 
 def can_access_panel_tickets(staff: dict) -> bool:
     role = staff.get("role")
-    if role == "admin":
-        return True
-    if role == "pg_staff":
-        return True
-    if role == "reseller":
-        return True  # core support channel for shop owners
-    return False
+    return role in {"admin", "reseller", "pg_staff"}
 
 
 def _scope_query(actor: dict) -> Select[tuple[PanelTicket]]:
@@ -138,6 +158,49 @@ def _scope_query(actor: dict) -> Select[tuple[PanelTicket]]:
             PanelTicket.updated_at.desc(), PanelTicket.id.desc()
         )
     return q.where(PanelTicket.id == -1)
+
+
+def _tickets_upload_dir() -> Path:
+    d = DATA_DIR / "uploads" / "tickets"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def sanitize_filename(name: str | None) -> str:
+    raw = (name or "file").strip().replace("\\", "/").split("/")[-1]
+    cleaned = _SAFE_NAME_RE.sub("_", raw).strip(" ._")
+    return (cleaned or "file")[:180]
+
+
+async def save_ticket_attachment(
+    upload,
+    *,
+    ticket_id: int | None = None,
+) -> tuple[str, str, str] | None:
+    """Persist an UploadFile; return (rel_path, display_name, mime) or None if empty."""
+    if upload is None:
+        return None
+    filename = getattr(upload, "filename", None) or ""
+    if not str(filename).strip():
+        return None
+
+    display = sanitize_filename(str(filename))
+    ext = Path(display).suffix.lower()
+    if ext not in ALLOWED_ATTACHMENT_EXT:
+        raise ValueError("نوع فایل مجاز نیست (تصویر، PDF، ZIP، متن یا آفیس)")
+
+    content = await upload.read(MAX_ATTACHMENT_BYTES + 1)
+    if not content:
+        return None
+    if len(content) > MAX_ATTACHMENT_BYTES:
+        raise ValueError("حجم فایل حداکثر ۱۲ مگابایت است")
+
+    mime = (getattr(upload, "content_type", None) or "application/octet-stream").strip()[:128]
+    stem = f"t{ticket_id or 0}_{uuid.uuid4().hex[:12]}{ext}"
+    dest = _tickets_upload_dir() / stem
+    dest.write_bytes(content)
+    rel = f"uploads/tickets/{stem}"
+    return rel, display, mime
 
 
 async def list_tickets(session: AsyncSession, staff: dict, *, limit: int = 100) -> list[PanelTicket]:
@@ -175,6 +238,7 @@ async def create_ticket(
     subject: str,
     body: str,
     priority: str | None = None,
+    attachment: tuple[str, str, str] | None = None,
 ) -> PanelTicket:
     actor = actor_from_staff(staff)
     if not actor["is_opener"]:
@@ -183,8 +247,8 @@ async def create_ticket(
     msg = (body or "").strip()
     if len(sub) < 3:
         raise ValueError("موضوع حداقل ۳ کاراکتر باشد")
-    if len(msg) < 3:
-        raise ValueError("متن پیام حداقل ۳ کاراکتر باشد")
+    if len(msg) < 1 and not attachment:
+        raise ValueError("متن پیام یا فایل پیوست لازم است")
     if actor["role"] == "reseller" and not actor["reseller_user_id"]:
         raise PermissionError("شناسه نماینده مشخص نیست")
     if actor["role"] == "pg_staff" and not actor["pg_staff_id"]:
@@ -199,15 +263,22 @@ async def create_ticket(
         opener_pg_staff_id=actor["pg_staff_id"],
         opener_label=str(actor["label"])[:128],
         answered_unread=False,
+        owner_unread=True,
     )
     session.add(ticket)
     await session.flush()
+    path = name = mime = None
+    if attachment:
+        path, name, mime = attachment
     session.add(
         PanelTicketMessage(
             ticket_id=ticket.id,
             sender_role=actor["role"],
             sender_label=str(actor["label"])[:128],
-            body=msg,
+            body=msg or (f"پیوست: {name}" if name else ""),
+            attachment_path=path,
+            attachment_name=name,
+            attachment_mime=mime,
         )
     )
     await session.commit()
@@ -220,6 +291,7 @@ async def reply_ticket(
     ticket_id: int,
     *,
     body: str,
+    attachment: tuple[str, str, str] | None = None,
 ) -> PanelTicket:
     actor = actor_from_staff(staff)
     ticket = await get_ticket(session, staff, ticket_id)
@@ -228,24 +300,31 @@ async def reply_ticket(
     if ticket.status == PanelTicketStatus.CLOSED.value:
         raise ValueError("تیکت بسته است")
     msg = (body or "").strip()
-    if len(msg) < 1:
-        raise ValueError("متن پیام خالی است")
+    if len(msg) < 1 and not attachment:
+        raise ValueError("متن پیام یا فایل پیوست لازم است")
 
+    path = name = mime = None
+    if attachment:
+        path, name, mime = attachment
     session.add(
         PanelTicketMessage(
             ticket_id=ticket.id,
             sender_role=actor["role"],
             sender_label=str(actor["label"])[:128],
-            body=msg,
+            body=msg or (f"پیوست: {name}" if name else ""),
+            attachment_path=path,
+            attachment_name=name,
+            attachment_mime=mime,
         )
     )
     if actor["is_owner"]:
         ticket.status = PanelTicketStatus.ANSWERED.value
         ticket.answered_unread = True
+        ticket.owner_unread = False
     else:
-        # Opener followed up — waiting for owner again
         ticket.status = PanelTicketStatus.OPEN.value
         ticket.answered_unread = False
+        ticket.owner_unread = True
     ticket.updated_at = _utcnow()
     await session.commit()
     return await get_ticket(session, staff, ticket_id)  # type: ignore[return-value]
@@ -270,7 +349,6 @@ async def set_status(
         if new_status not in OWNER_STATUSES:
             raise ValueError("وضعیت نامعتبر است")
     else:
-        # Opener may only close
         if new_status != PanelTicketStatus.CLOSED.value:
             raise PermissionError("شما فقط می‌توانید تیکت را ببندید")
 
@@ -279,8 +357,10 @@ async def set_status(
     if new_status == PanelTicketStatus.CLOSED.value:
         ticket.closed_at = _utcnow()
         ticket.answered_unread = False
+        ticket.owner_unread = False
     elif new_status == PanelTicketStatus.ANSWERED.value and actor["is_owner"]:
         ticket.answered_unread = True
+        ticket.owner_unread = False
     elif new_status in (PanelTicketStatus.OPEN.value, PanelTicketStatus.IN_PROGRESS.value):
         if actor["is_owner"]:
             ticket.answered_unread = False
@@ -289,15 +369,20 @@ async def set_status(
 
 
 async def mark_viewed(session: AsyncSession, staff: dict, ticket_id: int) -> None:
-    """Clear answered_unread when opener opens the ticket."""
+    """Clear unread flags when the relevant party opens the ticket."""
     actor = actor_from_staff(staff)
-    if actor["is_owner"]:
-        return
     ticket = await get_ticket(session, staff, ticket_id)
-    if not ticket or not ticket.answered_unread:
+    if not ticket:
         return
-    ticket.answered_unread = False
-    await session.commit()
+    changed = False
+    if actor["is_owner"] and ticket.owner_unread:
+        ticket.owner_unread = False
+        changed = True
+    elif actor["is_opener"] and ticket.answered_unread:
+        ticket.answered_unread = False
+        changed = True
+    if changed:
+        await session.commit()
 
 
 async def count_answered_unread(session: AsyncSession, staff: dict) -> int:
@@ -311,8 +396,6 @@ async def count_answered_unread(session: AsyncSession, staff: dict) -> int:
         conds.append(PanelTicket.opener_pg_staff_id == int(actor["pg_staff_id"]))
     else:
         return 0
-    from sqlalchemy import func
-
     n = (
         await session.execute(select(func.count()).select_from(PanelTicket).where(*conds))
     ).scalar_one()
@@ -334,28 +417,34 @@ async def first_answered_unread_id(session: AsyncSession, staff: dict) -> Option
     return (await session.execute(q)).scalar_one_or_none()
 
 
-async def count_owner_waiting(session: AsyncSession, staff: dict) -> int:
-    """Open / in-progress panel tickets awaiting platform admin attention."""
+async def count_owner_unread(session: AsyncSession, staff: dict) -> int:
     actor = actor_from_staff(staff)
     if not actor["is_owner"]:
         return 0
-    from sqlalchemy import func
-
     n = (
         await session.execute(
-            select(func.count())
-            .select_from(PanelTicket)
-            .where(
-                PanelTicket.status.in_(
-                    [
-                        PanelTicketStatus.OPEN.value,
-                        PanelTicketStatus.IN_PROGRESS.value,
-                    ]
-                )
-            )
+            select(func.count()).select_from(PanelTicket).where(PanelTicket.owner_unread.is_(True))
         )
     ).scalar_one()
     return int(n or 0)
+
+
+async def count_owner_waiting(session: AsyncSession, staff: dict) -> int:
+    """Backward-compatible alias: unread for owner (new messages awaiting review)."""
+    return await count_owner_unread(session, staff)
+
+
+async def sidebar_unread_count(session: AsyncSession, staff: dict) -> int:
+    """Dot badge count next to پشتیبانی in the sidebar."""
+    try:
+        actor = actor_from_staff(staff)
+    except PermissionError:
+        return 0
+    if actor["is_owner"]:
+        return await count_owner_unread(session, staff)
+    if actor["is_opener"]:
+        return await count_answered_unread(session, staff)
+    return 0
 
 
 async def enrich_opener_label(session: AsyncSession, ticket: PanelTicket) -> str:

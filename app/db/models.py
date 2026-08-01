@@ -244,6 +244,8 @@ class PanelTicket(Base):
     opener_label: Mapped[str] = mapped_column(String(128), default="")
     # True when owner replied and opener has not viewed since
     answered_unread: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # True when opener created/replied and owner has not viewed since
+    owner_unread: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -263,7 +265,10 @@ class PanelTicketMessage(Base):
     # sender_role: "admin" | "reseller" | "pg_staff"
     sender_role: Mapped[str] = mapped_column(String(32))
     sender_label: Mapped[str] = mapped_column(String(128), default="")
-    body: Mapped[str] = mapped_column(Text)
+    body: Mapped[str] = mapped_column(Text, default="")
+    attachment_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    attachment_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    attachment_mime: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     ticket: Mapped["PanelTicket"] = relationship(back_populates="messages")

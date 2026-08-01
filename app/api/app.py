@@ -135,6 +135,8 @@ def render(request: Request, name: str, context: dict | None = None, status_code
                 upd = None
         if upd is not None:
             ctx["update"] = upd
+    if "tickets_unread" not in ctx:
+        ctx["tickets_unread"] = int(getattr(request.state, "panel_tickets_unread", 0) or 0)
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
 
@@ -338,6 +340,12 @@ def create_api_app(lifespan=None) -> FastAPI:
             if not (user.get("pg_permissions") or []):
                 # No mapped features → deny panel use
                 raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
+        try:
+            from app.services.panel_tickets import sidebar_unread_count
+
+            request.state.panel_tickets_unread = await sidebar_unread_count(session, user)
+        except Exception:
+            request.state.panel_tickets_unread = 0
         return user
 
     async def require_admin(

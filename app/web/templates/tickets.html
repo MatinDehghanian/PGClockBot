@@ -28,7 +28,7 @@
     </thead>
     <tbody>
     {% for t in panel_tickets %}
-      <tr class="{% if t.answered_unread and not is_owner %}is-unread{% endif %}">
+      <tr class="{% if (t.answered_unread and not is_owner) or (t.owner_unread and is_owner) %}is-unread{% endif %}">
         <td class="mono">{{ t.id }}</td>
         {% if is_owner %}
         <td>
@@ -44,6 +44,8 @@
           {{ t.subject }}
           {% if t.answered_unread and not is_owner %}
           <span class="badge answered">پاسخ جدید</span>
+          {% elif t.owner_unread and is_owner %}
+          <span class="badge open">جدید</span>
           {% endif %}
         </td>
         <td>
@@ -104,7 +106,7 @@
       <h2 id="ticket-new-title">تیکت جدید</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <form method="post" action="/tickets/panel/create" class="form-stack">
+    <form method="post" action="/tickets/panel/create" class="form-stack" enctype="multipart/form-data">
       <label class="form-field">موضوع
         <input name="subject" required maxlength="255" minlength="3" placeholder="مثلاً مشکل اتصال به نود" autocomplete="off" />
       </label>
@@ -116,7 +118,12 @@
         </select>
       </label>
       <label class="form-field">متن پیام
-        <textarea name="body" rows="5" required minlength="3" placeholder="شرح مشکل یا درخواست…"></textarea>
+        <textarea name="body" rows="5" placeholder="شرح مشکل یا درخواست…"></textarea>
+        <small class="muted">متن یا فایل پیوست — حداقل یکی لازم است</small>
+      </label>
+      <label class="form-field">پیوست (اختیاری)
+        <input type="file" name="attachment" accept=".png,.jpg,.jpeg,.webp,.gif,.pdf,.txt,.zip,.rar,.7z,.doc,.docx,.xls,.xlsx,.csv,.log,image/*" />
+        <small class="muted">حداکثر ۱۲ مگابایت — تصویر، PDF، ZIP، متن یا آفیس</small>
       </label>
       <div class="ui-modal-actions">
         <button type="submit" class="btn">ثبت تیکت</button>
@@ -155,15 +162,24 @@
           <strong>{{ m.sender_label or m.sender_role }}</strong>
           <span class="muted mono" dir="ltr">{{ m.created_at }}</span>
         </header>
-        <p class="ticket-msg-body">{{ m.body }}</p>
+        {% if m.body %}<p class="ticket-msg-body">{{ m.body }}</p>{% endif %}
+        {% if m.attachment_path %}
+        <a class="ticket-attach" href="/media/{{ m.attachment_path }}" target="_blank" rel="noopener">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3h5v5M19 3l-9 9"/><path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/></svg>
+          <span>{{ m.attachment_name or 'دانلود پیوست' }}</span>
+        </a>
+        {% endif %}
       </article>
       {% endfor %}
     </div>
 
     {% if t.status != 'closed' %}
-    <form method="post" action="/tickets/panel/{{ t.id }}/reply" class="form-stack ticket-reply">
+    <form method="post" action="/tickets/panel/{{ t.id }}/reply" class="form-stack ticket-reply" enctype="multipart/form-data">
       <label class="form-field">پاسخ
-        <textarea name="body" rows="3" required placeholder="متن پاسخ…"></textarea>
+        <textarea name="body" rows="3" placeholder="متن پاسخ…"></textarea>
+      </label>
+      <label class="form-field">پیوست (اختیاری)
+        <input type="file" name="attachment" accept=".png,.jpg,.jpeg,.webp,.gif,.pdf,.txt,.zip,.rar,.7z,.doc,.docx,.xls,.xlsx,.csv,.log,image/*" />
       </label>
       <div class="ui-modal-actions">
         <button type="submit" class="btn">ارسال پاسخ</button>

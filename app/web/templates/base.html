@@ -120,7 +120,7 @@
           {% if is_pg_staff %}
           <a href="/tickets" class="nav-item nav-item-home {% if path.startswith('/tickets') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
-            <span>پشتیبانی</span>
+            <span class="nav-item-label"><span>پشتیبانی</span>{% if tickets_unread %}<i class="nav-dot" aria-label="پیام خوانده‌نشده"></i>{% endif %}</span>
           </a>
           {% endif %}
         </div>
@@ -165,7 +165,7 @@
           {% if is_admin or is_reseller or 'tickets' in perms %}
           <a href="/tickets" class="nav-item nav-item-bot {% if path.startswith('/tickets') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
-            <span>پشتیبانی</span>
+            <span class="nav-item-label"><span>پشتیبانی</span>{% if tickets_unread %}<i class="nav-dot" aria-label="پیام خوانده‌نشده"></i>{% endif %}</span>
           </a>
           {% endif %}
           {% if is_admin %}

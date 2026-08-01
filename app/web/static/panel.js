@@ -245,10 +245,10 @@
 
       const spaceBelow = vh - rect.bottom - gap - pad;
       const spaceAbove = rect.top - gap - pad;
-      /* Prefer the side that fits the full menu; flip up when below is short */
+      /* Prefer upward so table «عملیات» menus stay on-screen above the row */
       let openDown;
-      if (spaceBelow >= mh) openDown = true;
-      else if (spaceAbove >= mh) openDown = false;
+      if (spaceAbove >= mh) openDown = false;
+      else if (spaceBelow >= mh) openDown = true;
       else openDown = spaceBelow >= spaceAbove;
 
       let top;
