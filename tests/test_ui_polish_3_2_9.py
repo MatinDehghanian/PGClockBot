@@ -53,7 +53,7 @@ class ForceJoinCardGridTests(unittest.TestCase):
         js = JS.read_text(encoding="utf-8")
         self.assertNotIn("force-channels-footer", html)
         self.assertIn("force-channels-list", html)
-        self.assertIn("grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));", css)
+        self.assertIn("grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));", css)
         self.assertIn(".force-channel-add {", css)
         self.assertIn("border: 1px dashed", css)
         self.assertIn("addTileHtml", js)

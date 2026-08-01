@@ -156,9 +156,10 @@ class VersionBumpTests(unittest.TestCase):
     def test_version_is_current(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.2.9")
-        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "3.2.9")
+        self.assertEqual(__version__, "3.2.10")
+        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "3.2.10")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"3.2.10"', notes)
         self.assertIn('"3.2.9"', notes)
         self.assertIn('"3.2.8"', notes)
         self.assertIn('"3.2.7"', notes)

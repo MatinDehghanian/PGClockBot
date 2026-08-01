@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.2.10": [
+        "سایدبار موبایل: فاصله بالای منوی تم برابر فاصله‌اش تا خط جداکننده",
+        "کانال اجباری: کارت‌ها در صفحات عریض کمی پهن‌تر",
+    ],
     "3.2.9": [
         "جداول: سربرگ دیگر از گوشه گرد باکس بیرون نمی‌زند",
         "سایدبار: فاصله خط تم از کنترل تم و از باکس منوها برابر فاصله خط بالای تم",
