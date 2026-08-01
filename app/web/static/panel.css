@@ -208,7 +208,8 @@ a:hover { opacity: 0.8; }
   border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: 0;
+  /* Tiny air so hover/active boxes don’t touch */
+  gap: var(--space-0);
 }
 .nav-label {
   padding: var(--space-1);
@@ -1891,10 +1892,11 @@ a.btn.btn-star:hover {
   gap: var(--space-2);
 }
 .force-channel-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   align-items: end;
+  justify-content: flex-start;
   padding: var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1905,6 +1907,9 @@ a.btn.btn-star:hover {
   flex-direction: column;
   gap: 0;
   margin: 0;
+  flex: 0 1 240px;
+  width: 100%;
+  max-width: 240px;
   min-width: 0;
   font-size: 13px;
   font-weight: 600;
@@ -1934,6 +1939,7 @@ a.btn.btn-star:hover {
   background: transparent !important;
   color: var(--foreground) !important;
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 .force-channel-req .ui-switch { margin-inline-start: var(--space-1); flex: 0 0 auto; }
 .force-channel-actions {
@@ -1949,8 +1955,12 @@ a.btn.btn-star:hover {
 }
 @media (max-width: 720px) {
   .force-channel-row {
-    grid-template-columns: 1fr;
+    flex-direction: column;
     align-items: stretch;
+  }
+  .force-channel-id-wrap {
+    max-width: none;
+    flex: 1 1 auto;
   }
   .force-channel-actions { width: 100%; }
   .force-channel-actions .btn { width: 100%; justify-content: center; }
@@ -3037,6 +3047,7 @@ a.btn.btn-star:hover {
   padding: var(--space-1);
   border-radius: var(--radius);
   border-top: none;
+  gap: var(--space-0);
 }
 .nav-section-home,
 .nav-section-panel {
@@ -3584,8 +3595,8 @@ body.modal-open { overflow: hidden; }
 /* —— Theme switcher (sidebar top) —— */
 .side-theme {
   position: relative;
-  /* Equal air above/below the separator: padding-bottom == .side gap to first nav box */
-  padding: 0 var(--space-1) var(--space-1);
+  /* No horizontal pad — theme control matches nav-section box width */
+  padding: 0 0 var(--space-1);
   margin-bottom: 0;
   border-bottom: 1px solid var(--border);
 }
@@ -3661,7 +3672,8 @@ body.modal-open { overflow: hidden; }
   position: absolute;
   z-index: 40;
   top: calc(100% - var(--space-0));
-  inset-inline: var(--space-1);
+  /* Same width as theme button / sidebar nav boxes */
+  inset-inline: 0;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -3670,6 +3682,7 @@ body.modal-open { overflow: hidden; }
   border: 1px solid var(--border);
   background: var(--bg-card);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
 }
 .side-theme-menu[hidden] { display: none !important; }
 .side-theme-menu button {

@@ -61,7 +61,7 @@ class ForceJoinRedesignTests(unittest.TestCase):
         self.assertIn("force-channels-head", html)
         self.assertIn("force-channels-title", html)
         self.assertIn("+ افزودن کانال", html)
-        self.assertIn("grid-template-columns: minmax(0, 1fr) auto auto", css)
+        self.assertIn("max-width: 240px;", css)
         self.assertNotIn("force-channel-fields", js)
         self.assertIn("form-field force-channel-id-wrap", js)
 

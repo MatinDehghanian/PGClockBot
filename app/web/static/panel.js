@@ -657,7 +657,7 @@
               '</span>' +
             '</label>' +
             '<div class="force-channel-actions">' +
-              '<button type="button" class="btn btn-ghost btn-sm force-channel-remove" aria-label="حذف کانال">حذف</button>' +
+              '<button type="button" class="btn btn-danger btn-sm force-channel-remove" aria-label="حذف کانال">حذف</button>' +
             '</div>' +
           '</div>'
         );

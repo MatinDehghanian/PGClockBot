@@ -31,7 +31,7 @@ class SidebarThemeGapTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         theme = css.split(".side-theme {\n", 1)[1].split("}", 1)[0]
         self.assertIn("margin-bottom: 0;", theme)
-        self.assertIn("padding: 0 var(--space-1) var(--space-1);", theme)
+        self.assertIn("padding: 0 0 var(--space-1);", theme)
         self.assertIn(".side-nav > .nav-section:first-child", css)
         first = css.split(".side-nav > .nav-section:first-child", 1)[1].split("}", 1)[0]
         self.assertIn("margin-top: 0;", first)

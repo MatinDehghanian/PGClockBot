@@ -107,7 +107,8 @@ class UpdateUiSourceTests(unittest.TestCase):
         self.assertIn("force-channel-remove", js)
         self.assertIn(".force-channel-row", css)
         self.assertIn(".force-channels-footer", css)
-        self.assertIn("grid-template-columns: minmax(0, 1fr) auto auto", css)
+        self.assertIn("max-width: 240px;", css)
+        self.assertIn("btn-danger", js)
 
 
 if __name__ == "__main__":
