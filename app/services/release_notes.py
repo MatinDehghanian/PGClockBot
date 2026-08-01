@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.2.2": [
+        "تنظیمات: فاصله زیر تب‌ها برابر فاصله بالای تب (تیتر)",
+        "فاصله محتوا تا فوتر برابر فاصله محتوا از بالای صفحه",
+        "پاسارگارد: تیتر اول مثل بقیه صفحات؛ فاصله از بالا یکسان شد",
+    ],
     "3.2.1": [
         "نمای کلی ربات: فاصله باکس پنل ربات تا دسترسی سریع مثل بقیه باکس‌ها",
     ],

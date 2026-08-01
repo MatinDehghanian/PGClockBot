@@ -288,13 +288,13 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         body = foot.group(1)
         self.assertIn("margin-top: auto", body)
         # Align with .side-foot baseline
-        self.assertIn("padding-top: var(--space-2)", body)
+        self.assertIn("padding-top: var(--page-title-gap)", body)
         # star button should be shorter than primary --btn-h
         self.assertIn("min-height: 28px", css)
         # sidebar footer must stay at the pre-compact sizing
         side = re.search(r"(?ms)^\.side-foot\s*\{([^}]+)\}", css)
         self.assertIsNotNone(side)
-        self.assertIn("padding-top: var(--space-2)", side.group(1))
+        self.assertIn("padding-top: var(--page-title-gap)", side.group(1))
         logout = re.search(r"(?ms)^\.logout-link\s*\{([^}]+)\}", css)
         self.assertIsNotNone(logout)
         self.assertIn("font-size: 13px", logout.group(1))

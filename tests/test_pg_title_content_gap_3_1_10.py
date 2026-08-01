@@ -45,7 +45,7 @@ class PgTitleContentGapTests(unittest.TestCase):
             title_at = head_only.find('class="page-head"')
             self.assertGreaterEqual(tabs_at, 0, msg=path.name)
             self.assertGreaterEqual(title_at, 0, msg=path.name)
-            self.assertLess(tabs_at, title_at, msg=f"{path.name}: tabs must be above title")
+            self.assertLess(title_at, tabs_at, msg=f"{path.name}: tabs must be below title")
 
 
 if __name__ == "__main__":

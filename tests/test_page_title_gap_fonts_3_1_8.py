@@ -23,7 +23,7 @@ class PageTitleGapParityTests(unittest.TestCase):
     def test_main_top_matches_page_head_bottom(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-4) calc(var(--space-2) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));",
             css,
         )
         self.assertIn(".page-head {\n  display: flex;", css)
@@ -41,15 +41,15 @@ class PageTitleGapParityTests(unittest.TestCase):
         self.assertIn(".pg-head > .page-head {\n  margin-bottom: 0;\n}", css)
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--space-2) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));",
             mobile,
         )
         self.assertIn(".page-head { margin-bottom: var(--page-title-gap);", mobile)
         self.assertIn(".pg-head { margin-bottom: var(--page-title-gap);", mobile)
         self.assertIn(".pg-head > .page-head { margin-bottom: 0; }", mobile)
 
-    def test_pg_tabs_sit_above_title(self):
-        """Tabs above title — otherwise they inflate title→content vs bot."""
+    def test_pg_tabs_sit_below_title(self):
+        """Tabs below title — otherwise they inflate title→content vs bot."""
         pages = sorted(Path("app/web/templates").glob("pg_*.html"))
         self.assertTrue(pages)
         for path in pages:
@@ -64,7 +64,7 @@ class PageTitleGapParityTests(unittest.TestCase):
             title_at = head_only.find('class="page-head"')
             self.assertGreaterEqual(tabs_at, 0, msg=path.name)
             self.assertGreaterEqual(title_at, 0, msg=path.name)
-            self.assertLess(tabs_at, title_at, msg=f"{path.name}: tabs must be above title")
+            self.assertLess(title_at, tabs_at, msg=f"{path.name}: tabs must be below title")
 
 
 class PanelFontUnityTests(unittest.TestCase):
