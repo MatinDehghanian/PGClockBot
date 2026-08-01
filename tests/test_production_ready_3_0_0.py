@@ -14,7 +14,7 @@ class VersionThreeConsistencyTests(unittest.TestCase):
     def test_version_files_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.2.0")
+        self.assertEqual(__version__, "3.2.1")
         self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "3.1.8")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         first = notes.split("RELEASE_NOTES_FA", 1)[1]

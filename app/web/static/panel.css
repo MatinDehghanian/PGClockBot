@@ -4088,7 +4088,8 @@ html[data-theme="light"] .tg-preview-shell {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--section-gap);
-  margin-bottom: var(--space-2);
+  /* Match .card margin-bottom so پنل ربات → دسترسی سریع equals other box gaps */
+  margin-bottom: var(--section-gap);
   align-items: stretch;
 }
 .home-panel {
