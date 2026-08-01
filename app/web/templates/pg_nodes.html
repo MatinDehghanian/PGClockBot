@@ -3,12 +3,12 @@
 {% block title %}نودهای پاسارگارد{% endblock %}
 {% block content %}
 <div class="pg-head">
-{{ pg_tabs('pg_nodes') }}
 <div class="page-head">
   <div>
     {{ page_title('nodes', 'نودها', 'pg') }}
   </div>
 </div>
+{{ pg_tabs('pg_nodes') }}
 </div>
 <div class="card card-flush">
   {% if not nodes %}

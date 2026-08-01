@@ -1,15 +1,7 @@
-"""PasarGuard title→content gap — root-cause fix (3.1.11 / restored 3.2.11).
+"""PasarGuard title→content gap — root-cause fix (3.1.11 / corrected 3.2.13).
 
-Root causes that made PG look looser than bot even when --page-title-gap matched:
-1) tabs between title and content (adds tab-row height + extra gap)
-2) .pg-head nested .page-head also carried margin-bottom (double gap)
-3) .page-head title wrapper flex:1 1 auto + wrap pushed .actions under the title
-4) card-flush search-bar used --card-pad top, so first content sat extra 16px
-   below the card edge (bot thead sits on the card edge)
-
-Fix: tabs ABOVE title; .pg-head owns the single --page-title-gap below the
-title; tabs→title uses --space-1 only; actions stay on the title row;
-flush search top pad uses --space-1.
+Title first like bot; .pg-head owns a single --page-title-gap below the
+header stack; tabs→title gap is --space-1 only; no negative pull-up.
 """
 
 from __future__ import annotations
@@ -31,15 +23,11 @@ class PgTitleContentGapRootTests(unittest.TestCase):
         pg = css.split(".pg-head {\n", 1)[1].split("}", 1)[0]
         self.assertIn("margin-bottom: var(--page-title-gap);", pg)
         self.assertIn("flex-direction: column;", pg)
-        # tabs→title is tight — NOT a second --page-title-gap
         self.assertIn("gap: var(--space-1);", pg)
         self.assertNotIn("gap: var(--page-title-gap);", pg)
-        self.assertIn(
-            "margin-top: calc(-1 * (var(--btn-h) + var(--space-1)));",
-            pg,
-        )
+        self.assertIn("margin-top: 0;", pg)
+        self.assertNotIn("margin-top: calc(", pg)
 
-        # Nested title must not add a second gap; tabs must not keep mobile pad-bottom
         self.assertIn(".pg-head > .page-head {\n  margin-bottom: 0;\n}", css)
         self.assertIn(
             ".pg-head > .pg-tabs,\n.pg-head > .section-tabs {\n  margin-bottom: 0;\n  padding-bottom: 0;\n}",
@@ -61,7 +49,7 @@ class PgTitleContentGapRootTests(unittest.TestCase):
         self.assertIn("padding: var(--space-1) var(--card-pad) 0;", block)
         self.assertNotIn("padding: var(--card-pad) var(--card-pad) 0;", block)
 
-    def test_all_pg_pages_put_tabs_above_title(self):
+    def test_all_pg_pages_put_title_before_tabs(self):
         pages = sorted(Path("app/web/templates").glob("pg_*.html"))
         self.assertTrue(pages)
         for path in pages:
@@ -74,7 +62,7 @@ class PgTitleContentGapRootTests(unittest.TestCase):
             )[0]
             tabs_at = head_only.find("pg_tabs(")
             title_at = head_only.find('class="page-head"')
-            self.assertLess(tabs_at, title_at, msg=f"{path.name}: tabs must be above title")
+            self.assertLess(title_at, tabs_at, msg=f"{path.name}: title must be before tabs")
 
 
 if __name__ == "__main__":

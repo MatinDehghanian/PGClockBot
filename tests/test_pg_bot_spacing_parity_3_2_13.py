@@ -1,4 +1,18 @@
-"""3.2.11 — superseded by 3.2.13 bot-parity model (title first, no pull-up)."""
+"""PasarGuard title spacing mirrors bot panel (restored correct model).
+
+Bot list pages:
+  .main pad (--page-title-gap) → .page-head (title) → --page-title-gap → content
+
+PG pages (have section tabs):
+  .main pad → title FIRST (same Y as bot) → tight --space-1 → tabs
+  → ONE --page-title-gap → content
+
+Forbidden regressions:
+- negative margin-top on .pg-head (clips out of .main)
+- flex gap: --page-title-gap (double-stacks with margin-bottom)
+- tabs ABOVE title (pushes title below bot Y / invites overflow hacks)
+- changing icon/title size or .main padding-top
+"""
 
 from __future__ import annotations
 
@@ -11,8 +25,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CSS = ROOT / "app/web/static/panel.css"
 
 
-class PgTitleContentParity3211Tests(unittest.TestCase):
-    def test_title_to_content_token_parity(self):
+class PgBotSpacingParityTests(unittest.TestCase):
+    def test_pg_head_matches_bot_tokens_without_pull_up(self):
         css = CSS.read_text(encoding="utf-8")
         bot = css.split(".page-head {\n", 1)[1].split("}", 1)[0]
         pg = css.split(".pg-head {\n", 1)[1].split("}", 1)[0]
@@ -22,17 +36,17 @@ class PgTitleContentParity3211Tests(unittest.TestCase):
         self.assertNotIn("gap: var(--page-title-gap);", pg)
         self.assertIn("margin-top: 0;", pg)
         self.assertNotIn("margin-top: calc(", pg)
-        ico = css.split(".page-title-ico {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("width: 40px;", ico)
-        self.assertIn("height: 40px;", ico)
-        self.assertIn("--page-title-gap: 24px;", css)
+        self.assertIn(".pg-head > .page-head {\n  margin-bottom: 0;\n}", css)
         main = css.split(".main {\n", 1)[1]
         self.assertIn(
             "padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));",
             main,
         )
+        ico = css.split(".page-title-ico {\n", 1)[1].split("}", 1)[0]
+        self.assertIn("width: 40px;", ico)
+        self.assertIn("height: 40px;", ico)
 
-    def test_mobile_pg_head_gap_is_tight(self):
+    def test_mobile_same_tokens(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         block = mobile.split(".pg-head {", 1)[1].split("}", 1)[0]
@@ -55,7 +69,7 @@ class PgTitleContentParity3211Tests(unittest.TestCase):
             self.assertLess(
                 head_only.find('class="page-head"'),
                 head_only.find("pg_tabs("),
-                msg=f"{path.name}: title must be before tabs",
+                msg=f"{path.name}: title must come first like bot pages",
             )
 
 

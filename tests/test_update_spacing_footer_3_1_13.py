@@ -64,14 +64,12 @@ class TitleGapParityTests(unittest.TestCase):
     def test_pg_head_gap_matches_page_title_gap(self):
         css = CSS.read_text(encoding="utf-8")
         pg = css.split(".pg-head {\n", 1)[1].split("}", 1)[0]
-        # Sole title→content spacer matches bot; tabs→title stays tight
+        # Sole header→content spacer matches bot; title→tabs stays tight
         self.assertIn("gap: var(--space-1);", pg)
         self.assertNotIn("gap: var(--page-title-gap);", pg)
         self.assertIn("margin-bottom: var(--page-title-gap);", pg)
-        self.assertIn(
-            "margin-top: calc(-1 * (var(--btn-h) + var(--space-1)));",
-            pg,
-        )
+        self.assertIn("margin-top: 0;", pg)
+        self.assertNotIn("margin-top: calc(", pg)
         tabs = css.split(".pg-head > .pg-tabs,\n.pg-head > .section-tabs {\n", 1)[1].split("}", 1)[0]
         self.assertIn("margin-bottom: 0;", tabs)
         self.assertIn("padding-bottom: 0;", tabs)
