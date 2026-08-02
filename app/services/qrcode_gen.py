@@ -6,7 +6,7 @@ from io import BytesIO
 from pathlib import Path
 
 import qrcode
-from PIL import Image
+from PIL import Image, ImageDraw
 from qrcode.constants import ERROR_CORRECT_H
 
 from app.config import DATA_DIR
@@ -56,8 +56,13 @@ def make_subscription_qr(
     if bg_path:
         try:
             bg = Image.open(bg_path).convert("RGBA")
-            # canvas from background, QR centered with padding
-            side = max(qr_img.size) + 80
+            # Shrink QR a bit so more of the branded background stays visible
+            shrink = 0.82
+            qw = max(1, int(qr_img.size[0] * shrink))
+            qh = max(1, int(qr_img.size[1] * shrink))
+            qr_img = qr_img.resize((qw, qh), Image.Resampling.LANCZOS)
+            # Larger canvas margin around the QR plate
+            side = max(qr_img.size) + 140
             canvas = Image.new("RGBA", (side, side), (255, 255, 255, 255))
             # cover-fit background
             bw, bh = bg.size
@@ -65,15 +70,18 @@ def make_subscription_qr(
             nw, nh = int(bw * scale), int(bh * scale)
             bg = bg.resize((nw, nh), Image.Resampling.LANCZOS)
             canvas.paste(bg, ((side - nw) // 2, (side - nh) // 2))
-            # white plate behind QR for readability
-            pad = 16
-            plate = Image.new(
-                "RGBA",
-                (qr_img.size[0] + pad * 2, qr_img.size[1] + pad * 2),
-                (255, 255, 255, 230),
+            # Rounded white plate behind QR for readability
+            pad = 20
+            radius = 18
+            pw, ph = qr_img.size[0] + pad * 2, qr_img.size[1] + pad * 2
+            plate = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
+            ImageDraw.Draw(plate).rounded_rectangle(
+                (0, 0, pw - 1, ph - 1),
+                radius=radius,
+                fill=(255, 255, 255, 230),
             )
-            px = (side - plate.size[0]) // 2
-            py = (side - plate.size[1]) // 2
+            px = (side - pw) // 2
+            py = (side - ph) // 2
             canvas.paste(plate, (px, py), plate)
             canvas.paste(qr_img, (px + pad, py + pad), qr_img)
             out_img = canvas.convert("RGB")

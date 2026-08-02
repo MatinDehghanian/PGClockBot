@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.db.models import Order, Payment
+from app.db.models import BotUser, Order, Payment
 from app.services.formatting import (
     format_bytes,
     format_expire,
@@ -20,6 +20,40 @@ from app.services.formatting import (
     kv_line,
 )
 from app.services.users import get_all_settings, on, set_settings_bulk
+
+
+def ticket_action_markup(ticket_id: int) -> InlineKeyboardMarkup:
+    """Reply / close buttons under ticket notification messages."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💬 پاسخ",
+                    callback_data=f"tkt:reply:{int(ticket_id)}",
+                ),
+                InlineKeyboardButton(
+                    text="🗃 بستن",
+                    callback_data=f"tkt:close:{int(ticket_id)}",
+                ),
+            ]
+        ]
+    )
+
+
+async def _ticket_reseller_chat_ids(session: AsyncSession, ticket_user_id: int) -> list[int]:
+    """Telegram ids of the customer's reseller (if they may handle tickets)."""
+    user = await session.get(BotUser, int(ticket_user_id))
+    if not user or not user.reseller_id:
+        return []
+    from app.services.resellers import get_reseller_profile, has_bot_perm
+
+    profile = await get_reseller_profile(session, int(user.reseller_id))
+    if not profile or not has_bot_perm(profile, "tickets"):
+        return []
+    owner = await session.get(BotUser, int(user.reseller_id))
+    if not owner or not owner.telegram_id:
+        return []
+    return [int(owner.telegram_id)]
 
 # (setting_key, title, description, default "1"|"0")
 NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
@@ -50,7 +84,7 @@ NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
     (
         "notify_new_ticket",
         "تیکت پشتیبانی",
-        "وقتی کاربر تیکت جدید ثبت می‌کند",
+        "وقتی کاربر تیکت جدید ثبت می‌کند یا پیام می‌فرستد — با دکمه پاسخ و بستن",
         "1",
     ),
     (
@@ -309,6 +343,7 @@ async def notify_new_ticket(
     ticket_id: int,
     subject: str,
     user_name: str | None,
+    ticket_user_id: int | None = None,
 ) -> None:
     if not await notify_enabled(session, "notify_new_ticket"):
         return
@@ -322,7 +357,69 @@ async def notify_new_ticket(
             ]
         ),
     )
-    await _send_admins(bot, text)
+    extra: list[int] = []
+    if ticket_user_id:
+        extra = await _ticket_reseller_chat_ids(session, ticket_user_id)
+    await _send_admins(
+        bot,
+        text,
+        markup=ticket_action_markup(ticket_id),
+        extra_chat_ids=extra,
+    )
+
+
+async def notify_ticket_message(
+    bot: Bot,
+    session: AsyncSession,
+    *,
+    ticket_id: int,
+    subject: str | None,
+    body: str,
+    from_staff: bool,
+    ticket_user_id: int,
+    actor_name: str | None = None,
+) -> None:
+    """Notify the other party of a ticket reply — always with پاسخ / بستن buttons."""
+    markup = ticket_action_markup(ticket_id)
+    preview = (body or "").strip()
+    if len(preview) > 500:
+        preview = preview[:500] + "…"
+
+    if from_staff:
+        user = await session.get(BotUser, int(ticket_user_id))
+        if not user or not user.telegram_id:
+            return
+        text = format_message(
+            "💬 پاسخ پشتیبانی",
+            info_block(
+                [
+                    kv_line("🔢", "تیکت", f"#{ticket_id}"),
+                    kv_line("📝", "موضوع", subject or "—"),
+                    kv_line("💬", "پیام", preview or "—"),
+                ]
+            ),
+        )
+        try:
+            await bot.send_message(int(user.telegram_id), text, reply_markup=markup)
+        except Exception:
+            pass
+        return
+
+    if not await notify_enabled(session, "notify_new_ticket"):
+        return
+    text = format_message(
+        "🎫 پیام جدید تیکت",
+        info_block(
+            [
+                kv_line("🔢", "تیکت", f"#{ticket_id}"),
+                kv_line("👤", "از", actor_name or "کاربر"),
+                kv_line("📝", "موضوع", subject or "—"),
+                kv_line("💬", "پیام", preview or "—"),
+            ]
+        ),
+    )
+    extra = await _ticket_reseller_chat_ids(session, ticket_user_id)
+    await _send_admins(bot, text, markup=markup, extra_chat_ids=extra)
 
 
 async def notify_auto_approve(

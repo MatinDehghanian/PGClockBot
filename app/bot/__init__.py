@@ -59,6 +59,7 @@ def create_dispatcher() -> Dispatcher:
         start,
         support,
         services,
+        ticket_actions,
         wallet,
     )
 
@@ -67,6 +68,7 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(wallet.router)
     dp.include_router(services.router)
     dp.include_router(support.router)
+    dp.include_router(ticket_actions.router)
     dp.include_router(payments.router)
     dp.include_router(reseller.router)
     dp.include_router(reseller_plans.router)

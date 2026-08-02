@@ -142,6 +142,7 @@ async def support_body(message: Message, state: FSMContext, session: AsyncSessio
             ticket_id=ticket.id,
             subject=ticket.subject,
             user_name=db_user.full_name or db_user.username,
+            ticket_user_id=db_user.id,
         )
     except Exception:
         pass
@@ -208,4 +209,19 @@ async def support_reply(message: Message, state: FSMContext, session: AsyncSessi
         return
     await reply_ticket(session, ticket, message.text or "", db_user.telegram_id, is_staff=False)
     await state.clear()
+    try:
+        from app.services.notifications import notify_ticket_message
+
+        await notify_ticket_message(
+            message.bot,
+            session,
+            ticket_id=ticket.id,
+            subject=ticket.subject,
+            body=message.text or "",
+            from_staff=False,
+            ticket_user_id=ticket.user_id,
+            actor_name=db_user.full_name or db_user.username,
+        )
+    except Exception:
+        pass
     await message.answer("پاسخ ثبت شد.", reply_markup=kb.back_home())

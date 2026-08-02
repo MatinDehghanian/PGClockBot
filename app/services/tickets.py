@@ -52,6 +52,13 @@ async def reply_ticket(
     return ticket
 
 
+async def close_ticket(session: AsyncSession, ticket: Ticket) -> Ticket:
+    ticket.status = TicketStatus.CLOSED.value
+    await session.commit()
+    await session.refresh(ticket)
+    return ticket
+
+
 async def list_user_tickets(session: AsyncSession, user_id: int) -> list[Ticket]:
     result = await session.execute(
         select(Ticket).where(Ticket.user_id == user_id).order_by(Ticket.id.desc())

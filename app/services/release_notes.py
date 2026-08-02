@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.3.6": [
+        "ربات: زیر پیام تیکت دکمه‌های پاسخ و بستن برای ادمین، کاربر و نماینده",
+        "اگر پس‌زمینه QR انتخاب شده باشد، QR کمی کوچک‌تر و گوشه‌های باکس گرد می‌شود",
+    ],
     "3.3.5": [
         "تم روشن: باکس وب‌پنل سایدبار دوباره بی‌رنگ و فقط با حاشیه",
         "رنگ سلکت و هاور آیتم‌های وب‌پنل در تم روشن با همان سبک خنثی هماهنگ شد",

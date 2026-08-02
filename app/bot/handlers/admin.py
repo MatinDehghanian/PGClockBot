@@ -1783,15 +1783,21 @@ async def adm_ticket_reply(message: Message, state: FSMContext, session: AsyncSe
         return
     await reply_ticket(session, ticket, message.text or "", db_user.telegram_id, is_staff=True)
     await state.clear()
-    user = await session.get(BotUser, ticket.user_id)
-    if user:
-        try:
-            await message.bot.send_message(
-                user.telegram_id,
-                f"💬 پاسخ پشتیبانی برای تیکت #{ticket.id}:\n{message.text}",
-            )
-        except Exception:
-            pass
+    try:
+        from app.services.notifications import notify_ticket_message
+
+        await notify_ticket_message(
+            message.bot,
+            session,
+            ticket_id=ticket.id,
+            subject=ticket.subject,
+            body=message.text or "",
+            from_staff=True,
+            ticket_user_id=ticket.user_id,
+            actor_name=db_user.full_name or db_user.username,
+        )
+    except Exception:
+        pass
     await message.answer("ارسال شد ✅", reply_markup=kb.admin_home())
 
 
