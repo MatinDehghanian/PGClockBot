@@ -96,36 +96,22 @@ def main_menu(
         return admin_main_menu(ui)
 
     settings = get_settings()
-    layout = _t(ui, "menu_layout")
-    rows: list[list[InlineKeyboardButton]] = []
-    pending_row: list[InlineKeyboardButton] = []
-
-    def flush_pending() -> None:
-        nonlocal pending_row
-        if not pending_row:
-            return
-        if layout == "compact":
-            for i in range(0, len(pending_row), 2):
-                rows.append(pending_row[i : i + 2])
-        else:
-            for b in pending_row:
-                rows.append([b])
-        pending_row = []
-
-    def add_full(btn: InlineKeyboardButton) -> None:
-        flush_pending()
-        rows.append([btn])
-
-    def add_mid(btn: InlineKeyboardButton) -> None:
-        pending_row.append(btn)
+    layout = (_t(ui, "menu_layout") or "classic").strip()
+    buttons: list[InlineKeyboardButton] = []
 
     for key in _menu_order(ui):
         if key == "shop":
-            add_full(InlineKeyboardButton(text=_t(ui, "btn_shop"), callback_data="shop:list"))
+            buttons.append(
+                InlineKeyboardButton(text=_t(ui, "btn_shop"), callback_data="shop:list")
+            )
         elif key == "services" and has_services:
-            add_full(InlineKeyboardButton(text=_t(ui, "btn_services"), callback_data="svc:list"))
+            buttons.append(
+                InlineKeyboardButton(text=_t(ui, "btn_services"), callback_data="svc:list")
+            )
         elif key == "wallet":
-            add_mid(InlineKeyboardButton(text=_t(ui, "btn_wallet"), callback_data="wallet:home"))
+            buttons.append(
+                InlineKeyboardButton(text=_t(ui, "btn_wallet"), callback_data="wallet:home")
+            )
         elif key == "support":
             contacts = active_support_contacts(
                 parse_support_contacts((ui or {}).get("support_contacts"))
@@ -133,45 +119,55 @@ def main_menu(
             if len(contacts) == 1:
                 url = support_chat_url(contacts[0].get("telegram") or "")
                 if url:
-                    add_mid(
+                    buttons.append(
                         InlineKeyboardButton(text=_t(ui, "btn_support"), url=url)
                     )
                 else:
-                    add_mid(
+                    buttons.append(
                         InlineKeyboardButton(
                             text=_t(ui, "btn_support"), callback_data="support:home"
                         )
                     )
             else:
-                add_mid(
+                buttons.append(
                     InlineKeyboardButton(
                         text=_t(ui, "btn_support"), callback_data="support:home"
                     )
                 )
         elif key == "guide":
-            add_mid(InlineKeyboardButton(text=_t(ui, "btn_guide"), callback_data="help:guide"))
+            buttons.append(
+                InlineKeyboardButton(text=_t(ui, "btn_guide"), callback_data="help:guide")
+            )
         elif key == "faq":
-            add_mid(InlineKeyboardButton(text=_t(ui, "btn_faq"), callback_data="help:faq"))
+            buttons.append(
+                InlineKeyboardButton(text=_t(ui, "btn_faq"), callback_data="help:faq")
+            )
         elif key == "referral":
-            add_full(InlineKeyboardButton(text=_t(ui, "btn_referral"), callback_data="ref:home"))
+            buttons.append(
+                InlineKeyboardButton(text=_t(ui, "btn_referral"), callback_data="ref:home")
+            )
         elif key == "reseller_apply" and role == Role.USER.value and on(
             _t(ui, "show_reseller_apply")
         ):
-            add_full(
+            buttons.append(
                 InlineKeyboardButton(
                     text=_t(ui, "btn_reseller_apply"),
                     callback_data="resapply:home",
                 )
             )
         elif key == "miniapp" and settings.miniapp_enabled:
-            add_full(
+            buttons.append(
                 InlineKeyboardButton(
                     text=_t(ui, "btn_miniapp"),
                     web_app=WebAppInfo(url=settings.miniapp_url),
                 )
             )
 
-    flush_pending()
+    # compact = pair left-to-right like the web-panel live preview; classic = one per row
+    if layout == "compact":
+        rows = chunk_buttons(buttons, cols=2)
+    else:
+        rows = [[b] for b in buttons]
 
     if role == Role.RESELLER.value:
         rows.append(

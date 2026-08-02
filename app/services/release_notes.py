@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.3.7": [
+        "منوی فشرده (جفتی): خرید سرویس و سرویس‌های من و بقیه دکمه‌ها مثل پیش‌نمایش وب‌پنل دو به دو چیده می‌شوند",
+    ],
     "3.3.6": [
         "ربات: زیر پیام تیکت دکمه‌های پاسخ و بستن برای ادمین، کاربر و نماینده",
         "اگر پس‌زمینه QR انتخاب شده باشد، QR کمی کوچک‌تر و گوشه‌های باکس گرد می‌شود",
