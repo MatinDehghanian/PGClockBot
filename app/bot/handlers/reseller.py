@@ -26,7 +26,7 @@ from app.services.resellers import (
     list_active_reseller_plans,
 )
 from app.bot.tg_utils import safe_edit_text
-from app.services.users import get_all_settings, on
+from app.services.users import get_all_settings
 
 router = Router(name="reseller")
 
@@ -434,8 +434,9 @@ async def resapply_home(
     reseller_owner_id: int | None = None,
 ):
     ui = await get_all_settings(session)
-    if not on(ui.get("show_reseller_apply", "1")):
-        await callback.answer("درخواست نمایندگی غیرفعال است", show_alert=True)
+    order_keys = [p.strip() for p in (ui.get("menu_order") or "").split(",") if p.strip()]
+    if "reseller_apply" not in order_keys:
+        await callback.answer("درخواست نمایندگی در منو فعال نیست", show_alert=True)
         return
     owner_id, _profile = await _actor(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id

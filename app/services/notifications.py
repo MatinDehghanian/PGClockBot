@@ -485,8 +485,12 @@ def build_qr_caption(
         lines.append(f"📦 حجم: <b>{vol}</b>")
     if exp is not None or info is not None:
         lines.append(f"⏱ زمان: <b>{format_expire(exp)}</b>")
-    lines.append("")
-    lines.append("🔗 لینک اشتراک:")
-    lines.append(f"<code>{sub_url}</code>")
+    # Honor panel toggle «نمایش لینک در کپشن QR» (same as delivery text path)
+    from app.services.users import on as _on
+
+    if _on(ui.get("show_sub_link_in_text", "1")):
+        lines.append("")
+        lines.append("🔗 لینک اشتراک:")
+        lines.append(f"<code>{sub_url}</code>")
     caption = "\n".join(lines).strip()
     return caption[:1024]

@@ -146,9 +146,7 @@ def main_menu(
             buttons.append(
                 InlineKeyboardButton(text=_t(ui, "btn_referral"), callback_data="ref:home")
             )
-        elif key == "reseller_apply" and role == Role.USER.value and on(
-            _t(ui, "show_reseller_apply")
-        ):
+        elif key == "reseller_apply" and role == Role.USER.value:
             buttons.append(
                 InlineKeyboardButton(
                     text=_t(ui, "btn_reseller_apply"),

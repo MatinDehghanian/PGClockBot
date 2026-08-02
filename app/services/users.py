@@ -34,7 +34,7 @@ def _split_channel_tokens(raw: str | None) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
     for part in (raw or "").replace(",", "\n").splitlines():
-        ch = part.strip()
+        ch, _required = _parse_channel_line(part)
         if not ch:
             continue
         key = ch.lower()
@@ -45,10 +45,33 @@ def _split_channel_tokens(raw: str | None) -> list[str]:
     return out
 
 
+def _parse_channel_line(part: str) -> tuple[str, bool]:
+    """Parse one force-join line → (channel_id, required).
+
+    Optional markers (Telegram admin edit / legacy text):
+    ``@chan !optional``, ``@chan !opt``, ``@chan (اختیاری)``.
+    """
+    ch = (part or "").strip()
+    if not ch:
+        return "", True
+    required = True
+    lower = ch.lower()
+    for marker in ("!optional", "!opt"):
+        if lower.endswith(marker):
+            ch = ch[: -len(marker)].strip()
+            required = False
+            break
+    if ch.endswith("(اختیاری)"):
+        ch = ch[: -len("(اختیاری)")].strip()
+        required = False
+    return ch, required
+
+
 def parse_force_join_entries(raw: str | None) -> list[dict[str, Any]]:
     """Parse force-join setting into [{id, required}, ...].
 
-    Accepts JSON array (new) or legacy line/comma-separated channels (all required).
+    Accepts JSON array (new) or legacy line/comma-separated channels (all required
+    unless marked ``!optional``).
     """
     s = (raw or "").strip()
     if not s:
@@ -63,8 +86,7 @@ def parse_force_join_entries(raw: str | None) -> list[dict[str, Any]]:
             seen: set[str] = set()
             for item in data:
                 if isinstance(item, str):
-                    ch = item.strip()
-                    required = True
+                    ch, required = _parse_channel_line(item)
                 elif isinstance(item, dict):
                     ch = str(item.get("id") or item.get("channel") or "").strip()
                     req = item.get("required", True)
@@ -82,7 +104,18 @@ def parse_force_join_entries(raw: str | None) -> list[dict[str, Any]]:
                 seen.add(key)
                 out.append({"id": ch, "required": required})
             return out
-    return [{"id": ch, "required": True} for ch in _split_channel_tokens(s)]
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for part in s.replace(",", "\n").splitlines():
+        ch, required = _parse_channel_line(part)
+        if not ch:
+            continue
+        key = ch.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"id": ch, "required": required})
+    return out
 
 
 def parse_force_join_channels(raw: str | None) -> list[str]:
@@ -114,9 +147,15 @@ def serialize_force_join_entries(entries: list[dict[str, Any]] | None) -> str:
 
 
 def format_force_join_for_edit(raw: str | None) -> str:
-    """Human-editable multi-line preview (one channel per line) for bot settings."""
-    return "\n".join(e["id"] for e in parse_force_join_entries(raw))
-
+    """Human-editable multi-line preview for bot settings (keeps optional flags)."""
+    lines: list[str] = []
+    for e in parse_force_join_entries(raw):
+        ch = e["id"]
+        if e.get("required", True):
+            lines.append(ch)
+        else:
+            lines.append(f"{ch} !optional")
+    return "\n".join(lines)
 
 def normalize_force_join_channel_value(raw: str | None) -> str:
     """Accept JSON or legacy lines; always store JSON entries (required defaults true)."""

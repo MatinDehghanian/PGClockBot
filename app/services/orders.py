@@ -21,6 +21,7 @@ from app.db.models import (
     ResellerProfile,
     TrialClaim,
     UserService,
+    WalletTransaction,
 )
 from app.services.pasarguard import extract_sub_token, get_pg
 from app.services.pg_quota import (
@@ -29,6 +30,53 @@ from app.services.pg_quota import (
     assert_reseller_can_renew,
 )
 from app.services.wallet import credit_wallet, debit_wallet
+
+
+async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None:
+    """Credit referrer wallet once after invitee's first successful purchase delivery.
+
+    Reads ``referral_bonus`` from shop settings (panel payment tab). Skips renewals,
+    reseller application fees, and zero/invalid bonus. Idempotent via wallet reason.
+    """
+    note = (order.note or "").strip()
+    if note.startswith("renew:") or note.startswith("reseller_app:"):
+        return
+    buyer = order.user
+    if buyer is None:
+        buyer = await session.get(BotUser, order.user_id)
+    if not buyer or not buyer.referred_by_id:
+        return
+    from app.services.users import get_setting
+
+    raw = await get_setting(
+        session, "referral_bonus", "0", reseller_id=order.reseller_id
+    )
+    try:
+        bonus = int(str(raw or "0").replace(",", "").strip() or "0")
+    except ValueError:
+        bonus = 0
+    if bonus <= 0:
+        return
+    reason = f"referral:{int(buyer.id)}"
+    existing = (
+        await session.execute(
+            select(WalletTransaction.id)
+            .where(
+                WalletTransaction.user_id == int(buyer.referred_by_id),
+                WalletTransaction.reason == reason,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return
+    referrer = await session.get(BotUser, int(buyer.referred_by_id))
+    if not referrer:
+        return
+    try:
+        await credit_wallet(session, referrer, bonus, reason)
+    except Exception:
+        pass
 
 
 async def _reseller_pg_link(
@@ -961,6 +1009,10 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         order.status = OrderStatus.DELIVERED.value
         await session.commit()
         await session.refresh(order)
+        try:
+            await _maybe_pay_referral_bonus(session, order)
+        except Exception:
+            pass
         return order
     except Exception:
         try:
