@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.3.5": [
+        "تم روشن: باکس وب‌پنل سایدبار دوباره بی‌رنگ و فقط با حاشیه",
+        "رنگ سلکت و هاور آیتم‌های وب‌پنل در تم روشن با همان سبک خنثی هماهنگ شد",
+    ],
     "3.3.2": [
         "ممیزی کامل پنل و ربات: حذف کدهای مرده و کوئری‌های تکراری",
         "سبک‌تر شدن احراز هویت وب (بدون COUNT اضافی در POST/JSON و بدون resolve دوبارهٔ نقش PG)",
