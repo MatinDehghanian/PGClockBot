@@ -63,6 +63,7 @@ SECTIONS: dict[str, dict] = {
                 ("btn_faq", "سوالات", "text"),
                 ("btn_referral", "دعوت", "text"),
                 ("btn_miniapp", "مینی‌اپ", "text"),
+                ("btn_wholesale", "فروش عمده", "text"),
                 ("btn_back", "بازگشت", "text"),
                 ("btn_cancel", "انصراف", "text"),
                 ("btn_renew", "تمدید", "text"),
