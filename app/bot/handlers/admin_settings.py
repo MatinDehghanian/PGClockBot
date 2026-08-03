@@ -200,6 +200,19 @@ def _field_lookup() -> dict[str, Field]:
 
 FIELDS = _field_lookup()
 
+NOTIFY_KEYS: frozenset[str] = frozenset(key for key, *_ in NOTIFY_PREFS)
+
+# Extra toggles rendered outside SECTIONS field lists
+EXTRA_TOGGLE_KEYS: frozenset[str] = frozenset({"custom_plan_enabled", "trial_enabled"}) | NOTIFY_KEYS
+
+
+def _is_toggleable_setting_key(key: str) -> bool:
+    """True for keys the adm:st:tog handler may flip."""
+    if key in EXTRA_TOGGLE_KEYS:
+        return True
+    meta = FIELDS.get(key)
+    return bool(meta and meta[2] == "toggle")
+
 
 def _preview(value: str | None, *, limit: int = 120) -> str:
     text = (value or "").strip()
@@ -533,7 +546,7 @@ async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_use
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     key = callback.data.split(":", 3)[-1]
-    if key not in FIELDS and key not in {"custom_plan_enabled", "trial_enabled"}:
+    if not _is_toggleable_setting_key(key):
         await callback.answer("کلید نامعتبر", show_alert=True)
         return
     cur = await get_setting(session, key)

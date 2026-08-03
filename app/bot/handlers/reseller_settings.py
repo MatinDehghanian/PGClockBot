@@ -159,6 +159,11 @@ def _field_lookup() -> dict[str, Field]:
 FIELDS = _field_lookup()
 
 
+def _is_field_toggle_key(key: str) -> bool:
+    meta = FIELDS.get(key)
+    return bool(meta and meta[2] == "toggle")
+
+
 def _preview(value: str | None, *, limit: int = 120) -> str:
     text = (value or "").strip()
     if not text:
@@ -436,7 +441,7 @@ async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_use
         await callback.answer(err, show_alert=True)
         return
     key = callback.data.split(":", 3)[-1]
-    if key.startswith("notify_") or key not in FIELDS:
+    if key.startswith("notify_") or not _is_field_toggle_key(key):
         await callback.answer("نامعتبر", show_alert=True)
         return
     with _Scoped(profile.user_id):
