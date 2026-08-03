@@ -21,6 +21,8 @@
 {% if not is_admin %}
   {% set ov = reseller_overview or {} %}
   {% if ov.ready %}
+  {% from "_pg_quota_gauges.html" import pg_quota_gauge, pg_quota_exhausted_banners %}
+  {{ pg_quota_exhausted_banners(users=ov.users, traffic=ov.traffic) }}
   {% if ov.username %}
   <div class="pg-admin-head">
     <strong class="pg-admin-name" dir="ltr">{{ ov.username }}</strong>
@@ -32,10 +34,9 @@
     {% endif %}
   </div>
   {% endif %}
-  {% from "_pg_quota_gauges.html" import pg_quota_gauge %}
   {% if ov.users or ov.traffic %}
   <section class="home-top pg-quota-top" aria-label="کاربران و حجم">
-    <div class="home-gauges">
+    <div class="home-gauges pg-quota-gauges">
       {% if ov.users %}
       {{ pg_quota_gauge(ov.users, 'کاربران', 'Users', 'pg-users') }}
       {% endif %}

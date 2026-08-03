@@ -54,7 +54,8 @@ class ConstraintBoxesTests(unittest.TestCase):
             self.assertIn("pg_quota_gauge", src)
         gauges = Path("app/web/templates/_pg_quota_gauges.html").read_text(encoding="utf-8")
         self.assertIn("باقی‌مانده", gauges)
-        self.assertIn("pg-gauge-pulse", gauges)
+        self.assertNotIn("pg-gauge-pulse", gauges)
+        self.assertIn("is-exhausted", gauges)
         self.assertIn("home-gauge", gauges)
 
     def test_status_meta_still_works(self):

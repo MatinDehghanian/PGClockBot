@@ -101,6 +101,7 @@ def _meter(
     else:
         ratio_text = format_value(used_v)
     tone = remain_tone(remain_pct)
+    exhausted = bool(has_limit and remain is not None and int(remain) <= 0)
     return {
         "label": label,
         "has_limit": has_limit,
@@ -110,7 +111,8 @@ def _meter(
         "pct": pct,
         "remain_pct": remain_pct,
         "tone": tone,
-        "alert": has_limit and tone in {"warn", "caution", "err"},
+        "exhausted": exhausted,
+        "alert": exhausted,  # legacy alias — only when fully depleted
         "used_text": format_value(used_v),
         "limit_text": format_value(limit) if has_limit else "نامحدود",
         "remain_text": format_value(remain) if remain is not None else "—",

@@ -1,4 +1,4 @@
-"""3.3.9 — PG quota gauges (users/traffic) like admin CPU/RAM."""
+"""3.3.10 — PG quota gauges: mobile single-col + exhausted banners."""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ class RemainToneTests(unittest.TestCase):
         self.assertEqual(remain_tone(9.9), "err")
         self.assertEqual(remain_tone(0), "err")
 
-    def test_meter_adds_tone_and_remain_pct(self):
-        m = _meter(
+    def test_meter_exhausted_only_at_zero(self):
+        low = _meter(
             label="کاربران",
             used=80,
             limit=100,
@@ -33,11 +33,23 @@ class RemainToneTests(unittest.TestCase):
             format_value=str,
             kind="count",
         )
-        self.assertTrue(m["has_limit"])
-        self.assertEqual(m["pct"], 80.0)
-        self.assertEqual(m["remain_pct"], 20.0)
-        self.assertEqual(m["tone"], "caution")
-        self.assertTrue(m["alert"])
+        self.assertEqual(low["tone"], "caution")
+        self.assertFalse(low["exhausted"])
+        self.assertFalse(low["alert"])
+
+        full = _meter(
+            label="کاربران",
+            used=100,
+            limit=100,
+            used_label="مصرف‌شده",
+            remain_label="باقی‌مانده",
+            format_value=str,
+            kind="count",
+        )
+        self.assertEqual(full["remain"], 0)
+        self.assertTrue(full["exhausted"])
+        self.assertTrue(full["alert"])
+        self.assertEqual(full["tone"], "err")
 
     def test_unlimited_is_neutral(self):
         m = _meter(
@@ -51,44 +63,51 @@ class RemainToneTests(unittest.TestCase):
         )
         self.assertFalse(m["has_limit"])
         self.assertEqual(m["tone"], "neutral")
-        self.assertFalse(m["alert"])
+        self.assertFalse(m["exhausted"])
 
 
 class PgQuotaGaugeUiTests(unittest.TestCase):
-    def test_macro_and_css(self):
+    def test_macro_no_pulse_has_exhausted(self):
         macro = (ROOT / "app/web/templates/_pg_quota_gauges.html").read_text(encoding="utf-8")
         self.assertIn("home-gauge", macro)
-        self.assertIn("pg-gauge-pulse", macro)
-        self.assertIn("remain_pct", macro)
-        self.assertIn("باقی‌مانده", macro)
+        self.assertNotIn("pg-gauge-pulse", macro)
+        self.assertIn("is-exhausted", macro)
+        self.assertIn("pg_quota_exhausted_banners", macro)
+        self.assertIn("سقف تعداد کاربران پر شده است", macro)
+        self.assertIn("سقف حجم تمام شده است", macro)
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn("home-gauge-caution", css)
-        self.assertIn("pg-gauge-blink", css)
-        self.assertIn("--caution-fg", css)
+        self.assertIn(".home-gauge.is-exhausted", css)
+        self.assertIn(".pg-quota-gauges", css)
+        self.assertNotIn("pg-gauge-blink", css)
+        self.assertNotIn("pg-gauge-pulse", css)
 
-    def test_pg_home_order_and_no_extra_captions(self):
+    def test_mobile_single_column_rectangular(self):
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        block = css.split(".pg-quota-gauges {")[1].split("}")[0]
+        self.assertIn("grid-template-columns: 1fr", block)
+        gauge = css.split(".pg-quota-gauges .home-gauge {")[1].split("}")[0]
+        self.assertIn("flex-direction: row", gauge)
+        self.assertIn("height: auto", gauge)
+
+    def test_pg_home_banners_and_order(self):
         src = (ROOT / "app/web/templates/pg_home.html").read_text(encoding="utf-8")
-        # Gauges section before stats grid
+        ban_i = src.find("pg_quota_exhausted_banners")
         top_i = src.find("pg-quota-top")
         grid_i = src.find("home-panel-grid")
-        self.assertGreater(top_i, 0)
+        self.assertGreater(ban_i, 0)
+        self.assertGreater(top_i, ban_i)
         self.assertGreater(grid_i, top_i)
-        # Other boxes no caption lines
+        self.assertIn("pg-quota-gauges", src)
         self.assertNotIn("فقط کاربران این حساب", src)
-        self.assertNotIn("۲ دقیقه اخیر", src)
-        # Users/traffic not duplicated as plain stats
-        self.assertNotIn("باقی‌مانده {{ ov.users.remain_text }}", src)
-        self.assertNotIn("باقی‌مانده {{ ov.traffic.remain_text }}", src)
 
-    def test_reseller_home_uses_gauges(self):
+    def test_reseller_home_banners_at_top(self):
         src = (ROOT / "app/web/templates/reseller_home.html").read_text(encoding="utf-8")
-        self.assertIn("pg_quota_gauge", src)
+        ban_i = src.find("pg_quota_exhausted_banners")
+        gauges_i = src.find("pg-quota-gauges")
+        self.assertGreater(ban_i, 0)
+        self.assertGreater(gauges_i, ban_i)
         self.assertIn("pg-quota-gauges-embed", src)
-        # Constraints after gauges; no remain captions on constraint stats
-        gauges_i = src.find("pg-quota-gauges-embed")
-        cons_i = src.find("pg_limits.constraints")
-        self.assertGreater(gauges_i, 0)
-        self.assertGreater(cons_i, gauges_i)
 
 
 if __name__ == "__main__":

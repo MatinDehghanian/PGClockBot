@@ -4233,40 +4233,66 @@ html[data-theme="light"] .setup-progress span.done {
 .home-gauge-err .home-gauge-val { stroke: var(--destructive-fg); }
 .home-gauge-neutral .home-gauge-val { stroke: var(--muted-fg); }
 
-/* PG quota gauges — blink when remaining capacity is constrained */
-.home-gauge.is-alert {
-  position: relative;
-}
-.pg-gauge-pulse {
-  position: absolute;
-  top: var(--space-2);
-  left: var(--space-2);
-  z-index: 2;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  pointer-events: none;
-  box-shadow: 0 0 0 0 currentColor;
-  animation: pg-gauge-blink 1.6s ease-in-out infinite;
-}
-.pg-gauge-pulse::after {
-  content: "";
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  border: 1.5px solid currentColor;
-  opacity: 0.35;
-}
-.pg-gauge-pulse-warn { color: var(--warn-fg); background: var(--warn-fg); }
-.pg-gauge-pulse-caution { color: var(--caution-fg, #fb923c); background: var(--caution-fg, #fb923c); }
-.pg-gauge-pulse-err { color: var(--destructive-fg); background: var(--destructive-fg); }
-@keyframes pg-gauge-blink {
-  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent); }
-  50% { opacity: 0.55; transform: scale(0.92); box-shadow: 0 0 0 6px transparent; }
+/* PG quota — exhausted: red border (no blink indicator) */
+.home-gauge.is-exhausted {
+  border-color: color-mix(in srgb, var(--destructive-fg) 72%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--destructive-fg) 28%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--destructive-fg) 12%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--destructive-fg) 8%, transparent),
+      transparent 42%
+    ),
+    var(--bg-card);
 }
 .pg-quota-top { margin-bottom: var(--section-gap); }
-.pg-quota-gauges-embed {
-  margin-top: var(--space-2);
+.pg-quota-gauges-embed { margin-top: var(--space-2); }
+.pg-quota-banner {
+  text-align: start;
+  padding: var(--space-2) var(--card-pad);
+}
+.pg-quota-banner-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  text-align: start;
+}
+.pg-quota-banner-ico {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--destructive-fg) 14%, transparent);
+  color: var(--destructive-fg);
+}
+.pg-quota-banner-ico svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pg-quota-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.pg-quota-banner-copy strong {
+  font-size: 13px;
+  font-weight: 650;
+  color: inherit;
+}
+.pg-quota-banner-copy span {
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.92;
 }
 .home-gauge-meta > small.muted {
   font-size: 12px;
@@ -4665,9 +4691,27 @@ html[data-theme="light"] .home-panel-pg a.btn {
   border-color: color-mix(in srgb, #2563eb 36%, transparent);
   background: color-mix(in srgb, #2563eb 12%, transparent);
 }
-html[data-theme="light"] .home-panel-pg .btn:hover,
-html[data-theme="light"] .home-panel-pg a.btn:hover {
-  background: color-mix(in srgb, #2563eb 18%, transparent);
+html[data-theme="light"] .home-gauge.is-exhausted {
+  border-color: color-mix(in srgb, var(--destructive-fg) 55%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--destructive-fg) 18%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--destructive-fg) 8%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--destructive-fg) 6%, transparent),
+      transparent 42%
+    ),
+    var(--bg-card);
+}
+html[data-theme="light"] .pg-quota-banner.flash.err {
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.28);
+}
+html[data-theme="light"] .pg-quota-banner-ico {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
 }
 
 @media (max-width: 1100px) {
@@ -4694,6 +4738,35 @@ html[data-theme="light"] .home-panel-pg a.btn:hover {
   }
   .home-gauge-ring { width: 96px; height: 96px; }
   .home-gauge-center strong { font-size: 20px; }
+
+  /* PG users/traffic: single-column rectangular cards on mobile */
+  .pg-quota-gauges {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+  .pg-quota-gauges .home-gauge {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: start;
+    gap: var(--space-2);
+    padding: var(--card-pad);
+    min-height: 0;
+    height: auto;
+  }
+  .pg-quota-gauges .home-gauge-ring {
+    width: 72px;
+    height: 72px;
+  }
+  .pg-quota-gauges .home-gauge-center strong { font-size: 16px; }
+  .pg-quota-gauges .home-gauge-center span { font-size: 10px; }
+  .pg-quota-gauges .home-gauge-meta {
+    text-align: start;
+    align-items: flex-start;
+  }
+  .pg-quota-gauges .home-gauge-meta [dir="ltr"] {
+    text-align: right;
+  }
 }
 @media (max-width: 560px) {
   .home-conn-row { grid-template-columns: 1fr; }
