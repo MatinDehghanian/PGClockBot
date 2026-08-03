@@ -40,21 +40,6 @@ def ticket_action_markup(ticket_id: int) -> InlineKeyboardMarkup:
     )
 
 
-async def _ticket_reseller_chat_ids(session: AsyncSession, ticket_user_id: int) -> list[int]:
-    """Telegram ids of the customer's reseller (if they may handle tickets)."""
-    user = await session.get(BotUser, int(ticket_user_id))
-    if not user or not user.reseller_id:
-        return []
-    from app.services.resellers import get_reseller_profile, has_bot_perm
-
-    profile = await get_reseller_profile(session, int(user.reseller_id))
-    if not profile or not has_bot_perm(profile, "tickets"):
-        return []
-    owner = await session.get(BotUser, int(user.reseller_id))
-    if not owner or not owner.telegram_id:
-        return []
-    return [int(owner.telegram_id)]
-
 # (setting_key, title, description, default "1"|"0")
 NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
     (
@@ -101,13 +86,75 @@ NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
     ),
 ]
 
+# Platform-owner only — never exposed or stored for reseller / sub-admin shops.
+PLATFORM_ONLY_NOTIFY_KEYS: frozenset[str] = frozenset(
+    {
+        "notify_account_edits",
+        "notify_wallet_topup",
+    }
+)
+
+# Shop notify key → at least one of these feature perms is required to see/toggle it.
+SHOP_NOTIFY_PERM_MAP: dict[str, frozenset[str]] = {
+    "notify_new_subscription": frozenset({"orders", "payments"}),
+    "notify_pending_approval": frozenset({"payments"}),
+    "notify_new_order": frozenset({"orders"}),
+    "notify_new_ticket": frozenset({"tickets"}),
+    "notify_auto_approve": frozenset({"payments"}),
+}
+
+_SHOP_NOTIFY_DEFAULTS: dict[str, str] = {
+    key: default
+    for key, _, _, default in NOTIFY_PREFS
+    if key not in PLATFORM_ONLY_NOTIFY_KEYS and key in SHOP_NOTIFY_PERM_MAP
+}
+
+
+def shop_notify_catalog(perms: list[str] | set[str] | None) -> list[tuple[str, str, str, str]]:
+    """NOTIFY_PREFS subset a shop staff member may customize, based on feature ACL."""
+    from app.services.resellers import with_shop_settings
+
+    perm_set = set(with_shop_settings(list(perms or [])))
+    out: list[tuple[str, str, str, str]] = []
+    for key, title, help_text, default in NOTIFY_PREFS:
+        if key in PLATFORM_ONLY_NOTIFY_KEYS:
+            continue
+        needed = SHOP_NOTIFY_PERM_MAP.get(key)
+        if not needed:
+            continue
+        if needed & perm_set:
+            out.append((key, title, help_text, default))
+    return out
+
+
+def shop_notify_allowed_keys(perms: list[str] | set[str] | None) -> set[str]:
+    return {key for key, *_ in shop_notify_catalog(perms)}
+
 
 async def get_notify_prefs(session: AsyncSession) -> dict[str, bool]:
+    """Platform-owner prefs from global Setting (never ResellerSetting)."""
     ui = await get_all_settings(session)
     return {key: on(ui.get(key, default)) for key, _, _, default in NOTIFY_PREFS}
 
 
+async def get_shop_notify_prefs(session: AsyncSession, reseller_id: int) -> dict[str, bool]:
+    """Shop prefs from ResellerSetting only — never inherit owner/global notify_*."""
+    from app.db.models import ResellerSetting
+
+    rid = int(reseller_id)
+    keys = list(_SHOP_NOTIFY_DEFAULTS.keys())
+    result = await session.execute(
+        select(ResellerSetting).where(
+            ResellerSetting.reseller_user_id == rid,
+            ResellerSetting.key.in_(keys),
+        )
+    )
+    rows = {r.key: r.value for r in result.scalars().all()}
+    return {key: on(rows.get(key, _SHOP_NOTIFY_DEFAULTS[key])) for key in keys}
+
+
 async def save_notify_prefs(session: AsyncSession, form: dict[str, Any]) -> None:
+    """Save platform-owner prefs to global Setting only."""
     payload = {
         key: ("1" if form.get(f"s_{key}") in {"1", "on", "true", True} else "0")
         for key, _, _, _ in NOTIFY_PREFS
@@ -115,26 +162,59 @@ async def save_notify_prefs(session: AsyncSession, form: dict[str, Any]) -> None
     await set_settings_bulk(session, payload)
 
 
-async def notify_enabled(session: AsyncSession, key: str) -> bool:
+async def save_shop_notify_prefs(
+    session: AsyncSession,
+    reseller_id: int,
+    form: dict[str, Any],
+    *,
+    allowed_keys: set[str],
+) -> None:
+    """Save shop prefs to ResellerSetting. Rejects platform-only / out-of-ACL keys."""
+    rid = int(reseller_id)
+    safe = {
+        key
+        for key in allowed_keys
+        if key in _SHOP_NOTIFY_DEFAULTS and key not in PLATFORM_ONLY_NOTIFY_KEYS
+    }
+    payload = {
+        key: ("1" if form.get(f"s_{key}") in {"1", "on", "true", True} else "0")
+        for key in safe
+    }
+    if not payload:
+        return
+    await set_settings_bulk(session, payload, reseller_id=rid)
+
+
+async def notify_enabled(
+    session: AsyncSession,
+    key: str,
+    *,
+    reseller_id: int | None = None,
+) -> bool:
+    if reseller_id is not None:
+        if key in PLATFORM_ONLY_NOTIFY_KEYS or key not in _SHOP_NOTIFY_DEFAULTS:
+            return False
+        prefs = await get_shop_notify_prefs(session, int(reseller_id))
+        return bool(prefs.get(key, False))
     prefs = await get_notify_prefs(session)
     return bool(prefs.get(key, False))
 
 
-async def _send_admins(
+async def _send_to_chats(
     bot: Bot,
+    chat_ids: list[int],
     text: str,
     *,
     markup: InlineKeyboardMarkup | None = None,
     photo: str | None = None,
-    extra_chat_ids: list[int] | None = None,
 ) -> None:
     import asyncio
 
     targets: list[int] = []
     seen: set[int] = set()
-    for admin_id in list(get_settings().admin_ids) + list(extra_chat_ids or []):
+    for raw in chat_ids:
         try:
-            aid = int(admin_id)
+            aid = int(raw)
         except (TypeError, ValueError):
             continue
         if aid in seen:
@@ -173,33 +253,165 @@ async def _send_admins(
     )
 
 
+async def _send_admins(
+    bot: Bot,
+    text: str,
+    *,
+    markup: InlineKeyboardMarkup | None = None,
+    photo: str | None = None,
+    extra_chat_ids: list[int] | None = None,
+) -> None:
+    """Legacy helper: platform ADMIN_IDS + optional extras (same gate already applied)."""
+    await _send_to_chats(
+        bot,
+        list(get_settings().admin_ids) + list(extra_chat_ids or []),
+        text,
+        markup=markup,
+        photo=photo,
+    )
+
+
+async def _resolve_shop_reseller_id(
+    session: AsyncSession,
+    *,
+    order: Order | None = None,
+    payment: Payment | None = None,
+    ticket_user_id: int | None = None,
+) -> int | None:
+    if order is not None and order.reseller_id:
+        return int(order.reseller_id)
+    if payment is not None:
+        if payment.is_wallet_topup:
+            return None
+        if payment.order_id:
+            ord_row = await session.get(Order, payment.order_id)
+            if ord_row and ord_row.reseller_id:
+                return int(ord_row.reseller_id)
+    if ticket_user_id is not None:
+        user = await session.get(BotUser, int(ticket_user_id))
+        if user and user.reseller_id:
+            return int(user.reseller_id)
+    return None
+
+
+async def _shop_recipient_chat_ids(
+    session: AsyncSession,
+    reseller_id: int,
+    notify_key: str,
+) -> list[int]:
+    """Owner + bot_admin_ids for a shop, if profile may receive this notify key."""
+    from app.db.models import ResellerProfile
+    from app.services.reseller_access import parse_telegram_ids
+    from app.services.resellers import has_bot_perm
+
+    if notify_key in PLATFORM_ONLY_NOTIFY_KEYS:
+        return []
+    needed = SHOP_NOTIFY_PERM_MAP.get(notify_key)
+    if not needed:
+        return []
+
+    profile = (
+        await session.execute(
+            select(ResellerProfile).where(ResellerProfile.user_id == int(reseller_id))
+        )
+    ).scalar_one_or_none()
+    if profile is None or not profile.is_active:
+        return []
+    if not any(has_bot_perm(profile, p) for p in needed):
+        return []
+
+    ids: list[int] = []
+    seen: set[int] = set()
+    owner = await session.get(BotUser, int(reseller_id))
+    if owner and owner.telegram_id:
+        tid = int(owner.telegram_id)
+        seen.add(tid)
+        ids.append(tid)
+    for tid in parse_telegram_ids(profile.bot_admin_ids):
+        if tid not in seen:
+            seen.add(tid)
+            ids.append(tid)
+    return ids
+
+
+async def _dispatch_dual_notify(
+    bot: Bot,
+    session: AsyncSession,
+    key: str,
+    text: str,
+    *,
+    markup: InlineKeyboardMarkup | None = None,
+    photo: str | None = None,
+    order: Order | None = None,
+    payment: Payment | None = None,
+    ticket_user_id: int | None = None,
+    platform: bool = True,
+    shop: bool = True,
+) -> None:
+    """Send to platform admins and/or shop staff using independent prefs."""
+    if platform and await notify_enabled(session, key):
+        await _send_to_chats(
+            bot,
+            list(get_settings().admin_ids),
+            text,
+            markup=markup,
+            photo=photo,
+        )
+
+    if not shop or key in PLATFORM_ONLY_NOTIFY_KEYS:
+        return
+    rid = await _resolve_shop_reseller_id(
+        session, order=order, payment=payment, ticket_user_id=ticket_user_id
+    )
+    if not rid:
+        return
+    if not await notify_enabled(session, key, reseller_id=rid):
+        return
+    targets = await _shop_recipient_chat_ids(session, rid, key)
+    if targets:
+        await _send_to_chats(bot, targets, text, markup=markup, photo=photo)
+
+
+async def _ticket_reseller_chat_ids(session: AsyncSession, ticket_user_id: int) -> list[int]:
+    """Telegram ids of the customer's reseller shop (owner + bot admins) if tickets allowed."""
+    rid = await _resolve_shop_reseller_id(session, ticket_user_id=ticket_user_id)
+    if not rid:
+        return []
+    return await _shop_recipient_chat_ids(session, rid, "notify_new_ticket")
+
+
 async def _shop_owner_chat_ids(
     session: AsyncSession,
     *,
     order: Order | None = None,
     payment: Payment | None = None,
 ) -> list[int]:
-    """Telegram ids of the reseller shop owner (if any) for this order/payment."""
-    rid = None
-    if order is not None and order.reseller_id:
-        rid = int(order.reseller_id)
-    elif payment is not None and payment.order_id:
-        ord_row = await session.get(Order, payment.order_id)
-        if ord_row and ord_row.reseller_id:
-            rid = int(ord_row.reseller_id)
+    """Backward-compatible helper — prefer _dispatch_dual_notify for new code."""
+    rid = await _resolve_shop_reseller_id(session, order=order, payment=payment)
     if not rid:
         return []
-    from app.db.models import BotUser, ResellerProfile
+    # Generic recipients without a specific key filter beyond payments/orders presence
+    from app.db.models import ResellerProfile
+    from app.services.reseller_access import parse_telegram_ids
 
     profile = (
         await session.execute(select(ResellerProfile).where(ResellerProfile.user_id == rid))
     ).scalar_one_or_none()
     if profile is not None and not profile.is_active:
         return []
+    ids: list[int] = []
+    seen: set[int] = set()
     owner = await session.get(BotUser, rid)
-    if not owner or not owner.telegram_id:
-        return []
-    return [int(owner.telegram_id)]
+    if owner and owner.telegram_id:
+        tid = int(owner.telegram_id)
+        seen.add(tid)
+        ids.append(tid)
+    if profile is not None:
+        for tid in parse_telegram_ids(profile.bot_admin_ids):
+            if tid not in seen:
+                seen.add(tid)
+                ids.append(tid)
+    return ids
 
 
 def _approval_markup(*, order_id: int | None = None, payment_id: int | None = None) -> InlineKeyboardMarkup:
@@ -251,9 +463,7 @@ async def notify_new_subscription(
     plan_name: str | None = None,
     needs_approval: bool = False,
 ) -> None:
-    """Inform admins that a subscription was purchased / delivered."""
-    if not await notify_enabled(session, "notify_new_subscription"):
-        return
+    """Inform platform admins and/or shop staff that a subscription was delivered."""
     settings = get_settings()
     lines = [
         kv_line("🧾", "سفارش", f"#{order.id}"),
@@ -267,11 +477,15 @@ async def notify_new_subscription(
         lines.append(kv_line("💳", "پرداخت", method))
     lines.append(kv_line("📌", "وضعیت", "نیاز به تأیید" if needs_approval else "تحویل‌شده"))
     text = format_message("🆕 اشتراک جدید", info_block(lines))
-    markup = None
-    if needs_approval:
-        markup = _approval_markup(order_id=order.id)
-    extra = await _shop_owner_chat_ids(session, order=order)
-    await _send_admins(bot, text, markup=markup, extra_chat_ids=extra)
+    markup = _approval_markup(order_id=order.id) if needs_approval else None
+    await _dispatch_dual_notify(
+        bot,
+        session,
+        "notify_new_subscription",
+        text,
+        markup=markup,
+        order=order,
+    )
 
 
 async def notify_pending_approval(
@@ -282,8 +496,6 @@ async def notify_pending_approval(
     *,
     user_name: str | None = None,
 ) -> None:
-    if not await notify_enabled(session, "notify_pending_approval"):
-        return
     settings = get_settings()
     kind = "شارژ کیف پول" if payment.is_wallet_topup else "خرید اشتراک"
     lines = [
@@ -299,8 +511,17 @@ async def notify_pending_approval(
         markup = _approval_markup(order_id=payment.order_id)
     else:
         markup = _approval_markup(payment_id=payment.id)
-    extra = await _shop_owner_chat_ids(session, payment=payment)
-    await _send_admins(bot, text, markup=markup, photo=payment.receipt_file_id, extra_chat_ids=extra)
+    # Wallet top-ups are platform-only; shop prefs never apply.
+    await _dispatch_dual_notify(
+        bot,
+        session,
+        "notify_pending_approval",
+        text,
+        markup=markup,
+        photo=payment.receipt_file_id,
+        payment=payment,
+        shop=not payment.is_wallet_topup,
+    )
 
 
 async def notify_new_order(
@@ -312,8 +533,6 @@ async def notify_new_order(
     plan_name: str | None = None,
     user_name: str | None = None,
 ) -> None:
-    if not await notify_enabled(session, "notify_new_order"):
-        return
     settings = get_settings()
     lines = [
         kv_line("🧾", "سفارش", f"#{order.id}"),
@@ -323,8 +542,13 @@ async def notify_new_order(
     if plan_name:
         lines.append(kv_line("💎", "پلن", plan_name))
     text = format_message("🛒 سفارش جدید", info_block(lines))
-    extra = await _shop_owner_chat_ids(session, order=order)
-    await _send_admins(bot, text, extra_chat_ids=extra)
+    await _dispatch_dual_notify(
+        bot,
+        session,
+        "notify_new_order",
+        text,
+        order=order,
+    )
 
 
 async def notify_wallet_topup_ok(
@@ -347,7 +571,14 @@ async def notify_wallet_topup_ok(
             ]
         ),
     )
-    await _send_admins(bot, text)
+    await _dispatch_dual_notify(
+        bot,
+        session,
+        "notify_wallet_topup",
+        text,
+        payment=payment,
+        shop=False,
+    )
 
 
 async def notify_new_ticket(
@@ -359,8 +590,6 @@ async def notify_new_ticket(
     user_name: str | None,
     ticket_user_id: int | None = None,
 ) -> None:
-    if not await notify_enabled(session, "notify_new_ticket"):
-        return
     text = format_message(
         "🎫 تیکت جدید",
         info_block(
@@ -371,14 +600,13 @@ async def notify_new_ticket(
             ]
         ),
     )
-    extra: list[int] = []
-    if ticket_user_id:
-        extra = await _ticket_reseller_chat_ids(session, ticket_user_id)
-    await _send_admins(
+    await _dispatch_dual_notify(
         bot,
+        session,
+        "notify_new_ticket",
         text,
         markup=ticket_action_markup(ticket_id),
-        extra_chat_ids=extra,
+        ticket_user_id=ticket_user_id,
     )
 
 
@@ -421,8 +649,6 @@ async def notify_ticket_message(
             pass
         return
 
-    if not await notify_enabled(session, "notify_new_ticket"):
-        return
     text = format_message(
         "🎫 پیام جدید تیکت",
         info_block(
@@ -434,8 +660,14 @@ async def notify_ticket_message(
             ]
         ),
     )
-    extra = await _ticket_reseller_chat_ids(session, ticket_user_id)
-    await _send_admins(bot, text, markup=markup, extra_chat_ids=extra)
+    await _dispatch_dual_notify(
+        bot,
+        session,
+        "notify_new_ticket",
+        text,
+        markup=markup,
+        ticket_user_id=ticket_user_id,
+    )
 
 
 async def notify_auto_approve(
@@ -443,13 +675,18 @@ async def notify_auto_approve(
     session: AsyncSession,
     payment: Payment,
 ) -> None:
-    if not await notify_enabled(session, "notify_auto_approve"):
-        return
     text = format_message(
         "⚡ تأیید خودکار",
         info_block([kv_line("🧾", "پرداخت", f"#{payment.id}"), kv_line("✅", "نتیجه", "خودکار تأیید شد")]),
     )
-    await _send_admins(bot, text)
+    await _dispatch_dual_notify(
+        bot,
+        session,
+        "notify_auto_approve",
+        text,
+        payment=payment,
+        shop=not payment.is_wallet_topup,
+    )
 
 
 def build_qr_caption(

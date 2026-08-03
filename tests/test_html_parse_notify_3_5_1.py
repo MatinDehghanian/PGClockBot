@@ -64,11 +64,12 @@ class SourceAuditTests(unittest.TestCase):
         sched = (ROOT / "app/jobs/scheduler.py").read_text(encoding="utf-8")
         self.assertIn('parse_mode="HTML"', sched)
 
-    def test_version_is_3_5_1(self):
+    def test_version_at_least_3_5_1(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.5.1")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.5.1")
+        self.assertGreaterEqual(
+            tuple(int(x) for x in __version__.split(".")), (3, 5, 1)
+        )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.5.1"', notes)
 

@@ -92,6 +92,9 @@
       </form>
     </div>
 
+  {% elif tab == 'notifications' %}
+    {% include "_shop_settings_notifications.html" %}
+
   {% elif tab == 'bot' %}
     <form method="post" action="/shop-settings?tab=bot" class="settings-form">
       <div class="card settings-card">
