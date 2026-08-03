@@ -33,6 +33,14 @@
 {{ pg_quota_exhausted_banners(users=pg_limits.users, traffic=pg_limits.traffic) }}
 {% endif %}
 
+{% if billing_card %}
+<div class="card home-conn-card">
+  <h2>کیف پول Billing</h2>
+  <p class="muted">حالت Pay As You Go — موجودی برای مصرف ترافیک و Provision</p>
+  <p style="font-size:1.35rem;margin:0.5rem 0 0"><strong>{{ billing_card.balance_fa }}</strong></p>
+</div>
+{% endif %}
+
 <div class="card home-conn-card">
   <h2>وضعیت اتصال</h2>
   <div class="home-conn-row">

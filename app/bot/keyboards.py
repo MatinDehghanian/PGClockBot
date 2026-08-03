@@ -467,6 +467,14 @@ def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
     if has_bot_perm(profile, "dashboard"):
         entries.append(("res_dash", "🏠 خانه نماینده"))
         entries.append(("res_users", "👥 مشتریان من"))
+    # PAYG billing wallet — only when mode is payg
+    try:
+        from app.services.billing import is_payg
+
+        if is_payg(profile):
+            entries.append(("res_billing", "💰 کیف پول"))
+    except Exception:
+        pass
     if has_bot_perm(profile, "stats"):
         entries.append(("res_stats", "📊 آمار و کمیسیون"))
     if has_bot_perm(profile, "plans"):

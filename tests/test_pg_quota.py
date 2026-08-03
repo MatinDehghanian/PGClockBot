@@ -213,8 +213,8 @@ class WiringTests(unittest.TestCase):
         from pathlib import Path
 
         src = Path("app/api/pg_pages.py").read_text(encoding="utf-8")
-        self.assertIn("assert_can_create_user", src)
-        self.assertIn("assert_can_modify_user", src)
+        self.assertIn("assert_provision_create", src)
+        self.assertIn("assert_provision_modify", src)
         self.assertIn("assert_can_mutate_owned_users", src)
         self.assertIn("PgQuotaError", src)
 
@@ -222,8 +222,8 @@ class WiringTests(unittest.TestCase):
         from pathlib import Path
 
         src = Path("app/services/orders.py").read_text(encoding="utf-8")
-        self.assertIn("assert_reseller_can_deliver", src)
-        self.assertIn("assert_reseller_can_renew", src)
+        self.assertIn("assert_provision_create", src)
+        self.assertIn("assert_provision_renew", src)
 
 
 if __name__ == "__main__":

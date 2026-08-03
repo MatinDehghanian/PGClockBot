@@ -338,6 +338,57 @@ async def res_stats(
         await safe_edit_text(callback.message, text, reply_markup=None)
 
 
+@router.callback_query(F.data == "res:billing")
+async def res_billing(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    """PAYG billing wallet — read-only for reseller (top-up is Super Admin only)."""
+    from app.services.billing import (
+        is_billing_enabled,
+        is_payg,
+        list_billing_transactions,
+        resolve_price_per_gb,
+        RateContext,
+    )
+
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    if not is_payg(profile):
+        await callback.answer("این فروشگاه Pay As You Go نیست", show_alert=True)
+        return
+    await callback.answer()
+    enabled = await is_billing_enabled(session)
+    rate = await resolve_price_per_gb(session, RateContext(reseller_user_id=int(owner_id)))
+    txs = await list_billing_transactions(session, int(owner_id), limit=5)
+    lines = [
+        "💰 <b>کیف پول Billing</b>",
+        "",
+        f"موجودی: <b>{format_toman(int(profile.billing_balance or 0), get_settings().currency)}</b>",
+        f"نرخ: {format_toman(rate, get_settings().currency)} / GB",
+        f"وضعیت سیستم: {'فعال' if enabled else 'غیرفعال'}",
+        "",
+        "برای شارژ با ادمین اصلی هماهنگ کنید.",
+    ]
+    if txs:
+        lines.append("")
+        lines.append("آخرین تراکنش‌ها:")
+        for tx in txs:
+            sign = "+" if tx.amount >= 0 else ""
+            lines.append(
+                f"• {tx.kind}: {sign}{format_toman(tx.amount, get_settings().currency)}"
+            )
+    if callback.message:
+        await safe_edit_text(callback.message, "\n".join(lines), reply_markup=None)
+
+
 @router.callback_query(F.data == "res:orders")
 async def res_orders(
     callback: CallbackQuery,

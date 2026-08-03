@@ -101,7 +101,7 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=("res_admin", 3)),
             ),
             patch(
-                "app.services.orders.assert_reseller_can_deliver",
+                "app.services.orders.assert_provision_create",
                 new=AsyncMock(),
             ),
         ):
@@ -177,7 +177,7 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=("res_admin", 3)),
             ),
             patch(
-                "app.services.orders.assert_reseller_can_deliver",
+                "app.services.orders.assert_provision_create",
                 new=AsyncMock(),
             ),
             patch(
@@ -212,9 +212,9 @@ class SourceWiringGuards(unittest.TestCase):
         )
         self.assertIn("مالکیت قابل تنظیم نیست", src)
         self.assertIn("delete_user_by_id", src)
-        # Reseller path must always call quota assert (not only when pg_owner truthy)
+        # Reseller path must always call provision gate (quota + billing)
         self.assertIn("if order.reseller_id:", src)
-        self.assertIn("assert_reseller_can_deliver", src)
+        self.assertIn("assert_provision_create", src)
         self.assertIn("get_pg_for_reseller", src)
 
     def test_web_create_requires_pg_owner(self):

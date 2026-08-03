@@ -74,6 +74,10 @@ def _migrate_sqlite(sync_conn) -> None:
             "share_pg_panel_url": "BOOLEAN DEFAULT 0",
             "bot_admin_ids": "TEXT",
             "pg_admin_password_enc": "TEXT",
+            "billing_mode": "VARCHAR(16) DEFAULT 'fixed'",
+            "billing_balance": "INTEGER DEFAULT 0",
+            "billing_watermark_bytes": "BIGINT DEFAULT 0",
+            "billing_low_warned_at": "DATETIME",
         }
         for col, typ in alters.items():
             if col not in rcols:

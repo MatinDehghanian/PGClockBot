@@ -221,6 +221,33 @@ async def check_expiring_services(bot: Bot) -> None:
         await session.commit()
 
 
+# Track last billing run so tick minutes setting works without reschedule
+_last_billing_tick_at: float | None = None
+
+
+async def run_reseller_billing_tick() -> None:
+    """Periodic PAYG usage charge; respects billing_tick_minutes setting."""
+    global _last_billing_tick_at
+    import time
+
+    async with SessionLocal() as session:
+        try:
+            from app.services.billing import get_tick_minutes, is_billing_enabled, run_billing_tick
+
+            if not await is_billing_enabled(session):
+                return
+            mins = await get_tick_minutes(session)
+            now = time.time()
+            if _last_billing_tick_at is not None and (now - _last_billing_tick_at) < mins * 60:
+                return
+            stats = await run_billing_tick(session)
+            _last_billing_tick_at = now
+            if stats.get("checked"):
+                logger.info("billing tick %s", stats)
+        except Exception:
+            logger.exception("billing tick failed")
+
+
 def start_scheduler(bot: Bot) -> None:
     if scheduler.running:
         return
@@ -233,6 +260,16 @@ def start_scheduler(bot: Bot) -> None:
         max_instances=1,
         coalesce=True,
         misfire_grace_time=3600,
+    )
+    # Job fires every minute; no-ops until billing_tick_minutes elapses.
+    scheduler.add_job(
+        run_reseller_billing_tick,
+        "interval",
+        minutes=1,
+        id="billing_tick",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=120,
     )
     scheduler.start()
     logger.info("Scheduler started")

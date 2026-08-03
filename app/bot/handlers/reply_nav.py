@@ -1331,6 +1331,7 @@ async def _soft_reseller(
     mapping = {
         "res_dash": ("res:dash", "res_dash"),
         "res_users": ("res:users:0", "res_users"),
+        "res_billing": ("res:billing", "res_billing"),
         "res_stats": ("res:stats", "res_stats"),
         "res_orders": ("res:orders", "res_orders"),
         "res_payments": ("res:payments", "res_payments"),
@@ -1407,6 +1408,7 @@ async def reply_main_nav(
         "res_plans",
         "res_dash",
         "res_users",
+        "res_billing",
         "res_stats",
         "res_orders",
         "res_payments",

@@ -23,9 +23,12 @@ from app.services.pasarguard import (
 from app.services.pg_access import staff_pg_action, staff_pg_writes, staff_user_actions
 from app.services.pg_quota import (
     PgQuotaError,
-    assert_can_create_user,
-    assert_can_modify_user,
     assert_can_mutate_owned_users,
+)
+from app.services.provision_gate import (
+    ProvisionError,
+    assert_provision_create,
+    assert_provision_modify,
 )
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 
@@ -348,6 +351,7 @@ def register_pg_pages(
     async def pg_users_create(
         request: Request,
         staff: dict = Depends(require_pg_perm("pg_users")),
+        session: AsyncSession = Depends(get_db),
     ):
         import time
 
@@ -400,9 +404,11 @@ def register_pg_pages(
                 if not template_allowed_for_staff(staff, tid):
                     return _pg_form_err("این تمپلیت مجاز نیست", modal="create")
                 try:
-                    await assert_can_create_user(staff, from_template=True)
-                except PgQuotaError as qe:
-                    return _pg_form_err(qe.message, modal="create")
+                    await assert_provision_create(
+                        session, staff=staff, from_template=True
+                    )
+                except (ProvisionError, PgQuotaError) as qe:
+                    return _pg_form_err(getattr(qe, "message", str(qe)), modal="create")
                 pg, as_owner = await _staff_pg(session, staff)
                 created = await pg.create_user_from_template(
                     {
@@ -450,14 +456,15 @@ def register_pg_pages(
                         return _pg_form_err("مدت نامعتبر است", modal="create")
 
                 try:
-                    await assert_can_create_user(
-                        staff,
+                    await assert_provision_create(
+                        session,
+                        staff=staff,
                         data_limit=data_limit,
                         expire_ts=expire_ts,
                         from_template=False,
                     )
-                except PgQuotaError as qe:
-                    return _pg_form_err(qe.message, modal="create")
+                except (ProvisionError, PgQuotaError) as qe:
+                    return _pg_form_err(getattr(qe, "message", str(qe)), modal="create")
 
                 pg, as_owner = await _staff_pg(session, staff)
                 created = await pg.create_user(
@@ -538,6 +545,7 @@ def register_pg_pages(
         user_id: int,
         request: Request,
         staff: dict = Depends(require_pg_perm("pg_users")),
+        session: AsyncSession = Depends(get_db),
     ):
         import time
 
@@ -578,15 +586,16 @@ def register_pg_pages(
             if current is None:
                 return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
             try:
-                await assert_can_modify_user(
+                await assert_provision_modify(
+                    session,
                     staff,
                     data_limit=data_limit,
                     expire_ts=expire_ts,
                     data_limit_changed=True,
                     expire_changed=True,
                 )
-            except PgQuotaError as qe:
-                return _pg_form_err(qe.message, modal="edit", uid=user_id)
+            except (ProvisionError, PgQuotaError) as qe:
+                return _pg_form_err(getattr(qe, "message", str(qe)), modal="edit", uid=user_id)
             # PasarGuard does not allow changing username after create
             payload = build_user_modify_payload(
                 username=None,

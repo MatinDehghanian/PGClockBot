@@ -332,6 +332,60 @@ class ResellerProfile(Base):
     # Extra Telegram IDs that get reseller panel on THIS shop's dedicated bot only
     bot_admin_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # --- Unified Billing (PAYG is one mode; fixed = legacy commission, untouched) ---
+    billing_mode: Mapped[str] = mapped_column(String(16), default="fixed")  # fixed | payg
+    billing_balance: Mapped[int] = mapped_column(Integer, default=0)  # prepaid toman (payg)
+    billing_watermark_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    billing_low_warned_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ResellerBillingTransaction(Base):
+    """Audit ledger for reseller Billing (topup / usage / adjustment). Independent of user wallet."""
+
+    __tablename__ = "reseller_billing_transactions"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_reseller_billing_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reseller_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(32), index=True)  # topup | usage | adjustment
+    amount: Mapped[int] = mapped_column(Integer)  # +credit / -debit (toman)
+    balance_after: Mapped[int] = mapped_column(Integer)
+    bytes_delta: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    rate_per_gb: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    watermark_after: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(191))
+    note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ResellerBillingRate(Base):
+    """Extensible price table. MVP UI uses global Setting; this enables per-reseller/plan/inbound/node later."""
+
+    __tablename__ = "reseller_billing_rates"
+    __table_args__ = (
+        UniqueConstraint(
+            "scope_kind",
+            "scope_key",
+            "reseller_user_id",
+            name="uq_reseller_billing_rate_scope",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # scope_kind: default | reseller | plan | inbound | node
+    scope_kind: Mapped[str] = mapped_column(String(32), index=True, default="reseller")
+    scope_key: Mapped[str] = mapped_column(String(128), default="")  # plan id / inbound / node id
+    reseller_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    price_per_gb: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

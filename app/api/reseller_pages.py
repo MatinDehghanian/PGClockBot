@@ -204,6 +204,13 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         perms = with_shop_settings(
             parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
         )
+        from app.services.billing import is_payg, list_billing_transactions
+        from app.services.formatting import format_toman
+        import secrets
+
+        billing_txs = []
+        if is_payg(profile):
+            billing_txs = await list_billing_transactions(session, int(user_id), limit=15)
         return render(
             request,
             "reseller_edit.html",
@@ -214,6 +221,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 "feature_perms": FEATURE_PERMS,
                 "selected_perms": perms,
                 "pg_roles": roles,
+                "is_payg": is_payg(profile),
+                "billing_txs": billing_txs,
+                "format_toman": format_toman,
+                "topup_nonce": secrets.token_hex(8),
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -237,6 +248,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             profile.commission_percent = int(str(form.get("commission_percent") or "10"))
         except ValueError:
             pass
+        mode = str(form.get("billing_mode") or "").strip().lower()
+        if mode in {"fixed", "payg"}:
+            profile.billing_mode = mode
         perms = _feature_perms_from_form(form)
         profile.web_permissions = perms
         profile.bot_permissions = perms  # must stay identical
@@ -332,6 +346,51 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         user.role = Role.RESELLER.value if profile.is_active else Role.USER.value
         await session.commit()
         return RedirectResponse(f"/resellers/{user_id}/edit?ok={_q('ذخیره شد')}", status_code=303)
+
+    @app.post("/resellers/{user_id}/billing-topup")
+    async def reseller_billing_topup(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """MVP: manual Billing credit by Super Admin only."""
+        form = await request.form()
+        raw = str(form.get("amount") or "").strip().replace(",", "")
+        note = str(form.get("note") or "").strip()
+        try:
+            amount = int(float(raw))
+        except (TypeError, ValueError):
+            return RedirectResponse(
+                f"/resellers/{user_id}/edit?err={_q('مبلغ نامعتبر است')}",
+                status_code=303,
+            )
+        if amount < 1000:
+            return RedirectResponse(
+                f"/resellers/{user_id}/edit?err={_q('حداقل شارژ ۱۰۰۰ تومان است')}",
+                status_code=303,
+            )
+        from app.services.billing import credit_topup
+
+        actor = str(staff.get("username") or staff.get("role") or "admin")
+        try:
+            await credit_topup(
+                session,
+                int(user_id),
+                amount,
+                created_by=actor,
+                note=note or "شارژ دستی ادمین",
+                idempotency_key=f"manual:{user_id}:{amount}:{note}:{actor}:{form.get('nonce') or ''}",
+            )
+        except ValueError as e:
+            return RedirectResponse(
+                f"/resellers/{user_id}/edit?err={_q(str(e))}",
+                status_code=303,
+            )
+        return RedirectResponse(
+            f"/resellers/{user_id}/edit?ok={_q(f'شارژ Billing به مبلغ {amount:,} تومان ثبت شد')}",
+            status_code=303,
+        )
 
     @app.post("/resellers/{user_id}/delete")
     async def reseller_delete(

@@ -163,6 +163,17 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             staff,
             unread=getattr(request.state, "panel_tickets_unread", None),
         )
+        billing_card = None
+        if profile is not None:
+            from app.services.billing import is_billing_enabled, is_payg
+            from app.services.formatting import format_toman
+
+            if is_payg(profile) and await is_billing_enabled(session):
+                billing_card = {
+                    "balance": int(profile.billing_balance or 0),
+                    "balance_fa": format_toman(int(profile.billing_balance or 0)),
+                    "mode": "payg",
+                }
         return render(
             request,
             "reseller_home.html",
@@ -173,6 +184,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "bot_setup_needed": bot_setup_needed,
                 "bot": bot,
                 "ticket_alert": ticket_alert,
+                "billing_card": billing_card,
             },
         )
 

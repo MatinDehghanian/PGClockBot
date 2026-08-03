@@ -16,6 +16,15 @@
         <label class="form-field">کمیسیون ٪
           <input name="commission_percent" type="number" value="{{ profile.commission_percent }}" />
         </label>
+        <small class="muted">فقط در حالت Fixed اعمال می‌شود</small>
+      </div>
+      <div>
+        <label class="form-field">حالت Billing
+          <select name="billing_mode">
+            <option value="fixed" {% if (profile.billing_mode or 'fixed') == 'fixed' %}selected{% endif %}>Fixed (کمیسیون)</option>
+            <option value="payg" {% if profile.billing_mode == 'payg' %}selected{% endif %}>Pay As You Go</option>
+          </select>
+        </label>
       </div>
       <div>
         <label class="form-field">یوزرنیم پاسارگارد
@@ -80,6 +89,59 @@
     </div>
   </form>
 </div>
+
+{% if is_payg %}
+<div class="card">
+  <h2>Billing — Pay As You Go</h2>
+  <p class="muted">موجودی فعلی: <b>{{ format_toman(profile.billing_balance or 0) }}</b>
+    · watermark: <span dir="ltr">{{ profile.billing_watermark_bytes or 0 }}</span> بایت</p>
+  <form method="post" action="/resellers/{{ user.id }}/billing-topup" class="form-stack">
+    <input type="hidden" name="nonce" value="{{ topup_nonce }}" />
+    <div class="form-row">
+      <div>
+        <label class="form-field">شارژ دستی (تومان)
+          <input name="amount" type="number" min="1000" step="1000" placeholder="مثلاً ۵۰۰۰۰" required />
+        </label>
+      </div>
+      <div>
+        <label class="form-field">یادداشت
+          <input name="note" type="text" maxlength="200" placeholder="اختیاری" />
+        </label>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit">ثبت شارژ</button>
+    </div>
+  </form>
+  {% if billing_txs %}
+  <h3 style="margin-top:1.25rem">تراکنش‌های اخیر</h3>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>نوع</th>
+          <th>مبلغ</th>
+          <th>مانده</th>
+          <th>یادداشت</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in billing_txs %}
+        <tr>
+          <td>{{ tx.id }}</td>
+          <td>{{ tx.kind }}</td>
+          <td dir="ltr">{{ tx.amount }}</td>
+          <td>{{ format_toman(tx.balance_after) }}</td>
+          <td class="muted">{{ tx.note or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
 
 <div class="card">
   <h2>تغییر نقش کاربر</h2>

@@ -573,6 +573,12 @@ DEFAULT_SETTINGS = {
     "stars_toman_per_star": "500",
     "stars_title": "خرید سرویس",
     "stars_description": "پرداخت سفارش با استارز تلگرام",
+    # Unified Billing (platform; PAYG resellers)
+    "billing_enabled": "0",
+    "billing_price_per_gb": "1000",
+    "billing_low_balance": "10000",
+    "billing_on_empty": "block_provision",
+    "billing_tick_minutes": "15",
 }
 
 # field kinds: text | textarea | toggle | select | number | image
@@ -590,6 +596,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("naming", "نام‌گذاری سرویس"),
     ("forcejoin", "کانال اجباری"),
     ("reseller", "نمایندگی"),
+    ("billing", "صورتحساب"),
     ("notifications", "نوتیفیکیشن"),
     ("bot", "ربات و اتصال"),
 ]
@@ -678,6 +685,39 @@ SETTING_GROUPS = {
             "آدرس پنل پاسارگارد برای نماینده",
             "text",
             "اختیاری. خالی = دقیقاً همان PG_BASE_URL تنظیم‌شده در اتصال بات (با path کامل).",
+        ),
+    ],
+    "صورتحساب نمایندگان": [
+        (
+            "billing_enabled",
+            "فعال‌سازی Billing",
+            "toggle",
+            "فقط روی نمایندگان Pay As You Go اثر دارد؛ Fixed دست‌نخورده می‌ماند",
+        ),
+        (
+            "billing_price_per_gb",
+            "قیمت هر گیگابایت (تومان)",
+            "number",
+            "نرخ پیش‌فرض سراسری — بعداً می‌توان per-reseller/plan/inbound/node تعریف کرد",
+        ),
+        (
+            "billing_low_balance",
+            "آستانه هشدار موجودی کم (تومان)",
+            "number",
+            "وقتی موجودی Billing به این مقدار یا کمتر برسد یک‌بار هشدار تلگرام می‌رود",
+        ),
+        (
+            "billing_on_empty",
+            "رفتار اتمام موجودی",
+            "select",
+            "پیش‌فرض: مسدود کردن همه Provisionها (ساخت/تمدید/افزایش حجم/…)",
+            [("block_provision", "مسدود کردن Provision")],
+        ),
+        (
+            "billing_tick_minutes",
+            "بازه شارژ خودکار (دقیقه)",
+            "number",
+            "فاصله اجرای billing tick برای کسر مصرف از watermark",
         ),
     ],
     "هشدار سرویس کاربر": [
@@ -791,6 +831,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "naming": ["نام‌گذاری سرویس در پاسارگارد"],
     "forcejoin": ["کانال اجباری"],
     "reseller": ["نمایندگی"],
+    "billing": ["صورتحساب نمایندگان"],
     "notifications": ["هشدار سرویس کاربر"],
     "backup": [],
     "pwa": [],

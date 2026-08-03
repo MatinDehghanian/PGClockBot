@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.7.0": [
+        "سیستم Billing یکپارچه: حالت Pay As You Go جدا از کمیسیون Fixed",
+        "Provision Gate مشترک برای ساخت/تمدید/افزایش حجم با مسدودسازی اتمام موجودی",
+        "شارژ دستی نماینده توسط Super Admin + تب تنظیمات صورتحساب و کیف پول PAYG",
+    ],
     "3.6.8": [
         "تیکت فروشگاه واقعاً به نماینده می‌رسد: ACL دیگر اعلان را خفه نمی‌کند؛ از همان ربات فروشگاه ارسال می‌شود",
         "اعلان تیکت همیشه تلاش می‌شود (حتی اگر نوتیف تیکت در تنظیمات خاموش باشد)؛ لاگ واضح برای شکست ارسال",

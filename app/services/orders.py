@@ -24,10 +24,10 @@ from app.db.models import (
     WalletTransaction,
 )
 from app.services.pasarguard import extract_sub_token, get_pg
-from app.services.pg_quota import (
-    PgQuotaError,
-    assert_reseller_can_deliver,
-    assert_reseller_can_renew,
+from app.services.provision_gate import (
+    ProvisionError,
+    assert_provision_create,
+    assert_provision_renew,
 )
 from app.services.wallet import credit_wallet, debit_wallet
 
@@ -1172,7 +1172,9 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                 )
             ).scalar_one_or_none()
             try:
-                await assert_reseller_can_deliver(
+                await assert_provision_create(
+                    session,
+                    reseller_user_id=int(order.reseller_id),
                     pg_admin_username=pg_owner,
                     pg_role_id=pg_role_id,
                     data_limit=data_limit,
@@ -1180,7 +1182,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                     from_template=bool(plan.pg_template_id),
                     quantity=qty,
                 )
-            except PgQuotaError as e:
+            except ProvisionError as e:
                 raise ValueError(e.message) from e
 
         from app.services.pasarguard import build_user_create_payload, parse_group_ids
@@ -1266,14 +1268,18 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             raise
 
         if profile is not None:
-            commission = int(order.amount * profile.commission_percent / 100)
-            if commission > 0:
-                await session.execute(
-                    update(ResellerProfile)
-                    .where(ResellerProfile.user_id == profile.user_id)
-                    .values(balance=ResellerProfile.balance + commission)
-                    .execution_options(synchronize_session=False)
-                )
+            from app.services.billing import should_credit_fixed_commission
+
+            # PAYG: no commission credit — Fixed mode only (untouched for current resellers)
+            if should_credit_fixed_commission(profile):
+                commission = int(order.amount * profile.commission_percent / 100)
+                if commission > 0:
+                    await session.execute(
+                        update(ResellerProfile)
+                        .where(ResellerProfile.user_id == profile.user_id)
+                        .values(balance=ResellerProfile.balance + commission)
+                        .execution_options(synchronize_session=False)
+                    )
 
         order.service_id = services[0].id if services else None
         order.status = OrderStatus.DELIVERED.value
@@ -1406,14 +1412,16 @@ async def apply_renewal(session: AsyncSession, order: Order, service: UserServic
 
         if order.reseller_id:
             try:
-                await assert_reseller_can_renew(
+                await assert_provision_renew(
+                    session,
+                    reseller_user_id=int(order.reseller_id),
                     pg_admin_username=pg_owner,
                     pg_role_id=pg_role_id,
                     data_limit=data_limit,
                     expire_ts=expire,
                     from_template=bool(plan.pg_template_id),
                 )
-            except PgQuotaError as e:
+            except ProvisionError as e:
                 raise ValueError(e.message) from e
 
         if plan.pg_template_id:
