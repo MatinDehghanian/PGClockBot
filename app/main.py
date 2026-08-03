@@ -109,6 +109,12 @@ def main() -> None:
                     me.id,
                     settings.admin_ids,
                 )
+                try:
+                    from app.bot.chat_menu import clear_telegram_menu_button
+
+                    await clear_telegram_menu_button(bot)
+                except Exception:
+                    logger.debug("clear telegram menu button failed", exc_info=True)
             except Exception:
                 logger.exception(
                     "Cannot connect to Telegram — web panel stays up. "

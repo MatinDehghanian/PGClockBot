@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -156,7 +157,9 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 
 
 @router.callback_query(F.data.startswith("svc:renewpay:"))
-async def svc_renew_pay(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def svc_renew_pay(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+):
     ui = await get_all_settings(session)
     _, _, svc_id, plan_id = callback.data.split(":")
     svc = await session.get(UserService, int(svc_id))
@@ -206,7 +209,20 @@ async def svc_renew_pay(callback: CallbackQuery, session: AsyncSession, db_user:
 
     text = format_message(
         f"🔄 تمدید — سفارش #{order.id}",
-        f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>\nروش پرداخت را انتخاب کنید:",
+        f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>\nروش پرداخت را از کیبورد پایین انتخاب کنید:",
     )
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=kb.pay_methods(order.id, ui))
+        from app.bot.menu_nav import present_order_pay
+
+        try:
+            await safe_edit_text(callback.message, text, reply_markup=None)
+        except Exception:
+            await callback.message.answer(text)
+        await present_order_pay(
+            callback.message,
+            session,
+            db_user,
+            order.id,
+            state=state,
+            text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+        )

@@ -122,17 +122,20 @@ async def wallet_topup_amount(message: Message, state: FSMContext, session: Asyn
         return
     await state.set_state(WalletStates.choose_method)
     await state.update_data(topup_amount=amount)
-    await message.answer(
-        format_message(
+    from app.bot import menu_nav as nav
+
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_TOPUP_PAY,
+        text=format_message(
             "➕ شارژ کیف پول",
             f"{kv_line('💰', 'مبلغ', f'<b>{format_toman(amount, get_settings().currency)}</b>')}\n\n"
-            "روش واریز را انتخاب کنید:",
+            "روش واریز را از کیبورد پایین انتخاب کنید:",
         ),
-        reply_markup=kb.wallet_reply_keyboard(ui),
-    )
-    await message.answer(
-        "💳 روش پرداخت:",
-        reply_markup=kb.topup_pay_methods(ui),
+        state=state,
+        push=True,
     )
 
 

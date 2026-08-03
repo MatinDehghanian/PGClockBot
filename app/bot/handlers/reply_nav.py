@@ -1,8 +1,8 @@
-"""Reply-keyboard main + submenu navigation.
+"""Reply-keyboard main + submenu navigation (3.6.0).
 
-Main menus and section submenus live on the Telegram reply keyboard.
-Selections (plans, pay methods, approve/reject, steppers) stay as inline
-buttons under messages.
+All navigation (including submenus + pay methods) uses the reply keyboard.
+Every submenu has «بازگشت» (one level) and «منوی اصلی».
+Inline under messages: plans, services list, approve/reject only.
 """
 
 from __future__ import annotations
@@ -15,8 +15,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot import menu_nav as nav
 from app.bot.menu_nav import restore_main_reply, user_has_services
-from app.db.models import BotUser, Role, UserService
+from app.db.models import BotUser, Order, Role, UserService
 from app.services.formatting import format_message
 from app.services.users import get_all_settings
 
@@ -74,8 +75,18 @@ class ReplyMenuTextFilter(BaseFilter):
                 include_submenus=True,
             ).items():
                 mapping.setdefault(k, v)
+        # Pay vs topup share labels — resolve by current nav level
+        level = await nav.get_nav_level(state)
+        if level == nav.NAV_TOPUP_PAY:
+            for key, label in kb._topup_method_entries(ui):
+                mapping[(label or "").strip()] = key
+        elif level == nav.NAV_PAY:
+            for key, label in kb._pay_method_entries(ui):
+                mapping[(label or "").strip()] = key
         if kb.is_home_text(text, ui):
             action = kb.REPLY_ACTION_HOME
+        elif text in {kb._back_label(ui), kb.BTN_BACK}:
+            action = kb.REPLY_ACTION_BACK
         else:
             action = mapping.get(text)
         if not action:
@@ -170,11 +181,17 @@ async def open_services_list(message: Message, session: AsyncSession, db_user: B
     await message.answer("یکی را انتخاب کنید:", reply_markup=kb.services_keyboard(services, ui))
 
 
-async def open_wallet_home(message: Message, session: AsyncSession, db_user: BotUser) -> None:
+async def open_wallet_home(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+) -> None:
     from app.config import get_settings
     from app.services.formatting import format_toman, kv_line
 
-    ui = await get_all_settings(session)
     text = format_message(
         "👛 کیف پول",
         "\n".join(
@@ -189,7 +206,15 @@ async def open_wallet_home(message: Message, session: AsyncSession, db_user: Bot
             ]
         ),
     )
-    await message.answer(text, reply_markup=kb.wallet_reply_keyboard(ui))
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_WALLET,
+        text=text,
+        state=state,
+        push=push,
+    )
 
 
 async def open_wallet_topup(
@@ -242,7 +267,14 @@ async def open_wallet_tx(message: Message, session: AsyncSession, db_user: BotUs
     )
 
 
-async def open_support_home(message: Message, session: AsyncSession) -> None:
+async def open_support_home(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+) -> None:
     from app.services.support_contacts import (
         active_support_contacts,
         parse_support_contacts,
@@ -251,13 +283,18 @@ async def open_support_home(message: Message, session: AsyncSession) -> None:
 
     ui = await get_all_settings(session)
     contacts = active_support_contacts(parse_support_contacts(ui.get("support_contacts")))
-    await message.answer(
-        format_message(
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_SUPPORT,
+        text=format_message(
             "🎧 پشتیبانی",
             ui.get("support_text")
             or "از کیبورد پایین تیکت جدید بسازید یا تیکت‌های قبلی را ببینید.",
         ),
-        reply_markup=kb.support_reply_keyboard(ui),
+        state=state,
+        push=push,
     )
     if contacts:
         rows: list[list[InlineKeyboardButton]] = []
@@ -393,9 +430,11 @@ async def open_reseller_home(
     message: Message,
     session: AsyncSession,
     db_user: BotUser,
+    state: FSMContext | None = None,
     *,
     is_reseller_bot: bool,
     reseller_owner_id: int | None,
+    push: bool = True,
 ) -> None:
     from app.services.reseller_access import load_reseller_actor
 
@@ -411,10 +450,15 @@ async def open_reseller_home(
     if not owner_id or not profile:
         await message.answer("دسترسی نماینده یافت نشد.")
         return
-    ui = await get_all_settings(session)
-    await message.answer(
-        format_message("🤝 پنل نماینده", "از کیبورد پایین بخش موردنظر را انتخاب کنید."),
-        reply_markup=kb.reseller_reply_keyboard(profile, ui),
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_RESELLER,
+        text=format_message("🤝 پنل نماینده", "از کیبورد پایین بخش موردنظر را انتخاب کنید."),
+        state=state,
+        push=push,
+        profile=profile,
     )
 
 
@@ -446,40 +490,64 @@ async def open_reseller_creds(message: Message, session: AsyncSession, db_user: 
         await message.answer("لینک ربات:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 
-async def open_admin_home(message: Message, session: AsyncSession, db_user: BotUser) -> None:
+async def open_admin_home(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+) -> None:
     from app.version import __version__ as local_version
 
     if db_user.role != Role.ADMIN.value:
         await message.answer("ادمین نیستید.")
         return
-    ui = await get_all_settings(session)
-    await message.answer(
-        f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
-        "از کیبورد پایین بخش موردنظر را انتخاب کنید.",
-        reply_markup=kb.main_reply_keyboard("admin", ui=ui),
-    )
-
-
-async def open_user_preview(message: Message, session: AsyncSession, db_user: BotUser) -> None:
-    ui = await get_all_settings(session)
-    has = await user_has_services(session, db_user.id)
-    text = format_message(
-        "👁 پیش‌نمایش منوی کاربر",
-        "کیبورد پایین به حالت کاربر تغییر کرد. برای بازگشت «منوی اصلی» را بزنید.",
-    )
-    await message.answer(
-        text,
-        reply_markup=kb.main_reply_keyboard(
-            db_user.role,
-            has_services=has,
-            ui=ui,
-            as_user=True,
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_ADMIN,
+        text=(
+            f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
+            "از کیبورد پایین بخش موردنظر را انتخاب کنید."
         ),
+        state=state,
+        push=push,
     )
 
 
-async def _soft_admin(message: Message, session: AsyncSession, db_user: BotUser, data: str) -> None:
+async def open_user_preview(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+) -> None:
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_USER_PREVIEW,
+        text=format_message(
+            "👁 پیش‌نمایش منوی کاربر",
+            "کیبورد پایین به حالت کاربر تغییر کرد. «بازگشت» یا «منوی اصلی» را بزنید.",
+        ),
+        state=state,
+        push=True,
+        as_user=True,
+    )
+
+
+async def _soft_admin(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    data: str,
+    state: FSMContext | None = None,
+) -> None:
     from app.bot.handlers import admin as admin_h
+    from app.bot.handlers import admin_backup as backup_h
+    from app.bot.handlers import admin_settings as settings_h
 
     if db_user.role != Role.ADMIN.value:
         await message.answer("ادمین نیستید.")
@@ -499,17 +567,33 @@ async def _soft_admin(message: Message, session: AsyncSession, db_user: BotUser,
             await admin_h.adm_pg(cb, db_user)
         elif data == "adm:users":
             await admin_h.adm_users(cb, session, db_user)
+        elif data == "adm:dash":
+            await admin_h.adm_dash(cb, session, db_user)
+        elif data == "adm:resellers":
+            await admin_h.adm_resellers(cb, db_user)
+        elif data == "adm:backup":
+            await backup_h.backup_hub(cb, db_user, state)
         elif data == "adm:broadcast":
-            # Opens audience picker — needs FSM; fall back to inline admin home
             await bubble.edit_text(
-                "📢 پیام گروهی را از پنل ادمین انتخاب کنید:",
-                reply_markup=kb.admin_home(),
+                "📢 پیام گروهی:",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text="شروع پیام گروهی", callback_data="adm:broadcast")]
+                    ]
+                ),
             )
         elif data == "adm:settings":
-            await bubble.edit_text(
-                "⚙️ تنظیمات را از پنل ادمین یا وب‌پنل باز کنید:",
-                reply_markup=kb.admin_home(),
-            )
+            if state is not None:
+                await settings_h.settings_hub(cb, state, db_user)
+            else:
+                await bubble.edit_text(
+                    "⚙️ تنظیمات:",
+                    reply_markup=InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [InlineKeyboardButton(text="باز کردن تنظیمات", callback_data="adm:settings")]
+                        ]
+                    ),
+                )
         else:
             await bubble.edit_text("این بخش در دسترس نیست.")
     except Exception as e:
@@ -517,6 +601,164 @@ async def _soft_admin(message: Message, session: AsyncSession, db_user: BotUser,
             await bubble.edit_text(f"خطا: {e}")
         except Exception:
             pass
+
+
+async def handle_back(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
+    """One-level back through the reply-keyboard stack."""
+    data = await state.get_data()
+    await state.set_state(None)
+    await state.set_data(data)
+    level = await nav.pop_nav_level(state)
+    if level == nav.NAV_WALLET:
+        await open_wallet_home(message, session, db_user, state, push=False)
+        return
+    if level == nav.NAV_SUPPORT:
+        await open_support_home(message, session, db_user, state, push=False)
+        return
+    if level == nav.NAV_ADMIN:
+        await open_admin_home(message, session, db_user, state, push=False)
+        return
+    if level == nav.NAV_RESELLER:
+        await open_reseller_home(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            push=False,
+        )
+        return
+    if level == nav.NAV_USER_PREVIEW:
+        await nav.show_nav_keyboard(
+            message,
+            session,
+            db_user,
+            nav.NAV_USER_PREVIEW,
+            text="👁 پیش‌نمایش منوی کاربر",
+            state=state,
+            push=False,
+            as_user=True,
+        )
+        return
+    if level == nav.NAV_PAY:
+        data2 = await state.get_data()
+        oid = data2.get(nav.PAY_ORDER_ID)
+        if oid:
+            await nav.show_nav_keyboard(
+                message,
+                session,
+                db_user,
+                nav.NAV_PAY,
+                text="💳 روش پرداخت را انتخاب کنید:",
+                state=state,
+                push=False,
+                order_id=int(oid),
+            )
+            return
+        await open_wallet_home(message, session, db_user, state, push=False)
+        return
+    if level == nav.NAV_TOPUP_PAY:
+        await open_wallet_home(message, session, db_user, state, push=False)
+        return
+    from app.bot.handlers.start import render_home
+
+    await nav.clear_nav(state)
+    await render_home(
+        message,
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+
+
+async def _handle_pay_action(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    action: str,
+) -> None:
+    from app.bot.handlers import shop as shop_h
+
+    data = await state.get_data()
+    order_id = data.get(nav.PAY_ORDER_ID)
+    if not order_id:
+        await message.answer("سفارش یافت نشد. دوباره از فروشگاه انتخاب کنید.")
+        return
+    order = await session.get(Order, int(order_id))
+    if not order or int(order.user_id) != int(db_user.id):
+        await restore_main_reply(
+            message, session, db_user, text="دسترسی به این سفارش مجاز نیست.", state=state
+        )
+        return
+    cb_map = {
+        kb.REPLY_ACTION_PAY_WALLET: f"pay:wallet:{order.id}",
+        kb.REPLY_ACTION_PAY_CARD: f"pay:card:{order.id}",
+        kb.REPLY_ACTION_PAY_GATEWAY: f"pay:gateway:{order.id}",
+        kb.REPLY_ACTION_PAY_CRYPTO: f"pay:crypto:{order.id}",
+        kb.REPLY_ACTION_PAY_STARS: f"pay:stars:{order.id}",
+        kb.REPLY_ACTION_PAY_DISCOUNT: f"pay:discount:{order.id}",
+    }
+    cb_data = cb_map.get(action)
+    if not cb_data:
+        return
+    bubble = await message.answer("⏳")
+    cb = _SoftCallback(bubble, cb_data)
+    try:
+        if action == kb.REPLY_ACTION_PAY_WALLET:
+            await shop_h.pay_wallet_cb(cb, session, db_user)
+        elif action == kb.REPLY_ACTION_PAY_CARD:
+            await shop_h.pay_card_cb(cb, session, db_user)
+        elif action == kb.REPLY_ACTION_PAY_GATEWAY:
+            await shop_h.pay_gateway_cb(cb, session, db_user)
+        elif action == kb.REPLY_ACTION_PAY_CRYPTO:
+            await shop_h.pay_crypto_cb(cb, session, db_user)
+        elif action == kb.REPLY_ACTION_PAY_STARS:
+            await shop_h.pay_stars_cb(cb, session, db_user)
+        elif action == kb.REPLY_ACTION_PAY_DISCOUNT:
+            await shop_h.ask_discount(cb, state, session)
+    except Exception as e:
+        try:
+            await bubble.edit_text(f"خطا: {e}")
+        except Exception:
+            await message.answer(f"خطا: {e}")
+
+
+async def _handle_topup_action(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    action: str,
+) -> None:
+    from app.bot.handlers import wallet as wallet_h
+
+    key = {
+        kb.REPLY_ACTION_TOPUP_CARD: "wtop:card",
+        kb.REPLY_ACTION_TOPUP_GATEWAY: "wtop:gateway",
+        kb.REPLY_ACTION_TOPUP_CRYPTO: "wtop:crypto",
+    }.get(action)
+    if not key:
+        return
+    bubble = await message.answer("⏳")
+    cb = _SoftCallback(bubble, key)
+    try:
+        await wallet_h.wtop_choose_method(cb, session, state, db_user)
+    except Exception as e:
+        try:
+            await bubble.edit_text(f"خطا: {e}")
+        except Exception:
+            await message.answer(f"خطا: {e}")
 
 
 async def _soft_reseller(
@@ -597,17 +839,32 @@ async def reply_main_nav(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    """Handle taps on the persistent reply keyboard (clears FSM first)."""
+    """Handle taps on the reply keyboard."""
     from app.bot.handlers.start import render_home
 
     action = reply_action
     ui = reply_ui
     role = reply_role
 
-    # Leaving any input flow when a menu button is pressed
-    await state.clear()
+    preserve_state = action in {
+        kb.REPLY_ACTION_BACK,
+        kb.REPLY_ACTION_PAY_WALLET,
+        kb.REPLY_ACTION_PAY_CARD,
+        kb.REPLY_ACTION_PAY_GATEWAY,
+        kb.REPLY_ACTION_PAY_CRYPTO,
+        kb.REPLY_ACTION_PAY_STARS,
+        kb.REPLY_ACTION_PAY_DISCOUNT,
+        kb.REPLY_ACTION_TOPUP_CARD,
+        kb.REPLY_ACTION_TOPUP_GATEWAY,
+        kb.REPLY_ACTION_TOPUP_CRYPTO,
+        kb.REPLY_ACTION_WALLET_TOPUP,
+        kb.REPLY_ACTION_SUPPORT_NEW,
+    }
+    if not preserve_state:
+        await state.clear()
 
     if action == kb.REPLY_ACTION_HOME:
+        await nav.clear_nav(state)
         await render_home(
             message,
             session,
@@ -619,18 +876,29 @@ async def reply_main_nav(
         )
         return
 
+    if action == kb.REPLY_ACTION_BACK:
+        await handle_back(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+
     if action == kb.REPLY_ACTION_SHOP:
         await open_shop_list(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_SERVICES:
         await open_services_list(message, session, db_user)
     elif action == kb.REPLY_ACTION_WALLET:
-        await open_wallet_home(message, session, db_user)
+        await open_wallet_home(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_WALLET_TOPUP:
         await open_wallet_topup(message, session, state)
     elif action == kb.REPLY_ACTION_WALLET_TX:
         await open_wallet_tx(message, session, db_user)
     elif action == kb.REPLY_ACTION_SUPPORT:
-        await open_support_home(message, session)
+        await open_support_home(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_SUPPORT_NEW:
         await open_support_new(message, session, state)
     elif action == kb.REPLY_ACTION_SUPPORT_LIST:
@@ -644,31 +912,38 @@ async def reply_main_nav(
             message,
             session,
             db_user,
+            state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_CREDS:
         await open_reseller_creds(message, session, db_user)
     elif action == kb.REPLY_ACTION_ADMIN:
-        await open_admin_home(message, session, db_user)
+        await open_admin_home(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_ADMIN_PREVIEW:
-        await open_user_preview(message, session, db_user)
+        await open_user_preview(message, session, db_user, state)
+    elif action == kb.REPLY_ACTION_ADMIN_DASH:
+        await _soft_admin(message, session, db_user, "adm:dash", state)
     elif action == kb.REPLY_ACTION_ADMIN_ORDERS:
-        await _soft_admin(message, session, db_user, "adm:orders")
+        await _soft_admin(message, session, db_user, "adm:orders", state)
     elif action == kb.REPLY_ACTION_ADMIN_PAYMENTS:
-        await _soft_admin(message, session, db_user, "adm:payments")
+        await _soft_admin(message, session, db_user, "adm:payments", state)
     elif action == kb.REPLY_ACTION_ADMIN_TICKETS:
-        await _soft_admin(message, session, db_user, "adm:tickets")
+        await _soft_admin(message, session, db_user, "adm:tickets", state)
     elif action == kb.REPLY_ACTION_ADMIN_PLANS:
-        await _soft_admin(message, session, db_user, "adm:plans")
+        await _soft_admin(message, session, db_user, "adm:plans", state)
     elif action == kb.REPLY_ACTION_ADMIN_PG:
-        await _soft_admin(message, session, db_user, "adm:pg")
+        await _soft_admin(message, session, db_user, "adm:pg", state)
     elif action == kb.REPLY_ACTION_ADMIN_USERS:
-        await _soft_admin(message, session, db_user, "adm:users")
+        await _soft_admin(message, session, db_user, "adm:users", state)
     elif action == kb.REPLY_ACTION_ADMIN_SETTINGS:
-        await _soft_admin(message, session, db_user, "adm:settings")
+        await _soft_admin(message, session, db_user, "adm:settings", state)
     elif action == kb.REPLY_ACTION_ADMIN_BROADCAST:
-        await _soft_admin(message, session, db_user, "adm:broadcast")
+        await _soft_admin(message, session, db_user, "adm:broadcast", state)
+    elif action == kb.REPLY_ACTION_ADMIN_RESELLERS:
+        await _soft_admin(message, session, db_user, "adm:resellers", state)
+    elif action == kb.REPLY_ACTION_ADMIN_BACKUP:
+        await _soft_admin(message, session, db_user, "adm:backup", state)
     elif action.startswith("res_"):
         await _soft_reseller(
             message,
@@ -678,6 +953,10 @@ async def reply_main_nav(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
+    elif action.startswith("pay_"):
+        await _handle_pay_action(message, session, db_user, state, action)
+    elif action.startswith("topup_"):
+        await _handle_topup_action(message, session, db_user, state, action)
 
 
 @router.message(F.text.func(kb.is_cancel_text))

@@ -36,6 +36,21 @@ from app.services.users import get_all_settings, on
 
 router = Router(name="shop")
 
+async def _show_order_pay(message, session, db_user, order_id, state, text: str):
+    """Show order summary then payment methods on the reply keyboard."""
+    from app.bot.menu_nav import present_order_pay
+    if message is not None:
+        try:
+            from app.bot.tg_utils import safe_edit_text
+            await safe_edit_text(message, text, reply_markup=None)
+        except Exception:
+            try:
+                await message.answer(text)
+            except Exception:
+                pass
+        await present_order_pay(message, session, db_user, order_id, state=state, text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:")
+
+
 
 class ShopStates(StatesGroup):
     discount = State()
@@ -484,7 +499,7 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         "روش پرداخت را انتخاب کنید:",
     )
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=kb.pay_methods(order.id, ui))
+        await _show_order_pay(callback.message, session, db_user, order.id, state, text)
     await _notify_new_order(callback.bot, session, order, db_user, "پلن دلخواه")
 
 
@@ -778,7 +793,7 @@ async def wholesale_buy(
         "روش پرداخت را انتخاب کنید:",
     )
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=kb.pay_methods(order.id, ui))
+        await _show_order_pay(callback.message, session, db_user, order.id, state, text)
     await _notify_new_order(
         callback.bot, session, order, db_user, f"فروش عمده ×{order.quantity}"
     )
@@ -810,7 +825,7 @@ async def shop_plan(callback: CallbackQuery, session: AsyncSession):
 
 
 @router.callback_query(F.data.startswith("shop:buy:"))
-async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     ui = await get_all_settings(session)
     plan_id = int(callback.data.split(":")[-1])
     plan = await get_catalog_plan(session, plan_id)
@@ -869,7 +884,7 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         "روش پرداخت را انتخاب کنید:",
     )
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=kb.pay_methods(order.id, ui))
+        await _show_order_pay(callback.message, session, db_user, order.id, state, text)
     await _notify_new_order(callback.bot, session, order, db_user, plan.name if plan else None)
 
 
@@ -931,26 +946,18 @@ async def apply_discount_msg(
             reseller_owner_id=reseller_owner_id,
         )
         return
-    from app.bot.menu_nav import build_main_reply_keyboard
-    from app.services.orders import apply_discount_to_order
+    from app.bot.menu_nav import present_order_pay
 
-    main_kb, _, _ = await build_main_reply_keyboard(
-        session,
-        db_user,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-    )
     try:
         order = await apply_discount_to_order(session, order, code_raw)
     except ValueError as e:
-        await message.answer(str(e), reply_markup=main_kb)
-        await message.answer("روش پرداخت:", reply_markup=kb.pay_methods(order.id, ui))
+        await message.answer(str(e))
+        await present_order_pay(message, session, db_user, order.id, state=state)
         return
     await message.answer(
         f"تخفیف اعمال شد ✅\nمبلغ جدید: {format_toman(order.amount, get_settings().currency)}",
-        reply_markup=main_kb,
     )
-    await message.answer("روش پرداخت:", reply_markup=kb.pay_methods(order.id, ui))
+    await present_order_pay(message, session, db_user, order.id, state=state)
 
 
 @router.callback_query(F.data.startswith("pay:wallet:"))

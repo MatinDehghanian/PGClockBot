@@ -17,11 +17,12 @@ class VersionAuditTests(unittest.TestCase):
     def test_version_bumped(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.5.6")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.5.6")
+        # Historical pin for the 3.5.6 audit release notes order; current app may be newer.
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.5.6"', notes)
         self.assertLess(notes.find('"3.5.6"'), notes.find('"3.5.5"'))
+        self.assertGreaterEqual(tuple(int(x) for x in __version__.split(".")[:3]), (3, 5, 6))
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
 
 
 class PaymentRaceSourceTests(unittest.TestCase):

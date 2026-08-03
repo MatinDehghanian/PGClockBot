@@ -81,9 +81,11 @@
       .replaceAll('{holder}','نام دارنده')
       .replaceAll('{url}','https://example.com/sub/demo');
   }
-  function renderReplyKeys(labels){
+  function renderReplyKeys(labels, opts){
     if (!keysEl) return;
+    opts = opts || {};
     const home = val('btn_menu_home', values.btn_menu_home || '🏠 منوی اصلی');
+    const back = val('btn_back', values.btn_back || '⬅️ بازگشت');
     const compact = menuLayout() === 'compact';
     let html = '';
     if (compact) {
@@ -93,7 +95,11 @@
     } else {
       html = labels.map(l => '<div class="tg-key-row">'+btn(l)+'</div>').join('');
     }
-    if (home) html += '<div class="tg-key-row tg-key-home">'+btn(home)+'</div>';
+    if (opts.submenu) {
+      html += '<div class="tg-key-row tg-key-nav">'+btn(back)+btn(home)+'</div>';
+    } else if (home) {
+      html += '<div class="tg-key-row tg-key-home">'+btn(home)+'</div>';
+    }
     keysEl.innerHTML = html;
   }
   function render(){

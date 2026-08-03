@@ -1,7 +1,8 @@
-"""Shared helpers to build / restore the persistent reply keyboard menu."""
+"""Reply-keyboard navigation: main menu, submenus, back stack, restore."""
 
 from __future__ import annotations
 
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardMarkup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.db.models import BotUser, UserService
 from app.services.users import get_all_settings
+
+# FSM data keys (do not collide with shop/wallet payload keys)
+NAV_LEVEL = "_kb_nav"
+NAV_STACK = "_kb_stack"
+PAY_ORDER_ID = "_pay_order_id"
+
+NAV_MAIN = "main"
+NAV_WALLET = "wallet"
+NAV_SUPPORT = "support"
+NAV_ADMIN = "admin"
+NAV_RESELLER = "reseller"
+NAV_PAY = "pay"
+NAV_TOPUP_PAY = "topup_pay"
+NAV_USER_PREVIEW = "user_preview"
 
 
 async def user_has_services(session: AsyncSession, user_id: int) -> bool:
@@ -27,7 +42,6 @@ async def build_main_reply_keyboard(
     as_user: bool = False,
     ui: dict | None = None,
 ) -> tuple[ReplyKeyboardMarkup, dict, str]:
-    """Return (markup, ui, effective_role) for the main reply keyboard."""
     from app.services.reseller_access import effective_menu_role, is_shop_owner_on_main_bot
 
     if ui is None:
@@ -50,24 +64,64 @@ async def build_main_reply_keyboard(
     return markup, ui, role
 
 
+async def get_nav_level(state: FSMContext | None) -> str:
+    if state is None:
+        return NAV_MAIN
+    data = await state.get_data()
+    return str(data.get(NAV_LEVEL) or NAV_MAIN)
+
+
+async def set_nav_level(state: FSMContext | None, level: str, *, push: bool = True) -> None:
+    """Set current keyboard level; optionally push previous onto the back stack."""
+    if state is None:
+        return
+    data = await state.get_data()
+    current = str(data.get(NAV_LEVEL) or NAV_MAIN)
+    stack = list(data.get(NAV_STACK) or [])
+    if push and current and current != level:
+        stack.append(current)
+        stack = stack[-8:]
+    await state.update_data(**{NAV_LEVEL: level, NAV_STACK: stack})
+
+
+async def clear_nav(state: FSMContext | None) -> None:
+    if state is None:
+        return
+    await state.update_data(**{NAV_LEVEL: NAV_MAIN, NAV_STACK: [], PAY_ORDER_ID: None})
+
+
+async def pop_nav_level(state: FSMContext | None) -> str:
+    """Pop back stack and return the level to restore (defaults to main)."""
+    if state is None:
+        return NAV_MAIN
+    data = await state.get_data()
+    stack = list(data.get(NAV_STACK) or [])
+    level = stack.pop() if stack else NAV_MAIN
+    await state.update_data(**{NAV_LEVEL: level, NAV_STACK: stack})
+    return level
+
+
 async def restore_main_reply(
     message: Message,
     session: AsyncSession,
     db_user: BotUser,
     *,
     text: str = "🏠 منوی اصلی",
-    state=None,
+    state: FSMContext | None = None,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
     as_user: bool = False,
 ) -> dict:
-    """Clear FSM (if any) and send a message that restores the main reply keyboard."""
     if state is not None:
         try:
             await state.clear()
         except Exception:
             pass
-    markup, ui, role = await build_main_reply_keyboard(
+        try:
+            await state.update_data(**{NAV_LEVEL: NAV_MAIN, NAV_STACK: []})
+        except Exception:
+            pass
+    markup, ui, _role = await build_main_reply_keyboard(
         session,
         db_user,
         is_reseller_bot=is_reseller_bot,
@@ -76,3 +130,88 @@ async def restore_main_reply(
     )
     await message.answer(text, reply_markup=markup)
     return ui
+
+
+async def show_nav_keyboard(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    level: str,
+    *,
+    text: str,
+    state: FSMContext | None = None,
+    push: bool = True,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+    profile=None,
+    order_id: int | None = None,
+    as_user: bool = False,
+) -> dict:
+    """Show the reply keyboard for ``level`` and update nav stack."""
+    ui = await get_all_settings(session)
+    if state is not None:
+        await set_nav_level(state, level, push=push)
+        if order_id is not None:
+            await state.update_data(**{PAY_ORDER_ID: int(order_id)})
+
+    if level == NAV_WALLET:
+        markup = kb.wallet_reply_keyboard(ui)
+    elif level == NAV_SUPPORT:
+        markup = kb.support_reply_keyboard(ui)
+    elif level == NAV_ADMIN:
+        markup = kb.admin_reply_keyboard(ui)
+    elif level == NAV_RESELLER:
+        markup = kb.reseller_reply_keyboard(profile, ui)
+    elif level == NAV_PAY:
+        oid = order_id
+        if oid is None and state is not None:
+            data = await state.get_data()
+            oid = data.get(PAY_ORDER_ID)
+        markup = kb.pay_reply_keyboard(int(oid or 0), ui)
+    elif level == NAV_TOPUP_PAY:
+        markup = kb.topup_pay_reply_keyboard(ui)
+    elif level == NAV_USER_PREVIEW:
+        has = await user_has_services(session, db_user.id)
+        markup = kb.main_reply_keyboard(
+            db_user.role,
+            has_services=has,
+            ui=ui,
+            as_user=True,
+        )
+    else:
+        markup, ui, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            as_user=as_user,
+            ui=ui,
+        )
+    await message.answer(text, reply_markup=markup)
+    return ui
+
+
+async def present_order_pay(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    order_id: int,
+    *,
+    state: FSMContext | None = None,
+    text: str = "روش پرداخت را از کیبورد پایین انتخاب کنید:",
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
+    """Show order payment methods on the reply keyboard (not inline)."""
+    await show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        NAV_PAY,
+        text=text,
+        state=state,
+        push=True,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+        order_id=order_id,
+    )

@@ -8,7 +8,6 @@ from typing import Any
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import BotCommand, MenuButtonCommands
 from sqlalchemy import select
 
 from app.db.models import ResellerProfile
@@ -64,16 +63,9 @@ class ResellerBotManager:
                 me = await bot.get_me()
                 tg_id = int(me.id)
                 uname = me.username or ""
-                await bot.set_my_commands(
-                    [
-                        BotCommand(command="start", description="شروع / منو"),
-                        BotCommand(command="help", description="راهنما"),
-                    ]
-                )
-                try:
-                    await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
-                except Exception:
-                    pass
+                from app.bot.chat_menu import clear_telegram_menu_button
+
+                await clear_telegram_menu_button(bot)
 
                 async with SessionLocal() as session:
                     row = await session.get(ResellerProfile, reseller_profile_id)

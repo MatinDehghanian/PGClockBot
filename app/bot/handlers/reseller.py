@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -552,6 +553,7 @@ async def resapply_plan(
     callback: CallbackQuery,
     session: AsyncSession,
     db_user: BotUser,
+    state: FSMContext,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
@@ -653,4 +655,17 @@ async def resapply_buy(
         "روش پرداخت را انتخاب کنید:",
     )
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=kb.pay_methods(order.id, ui))
+        from app.bot.menu_nav import present_order_pay
+
+        try:
+            await safe_edit_text(callback.message, text, reply_markup=None)
+        except Exception:
+            await callback.message.answer(text)
+        await present_order_pay(
+            callback.message,
+            session,
+            db_user,
+            order.id,
+            state=state,
+            text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+        )

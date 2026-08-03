@@ -24,10 +24,12 @@ class KeyboardMenu357Tests(unittest.TestCase):
         self.assertTrue({"guide", "faq", "restart"} <= REMOVED_MENU_KEYS)
 
     def test_submenus_persistent_with_home(self):
-        ui = {"btn_menu_home": "🏠 منوی اصلی", "menu_layout": "compact"}
+        ui = {"btn_menu_home": "🏠 منوی اصلی", "menu_layout": "compact", "btn_back": "⬅️ بازگشت"}
         for kb in (wallet_reply_keyboard(ui), support_reply_keyboard(ui)):
-            self.assertTrue(kb.is_persistent)
-            self.assertEqual(kb.keyboard[-1][0].text, "🏠 منوی اصلی")
+            self.assertFalse(kb.is_persistent)
+            flat = [b.text for row in kb.keyboard for b in row]
+            self.assertIn("🏠 منوی اصلی", flat)
+            self.assertIn("⬅️ بازگشت", flat)
 
     def test_submenu_labels_in_action_map(self):
         mapping = reply_action_map(
@@ -56,11 +58,13 @@ class KeyboardMenu357Tests(unittest.TestCase):
             "btn_adm_settings": "⚙️ تنظیمات",
             "btn_adm_broadcast": "📢 پیام گروهی",
             "btn_menu_home": "🏠 منوی اصلی",
+            "btn_back": "⬅️ بازگشت",
         }
         flat = [b.text for row in main_reply_keyboard("admin", ui=ui).keyboard for b in row]
         self.assertIn("👥 کاربران", flat)
         self.assertIn("⚙️ تنظیمات", flat)
         self.assertIn("📢 پیام گروهی", flat)
+        self.assertIn("📊 داشبورد", flat)
 
 
 if __name__ == "__main__":

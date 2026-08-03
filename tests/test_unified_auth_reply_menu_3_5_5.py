@@ -38,7 +38,7 @@ class ReplyKeyboardMenuTests(unittest.TestCase):
         self.assertEqual(len(rows[1]), 2)
         self.assertEqual(len(rows[-1]), 1)
         self.assertEqual(rows[-1][0].text, "🏠 منوی اصلی")
-        self.assertTrue(kb.is_persistent)
+        self.assertFalse(kb.is_persistent)
 
     def test_guide_faq_stripped_from_reply_keyboard(self):
         ui = {
@@ -63,7 +63,7 @@ class ReplyKeyboardMenuTests(unittest.TestCase):
         kb = cancel_reply({})
         flat = [b.text for row in kb.keyboard for b in row]
         self.assertEqual(flat, ["انصراف"])
-        self.assertTrue(kb.is_persistent)
+        self.assertFalse(kb.is_persistent)
 
     def test_reply_action_map_resolves_labels(self):
         ui = {
@@ -77,17 +77,21 @@ class ReplyKeyboardMenuTests(unittest.TestCase):
         self.assertEqual(mapping["🏠 منوی اصلی"], REPLY_ACTION_HOME)
 
     def test_admin_reply_keyboard_includes_panel(self):
+        from app.bot.keyboards import REPLY_ACTION_ADMIN_ORDERS
+
         ui = {
             "menu_layout": "compact",
             "btn_admin": "🛠 پنل ادمین",
             "btn_adm_orders": "🛒 سفارش‌ها",
             "btn_menu_home": "🏠 منوی اصلی",
+            "btn_back": "⬅️ بازگشت",
         }
         mapping = reply_action_map("admin", ui=ui)
-        self.assertEqual(mapping["🛠 پنل ادمین"], REPLY_ACTION_ADMIN)
+        self.assertEqual(mapping["🛒 سفارش‌ها"], REPLY_ACTION_ADMIN_ORDERS)
         kb = main_reply_keyboard("admin", ui=ui)
         flat = [b.text for row in kb.keyboard for b in row]
-        self.assertIn("🛠 پنل ادمین", flat)
+        self.assertIn("🛒 سفارش‌ها", flat)
+        self.assertIn("📊 داشبورد", flat)
 
 
 class UnifiedCredentialsMessageTests(unittest.TestCase):

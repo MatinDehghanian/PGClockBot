@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.6.0": [
+        "بازطراحی کامل کیبورد پایین: همه منوها و زیرمنوها + روش پرداخت روی Reply Keyboard",
+        "زیرمنوها با «بازگشت» (یک مرحله) و «منوی اصلی»؛ فقط پلن/سرویس/تأیید-رد زیر پیام اینلاین می‌مانند",
+        "حذف دکمه Menu کنار کادر نوشتن تلگرام (delete_my_commands + MenuButtonDefault)",
+        "ناوبری امن با stack در FSM؛ مالکیت سفارش هنگام پرداخت از کیبورد دوباره چک می‌شود",
+    ],
     "3.5.7": [
         "منوی اصلی و زیرمنوهای اصلی روی کیبورد پایین (Reply Keyboard) با is_persistent — آیکون ۴خانه تلگرام کیبورد را دوباره باز می‌کند",
         "حذف راهنما/سوالات/شروع مجدد از کیبورد؛ انصراف فقط هنگام ورود متن؛ بعد از لغو/اتمام ورودی منوی اصلی برمی‌گردد",

@@ -145,12 +145,18 @@ async def apply_appearance(
         await bot.set_my_name(name=name)
         await bot.set_my_description(description=description)
         await bot.set_my_short_description(short_description=short_description)
-        await bot.set_my_commands(
-            [
-                BotCommand(command="start", description=cmd_start),
-                BotCommand(command="help", description=cmd_help),
-            ]
-        )
+        await bot.delete_my_commands()
+        try:
+            from aiogram.types import MenuButtonDefault
+
+            await bot.set_chat_menu_button(menu_button=MenuButtonDefault())
+        except Exception:
+            pass
+        try:
+            await bot.delete_chat_menu_button()
+        except Exception:
+            pass
+        # Keep descriptions in return value for panel form, but do not show Menu beside input
         if remove_photo and not photo_bytes:
             try:
                 await bot.remove_my_profile_photo()
