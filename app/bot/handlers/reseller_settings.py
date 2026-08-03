@@ -179,7 +179,6 @@ MENU_ORDER_LABELS = {
     "wallet": "کیف پول",
     "support": "پشتیبانی",
     "referral": "دعوت",
-    "miniapp": "مینی‌اپ",
 }
 
 
@@ -197,7 +196,7 @@ async def _render_menu_order(
     order = [
         p.strip()
         for p in raw.split(",")
-        if p.strip() and p.strip() in DEFAULT_MENU_ORDER and p.strip() != "reseller_apply"
+        if p.strip() and p.strip() in DEFAULT_MENU_ORDER and p.strip() not in {"reseller_apply", "miniapp"}
     ]
     if "shop" not in order:
         order.insert(0, "shop")
@@ -211,7 +210,11 @@ async def _render_menu_order(
             row.append(InlineKeyboardButton(text="⬇️", callback_data=f"res:st:menu:dn:{i}"))
         rows.append(row)
     # Offer pool items to add
-    pool = [k for k in DEFAULT_MENU_ORDER if k not in order and k != "reseller_apply"]
+    pool = [
+        k
+        for k in DEFAULT_MENU_ORDER
+        if k not in order and k not in {"reseller_apply", "miniapp"}
+    ]
     for key in pool[:6]:
         label = MENU_ORDER_LABELS.get(key, key)
         rows.append(
@@ -612,7 +615,7 @@ async def menu_order_edit(
     order = [
         p.strip()
         for p in raw.split(",")
-        if p.strip() and p.strip() in DEFAULT_MENU_ORDER and p.strip() != "reseller_apply"
+        if p.strip() and p.strip() in DEFAULT_MENU_ORDER and p.strip() not in {"reseller_apply", "miniapp"}
     ]
     if "shop" not in order:
         order.insert(0, "shop")
@@ -629,7 +632,11 @@ async def menu_order_edit(
         order[idx], order[swap] = order[swap], order[idx]
     elif op == "add":
         key = parts[4] if len(parts) > 4 else ""
-        if key in DEFAULT_MENU_ORDER and key != "reseller_apply" and key not in order:
+        if (
+            key in DEFAULT_MENU_ORDER
+            and key not in {"reseller_apply", "miniapp"}
+            and key not in order
+        ):
             order.append(key)
     elif op == "rm":
         key = parts[4] if len(parts) > 4 else ""

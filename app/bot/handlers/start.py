@@ -92,7 +92,9 @@ async def render_home(
             show_reseller_creds=show_creds,
         )
 
-    mini = kb.miniapp_inline_keyboard(ui)
+    mini = None
+    if not is_reseller_bot:
+        mini = kb.miniapp_inline_keyboard(ui)
 
     if edit:
         from aiogram.exceptions import TelegramBadRequest

@@ -152,29 +152,21 @@ async def support_body(
     )
     from app.bot.menu_nav import restore_main_reply
 
-    await restore_main_reply(
-        message,
-        session,
-        db_user,
-        text=format_message(
-            "✅ تیکت ثبت شد",
-            f"تیکت <b>#{ticket.id}</b> با موفقیت ثبت شد.\nبه‌زودی پاسخ می‌دهیم.",
-        ),
-        state=state,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-    )
+    delivered = 0
     try:
         from app.services.notifications import notify_new_ticket
 
-        await notify_new_ticket(
-            message.bot,
-            session,
-            ticket_id=ticket.id,
-            subject=ticket.subject,
-            user_name=db_user.full_name or db_user.username,
-            ticket_user_id=db_user.id,
-            ticket_reseller_id=ticket.reseller_id,
+        delivered = int(
+            await notify_new_ticket(
+                message.bot,
+                session,
+                ticket_id=ticket.id,
+                subject=ticket.subject,
+                user_name=db_user.full_name or db_user.username,
+                ticket_user_id=db_user.id,
+                ticket_reseller_id=ticket.reseller_id,
+            )
+            or 0
         )
     except Exception:
         import logging
@@ -184,6 +176,25 @@ async def support_body(
             ticket.id,
             ticket.reseller_id,
         )
+    ok_body = f"تیکت <b>#{ticket.id}</b> با موفقیت ثبت شد.\nبه‌زودی پاسخ می‌دهیم."
+    if is_reseller_bot and ticket.reseller_id and delivered <= 0:
+        # Ticket is saved; staff DM may have failed (never /start on shop bot, etc.)
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "ticket saved but staff notify delivered=0 ticket_id=%s reseller_id=%s",
+            ticket.id,
+            ticket.reseller_id,
+        )
+    await restore_main_reply(
+        message,
+        session,
+        db_user,
+        text=format_message("✅ تیکت ثبت شد", ok_body),
+        state=state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
 
 
 @router.callback_query(F.data == "support:list")

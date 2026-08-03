@@ -868,8 +868,17 @@ async def get_all_settings(
             select(ResellerSetting).where(ResellerSetting.reseller_user_id == rid)
         )
         data.update({r.key: r.value for r in r_result.scalars().all()})
-        # Reseller bots never show platform apply / admin buttons
+        # Reseller bots never show platform apply / admin buttons / miniapp (platform WebApp)
         data["show_reseller_apply"] = "0"
+        data["show_miniapp"] = "0"
+        order = [
+            p.strip()
+            for p in str(data.get("menu_order") or "").split(",")
+            if p.strip() and p.strip() not in {"reseller_apply", "miniapp"}
+        ]
+        if "shop" not in order:
+            order.insert(0, "shop")
+        data["menu_order"] = ",".join(order)
         _SETTINGS_CACHE[cache_key] = (now, dict(data))
         return data
     result = await session.execute(select(Setting))

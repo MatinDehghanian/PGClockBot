@@ -209,9 +209,11 @@ async def _send_to_chats(
     *,
     markup: InlineKeyboardMarkup | None = None,
     photo: str | None = None,
-) -> None:
+) -> int:
     import asyncio
+    import logging
 
+    log = logging.getLogger(__name__)
     targets: list[int] = []
     seen: set[int] = set()
     for raw in chat_ids:
@@ -219,14 +221,19 @@ async def _send_to_chats(
             aid = int(raw)
         except (TypeError, ValueError):
             continue
-        if aid in seen:
+        if aid <= 0 or aid in seen:
             continue
         seen.add(aid)
         targets.append(aid)
 
+    if not targets:
+        return 0
+
+    ok = 0
+    lock = asyncio.Lock()
+
     async def _one(admin_id: int) -> None:
-        if admin_id <= 0:
-            return
+        nonlocal ok
         try:
             if photo:
                 await bot.send_photo(
@@ -240,26 +247,25 @@ async def _send_to_chats(
                 await bot.send_message(
                     admin_id, text, reply_markup=markup, parse_mode="HTML"
                 )
+            async with lock:
+                ok += 1
         except Exception:
-            import logging
-
-            logging.getLogger(__name__).warning(
-                "notify send failed chat_id=%s", admin_id, exc_info=True
-            )
+            log.warning("notify send failed chat_id=%s", admin_id, exc_info=True)
             if photo:
                 try:
                     await bot.send_message(
                         admin_id, text, reply_markup=markup, parse_mode="HTML"
                     )
+                    async with lock:
+                        ok += 1
                 except Exception:
                     pass
 
-    if not targets:
-        return
     await asyncio.gather(
         *(_one(admin_id) for admin_id in targets),
         return_exceptions=True,
     )
+    return ok
 
 
 async def _send_admins(
@@ -317,11 +323,18 @@ async def _shop_recipient_chat_ids(
     reseller_id: int,
     notify_key: str,
 ) -> list[int]:
-    """Owner + bot_admin_ids for a shop, if profile may receive this notify key."""
+    """Owner + bot_admin_ids for a shop, if profile may receive this notify key.
+
+    Ticket notifies always target the shop owner (+ bot admins) — feature ACL must
+    not silently drop delivery (empty web_permissions previously blocked all DMs).
+    """
+    import logging
+
     from app.db.models import ResellerProfile
     from app.services.reseller_access import parse_telegram_ids
     from app.services.resellers import has_bot_perm
 
+    log = logging.getLogger(__name__)
     if notify_key in PLATFORM_ONLY_NOTIFY_KEYS:
         return []
     needed = SHOP_NOTIFY_PERM_MAP.get(notify_key)
@@ -334,21 +347,43 @@ async def _shop_recipient_chat_ids(
         )
     ).scalar_one_or_none()
     if profile is None or not profile.is_active:
+        log.warning("shop notify: no active profile rid=%s key=%s", reseller_id, notify_key)
         return []
-    if not any(has_bot_perm(profile, p) for p in needed):
-        return []
+    # Ticket DMs are mandatory for the shop owner; other keys still respect ACL
+    if notify_key != "notify_new_ticket":
+        if not any(has_bot_perm(profile, p) for p in needed):
+            log.warning(
+                "shop notify: ACL denied rid=%s key=%s needed=%s",
+                reseller_id,
+                notify_key,
+                sorted(needed),
+            )
+            return []
 
     ids: list[int] = []
     seen: set[int] = set()
     owner = await session.get(BotUser, int(reseller_id))
     if owner and owner.telegram_id:
         tid = int(owner.telegram_id)
-        seen.add(tid)
-        ids.append(tid)
-    for tid in parse_telegram_ids(profile.bot_admin_ids):
-        if tid not in seen:
+        if tid > 0:
             seen.add(tid)
             ids.append(tid)
+        else:
+            log.warning(
+                "shop notify: owner telegram_id is synthetic/invalid rid=%s tid=%s",
+                reseller_id,
+                tid,
+            )
+    for tid in parse_telegram_ids(profile.bot_admin_ids):
+        if tid > 0 and tid not in seen:
+            seen.add(tid)
+            ids.append(tid)
+    if not ids:
+        log.warning(
+            "shop notify: no deliverable chat ids rid=%s key=%s",
+            reseller_id,
+            notify_key,
+        )
     return ids
 
 
@@ -366,13 +401,18 @@ async def _dispatch_dual_notify(
     ticket_reseller_id: object = _TICKET_RID_UNSET,
     platform: bool = True,
     shop: bool = True,
-) -> None:
+) -> int:
     """Route staff notifications with hard shop isolation.
+
+    Returns the number of successful Telegram deliveries (0 = nobody got it).
 
     If the event belongs to a reseller shop, ONLY that shop's staff are notified
     (via the shop bot) — platform ADMIN_IDS never receive shop-scoped events.
     Platform customers (no reseller_id) notify ADMIN_IDS only.
     """
+    import logging
+
+    log = logging.getLogger(__name__)
     rid: int | None = None
     if shop and key not in PLATFORM_ONLY_NOTIFY_KEYS:
         rid = await _resolve_shop_reseller_id(
@@ -385,34 +425,50 @@ async def _dispatch_dual_notify(
 
     # --- Shop-scoped: never fan-out to platform owner ---
     if rid is not None:
-        if not await notify_enabled(session, key, reseller_id=rid):
-            return
+        # Ticket DMs always attempt delivery; other keys respect shop notify prefs
+        if key != "notify_new_ticket" and not await notify_enabled(session, key, reseller_id=rid):
+            log.warning("shop notify disabled key=%s rid=%s", key, rid)
+            return 0
         targets = await _shop_recipient_chat_ids(session, rid, key)
         if not targets:
-            return
+            return 0
         from app.services.reseller_bots import open_notify_bot_for_reseller
+        from app.services.resellers import get_reseller_profile
 
-        shop_bot, should_close = await open_notify_bot_for_reseller(session, rid)
+        shop_bot = None
+        should_close = False
+        # Prefer the live bot that received the user update when it is this shop
+        profile = await get_reseller_profile(session, int(rid))
+        live_token = (getattr(bot, "token", None) or "").strip()
+        shop_token = ((profile.bot_token if profile else None) or "").strip()
+        if live_token and shop_token and live_token == shop_token:
+            shop_bot, should_close = bot, False
+        else:
+            shop_bot, should_close = await open_notify_bot_for_reseller(session, rid)
         if shop_bot is None:
-            return
+            log.warning("shop notify: no bot for rid=%s key=%s", rid, key)
+            return 0
         try:
-            await _send_to_chats(
+            return await _send_to_chats(
                 shop_bot, targets, text, markup=markup, photo=photo
             )
         finally:
             if should_close:
-                await shop_bot.session.close()
-        return
+                try:
+                    await shop_bot.session.close()
+                except Exception:
+                    pass
 
     # --- Platform-only customers / wallet / account edits ---
     if platform and await notify_enabled(session, key):
-        await _send_to_chats(
+        return await _send_to_chats(
             bot,
             list(get_settings().admin_ids),
             text,
             markup=markup,
             photo=photo,
         )
+    return 0
 
 
 async def _ticket_reseller_chat_ids(session: AsyncSession, ticket_user_id: int) -> list[int]:
@@ -636,18 +692,20 @@ async def notify_new_ticket(
     user_name: str | None,
     ticket_user_id: int | None = None,
     ticket_reseller_id: object = _TICKET_RID_UNSET,
-) -> None:
+) -> int:
+    import html as html_mod
+
     text = format_message(
         "🎫 تیکت جدید",
         info_block(
             [
                 kv_line("🔢", "شماره", f"#{ticket_id}"),
-                kv_line("👤", "از", user_name or "—"),
-                kv_line("📝", "موضوع", subject),
+                kv_line("👤", "از", html_mod.escape(user_name or "—")),
+                kv_line("📝", "موضوع", html_mod.escape(subject or "—")),
             ]
         ),
     )
-    await _dispatch_dual_notify(
+    return await _dispatch_dual_notify(
         bot,
         session,
         "notify_new_ticket",
@@ -671,6 +729,8 @@ async def notify_ticket_message(
     ticket_reseller_id: object = _TICKET_RID_UNSET,
 ) -> None:
     """Notify the other party of a ticket reply — always with پاسخ / بستن buttons."""
+    import html as html_mod
+
     markup = ticket_action_markup(ticket_id)
     preview = (body or "").strip()
     if len(preview) > 500:
@@ -685,8 +745,8 @@ async def notify_ticket_message(
             info_block(
                 [
                     kv_line("🔢", "تیکت", f"#{ticket_id}"),
-                    kv_line("📝", "موضوع", subject or "—"),
-                    kv_line("💬", "پیام", preview or "—"),
+                    kv_line("📝", "موضوع", html_mod.escape(subject or "—")),
+                    kv_line("💬", "پیام", html_mod.escape(preview or "—")),
                 ]
             ),
         )
@@ -725,9 +785,9 @@ async def notify_ticket_message(
         info_block(
             [
                 kv_line("🔢", "تیکت", f"#{ticket_id}"),
-                kv_line("👤", "از", actor_name or "کاربر"),
-                kv_line("📝", "موضوع", subject or "—"),
-                kv_line("💬", "پیام", preview or "—"),
+                kv_line("👤", "از", html_mod.escape(actor_name or "کاربر")),
+                kv_line("📝", "موضوع", html_mod.escape(subject or "—")),
+                kv_line("💬", "پیام", html_mod.escape(preview or "—")),
             ]
         ),
     )

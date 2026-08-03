@@ -888,19 +888,26 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
         "force_join_enabled",
         "force_join_channel",
         "notify_new_ticket",
-        "notify_ticket_message",
+        "show_miniapp",
     )
     added = False
     for key in seed_keys:
         if key in existing:
             continue
-        if key not in DEFAULT_SETTINGS:
+        if key == "menu_order":
+            # Shop-safe order: never seed platform miniapp / reseller_apply
+            value = "shop,services,wallet,support,referral"
+        elif key == "show_miniapp":
+            value = "0"
+        elif key not in DEFAULT_SETTINGS:
             continue
+        else:
+            value = str(DEFAULT_SETTINGS[key])
         session.add(
             ResellerSetting(
                 reseller_user_id=rid,
                 key=key,
-                value=str(DEFAULT_SETTINGS[key]),
+                value=value,
             )
         )
         added = True

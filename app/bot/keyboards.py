@@ -827,7 +827,12 @@ def reply_action_map(
 
 
 def miniapp_inline_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup | None:
-    """WebApp can only live on inline keyboards."""
+    """WebApp can only live on inline keyboards. Platform bot only."""
+    from app.services.users import current_shop_reseller_id
+
+    # Shop bots never advertise the platform miniapp (HMAC uses main bot token)
+    if current_shop_reseller_id():
+        return None
     settings = get_settings()
     if not settings.miniapp_enabled:
         return None

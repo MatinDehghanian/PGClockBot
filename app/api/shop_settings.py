@@ -42,7 +42,6 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             "wallet": {"label": "کیف پول", "required": False},
             "support": {"label": "پشتیبانی", "required": False},
             "referral": {"label": "دعوت دوستان", "required": False},
-            "miniapp": {"label": "مینی‌اپ", "required": False},
         }
         items = []
         for key in order:
@@ -419,7 +418,11 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             return _deny_scope()
         form = await request.form()
         order = [p.strip() for p in str(form.get("menu_order") or "").split(",") if p.strip()]
-        order = [k for k in order if k in DEFAULT_MENU_ORDER and k != "reseller_apply"]
+        order = [
+            k
+            for k in order
+            if k in DEFAULT_MENU_ORDER and k not in {"reseller_apply", "miniapp"}
+        ]
         if "shop" not in order:
             order.insert(0, "shop")
         layout = str(form.get("menu_layout") or "compact").strip()
@@ -428,6 +431,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
 
         payload = {"menu_order": ",".join(order), **sync_show_flags_for_order(order)}
         payload["show_reseller_apply"] = "0"
+        payload["show_miniapp"] = "0"
         if layout in {"classic", "compact"}:
             payload["menu_layout"] = layout
         await set_settings_bulk(session, payload, reseller_id=rid)
