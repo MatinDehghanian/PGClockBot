@@ -30,7 +30,7 @@
     <div class="home-gauge-center">
       {% if meter.has_limit and meter.remain_pct is not none %}
       <strong>{{ '%.0f'|format(meter.remain_pct) }}٪</strong>
-      <span>باقی</span>
+      <span>مانده</span>
       {% else %}
       <strong>—</strong>
       <span>{{ unit_label }}</span>

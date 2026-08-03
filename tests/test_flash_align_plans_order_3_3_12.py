@@ -45,6 +45,13 @@ class PlansWholesaleButtonOrderTests(unittest.TestCase):
         self.assertEqual(buttons[-1], "modal-wholesale")
 
 
+class GaugeCenterLabelTests(unittest.TestCase):
+    def test_center_label_is_mande(self):
+        macro = (ROOT / "app/web/templates/_pg_quota_gauges.html").read_text(encoding="utf-8")
+        self.assertIn("<span>مانده</span>", macro)
+        self.assertNotIn("<span>باقی</span>", macro)
+
+
 class VersionBumpTests(unittest.TestCase):
     def test_version_is_3_3_12(self):
         from app.version import __version__
@@ -53,6 +60,7 @@ class VersionBumpTests(unittest.TestCase):
         self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.3.12")
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.3.12"', notes)
+        self.assertIn("مانده", notes)
 
 
 if __name__ == "__main__":
