@@ -278,6 +278,26 @@
       </footer>
     </main>
   </div>
+  <div class="ui-modal" id="modal-confirm" hidden>
+    <div class="ui-modal-backdrop" data-modal-close></div>
+    <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <div class="ui-modal-head">
+        <h2 id="confirm-title">تأیید</h2>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <form id="confirm-form" class="form-stack" action="#" method="post">
+        <p id="confirm-message" class="confirm-message" style="margin:0;line-height:1.6"></p>
+        <label class="form-field" id="confirm-reason-wrap" hidden>
+          <span id="confirm-reason-label">علت</span>
+          <textarea id="confirm-reason" name="confirm_reason" rows="3" minlength="3" placeholder="حداقل ۳ کاراکتر"></textarea>
+        </label>
+        <div class="actions">
+          <button type="submit" class="btn btn-danger" id="confirm-submit">تأیید</button>
+          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+        </div>
+      </form>
+    </div>
+  </div>
   <script src="/static/panel.js?v={{ app_version }}" defer></script>
   {% else %}
     {% block auth %}{% endblock %}

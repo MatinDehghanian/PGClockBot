@@ -38,7 +38,7 @@
             <form method="post" action="/pg/hosts/{{ h.get('id') }}/toggle">
               <button class="btn btn-ghost btn-sm" type="submit">{% if h.get('is_disabled') %}فعال{% else %}خاموش{% endif %}</button>
             </form>
-            <form method="post" action="/pg/hosts/{{ h.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
+            <form method="post" action="/pg/hosts/{{ h.get('id') }}/delete" data-confirm="این هاست حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
               <button class="btn btn-sm btn-danger" type="submit">حذف</button>
             </form>
           {% endcall %}

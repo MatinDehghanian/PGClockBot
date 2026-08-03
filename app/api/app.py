@@ -152,7 +152,9 @@ def _redirect_msg(path: str, *, ok: str | None = None, err: str | None = None) -
         q.append(f"ok={quote(ok)}")
     if err:
         q.append(f"err={quote(err)}")
-    url = path if not q else f"{path}?{'&'.join(q)}"
+    # Bust caches that key only on stable ?ok= text (table must refresh with flash)
+    q.append(f"_={int(time.time())}")
+    url = f"{path}?{'&'.join(q)}"
     return RedirectResponse(url, status_code=303)
 
 
@@ -537,7 +539,12 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
             )
         path = request.url.path
-        if path in {"/login", "/setup", "/security"} or path.startswith("/setup/") or path.startswith("/rsetup/"):
+        ct = (response.headers.get("content-type") or "").lower()
+        # Authenticated panel HTML must never be cached — flash + table must stay in sync
+        if "text/html" in ct:
+            response.headers["Cache-Control"] = "no-store, private"
+            response.headers["Pragma"] = "no-cache"
+        elif path in {"/login", "/setup", "/security"} or path.startswith("/setup/") or path.startswith("/rsetup/"):
             response.headers["Cache-Control"] = "no-store, private"
             response.headers["Pragma"] = "no-cache"
         if _cookie_secure(request):
@@ -2286,7 +2293,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             else:
                 user.role = role
                 await session.commit()
-        return RedirectResponse(f"/users?ok={quote('نقش به‌روز شد')}", status_code=303)
+        return _redirect_msg("/users", ok="نقش به‌روز شد")
 
     @app.post("/users/{user_id}/block")
     async def users_toggle_block(
@@ -2300,12 +2307,12 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         user = await session.get(BotUser, user_id)
         if not user:
-            return RedirectResponse(f"/users?err={quote('کاربر یافت نشد')}", status_code=303)
+            return _redirect_msg("/users", err="کاربر یافت نشد")
         if is_protected_admin(user):
-            return RedirectResponse(f"/users?err={quote('مسدود کردن ادمین مجاز نیست')}", status_code=303)
+            return _redirect_msg("/users", err="مسدود کردن ادمین مجاز نیست")
         user.is_blocked = not user.is_blocked
         await session.commit()
-        return RedirectResponse(f"/users?ok={quote('وضعیت مسدودی تغییر کرد')}", status_code=303)
+        return _redirect_msg("/users", ok="وضعیت مسدودی تغییر کرد")
 
     @app.post("/users/{user_id}/delete")
     async def users_delete(
@@ -2339,14 +2346,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                 actor_user_id=actor_id,
             )
         except ValueError as e:
-            return RedirectResponse(f"/users?err={quote(str(e))}", status_code=303)
+            return _redirect_msg("/users", err=str(e))
         except Exception as e:
-            return RedirectResponse(f"/users?err={quote(str(e))}", status_code=303)
+            return _redirect_msg("/users", err=str(e))
         label = info.get("name") or info.get("telegram_id")
-        return RedirectResponse(
-            f"/users?ok={quote(f'کاربر {label} حذف شد')}",
-            status_code=303,
-        )
+        return _redirect_msg("/users", ok=f"کاربر {label} حذف شد")
 
     @app.get("/menu-layout", response_class=HTMLResponse)
     async def menu_layout_page(staff: dict = Depends(require_admin)):

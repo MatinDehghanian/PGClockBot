@@ -44,7 +44,11 @@
             <form method="post" action="/plans/{{ p.id }}/toggle">
               <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
             </form>
-            <form method="post" action="/plans/{{ p.id }}/delete" onsubmit="return confirm('حذف پلن از فروشگاه؟')">
+            <form method="post" action="/plans/{{ p.id }}/delete"
+                  data-confirm="حذف پلن از فروشگاه؟"
+                  data-confirm-title="تأیید حذف پلن"
+                  data-confirm-danger="1"
+                  data-confirm-label="حذف پلن">
               <button class="btn btn-danger btn-sm" type="submit">حذف</button>
             </form>
           {% endcall %}

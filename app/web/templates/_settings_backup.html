@@ -78,7 +78,11 @@
       </div>
       <div style="display:flex;flex-wrap:wrap;gap: var(--space-1);align-items:center">
         <a class="btn btn-ghost btn-sm" href="/backup/download/{{ b.id }}">دانلود</a>
-        <form method="post" action="/backup/delete/{{ b.id }}" onsubmit="return confirm('این بکاپ حذف شود؟')">
+        <form method="post" action="/backup/delete/{{ b.id }}"
+              data-confirm="این بکاپ حذف شود؟"
+              data-confirm-title="تأیید حذف بکاپ"
+              data-confirm-danger="1"
+              data-confirm-label="حذف بکاپ">
           <button class="btn btn-danger btn-sm" type="submit">حذف</button>
         </form>
         <button type="button" class="btn btn-sm"

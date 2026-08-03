@@ -30,8 +30,8 @@
         <td class="col-actions">
           {% if p.status == 'pending' %}
           {% call row_actions() %}
-            <form method="post" action="/payments/{{ p.id }}/approve"><button class="btn btn-ok btn-sm" type="submit">تأیید</button></form>
-            <form method="post" action="/payments/{{ p.id }}/reject"><button class="btn btn-danger btn-sm" type="submit">رد</button></form>
+            <form method="post" action="/payments/{{ p.id }}/approve" data-confirm="این پرداخت تأیید شود؟" data-confirm-title="تأیید پرداخت" data-confirm-label="تأیید"><button class="btn btn-ok btn-sm" type="submit">تأیید</button></form>
+            <form method="post" action="/payments/{{ p.id }}/reject" data-confirm="این پرداخت رد شود؟" data-confirm-title="رد پرداخت" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-danger btn-sm" type="submit">رد</button></form>
           {% endcall %}
           {% else %}
           <span class="muted">—</span>

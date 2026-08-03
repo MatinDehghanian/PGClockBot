@@ -211,7 +211,11 @@
         <button type="submit" class="btn btn-sm">ذخیره وضعیت</button>
       </form>
       {% elif t.status != 'closed' %}
-      <form method="post" action="/tickets/panel/{{ t.id }}/status" onsubmit="return confirm('تیکت بسته شود؟');">
+      <form method="post" action="/tickets/panel/{{ t.id }}/status"
+            data-confirm="تیکت بسته شود؟"
+            data-confirm-title="بستن تیکت"
+            data-confirm-warn="1"
+            data-confirm-label="بستن تیکت">
         <input type="hidden" name="status" value="closed" />
         <button type="submit" class="btn btn-sm btn-ghost">بستن تیکت</button>
       </form>

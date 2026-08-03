@@ -46,7 +46,7 @@
         <td class="col-actions">
           {% if can_write %}
           {% call row_actions() %}
-          <form method="post" action="/pg/templates/{{ t.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
+          <form method="post" action="/pg/templates/{{ t.get('id') }}/delete" data-confirm="این تمپلیت حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
             <button class="btn btn-sm btn-danger" type="submit">حذف</button>
           </form>
           {% endcall %}

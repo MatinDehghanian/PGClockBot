@@ -36,7 +36,11 @@
       <h2 style="margin: 0">تاریخچه ارسال</h2>
     </div>
     {% if history %}
-    <form method="post" action="/broadcast/history/clear" onsubmit="return confirm('همه تاریخچه پیام‌های گروهی پاک شود؟')">
+    <form method="post" action="/broadcast/history/clear"
+          data-confirm="همه تاریخچه پیام‌های گروهی پاک شود؟"
+          data-confirm-title="پاک کردن تاریخچه"
+          data-confirm-danger="1"
+          data-confirm-label="پاک کردن">
       <button class="btn btn-danger btn-sm" type="submit">حذف تاریخچه</button>
     </form>
     {% endif %}
@@ -56,7 +60,11 @@
         <td class="mono cell-tight">{{ row.ok_count }}/{{ row.total }}{% if row.fail_count %} · ناموفق {{ row.fail_count }}{% endif %}</td>
         <td class="muted col-hide-sm">{{ row.created_by or '—' }}</td>
         <td class="col-actions">
-          <form method="post" action="/broadcast/history/{{ row.id }}/delete" onsubmit="return confirm('این رکورد حذف شود؟')">
+          <form method="post" action="/broadcast/history/{{ row.id }}/delete"
+                data-confirm="این رکورد حذف شود؟"
+                data-confirm-title="تأیید حذف"
+                data-confirm-danger="1"
+                data-confirm-label="حذف">
             <button class="btn btn-danger btn-sm" type="submit">حذف</button>
           </form>
         </td>

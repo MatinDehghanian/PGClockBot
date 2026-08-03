@@ -100,14 +100,12 @@
         <td class="col-actions">
           {% call row_actions() %}
             <form method="post" action="/resellers/{{ u.id }}/role" class="row-actions-stack"
-                  onsubmit="
-                    if (this.role.value === 'user') {
-                      var r = prompt('علت تغییر نقش به کاربر عادی (برای نماینده ارسال می‌شود):');
-                      if (!r || r.trim().length < 3) { alert('علت الزامی است'); return false; }
-                      this.reason.value = r.trim();
-                    }
-                    return true;
-                  ">
+                  data-confirm="نقش این نماینده/کاربر تغییر کند؟"
+                  data-confirm-title="تأیید تغییر نقش"
+                  data-confirm-reason-when="user"
+                  data-confirm-reason-label="علت تغییر نقش به کاربر عادی"
+                  data-confirm-reason-name="reason"
+                  data-confirm-label="اعمال نقش">
               <input type="hidden" name="reason" value="" />
               <select name="role" class="select-sm">
                 <option value="user" {% if u.role=='user' %}selected{% endif %}>کاربر</option>
@@ -118,22 +116,24 @@
             </form>
             <a class="btn btn-ghost btn-sm" href="/resellers/{{ u.id }}/edit">ویرایش</a>
             <form method="post" action="/resellers/{{ u.id }}/delete"
-                  onsubmit="
-                    var r = prompt('علت حذف نمایندگی را بنویسید:');
-                    if (!r || r.trim().length < 3) { alert('علت الزامی است (حداقل ۳ کاراکتر)'); return false; }
-                    this.reason.value = r.trim();
-                    return confirm('نمایندگی حذف شود و علت برای کاربر ارسال شود؟');
-                  ">
+                  data-confirm="نمایندگی حذف شود و علت برای کاربر ارسال شود؟"
+                  data-confirm-title="حذف نمایندگی"
+                  data-confirm-danger="1"
+                  data-confirm-reason="1"
+                  data-confirm-reason-label="علت حذف نمایندگی"
+                  data-confirm-reason-name="reason"
+                  data-confirm-label="حذف نمایندگی">
               <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف نمایندگی</button>
             </form>
             <form method="post" action="/resellers/{{ u.id }}/delete-user"
-                  onsubmit="
-                    var r = prompt('علت حذف کامل کاربر را بنویسید:');
-                    if (!r || r.trim().length < 3) { alert('علت الزامی است'); return false; }
-                    this.reason.value = r.trim();
-                    return confirm('کاربر و تمام داده‌های مرتبط کامل حذف شوند؟ برگشت‌ناپذیر است.');
-                  ">
+                  data-confirm="کاربر و تمام داده‌های مرتبط کامل حذف شوند؟ برگشت‌ناپذیر است."
+                  data-confirm-title="حذف کامل کاربر"
+                  data-confirm-danger="1"
+                  data-confirm-reason="1"
+                  data-confirm-reason-label="علت حذف کامل کاربر"
+                  data-confirm-reason-name="reason"
+                  data-confirm-label="حذف کاربر">
               <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف کاربر</button>
             </form>
