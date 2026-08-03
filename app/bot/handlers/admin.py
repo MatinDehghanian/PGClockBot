@@ -521,10 +521,11 @@ async def adm_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
 
 
 @router.callback_query(F.data == "adm:plans")
-async def adm_plans(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def adm_plans(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
+    await state.clear()
     await callback.answer()
     await _render_plans_list(callback, session)
 
@@ -565,7 +566,7 @@ async def plan_name(message: Message, state: FSMContext, db_user: BotUser):
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.admin_plans_reply_keyboard())
         return
     await state.update_data(name=(message.text or "").strip())
     await state.set_state(AdminStates.add_plan_price)
@@ -580,7 +581,7 @@ async def plan_price(message: Message, state: FSMContext, db_user: BotUser):
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.admin_plans_reply_keyboard())
         return
     try:
         price = int((message.text or "").replace(",", "").replace("٬", ""))
@@ -600,7 +601,7 @@ async def plan_days(message: Message, state: FSMContext, db_user: BotUser):
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.admin_plans_reply_keyboard())
         return
     try:
         days = int(message.text or "30")
@@ -623,7 +624,7 @@ async def plan_gb(message: Message, state: FSMContext, db_user: BotUser):
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.admin_plans_reply_keyboard())
         return
     try:
         gb = float(message.text or "0")
@@ -634,6 +635,10 @@ async def plan_gb(message: Message, state: FSMContext, db_user: BotUser):
     await state.set_state(AdminStates.add_plan_link)
     await message.answer(
         "اتصال پاسارگارد را انتخاب کنید:",
+        reply_markup=kb.admin_plans_reply_keyboard(),
+    )
+    await message.answer(
+        "یکی از گزینه‌های زیر را انتخاب کنید:",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="📋 از تمپلیت", callback_data="adm:plan:new:mode:tpl")],
@@ -641,6 +646,23 @@ async def plan_gb(message: Message, state: FSMContext, db_user: BotUser):
                 [InlineKeyboardButton(text="❌ انصراف", callback_data="adm:plans")],
             ]
         ),
+    )
+
+
+@router.message(AdminStates.add_plan_link)
+async def plan_link_cancel(message: Message, state: FSMContext, db_user: BotUser):
+    """Allow reply-keyboard انصراف while waiting for inline PG mode pick."""
+    if not _is_admin(db_user):
+        await state.clear()
+        await message.answer("ادمین نیستید")
+        return
+    if kb.is_cancel_text(message.text):
+        await state.clear()
+        await message.answer("لغو شد.", reply_markup=kb.admin_plans_reply_keyboard())
+        return
+    await message.answer(
+        "اتصال را از دکمه‌های زیر پیام انتخاب کنید، یا انصراف بزنید.",
+        reply_markup=kb.admin_plans_reply_keyboard(),
     )
 
 
@@ -1933,6 +1955,11 @@ async def adm_ticket_reply(message: Message, state: FSMContext, session: AsyncSe
         await state.clear()
         return
     if ticket.reseller_id:
+        await state.clear()
+        await message.answer("دسترسی به تیکت فروشگاه ندارید.", reply_markup=kb.admin_reply_keyboard())
+        return
+    ticket_user = await session.get(BotUser, int(ticket.user_id))
+    if ticket_user and ticket_user.reseller_id:
         await state.clear()
         await message.answer("دسترسی به تیکت فروشگاه ندارید.", reply_markup=kb.admin_reply_keyboard())
         return

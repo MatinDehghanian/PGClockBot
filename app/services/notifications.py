@@ -133,7 +133,8 @@ def shop_notify_allowed_keys(perms: list[str] | set[str] | None) -> set[str]:
 
 async def get_notify_prefs(session: AsyncSession) -> dict[str, bool]:
     """Platform-owner prefs from global Setting (never ResellerSetting)."""
-    ui = await get_all_settings(session)
+    # reseller_id=0 forces platform scope even if a shop ContextVar is active
+    ui = await get_all_settings(session, reseller_id=0)
     return {key: on(ui.get(key, default)) for key, _, _, default in NOTIFY_PREFS}
 
 
@@ -159,7 +160,8 @@ async def save_notify_prefs(session: AsyncSession, form: dict[str, Any]) -> None
         key: ("1" if form.get(f"s_{key}") in {"1", "on", "true", True} else "0")
         for key, _, _, _ in NOTIFY_PREFS
     }
-    await set_settings_bulk(session, payload)
+    # reseller_id=0 forces platform Setting even inside a shop request context
+    await set_settings_bulk(session, payload, reseller_id=0)
 
 
 async def save_shop_notify_prefs(
@@ -271,13 +273,17 @@ async def _send_admins(
     )
 
 
+# Distinguishes "caller omitted ticket scope" from "explicit platform ticket (None)".
+_TICKET_RID_UNSET = object()
+
+
 async def _resolve_shop_reseller_id(
     session: AsyncSession,
     *,
     order: Order | None = None,
     payment: Payment | None = None,
     ticket_user_id: int | None = None,
-    ticket_reseller_id: int | None = None,
+    ticket_reseller_id: object = _TICKET_RID_UNSET,
 ) -> int | None:
     if order is not None and order.reseller_id:
         return int(order.reseller_id)
@@ -288,9 +294,10 @@ async def _resolve_shop_reseller_id(
             ord_row = await session.get(Order, payment.order_id)
             if ord_row and ord_row.reseller_id:
                 return int(ord_row.reseller_id)
-    # Prefer explicit ticket shop scope (Ticket.reseller_id)
-    if ticket_reseller_id is not None:
-        return int(ticket_reseller_id)
+    # Explicit Ticket.reseller_id (including None = platform) is authoritative
+    if ticket_reseller_id is not _TICKET_RID_UNSET:
+        return int(ticket_reseller_id) if ticket_reseller_id is not None else None
+    # Legacy fallback only when ticket scope was not passed
     if ticket_user_id is not None:
         user = await session.get(BotUser, int(ticket_user_id))
         if user and user.reseller_id:
@@ -349,7 +356,7 @@ async def _dispatch_dual_notify(
     order: Order | None = None,
     payment: Payment | None = None,
     ticket_user_id: int | None = None,
-    ticket_reseller_id: int | None = None,
+    ticket_reseller_id: object = _TICKET_RID_UNSET,
     platform: bool = True,
     shop: bool = True,
 ) -> None:
@@ -621,7 +628,7 @@ async def notify_new_ticket(
     subject: str,
     user_name: str | None,
     ticket_user_id: int | None = None,
-    ticket_reseller_id: int | None = None,
+    ticket_reseller_id: object = _TICKET_RID_UNSET,
 ) -> None:
     text = format_message(
         "🎫 تیکت جدید",
@@ -654,7 +661,7 @@ async def notify_ticket_message(
     from_staff: bool,
     ticket_user_id: int,
     actor_name: str | None = None,
-    ticket_reseller_id: int | None = None,
+    ticket_reseller_id: object = _TICKET_RID_UNSET,
 ) -> None:
     """Notify the other party of a ticket reply — always with پاسخ / بستن buttons."""
     markup = ticket_action_markup(ticket_id)
@@ -678,13 +685,13 @@ async def notify_ticket_message(
         )
         send_bot = bot
         close_bot = False
-        rid = ticket_reseller_id
-        if rid is None:
+        if ticket_reseller_id is not _TICKET_RID_UNSET:
+            rid = int(ticket_reseller_id) if ticket_reseller_id is not None else None
+        else:
             from app.db.models import Ticket as TicketModel
 
             trow = await session.get(TicketModel, int(ticket_id))
-            if trow is not None and trow.reseller_id:
-                rid = int(trow.reseller_id)
+            rid = int(trow.reseller_id) if trow is not None and trow.reseller_id else None
         if rid:
             from app.services.reseller_bots import open_notify_bot_for_reseller
 

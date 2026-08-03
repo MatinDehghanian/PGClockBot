@@ -590,7 +590,7 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
         await state.clear()
         await message.answer(
             "لغو شد.",
-            reply_markup=_kb([[InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="res:st:hub")]]),
+            reply_markup=kb.reseller_settings_reply_keyboard(),
         )
         return
     if key == "force_join_channel":
@@ -601,7 +601,7 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
     await state.clear()
     await message.answer(
         "✅ ذخیره شد.",
-        reply_markup=_kb([[InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="res:st:hub")]]),
+        reply_markup=kb.reseller_settings_reply_keyboard(),
     )
 
 
@@ -631,7 +631,7 @@ async def support_title_save(message: Message, state: FSMContext, session: Async
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
         await state.clear()
-        await message.answer("لغو شد.")
+        await message.answer("لغو شد.", reply_markup=kb.reseller_settings_reply_keyboard())
         return
     await state.update_data(support_title=text)
     await state.set_state(ResellerSettingsStates.support_telegram)
@@ -649,7 +649,7 @@ async def support_telegram_save(message: Message, state: FSMContext, session: As
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
         await state.clear()
-        await message.answer("لغو شد.")
+        await message.answer("لغو شد.", reply_markup=kb.reseller_settings_reply_keyboard())
         return
     data = await state.get_data()
     title = data.get("support_title") or "پشتیبانی"
@@ -713,7 +713,7 @@ async def bot_token_save(message: Message, state: FSMContext, session: AsyncSess
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
         await state.clear()
-        await message.answer("لغو شد.")
+        await message.answer("لغو شد.", reply_markup=kb.reseller_settings_reply_keyboard())
         return
     from app.services.resellers import complete_reseller_setup
     from app.services.reseller_bots import start_reseller_bot_for_profile

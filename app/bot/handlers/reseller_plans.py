@@ -109,6 +109,7 @@ def _plan_text(plan: Plan) -> str:
 
 @router.callback_query(F.data == "res:plans")
 async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    state: FSMContext,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
@@ -121,6 +122,7 @@ async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if not has_bot_perm(profile, "plans"):
         await callback.answer("دسترسی پلن ندارید", show_alert=True)
         return
+    await state.clear()
     await callback.answer()
     plans = await _list_plans(session, owner_id)
     text = "💎 <b>پلن‌های فروش فروشگاه شما</b>\n"
@@ -370,7 +372,23 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
         return
     await message.answer(
         "منبع ساخت سرویس در پاسارگارد را انتخاب کنید:" + note,
+        reply_markup=kb.reseller_plans_reply_keyboard(),
+    )
+    await message.answer(
+        "یکی از گزینه‌های زیر را انتخاب کنید:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+@router.message(ResellerPlanStates.mode)
+async def res_plan_mode_cancel(message: Message, state: FSMContext):
+    if kb.is_cancel_text(message.text):
+        await state.clear()
+        await message.answer("لغو شد.", reply_markup=kb.reseller_plans_reply_keyboard())
+        return
+    await message.answer(
+        "منبع را از دکمه‌های زیر پیام انتخاب کنید، یا انصراف بزنید.",
+        reply_markup=kb.reseller_plans_reply_keyboard(),
     )
 
 

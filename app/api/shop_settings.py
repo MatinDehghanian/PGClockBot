@@ -407,7 +407,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         order = [k for k in order if k in DEFAULT_MENU_ORDER and k != "reseller_apply"]
         if "shop" not in order:
             order.insert(0, "shop")
-        layout = str(form.get("menu_layout") or "classic").strip()
+        layout = str(form.get("menu_layout") or "compact").strip()
         from app.bot.keyboards import sync_show_flags_for_order
         from app.services.users import set_settings_bulk
 

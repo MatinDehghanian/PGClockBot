@@ -237,6 +237,7 @@ async def backup_restore_ask(callback: CallbackQuery, db_user: BotUser, state: F
             f".env: {'بله' if restore_env else 'خیر'}\n\n"
             "برای تأیید همین پیام را بفرستید:\n<code>RESTORE</code>\n"
             "برای انصراف: انصراف",
+            reply_markup=kb.cancel_reply(),
         )
 
 
@@ -248,10 +249,13 @@ async def backup_restore_confirm(message: Message, db_user: BotUser, state: FSMC
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
         await state.clear()
-        await message.answer("لغو شد.")
+        await message.answer("لغو شد.", reply_markup=kb.admin_reply_keyboard())
         return
     if text != "RESTORE":
-        await message.answer("برای تأیید دقیقاً <code>RESTORE</code> را بفرستید یا انصراف.")
+        await message.answer(
+            "برای تأیید دقیقاً <code>RESTORE</code> را بفرستید یا انصراف.",
+            reply_markup=kb.cancel_reply(),
+        )
         return
     data = await state.get_data()
     await state.clear()
@@ -343,6 +347,6 @@ async def backup_upload_cancel(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
         await state.clear()
-        await message.answer("لغو شد.")
+        await message.answer("لغو شد.", reply_markup=kb.admin_reply_keyboard())
         return
-    await message.answer("یک فایل ZIP بفرستید یا انصراف.")
+    await message.answer("یک فایل ZIP بفرستید یا انصراف.", reply_markup=kb.cancel_reply())

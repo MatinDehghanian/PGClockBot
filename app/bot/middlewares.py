@@ -229,6 +229,7 @@ class UserMiddleware(BaseMiddleware):
 
         token = getattr(bot, "token", None) if bot else None
         main_token = (get_settings().bot_token or "").strip()
+        # Fail closed: a non-main token must NEVER use platform settings/ACL.
         if token and main_token and token != main_token:
             info = getattr(bot, "_pgclock_reseller", None)
             if not isinstance(info, dict):
@@ -245,6 +246,19 @@ class UserMiddleware(BaseMiddleware):
                         })
                     except Exception:
                         pass
+            else:
+                logger.error(
+                    "Rejecting update: bot token is not main and not a known reseller shop"
+                )
+                msg = _reply_message(event)
+                if msg:
+                    try:
+                        await msg.answer(
+                            "ربات فروشگاه شناسایی نشد. با پشتیبانی تماس بگیرید."
+                        )
+                    except Exception:
+                        pass
+                return None
 
         data["reseller_owner_id"] = reseller_owner_id
         data["reseller_profile_id"] = reseller_profile_id

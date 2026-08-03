@@ -2753,7 +2753,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             order = [k for k in order if k != "reseller_apply"]
         if "shop" not in order:
             order.insert(0, "shop")
-        layout = str(form.get("menu_layout") or "classic").strip()
+        layout = str(form.get("menu_layout") or "compact").strip()
         payload = {"menu_order": ",".join(order)}
         if layout in {"classic", "compact"}:
             payload["menu_layout"] = layout

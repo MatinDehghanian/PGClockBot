@@ -622,7 +622,7 @@ async def settings_edit_save(
         await state.clear()
         await message.answer(
             "لغو شد.",
-            reply_markup=_kb([[InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="adm:settings")]]),
+            reply_markup=kb.admin_settings_reply_keyboard(),
         )
         return
     meta = FIELDS.get(key)
@@ -734,7 +734,7 @@ async def support_title_msg(message: Message, state: FSMContext, db_user: BotUse
         await state.clear()
         await message.answer(
             "لغو شد.",
-            reply_markup=_kb([[InlineKeyboardButton(text="🎧 پشتیبان‌ها", callback_data="adm:st:sec:support")]]),
+            reply_markup=kb.admin_settings_reply_keyboard(),
         )
         return
     await state.update_data(support_title=text)
@@ -758,7 +758,7 @@ async def support_telegram_msg(
         await state.clear()
         await message.answer(
             "لغو شد.",
-            reply_markup=_kb([[InlineKeyboardButton(text="🎧 پشتیبان‌ها", callback_data="adm:st:sec:support")]]),
+            reply_markup=kb.admin_settings_reply_keyboard(),
         )
         return
     data = await state.get_data()
@@ -931,7 +931,7 @@ async def trial_save_name(
         await state.clear()
         await message.answer(
             "لغو شد.",
-            reply_markup=_kb([[InlineKeyboardButton(text="پلن تست", callback_data="adm:st:sub:service:trial")]]),
+            reply_markup=kb.admin_settings_reply_keyboard(),
         )
         return
     trial = await _ensure_trial(session)
@@ -968,7 +968,7 @@ async def trial_save_days(
         await state.clear()
         await message.answer(
             "لغو شد.",
-            reply_markup=_kb([[InlineKeyboardButton(text="پلن تست", callback_data="adm:st:sub:service:trial")]]),
+            reply_markup=kb.admin_settings_reply_keyboard(),
         )
         return
     try:
@@ -1010,7 +1010,7 @@ async def trial_save_gb(
         await state.clear()
         await message.answer(
             "لغو شد.",
-            reply_markup=_kb([[InlineKeyboardButton(text="پلن تست", callback_data="adm:st:sub:service:trial")]]),
+            reply_markup=kb.admin_settings_reply_keyboard(),
         )
         return
     try:

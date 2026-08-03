@@ -107,6 +107,57 @@ class TicketShopScopeTests(unittest.TestCase):
         src = (ROOT / "app/bot/handlers/support.py").read_text(encoding="utf-8")
         self.assertIn("reseller_id=reseller_owner_id", src)
         self.assertIn("ticket_reseller_id=ticket.reseller_id", src)
+        # user replies also pass shop scope
+        chunk = src.split("async def support_reply")[1].split("@router.")[0]
+        self.assertIn("ticket_reseller_id=ticket.reseller_id", chunk)
+
+
+class MiddlewareFailClosedTests(unittest.TestCase):
+    def test_unknown_shop_token_rejected(self):
+        src = (ROOT / "app/bot/middlewares.py").read_text(encoding="utf-8")
+        chunk = src.split("class UserMiddleware")[1].split("class ")[0]
+        self.assertIn("not a known reseller shop", chunk)
+        self.assertIn("return None", chunk)
+
+
+class TicketNotifyAuthorityTests(unittest.TestCase):
+    def test_explicit_none_not_sticky(self):
+        src = (ROOT / "app/services/notifications.py").read_text(encoding="utf-8")
+        self.assertIn("_TICKET_RID_UNSET", src)
+        chunk = src.split("async def _resolve_shop_reseller_id")[1].split("async def ")[0]
+        self.assertIn("is not _TICKET_RID_UNSET", chunk)
+
+    def test_platform_notify_prefs_force_platform(self):
+        src = (ROOT / "app/services/notifications.py").read_text(encoding="utf-8")
+        chunk = src.split("async def get_notify_prefs")[1].split("async def ")[0]
+        self.assertIn("reseller_id=0", chunk)
+
+    def test_panel_admin_tg_filters_ticket_reseller(self):
+        src = (ROOT / "app/api/panel_tickets_pages.py").read_text(encoding="utf-8")
+        self.assertIn("Ticket.reseller_id.is_(None)", src)
+
+    def test_no_main_bot_ticket_notify_fallback(self):
+        src = (ROOT / "app/services/reseller_bots.py").read_text(encoding="utf-8")
+        chunk = src.split("async def open_notify_bot_for_reseller")[1].split("\ndef ")[0]
+        self.assertIn("return None, False", chunk)
+        self.assertIn("do not fall back to main bot", chunk)
+        # Must not create the main/platform bot as a silent fallback
+        self.assertNotIn("return create_bot(), True", chunk)
+
+
+class WalletCancelTests(unittest.TestCase):
+    def test_waiting_receipt_cancel(self):
+        src = (ROOT / "app/bot/handlers/wallet.py").read_text(encoding="utf-8")
+        self.assertIn("WalletStates.waiting_receipt", src)
+        self.assertIn("async def wallet_receipt_cancel", src)
+        self.assertIn("async def wallet_choose_method_cancel", src)
+
+
+class ShopSeedTests(unittest.TestCase):
+    def test_seed_on_setup(self):
+        src = (ROOT / "app/services/resellers.py").read_text(encoding="utf-8")
+        self.assertIn("seed_reseller_shop_settings", src)
+        self.assertIn('"menu_layout"', src)
 
 
 if __name__ == "__main__":

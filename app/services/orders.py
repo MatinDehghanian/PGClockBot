@@ -199,11 +199,12 @@ async def generate_pg_username(
     plan_prefix: str | None = None,
     plan_suffix: str | None = None,
     plan_pattern: str | None = None,
+    reseller_id: int | None = None,
 ) -> str:
     """Generate a Pasarguard username using plan overrides when set, else globals."""
     from app.services.users import get_all_settings
 
-    ui = await get_all_settings(session)
+    ui = await get_all_settings(session, reseller_id=reseller_id)
     if plan is not None and plan_prefix is None and plan_suffix is None and plan_pattern is None:
         plan_prefix, plan_suffix, plan_pattern = naming_from_plan(plan)
     prefix, suffix, pattern = resolve_username_naming(
@@ -1196,7 +1197,12 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         services: list[UserService] = []
 
         async def _create_one(index: int) -> UserService:
-            username = await generate_pg_username(session, user_id=order.user_id, plan=plan)
+            username = await generate_pg_username(
+                session,
+                user_id=order.user_id,
+                plan=plan,
+                reseller_id=order.reseller_id,
+            )
             note = f"PGClockBot order #{order.id}"
             if qty > 1:
                 note = f"{note} ({index}/{qty})"

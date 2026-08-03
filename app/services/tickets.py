@@ -71,10 +71,22 @@ async def close_ticket(session: AsyncSession, ticket: Ticket) -> Ticket:
     return ticket
 
 
-async def list_user_tickets(session: AsyncSession, user_id: int) -> list[Ticket]:
-    result = await session.execute(
-        select(Ticket).where(Ticket.user_id == user_id).order_by(Ticket.id.desc())
-    )
+async def list_user_tickets(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    reseller_id: int | None = None,
+) -> list[Ticket]:
+    """List tickets for a user, scoped to current shop (or platform when reseller_id is None)."""
+    from app.services.users import current_shop_reseller_id
+
+    rid = reseller_id if reseller_id is not None else current_shop_reseller_id()
+    q = select(Ticket).where(Ticket.user_id == user_id)
+    if rid:
+        q = q.where(Ticket.reseller_id == int(rid))
+    else:
+        q = q.where(Ticket.reseller_id.is_(None))
+    result = await session.execute(q.order_by(Ticket.id.desc()))
     return list(result.scalars().all())
 
 

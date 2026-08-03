@@ -211,10 +211,26 @@ async def support_list(callback: CallbackQuery, session: AsyncSession, db_user: 
 
 
 @router.callback_query(F.data.startswith("support:view:"))
-async def support_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
+async def support_view(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     ticket_id = int(callback.data.split(":")[-1])
     ticket = await get_ticket(session, ticket_id)
     if not ticket or ticket.user_id != db_user.id:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    # Shop isolation: only show tickets belonging to this bot's scope
+    shop_rid = int(reseller_owner_id) if reseller_owner_id else None
+    if shop_rid:
+        if int(ticket.reseller_id or 0) != shop_rid:
+            await callback.answer("یافت نشد", show_alert=True)
+            return
+    elif ticket.reseller_id:
         await callback.answer("یافت نشد", show_alert=True)
         return
     await callback.answer()
@@ -293,6 +309,7 @@ async def support_reply(
             from_staff=False,
             ticket_user_id=ticket.user_id,
             actor_name=db_user.full_name or db_user.username,
+            ticket_reseller_id=ticket.reseller_id,
         )
     except Exception:
         pass

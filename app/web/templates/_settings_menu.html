@@ -8,15 +8,15 @@
     <label class="setting-item">
       <span>حالت چیدمان کیبورد</span>
       <select name="menu_layout_ui" id="menu_layout_select" form="menu-form">
-        <option value="classic" {% if values.get('menu_layout','compact')=='classic' %}selected{% endif %}>کلاسیک — هر دکمه یک ردیف</option>
-        <option value="compact" {% if values.get('menu_layout','compact')=='compact' %}selected{% endif %}>فشرده — دکمه‌ها جفتی (پیشنهادی)</option>
+        <option value="classic" {% if values.get('menu_layout','compact')=='classic' %}selected{% endif %}>کلاسیک (تکی — هر دکمه یک ردیف)</option>
+        <option value="compact" {% if values.get('menu_layout','compact')=='compact' %}selected{% endif %}>فشرده (جفتی — پیشنهادی)</option>
       </select>
     </label>
   </div>
 </div>
 <form method="post" action="/settings?tab=menu" id="menu-form" class="menu-layout-form">
   <input type="hidden" name="menu_order" id="menu_order" value="{{ order_csv }}" />
-  <input type="hidden" name="menu_layout" id="menu_layout" value="{{ values.get('menu_layout', 'classic') }}" />
+  <input type="hidden" name="menu_layout" id="menu_layout" value="{{ values.get('menu_layout', 'compact') }}" />
   <input type="hidden" name="menu_layout_save" value="1" />
   <div class="dnd-cols">
     <div class="card dnd-card">

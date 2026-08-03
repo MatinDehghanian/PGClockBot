@@ -250,8 +250,8 @@ async def open_notify_bot_for_reseller(session, reseller_user_id: int) -> tuple[
     token = (profile.bot_token or "").strip()
     if token:
         return create_bot(token), True
-    # No dedicated bot yet — fall back to main bot so owner still gets DMs there
-    return create_bot(), True
+    # No dedicated bot yet — do not fall back to main bot (ACL would break on platform bot)
+    return None, False
 
 
 def init_reseller_bot_manager(dispatcher: Dispatcher) -> ResellerBotManager:

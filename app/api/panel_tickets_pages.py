@@ -58,7 +58,10 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                     await session.execute(
                         select(Ticket)
                         .join(BotUser, BotUser.id == Ticket.user_id)
-                        .where(BotUser.reseller_id.is_(None))
+                        .where(
+                            Ticket.reseller_id.is_(None),
+                            BotUser.reseller_id.is_(None),
+                        )
                         .order_by(Ticket.id.desc())
                         .limit(100)
                     )

@@ -848,12 +848,66 @@ async def complete_reseller_setup(
     await session.commit()
     await session.refresh(profile)
     try:
+        await seed_reseller_shop_settings(session, int(profile.user_id))
+    except Exception:
+        pass
+    try:
         from app.services.reseller_bots import clear_reseller_token_cache
 
         clear_reseller_token_cache()
     except Exception:
         pass
     return profile
+
+
+async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: int) -> None:
+    """Seed isolated shop settings from code defaults (never live platform Setting)."""
+    from app.db.models import ResellerSetting
+    from app.services.users import DEFAULT_SETTINGS
+
+    rid = int(reseller_user_id)
+    existing = {
+        row[0]
+        for row in (
+            await session.execute(
+                select(ResellerSetting.key).where(ResellerSetting.reseller_user_id == rid)
+            )
+        ).all()
+    }
+    # Seed UX-critical keys so shops start independent of platform live values
+    seed_keys = (
+        "menu_layout",
+        "menu_order",
+        "shop_title",
+        "welcome_text",
+        "card_enabled",
+        "gateway_enabled",
+        "crypto_enabled",
+        "force_join_enabled",
+        "force_join_channel",
+    )
+    added = False
+    for key in seed_keys:
+        if key in existing:
+            continue
+        if key not in DEFAULT_SETTINGS:
+            continue
+        session.add(
+            ResellerSetting(
+                reseller_user_id=rid,
+                key=key,
+                value=str(DEFAULT_SETTINGS[key]),
+            )
+        )
+        added = True
+    if added:
+        await session.commit()
+        try:
+            from app.services.users import clear_settings_cache
+
+            clear_settings_cache(rid)
+        except Exception:
+            pass
 
 
 def _synthetic_telegram_id(pg_username: str) -> int:
@@ -1165,6 +1219,11 @@ async def revoke_reseller(
     )
     await session.execute(
         update(Order).where(Order.reseller_id == user_id).values(reseller_id=None)
+    )
+    from app.db.models import Ticket
+
+    await session.execute(
+        update(Ticket).where(Ticket.reseller_id == user_id).values(reseller_id=None)
     )
 
     await session.delete(profile)

@@ -221,6 +221,39 @@ async def wtop_choose_method(
     await state.update_data(payment_id=payment.id, topup_amount=None)
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=markup)
+        await callback.message.answer(
+            "عکس رسید را بفرستید یا انصراف بزنید:",
+            reply_markup=kb.cancel_reply(ui),
+        )
+
+
+@router.message(WalletStates.choose_method)
+async def wallet_choose_method_cancel(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.bot.menu_nav import restore_main_reply
+
+    ui = await get_all_settings(session)
+    if kb.is_cancel_text(message.text) or kb.is_home_text(message.text, ui):
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="لغو شد.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    await message.answer(
+        "روش واریز را از کیبورد پایین انتخاب کنید یا انصراف بزنید.",
+        reply_markup=kb.cancel_reply(ui),
+    )
 
 
 @router.message(WalletStates.waiting_receipt, F.photo)
@@ -266,6 +299,35 @@ async def wallet_receipt_photo(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
+
+
+@router.message(WalletStates.waiting_receipt)
+async def wallet_receipt_cancel(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.bot.menu_nav import restore_main_reply
+
+    ui = await get_all_settings(session)
+    if kb.is_cancel_text(message.text) or kb.is_home_text(message.text, ui):
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="لغو شد.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    await message.answer(
+        "عکس رسید را بفرستید یا انصراف بزنید.",
+        reply_markup=kb.cancel_reply(ui),
+    )
 
 
 @router.message(F.photo)
