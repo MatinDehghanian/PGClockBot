@@ -20,6 +20,10 @@ NAV_MAIN = "main"
 NAV_WALLET = "wallet"
 NAV_SUPPORT = "support"
 NAV_ADMIN = "admin"
+NAV_ADMIN_PG = "admin_pg"
+NAV_ADMIN_USERS = "admin_users"
+NAV_ADMIN_RESELLERS = "admin_resellers"
+NAV_ADMIN_SETTINGS = "admin_settings"
 NAV_RESELLER = "reseller"
 NAV_PAY = "pay"
 NAV_TOPUP_PAY = "topup_pay"
@@ -160,6 +164,14 @@ async def show_nav_keyboard(
         markup = kb.support_reply_keyboard(ui)
     elif level == NAV_ADMIN:
         markup = kb.admin_reply_keyboard(ui)
+    elif level == NAV_ADMIN_PG:
+        markup = kb.pg_reply_keyboard(ui)
+    elif level == NAV_ADMIN_USERS:
+        markup = kb.admin_users_reply_keyboard(ui)
+    elif level == NAV_ADMIN_RESELLERS:
+        markup = kb.admin_resellers_reply_keyboard(ui)
+    elif level == NAV_ADMIN_SETTINGS:
+        markup = kb.admin_settings_reply_keyboard(ui)
     elif level == NAV_RESELLER:
         markup = kb.reseller_reply_keyboard(profile, ui)
     elif level == NAV_PAY:

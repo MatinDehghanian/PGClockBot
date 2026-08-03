@@ -129,7 +129,7 @@ async def _render_users_list(
         users, total = await _fetch_users_page(page, username=query)
     except Exception as e:
         text = format_message("❌ خطا", str(e))
-        markup = kb.pg_admin_keyboard()
+        markup = None  # navigation is on reply keyboard (pg_reply_keyboard)
         if edit:
             await safe_edit_text(target, text, reply_markup=markup)
         else:
@@ -165,17 +165,11 @@ async def _render_users_list(
     if nav:
         rows.append(nav)
 
-    rows.append(
-        [
-            InlineKeyboardButton(text="🔎 جستجو", callback_data="adm:pg:search"),
-            InlineKeyboardButton(text="➕ ساخت", callback_data="adm:pg:create"),
-        ]
-    )
     if query:
         rows.append(
             [InlineKeyboardButton(text="🧹 پاک کردن جستجو", callback_data="adm:pg:users:clear")]
         )
-    rows.append([InlineKeyboardButton(text="⬅️ پاسارگارد", callback_data="adm:pg")])
+    # Hub actions (search/create/back) live on the reply keyboard — not inline
 
     title = "👥 کاربران پاسارگارد"
     bits = [f"صفحه {page_label}"]
@@ -209,9 +203,9 @@ async def _show_user_card(
     except Exception as e:
         text = format_message("❌ خطا", str(e))
         if edit:
-            await safe_edit_text(target, text, reply_markup=kb.pg_admin_keyboard())
+            await safe_edit_text(target, text, reply_markup=None)
         else:
-            await target.answer(text, reply_markup=kb.pg_admin_keyboard())
+            await target.answer(text, reply_markup=kb.pg_reply_keyboard())
         return
     text = service_card(user if isinstance(user, dict) else {})
     if notice:
@@ -278,7 +272,7 @@ async def pg_search_query(message: Message, state: FSMContext, db_user: BotUser)
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_admin_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.pg_reply_keyboard())
         return
     q = (message.text or "").strip()
     if not q:
@@ -646,7 +640,7 @@ async def pg_create_username(message: Message, state: FSMContext, db_user: BotUs
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_admin_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.pg_reply_keyboard())
         return
     uname = (message.text or "").strip()
     if not _USERNAME_RE.fullmatch(uname):
@@ -659,7 +653,7 @@ async def pg_create_username(message: Message, state: FSMContext, db_user: BotUs
         tid = data.get("pg_template_id")
         if not tid:
             await state.clear()
-            await message.answer("تمپلیت انتخاب نشده.", reply_markup=kb.pg_admin_keyboard())
+            await message.answer("تمپلیت انتخاب نشده.", reply_markup=kb.pg_reply_keyboard())
             return
         try:
             user = await get_pg().create_user_from_template(
@@ -677,7 +671,7 @@ async def pg_create_username(message: Message, state: FSMContext, db_user: BotUs
         if uid:
             await _show_user_card(message, uid, edit=False, notice="✅ کاربر ساخته شد")
         else:
-            await message.answer("✅ کاربر ساخته شد.", reply_markup=kb.pg_admin_keyboard())
+            await message.answer("✅ کاربر ساخته شد.", reply_markup=kb.pg_reply_keyboard())
         return
     await state.set_state(PgUserStates.create_gb)
     await message.answer(
@@ -693,7 +687,7 @@ async def pg_create_gb(message: Message, state: FSMContext, db_user: BotUser):
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_admin_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.pg_reply_keyboard())
         return
     raw = (message.text or "").strip().replace(",", ".")
     try:
@@ -718,7 +712,7 @@ async def pg_create_days(message: Message, state: FSMContext, db_user: BotUser):
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_admin_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.pg_reply_keyboard())
         return
     raw = (message.text or "").strip()
     try:
@@ -734,7 +728,7 @@ async def pg_create_days(message: Message, state: FSMContext, db_user: BotUser):
     gb = float(data.get("pg_create_gb") or 0)
     if not uname or not groups:
         await state.clear()
-        await message.answer("داده ناقص است — دوباره شروع کنید.", reply_markup=kb.pg_admin_keyboard())
+        await message.answer("داده ناقص است — دوباره شروع کنید.", reply_markup=kb.pg_reply_keyboard())
         return
     data_limit = int(gb * (1024**3)) if gb > 0 else 0
     expire_ts = int(time.time()) + days * 86400 if days > 0 else 0
@@ -760,7 +754,7 @@ async def pg_create_days(message: Message, state: FSMContext, db_user: BotUser):
     if uid:
         await _show_user_card(message, uid, edit=False, notice="✅ کاربر ساخته شد")
     else:
-        await message.answer("✅ کاربر ساخته شد.", reply_markup=kb.pg_admin_keyboard())
+        await message.answer("✅ کاربر ساخته شد.", reply_markup=kb.pg_reply_keyboard())
 
 
 # ----- edit -----
@@ -805,7 +799,7 @@ async def pg_edit_name_save(message: Message, state: FSMContext, db_user: BotUse
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_admin_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.pg_reply_keyboard())
         return
     uname = (message.text or "").strip()
     if not _USERNAME_RE.fullmatch(uname):
@@ -855,7 +849,7 @@ async def pg_edit_gb_save(message: Message, state: FSMContext, db_user: BotUser)
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_admin_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.pg_reply_keyboard())
         return
     raw = (message.text or "").strip().replace(",", ".")
     try:
@@ -911,7 +905,7 @@ async def pg_edit_days_save(message: Message, state: FSMContext, db_user: BotUse
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_admin_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.pg_reply_keyboard())
         return
     raw = (message.text or "").strip()
     try:

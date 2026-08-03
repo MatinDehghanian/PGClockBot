@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.6.1": [
+        "زیرمنوی پاسارگارد/کاربران/نمایندگان/تنظیمات روی Reply Keyboard (نه اینلاین زیر پیام)",
+        "بازگشت و منوی اصلی در زیرمنوی پاسارگارد؛ لیست کاربران VPN فقط انتخاب آیتم اینلاین می‌ماند",
+    ],
     "3.6.0": [
         "بازطراحی کامل کیبورد پایین: همه منوها و زیرمنوها + روش پرداخت روی Reply Keyboard",
         "زیرمنوها با «بازگشت» (یک مرحله) و «منوی اصلی»؛ فقط پلن/سرویس/تأیید-رد زیر پیام اینلاین می‌مانند",

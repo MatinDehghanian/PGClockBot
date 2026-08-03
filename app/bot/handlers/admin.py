@@ -1126,7 +1126,7 @@ async def adm_users(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         "لیست صفحه‌بندی‌شده یا جستجو با آیدی تلگرام."
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.admin_users_keyboard())
+        await callback.message.edit_text(text, reply_markup=None)
 
 
 USERS_PAGE_SIZE = 10
@@ -1547,7 +1547,7 @@ async def adm_resellers(callback: CallbackQuery, db_user: BotUser):
     if callback.message:
         await callback.message.edit_text(
             "🤝 <b>نمایندگان</b>\nلیست فعال، درخواست‌ها، یا افزودن دستی.",
-            reply_markup=kb.admin_resellers_menu(),
+            reply_markup=None,
         )
 
 
@@ -1640,7 +1640,7 @@ async def adm_resapp_list(callback: CallbackQuery, session: AsyncSession, db_use
         if callback.message:
             await callback.message.edit_text(
                 "درخواست معلقی نیست.",
-                reply_markup=kb.admin_resellers_menu(),
+                reply_markup=None,
             )
         return
     rows = []
@@ -1723,7 +1723,7 @@ async def adm_resapp_ok(callback: CallbackQuery, session: AsyncSession, db_user:
     if callback.message:
         await callback.message.edit_text(
             f"✅ درخواست #{app.id} تأیید شد — اطلاعات ورود ارسال شد.",
-            reply_markup=kb.admin_resellers_menu(),
+            reply_markup=None,
         )
 
 
@@ -1756,7 +1756,7 @@ async def adm_resapp_no(callback: CallbackQuery, session: AsyncSession, db_user:
     if callback.message:
         await callback.message.edit_text(
             f"❌ درخواست #{app.id} رد شد.",
-            reply_markup=kb.admin_resellers_menu(),
+            reply_markup=None,
         )
 
 
@@ -1984,9 +1984,16 @@ async def adm_pg(callback: CallbackQuery, db_user: BotUser):
     if callback.message:
         await callback.message.edit_text(
             "🖥 <b>عملیات پاسارگارد</b>\n"
-            "کاربران VPN را لیست/جستجو کنید، بسازید و مثل پنل مدیریت کنید.",
-            reply_markup=kb.pg_admin_keyboard(),
+            "از کیبورد پایین بخش موردنظر را انتخاب کنید.",
+            reply_markup=None,
         )
+        try:
+            await callback.message.answer(
+                "⌨️",
+                reply_markup=kb.pg_reply_keyboard(),
+            )
+        except Exception:
+            pass
 
 
 @router.callback_query(F.data == "adm:pg:group")
@@ -2002,7 +2009,7 @@ async def adm_pg_group_hint(callback: CallbackQuery, db_user: BotUser):
         "مدیریت کاربران VPN از همین ربات: «کاربران VPN»."
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.pg_admin_keyboard())
+        await callback.message.edit_text(text, reply_markup=None)
 
 
 @router.callback_query(F.data == "adm:pg:template")
@@ -2017,7 +2024,7 @@ async def adm_pg_template_hint(callback: CallbackQuery, db_user: BotUser):
         "ساخت کاربر از تمپلیت در ربات: پاسارگارد ← ساخت کاربر."
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.pg_admin_keyboard())
+        await callback.message.edit_text(text, reply_markup=None)
 
 
 @router.callback_query(F.data == "adm:pg:stats")
@@ -2030,11 +2037,11 @@ async def pg_stats(callback: CallbackQuery, db_user: BotUser):
         stats = await get_pg().get_system_stats()
     except Exception as e:
         if callback.message:
-            await callback.message.edit_text(f"خطا: {e}", reply_markup=kb.pg_admin_keyboard())
+            await callback.message.edit_text(f"خطا: {e}", reply_markup=None)
         return
     text = "🏠 <b>نمای کلی پاسارگارد</b>\n\n" + format_system_stats(stats)
     if callback.message:
-        await callback.message.edit_text(text[:3500], reply_markup=kb.pg_admin_keyboard())
+        await callback.message.edit_text(text[:3500], reply_markup=None)
 
 
 @router.callback_query(F.data == "adm:pg:nodes")
@@ -2047,7 +2054,7 @@ async def pg_nodes(callback: CallbackQuery, db_user: BotUser):
         nodes = await get_pg().get_nodes()
     except Exception as e:
         if callback.message:
-            await callback.message.edit_text(f"خطا: {e}", reply_markup=kb.pg_admin_keyboard())
+            await callback.message.edit_text(f"خطا: {e}", reply_markup=None)
         return
     items = nodes if isinstance(nodes, list) else nodes.get("nodes", nodes.get("items", []))
     lines = ["🕸 <b>نودها</b>\n"]

@@ -490,6 +490,111 @@ async def open_reseller_creds(message: Message, session: AsyncSession, db_user: 
         await message.answer("لینک ربات:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 
+async def open_pg_home(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+) -> None:
+    if db_user.role != Role.ADMIN.value:
+        await message.answer("ادمین نیستید.")
+        return
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_ADMIN_PG,
+        text=(
+            "🖥 <b>عملیات پاسارگارد</b>\n"
+            "از کیبورد پایین بخش موردنظر را انتخاب کنید."
+        ),
+        state=state,
+        push=push,
+    )
+
+
+async def open_admin_users_hub(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+) -> None:
+    if db_user.role != Role.ADMIN.value:
+        await message.answer("ادمین نیستید.")
+        return
+    from sqlalchemy import func
+    from app.db.models import Order
+
+    total = await session.scalar(select(func.count()).select_from(BotUser))
+    blocked = await session.scalar(
+        select(func.count()).select_from(BotUser).where(BotUser.is_blocked.is_(True))
+    ) or 0
+    orders = await session.scalar(select(func.count()).select_from(Order))
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_ADMIN_USERS,
+        text=(
+            "👥 <b>کاربران بات</b>\n\n"
+            f"کل: {total}\n"
+            f"مسدود: {blocked}\n"
+            f"سفارش‌ها: {orders}\n\n"
+            "از کیبورد پایین لیست یا جستجو را انتخاب کنید."
+        ),
+        state=state,
+        push=push,
+    )
+
+
+async def open_admin_resellers_hub(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+) -> None:
+    if db_user.role != Role.ADMIN.value:
+        await message.answer("ادمین نیستید.")
+        return
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_ADMIN_RESELLERS,
+        text="🤝 <b>نمایندگان</b>\nاز کیبورد پایین بخش موردنظر را انتخاب کنید.",
+        state=state,
+        push=push,
+    )
+
+
+async def open_admin_settings_hub(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+) -> None:
+    if db_user.role != Role.ADMIN.value:
+        await message.answer("ادمین نیستید.")
+        return
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_ADMIN_SETTINGS,
+        text="⚙️ <b>تنظیمات</b>\nاز کیبورد پایین یک بخش را انتخاب کنید:",
+        state=state,
+        push=push,
+    )
+
+
 async def open_admin_home(
     message: Message,
     session: AsyncSession,
@@ -565,8 +670,42 @@ async def _soft_admin(
             await admin_h.adm_plans(cb, session, db_user)
         elif data == "adm:pg":
             await admin_h.adm_pg(cb, db_user)
-        elif data == "adm:users":
-            await admin_h.adm_users(cb, session, db_user)
+        elif data == "adm:pg:stats":
+            await admin_h.pg_stats(cb, db_user)
+        elif data == "adm:pg:nodes":
+            await admin_h.pg_nodes(cb, db_user)
+        elif data == "adm:pg:group":
+            await admin_h.adm_pg_group_hint(cb, db_user)
+        elif data == "adm:pg:template":
+            await admin_h.adm_pg_template_hint(cb, db_user)
+        elif data == "adm:pg:users":
+            from app.bot.handlers import admin_pg_users as pg_users_h
+
+            await pg_users_h.pg_users_list(cb, state, db_user)
+        elif data == "adm:pg:search":
+            from app.bot.handlers import admin_pg_users as pg_users_h
+
+            await pg_users_h.pg_search_start(cb, state, db_user)
+        elif data == "adm:pg:create":
+            from app.bot.handlers import admin_pg_users as pg_users_h
+
+            await pg_users_h.pg_create_menu(cb, state, db_user)
+        elif data == "adm:users:list:0":
+            await admin_h.adm_users_list(cb, session, db_user)
+        elif data == "adm:users:search":
+            await admin_h.adm_users_search_start(cb, state, db_user)
+        elif data == "adm:users:webhint":
+            await admin_h.adm_users_webhint(cb, db_user)
+        elif data == "adm:resellers:list:0":
+            await admin_h.adm_resellers_list(cb, session, db_user)
+        elif data == "adm:resapp:list":
+            await admin_h.adm_resapp_list(cb, session, db_user)
+        elif data == "adm:resellers:add":
+            await admin_h.adm_resellers_add(cb, state, db_user)
+        elif data.startswith("adm:st:sec:"):
+            from app.bot.handlers import admin_settings as settings_h
+
+            await settings_h.settings_section(cb, session, db_user)
         elif data == "adm:dash":
             await admin_h.adm_dash(cb, session, db_user)
         elif data == "adm:resellers":
@@ -625,6 +764,18 @@ async def handle_back(
         return
     if level == nav.NAV_ADMIN:
         await open_admin_home(message, session, db_user, state, push=False)
+        return
+    if level == nav.NAV_ADMIN_PG:
+        await open_pg_home(message, session, db_user, state, push=False)
+        return
+    if level == nav.NAV_ADMIN_USERS:
+        await open_admin_users_hub(message, session, db_user, state, push=False)
+        return
+    if level == nav.NAV_ADMIN_RESELLERS:
+        await open_admin_resellers_hub(message, session, db_user, state, push=False)
+        return
+    if level == nav.NAV_ADMIN_SETTINGS:
+        await open_admin_settings_hub(message, session, db_user, state, push=False)
         return
     if level == nav.NAV_RESELLER:
         await open_reseller_home(
@@ -933,17 +1084,46 @@ async def reply_main_nav(
     elif action == kb.REPLY_ACTION_ADMIN_PLANS:
         await _soft_admin(message, session, db_user, "adm:plans", state)
     elif action == kb.REPLY_ACTION_ADMIN_PG:
-        await _soft_admin(message, session, db_user, "adm:pg", state)
+        await open_pg_home(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_ADMIN_USERS:
-        await _soft_admin(message, session, db_user, "adm:users", state)
+        await open_admin_users_hub(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_ADMIN_SETTINGS:
-        await _soft_admin(message, session, db_user, "adm:settings", state)
+        await open_admin_settings_hub(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_ADMIN_BROADCAST:
         await _soft_admin(message, session, db_user, "adm:broadcast", state)
     elif action == kb.REPLY_ACTION_ADMIN_RESELLERS:
-        await _soft_admin(message, session, db_user, "adm:resellers", state)
+        await open_admin_resellers_hub(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_ADMIN_BACKUP:
         await _soft_admin(message, session, db_user, "adm:backup", state)
+    elif action == kb.REPLY_ACTION_PG_STATS:
+        await _soft_admin(message, session, db_user, "adm:pg:stats", state)
+    elif action == kb.REPLY_ACTION_PG_USERS:
+        await _soft_admin(message, session, db_user, "adm:pg:users", state)
+    elif action == kb.REPLY_ACTION_PG_CREATE:
+        await _soft_admin(message, session, db_user, "adm:pg:create", state)
+    elif action == kb.REPLY_ACTION_PG_SEARCH:
+        await _soft_admin(message, session, db_user, "adm:pg:search", state)
+    elif action == kb.REPLY_ACTION_PG_NODES:
+        await _soft_admin(message, session, db_user, "adm:pg:nodes", state)
+    elif action == kb.REPLY_ACTION_PG_GROUP:
+        await _soft_admin(message, session, db_user, "adm:pg:group", state)
+    elif action == kb.REPLY_ACTION_PG_TEMPLATE:
+        await _soft_admin(message, session, db_user, "adm:pg:template", state)
+    elif action == kb.REPLY_ACTION_ADM_USERS_LIST:
+        await _soft_admin(message, session, db_user, "adm:users:list:0", state)
+    elif action == kb.REPLY_ACTION_ADM_USERS_SEARCH:
+        await _soft_admin(message, session, db_user, "adm:users:search", state)
+    elif action == kb.REPLY_ACTION_ADM_USERS_WEB:
+        await _soft_admin(message, session, db_user, "adm:users:webhint", state)
+    elif action == kb.REPLY_ACTION_ADM_RES_LIST:
+        await _soft_admin(message, session, db_user, "adm:resellers:list:0", state)
+    elif action == kb.REPLY_ACTION_ADM_RES_APPS:
+        await _soft_admin(message, session, db_user, "adm:resapp:list", state)
+    elif action == kb.REPLY_ACTION_ADM_RES_ADD:
+        await _soft_admin(message, session, db_user, "adm:resellers:add", state)
+    elif action.startswith("adm_st_"):
+        sec = action.replace("adm_st_", "", 1)
+        await _soft_admin(message, session, db_user, f"adm:st:sec:{sec}", state)
     elif action.startswith("res_"):
         await _soft_reseller(
             message,

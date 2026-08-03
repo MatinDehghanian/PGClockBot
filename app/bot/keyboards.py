@@ -254,6 +254,19 @@ REPLY_ACTION_PAY_DISCOUNT = "pay_discount"
 REPLY_ACTION_TOPUP_CARD = "topup_card"
 REPLY_ACTION_TOPUP_GATEWAY = "topup_gateway"
 REPLY_ACTION_TOPUP_CRYPTO = "topup_crypto"
+REPLY_ACTION_PG_STATS = "pg_stats"
+REPLY_ACTION_PG_USERS = "pg_users"
+REPLY_ACTION_PG_CREATE = "pg_create"
+REPLY_ACTION_PG_SEARCH = "pg_search"
+REPLY_ACTION_PG_NODES = "pg_nodes"
+REPLY_ACTION_PG_GROUP = "pg_group"
+REPLY_ACTION_PG_TEMPLATE = "pg_template"
+REPLY_ACTION_ADM_USERS_LIST = "adm_users_list"
+REPLY_ACTION_ADM_USERS_SEARCH = "adm_users_search"
+REPLY_ACTION_ADM_USERS_WEB = "adm_users_web"
+REPLY_ACTION_ADM_RES_LIST = "adm_res_list"
+REPLY_ACTION_ADM_RES_APPS = "adm_res_apps"
+REPLY_ACTION_ADM_RES_ADD = "adm_res_add"
 
 BTN_BACK = "⬅️ بازگشت"
 
@@ -331,6 +344,50 @@ def _reply_admin_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         (REPLY_ACTION_ADMIN_BROADCAST, _t(ui, "btn_adm_broadcast")),
         (REPLY_ACTION_ADMIN_BACKUP, "💾 بکاپ / ریستور"),
         (REPLY_ACTION_ADMIN_PREVIEW, _t(ui, "btn_adm_preview")),
+    ]
+
+
+def _pg_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    _ = ui
+    return [
+        (REPLY_ACTION_PG_STATS, "🏠 نمای کلی"),
+        (REPLY_ACTION_PG_USERS, "👥 کاربران VPN"),
+        (REPLY_ACTION_PG_CREATE, "➕ ساخت کاربر"),
+        (REPLY_ACTION_PG_SEARCH, "🔎 جستجوی یوزر"),
+        (REPLY_ACTION_PG_NODES, "🕸 نودها"),
+        (REPLY_ACTION_PG_GROUP, "📁 ساخت گروه"),
+        (REPLY_ACTION_PG_TEMPLATE, "📋 ساخت تمپلیت"),
+    ]
+
+
+def _admin_users_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    _ = ui
+    return [
+        (REPLY_ACTION_ADM_USERS_LIST, "📋 لیست کاربران"),
+        (REPLY_ACTION_ADM_USERS_SEARCH, "🔎 جستجو با آیدی تلگرام"),
+        (REPLY_ACTION_ADM_USERS_WEB, "🌐 مدیریت کامل در وب‌پنل"),
+    ]
+
+
+def _admin_resellers_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    _ = ui
+    return [
+        (REPLY_ACTION_ADM_RES_LIST, "📋 لیست نمایندگان"),
+        (REPLY_ACTION_ADM_RES_APPS, "📋 درخواست‌های منتظر"),
+        (REPLY_ACTION_ADM_RES_ADD, "➕ افزودن دستی"),
+    ]
+
+
+def _admin_settings_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    _ = ui
+    # Labels MUST match admin_settings.SECTIONS[*]["title"]
+    return [
+        ("adm_st_shop", "فروشگاه و متون"),
+        ("adm_st_menu", "کیبورد اصلی"),
+        ("adm_st_pay", "پرداخت"),
+        ("adm_st_support", "پشتیبان‌ها"),
+        ("adm_st_service", "سرویس و دسترسی"),
+        ("adm_st_notify", "اعلان‌ها"),
     ]
 
 
@@ -501,6 +558,30 @@ def topup_pay_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
     return _reply_markup(rows, placeholder="روش شارژ را انتخاب کنید…")
 
 
+def pg_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(_pg_submenu_entries(ui), ui, footer_row=_submenu_footer(ui))
+    return _reply_markup(rows, placeholder="پاسارگارد — یک گزینه را انتخاب کنید…")
+
+
+def admin_users_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(_admin_users_submenu_entries(ui), ui, footer_row=_submenu_footer(ui))
+    return _reply_markup(rows, placeholder="کاربران بات…")
+
+
+def admin_resellers_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _admin_resellers_submenu_entries(ui), ui, footer_row=_submenu_footer(ui)
+    )
+    return _reply_markup(rows, placeholder="نمایندگان…")
+
+
+def admin_settings_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _admin_settings_submenu_entries(ui), ui, footer_row=_submenu_footer(ui)
+    )
+    return _reply_markup(rows, placeholder="تنظیمات…")
+
+
 def reply_action_map(
     role: str,
     *,
@@ -555,6 +636,14 @@ def reply_action_map(
         for key, text in _pay_method_entries(ui):
             mapping[(text or "").strip()] = key
         for key, text in _topup_method_entries(ui):
+            mapping[(text or "").strip()] = key
+        for key, text in _pg_submenu_entries(ui):
+            mapping[(text or "").strip()] = key
+        for key, text in _admin_users_submenu_entries(ui):
+            mapping[(text or "").strip()] = key
+        for key, text in _admin_resellers_submenu_entries(ui):
+            mapping[(text or "").strip()] = key
+        for key, text in _admin_settings_submenu_entries(ui):
             mapping[(text or "").strip()] = key
     return {k: v for k, v in mapping.items() if k}
 

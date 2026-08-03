@@ -117,12 +117,20 @@ class ReplyKeyboard360Tests(unittest.TestCase):
 
         self.assertTrue(callable(clear_telegram_menu_button))
 
-    def test_menu_nav_levels(self):
-        from app.bot import menu_nav as nav
+    def test_pg_reply_keyboard_has_ops_and_nav(self):
+        from app.bot.keyboards import pg_reply_keyboard, REPLY_ACTION_PG_USERS, reply_action_map
 
-        self.assertEqual(nav.NAV_MAIN, "main")
-        self.assertEqual(nav.NAV_WALLET, "wallet")
-        self.assertEqual(nav.NAV_PAY, "pay")
+        ui = {
+            "menu_layout": "compact",
+            "btn_back": "⬅️ بازگشت",
+            "btn_menu_home": "🏠 منوی اصلی",
+        }
+        flat = [b.text for row in pg_reply_keyboard(ui).keyboard for b in row]
+        self.assertIn("👥 کاربران VPN", flat)
+        self.assertIn("🏠 نمای کلی", flat)
+        self.assertEqual(pg_reply_keyboard(ui).keyboard[-1][0].text, "⬅️ بازگشت")
+        mapping = reply_action_map("admin", ui=ui)
+        self.assertEqual(mapping["👥 کاربران VPN"], REPLY_ACTION_PG_USERS)
 
 
 if __name__ == "__main__":
