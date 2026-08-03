@@ -1,4 +1,4 @@
-"""3.3.14 — flash captions inherit severity text color."""
+"""3.4.0 — flash captions inherit severity text color (from 3.3.14)."""
 
 from __future__ import annotations
 
@@ -33,13 +33,13 @@ class FlashCaptionColorTests(unittest.TestCase):
 
 
 class VersionBumpTests(unittest.TestCase):
-    def test_version_is_3_3_14(self):
+    def test_version_is_3_4_0(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.3.14")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.3.14")
+        self.assertEqual(__version__, "3.4.0")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.4.0")
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"3.3.14"', notes)
+        self.assertIn('"3.4.0"', notes)
 
 
 if __name__ == "__main__":
