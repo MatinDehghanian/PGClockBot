@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Payment, UserService
-from app.services.formatting import format_message, format_toman, info_block, kv_line, service_card
+from app.services.formatting import format_message, format_toman, info_block, kv_line, service_card, copyable
 from app.bot import keyboards as kb
 from app.config import get_settings
 from app.services.pasarguard import get_pg
@@ -37,6 +37,8 @@ async def build_delivery_content(
 
     For subscriptions, ``include_details=False`` yields a short success-only body
     (no service card / sub link); details stay available via sub_info/sub_url for QR.
+
+    Wholesale (qty > 1): never attach a QR URL — links are listed in text only.
     """
     shop_rid = getattr(order, "reseller_id", None) if order is not None else None
     ui = await get_all_settings(session, reseller_id=shop_rid)
@@ -68,29 +70,24 @@ async def build_delivery_content(
                 for i, s in enumerate(siblings, 1):
                     uname = s.pg_username or f"#{s.id}"
                     if s.subscription_url and on(ui.get("show_sub_link_in_text", "1")):
-                        lines.append(f"{i}. <b>{uname}</b>\n<code>{s.subscription_url}</code>")
+                        lines.append(
+                            f"{i}. {copyable(uname)}\n{copyable(s.subscription_url)}"
+                        )
                     else:
-                        lines.append(f"{i}. <b>{uname}</b>")
+                        lines.append(f"{i}. {copyable(uname)}")
                 body_parts.append("\n\n".join(lines))
             markup = kb.back_home(ui)
-            # Prefer first service for QR if enabled
-            sub_url = svc.subscription_url if svc else None
-            sub_info = None
-            if svc and svc.subscription_token:
-                try:
-                    info = await get_pg().subscription_info(svc.subscription_token)
-                    sub_info = info if isinstance(info, dict) else None
-                except Exception:
-                    pass
+            # Wholesale: no QR (would only cover the first link)
             body = "\n\n".join(body_parts)
             return {
                 "title": title,
                 "text": format_message(title, body),
                 "markup": markup,
-                "sub_url": sub_url,
-                "sub_info": sub_info,
+                "sub_url": None,
+                "sub_info": None,
                 "ui": ui,
                 "is_subscription": True,
+                "skip_qr": True,
             }
 
         if svc and svc.subscription_token:
@@ -101,14 +98,14 @@ async def build_delivery_content(
                     body_parts.append(service_card(info))
             except Exception:
                 if include_details and svc.pg_username:
-                    body_parts.append(f"👤 <b>{svc.pg_username}</b>")
+                    body_parts.append(f"👤 {copyable(svc.pg_username)}")
             sub_url = svc.subscription_url
             if include_details and sub_url and on(ui.get("show_sub_link_in_text", "1")):
                 body_parts.append(
                     info_block(
                         [
                             "🔗 <b>لینک اشتراک</b>",
-                            f"<code>{sub_url}</code>",
+                            copyable(sub_url),
                         ]
                     )
                 )
@@ -122,6 +119,7 @@ async def build_delivery_content(
             "sub_info": sub_info,
             "ui": ui,
             "is_subscription": True,
+            "skip_qr": False,
         }
 
     if payment and payment.is_wallet_topup:
@@ -145,6 +143,7 @@ async def build_delivery_content(
             "sub_info": None,
             "ui": ui,
             "is_subscription": False,
+            "skip_qr": True,
         }
 
     title = ui.get("payment_ok_title") or "✅ پرداخت تأیید شد"
@@ -162,6 +161,7 @@ async def build_delivery_content(
         "sub_info": None,
         "ui": ui,
         "is_subscription": False,
+        "skip_qr": True,
     }
 
 
@@ -175,6 +175,8 @@ async def send_delivery_to_user(
     """
     Send delivery text to user; if subscription URL exists and QR is enabled,
     also send QR as a photo. Returns the HTML text that was sent.
+
+    Wholesale (qty > 1) never sends QR — all links are in the text message.
     """
     shop_rid = getattr(order, "reseller_id", None) if order is not None else None
     ui = await get_all_settings(session, reseller_id=shop_rid)
@@ -193,12 +195,13 @@ async def send_delivery_to_user(
             app_id = 0
         if app_id:
             from app.db.models import BotUser
+            from app.services.formatting import format_user_label
 
             user = await session.get(BotUser, order.user_id)
             notify = (
                 f"🤝 درخواست نمایندگی پرداخت‌شده #{app_id}\n"
                 f"سفارش #{order.id}\n"
-                f"کاربر: {(user.full_name or user.telegram_id) if user else '—'}"
+                f"کاربر: {format_user_label(user)}"
             )
             for aid in get_settings().admin_ids:
                 try:
@@ -206,13 +209,21 @@ async def send_delivery_to_user(
                         aid,
                         notify,
                         reply_markup=kb.reseller_app_review(app_id),
+                        parse_mode="HTML",
                     )
                 except Exception:
                     pass
         return text
-    # Peek whether QR can carry the details (subscription only).
-    sub_url_peek = None
+
+    wholesale = False
     if order and order.service_id:
+        from app.services.orders import order_quantity
+
+        wholesale = order_quantity(order) > 1
+
+    # Peek whether QR can carry the details (single subscription only).
+    sub_url_peek = None
+    if order and order.service_id and not wholesale:
         svc = await session.get(UserService, order.service_id)
         if svc:
             sub_url_peek = svc.subscription_url
@@ -222,6 +233,7 @@ async def send_delivery_to_user(
         and order.service_id
         and sub_url_peek
         and qr_enabled
+        and not wholesale
     )
 
     payload = await build_delivery_content(
@@ -232,6 +244,7 @@ async def send_delivery_to_user(
     ui = payload["ui"]
     sub_url = payload["sub_url"]
     sub_info = payload.get("sub_info")
+    skip_qr = bool(payload.get("skip_qr")) or wholesale
 
     try:
         await bot.send_message(chat_id, text, reply_markup=markup, parse_mode="HTML")
@@ -242,7 +255,7 @@ async def send_delivery_to_user(
             pass
 
     qr_sent = False
-    if sub_url:
+    if sub_url and not skip_qr:
         qr_sent = await send_subscription_qr_photo(
             bot, chat_id, sub_url, ui, info=sub_info
         )

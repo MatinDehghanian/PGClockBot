@@ -105,12 +105,16 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
             sub_info = None
     parts = ["🔗 لینک و QR اشتراک"]
     if url and on(ui.get("show_sub_link_in_text", "1")):
-        parts.append(f"<code>{url}</code>")
+        from app.services.formatting import copyable
+
+        parts.append(copyable(url))
     elif not url:
         parts.append("لینک موجود نیست.")
     if isinstance(sub_info, dict):
-        from app.services.formatting import format_bytes, format_expire
+        from app.services.formatting import copyable, format_bytes, format_expire
 
+        if svc.pg_username:
+            parts.append(f"👤 {copyable(svc.pg_username)}")
         parts.append(
             f"📦 حجم: <b>{format_bytes(sub_info.get('used_traffic'))} از "
             f"{format_bytes(sub_info.get('data_limit'))}</b>"

@@ -293,12 +293,13 @@ async def res_user_view(
         return
     await callback.answer()
     blocked = "بله" if user.is_blocked else "خیر"
+    from app.services.formatting import copyable
+
     display = html.escape(user.full_name or user.username or "—")
-    uname = html.escape(user.username or "—")
     text = (
         f"👤 <b>{display}</b>\n\n"
-        f"آیدی: <code>{user.telegram_id}</code>\n"
-        f"یوزرنیم: @{uname}\n"
+        f"آیدی: {copyable(user.telegram_id)}\n"
+        f"یوزرنیم: {copyable('@' + user.username) if user.username else '—'}\n"
         f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
         f"مسدود: {blocked}"
     )

@@ -653,6 +653,8 @@ async def provision_reseller(
 
 def format_credentials_message(creds: dict) -> str:
     """Deliver PG + web panel URLs/credentials (and optional bot setup link)."""
+    from app.services.formatting import copyable
+
     lines = [
         "✅ <b>نمایندگی فعال شد</b>",
         "",
@@ -673,29 +675,32 @@ def format_credentials_message(creds: dict) -> str:
             "همان یوزر و رمز برای هر دو پنل استفاده می‌شود.",
         ]
         if panel:
-            lines += [f"آدرس وب‌پنل: {panel}", f"ورود وب‌پنل: {panel}/login"]
+            lines += [
+                f"آدرس وب‌پنل: {copyable(panel)}",
+                f"ورود وب‌پنل: {copyable(f'{panel}/login')}",
+            ]
         else:
             lines.append("آدرس وب‌پنل هنوز تنظیم نشده — از ادمین بپرسید.")
         if share_pg and pg_panel:
-            lines.append(f"آدرس پاسارگارد: {pg_panel}")
+            lines.append(f"آدرس پاسارگارد: {copyable(pg_panel)}")
         elif not share_pg:
             lines.append(
                 "لینک مستقیم پاسارگارد ارسال نشده؛ مدیریت VPN از وب‌پنل ربات هم ممکن است."
             )
         lines += [
-            f"نام کاربری: <code>{panel_user}</code>",
-            f"رمز: <code>{panel_pass}</code>",
+            f"نام کاربری: {copyable(panel_user)}",
+            f"رمز: {copyable(panel_pass)}",
             "رمز را عوض کنید و در جای امن نگه دارید (تغییر رمز در وب‌پنل هر دو جا را یکی نگه می‌دارد).",
         ]
     else:
         if share_pg or creds.get("pg_username"):
             lines += ["", "🛡 <b>پنل پاسارگارد</b>"]
             if pg_panel:
-                lines.append(f"آدرس پنل: {pg_panel}")
+                lines.append(f"آدرس پنل: {copyable(pg_panel)}")
             if creds.get("pg_username") and creds.get("pg_password"):
                 lines += [
-                    f"نام کاربری: <code>{creds['pg_username']}</code>",
-                    f"رمز: <code>{creds['pg_password']}</code>",
+                    f"نام کاربری: {copyable(creds['pg_username'])}",
+                    f"رمز: {copyable(creds['pg_password'])}",
                     "رمز را عوض کنید و در جای امن نگه دارید.",
                 ]
             elif not pg_panel:
@@ -708,13 +713,16 @@ def format_credentials_message(creds: dict) -> str:
 
         lines += ["", "🌐 <b>وب‌پنل ربات (نماینده)</b>"]
         if panel:
-            lines += [f"آدرس پنل: {panel}", f"آدرس ورود: {panel}/login"]
+            lines += [
+                f"آدرس پنل: {copyable(panel)}",
+                f"آدرس ورود: {copyable(f'{panel}/login')}",
+            ]
         else:
             lines.append("آدرس پنل هنوز تنظیم نشده — از ادمین بپرسید.")
         if creds.get("web_username") and creds.get("web_password"):
             lines += [
-                f"نام کاربری: <code>{creds['web_username']}</code>",
-                f"رمز: <code>{creds['web_password']}</code>",
+                f"نام کاربری: {copyable(creds['web_username'])}",
+                f"رمز: {copyable(creds['web_password'])}",
             ]
 
     if creds.get("setup_url"):
@@ -722,7 +730,7 @@ def format_credentials_message(creds: dict) -> str:
             "",
             "🤖 <b>ربات اختصاصی (اختیاری)</b>",
             "برای ثبت توکن ربات خودتان از @BotFather:",
-            creds["setup_url"],
+            copyable(creds["setup_url"]),
             "لینک یک‌بارمصرف است — با کسی به اشتراک نگذارید.",
         ]
 
@@ -736,7 +744,7 @@ def format_credentials_message(creds: dict) -> str:
 
 async def format_reseller_access_card(session: AsyncSession, profile) -> str:
     """Non-secret access info for a reseller on the main bot (no plaintext passwords)."""
-    from app.services.formatting import format_message, info_block, kv_line
+    from app.services.formatting import copyable, format_message, info_block, kv_line
 
     panel = (await get_reseller_panel_base_url(session)).rstrip("/")
     lines = [
@@ -747,17 +755,20 @@ async def format_reseller_access_card(session: AsyncSession, profile) -> str:
     pg_u = (profile.pg_admin_username or "").strip()
     web_u = (profile.web_username or "").strip()
     unified = bool(pg_u and web_u and pg_u.lower() == web_u.lower())
+    login_url = f"{panel}/login" if panel else ""
     block = [
-        kv_line("🌐", "وب‌پنل", f"{panel}/login" if panel else "—"),
+        kv_line("🌐", "وب‌پنل", copyable(login_url) if login_url else "—"),
     ]
     if unified:
-        block.append(kv_line("👤", "یوزر (وب‌پنل + پاسارگارد)", web_u or "—"))
+        block.append(
+            kv_line("👤", "یوزر (وب‌پنل + پاسارگارد)", copyable(web_u) if web_u else "—")
+        )
     else:
-        block.append(kv_line("👤", "نام کاربری وب", web_u or "—"))
+        block.append(kv_line("👤", "نام کاربری وب", copyable(web_u) if web_u else "—"))
         if pg_u:
-            block.append(kv_line("🛡", "کاربر پاسارگارد", pg_u))
+            block.append(kv_line("🛡", "کاربر پاسارگارد", copyable(pg_u)))
     if profile.bot_username:
-        block.append(kv_line("🤖", "ربات اختصاصی", f"@{profile.bot_username}"))
+        block.append(kv_line("🤖", "ربات اختصاصی", copyable(f"@{profile.bot_username}")))
     else:
         block.append(
             kv_line("🤖", "ربات اختصاصی", "هنوز ثبت نشده — از وب‌پنل توکن را تنظیم کنید")

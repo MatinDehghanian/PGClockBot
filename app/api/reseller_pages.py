@@ -317,19 +317,21 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
 
                     bot = create_bot()
                     try:
+                        from app.services.formatting import copyable
+
                         parts = [
                             "🔗 لینک جدید راه‌اندازی نماینده:",
-                            f"{base}/rsetup/{token}",
+                            copyable(f"{base}/rsetup/{token}"),
                             "",
-                            f"آدرس وب‌پنل ربات: {base}",
-                            f"ورود: {base}/login",
+                            f"آدرس وب‌پنل ربات: {copyable(base)}",
+                            f"ورود: {copyable(f'{base}/login')}",
                         ]
                         if pg_panel:
-                            parts += ["", f"آدرس پنل پاسارگارد: {pg_panel}"]
+                            parts += ["", f"آدرس پنل پاسارگارد: {copyable(pg_panel)}"]
                         if profile.web_username:
                             parts += [
                                 "",
-                                f"یوزر وب فعلی: <code>{profile.web_username}</code>",
+                                f"یوزر وب فعلی: {copyable(profile.web_username)}",
                                 "در لینک فقط توکن ربات اختصاصی را ثبت کنید.",
                             ]
                         else:

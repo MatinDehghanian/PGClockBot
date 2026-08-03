@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.7.1": [
+        "خرید عمده: دیگر QR ارسال نمی‌شود (همه لینک‌ها فقط در متن)",
+        "اعلان تأیید رسید: جزئیات دقیق سفارش (پلن/تعداد/تمدید/عمده) + نمایش @یوزرنیم به‌جای آیدی عددی",
+        "آدرس‌ها، یوزرنیم و رمز در پیام‌های اشتراک/وب‌پنل با فرمت کپی‌شونده (<code>)",
+    ],
     "3.7.0": [
         "سیستم Billing یکپارچه: حالت Pay As You Go جدا از کمیسیون Fixed",
         "Provision Gate مشترک برای ساخت/تمدید/افزایش حجم با مسدودسازی اتمام موجودی",

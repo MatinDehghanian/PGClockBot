@@ -2,6 +2,34 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Optional
+import html as html_mod
+
+
+def copyable(value: Any, *, empty: str = "—") -> str:
+    """Telegram HTML <code> so the user can tap-to-copy usernames, passwords, URLs."""
+    if value is None:
+        return empty
+    text = str(value).strip()
+    if not text:
+        return empty
+    return f"<code>{html_mod.escape(text)}</code>"
+
+
+def format_user_label(user: Any = None, *, telegram_id: int | None = None) -> str:
+    """Prefer @username; fall back to full name, then numeric id."""
+    if user is not None:
+        uname = (getattr(user, "username", None) or "").strip()
+        if uname:
+            return f"@{html_mod.escape(uname.lstrip('@'))}"
+        name = (getattr(user, "full_name", None) or "").strip()
+        if name:
+            return html_mod.escape(name)
+        tid = getattr(user, "telegram_id", None)
+        if tid:
+            return str(tid)
+    if telegram_id:
+        return str(telegram_id)
+    return "—"
 
 
 def _byte_unit_table() -> tuple[tuple[float, str], ...]:
@@ -450,7 +478,7 @@ def service_card(info: dict, currency_note: str = "") -> str:
     expire = format_expire(info.get("expire"))
     bar = progress_bar(float(used), float(limit) if limit else None)
     lines = [
-        f"👤 <b>{username}</b>",
+        f"👤 {copyable(username)}",
         "",
         kv_line("📶", "وضعیت", status),
         kv_line("📦", "حجم", f"{format_bytes(used)} از {format_bytes(limit)}"),

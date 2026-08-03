@@ -16,6 +16,7 @@ from app.services.formatting import (
     format_expire,
     format_message,
     format_toman,
+    format_user_label,
     info_block,
     kv_line,
 )
@@ -569,9 +570,12 @@ async def notify_new_subscription(
 ) -> None:
     """Inform platform admins and/or shop staff that a subscription was delivered."""
     settings = get_settings()
+    if not user_name:
+        user = await session.get(BotUser, order.user_id) if order.user_id else None
+        user_name = format_user_label(user, telegram_id=user_tg_id)
     lines = [
         kv_line("🧾", "سفارش", f"#{order.id}"),
-        kv_line("👤", "کاربر", user_name or (str(user_tg_id) if user_tg_id else "—")),
+        kv_line("👤", "کاربر", user_name or "—"),
         kv_line("💰", "مبلغ", format_toman(order.amount, settings.currency)),
     ]
     if plan_name:
@@ -601,15 +605,28 @@ async def notify_pending_approval(
     user_name: str | None = None,
 ) -> None:
     settings = get_settings()
-    kind = "شارژ کیف پول" if payment.is_wallet_topup else "خرید اشتراک"
+    user = await session.get(BotUser, payment.user_id) if payment.user_id else None
+    user_label = user_name or format_user_label(user, telegram_id=user_tg_id)
+
     lines = [
         kv_line("🧾", "پرداخت", f"#{payment.id}"),
         kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
-        kv_line("👤", "کاربر", user_name or (str(user_tg_id) if user_tg_id else "—")),
-        kv_line("📦", "نوع", kind),
+        kv_line("👤", "کاربر", user_label),
     ]
-    if payment.order_id and not payment.is_wallet_topup:
-        lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
+
+    if payment.is_wallet_topup:
+        lines.append(kv_line("📦", "نوع", "شارژ کیف پول"))
+        lines.append(kv_line("📝", "بابت", "افزایش موجودی کیف پول کاربر"))
+    else:
+        order = None
+        if payment.order_id:
+            order = await session.get(Order, payment.order_id)
+        kind, detail_lines = await _pending_order_detail_lines(session, order, payment)
+        lines.append(kv_line("📦", "نوع", kind))
+        if payment.order_id:
+            lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
+        lines.extend(detail_lines)
+
     text = format_message("⏳ نیاز به تأیید", info_block(lines) + "\n\nاز دکمه‌های زیر تأیید یا رد کنید.")
     # Always payrev so shop staff can act on their own bot; ordrev is platform-only.
     markup = _approval_markup(payment_id=payment.id)
@@ -626,6 +643,67 @@ async def notify_pending_approval(
     )
 
 
+async def _pending_order_detail_lines(
+    session: AsyncSession,
+    order: Order | None,
+    payment: Payment,
+) -> tuple[str, list[str]]:
+    """Return (kind_label, extra kv lines) describing what the receipt is for."""
+    from app.db.models import Plan
+    from app.services.orders import order_quantity
+
+    if order is None:
+        return "خرید اشتراک", [kv_line("📝", "بابت", "رسید خرید — جزئیات سفارش در دسترس نیست")]
+
+    note = (order.note or "").strip()
+    qty = order_quantity(order)
+    plan = await session.get(Plan, order.plan_id) if order.plan_id else None
+    plan_name = (plan.name if plan else None) or "—"
+    extras: list[str] = []
+
+    if note.startswith("reseller_app:"):
+        kind = "درخواست نمایندگی"
+        extras.append(kv_line("📝", "بابت", "پرداخت هزینه پلن نمایندگی"))
+        extras.append(kv_line("💎", "پلن", plan_name))
+        return kind, extras
+
+    if note.startswith("renew:"):
+        kind = "تمدید اشتراک"
+        extras.append(kv_line("📝", "بابت", f"تمدید سرویس با پلن «{plan_name}»"))
+    elif qty > 1 or note.startswith("wholesale:"):
+        kind = "خرید عمده"
+        extras.append(
+            kv_line("📝", "بابت", f"خرید عمده {qty} سرویس از پلن «{plan_name}»")
+        )
+        extras.append(kv_line("📦", "تعداد", str(qty)))
+    else:
+        kind = "خرید اشتراک"
+        extras.append(kv_line("📝", "بابت", f"خرید پلن «{plan_name}»"))
+
+    extras.append(kv_line("💎", "پلن", plan_name))
+    if plan is not None:
+        if plan.data_limit_gb is not None:
+            extras.append(kv_line("📶", "حجم پلن", f"{plan.data_limit_gb} گیگ"))
+        if plan.duration_days:
+            extras.append(kv_line("📅", "مدت پلن", f"{plan.duration_days} روز"))
+    if order.payment_method:
+        method_map = {
+            "wallet": "کیف پول",
+            "card": "کارت به کارت",
+            "gateway": "درگاه",
+            "crypto": "رمزارز",
+            "stars": "استارز",
+        }
+        extras.append(
+            kv_line(
+                "💳",
+                "روش",
+                method_map.get(str(order.payment_method), str(order.payment_method)),
+            )
+        )
+    return kind, extras
+
+
 async def notify_new_order(
     bot: Bot,
     session: AsyncSession,
@@ -636,9 +714,12 @@ async def notify_new_order(
     user_name: str | None = None,
 ) -> None:
     settings = get_settings()
+    if not user_name:
+        user = await session.get(BotUser, order.user_id) if order.user_id else None
+        user_name = format_user_label(user, telegram_id=user_tg_id)
     lines = [
         kv_line("🧾", "سفارش", f"#{order.id}"),
-        kv_line("👤", "کاربر", user_name or (str(user_tg_id) if user_tg_id else "—")),
+        kv_line("👤", "کاربر", user_name or "—"),
         kv_line("💰", "مبلغ", format_toman(order.amount, settings.currency)),
     ]
     if plan_name:
@@ -662,13 +743,14 @@ async def notify_wallet_topup_ok(
     if not await notify_enabled(session, "notify_wallet_topup"):
         return
     settings = get_settings()
+    user = await session.get(BotUser, payment.user_id) if payment.user_id else None
     text = format_message(
         "💰 شارژ کیف پول",
         info_block(
             [
                 kv_line("🧾", "پرداخت", f"#{payment.id}"),
                 kv_line("💵", "مبلغ", format_toman(payment.amount, settings.currency)),
-                kv_line("👤", "کاربر", str(user_tg_id) if user_tg_id else "—"),
+                kv_line("👤", "کاربر", format_user_label(user, telegram_id=user_tg_id)),
                 kv_line("✅", "وضعیت", "تأیید و واریز شد"),
             ]
         ),
@@ -864,19 +946,22 @@ def build_qr_caption(
 
     lines.append("")
     if uname:
-        lines.append(f"👤 <b>{uname}</b>")
+        from app.services.formatting import copyable
+
+        lines.append(f"👤 {copyable(uname)}")
     if used is not None or limit is not None:
         vol = f"{format_bytes(used)} از {format_bytes(limit)}" if used is not None else format_bytes(limit)
         lines.append(f"📦 حجم: <b>{vol}</b>")
     if exp is not None or info is not None:
         lines.append(f"⏱ زمان: <b>{format_expire(exp)}</b>")
     # Honor panel toggle «نمایش لینک در کپشن QR» (same as delivery text path)
+    from app.services.formatting import copyable
     from app.services.users import on as _on
 
     if _on(ui.get("show_sub_link_in_text", "1")):
         lines.append("")
         lines.append("🔗 لینک اشتراک:")
-        lines.append(f"<code>{sub_url}</code>")
+        lines.append(copyable(sub_url))
     caption = "\n".join(lines).strip()
     return caption[:1024]
 
