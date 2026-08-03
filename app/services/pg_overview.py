@@ -59,6 +59,19 @@ def _role_limits(admin: dict | None, role: dict | None) -> dict:
     return merge_role_limits(admin, role)
 
 
+def remain_tone(remain_pct: float | None) -> str:
+    """Tone from remaining capacity: <10% err, <25% caution, <50% warn, else ok."""
+    if remain_pct is None:
+        return "neutral"
+    if remain_pct < 10:
+        return "err"
+    if remain_pct < 25:
+        return "caution"
+    if remain_pct < 50:
+        return "warn"
+    return "ok"
+
+
 def _meter(
     *,
     label: str,
@@ -75,16 +88,19 @@ def _meter(
     used_v = int(used or 0)
     remain = None
     pct = None
+    remain_pct = None
     if has_limit:
         lim = int(limit)
         remain = max(0, lim - used_v)
         pct = min(100.0, (used_v / lim) * 100.0) if lim else 0.0
+        remain_pct = max(0.0, 100.0 - pct)
         if kind == "bytes":
             ratio_text = format_bytes_ratio(used_v, lim)
         else:
             ratio_text = format_count_ratio(used_v, lim)
     else:
         ratio_text = format_value(used_v)
+    tone = remain_tone(remain_pct)
     return {
         "label": label,
         "has_limit": has_limit,
@@ -92,6 +108,9 @@ def _meter(
         "limit": int(limit) if has_limit else None,
         "remain": remain,
         "pct": pct,
+        "remain_pct": remain_pct,
+        "tone": tone,
+        "alert": has_limit and tone in {"warn", "caution", "err"},
         "used_text": format_value(used_v),
         "limit_text": format_value(limit) if has_limit else "نامحدود",
         "remain_text": format_value(remain) if remain is not None else "—",

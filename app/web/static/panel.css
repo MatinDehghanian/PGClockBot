@@ -19,6 +19,8 @@
   --ok-fg: #4ade80;
   --warn: #eab308;
   --warn-fg: #facc15;
+  --caution: #f97316;
+  --caution-fg: #fb923c;
   --info: #3b82f6;
   --info-fg: #60a5fa;
   --brand: #f97316;
@@ -3779,6 +3781,8 @@ html[data-theme="light"] {
   --ok-fg: #15803d;
   --warn: #ca8a04;
   --warn-fg: #a16207;
+  --caution: #ea580c;
+  --caution-fg: #c2410c;
   --info: #2563eb;
   --info-fg: #1d4ed8;
   --brand: #ea580c;
@@ -4225,8 +4229,49 @@ html[data-theme="light"] .setup-progress span.done {
   transition: stroke-dasharray .6s ease, stroke .25s ease;
 }
 .home-gauge-warn .home-gauge-val { stroke: var(--warn-fg); }
+.home-gauge-caution .home-gauge-val { stroke: var(--caution-fg, #fb923c); }
 .home-gauge-err .home-gauge-val { stroke: var(--destructive-fg); }
 .home-gauge-neutral .home-gauge-val { stroke: var(--muted-fg); }
+
+/* PG quota gauges — blink when remaining capacity is constrained */
+.home-gauge.is-alert {
+  position: relative;
+}
+.pg-gauge-pulse {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 2;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow: 0 0 0 0 currentColor;
+  animation: pg-gauge-blink 1.6s ease-in-out infinite;
+}
+.pg-gauge-pulse::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  opacity: 0.35;
+}
+.pg-gauge-pulse-warn { color: var(--warn-fg); background: var(--warn-fg); }
+.pg-gauge-pulse-caution { color: var(--caution-fg, #fb923c); background: var(--caution-fg, #fb923c); }
+.pg-gauge-pulse-err { color: var(--destructive-fg); background: var(--destructive-fg); }
+@keyframes pg-gauge-blink {
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent); }
+  50% { opacity: 0.55; transform: scale(0.92); box-shadow: 0 0 0 6px transparent; }
+}
+.pg-quota-top { margin-bottom: var(--section-gap); }
+.pg-quota-gauges-embed {
+  margin-top: var(--space-2);
+}
+.home-gauge-meta > small.muted {
+  font-size: 12px;
+  line-height: 1.3;
+}
 .home-gauge-center {
   position: absolute;
   inset: 0;

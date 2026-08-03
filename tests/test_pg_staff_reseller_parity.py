@@ -51,7 +51,11 @@ class ConstraintBoxesTests(unittest.TestCase):
         for rel in ("app/web/templates/reseller_home.html", "app/web/templates/pg_home.html"):
             src = Path(rel).read_text(encoding="utf-8")
             self.assertNotIn("c.hint", src)
-            self.assertIn("باقی‌مانده", src)
+            self.assertIn("pg_quota_gauge", src)
+        gauges = Path("app/web/templates/_pg_quota_gauges.html").read_text(encoding="utf-8")
+        self.assertIn("باقی‌مانده", gauges)
+        self.assertIn("pg-gauge-pulse", gauges)
+        self.assertIn("home-gauge", gauges)
 
     def test_status_meta_still_works(self):
         self.assertEqual(_status_meta("limited"), ("محدود", "warn"))
@@ -96,8 +100,11 @@ class WiringTests(unittest.TestCase):
         self.assertIn("کاربران", src)
         self.assertNotIn("VPN", src)
         self.assertNotIn('class="meter"', src)
-        self.assertIn("باقی‌مانده {{ ov.traffic.remain_text }}", src)
-        self.assertIn("ratio_text", src)
+        self.assertIn("pg_quota_gauge", src)
+        self.assertIn("pg-quota-top", src)
+        gauges = Path("app/web/templates/_pg_quota_gauges.html").read_text(encoding="utf-8")
+        self.assertIn("باقی‌مانده {{ meter.remain_text }}", gauges)
+        self.assertIn("ratio_text", Path("app/services/pg_overview.py").read_text(encoding="utf-8"))
 
     def test_dashboard_status_is_badge_not_box(self):
         # Status badge lives on reseller web home / PG overview, not bot نمای کلی
