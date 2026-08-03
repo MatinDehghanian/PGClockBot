@@ -2225,18 +2225,27 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.post("/users/{user_id}/role")
     async def users_set_role(
+        request: Request,
         user_id: int,
         role: str = Form(...),
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        from urllib.parse import quote
-
+        form = await request.form()
+        reason = str(form.get("reason") or "").strip()
         user = await session.get(BotUser, user_id)
         if not user:
-            return RedirectResponse(f"/users?err={quote('کاربر یافت نشد')}", status_code=303)
+            return _redirect_msg("/users", err="کاربر یافت نشد")
         if role not in {Role.USER.value, Role.RESELLER.value, Role.ADMIN.value}:
-            return RedirectResponse(f"/users?err={quote('نقش نامعتبر')}", status_code=303)
+            return _redirect_msg("/users", err="نقش نامعتبر")
+        if len(reason) < 3:
+            return _redirect_msg("/users", err="علت تغییر نقش الزامی است (حداقل ۳ کاراکتر)")
+
+        from app.services.notifications import actor_label_from_staff, notify_account_edit
+
+        old_role = user.role
+        actor = actor_label_from_staff(staff)
+
         if role == Role.RESELLER.value:
             from app.services.resellers import (
                 format_credentials_message,
@@ -2255,7 +2264,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     panel_base_url=await get_reseller_panel_base_url(session),
                 )
             except Exception as e:
-                return RedirectResponse(f"/users?err={quote(str(e))}", status_code=303)
+                return _redirect_msg("/users", err=str(e))
             try:
                 from app.bot import create_bot
 
@@ -2270,59 +2279,116 @@ def create_api_app(lifespan=None) -> FastAPI:
                     await bot.session.close()
             except Exception:
                 pass
+            # Admin mirror + short role notice (credentials already sent to subject)
+            await notify_account_edit(
+                session,
+                user=user,
+                event="role",
+                reason=reason,
+                old_role=old_role,
+                new_role=role,
+                actor=actor,
+                notify_subject=False,
+            )
         else:
             # Demoting a reseller must tear down profile / PG admin / shop bot
             if user.role == Role.RESELLER.value and role != Role.RESELLER.value:
-                from app.services.resellers import revoke_reseller
+                from app.services.resellers import notify_reseller_revoked, revoke_reseller
 
                 try:
-                    await revoke_reseller(
+                    info = await revoke_reseller(
                         session,
                         user.id,
                         delete_pg_admin=True,
-                        reason="role changed from web panel",
+                        reason=reason,
                     )
                 except ValueError:
                     user.role = role
                     await session.commit()
+                    info = {"telegram_id": user.telegram_id}
                 if role == Role.ADMIN.value:
                     user = await session.get(BotUser, user_id)
                     if user and user.role != Role.ADMIN.value:
                         user.role = Role.ADMIN.value
                         await session.commit()
+                user = await session.get(BotUser, user_id)
+                if user and role == Role.USER.value:
+                    await notify_reseller_revoked(
+                        int(info.get("telegram_id") or user.telegram_id),
+                        reason,
+                        session=session,
+                        user=user,
+                        actor=actor,
+                    )
+                elif user:
+                    await notify_account_edit(
+                        session,
+                        user=user,
+                        event="role",
+                        reason=reason,
+                        old_role=old_role,
+                        new_role=role,
+                        actor=actor,
+                    )
             else:
                 user.role = role
                 await session.commit()
+                await notify_account_edit(
+                    session,
+                    user=user,
+                    event="role",
+                    reason=reason,
+                    old_role=old_role,
+                    new_role=role,
+                    actor=actor,
+                )
         return _redirect_msg("/users", ok="نقش به‌روز شد")
 
     @app.post("/users/{user_id}/block")
     async def users_toggle_block(
+        request: Request,
         user_id: int,
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        from urllib.parse import quote
-
+        from app.services.notifications import actor_label_from_staff, notify_account_edit
         from app.services.users import is_protected_admin
 
+        form = await request.form()
+        reason = str(form.get("reason") or "").strip()
         user = await session.get(BotUser, user_id)
         if not user:
             return _redirect_msg("/users", err="کاربر یافت نشد")
         if is_protected_admin(user):
             return _redirect_msg("/users", err="مسدود کردن ادمین مجاز نیست")
-        user.is_blocked = not user.is_blocked
+        will_block = not user.is_blocked
+        if will_block and len(reason) < 3:
+            return _redirect_msg("/users", err="علت مسدودسازی الزامی است (حداقل ۳ کاراکتر)")
+        user.is_blocked = will_block
         await session.commit()
+        await notify_account_edit(
+            session,
+            user=user,
+            event="block" if will_block else "unblock",
+            reason=reason or None,
+            actor=actor_label_from_staff(staff),
+        )
         return _redirect_msg("/users", ok="وضعیت مسدودی تغییر کرد")
 
     @app.post("/users/{user_id}/delete")
     async def users_delete(
+        request: Request,
         user_id: int,
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        from urllib.parse import quote
-
+        from app.services.notifications import actor_label_from_staff, notify_account_edit
         from app.services.users import delete_bot_user
+
+        form = await request.form()
+        reason = str(form.get("reason") or "").strip()
+        if len(reason) < 3:
+            return _redirect_msg("/users", err="علت حذف کاربر الزامی است (حداقل ۳ کاراکتر)")
 
         actor_id = None
         try:
@@ -2339,6 +2405,17 @@ def create_api_app(lifespan=None) -> FastAPI:
                 actor_id = actor.id if actor else None
             except Exception:
                 actor_id = None
+
+        user = await session.get(BotUser, user_id)
+        if not user:
+            return _redirect_msg("/users", err="کاربر یافت نشد")
+        await notify_account_edit(
+            session,
+            user=user,
+            event="user_delete",
+            reason=reason,
+            actor=actor_label_from_staff(staff),
+        )
         try:
             info = await delete_bot_user(
                 session,

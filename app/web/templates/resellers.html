@@ -100,10 +100,10 @@
         <td class="col-actions">
           {% call row_actions() %}
             <form method="post" action="/resellers/{{ u.id }}/role" class="row-actions-stack"
-                  data-confirm="نقش این نماینده/کاربر تغییر کند؟"
+                  data-confirm="نقش این نماینده/کاربر تغییر کند؟ پیام و علت برای او در ربات ارسال می‌شود."
                   data-confirm-title="تأیید تغییر نقش"
-                  data-confirm-reason-when="user"
-                  data-confirm-reason-label="علت تغییر نقش به کاربر عادی"
+                  data-confirm-reason="1"
+                  data-confirm-reason-label="علت تغییر نقش"
                   data-confirm-reason-name="reason"
                   data-confirm-label="اعمال نقش">
               <input type="hidden" name="reason" value="" />

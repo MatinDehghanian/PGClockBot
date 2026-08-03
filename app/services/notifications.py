@@ -93,6 +93,12 @@ NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
         "وقتی رسید به‌صورت خودکار تأیید می‌شود",
         "1",
     ),
+    (
+        "notify_account_edits",
+        "ویرایش حساب کاربران",
+        "مسدود/رفع مسدودی، تغییر نقش، لغو نمایندگی و حذف کاربر — رونوشت برای ادمین اصلی",
+        "1",
+    ),
 ]
 
 
@@ -494,3 +500,190 @@ def build_qr_caption(
         lines.append(f"<code>{sub_url}</code>")
     caption = "\n".join(lines).strip()
     return caption[:1024]
+
+
+# —— Account moderation notices (block / role / revoke / delete) ——
+
+ROLE_LABELS_FA: dict[str, str] = {
+    "user": "کاربر",
+    "reseller": "نماینده",
+    "admin": "مدیر",
+    "pg_staff": "ادمین پاسارگارد",
+}
+
+_EVENT_TITLES_FA: dict[str, str] = {
+    "block": "🚫 حساب شما مسدود شد",
+    "unblock": "✅ مسدودیت برداشته شد",
+    "role": "🔄 نقش شما تغییر کرد",
+    "reseller_revoke": "❌ نمایندگی شما حذف شد",
+    "user_delete": "🗑 حساب کاربری حذف شد",
+}
+
+_EVENT_ADMIN_TITLES_FA: dict[str, str] = {
+    "block": "🚫 مسدودسازی کاربر",
+    "unblock": "✅ رفع مسدودی کاربر",
+    "role": "🔄 تغییر نقش کاربر",
+    "reseller_revoke": "❌ لغو نمایندگی",
+    "user_delete": "🗑 حذف کاربر",
+}
+
+
+def role_label_fa(role: str | None) -> str:
+    key = (role or "").strip()
+    return ROLE_LABELS_FA.get(key, key or "—")
+
+
+def actor_label_from_staff(staff: dict | None) -> str | None:
+    if not staff:
+        return None
+    for key in ("username", "name", "full_name", "web_username"):
+        val = (staff.get(key) or "").strip() if isinstance(staff.get(key), str) else ""
+        if val:
+            return val
+    role = staff.get("role")
+    if role:
+        return role_label_fa(str(role))
+    return "ادمین پنل"
+
+
+def format_account_edit_subject(
+    *,
+    event: str,
+    reason: str | None = None,
+    old_role: str | None = None,
+    new_role: str | None = None,
+) -> str:
+    """HTML message for the affected user."""
+    reason = (reason or "").strip()
+    title = _EVENT_TITLES_FA.get(event, "ℹ️ به‌روزرسانی حساب")
+    lines: list[str] = []
+
+    if event == "block":
+        lines.append("دسترسی شما به ربات فعلاً غیرفعال است.")
+    elif event == "unblock":
+        lines.append("حساب شما دوباره فعال شد و می‌توانید از ربات استفاده کنید.")
+    elif event == "role":
+        lines.append(kv_line("📌", "نقش قبلی", role_label_fa(old_role)))
+        lines.append(kv_line("📌", "نقش جدید", role_label_fa(new_role)))
+    elif event == "reseller_revoke":
+        lines.append("دسترسی پنل نماینده و ادمین پاسارگارد مرتبط لغو شده است.")
+        lines.append("نقش شما به «کاربر» برگشت.")
+    elif event == "user_delete":
+        lines.append("حساب و داده‌های مرتبط شما از ربات حذف شد.")
+    else:
+        lines.append("وضعیت حساب شما به‌روز شد.")
+
+    if reason:
+        lines.append("")
+        lines.append(kv_line("📝", "علت", reason))
+    lines.append("")
+    lines.append("در صورت نیاز با پشتیبانی در ارتباط باشید.")
+    return format_message(title, "\n".join(lines))
+
+
+def format_account_edit_admin(
+    *,
+    event: str,
+    user: BotUser,
+    reason: str | None = None,
+    old_role: str | None = None,
+    new_role: str | None = None,
+    actor: str | None = None,
+) -> str:
+    """HTML mirror for platform admins."""
+    reason = (reason or "").strip()
+    title = _EVENT_ADMIN_TITLES_FA.get(event, "ℹ️ ویرایش حساب")
+    name = user.full_name or user.username or "—"
+    lines = [
+        kv_line("👤", "کاربر", f"{name} (<code>{user.telegram_id}</code>)"),
+        kv_line("🏷", "نقش فعلی", role_label_fa(user.role)),
+    ]
+    if event == "role":
+        lines.append(kv_line("📤", "از", role_label_fa(old_role)))
+        lines.append(kv_line("📥", "به", role_label_fa(new_role)))
+    elif event == "block":
+        lines.append(kv_line("📌", "وضعیت", "مسدود شد"))
+    elif event == "unblock":
+        lines.append(kv_line("📌", "وضعیت", "رفع مسدودی"))
+    elif event == "reseller_revoke":
+        lines.append(kv_line("📌", "عملیات", "لغو نمایندگی"))
+    elif event == "user_delete":
+        lines.append(kv_line("📌", "عملیات", "حذف کامل حساب"))
+    if reason:
+        lines.append(kv_line("📝", "علت", reason))
+    if actor:
+        lines.append(kv_line("🛠", "توسط", actor))
+    return format_message(title, info_block(lines))
+
+
+async def _send_to_user_chat(
+    session: AsyncSession,
+    user: BotUser,
+    text: str,
+) -> bool:
+    if not user.telegram_id:
+        return False
+    try:
+        from app.services.reseller_bots import open_notify_bot_for_user
+
+        bot, should_close = await open_notify_bot_for_user(session, user)
+        try:
+            await bot.send_message(int(user.telegram_id), text)
+            return True
+        finally:
+            if should_close:
+                await bot.session.close()
+    except Exception:
+        return False
+
+
+async def notify_account_edit(
+    session: AsyncSession,
+    *,
+    user: BotUser,
+    event: str,
+    reason: str | None = None,
+    old_role: str | None = None,
+    new_role: str | None = None,
+    actor: str | None = None,
+    notify_subject: bool = True,
+) -> dict[str, bool]:
+    """Notify the affected user and (optionally) platform admins.
+
+    Returns ``{"subject": bool, "admins": bool}``.
+    """
+    result = {"subject": False, "admins": False}
+    reason = (reason or "").strip() or None
+
+    subject_text = format_account_edit_subject(
+        event=event,
+        reason=reason,
+        old_role=old_role,
+        new_role=new_role,
+    )
+    admin_text = format_account_edit_admin(
+        event=event,
+        user=user,
+        reason=reason,
+        old_role=old_role,
+        new_role=new_role,
+        actor=actor,
+    )
+
+    if notify_subject:
+        result["subject"] = await _send_to_user_chat(session, user, subject_text)
+
+    if await notify_enabled(session, "notify_account_edits"):
+        try:
+            from app.bot import create_bot
+
+            bot = create_bot()
+            try:
+                await _send_admins(bot, admin_text)
+                result["admins"] = True
+            finally:
+                await bot.session.close()
+        except Exception:
+            result["admins"] = False
+
+    return result

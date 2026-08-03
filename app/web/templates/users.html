@@ -43,9 +43,13 @@
         <td class="col-actions">
           {% call row_actions() %}
             <form method="post" action="/users/{{ u.id }}/role" class="row-actions-stack"
-                  data-confirm="نقش این کاربر تغییر کند؟"
+                  data-confirm="نقش این کاربر تغییر کند؟ پیام و علت برای کاربر در ربات ارسال می‌شود."
                   data-confirm-title="تأیید تغییر نقش"
+                  data-confirm-reason="1"
+                  data-confirm-reason-label="علت تغییر نقش"
+                  data-confirm-reason-name="reason"
                   data-confirm-label="اعمال نقش">
+              <input type="hidden" name="reason" value="" />
               <select name="role" class="select-sm">
                 <option value="user" {% if u.role=='user' %}selected{% endif %}>کاربر</option>
                 <option value="reseller" {% if u.role=='reseller' %}selected{% endif %}>نماینده</option>
@@ -54,10 +58,11 @@
               <button class="btn btn-sm" type="submit">اعمال نقش</button>
             </form>
             <form method="post" action="/users/{{ u.id }}/block"
-                  data-confirm="{% if u.is_blocked %}مسدودیت این کاربر برداشته شود؟{% else %}این کاربر مسدود شود؟{% endif %}"
+                  data-confirm="{% if u.is_blocked %}مسدودیت این کاربر برداشته شود؟{% else %}این کاربر مسدود شود؟ پیام و علت برای کاربر ارسال می‌شود.{% endif %}"
                   data-confirm-title="{% if u.is_blocked %}رفع مسدودی{% else %}تأیید مسدودسازی{% endif %}"
-                  {% if not u.is_blocked %}data-confirm-warn="1"{% endif %}
+                  {% if not u.is_blocked %}data-confirm-warn="1" data-confirm-reason="1" data-confirm-reason-label="علت مسدودسازی" data-confirm-reason-name="reason"{% endif %}
                   data-confirm-label="{% if u.is_blocked %}رفع مسدودی{% else %}مسدود کردن{% endif %}">
+              <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm {% if not u.is_blocked %}btn-warn{% endif %}" type="submit">
                 {% if u.is_blocked %}رفع مسدودی{% else %}مسدود{% endif %}
               </button>
@@ -67,7 +72,11 @@
                   data-confirm="کاربر و تمام سفارش‌ها/سرویس‌ها/تیکت‌های مرتبط حذف شوند؟ این عمل برگشت‌ناپذیر است."
                   data-confirm-title="تأیید حذف کاربر"
                   data-confirm-danger="1"
+                  data-confirm-reason="1"
+                  data-confirm-reason-label="علت حذف"
+                  data-confirm-reason-name="reason"
                   data-confirm-label="حذف کاربر">
+              <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف</button>
             </form>
             {% endif %}

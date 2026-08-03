@@ -1037,20 +1037,39 @@ async def revoke_reseller(
 
 def format_revoke_message(reason: str) -> str:
     """Notify former reseller that their agency access was removed."""
-    reason = (reason or "").strip()
-    lines = [
-        "❌ <b>نمایندگی شما حذف شد</b>",
-        "",
-        "دسترسی پنل نماینده و ادمین پاسارگارد مرتبط لغو شده است.",
-    ]
-    if reason:
-        lines += ["", f"علت: {reason}"]
-    lines += ["", "در صورت نیاز با پشتیبانی در ارتباط باشید."]
-    return "\n".join(lines)
+    from app.services.notifications import format_account_edit_subject
+
+    return format_account_edit_subject(event="reseller_revoke", reason=reason)
 
 
-async def notify_reseller_revoked(telegram_id: int, reason: str) -> bool:
-    """Best-effort Telegram notice after revoke. Returns True if sent."""
+async def notify_reseller_revoked(
+    telegram_id: int,
+    reason: str,
+    *,
+    session: AsyncSession | None = None,
+    user: BotUser | None = None,
+    actor: str | None = None,
+) -> bool:
+    """Best-effort Telegram notice after revoke. Returns True if subject was notified."""
+    from app.services.notifications import (
+        format_account_edit_subject,
+        notify_account_edit,
+    )
+
+    if session is not None and user is not None:
+        result = await notify_account_edit(
+            session,
+            user=user,
+            event="reseller_revoke",
+            reason=reason,
+            new_role=Role.USER.value,
+            old_role=Role.RESELLER.value,
+            actor=actor,
+            notify_subject=True,
+        )
+        return bool(result.get("subject"))
+
+    # Legacy path (telegram_id only) — subject message, no admin mirror
     try:
         from app.bot import create_bot
 
@@ -1058,7 +1077,7 @@ async def notify_reseller_revoked(telegram_id: int, reason: str) -> bool:
         try:
             await bot.send_message(
                 telegram_id,
-                format_revoke_message(reason),
+                format_account_edit_subject(event="reseller_revoke", reason=reason),
                 parse_mode="HTML",
             )
             return True
