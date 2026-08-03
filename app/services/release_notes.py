@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.3.14": [
+        "کپشن داخل باکس‌های موفقیت/هشدار/اخطار همرنگ متن همان باکس (نه خاکستری)",
+    ],
     "3.3.13": [
         "اصلاح: رنگ متن پیام‌های موفقیت/هشدار/خطا به حالت قبلی برگشت",
         "باکس‌های راهنما مثل «نکات مهم» بکاپ: متن از سبز به رنگ تیترها",
