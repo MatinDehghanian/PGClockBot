@@ -232,13 +232,33 @@ async def open_notify_bot_for_user(session, user) -> tuple[Bot, bool]:
 
     reseller_id = getattr(user, "reseller_id", None)
     if reseller_id:
-        mgr = get_reseller_bot_manager()
-        if mgr:
-            profile = await get_reseller_profile(session, int(reseller_id))
-            if profile:
-                shop = mgr.bot_for_profile_id(int(profile.id))
-                if shop is not None:
-                    return shop, False
+        bot, should_close = await open_notify_bot_for_reseller(session, int(reseller_id))
+        if bot is not None:
+            return bot, should_close
+    return create_bot(), True
+
+
+async def open_notify_bot_for_reseller(session, reseller_user_id: int) -> tuple[Bot | None, bool]:
+    """Return (shop_bot, should_close) for notifying shop staff.
+
+    Prefers the running dedicated bot; falls back to an ephemeral bot from stored token.
+    Returns (None, False) when the shop has no bot token.
+    """
+    from app.bot import create_bot
+    from app.services.resellers import get_reseller_profile
+
+    profile = await get_reseller_profile(session, int(reseller_user_id))
+    if not profile or not profile.is_active:
+        return None, False
+    mgr = get_reseller_bot_manager()
+    if mgr:
+        shop = mgr.bot_for_profile_id(int(profile.id))
+        if shop is not None:
+            return shop, False
+    token = (profile.bot_token or "").strip()
+    if token:
+        return create_bot(token), True
+    # No dedicated bot yet — fall back to main bot so owner still gets DMs there
     return create_bot(), True
 
 

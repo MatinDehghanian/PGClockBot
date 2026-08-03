@@ -16,6 +16,7 @@ from app.services.pasarguard import (
     build_user_create_payload,
     build_user_modify_payload,
     get_pg,
+    get_pg_for_reseller,
     user_group_ids,
     user_subscription_url,
 )
@@ -26,10 +27,21 @@ from app.services.pg_quota import (
     assert_can_modify_user,
     assert_can_mutate_owned_users,
 )
+from app.services.shop_scope import is_platform_admin, shop_owner_id
 
 
 def _q(msg: str) -> str:
     return quote(str(msg), safe="")
+
+
+async def _staff_pg(session: AsyncSession, staff: dict):
+    """Return (client, as_owner). Shop staff always use their PG admin credentials."""
+    if is_platform_admin(staff):
+        return get_pg(), True
+    rid = shop_owner_id(staff)
+    if not rid:
+        raise PasarGuardError("محدوده فروشگاه مشخص نیست — عملیات پاسارگارد مجاز نیست")
+    return await get_pg_for_reseller(session, int(rid)), False
 
 
 def _pg_form_err(msg: str, *, modal: str, uid: str | int | None = None) -> RedirectResponse:
@@ -391,7 +403,8 @@ def register_pg_pages(
                     await assert_can_create_user(staff, from_template=True)
                 except PgQuotaError as qe:
                     return _pg_form_err(qe.message, modal="create")
-                created = await get_pg().create_user_from_template(
+                pg, as_owner = await _staff_pg(session, staff)
+                created = await pg.create_user_from_template(
                     {
                         "username": uname,
                         "user_template_id": tid,
@@ -446,7 +459,8 @@ def register_pg_pages(
                 except PgQuotaError as qe:
                     return _pg_form_err(qe.message, modal="create")
 
-                created = await get_pg().create_user(
+                pg, as_owner = await _staff_pg(session, staff)
+                created = await pg.create_user(
                     build_user_create_payload(
                         username=uname,
                         group_ids=ids,
@@ -456,7 +470,10 @@ def register_pg_pages(
                     )
                 )
 
-            if not _is_admin(staff):
+            if not as_owner:
+                # Created as the shop PG admin — already owned; no owner-token transfer.
+                pass
+            elif not _is_admin(staff):
                 owner = _pg_owner(staff)
                 uid = created.get("id") if isinstance(created, dict) else None
                 if not owner:

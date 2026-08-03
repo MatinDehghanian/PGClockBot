@@ -1054,7 +1054,14 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         await session.commit()
 
     try:
-        pg = get_pg()
+        # Shop deliveries authenticate as the reseller's PG admin (role limits apply).
+        # Platform orders use the owner client.
+        if order.reseller_id:
+            from app.services.pasarguard import get_pg_for_reseller
+
+            pg = await get_pg_for_reseller(session, int(order.reseller_id))
+        else:
+            pg = get_pg()
         qty = order_quantity(order)
 
         pg_owner, pg_role_id = await _reseller_pg_link(session, order.reseller_id)
@@ -1126,14 +1133,18 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             pg_uid = pg_user.get("id")
             if pg_uid:
                 created_pg_ids.append(int(pg_uid))
-            # Fail closed: reseller delivery must transfer ownership or roll back the PG user.
-            if order.reseller_id:
+            # When creating via the shop's own PG admin, ownership is already that admin.
+            # set_owner is only needed for the legacy owner-token path (no stored password).
+            # With get_pg_for_reseller we skip transfer.
+            if order.reseller_id and getattr(pg, "_login_username", None) is None:
                 owner_name = (pg_owner or "").strip()
                 if not owner_name or not pg_uid:
                     raise ValueError(
                         "کاربر ساخته شد ولی مالکیت قابل تنظیم نیست — تحویل لغو شد"
                     )
                 await pg.set_owner_by_id(int(pg_uid), owner_name)
+            elif order.reseller_id and not pg_uid:
+                raise ValueError("ساخت کاربر پاسارگارد شناسه برنگرداند — تحویل لغو شد")
 
             sub_url = pg_user.get("subscription_url")
             service = UserService(

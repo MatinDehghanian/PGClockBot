@@ -141,11 +141,25 @@ def build_user_modify_payload(
 
 
 class PasarGuardClient:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        username: str | None = None,
+        password: str | None = None,
+        access_token: str | None = None,
+    ) -> None:
         self.settings = get_settings()
         # Use settings value as-is (already normalized with path preserved)
         self.base_url = (self.settings.pg_base_url or "").rstrip("/")
-        self._token: str | None = (self.settings.pg_access_token or None) or None
+        # Optional per-admin credentials (reseller shop) — never fall back to owner silently
+        self._login_username = (username or "").strip() or None
+        self._login_password = (password or "").replace("\r", "").strip() or None
+        if access_token is not None:
+            self._token: str | None = access_token or None
+        elif self._login_username:
+            self._token = None
+        else:
+            self._token = (self.settings.pg_access_token or None) or None
         if self._token == "":
             self._token = None
         self._client = httpx.AsyncClient(
@@ -208,10 +222,18 @@ class PasarGuardClient:
         if self._token:
             return self._token
         await self._ensure_api_base()
-        username = (self.settings.pg_username or "").strip()
-        password = (self.settings.pg_password or "").replace("\r", "").strip()
+        if self._login_username:
+            username = self._login_username
+            password = self._login_password or ""
+        else:
+            username = (self.settings.pg_username or "").strip()
+            password = (self.settings.pg_password or "").replace("\r", "").strip()
         if not username or not password:
-            raise PasarGuardError("PG_USERNAME / PG_PASSWORD missing in .env")
+            raise PasarGuardError(
+                "اعتبارنامه پاسارگارد ناقص است"
+                if self._login_username
+                else "PG_USERNAME / PG_PASSWORD missing in .env"
+            )
 
         attempts = [
             {"grant_type": "password", "username": username, "password": password},
@@ -533,9 +555,11 @@ def as_list(data: Any, *keys: str) -> list[dict]:
 
 
 _pg: Optional[PasarGuardClient] = None
+_pg_reseller_cache: dict[int, PasarGuardClient] = {}
 
 
 def get_pg() -> PasarGuardClient:
+    """Platform owner PasarGuard client (env credentials)."""
     global _pg
     if _pg is None:
         _pg = PasarGuardClient()
@@ -543,9 +567,47 @@ def get_pg() -> PasarGuardClient:
 
 
 def reset_pg() -> None:
-    """Drop cached client (after PG_BASE_URL / credentials change)."""
-    global _pg
+    """Drop cached clients (after PG_BASE_URL / credentials change)."""
+    global _pg, _pg_reseller_cache
     _pg = None
+    _pg_reseller_cache = {}
+
+
+async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClient:
+    """PasarGuard client authenticated as the shop's PG admin — never owner token.
+
+    Requires ``pg_admin_username`` + stored encrypted password on the profile.
+    """
+    from sqlalchemy import select
+
+    from app.db.models import ResellerProfile
+    from app.services.secret_box import decrypt_secret
+
+    rid = int(reseller_user_id)
+    cached = _pg_reseller_cache.get(rid)
+    if cached is not None and cached._token:
+        return cached
+
+    profile = (
+        await session.execute(select(ResellerProfile).where(ResellerProfile.user_id == rid))
+    ).scalar_one_or_none()
+    if not profile or not profile.pg_admin_username:
+        raise PasarGuardError(
+            "ادمین پاسارگارد برای این نماینده تعریف نشده — عملیات فروشگاه ممکن نیست"
+        )
+    password = decrypt_secret(profile.pg_admin_password_enc)
+    if not password:
+        raise PasarGuardError(
+            "رمز پاسارگارد نماینده ذخیره نشده — نمایندگی را دوباره provision کنید "
+            "یا رمز را از پنل ادمین بازنشانی کنید"
+        )
+    client = PasarGuardClient(
+        username=profile.pg_admin_username,
+        password=password,
+    )
+    await client.ensure_token()
+    _pg_reseller_cache[rid] = client
+    return client
 
 
 def public_pg_api_base() -> str:

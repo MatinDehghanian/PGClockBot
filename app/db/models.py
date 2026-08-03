@@ -309,6 +309,8 @@ class ResellerProfile(Base):
     balance: Mapped[int] = mapped_column(Integer, default=0)
     can_approve_receipts: Mapped[bool] = mapped_column(Boolean, default=False)
     pg_admin_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # Fernet ciphertext of the PasarGuard admin password (shop ops must use this, not owner).
+    pg_admin_password_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     share_pg_panel_url: Mapped[bool] = mapped_column(Boolean, default=False)
     web_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, unique=True)

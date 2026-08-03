@@ -348,7 +348,40 @@ async def _dispatch_dual_notify(
     platform: bool = True,
     shop: bool = True,
 ) -> None:
-    """Send to platform admins and/or shop staff using independent prefs."""
+    """Route staff notifications with hard shop isolation.
+
+    If the event belongs to a reseller shop, ONLY that shop's staff are notified
+    (via the shop bot) — platform ADMIN_IDS never receive shop-scoped events.
+    Platform customers (no reseller_id) notify ADMIN_IDS only.
+    """
+    rid: int | None = None
+    if shop and key not in PLATFORM_ONLY_NOTIFY_KEYS:
+        rid = await _resolve_shop_reseller_id(
+            session, order=order, payment=payment, ticket_user_id=ticket_user_id
+        )
+
+    # --- Shop-scoped: never fan-out to platform owner ---
+    if rid is not None:
+        if not await notify_enabled(session, key, reseller_id=rid):
+            return
+        targets = await _shop_recipient_chat_ids(session, rid, key)
+        if not targets:
+            return
+        from app.services.reseller_bots import open_notify_bot_for_reseller
+
+        shop_bot, should_close = await open_notify_bot_for_reseller(session, rid)
+        if shop_bot is None:
+            return
+        try:
+            await _send_to_chats(
+                shop_bot, targets, text, markup=markup, photo=photo
+            )
+        finally:
+            if should_close:
+                await shop_bot.session.close()
+        return
+
+    # --- Platform-only customers / wallet / account edits ---
     if platform and await notify_enabled(session, key):
         await _send_to_chats(
             bot,
@@ -357,19 +390,6 @@ async def _dispatch_dual_notify(
             markup=markup,
             photo=photo,
         )
-
-    if not shop or key in PLATFORM_ONLY_NOTIFY_KEYS:
-        return
-    rid = await _resolve_shop_reseller_id(
-        session, order=order, payment=payment, ticket_user_id=ticket_user_id
-    )
-    if not rid:
-        return
-    if not await notify_enabled(session, key, reseller_id=rid):
-        return
-    targets = await _shop_recipient_chat_ids(session, rid, key)
-    if targets:
-        await _send_to_chats(bot, targets, text, markup=markup, photo=photo)
 
 
 async def _ticket_reseller_chat_ids(session: AsyncSession, ticket_user_id: int) -> list[int]:
@@ -414,41 +434,46 @@ async def _shop_owner_chat_ids(
     return ids
 
 
-def _approval_markup(*, order_id: int | None = None, payment_id: int | None = None) -> InlineKeyboardMarkup:
-    if order_id:
+def _approval_markup(
+    *,
+    order_id: int | None = None,
+    payment_id: int | None = None,
+) -> InlineKeyboardMarkup:
+    """Review buttons. Prefer payrev (shop + platform can use); ordrev is platform-only."""
+    if payment_id is not None:
         return InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
                         text="✅ تأیید",
-                        callback_data=f"ordrev:ok:{order_id}",
+                        callback_data=f"payrev:ok:{payment_id}",
                     ),
                     InlineKeyboardButton(
                         text="❌ رد",
-                        callback_data=f"ordrev:no:{order_id}",
+                        callback_data=f"payrev:no:{payment_id}",
                     ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="📋 جزئیات سفارش",
-                        callback_data=f"adm:order:{order_id}",
-                    )
-                ],
+                ]
             ]
         )
-    assert payment_id is not None
+    assert order_id is not None
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="✅ تأیید",
-                    callback_data=f"payrev:ok:{payment_id}",
+                    callback_data=f"ordrev:ok:{order_id}",
                 ),
                 InlineKeyboardButton(
                     text="❌ رد",
-                    callback_data=f"payrev:no:{payment_id}",
+                    callback_data=f"ordrev:no:{order_id}",
                 ),
-            ]
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📋 جزئیات سفارش",
+                    callback_data=f"adm:order:{order_id}",
+                )
+            ],
         ]
     )
 
@@ -507,10 +532,8 @@ async def notify_pending_approval(
     if payment.order_id and not payment.is_wallet_topup:
         lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
     text = format_message("⏳ نیاز به تأیید", info_block(lines) + "\n\nاز دکمه‌های زیر تأیید یا رد کنید.")
-    if payment.order_id and not payment.is_wallet_topup:
-        markup = _approval_markup(order_id=payment.order_id)
-    else:
-        markup = _approval_markup(payment_id=payment.id)
+    # Always payrev so shop staff can act on their own bot; ordrev is platform-only.
+    markup = _approval_markup(payment_id=payment.id)
     # Wallet top-ups are platform-only; shop prefs never apply.
     await _dispatch_dual_notify(
         bot,

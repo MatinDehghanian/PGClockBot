@@ -391,6 +391,12 @@ async def order_approve_cb(callback: CallbackQuery, session: AsyncSession, db_us
     if not order:
         await callback.answer("یافت نشد", show_alert=True)
         return
+    if order.reseller_id:
+        await callback.answer(
+            "این سفارش مربوط به نماینده است — فقط در ربات/پنل همان فروشگاه قابل تأیید است",
+            show_alert=True,
+        )
+        return
     try:
         msg = await _approve_order_bot(session, order, callback.bot)
         await callback.answer(msg, show_alert=True)
@@ -415,6 +421,12 @@ async def order_reject_cb(callback: CallbackQuery, session: AsyncSession, db_use
     order = await session.get(Order, order_id)
     if not order:
         await callback.answer("یافت نشد", show_alert=True)
+        return
+    if order.reseller_id:
+        await callback.answer(
+            "این سفارش مربوط به نماینده است — فقط در ربات/پنل همان فروشگاه قابل رد است",
+            show_alert=True,
+        )
         return
     pay = (
         await session.execute(
@@ -1819,7 +1831,7 @@ async def adm_tickets(callback: CallbackQuery, session: AsyncSession, db_user: B
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    tickets = await list_open_tickets(session)
+    tickets = await list_open_tickets(session, platform_only=True)
     if not tickets:
         if callback.message:
             await callback.message.edit_text("تیکت بازی نیست.", reply_markup=kb.admin_home())

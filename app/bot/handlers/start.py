@@ -38,13 +38,13 @@ async def render_home(
     effective_role: str | None = None,
 ):
     from app.services.formatting import format_message
-    from app.services.reseller_access import effective_menu_role
+    from app.services.reseller_access import effective_menu_role, is_shop_owner_on_main_bot
 
     if ui is None:
         ui = await get_all_settings(session)
     # Dedicated reseller bot: owner + bot_admin_ids → reseller panel;
     # platform admins/other resellers → shop user menu.
-    # Main bot: bot_admin_ids stay normal users.
+    # Main bot: resellers see user menu + credentials (no full panel).
     if effective_role is None:
         effective_role = await effective_menu_role(
             session,
@@ -52,6 +52,8 @@ async def render_home(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
+
+    show_creds = is_shop_owner_on_main_bot(db_user, is_reseller_bot=is_reseller_bot)
 
     if effective_role == "admin":
         text = format_message(
@@ -68,7 +70,12 @@ async def render_home(
             body = welcome
         text = format_message(f"✨ {title}", body)
         has = await _has_services(session, db_user.id)
-        markup = kb.main_menu(effective_role, has_services=has, ui=ui)
+        markup = kb.main_menu(
+            effective_role,
+            has_services=has,
+            ui=ui,
+            show_reseller_creds=show_creds,
+        )
 
     if edit:
         from aiogram.exceptions import TelegramBadRequest

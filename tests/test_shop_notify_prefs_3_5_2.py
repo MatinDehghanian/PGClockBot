@@ -84,8 +84,8 @@ class IsolationLogicTests(unittest.IsolatedAsyncioTestCase):
 
         async def enabled(_session, key, *, reseller_id=None):
             if reseller_id is None:
-                return False  # owner OFF
-            return key == "notify_new_order"  # shop ON
+                return True  # owner ON — must still not receive shop events
+            return key == "notify_new_order"
 
         with patch(
             "app.services.notifications.notify_enabled", side_effect=enabled
@@ -97,14 +97,43 @@ class IsolationLogicTests(unittest.IsolatedAsyncioTestCase):
         ), patch(
             "app.services.notifications._shop_recipient_chat_ids",
             new=AsyncMock(return_value=[555]),
+        ), patch(
+            "app.services.reseller_bots.open_notify_bot_for_reseller",
+            new=AsyncMock(return_value=(MagicMock(session=MagicMock(close=AsyncMock())), True)),
         ):
             await _dispatch_dual_notify(
                 bot, session, "notify_new_order", "hello", order=order
             )
 
-        # Only shop path should fire (owner gate false)
+        # Shop path only — platform ADMIN_IDS must not be contacted
         self.assertEqual(send.await_count, 1)
         self.assertEqual(send.await_args.args[1], [555])
+
+    async def test_platform_customer_still_notifies_admins(self):
+        from app.services.notifications import _dispatch_dual_notify
+
+        session = AsyncMock()
+        bot = MagicMock()
+        order = MagicMock()
+        order.reseller_id = None
+
+        with patch(
+            "app.services.notifications.notify_enabled", new=AsyncMock(return_value=True)
+        ), patch(
+            "app.services.notifications._send_to_chats", new=AsyncMock()
+        ) as send, patch(
+            "app.services.notifications._resolve_shop_reseller_id",
+            new=AsyncMock(return_value=None),
+        ), patch(
+            "app.services.notifications.get_settings"
+        ) as gs:
+            gs.return_value.admin_ids = [111]
+            await _dispatch_dual_notify(
+                bot, session, "notify_new_ticket", "hello", order=order
+            )
+
+        self.assertEqual(send.await_count, 1)
+        self.assertEqual(send.await_args.args[1], [111])
 
 
 class WiringTests(unittest.TestCase):
