@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.6.3": [
+        "ایزوله سخت سفارش/رسید فروشگاه در وب و ربات ادمین اصلی (لیست، داشبورد، تأیید/رد)",
+        "تأیید رسید از مسیر سفارش فقط با دسترسی payments؛ نمای کلی وب با permission dashboard",
+        "برچسب‌های Reply نماینده فقط طبق ACL واقعی؛ هاب تنظیمات/پلن با permission؛ SoftCallback دیگر حباب ⏳ گیر نمی‌کند",
+        "بازگشت adm:home با Reply Keyboard درست؛ کروم پلن نماینده روی Reply؛ پیش‌نمایش دکمه‌ها با پیش‌فرض واقعی",
+    ],
     "3.6.2": [
         "ثابت‌ها (منو/زیرمنو/بکاپ/پیام گروهی/کروم پلن/تنظیمات نماینده) روی Reply Keyboard؛ داینامیک‌ها (سفارش/کاربر/فایل بکاپ/ردیف پلن) اینلاین",
         "هم‌ترازی منوی ربات نماینده + پیش‌نمایش/راهنمای وب‌پنل با همان قاعده",

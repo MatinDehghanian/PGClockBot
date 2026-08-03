@@ -29,6 +29,7 @@ NAV_ADMIN_BROADCAST = "admin_broadcast"
 NAV_ADMIN_PLANS = "admin_plans"
 NAV_RESELLER = "reseller"
 NAV_RESELLER_SETTINGS = "reseller_settings"
+NAV_RESELLER_PLANS = "reseller_plans"
 NAV_PAY = "pay"
 NAV_TOPUP_PAY = "topup_pay"
 NAV_USER_PREVIEW = "user_preview"
@@ -186,6 +187,8 @@ async def show_nav_keyboard(
         markup = kb.reseller_reply_keyboard(profile, ui)
     elif level == NAV_RESELLER_SETTINGS:
         markup = kb.reseller_settings_reply_keyboard(ui)
+    elif level == NAV_RESELLER_PLANS:
+        markup = kb.reseller_plans_reply_keyboard(ui)
     elif level == NAV_PAY:
         oid = order_id
         if oid is None and state is not None:

@@ -26,9 +26,9 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
 
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.6.2")
+        self.assertEqual(__version__, "3.6.3")
         root = Path(__file__).resolve().parents[1]
-        self.assertEqual((root / "VERSION").read_text(encoding="utf-8").strip(), "3.6.2")
+        self.assertEqual((root / "VERSION").read_text(encoding="utf-8").strip(), "3.6.3")
 
     def test_user_cannot_map_admin_labels(self):
         ui = {"btn_menu_home": "🏠 منوی اصلی", "btn_back": "⬅️ بازگشت", "menu_order": "shop,wallet"}
@@ -70,16 +70,61 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
         self.assertTrue(admin_plans_reply_keyboard(ui).keyboard)
 
     def test_reseller_bot_map_has_settings_sections(self):
+        from types import SimpleNamespace
+
         ui = {"menu_layout": "compact", "btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"}
+        profile = SimpleNamespace(
+            is_active=True,
+            web_permissions="dashboard,plans,orders,payments,tickets,stats,shop_settings",
+        )
         mapping = reply_action_map(
-            "reseller", ui=ui, include_submenus=True, is_reseller_bot=True
+            "reseller",
+            ui=ui,
+            include_submenus=True,
+            is_reseller_bot=True,
+            profile=profile,
         )
         self.assertEqual(mapping["⚙️ تنظیمات فروشگاه"], "res_settings")
         self.assertEqual(mapping["فروشگاه و متون"], "res_st_shop")
         self.assertEqual(mapping["ربات اختصاصی"], "res_st_bot")
+        self.assertEqual(mapping["➕ پلن جدید"], "res_plan_add")
         flat = [b.text for row in reseller_settings_reply_keyboard(ui).keyboard for b in row]
         self.assertIn("فروشگاه و متون", flat)
         self.assertIn("⬅️ بازگشت", flat)
+
+    def test_reseller_map_fail_closed_without_profile(self):
+        ui = {"btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"}
+        mapping = reply_action_map(
+            "reseller", ui=ui, include_submenus=True, is_reseller_bot=True
+        )
+        self.assertNotIn("⚙️ تنظیمات فروشگاه", mapping)
+        self.assertNotIn("💎 پلن‌های فروش", mapping)
+        self.assertNotIn("🛒 سفارش‌های مشتریان", mapping)
+
+    def test_reseller_map_respects_stripped_perms(self):
+        from types import SimpleNamespace
+
+        ui = {"btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"}
+        # orders+payments only (shop_settings/plans still soft-injected by has_bot_perm)
+        profile = SimpleNamespace(
+            is_active=True,
+            web_permissions="orders,payments",
+        )
+        mapping = reply_action_map(
+            "reseller",
+            ui=ui,
+            include_submenus=True,
+            is_reseller_bot=True,
+            profile=profile,
+        )
+        self.assertIn("🛒 سفارش‌های مشتریان", mapping)
+        self.assertIn("🧾 رسیدهای در انتظار", mapping)
+        # soft-injected by with_shop_settings — still present by design
+        self.assertIn("💎 پلن‌های فروش", mapping)
+        self.assertIn("⚙️ تنظیمات فروشگاه", mapping)
+        # dashboard/stats NOT in stored perms and not soft-injected
+        self.assertNotIn("🏠 خانه نماینده", mapping)
+        self.assertNotIn("📊 آمار و کمیسیون", mapping)
 
     def test_legacy_hubs_no_longer_static_chrome(self):
         """Inline legacy hubs must not re-surface full static menus."""

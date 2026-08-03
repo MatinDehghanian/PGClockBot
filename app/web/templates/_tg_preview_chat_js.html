@@ -147,13 +147,13 @@
     if (showKeys) {
       const order = menuOrder();
       const map = {
-        shop: values.btn_shop || 'خرید سرویس',
-        services: values.btn_services || 'سرویس‌های من',
-        wallet: values.btn_wallet || 'کیف پول',
-        support: values.btn_support || 'پشتیبانی',
-        referral: values.btn_referral || 'دعوت',
-        reseller_apply: values.btn_reseller_apply || 'درخواست نمایندگی',
-        miniapp: values.btn_miniapp || 'مینی‌اپ',
+        shop: values.btn_shop || '🟢🛒 خرید سرویس',
+        services: values.btn_services || '🔵📦 سرویس‌های من',
+        wallet: values.btn_wallet || '🟡👛 کیف پول',
+        support: values.btn_support || '🟣🎧 پشتیبانی',
+        referral: values.btn_referral || '🎁 دعوت دوستان',
+        reseller_apply: values.btn_reseller_apply || '🤝 درخواست نمایندگی',
+        miniapp: values.btn_miniapp || '📱 مینی‌اپ',
       };
       if (tab === 'buttons') {
         map.shop = val('btn_shop', map.shop);

@@ -174,11 +174,18 @@ async def adm_home(callback: CallbackQuery, db_user: BotUser):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
+    text = (
+        f"🛠 <b>پنل ادمین</b>\n"
+        f"<code>v{local_version()}</code>\n\n"
+        "از منوی زیر بخش موردنظر را انتخاب کنید."
+    )
     if callback.message:
-        await callback.message.edit_text(
-            f"🛠 <b>پنل ادمین</b>\n"
-            f"<code>v{local_version()}</code>\n\n"
-            "از منوی زیر بخش موردنظر را انتخاب کنید.",
+        # ReplyKeyboard cannot be attached via edit_text — clear inline then send reply KB
+        from app.bot.tg_utils import safe_edit_text
+
+        await safe_edit_text(callback.message, text, reply_markup=None)
+        await callback.message.answer(
+            "پنل ادمین:",
             reply_markup=kb.admin_reply_keyboard(),
         )
 
@@ -189,17 +196,33 @@ async def adm_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
+    from sqlalchemy import or_
+
     users_count = await session.scalar(select(func.count()).select_from(BotUser)) or 0
-    orders_count = await session.scalar(select(func.count()).select_from(Order)) or 0
+    # Platform-scoped aggregates only (exclude shop-tenant orders/payments)
+    orders_count = await session.scalar(
+        select(func.count()).select_from(Order).where(Order.reseller_id.is_(None))
+    ) or 0
     pending_pay = await session.scalar(
         select(func.count())
         .select_from(Payment)
-        .where(Payment.status == PaymentStatus.PENDING.value, Payment.receipt_file_id.is_not(None))
+        .outerjoin(Order, Order.id == Payment.order_id)
+        .where(
+            Payment.status == PaymentStatus.PENDING.value,
+            Payment.receipt_file_id.is_not(None),
+            or_(
+                Payment.is_wallet_topup.is_(True),
+                Order.reseller_id.is_(None),
+            ),
+        )
     ) or 0
     pending_orders = await session.scalar(
         select(func.count())
         .select_from(Order)
-        .where(Order.status.in_([OrderStatus.AWAITING_APPROVAL.value, OrderStatus.PAID.value]))
+        .where(
+            Order.reseller_id.is_(None),
+            Order.status.in_([OrderStatus.AWAITING_APPROVAL.value, OrderStatus.PAID.value]),
+        )
     ) or 0
     services = await session.scalar(select(func.count()).select_from(UserService)) or 0
     text = (
@@ -221,6 +244,9 @@ async def adm_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotU
 
 def _order_actions(order: Order, payment: Payment | None) -> list[list[InlineKeyboardButton]]:
     rows: list[list[InlineKeyboardButton]] = []
+    # Shop-tenant orders are never actionable by platform admin
+    if order.reseller_id:
+        return rows
     can_decide = False
     if payment and payment.status == PaymentStatus.PENDING.value:
         can_decide = True
@@ -242,7 +268,12 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    result = await session.execute(select(Order).order_by(Order.id.desc()).limit(12))
+    result = await session.execute(
+        select(Order)
+        .where(Order.reseller_id.is_(None))
+        .order_by(Order.id.desc())
+        .limit(12)
+    )
     orders = list(result.scalars().all())
     if not orders:
         if callback.message:
@@ -269,6 +300,12 @@ async def adm_order_view(callback: CallbackQuery, session: AsyncSession, db_user
     order = await session.get(Order, order_id)
     if not order:
         await callback.answer("یافت نشد", show_alert=True)
+        return
+    if order.reseller_id:
+        await callback.answer(
+            "این سفارش مربوط به نماینده است — فقط در ربات/پنل همان فروشگاه قابل مشاهده است",
+            show_alert=True,
+        )
         return
     await callback.answer()
     user = await session.get(BotUser, order.user_id)
@@ -445,11 +482,18 @@ async def adm_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
+    from sqlalchemy import or_
+
     result = await session.execute(
         select(Payment)
+        .outerjoin(Order, Order.id == Payment.order_id)
         .where(
             Payment.status == PaymentStatus.PENDING.value,
             Payment.receipt_file_id.is_not(None),
+            or_(
+                Payment.is_wallet_topup.is_(True),
+                Order.reseller_id.is_(None),
+            ),
         )
         .order_by(Payment.id.desc())
         .limit(15)

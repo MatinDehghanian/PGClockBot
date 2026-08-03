@@ -420,6 +420,13 @@ def _admin_plans_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]
     ]
 
 
+def _reseller_plans_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    _ = ui
+    return [
+        ("res_plan_add", "➕ پلن جدید"),
+    ]
+
+
 def _reseller_settings_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     _ = ui
     # Labels MUST match reseller_settings.SECTIONS[*]["title"] / HUB_ORDER
@@ -653,6 +660,37 @@ def reseller_settings_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMar
     return _reply_markup(rows, placeholder="تنظیمات فروشگاه نماینده…")
 
 
+def reseller_plans_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    """Static chrome for reseller plans (list stays inline under the message)."""
+    rows = _pack_reply_rows(
+        _reseller_plans_submenu_entries(ui), ui, footer_row=_submenu_footer(ui)
+    )
+    return _reply_markup(rows, placeholder="پلن‌های فروشگاه…")
+
+
+def reseller_plans_list_keyboard(plans: list) -> InlineKeyboardMarkup:
+    """Dynamic plan rows only (static chrome on reseller_plans_reply_keyboard)."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for p in plans[:20]:
+        flag = "✅" if getattr(p, "is_active", True) else "⏸"
+        name = (getattr(p, "name", "") or "")[:22]
+        price = getattr(p, "price", 0) or 0
+        label = f"{flag} {name} · {price:,}"
+        rows.append(
+            [InlineKeyboardButton(text=label, callback_data=f"res:plan:view:{p.id}")]
+        )
+    if not rows:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="پلنی نیست — از کیبورد «پلن جدید»",
+                    callback_data="res:plans",
+                )
+            ]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def reply_action_map(
     role: str,
     *,
@@ -662,11 +700,14 @@ def reply_action_map(
     show_reseller_creds: bool = False,
     include_submenus: bool = True,
     is_reseller_bot: bool = False,
+    profile=None,
 ) -> dict[str, str]:
     """Map button label → action key for the current role/bot.
 
     Security: admin/PG labels are never registered on reseller bots or for
-    non-admin roles. Reseller panel labels only for reseller actors on shop bots.
+    non-admin roles. Reseller panel labels only for reseller actors on shop bots,
+    and only for permissions the profile actually has (no forgeable restricted
+    labels).
     """
     home_label = _home_label(ui)
     back_label = _back_label(ui)
@@ -740,18 +781,18 @@ def reply_action_map(
                 mapping[(text or "").strip()] = key
 
         if reseller_actor:
-            for key, text in _reseller_submenu_entries(None):
-                mapping[(text or "").strip()] = key
-            for key, text in (
-                ("res_plans", "💎 پلن‌های فروش"),
-                ("res_orders", "🛒 سفارش‌های مشتریان"),
-                ("res_payments", "🧾 رسیدهای در انتظار"),
-                ("res_tickets", "🎫 تیکت‌های مشتریان"),
-                ("res_settings", "⚙️ تنظیمات فروشگاه"),
-            ):
-                mapping[text] = key
-            for key, text in _reseller_settings_submenu_entries(ui):
-                mapping[(text or "").strip()] = key
+            from app.services.resellers import has_bot_perm
+
+            # Fail closed: without a live profile, register no reseller panel labels
+            if profile is not None:
+                for key, text in _reseller_submenu_entries(profile):
+                    mapping[(text or "").strip()] = key
+                if has_bot_perm(profile, "shop_settings"):
+                    for key, text in _reseller_settings_submenu_entries(ui):
+                        mapping[(text or "").strip()] = key
+                if has_bot_perm(profile, "plans"):
+                    for key, text in _reseller_plans_submenu_entries(ui):
+                        mapping[(text or "").strip()] = key
 
     return {k: v for k, v in mapping.items() if k}
 

@@ -311,9 +311,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                 )
                 if not allowed:
                     raise NotAuthenticated(login_error=deny_msg)
-            # Always re-read ACL from DB — never trust stale cookie permissions
+            # Always re-read ACL from DB — never trust stale cookie permissions.
+            # Match bot has_perm: soft-ensure core shop keys when any perms exist.
+            from app.services.resellers import with_shop_settings
+
             user = dict(user)
-            user["permissions"] = parse_perms(profile.web_permissions) or []
+            parsed = parse_perms(profile.web_permissions) or []
+            user["permissions"] = with_shop_settings(parsed) if parsed else parsed
             user["bot_user_id"] = int(bot_user_id)
             if profile.pg_admin_username:
                 user["pg_admin_username"] = profile.pg_admin_username
@@ -1202,11 +1206,13 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.get("/dashboard", response_class=HTMLResponse)
     async def dashboard(
         request: Request,
-        staff: dict = Depends(require_staff),
+        staff: dict = Depends(require_perm("dashboard")),
         session: AsyncSession = Depends(get_db),
     ):
         # Bot overview (/dashboard): platform admin sees bot boxes;
         # overall web home stays at /home. Resellers stay shop-scoped.
+        from sqlalchemy import or_
+
         from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
 
         rid = shop_owner_id(staff)
@@ -1236,14 +1242,31 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "plans": int(plans_count),
                 "tickets": summary["tickets"],
             }
+            # Hard shop isolation: platform dashboard never lists tenant shop traffic
             recent_payments = list(
                 (
-                    await session.execute(select(Payment).order_by(Payment.id.desc()).limit(6))
+                    await session.execute(
+                        select(Payment)
+                        .outerjoin(Order, Order.id == Payment.order_id)
+                        .where(
+                            or_(
+                                Payment.is_wallet_topup.is_(True),
+                                Order.reseller_id.is_(None),
+                            )
+                        )
+                        .order_by(Payment.id.desc())
+                        .limit(6)
+                    )
                 ).scalars().all()
             )
             recent_orders = list(
                 (
-                    await session.execute(select(Order).order_by(Order.id.desc()).limit(6))
+                    await session.execute(
+                        select(Order)
+                        .where(Order.reseller_id.is_(None))
+                        .order_by(Order.id.desc())
+                        .limit(6)
+                    )
                 ).scalars().all()
             )
             return render(
@@ -1875,7 +1898,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         )
         from app.services.shop_scope import is_platform_admin, shop_owner_id
 
-        if not is_platform_admin(staff):
+        if is_platform_admin(staff):
+            # Match payments + bot isolation: platform admin sees main-bot orders only
+            q = q.where(Order.reseller_id.is_(None))
+        else:
             rid = shop_owner_id(staff)
             if not rid:
                 orders = []
@@ -1961,6 +1987,13 @@ def create_api_app(lifespan=None) -> FastAPI:
         order = await session.get(Order, order_id)
         if not order:
             return _redirect_msg("/orders", err="سفارش یافت نشد")
+        # Hard shop isolation (match bot ordrev + web payments): platform admin
+        # must never approve tenant shop orders.
+        if order.reseller_id and staff.get("role") == "admin":
+            return _redirect_msg(
+                "/orders",
+                err="این سفارش مربوط به نماینده است — فقط در ربات/پنل همان فروشگاه قابل تأیید است",
+            )
         if staff.get("role") != "admin":
             from app.services.shop_scope import ShopScopeError, assert_order_in_scope
 
@@ -1980,6 +2013,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         payment = result.scalar_one_or_none()
         try:
             if payment and payment.status == PaymentStatus.PENDING.value:
+                # Approving a pending receipt requires payments perm (not only orders)
+                if staff.get("role") != "admin":
+                    perms = staff.get("permissions") or []
+                    if "payments" not in perms:
+                        return _redirect_msg(
+                            "/orders",
+                            err="تأیید رسید نیاز به دسترسی «پرداخت‌ها» دارد",
+                        )
                 delivered = await approve_payment(session, payment, reviewer_tg=0)
                 await _notify_order_user(session, payment, delivered or order)
             elif order.status == OrderStatus.PAID.value:
@@ -2004,6 +2045,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         order = await session.get(Order, order_id)
         if not order:
             return _redirect_msg("/orders", err="سفارش یافت نشد")
+        if order.reseller_id and staff.get("role") == "admin":
+            return _redirect_msg(
+                "/orders",
+                err="این سفارش مربوط به نماینده است — فقط در ربات/پنل همان فروشگاه قابل رد است",
+            )
         if staff.get("role") != "admin":
             from app.services.shop_scope import ShopScopeError, assert_order_in_scope
 
@@ -2011,6 +2057,22 @@ def create_api_app(lifespan=None) -> FastAPI:
                 assert_order_in_scope(staff, order)
             except ShopScopeError as e:
                 return _redirect_msg("/orders", err=e.message)
+        # Rejecting a pending receipt also requires payments perm for limited staff
+        pending_pay = (
+            await session.execute(
+                select(Payment)
+                .where(Payment.order_id == order_id, Payment.status == PaymentStatus.PENDING.value)
+                .order_by(Payment.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if pending_pay and staff.get("role") != "admin":
+            perms = staff.get("permissions") or []
+            if "payments" not in perms:
+                return _redirect_msg(
+                    "/orders",
+                    err="رد رسید نیاز به دسترسی «پرداخت‌ها» دارد",
+                )
         result = await session.execute(
             select(Payment)
             .where(Payment.order_id == order_id)

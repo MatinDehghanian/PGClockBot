@@ -128,25 +128,37 @@ def _summarize_nodes(nodes: list | None) -> dict[str, Any]:
 
 
 async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
-    """Single round-trip aggregate counts for the bot dashboard."""
+    """Single round-trip aggregate counts for the bot dashboard.
+
+    Platform-scoped only: shop-tenant orders/payments/tickets are excluded
+    (hard shop isolation — match web payments/orders lists).
+    """
+    from sqlalchemy import or_
+
     pending_expr = (
         select(func.count())
         .select_from(Payment)
+        .outerjoin(Order, Order.id == Payment.order_id)
         .where(
             Payment.status == PaymentStatus.PENDING.value,
             Payment.receipt_file_id.is_not(None),
+            or_(
+                Payment.is_wallet_topup.is_(True),
+                Order.reseller_id.is_(None),
+            ),
         )
         .scalar_subquery()
     )
     revenue_expr = (
         select(func.coalesce(func.sum(Order.amount), 0))
-        .where(Order.status == "delivered")
+        .where(Order.status == "delivered", Order.reseller_id.is_(None))
         .scalar_subquery()
     )
     tickets_expr = (
         select(func.count())
         .select_from(Ticket)
-        .where(Ticket.status == "open")
+        .join(BotUser, BotUser.id == Ticket.user_id)
+        .where(Ticket.status == "open", BotUser.reseller_id.is_(None))
         .scalar_subquery()
     )
     resellers_expr = (
@@ -155,11 +167,14 @@ async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
         .where(ResellerProfile.is_active.is_(True))
         .scalar_subquery()
     )
+    orders_expr = (
+        select(func.count()).select_from(Order).where(Order.reseller_id.is_(None)).scalar_subquery()
+    )
     row = (
         await session.execute(
             select(
                 select(func.count()).select_from(BotUser).scalar_subquery(),
-                select(func.count()).select_from(Order).scalar_subquery(),
+                orders_expr,
                 select(func.count()).select_from(UserService).scalar_subquery(),
                 pending_expr,
                 revenue_expr,

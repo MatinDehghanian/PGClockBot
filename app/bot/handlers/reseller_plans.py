@@ -61,18 +61,10 @@ async def _staff_ctx(profile: ResellerProfile) -> dict:
 
 
 def _plans_kb(plans: list[Plan]) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="➕ پلن جدید", callback_data="res:plan:add")],
-        [InlineKeyboardButton(text="🌐 مدیریت کامل در وب‌پنل", callback_data="res:plan:webhint")],
-    ]
-    for p in plans[:20]:
-        flag = "✅" if p.is_active else "⏸"
-        label = f"{flag} {p.name[:22]} · {p.price:,}"
-        rows.append(
-            [InlineKeyboardButton(text=label, callback_data=f"res:plan:view:{p.id}")]
-        )
-    rows.append([InlineKeyboardButton(text="⬅️ پنل نماینده", callback_data="res:home")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+    """Dynamic plan rows only — static «پلن جدید» lives on reply keyboard."""
+    from app.bot.keyboards import reseller_plans_list_keyboard
+
+    return reseller_plans_list_keyboard(plans)
 
 
 def _plan_item_kb(plan: Plan) -> InlineKeyboardMarkup:
@@ -133,7 +125,7 @@ async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     plans = await _list_plans(session, owner_id)
     text = "💎 <b>پلن‌های فروش فروشگاه شما</b>\n"
     if not plans:
-        text += "هنوز پلنی نساخته‌اید. از دکمه زیر بسازید یا در وب‌پنل کامل‌تر تنظیم کنید."
+        text += "هنوز پلنی نساخته‌اید. از کیبورد «پلن جدید» بسازید یا در وب‌پنل کامل‌تر تنظیم کنید."
     else:
         text += f"تعداد: {len(plans)}"
     if callback.message:

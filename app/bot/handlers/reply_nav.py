@@ -35,6 +35,13 @@ class _SoftCallback:
         self.bot = message.bot
 
     async def answer(self, *args, **kwargs):
+        # Show denial / alert text on the ⏳ bubble (no-op answer would leave it stuck)
+        text = args[0] if args else kwargs.get("text")
+        if text:
+            try:
+                await self.message.edit_text(str(text)[:500])
+            except Exception:
+                pass
         return True
 
 
@@ -59,6 +66,16 @@ class ReplyMenuTextFilter(BaseFilter):
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
+        profile = None
+        if is_reseller_bot and role == Role.RESELLER.value:
+            from app.services.reseller_access import load_reseller_actor
+
+            _, profile = await load_reseller_actor(
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
         mapping = kb.reply_action_map(
             role,
             has_services=has,
@@ -66,6 +83,7 @@ class ReplyMenuTextFilter(BaseFilter):
             show_reseller_creds=show_creds,
             include_submenus=True,
             is_reseller_bot=is_reseller_bot,
+            profile=profile,
         )
         # Main-bot admin can also hit user-preview labels
         if role == "admin" and not is_reseller_bot:
@@ -706,6 +724,7 @@ async def open_reseller_settings_hub(
     push: bool = True,
 ) -> None:
     from app.services.reseller_access import load_reseller_actor
+    from app.services.resellers import has_bot_perm
 
     if not is_reseller_bot:
         await open_reseller_creds(message, session, db_user)
@@ -718,6 +737,9 @@ async def open_reseller_settings_hub(
     )
     if not owner_id or not profile:
         await message.answer("دسترسی نماینده یافت نشد.")
+        return
+    if not has_bot_perm(profile, "shop_settings"):
+        await message.answer("دسترسی تنظیمات فروشگاه ندارید.")
         return
     bot_line = f"@{profile.bot_username}" if profile.bot_username else "توکن ثبت نشده"
     await nav.show_nav_keyboard(
@@ -735,6 +757,62 @@ async def open_reseller_settings_hub(
         profile=profile,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
+    )
+
+
+async def open_reseller_plans_hub(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
+    push: bool = True,
+) -> None:
+    from app.bot.handlers.reseller_plans import _list_plans
+    from app.services.reseller_access import load_reseller_actor
+    from app.services.resellers import has_bot_perm
+
+    if not is_reseller_bot:
+        await open_reseller_creds(message, session, db_user)
+        return
+    owner_id, profile = await load_reseller_actor(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not owner_id or not profile:
+        await message.answer("دسترسی نماینده یافت نشد.")
+        return
+    if not has_bot_perm(profile, "plans"):
+        await message.answer("دسترسی پلن ندارید.")
+        return
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_RESELLER_PLANS,
+        text=(
+            "💎 <b>پلن‌های فروش</b>\n"
+            "ساخت از کیبورد؛ انتخاب پلن زیر پیام اینلاین است.\n"
+            "مدیریت کامل‌تر (تست/دلخواه) در وب‌پنل «پلن‌ها»."
+        ),
+        state=state,
+        push=push,
+        profile=profile,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    plans = await _list_plans(session, owner_id)
+    if not plans:
+        body = "هنوز پلنی نساخته‌اید."
+    else:
+        body = f"تعداد: {len(plans)}"
+    await message.answer(
+        f"📦 <b>لیست پلن‌ها</b>\n\n{body}",
+        reply_markup=kb.reseller_plans_list_keyboard(plans),
     )
 
 
@@ -1127,6 +1205,34 @@ async def _soft_reseller(
             reseller_owner_id=reseller_owner_id,
         )
         return
+    if action == "res_plans":
+        await open_reseller_plans_hub(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    if action == "res_plan_add":
+        bubble = await message.answer("⏳")
+        cb = _SoftCallback(bubble, "res:plan:add")
+        try:
+            await res_plans_h.res_plan_add(
+                cb,
+                state,
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
+        except Exception as e:
+            try:
+                await bubble.edit_text(f"خطا: {e}")
+            except Exception:
+                pass
+        return
     if action.startswith("res_st_"):
         sec = action.replace("res_st_", "", 1)
         bubble = await message.answer("⏳")
@@ -1150,7 +1256,6 @@ async def _soft_reseller(
         "res_dash": ("res:dash", "res_dash"),
         "res_users": ("res:users:0", "res_users"),
         "res_stats": ("res:stats", "res_stats"),
-        "res_plans": ("res:plans", "res_plans"),
         "res_orders": ("res:orders", "res_orders"),
         "res_payments": ("res:payments", "res_payments"),
         "res_tickets": ("res:tickets", "res_tickets"),
@@ -1164,10 +1269,7 @@ async def _soft_reseller(
         fn_name = "res_users_list"
     bubble = await message.answer("⏳")
     cb = _SoftCallback(bubble, data)
-    if fn_name == "res_plans":
-        fn = getattr(res_plans_h, "res_plans", None)
-    else:
-        fn = getattr(res_h, fn_name, None)
+    fn = getattr(res_h, fn_name, None)
     if fn is None:
         await bubble.edit_text("این بخش در دسترس نیست — از کیبورد نماینده استفاده کنید.")
         return
@@ -1220,6 +1322,7 @@ async def reply_main_nav(
         "bc_aud_resellers",
         "bc_aud_admins",
         "adm_plan_add",
+        "res_plan_add",
         "backup_upload",
     }
     if not preserve_state:
