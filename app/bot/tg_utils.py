@@ -6,6 +6,7 @@ from typing import Any
 
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardMarkup, Message
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("pgclock.bot")
 
@@ -67,10 +68,30 @@ async def seed_persistent_reply_kb(message: Message) -> None:
     await seed_reply_keyboard(message, kb.persistent_reply_keyboard())
 
 
-async def clear_fsm_with_reply(message: Message, state, *, note: str = "لغو شد.") -> None:
-    """Clear FSM and restore the main reply keyboard when possible."""
+async def clear_fsm_with_reply(
+    message: Message,
+    state,
+    *,
+    note: str = "لغو شد.",
+    session: AsyncSession | None = None,
+    db_user=None,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
+    """Clear FSM and restore the full main reply keyboard when context is available."""
     from app.bot import keyboards as kb
+    from app.bot.menu_nav import restore_main_reply
 
+    if session is not None and db_user is not None:
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text=note,
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
     await state.clear()
-    # Prefer full main keyboard if caller attached context later; fallback home btn
     await message.answer(note, reply_markup=kb.persistent_reply_keyboard())

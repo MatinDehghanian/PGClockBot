@@ -24,11 +24,11 @@ class ReplyKeyboardMenuTests(unittest.TestCase):
     def test_user_reply_keyboard_two_columns_when_compact(self):
         ui = {
             "menu_layout": "compact",
-            "menu_order": "shop,wallet,support,guide",
+            "menu_order": "shop,wallet,support,referral",
             "btn_shop": "خرید",
             "btn_wallet": "کیف پول",
             "btn_support": "پشتیبانی",
-            "btn_guide": "راهنما",
+            "btn_referral": "دعوت",
             "btn_menu_home": "🏠 منوی اصلی",
         }
         kb = main_reply_keyboard("user", has_services=False, ui=ui)
@@ -38,6 +38,32 @@ class ReplyKeyboardMenuTests(unittest.TestCase):
         self.assertEqual(len(rows[1]), 2)
         self.assertEqual(len(rows[-1]), 1)
         self.assertEqual(rows[-1][0].text, "🏠 منوی اصلی")
+        self.assertTrue(kb.is_persistent)
+
+    def test_guide_faq_stripped_from_reply_keyboard(self):
+        ui = {
+            "menu_layout": "compact",
+            "menu_order": "shop,guide,faq,wallet",
+            "btn_shop": "خرید",
+            "btn_wallet": "کیف",
+            "btn_guide": "راهنما",
+            "btn_faq": "سوالات",
+            "btn_menu_home": "🏠 منوی اصلی",
+        }
+        kb = main_reply_keyboard("user", has_services=False, ui=ui)
+        flat = [b.text for row in kb.keyboard for b in row]
+        self.assertIn("خرید", flat)
+        self.assertIn("کیف", flat)
+        self.assertNotIn("راهنما", flat)
+        self.assertNotIn("سوالات", flat)
+
+    def test_cancel_reply_is_cancel_only(self):
+        from app.bot.keyboards import cancel_reply
+
+        kb = cancel_reply({})
+        flat = [b.text for row in kb.keyboard for b in row]
+        self.assertEqual(flat, ["انصراف"])
+        self.assertTrue(kb.is_persistent)
 
     def test_reply_action_map_resolves_labels(self):
         ui = {

@@ -2649,8 +2649,6 @@ def create_api_app(lifespan=None) -> FastAPI:
             "services": {"label": "سرویس‌های من", "required": False},
             "wallet": {"label": "کیف پول", "required": False},
             "support": {"label": "پشتیبانی", "required": False},
-            "guide": {"label": "راهنما", "required": False},
-            "faq": {"label": "سوالات متداول", "required": False},
             "referral": {"label": "دعوت دوستان", "required": False},
             "reseller_apply": {"label": "درخواست نمایندگی", "required": False},
             "miniapp": {"label": "مینی‌اپ", "required": False},

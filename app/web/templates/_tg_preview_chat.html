@@ -1,4 +1,4 @@
-{# Telegram chat/menu live preview (shared by admin + reseller settings). #}
+{# Telegram chat + Reply Keyboard live preview (shared by admin + reseller settings). #}
 <aside class="tg-preview-wrap" aria-label="پیش‌نمایش تلگرام">
   <div class="tg-preview">
     <div class="tg-top">
@@ -19,9 +19,14 @@
         </div>
         <div class="tg-qr-cap" id="pv-qr-cap"></div>
       </div>
-      <div class="tg-keys" id="pv-keys"></div>
     </div>
-    <div class="tg-composer"><span>پیام…</span></div>
+    <div class="tg-reply-kb" id="pv-keys" aria-label="کیبورد پایین تلگرام"></div>
+    <div class="tg-composer">
+      <button type="button" class="tg-kb-icon" title="باز کردن منوی کیبورد" aria-label="منوی کیبورد">
+        <span class="tg-kb-grid" aria-hidden="true"></span>
+      </button>
+      <span class="tg-composer-ph">پیام…</span>
+    </div>
   </div>
-  <p class="muted tg-preview-hint">پیش‌نمایش زنده — با تغییر فیلدها به‌روز می‌شود (ذخیره لازم نیست).</p>
+  <p class="muted tg-preview-hint">پیش‌نمایش زنده کیبورد پایین (Reply Keyboard) — با تغییر فیلدها به‌روز می‌شود.</p>
 </aside>

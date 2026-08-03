@@ -18,17 +18,19 @@ from app.services.support_contacts import (
 from app.services.users import DEFAULT_SETTINGS, on
 
 # Default order for user menu items (drag-and-drop in web panel edits menu_order)
+# guide/faq removed from keyboard — keep texts available via /help if needed
 DEFAULT_MENU_ORDER = [
     "shop",
     "services",
     "wallet",
     "support",
-    "guide",
-    "faq",
     "referral",
     "reseller_apply",
     "miniapp",
 ]
+
+# Legacy keys stripped from saved menu_order so old installs drop them from the keyboard
+REMOVED_MENU_KEYS = frozenset({"guide", "faq", "restart", "help"})
 
 
 def _t(ui: dict | None, key: str) -> str:
@@ -89,7 +91,7 @@ def _menu_order(ui: dict | None) -> list[str]:
     raw = _t(ui, "menu_order")
     parts = [p.strip() for p in (raw or "").split(",") if p.strip()]
     known = set(DEFAULT_MENU_ORDER)
-    ordered = [p for p in parts if p in known]
+    ordered = [p for p in parts if p in known and p not in REMOVED_MENU_KEYS]
     # shop always present
     if "shop" not in ordered:
         ordered.insert(0, "shop")
@@ -99,8 +101,6 @@ def _menu_order(ui: dict | None) -> list[str]:
 MENU_SHOW_KEYS = (
     "wallet",
     "support",
-    "guide",
-    "faq",
     "referral",
     "reseller_apply",
     "miniapp",
@@ -222,9 +222,11 @@ REPLY_ACTION_HOME = "home"
 REPLY_ACTION_SHOP = "shop"
 REPLY_ACTION_SERVICES = "services"
 REPLY_ACTION_WALLET = "wallet"
+REPLY_ACTION_WALLET_TOPUP = "wallet_topup"
+REPLY_ACTION_WALLET_TX = "wallet_tx"
 REPLY_ACTION_SUPPORT = "support"
-REPLY_ACTION_GUIDE = "guide"
-REPLY_ACTION_FAQ = "faq"
+REPLY_ACTION_SUPPORT_NEW = "support_new"
+REPLY_ACTION_SUPPORT_LIST = "support_list"
 REPLY_ACTION_REFERRAL = "referral"
 REPLY_ACTION_RESELLER_APPLY = "reseller_apply"
 REPLY_ACTION_RESELLER = "reseller"
@@ -236,6 +238,19 @@ REPLY_ACTION_ADMIN_TICKETS = "adm_tickets"
 REPLY_ACTION_ADMIN_PLANS = "adm_plans"
 REPLY_ACTION_ADMIN_PG = "adm_pg"
 REPLY_ACTION_ADMIN_PREVIEW = "adm_preview"
+REPLY_ACTION_ADMIN_USERS = "adm_users"
+REPLY_ACTION_ADMIN_SETTINGS = "adm_settings"
+REPLY_ACTION_ADMIN_BROADCAST = "adm_broadcast"
+
+# Submenu context keys stored implicitly by which reply labels are shown
+REPLY_SUBMENU_WALLET = "wallet"
+REPLY_SUBMENU_SUPPORT = "support"
+REPLY_SUBMENU_ADMIN = "admin"
+REPLY_SUBMENU_RESELLER = "reseller"
+
+
+def _home_label(ui: dict | None = None) -> str:
+    return (_t(ui, "btn_menu_home") or "🏠 منوی اصلی").strip() or "🏠 منوی اصلی"
 
 
 def _reply_user_entries(
@@ -256,10 +271,6 @@ def _reply_user_entries(
             entries.append((REPLY_ACTION_WALLET, _t(ui, "btn_wallet")))
         elif key == "support":
             entries.append((REPLY_ACTION_SUPPORT, _t(ui, "btn_support")))
-        elif key == "guide":
-            entries.append((REPLY_ACTION_GUIDE, _t(ui, "btn_guide")))
-        elif key == "faq":
-            entries.append((REPLY_ACTION_FAQ, _t(ui, "btn_faq")))
         elif key == "referral":
             entries.append((REPLY_ACTION_REFERRAL, _t(ui, "btn_referral")))
         elif key == "reseller_apply" and role == Role.USER.value and not show_reseller_creds:
@@ -285,8 +296,25 @@ def _reply_admin_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         (REPLY_ACTION_ADMIN_PAYMENTS, _t(ui, "btn_adm_payments")),
         (REPLY_ACTION_ADMIN_TICKETS, _t(ui, "btn_adm_tickets")),
         (REPLY_ACTION_ADMIN_PLANS, _t(ui, "btn_adm_plans")),
+        (REPLY_ACTION_ADMIN_USERS, _t(ui, "btn_adm_users")),
         (REPLY_ACTION_ADMIN_PG, _t(ui, "btn_adm_pg")),
+        (REPLY_ACTION_ADMIN_SETTINGS, _t(ui, "btn_adm_settings")),
+        (REPLY_ACTION_ADMIN_BROADCAST, _t(ui, "btn_adm_broadcast")),
         (REPLY_ACTION_ADMIN_PREVIEW, _t(ui, "btn_adm_preview")),
+    ]
+
+
+def _wallet_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    return [
+        (REPLY_ACTION_WALLET_TOPUP, "🟢➕ شارژ کیف پول"),
+        (REPLY_ACTION_WALLET_TX, "🟡📜 تراکنش‌ها"),
+    ]
+
+
+def _support_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    return [
+        (REPLY_ACTION_SUPPORT_NEW, "🟣✉️ تیکت جدید"),
+        (REPLY_ACTION_SUPPORT_LIST, "📋 تیکت‌های من"),
     ]
 
 
@@ -320,11 +348,10 @@ def main_reply_keyboard(
     as_user: bool = False,
     show_reseller_creds: bool = False,
 ) -> ReplyKeyboardMarkup:
-    """Persistent reply keyboard — primary navigation (like professional VPN bots)."""
-    home_label = _t(ui, "btn_menu_home") or BTN_RESTART
+    """Persistent reply keyboard — primary navigation (Telegram shows ☰ when minimized)."""
+    home_label = _home_label(ui)
     if role == Role.ADMIN.value and not as_user:
         entries = _reply_admin_entries(ui)
-        # Admin also gets a quick jump to customer menu preview via dedicated button
         rows = _pack_reply_rows(entries, ui, footer=[home_label])
     else:
         entries = _reply_user_entries(
@@ -343,6 +370,61 @@ def main_reply_keyboard(
     )
 
 
+def wallet_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    home = _home_label(ui)
+    rows = _pack_reply_rows(_wallet_submenu_entries(ui), ui, footer=[home])
+    return ReplyKeyboardMarkup(
+        keyboard=rows,
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        is_persistent=True,
+        input_field_placeholder="کیف پول — یک گزینه را انتخاب کنید…",
+    )
+
+
+def support_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    home = _home_label(ui)
+    rows = _pack_reply_rows(_support_submenu_entries(ui), ui, footer=[home])
+    return ReplyKeyboardMarkup(
+        keyboard=rows,
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        is_persistent=True,
+        input_field_placeholder="پشتیبانی — یک گزینه را انتخاب کنید…",
+    )
+
+
+def reseller_reply_keyboard(profile=None, ui: dict | None = None) -> ReplyKeyboardMarkup:
+    """Reply-keyboard mirror of reseller panel sections."""
+    from app.services.resellers import has_bot_perm
+
+    entries: list[tuple[str, str]] = []
+    if profile is None or has_bot_perm(profile, "dashboard"):
+        entries.append(("res_dash", "🏠 خانه نماینده"))
+        entries.append(("res_users", "👥 مشتریان من"))
+    if profile is None or has_bot_perm(profile, "stats"):
+        entries.append(("res_stats", "📊 آمار و کمیسیون"))
+    if profile is not None and has_bot_perm(profile, "plans"):
+        entries.append(("res_plans", "💎 پلن‌های فروش"))
+    if profile is not None and has_bot_perm(profile, "orders"):
+        entries.append(("res_orders", "🛒 سفارش‌های مشتریان"))
+    if profile is not None and has_bot_perm(profile, "payments"):
+        entries.append(("res_payments", "🧾 رسیدهای در انتظار"))
+    if profile is not None and has_bot_perm(profile, "tickets"):
+        entries.append(("res_tickets", "🎫 تیکت‌های مشتریان"))
+    if profile is not None and has_bot_perm(profile, "shop_settings"):
+        entries.append(("res_settings", "⚙️ تنظیمات فروشگاه"))
+    home = _home_label(ui)
+    rows = _pack_reply_rows(entries, ui, footer=[home])
+    return ReplyKeyboardMarkup(
+        keyboard=rows or [[KeyboardButton(text=home)]],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        is_persistent=True,
+        input_field_placeholder="پنل نماینده…",
+    )
+
+
 def reply_action_map(
     role: str,
     *,
@@ -350,14 +432,15 @@ def reply_action_map(
     ui: dict | None = None,
     as_user: bool = False,
     show_reseller_creds: bool = False,
+    include_submenus: bool = True,
 ) -> dict[str, str]:
     """Map button label → action key for the current role/settings."""
-    home_label = (_t(ui, "btn_menu_home") or BTN_RESTART).strip()
+    home_label = _home_label(ui)
     mapping: dict[str, str] = {home_label: REPLY_ACTION_HOME}
-    # Always recognize restart aliases
+    # Legacy aliases that old cancel keyboards may still show
     mapping[BTN_RESTART] = REPLY_ACTION_HOME
     mapping["شروع مجدد"] = REPLY_ACTION_HOME
-    mapping["restart"] = REPLY_ACTION_HOME
+    mapping["🏠 شروع مجدد"] = REPLY_ACTION_HOME
     if role == Role.ADMIN.value and not as_user:
         for key, text in _reply_admin_entries(ui):
             mapping[(text or "").strip()] = key
@@ -369,10 +452,25 @@ def reply_action_map(
             show_reseller_creds=show_reseller_creds,
         ):
             mapping[(text or "").strip()] = key
-        # Admin previewing as user still may press admin btn if present
         if role == Role.ADMIN.value and as_user:
             mapping[(_t(ui, "btn_admin") or "").strip()] = REPLY_ACTION_ADMIN
-    # Drop empty keys
+    if include_submenus:
+        for key, text in _wallet_submenu_entries(ui):
+            mapping[(text or "").strip()] = key
+        for key, text in _support_submenu_entries(ui):
+            mapping[(text or "").strip()] = key
+        # Reseller submenu labels (static)
+        for key, text in (
+            ("res_dash", "🏠 خانه نماینده"),
+            ("res_users", "👥 مشتریان من"),
+            ("res_stats", "📊 آمار و کمیسیون"),
+            ("res_plans", "💎 پلن‌های فروش"),
+            ("res_orders", "🛒 سفارش‌های مشتریان"),
+            ("res_payments", "🧾 رسیدهای در انتظار"),
+            ("res_tickets", "🎫 تیکت‌های مشتریان"),
+            ("res_settings", "⚙️ تنظیمات فروشگاه"),
+        ):
+            mapping[text] = key
     return {k: v for k, v in mapping.items() if k}
 
 
@@ -972,26 +1070,31 @@ def back_home(ui: dict | None = None) -> InlineKeyboardMarkup:
 
 
 BTN_CANCEL = "انصراف"
-BTN_RESTART = "🏠 شروع مجدد"
+BTN_RESTART = "🏠 شروع مجدد"  # legacy alias only — no longer shown on cancel KB
 
 
-def cancel_reply() -> ReplyKeyboardMarkup:
+def cancel_reply(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    """Thin cancel keyboard during text input — does not include home/restart."""
+    label = (_t(ui, "btn_cancel") or "").strip()
+    # Prefer plain انصراف so is_cancel_text keeps matching; strip emoji variants
+    cancel_label = BTN_CANCEL
+    if label and "انصراف" in label and label != BTN_CANCEL:
+        # Still accept panel label if it contains انصراف, but show clean text
+        cancel_label = BTN_CANCEL
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=BTN_CANCEL)],
-            [KeyboardButton(text=BTN_RESTART)],
-        ],
+        keyboard=[[KeyboardButton(text=cancel_label)]],
         resize_keyboard=True,
         one_time_keyboard=False,
         is_persistent=True,
+        input_field_placeholder="مقدار را بفرستید یا انصراف بزنید…",
     )
 
 
 def persistent_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
     """Fallback reply keyboard (home only) when role context is unavailable."""
-    home = _t(ui, "btn_menu_home") if ui else BTN_RESTART
+    home = _home_label(ui)
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=home or BTN_RESTART)]],
+        keyboard=[[KeyboardButton(text=home)]],
         resize_keyboard=True,
         one_time_keyboard=False,
         is_persistent=True,
@@ -999,9 +1102,23 @@ def persistent_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
 
 
 def is_cancel_text(text: str | None) -> bool:
-    return (text or "").strip() in {BTN_CANCEL, "لغو", "cancel", "/cancel"}
+    t = (text or "").strip()
+    return t in {BTN_CANCEL, "لغو", "cancel", "/cancel"} or t.endswith("انصراف")
+
+
+def is_home_text(text: str | None, ui: dict | None = None) -> bool:
+    """True for main-menu / legacy restart labels."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    home = _home_label(ui)
+    if t == home:
+        return True
+    return t in {BTN_RESTART, "شروع مجدد", "restart", "🏠 منوی اصلی"} or t.endswith(
+        "شروع مجدد"
+    ) or t.endswith("منوی اصلی")
 
 
 def is_restart_text(text: str | None) -> bool:
-    t = (text or "").strip()
-    return t in {BTN_RESTART, "شروع مجدد", "restart"} or t.endswith("شروع مجدد")
+    """Backward-compat alias — treats home + legacy restart as home navigation."""
+    return is_home_text(text)

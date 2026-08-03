@@ -129,6 +129,7 @@ async def cmd_restart(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
+    """Home / legacy «شروع مجدد» — always restore main reply keyboard."""
     await state.clear()
     await render_home(
         message,
@@ -278,28 +279,55 @@ async def cmd_menu(
 
 
 @router.message(Command("help"))
-async def cmd_help(message: Message, session: AsyncSession):
-    """Telegram /help menu command — same content as دکمه راهنما (guide_text in settings)."""
+async def cmd_help(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    """Telegram /help — guide_text from settings (no longer a keyboard button)."""
+    from app.bot.menu_nav import build_main_reply_keyboard
     from app.services.formatting import format_message
 
     ui = await get_all_settings(session)
-    body = (ui.get("guide_text") or "").strip() or "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، فیلد «متن راهنما» را پر کنید."
-    await message.answer(
-        format_message("📘 راهنما", body),
-        reply_markup=kb.back_home(ui),
+    body = (ui.get("guide_text") or "").strip() or (
+        "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، فیلد «متن راهنما» را پر کنید."
     )
+    main_kb, _, _ = await build_main_reply_keyboard(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    await message.answer(format_message("📘 راهنما", body), reply_markup=main_kb)
 
 
 @router.message(F.text.func(kb.is_cancel_text))
-async def orphan_cancel(message: Message, state: FSMContext):
-    """When انصراف is pressed outside an FSM prompt, clear sticky cancel keyboard."""
+async def orphan_cancel(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    """انصراف outside FSM restores main KB; inside FSM let state handlers run first."""
+    from aiogram.exceptions import SkipHandler
+
     cur = await state.get_state()
     if cur:
-        # Let state-specific handlers process cancel; if none do, still clear below next tick
-        return
-    await message.answer(
-        "عملیاتی برای انصراف نیست.",
-        reply_markup=kb.persistent_reply_keyboard(),
+        raise SkipHandler()
+    from app.bot.menu_nav import restore_main_reply
+
+    await restore_main_reply(
+        message,
+        session,
+        db_user,
+        text="🏠 منوی اصلی",
+        state=state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
     )
 
 

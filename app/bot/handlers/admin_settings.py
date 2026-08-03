@@ -172,9 +172,8 @@ MENU_ORDER_LABELS = {
     "services": "سرویس‌ها",
     "wallet": "کیف پول",
     "support": "پشتیبانی",
-    "guide": "راهنما",
-    "faq": "سوالات",
     "referral": "دعوت",
+    "reseller_apply": "نمایندگی",
     "miniapp": "مینی‌اپ",
 }
 
@@ -361,8 +360,16 @@ async def _render_sub(callback: CallbackQuery, session: AsyncSession, sec_id: st
 
 
 async def _render_menu_order(callback: CallbackQuery, session: AsyncSession, back: str) -> None:
+    from app.bot.keyboards import DEFAULT_MENU_ORDER, REMOVED_MENU_KEYS
+
     ui = await get_all_settings(session)
-    order = [p.strip() for p in (ui.get("menu_order") or "").split(",") if p.strip()]
+    order = [
+        p.strip()
+        for p in (ui.get("menu_order") or "").split(",")
+        if p.strip() and p.strip() in DEFAULT_MENU_ORDER and p.strip() not in REMOVED_MENU_KEYS
+    ]
+    if "shop" not in order:
+        order.insert(0, "shop")
     rows: list[list[InlineKeyboardButton]] = []
     for i, key in enumerate(order[:10]):
         label = MENU_ORDER_LABELS.get(key, key)
@@ -670,7 +677,15 @@ async def menu_reorder(callback: CallbackQuery, session: AsyncSession, db_user: 
         return
     parts = callback.data.split(":")
     direction, idx = parts[3], int(parts[4])
-    order = [p.strip() for p in (await get_setting(session, "menu_order") or "").split(",") if p.strip()]
+    from app.bot.keyboards import DEFAULT_MENU_ORDER, REMOVED_MENU_KEYS, sync_show_flags_for_order
+
+    order = [
+        p.strip()
+        for p in (await get_setting(session, "menu_order") or "").split(",")
+        if p.strip() and p.strip() in DEFAULT_MENU_ORDER and p.strip() not in REMOVED_MENU_KEYS
+    ]
+    if "shop" not in order:
+        order.insert(0, "shop")
     if idx < 0 or idx >= len(order):
         await callback.answer()
         return
@@ -680,7 +695,6 @@ async def menu_reorder(callback: CallbackQuery, session: AsyncSession, db_user: 
         return
     order[idx], order[swap] = order[swap], order[idx]
     await set_setting(session, "menu_order", ",".join(order))
-    from app.bot.keyboards import sync_show_flags_for_order
 
     for key, val in sync_show_flags_for_order(order).items():
         await set_setting(session, key, val)

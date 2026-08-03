@@ -1,15 +1,21 @@
-"""Reply-keyboard main navigation — opens sections; selections stay as inline under messages."""
+"""Reply-keyboard main + submenu navigation.
+
+Main menus and section submenus live on the Telegram reply keyboard.
+Selections (plans, pay methods, approve/reject, steppers) stay as inline
+buttons under messages.
+"""
 
 from __future__ import annotations
 
 from aiogram import F, Router
-from aiogram.filters import BaseFilter, StateFilter
+from aiogram.filters import BaseFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.menu_nav import restore_main_reply, user_has_services
 from app.db.models import BotUser, Role, UserService
 from app.services.formatting import format_message
 from app.services.users import get_all_settings
@@ -32,7 +38,7 @@ class _SoftCallback:
 
 
 class ReplyMenuTextFilter(BaseFilter):
-    """Match only when the text is a known reply-menu label for this user."""
+    """Match known reply-menu / submenu labels (works even during FSM — clears it)."""
 
     async def __call__(
         self,
@@ -46,9 +52,6 @@ class ReplyMenuTextFilter(BaseFilter):
         text = (message.text or "").strip()
         if not text or kb.is_cancel_text(text):
             return False
-        # Restart is handled by start.cmd_restart — avoid double handling
-        if kb.is_restart_text(text):
-            return False
         ui, role, has, show_creds = await _nav_context(
             session,
             db_user,
@@ -60,6 +63,7 @@ class ReplyMenuTextFilter(BaseFilter):
             has_services=has,
             ui=ui,
             show_reseller_creds=show_creds,
+            include_submenus=True,
         )
         if role == "admin":
             for k, v in kb.reply_action_map(
@@ -67,11 +71,10 @@ class ReplyMenuTextFilter(BaseFilter):
                 has_services=has,
                 ui=ui,
                 as_user=True,
+                include_submenus=True,
             ).items():
                 mapping.setdefault(k, v)
-        # Home label (btn_menu_home) may differ from BTN_RESTART
-        home_label = (ui.get("btn_menu_home") or "").strip()
-        if home_label and text == home_label:
+        if kb.is_home_text(text, ui):
             action = kb.REPLY_ACTION_HOME
         else:
             action = mapping.get(text)
@@ -82,13 +85,6 @@ class ReplyMenuTextFilter(BaseFilter):
             "reply_ui": ui,
             "reply_role": role,
         }
-
-
-async def _has_services(session: AsyncSession, user_id: int) -> bool:
-    result = await session.execute(
-        select(UserService.id).where(UserService.bot_user_id == user_id).limit(1)
-    )
-    return result.scalar_one_or_none() is not None
 
 
 async def _nav_context(
@@ -107,7 +103,7 @@ async def _nav_context(
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
-    has = await _has_services(session, db_user.id)
+    has = await user_has_services(session, db_user.id)
     show_creds = is_shop_owner_on_main_bot(db_user, is_reseller_bot=is_reseller_bot)
     return ui, role, has, show_creds
 
@@ -116,6 +112,7 @@ async def open_shop_list(
     message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext
 ) -> None:
     from app.bot.handlers.shop import _custom_available_for_users
+    from app.bot.menu_nav import build_main_reply_keyboard
     from app.services.orders import list_active_plans
     from app.services.users import on
 
@@ -125,24 +122,26 @@ async def open_shop_list(
     plans = await list_active_plans(session, include_trial=True)
     if not trial_on:
         plans = [p for p in plans if not p.is_trial]
-    has_svc = (
-        await session.execute(
-            select(UserService.id).where(UserService.bot_user_id == db_user.id).limit(1)
-        )
-    ).scalar_one_or_none()
+    has_svc = await user_has_services(session, db_user.id)
     if has_svc:
         plans = [p for p in plans if not p.is_trial]
     custom_on = await _custom_available_for_users(session, ui, plans=plans)
     wholesale_on = on(ui.get("wholesale_enabled")) and any(not p.is_trial for p in plans)
+    main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
     if not plans and not custom_on:
         text = format_message(
             "🛒 فروشگاه",
             ui.get("shop_empty_text") or "در حال حاضر پلنی برای فروش فعال نیست.",
         )
-        await message.answer(text, reply_markup=kb.back_home(ui))
+        await message.answer(text, reply_markup=main_kb)
         return
+    # Keep main reply KB visible; plan picks are inline under the message
     await message.answer(
         format_message("🛒 انتخاب پلن", "یکی از پلن‌ها را انتخاب کنید:"),
+        reply_markup=main_kb,
+    )
+    await message.answer(
+        "📦 پلن‌ها:",
         reply_markup=kb.plans_keyboard(
             plans, ui, custom_enabled=custom_on, wholesale_enabled=wholesale_on
         ),
@@ -150,6 +149,8 @@ async def open_shop_list(
 
 
 async def open_services_list(message: Message, session: AsyncSession, db_user: BotUser) -> None:
+    from app.bot.menu_nav import build_main_reply_keyboard
+
     ui = await get_all_settings(session)
     result = await session.execute(
         select(UserService)
@@ -157,17 +158,16 @@ async def open_services_list(message: Message, session: AsyncSession, db_user: B
         .order_by(UserService.id.desc())
     )
     services = list(result.scalars().all())
+    main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
     if not services:
         await message.answer(
             ui.get("empty_services_text")
             or "هنوز سرویسی ندارید.\nاز بخش «خرید سرویس» شروع کنید.",
-            reply_markup=kb.back_home(ui),
+            reply_markup=main_kb,
         )
         return
-    await message.answer(
-        "📦 <b>سرویس‌های شما</b>",
-        reply_markup=kb.services_keyboard(services, ui),
-    )
+    await message.answer("📦 <b>سرویس‌های شما</b>", reply_markup=main_kb)
+    await message.answer("یکی را انتخاب کنید:", reply_markup=kb.services_keyboard(services, ui))
 
 
 async def open_wallet_home(message: Message, session: AsyncSession, db_user: BotUser) -> None:
@@ -184,10 +184,62 @@ async def open_wallet_home(message: Message, session: AsyncSession, db_user: Bot
                     "موجودی",
                     f"<b>{format_toman(db_user.wallet_balance, get_settings().currency)}</b>",
                 ),
+                "",
+                "از کیبورد پایین شارژ یا تراکنش‌ها را انتخاب کنید.",
             ]
         ),
     )
-    await message.answer(text, reply_markup=kb.wallet_keyboard(ui))
+    await message.answer(text, reply_markup=kb.wallet_reply_keyboard(ui))
+
+
+async def open_wallet_topup(
+    message: Message, session: AsyncSession, state: FSMContext
+) -> None:
+    from app.services.users import on
+
+    ui = await get_all_settings(session)
+    can_topup = any(
+        on(ui.get(k))
+        for k in ("pay_card_enabled", "pay_gateway_enabled", "pay_crypto_enabled")
+    )
+    if not can_topup:
+        await message.answer(
+            "روش شارژ فعالی تنظیم نشده.",
+            reply_markup=kb.wallet_reply_keyboard(ui),
+        )
+        return
+    from app.bot.handlers.wallet import WalletStates
+
+    await state.set_state(WalletStates.topup_amount)
+    await message.answer(
+        format_message("➕ شارژ کیف پول", "مبلغ شارژ را به تومان وارد کنید:"),
+        reply_markup=kb.cancel_reply(ui),
+    )
+
+
+async def open_wallet_tx(message: Message, session: AsyncSession, db_user: BotUser) -> None:
+    from app.config import get_settings
+    from app.services.formatting import format_toman
+    from app.services.wallet import list_transactions
+
+    ui = await get_all_settings(session)
+    txs = await list_transactions(session, db_user.id, limit=15)
+    if not txs:
+        await message.answer(
+            "تراکنشی ثبت نشده.",
+            reply_markup=kb.wallet_reply_keyboard(ui),
+        )
+        return
+    lines = []
+    for t in txs:
+        sign = "+" if t.amount >= 0 else ""
+        lines.append(
+            f"{sign}{format_toman(t.amount, get_settings().currency)} — {t.reason}"
+        )
+    await message.answer(
+        format_message("📜 تراکنش‌ها", "\n".join(lines)),
+        reply_markup=kb.wallet_reply_keyboard(ui),
+    )
 
 
 async def open_support_home(message: Message, session: AsyncSession) -> None:
@@ -199,54 +251,75 @@ async def open_support_home(message: Message, session: AsyncSession) -> None:
 
     ui = await get_all_settings(session)
     contacts = active_support_contacts(parse_support_contacts(ui.get("support_contacts")))
-    if len(contacts) == 1:
-        url = support_chat_url(contacts[0].get("telegram") or "")
-        title = contacts[0].get("title") or "پشتیبان"
-        rows: list[list[InlineKeyboardButton]] = []
-        if url:
-            rows.append([InlineKeyboardButton(text=f"💬 گفتگو با {title}", url=url)])
-        rows.append(
-            [InlineKeyboardButton(text="🟣✉️ تیکت پشتیبانی", callback_data="support:tickets")]
-        )
-        rows.append(
-            [InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="menu:home")]
-        )
-        text = format_message(
+    await message.answer(
+        format_message(
             "🎧 پشتیبانی",
-            f"برای ارتباط مستقیم روی دکمه زیر بزنید:\n<b>{title}</b>",
-        )
-        await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
-        return
-    if len(contacts) > 1:
+            ui.get("support_text")
+            or "از کیبورد پایین تیکت جدید بسازید یا تیکت‌های قبلی را ببینید.",
+        ),
+        reply_markup=kb.support_reply_keyboard(ui),
+    )
+    if contacts:
+        rows: list[list[InlineKeyboardButton]] = []
+        for c in contacts:
+            url = support_chat_url(c.get("telegram") or "")
+            title = c.get("title") or "پشتیبان"
+            if url:
+                rows.append([InlineKeyboardButton(text=f"💬 گفتگو با {title}", url=url)])
+        if rows:
+            await message.answer(
+                "ارتباط مستقیم:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            )
+
+
+async def open_support_new(
+    message: Message, session: AsyncSession, state: FSMContext
+) -> None:
+    from app.bot.handlers.support import SupportStates
+
+    ui = await get_all_settings(session)
+    await state.set_state(SupportStates.subject)
+    await message.answer(
+        "موضوع تیکت را بنویسید:",
+        reply_markup=kb.cancel_reply(ui),
+    )
+
+
+async def open_support_list(
+    message: Message, session: AsyncSession, db_user: BotUser
+) -> None:
+    from app.services.tickets import list_user_tickets
+
+    ui = await get_all_settings(session)
+    tickets = await list_user_tickets(session, db_user.id)
+    if not tickets:
         await message.answer(
-            format_message("🎧 پشتیبانی", "یکی از پشتیبان‌ها را انتخاب کنید:"),
-            reply_markup=kb.support_contacts_keyboard(contacts, ui),
+            "تیکتی ندارید.",
+            reply_markup=kb.support_reply_keyboard(ui),
         )
         return
-    text = ui.get("support_text") or "پیام خود را بنویسید؛ تیم پشتیبانی پاسخ می‌دهد."
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"#{t.id} — {(t.subject or '')[:28]}",
+                callback_data=f"support:view:{t.id}",
+            )
+        ]
+        for t in tickets[:20]
+    ]
     await message.answer(
-        format_message("🎧 پشتیبانی", text),
-        reply_markup=kb.support_keyboard(ui),
+        "📋 تیکت‌های شما:",
+        reply_markup=kb.support_reply_keyboard(ui),
     )
-
-
-async def open_guide(message: Message, session: AsyncSession) -> None:
-    ui = await get_all_settings(session)
-    body = (ui.get("guide_text") or "").strip() or (
-        "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، فیلد «متن راهنما» را پر کنید."
-    )
-    await message.answer(format_message("📘 راهنما", body), reply_markup=kb.back_home(ui))
-
-
-async def open_faq(message: Message, session: AsyncSession) -> None:
-    ui = await get_all_settings(session)
     await message.answer(
-        format_message("❓ سوالات متداول", ui.get("faq_text") or ""),
-        reply_markup=kb.back_home(ui),
+        "یکی را باز کنید:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
 
 
 async def open_referral(message: Message, session: AsyncSession, db_user: BotUser) -> None:
+    from app.bot.menu_nav import build_main_reply_keyboard
     from app.config import get_settings
 
     ui = await get_all_settings(session)
@@ -257,27 +330,30 @@ async def open_referral(message: Message, session: AsyncSession, db_user: BotUse
         body = ui["referral_text"].format(code=db_user.referral_code, link=link)
     except Exception:
         body = f"کد: {db_user.referral_code}\n{link}"
+    main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
     await message.answer(
         format_message("🎁 دعوت دوستان", body),
-        reply_markup=kb.back_home(ui),
+        reply_markup=main_kb,
     )
 
 
 async def open_reseller_apply(message: Message, session: AsyncSession, db_user: BotUser) -> None:
+    from app.bot.menu_nav import build_main_reply_keyboard
     from app.config import get_settings
     from app.services.formatting import format_toman
     from app.services.resellers import list_active_reseller_plans
 
     ui = await get_all_settings(session)
     order_keys = [p.strip() for p in (ui.get("menu_order") or "").split(",") if p.strip()]
+    main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
     if "reseller_apply" not in order_keys:
-        await message.answer("درخواست نمایندگی در منو فعال نیست.")
+        await message.answer("درخواست نمایندگی در منو فعال نیست.", reply_markup=main_kb)
         return
     if db_user.role == Role.RESELLER.value:
-        await message.answer("شما هم‌اکنون نماینده هستید.")
+        await message.answer("شما هم‌اکنون نماینده هستید.", reply_markup=main_kb)
         return
     if db_user.role == Role.ADMIN.value:
-        await message.answer("ادمین نیاز به درخواست ندارد.")
+        await message.answer("ادمین نیاز به درخواست ندارد.", reply_markup=main_kb)
         return
     plans = await list_active_reseller_plans(session)
     if not plans:
@@ -286,7 +362,7 @@ async def open_reseller_apply(message: Message, session: AsyncSession, db_user: 
                 "🤝 نمایندگی",
                 "در حال حاضر پلن نمایندگی فعالی تعریف نشده است.\nبعداً دوباره بررسی کنید.",
             ),
-            reply_markup=kb.back_home(ui),
+            reply_markup=main_kb,
         )
         return
     rows = []
@@ -300,14 +376,15 @@ async def open_reseller_apply(message: Message, session: AsyncSession, db_user: 
                 )
             ]
         )
-    rows.append(
-        [InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="menu:home")]
-    )
     await message.answer(
         format_message(
             "🤝 درخواست نمایندگی",
-            "یکی از پلن‌های زیر را انتخاب کنید. پس از پرداخت (در صورت نیاز) ادمین درخواست را بررسی می‌کند.",
+            "یکی از پلن‌های زیر را انتخاب کنید.",
         ),
+        reply_markup=main_kb,
+    )
+    await message.answer(
+        "پلن‌ها:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
 
@@ -334,53 +411,58 @@ async def open_reseller_home(
     if not owner_id or not profile:
         await message.answer("دسترسی نماینده یافت نشد.")
         return
+    ui = await get_all_settings(session)
     await message.answer(
-        format_message("🤝 پنل نماینده", "دسترسی‌ها با وب‌پنل یکسان است."),
-        reply_markup=kb.reseller_home(profile),
+        format_message("🤝 پنل نماینده", "از کیبورد پایین بخش موردنظر را انتخاب کنید."),
+        reply_markup=kb.reseller_reply_keyboard(profile, ui),
     )
 
 
 async def open_reseller_creds(message: Message, session: AsyncSession, db_user: BotUser) -> None:
+    from app.bot.menu_nav import build_main_reply_keyboard
     from app.services.resellers import format_reseller_access_card, get_reseller_profile
 
+    main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
     if db_user.role != Role.RESELLER.value:
-        await message.answer("فقط نمایندگان.")
+        await message.answer("فقط نمایندگان.", reply_markup=main_kb)
         return
     profile = await get_reseller_profile(session, db_user.id)
     if not profile or not profile.is_active:
-        await message.answer("پروفایل نماینده یافت نشد.")
+        await message.answer("پروفایل نماینده یافت نشد.", reply_markup=main_kb)
         return
     text = await format_reseller_access_card(session, profile)
-    rows = [[InlineKeyboardButton(text="⬅️ بازگشت", callback_data="menu:home")]]
+    rows: list[list[InlineKeyboardButton]] = []
     if profile.bot_username:
-        rows.insert(
-            0,
+        rows.append(
             [
                 InlineKeyboardButton(
                     text=f"باز کردن @{profile.bot_username}",
                     url=f"https://t.me/{profile.bot_username}",
                 )
-            ],
+            ]
         )
-    await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    await message.answer(text, reply_markup=main_kb)
+    if rows:
+        await message.answer("لینک ربات:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 
-async def open_admin_home(message: Message, db_user: BotUser) -> None:
+async def open_admin_home(message: Message, session: AsyncSession, db_user: BotUser) -> None:
     from app.version import __version__ as local_version
 
     if db_user.role != Role.ADMIN.value:
         await message.answer("ادمین نیستید.")
         return
+    ui = await get_all_settings(session)
     await message.answer(
         f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
-        "از منوی زیر یا کیبورد پایین بخش موردنظر را انتخاب کنید.",
-        reply_markup=kb.admin_home(),
+        "از کیبورد پایین بخش موردنظر را انتخاب کنید.",
+        reply_markup=kb.main_reply_keyboard("admin", ui=ui),
     )
 
 
 async def open_user_preview(message: Message, session: AsyncSession, db_user: BotUser) -> None:
     ui = await get_all_settings(session)
-    has = await _has_services(session, db_user.id)
+    has = await user_has_services(session, db_user.id)
     text = format_message(
         "👁 پیش‌نمایش منوی کاربر",
         "کیبورد پایین به حالت کاربر تغییر کرد. برای بازگشت «منوی اصلی» را بزنید.",
@@ -404,19 +486,106 @@ async def _soft_admin(message: Message, session: AsyncSession, db_user: BotUser,
         return
     bubble = await message.answer("⏳")
     cb = _SoftCallback(bubble, data)
-    if data == "adm:orders":
-        await admin_h.adm_orders(cb, session, db_user)
-    elif data == "adm:payments":
-        await admin_h.adm_payments(cb, session, db_user)
-    elif data == "adm:tickets":
-        await admin_h.adm_tickets(cb, session, db_user)
-    elif data == "adm:plans":
-        await admin_h.adm_plans(cb, session, db_user)
-    elif data == "adm:pg":
-        await admin_h.adm_pg(cb, db_user)
+    try:
+        if data == "adm:orders":
+            await admin_h.adm_orders(cb, session, db_user)
+        elif data == "adm:payments":
+            await admin_h.adm_payments(cb, session, db_user)
+        elif data == "adm:tickets":
+            await admin_h.adm_tickets(cb, session, db_user)
+        elif data == "adm:plans":
+            await admin_h.adm_plans(cb, session, db_user)
+        elif data == "adm:pg":
+            await admin_h.adm_pg(cb, db_user)
+        elif data == "adm:users":
+            await admin_h.adm_users(cb, session, db_user)
+        elif data == "adm:broadcast":
+            # Opens audience picker — needs FSM; fall back to inline admin home
+            await bubble.edit_text(
+                "📢 پیام گروهی را از پنل ادمین انتخاب کنید:",
+                reply_markup=kb.admin_home(),
+            )
+        elif data == "adm:settings":
+            await bubble.edit_text(
+                "⚙️ تنظیمات را از پنل ادمین یا وب‌پنل باز کنید:",
+                reply_markup=kb.admin_home(),
+            )
+        else:
+            await bubble.edit_text("این بخش در دسترس نیست.")
+    except Exception as e:
+        try:
+            await bubble.edit_text(f"خطا: {e}")
+        except Exception:
+            pass
 
 
-@router.message(StateFilter(None), F.text, ReplyMenuTextFilter())
+async def _soft_reseller(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    action: str,
+    *,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
+) -> None:
+    from app.bot.handlers import reseller as res_h
+
+    mapping = {
+        "res_dash": "res:dash",
+        "res_users": "res:users:0",
+        "res_stats": "res:stats",
+        "res_plans": "res:plans",
+        "res_orders": "res:orders",
+        "res_payments": "res:payments",
+        "res_tickets": "res:tickets",
+        "res_settings": "res:st:hub",
+    }
+    data = mapping.get(action)
+    if not data:
+        return
+    bubble = await message.answer("⏳")
+    cb = _SoftCallback(bubble, data)
+    # Call the matching reseller callback by name when available
+    name_map = {
+        "res:dash": "res_dash",
+        "res:users:0": "res_users",
+        "res:stats": "res_stats",
+        "res:plans": "res_plans",
+        "res:orders": "res_orders",
+        "res:payments": "res_payments",
+        "res:tickets": "res_tickets",
+        "res:st:hub": "res_st_hub",
+    }
+    fn_name = name_map.get(data)
+    fn = getattr(res_h, fn_name, None) if fn_name else None
+    if fn is None:
+        # Fallback: open reseller home inline
+        from app.services.reseller_access import load_reseller_actor
+
+        _oid, profile = await load_reseller_actor(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        await bubble.edit_text(
+            format_message("🤝 پنل نماینده", "بخش را از دکمه‌های زیر انتخاب کنید."),
+            reply_markup=kb.reseller_home(profile),
+        )
+        return
+    try:
+        await fn(
+            cb,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+    except TypeError:
+        await fn(cb, session, db_user)
+
+
+@router.message(F.text, ReplyMenuTextFilter())
 async def reply_main_nav(
     message: Message,
     session: AsyncSession,
@@ -428,15 +597,17 @@ async def reply_main_nav(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    """Handle taps on the persistent reply keyboard (only when no FSM state)."""
+    """Handle taps on the persistent reply keyboard (clears FSM first)."""
     from app.bot.handlers.start import render_home
 
     action = reply_action
     ui = reply_ui
     role = reply_role
 
+    # Leaving any input flow when a menu button is pressed
+    await state.clear()
+
     if action == kb.REPLY_ACTION_HOME:
-        await state.clear()
         await render_home(
             message,
             session,
@@ -454,12 +625,16 @@ async def reply_main_nav(
         await open_services_list(message, session, db_user)
     elif action == kb.REPLY_ACTION_WALLET:
         await open_wallet_home(message, session, db_user)
+    elif action == kb.REPLY_ACTION_WALLET_TOPUP:
+        await open_wallet_topup(message, session, state)
+    elif action == kb.REPLY_ACTION_WALLET_TX:
+        await open_wallet_tx(message, session, db_user)
     elif action == kb.REPLY_ACTION_SUPPORT:
         await open_support_home(message, session)
-    elif action == kb.REPLY_ACTION_GUIDE:
-        await open_guide(message, session)
-    elif action == kb.REPLY_ACTION_FAQ:
-        await open_faq(message, session)
+    elif action == kb.REPLY_ACTION_SUPPORT_NEW:
+        await open_support_new(message, session, state)
+    elif action == kb.REPLY_ACTION_SUPPORT_LIST:
+        await open_support_list(message, session, db_user)
     elif action == kb.REPLY_ACTION_REFERRAL:
         await open_referral(message, session, db_user)
     elif action == kb.REPLY_ACTION_RESELLER_APPLY:
@@ -475,7 +650,7 @@ async def reply_main_nav(
     elif action == kb.REPLY_ACTION_CREDS:
         await open_reseller_creds(message, session, db_user)
     elif action == kb.REPLY_ACTION_ADMIN:
-        await open_admin_home(message, db_user)
+        await open_admin_home(message, session, db_user)
     elif action == kb.REPLY_ACTION_ADMIN_PREVIEW:
         await open_user_preview(message, session, db_user)
     elif action == kb.REPLY_ACTION_ADMIN_ORDERS:
@@ -488,3 +663,57 @@ async def reply_main_nav(
         await _soft_admin(message, session, db_user, "adm:plans")
     elif action == kb.REPLY_ACTION_ADMIN_PG:
         await _soft_admin(message, session, db_user, "adm:pg")
+    elif action == kb.REPLY_ACTION_ADMIN_USERS:
+        await _soft_admin(message, session, db_user, "adm:users")
+    elif action == kb.REPLY_ACTION_ADMIN_SETTINGS:
+        await _soft_admin(message, session, db_user, "adm:settings")
+    elif action == kb.REPLY_ACTION_ADMIN_BROADCAST:
+        await _soft_admin(message, session, db_user, "adm:broadcast")
+    elif action.startswith("res_"):
+        await _soft_reseller(
+            message,
+            session,
+            db_user,
+            action,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+
+
+@router.message(F.text.func(kb.is_cancel_text))
+async def global_cancel_restore(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    """Fallback: انصراف always restores the main reply keyboard.
+
+    Specific FSM handlers registered earlier may handle cancel first; this
+    catches remaining cases so the main menu never stays stuck on cancel-only KB.
+    """
+    current = await state.get_state()
+    if current is None:
+        # Not in a flow — treat as home
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="🏠 منوی اصلی",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    # Let specific handlers run first when they match; if we got here, restore.
+    await restore_main_reply(
+        message,
+        session,
+        db_user,
+        text="لغو شد.",
+        state=state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )

@@ -94,11 +94,25 @@ async def support_new(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(SupportStates.subject)
-async def support_subject(message: Message, state: FSMContext):
+async def support_subject(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     if kb.is_cancel_text(message.text):
         from app.bot.tg_utils import clear_fsm_with_reply
 
-        await clear_fsm_with_reply(message, state)
+        await clear_fsm_with_reply(
+            message,
+            state,
+            session=session,
+            db_user=db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     subject = (message.text or "").strip()
     if not subject:
@@ -110,11 +124,25 @@ async def support_subject(message: Message, state: FSMContext):
 
 
 @router.message(SupportStates.body)
-async def support_body(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
+async def support_body(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     if kb.is_cancel_text(message.text):
         from app.bot.tg_utils import clear_fsm_with_reply
 
-        await clear_fsm_with_reply(message, state)
+        await clear_fsm_with_reply(
+            message,
+            state,
+            session=session,
+            db_user=db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     body = (message.text or "").strip()
     if not body:
@@ -129,9 +157,19 @@ async def support_body(message: Message, state: FSMContext, session: AsyncSessio
         body,
         db_user.telegram_id,
     )
-    await message.answer(
-        format_message("✅ تیکت ثبت شد", f"تیکت <b>#{ticket.id}</b> با موفقیت ثبت شد.\nبه‌زودی پاسخ می‌دهیم."),
-        reply_markup=kb.back_home(),
+    from app.bot.menu_nav import restore_main_reply
+
+    await restore_main_reply(
+        message,
+        session,
+        db_user,
+        text=format_message(
+            "✅ تیکت ثبت شد",
+            f"تیکت <b>#{ticket.id}</b> با موفقیت ثبت شد.\nبه‌زودی پاسخ می‌دهیم.",
+        ),
+        state=state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
     )
     try:
         from app.services.notifications import notify_new_ticket
@@ -196,20 +234,50 @@ async def support_view(callback: CallbackQuery, session: AsyncSession, db_user: 
 
 
 @router.message(SupportStates.reply)
-async def support_reply(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    if (message.text or "").strip() == "انصراف":
-        await state.clear()
-        await message.answer("بسته شد.", reply_markup=kb.back_home())
+async def support_reply(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.bot.menu_nav import restore_main_reply
+
+    if kb.is_cancel_text(message.text):
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="بسته شد.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     data = await state.get_data()
     ticket = await session.get(Ticket, data.get("ticket_id"))
     if not ticket or ticket.user_id != db_user.id:
-        await state.clear()
-        await message.answer("تیکت نامعتبر")
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="تیکت نامعتبر",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     if ticket.status == TicketStatus.CLOSED.value:
-        await state.clear()
-        await message.answer("تیکت قبلاً بسته شده است.", reply_markup=kb.back_home())
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="تیکت قبلاً بسته شده است.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     await reply_ticket(session, ticket, message.text or "", db_user.telegram_id, is_staff=False)
     await state.clear()
@@ -228,4 +296,12 @@ async def support_reply(message: Message, state: FSMContext, session: AsyncSessi
         )
     except Exception:
         pass
-    await message.answer("پاسخ ثبت شد.", reply_markup=kb.back_home())
+    await restore_main_reply(
+        message,
+        session,
+        db_user,
+        text="پاسخ ثبت شد.",
+        state=state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )

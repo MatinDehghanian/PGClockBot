@@ -2985,38 +2985,79 @@ a.btn.btn-star:hover {
   white-space: pre-wrap;
   word-break: break-word;
 }
-.tg-keys {
+.tg-keys,
+.tg-reply-kb {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  margin-top: var(--space-1);
+  gap: 6px;
+  padding: 8px 10px 6px;
+  background: rgba(23, 33, 43, 0.96);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex: 0 0 auto;
   animation: tg-in .34s ease both;
 }
 .tg-key-row {
   display: flex;
-  gap: var(--space-1);
+  gap: 6px;
+}
+.tg-key-home .tg-key {
+  background: linear-gradient(180deg, #3d6f9a, #2a4f72);
 }
 .tg-key {
   flex: 1 1 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: linear-gradient(180deg, #356891, var(--tg-key));
   color: #f2f7fb;
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
-  padding: var(--space-1);
-  min-height: 36px;
+  padding: 8px 6px;
+  min-height: 34px;
   cursor: default;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 .tg-composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: var(--space-1) var(--space-2);
-  background: var(--tg-panel);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(23, 33, 43, 0.98);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
   color: var(--tg-muted);
   font-size: 12px;
+  flex: 0 0 auto;
 }
+.tg-composer-ph { flex: 1 1 auto; }
+.tg-kb-icon {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: default;
+  padding: 0;
+}
+.tg-kb-grid {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 2px;
+}
+.tg-kb-grid::before,
+.tg-kb-grid::after {
+  content: "";
+  background: var(--tg-muted);
+  border-radius: 1px;
+  grid-column: 1;
+}
+.tg-kb-grid::before { grid-row: 1; box-shadow: 9px 0 0 var(--tg-muted); }
+.tg-kb-grid::after { grid-row: 2; box-shadow: 9px 0 0 var(--tg-muted); }
 .tg-preview-hint { margin: var(--space-1) var(--space-1) 0; font-size: 12px; }
 
 /* —— Bot appearance / profile live preview —— */

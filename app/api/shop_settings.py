@@ -41,8 +41,6 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             "services": {"label": "سرویس‌های من", "required": False},
             "wallet": {"label": "کیف پول", "required": False},
             "support": {"label": "پشتیبانی", "required": False},
-            "guide": {"label": "راهنما", "required": False},
-            "faq": {"label": "سوالات متداول", "required": False},
             "referral": {"label": "دعوت دوستان", "required": False},
             "miniapp": {"label": "مینی‌اپ", "required": False},
         }

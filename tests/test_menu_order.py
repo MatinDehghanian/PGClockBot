@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from app.bot.keyboards import (
     DEFAULT_MENU_ORDER,
+    REMOVED_MENU_KEYS,
     _menu_order,
     main_menu,
     sync_show_flags_for_order,
@@ -23,23 +24,30 @@ class MenuOrderTests(unittest.TestCase):
         }
         self.assertEqual(_menu_order(ui), ["shop", "wallet"])
 
+    def test_strips_legacy_guide_faq(self):
+        ui = {"menu_order": "shop,guide,faq,wallet"}
+        self.assertEqual(_menu_order(ui), ["shop", "wallet"])
+        self.assertTrue({"guide", "faq"} <= REMOVED_MENU_KEYS)
+        self.assertNotIn("guide", DEFAULT_MENU_ORDER)
+        self.assertNotIn("faq", DEFAULT_MENU_ORDER)
+
     def test_shop_always_present(self):
         self.assertEqual(_menu_order({"menu_order": "wallet,support"}), ["shop", "wallet", "support"])
 
     def test_sync_show_flags(self):
-        flags = sync_show_flags_for_order(["shop", "wallet", "faq"])
+        flags = sync_show_flags_for_order(["shop", "wallet", "referral"])
         self.assertEqual(flags["show_wallet"], "1")
-        self.assertEqual(flags["show_faq"], "1")
+        self.assertEqual(flags["show_referral"], "1")
         self.assertEqual(flags["show_support"], "0")
-        self.assertEqual(flags["show_guide"], "0")
+        self.assertNotIn("show_faq", flags)
+        self.assertNotIn("show_guide", flags)
 
     def test_main_menu_follows_order_not_stale_show_flags(self):
         ui = {
-            "menu_order": "shop,guide",
+            "menu_order": "shop,referral",
             "show_wallet": "1",  # stale — must not appear
-            "show_guide": "0",  # stale — guide is in order so must appear
             "btn_shop": "خرید",
-            "btn_guide": "راهنما",
+            "btn_referral": "دعوت",
             "btn_wallet": "کیف پول",
             "menu_layout": "classic",
             "support_contacts": "[]",
@@ -50,19 +58,19 @@ class MenuOrderTests(unittest.TestCase):
             markup = main_menu("user", has_services=False, ui=ui)
         labels = [btn.text for row in markup.inline_keyboard for btn in row]
         self.assertIn("خرید", labels)
-        self.assertIn("راهنما", labels)
+        self.assertIn("دعوت", labels)
         self.assertNotIn("کیف پول", labels)
 
     def test_compact_layout_pairs_all_buttons_including_shop_services(self):
         """Regression: shop/services used to force full-width rows even in compact."""
         ui = {
-            "menu_order": "shop,services,support,wallet,guide",
+            "menu_order": "shop,services,support,wallet,referral",
             "menu_layout": "compact",
             "btn_shop": "خرید سرویس",
             "btn_services": "سرویس‌های من",
             "btn_support": "پشتیبانی",
             "btn_wallet": "کیف پول",
-            "btn_guide": "راهنما",
+            "btn_referral": "دعوت",
             "support_contacts": "[]",
             "show_reseller_apply": "0",
         }
@@ -76,7 +84,7 @@ class MenuOrderTests(unittest.TestCase):
         self.assertEqual(len(rows[1]), 2, rows)
         self.assertEqual([b.text for b in rows[1]], ["پشتیبانی", "کیف پول"])
         self.assertEqual(len(rows[2]), 1)
-        self.assertEqual(rows[2][0].text, "راهنما")
+        self.assertEqual(rows[2][0].text, "دعوت")
 
     def test_classic_layout_one_button_per_row(self):
         ui = {

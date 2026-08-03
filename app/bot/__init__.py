@@ -67,6 +67,8 @@ def create_dispatcher() -> Dispatcher:
     )
 
     dp.include_router(start.router)
+    # Reply-keyboard nav early so menu labels win over FSM amount parsers
+    dp.include_router(reply_nav.router)
     dp.include_router(shop.router)
     dp.include_router(wallet.router)
     dp.include_router(services.router)
@@ -80,8 +82,6 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(admin_backup.router)
     dp.include_router(admin_pg_users.router)
     dp.include_router(admin.router)
-    # Reply-keyboard nav last among message routers; filter only matches menu labels
-    dp.include_router(reply_nav.router)
 
     block = _BlockPlatformAdminOnResellerBot()
     for r in (admin.router, admin_backup.router, admin_settings.router, admin_pg_users.router):

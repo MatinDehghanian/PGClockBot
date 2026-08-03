@@ -220,11 +220,27 @@ async def custom_gb_ask(callback: CallbackQuery, session: AsyncSession, state: F
 
 
 @router.message(ShopStates.custom_gb_input)
-async def custom_gb_entered(message: Message, state: FSMContext, session: AsyncSession):
+async def custom_gb_entered(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     ui = await get_all_settings(session)
-    if (message.text or "").strip() == "انصراف":
-        await state.set_state(None)
-        await message.answer("لغو شد.", reply_markup=kb.back_home(ui))
+    if kb.is_cancel_text(message.text):
+        from app.bot.menu_nav import restore_main_reply
+
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="لغو شد.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     min_gb, max_gb, _, _, _, _ = _custom_bounds(ui)
     try:
@@ -312,11 +328,27 @@ async def custom_days_ask(callback: CallbackQuery, session: AsyncSession, state:
 
 
 @router.message(ShopStates.custom_days_input)
-async def custom_days_entered(message: Message, state: FSMContext, session: AsyncSession):
+async def custom_days_entered(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     ui = await get_all_settings(session)
-    if (message.text or "").strip() == "انصراف":
-        await state.set_state(None)
-        await message.answer("لغو شد.", reply_markup=kb.back_home(ui))
+    if kb.is_cancel_text(message.text):
+        from app.bot.menu_nav import restore_main_reply
+
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="لغو شد.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     _, _, min_days, max_days, _, _ = _custom_bounds(ui)
     try:
@@ -602,11 +634,27 @@ async def wholesale_qty_ask(callback: CallbackQuery, session: AsyncSession, stat
 
 
 @router.message(ShopStates.wholesale_qty_input)
-async def wholesale_qty_entered(message: Message, state: FSMContext, session: AsyncSession):
+async def wholesale_qty_entered(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
     ui = await get_all_settings(session)
-    if (message.text or "").strip() == "انصراف":
-        await state.set_state(None)
-        await message.answer("لغو شد.", reply_markup=kb.back_home(ui))
+    if kb.is_cancel_text(message.text):
+        from app.bot.menu_nav import restore_main_reply
+
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="لغو شد.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     mn, mx = wholesale_bounds(ui)
     raw = (message.text or "").strip().replace(",", "").replace("٬", "")
@@ -844,12 +892,26 @@ async def ask_discount(callback: CallbackQuery, state: FSMContext, session: Asyn
 
 @router.message(ShopStates.discount)
 async def apply_discount_msg(
-    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
+    from app.bot.menu_nav import restore_main_reply
+
     ui = await get_all_settings(session)
     if kb.is_cancel_text(message.text):
-        await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.back_home(ui))
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="لغو شد.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     code_raw = (message.text or "").strip()
     if not code_raw:
@@ -859,19 +921,36 @@ async def apply_discount_msg(
     order = await session.get(Order, data.get("order_id"))
     await state.clear()
     if not order or order.user_id != db_user.id:
-        await message.answer("سفارش معتبر نیست.")
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="سفارش معتبر نیست.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
+    from app.bot.menu_nav import build_main_reply_keyboard
     from app.services.orders import apply_discount_to_order
 
+    main_kb, _, _ = await build_main_reply_keyboard(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
     try:
         order = await apply_discount_to_order(session, order, code_raw)
     except ValueError as e:
-        await message.answer(str(e), reply_markup=kb.pay_methods(order.id, ui))
+        await message.answer(str(e), reply_markup=main_kb)
+        await message.answer("روش پرداخت:", reply_markup=kb.pay_methods(order.id, ui))
         return
     await message.answer(
         f"تخفیف اعمال شد ✅\nمبلغ جدید: {format_toman(order.amount, get_settings().currency)}",
-        reply_markup=kb.pay_methods(order.id, ui),
+        reply_markup=main_kb,
     )
+    await message.answer("روش پرداخت:", reply_markup=kb.pay_methods(order.id, ui))
 
 
 @router.callback_query(F.data.startswith("pay:wallet:"))

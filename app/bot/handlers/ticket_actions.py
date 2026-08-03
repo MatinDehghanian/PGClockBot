@@ -122,9 +122,18 @@ async def tkt_reply_body(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
+    from app.bot.menu_nav import restore_main_reply
+
     if kb.is_cancel_text(message.text):
-        await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.back_home())
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="لغو شد.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     body = (message.text or "").strip()
     if not body:
@@ -133,12 +142,26 @@ async def tkt_reply_body(
     data = await state.get_data()
     ticket = await session.get(Ticket, data.get("ticket_id"))
     if not ticket:
-        await state.clear()
-        await message.answer("تیکت نامعتبر")
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="تیکت نامعتبر",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     if ticket.status == TicketStatus.CLOSED.value:
-        await state.clear()
-        await message.answer("تیکت قبلاً بسته شده است.", reply_markup=kb.back_home())
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="تیکت قبلاً بسته شده است.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     as_staff = bool(data.get("as_staff"))
     # Re-validate staff ACL on every reply (role may have changed mid-FSM)
@@ -151,12 +174,26 @@ async def tkt_reply_body(
             reseller_owner_id=reseller_owner_id,
         )
         if role != "staff":
-            await state.clear()
-            await message.answer("دسترسی ندارید.", reply_markup=kb.back_home())
+            await restore_main_reply(
+                message,
+                session,
+                db_user,
+                text="دسترسی ندارید.",
+                state=state,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
             return
     elif ticket.user_id != db_user.id:
-        await state.clear()
-        await message.answer("دسترسی ندارید.", reply_markup=kb.back_home())
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="دسترسی ندارید.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     await reply_ticket(session, ticket, body, db_user.telegram_id, is_staff=as_staff)
     await state.clear()
@@ -175,7 +212,15 @@ async def tkt_reply_body(
         )
     except Exception:
         pass
-    await message.answer("ارسال شد ✅", reply_markup=kb.back_home())
+    await restore_main_reply(
+        message,
+        session,
+        db_user,
+        text="ارسال شد ✅",
+        state=state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
 
 
 @router.callback_query(F.data.startswith("tkt:close:"))

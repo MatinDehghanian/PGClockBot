@@ -94,11 +94,21 @@ async def wallet_topup(callback: CallbackQuery, state: FSMContext, session: Asyn
 
 
 @router.message(WalletStates.topup_amount)
-async def wallet_topup_amount(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
+async def wallet_topup_amount(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False, reseller_owner_id: int | None = None):
+    from app.bot.menu_nav import restore_main_reply
+
     ui = await get_all_settings(session)
-    if (message.text or "").strip() == "انصراف":
-        await state.clear()
-        await message.answer(format_message("لغو شد", "عملیات لغو شد."), reply_markup=kb.back_home(ui))
+    if kb.is_cancel_text(message.text) or kb.is_home_text(message.text, ui):
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="لغو شد.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     try:
         amount = int((message.text or "").replace(",", "").replace("٬", "").strip())
@@ -107,7 +117,7 @@ async def wallet_topup_amount(message: Message, state: FSMContext, session: Asyn
     except ValueError:
         await message.answer(
             format_message("⚠️ خطا", "مبلغ معتبر وارد کنید (حداقل ۱٬۰۰۰)."),
-            reply_markup=kb.cancel_reply(),
+            reply_markup=kb.cancel_reply(ui),
         )
         return
     await state.set_state(WalletStates.choose_method)
@@ -118,6 +128,10 @@ async def wallet_topup_amount(message: Message, state: FSMContext, session: Asyn
             f"{kv_line('💰', 'مبلغ', f'<b>{format_toman(amount, get_settings().currency)}</b>')}\n\n"
             "روش واریز را انتخاب کنید:",
         ),
+        reply_markup=kb.wallet_reply_keyboard(ui),
+    )
+    await message.answer(
+        "💳 روش پرداخت:",
         reply_markup=kb.topup_pay_methods(ui),
     )
 
@@ -204,12 +218,28 @@ async def wtop_choose_method(
 
 
 @router.message(WalletStates.waiting_receipt, F.photo)
-async def wallet_receipt_photo(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
+async def wallet_receipt_photo(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.bot.menu_nav import restore_main_reply
+
     data = await state.get_data()
     payment = await session.get(Payment, data.get("payment_id"))
     if not payment or payment.user_id != db_user.id:
-        await state.clear()
-        await message.answer(format_message("خطا", "پرداخت پیدا نشد."))
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text=format_message("خطا", "پرداخت پیدا نشد."),
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     file_id = message.photo[-1].file_id
     await attach_receipt(session, payment, file_id)
@@ -221,8 +251,15 @@ async def wallet_receipt_photo(message: Message, state: FSMContext, session: Asy
         user_tg_id=message.from_user.id if message.from_user else None,
     )
     if text:
-        ui = await get_all_settings(session)
-        await message.answer(text, reply_markup=kb.back_home(ui))
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text=text,
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
 
 
 @router.message(F.photo)
