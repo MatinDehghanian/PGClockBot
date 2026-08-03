@@ -183,6 +183,7 @@ class AdminStates(StatesGroup):
     ticket_reply = State()
     user_search = State()
     revoke_reseller_reason = State()
+    block_user_reason = State()
     broadcast_text = State()
     broadcast_audience = State()
 
@@ -1295,7 +1296,9 @@ async def adm_users_view(callback: CallbackQuery, session: AsyncSession, db_user
 
 
 @router.callback_query(F.data.startswith("adm:users:block:"))
-async def adm_users_block(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def adm_users_block(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -1309,11 +1312,72 @@ async def adm_users_block(callback: CallbackQuery, session: AsyncSession, db_use
     if is_protected_admin(user):
         await callback.answer("مسدود کردن ادمین مجاز نیست", show_alert=True)
         return
-    user.is_blocked = not user.is_blocked
-    await session.commit()
-    await callback.answer("رفع مسدودی شد ✅" if not user.is_blocked else "مسدود شد 🚫", show_alert=True)
+
+    # Unblock immediately; ask reason only when blocking
+    if user.is_blocked:
+        from app.services.notifications import notify_account_edit
+
+        user.is_blocked = False
+        await session.commit()
+        await notify_account_edit(
+            session,
+            user=user,
+            event="unblock",
+            reason=None,
+            actor=db_user.username or db_user.full_name or "ادمین ربات",
+        )
+        await callback.answer("رفع مسدودی شد ✅", show_alert=True)
+        if callback.message:
+            await _render_user_card(callback.message, session, user, edit=True)
+        return
+
+    await state.set_state(AdminStates.block_user_reason)
+    await state.update_data(block_user_id=user_id)
+    await callback.answer()
     if callback.message:
-        await _render_user_card(callback.message, session, user, edit=True)
+        await callback.message.answer(
+            f"علت مسدودسازی کاربر <code>{user.telegram_id}</code> را بنویسید "
+            "(حداقل ۳ کاراکتر — برای کاربر ارسال می‌شود):"
+        )
+
+
+@router.message(AdminStates.block_user_reason)
+async def adm_users_block_reason(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        return
+    data = await state.get_data()
+    user_id = int(data.get("block_user_id") or 0)
+    reason = (message.text or "").strip()
+    if len(reason) < 3:
+        await message.answer("علت خیلی کوتاه است — حداقل ۳ کاراکتر.")
+        return
+    user = await session.get(BotUser, user_id)
+    if not user:
+        await state.clear()
+        await message.answer("کاربر یافت نشد.")
+        return
+    from app.services.notifications import notify_account_edit
+    from app.services.users import is_protected_admin
+
+    if is_protected_admin(user):
+        await state.clear()
+        await message.answer("مسدود کردن ادمین مجاز نیست.")
+        return
+    user.is_blocked = True
+    await session.commit()
+    await notify_account_edit(
+        session,
+        user=user,
+        event="block",
+        reason=reason,
+        actor=db_user.username or db_user.full_name or "ادمین ربات",
+    )
+    await state.clear()
+    await message.answer(f"🚫 کاربر مسدود شد.\nعلت: {reason}")
+    await _render_user_card(message, session, user, edit=False)
 
 
 @router.callback_query(F.data.startswith("adm:users:delask:"))
@@ -1343,8 +1407,20 @@ async def adm_users_delete(callback: CallbackQuery, session: AsyncSession, db_us
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     user_id = int(callback.data.split(":")[-1])
+    from app.services.notifications import notify_account_edit
     from app.services.users import delete_bot_user
 
+    user = await session.get(BotUser, user_id)
+    if not user:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await notify_account_edit(
+        session,
+        user=user,
+        event="user_delete",
+        reason="حذف از پنل ربات ادمین",
+        actor=db_user.username or db_user.full_name or "ادمین ربات",
+    )
     try:
         info = await delete_bot_user(
             session,
@@ -1428,9 +1504,19 @@ async def adm_users_unreseller_reason(
         await message.answer(f"خطا: {e}", reply_markup=kb.admin_users_keyboard())
         return
 
-    notified = await notify_reseller_revoked(int(info["telegram_id"]), reason)
-    note = "پیام علت ارسال شد ✅" if notified else "پیام تلگرام ارسال نشد ⚠️"
     user = await session.get(BotUser, user_id)
+    notified = False
+    if user:
+        notified = await notify_reseller_revoked(
+            int(info["telegram_id"]),
+            reason,
+            session=session,
+            user=user,
+            actor=db_user.username or db_user.full_name or "ادمین ربات",
+        )
+    else:
+        notified = await notify_reseller_revoked(int(info["telegram_id"]), reason)
+    note = "پیام علت ارسال شد ✅" if notified else "پیام تلگرام ارسال نشد ⚠️"
     await message.answer(
         f"🤝 نمایندگی حذف شد.\nعلت: {reason}\n{note}",
         reply_markup=kb.admin_users_keyboard(),

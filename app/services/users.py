@@ -436,6 +436,7 @@ DEFAULT_SETTINGS = {
     "notify_wallet_topup": "1",
     "notify_new_ticket": "1",
     "notify_auto_approve": "1",
+    "notify_account_edits": "1",
     # User low-remaining alerts (volume / time)
     "user_alert_low_enabled": "0",
     "user_alert_low_traffic_pct": "20",

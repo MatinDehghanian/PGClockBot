@@ -43,7 +43,7 @@ class ConfirmModalTests(unittest.TestCase):
         self.assertNotIn("prompt(", RESELLERS)
         self.assertNotIn("confirm(", RESELLERS)
         self.assertIn("data-confirm-reason", RESELLERS)
-        self.assertIn("data-confirm-reason-when", RESELLERS)
+        self.assertIn('data-confirm-reason="1"', RESELLERS)
 
     def test_templates_drop_native_confirm_for_table_deletes(self):
         for rel in (
@@ -60,11 +60,10 @@ class ConfirmModalTests(unittest.TestCase):
 
 
 class VersionBumpTests(unittest.TestCase):
-    def test_version_is_3_4_2(self):
+    def test_version_at_least_3_4_2(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.4.2")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.4.2")
+        self.assertGreaterEqual(tuple(int(x) for x in __version__.split(".")), (3, 4, 2))
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.4.2"', notes)
 

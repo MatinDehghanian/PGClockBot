@@ -348,7 +348,20 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
         except Exception as e:
             return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
-        notified = await notify_reseller_revoked(int(info["telegram_id"]), reason)
+        from app.services.notifications import actor_label_from_staff
+
+        user = await session.get(BotUser, user_id)
+        notified = False
+        if user:
+            notified = await notify_reseller_revoked(
+                int(info["telegram_id"]),
+                reason,
+                session=session,
+                user=user,
+                actor=actor_label_from_staff(staff),
+            )
+        else:
+            notified = await notify_reseller_revoked(int(info["telegram_id"]), reason)
         label = info.get("telegram_id") or user_id
         note = " — پیام علت ارسال شد" if notified else " — پیام تلگرام ارسال نشد"
         return RedirectResponse(
@@ -374,33 +387,75 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         if role not in {Role.USER.value, Role.RESELLER.value, Role.ADMIN.value}:
             return RedirectResponse(f"/resellers?err={_q('نقش نامعتبر')}", status_code=303)
 
+        reason = str(form.get("reason") or "").strip()
+        if len(reason) < 3:
+            return RedirectResponse(
+                f"/resellers?err={_q('علت تغییر نقش الزامی است (حداقل ۳ کاراکتر)')}",
+                status_code=303,
+            )
+
         if role == Role.USER.value:
-            reason = str(form.get("reason") or "").strip() or "تغییر نقش توسط ادمین"
             try:
                 info = await revoke_reseller(
                     session, user_id, delete_pg_admin=True, reason=reason
                 )
             except ValueError as e:
                 return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
-            await notify_reseller_revoked(int(info["telegram_id"]), reason)
+            from app.services.notifications import actor_label_from_staff
+
+            user = await session.get(BotUser, user_id)
+            if user:
+                await notify_reseller_revoked(
+                    int(info["telegram_id"]),
+                    reason,
+                    session=session,
+                    user=user,
+                    actor=actor_label_from_staff(staff),
+                )
+            else:
+                await notify_reseller_revoked(int(info["telegram_id"]), reason)
             return RedirectResponse(
                 f"/resellers?ok={_q('نقش به کاربر عادی تغییر کرد و اطلاع داده شد')}",
                 status_code=303,
             )
 
         if role == Role.ADMIN.value:
+            from app.services.notifications import actor_label_from_staff, notify_account_edit
+
+            old_role = user.role
             profile.is_active = False
             user.role = Role.ADMIN.value
             await session.commit()
+            await notify_account_edit(
+                session,
+                user=user,
+                event="role",
+                reason=reason,
+                old_role=old_role,
+                new_role=Role.ADMIN.value,
+                actor=actor_label_from_staff(staff),
+            )
             return RedirectResponse(
                 f"/resellers?ok={_q('نقش به مدیر تغییر کرد (پروفایل نماینده غیرفعال شد)')}",
                 status_code=303,
             )
 
         # reseller
+        from app.services.notifications import actor_label_from_staff, notify_account_edit
+
+        old_role = user.role
         profile.is_active = True
         user.role = Role.RESELLER.value
         await session.commit()
+        await notify_account_edit(
+            session,
+            user=user,
+            event="role",
+            reason=reason,
+            old_role=old_role,
+            new_role=Role.RESELLER.value,
+            actor=actor_label_from_staff(staff),
+        )
         return RedirectResponse(f"/resellers?ok={_q('نقش نماینده فعال شد')}", status_code=303)
 
     @app.post("/resellers/{user_id}/delete-user")
@@ -419,21 +474,20 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 status_code=303,
             )
         from app.services.users import delete_bot_user
+        from app.services.notifications import actor_label_from_staff, notify_account_edit
 
         # Notify before delete while telegram_id still available
         user = await session.get(BotUser, user_id)
         if not user:
             return RedirectResponse(f"/resellers?err={_q('کاربر یافت نشد')}", status_code=303)
-        tg_id = user.telegram_id
         try:
-            # If still reseller, notify revoke-style first
-            profile = (
-                await session.execute(
-                    select(ResellerProfile).where(ResellerProfile.user_id == user_id)
-                )
-            ).scalar_one_or_none()
-            if profile:
-                await notify_reseller_revoked(tg_id, reason)
+            await notify_account_edit(
+                session,
+                user=user,
+                event="user_delete",
+                reason=reason,
+                actor=actor_label_from_staff(staff),
+            )
             info = await delete_bot_user(
                 session,
                 user_id,
