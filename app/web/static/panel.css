@@ -3489,6 +3489,12 @@ body.modal-open { overflow: hidden; }
   min-height: 32px;
   font-size: 13px !important;
 }
+/* Nested open select must paint above sibling kebab actions */
+.row-actions-menu .ui-select.open,
+.row-actions-menu .row-actions-stack:has(.ui-select.open),
+.row-actions-menu > *:has(.ui-select.open) {
+  z-index: 5;
+}
 
 /* Kebab: mobile/small-tablet media + overflow-driven .force-kebab */
 @media (max-width: 1100px) {
