@@ -49,6 +49,7 @@ def _hub_keyboard(backups: list[dict] | None = None) -> InlineKeyboardMarkup:
 
 
 def _item_keyboard(backup_id: str) -> InlineKeyboardMarkup:
+    """Per-file actions only — hub/list nav via reply keyboard."""
     return _kb(
         [
             [InlineKeyboardButton(text="⬇️ دریافت فایل", callback_data=f"adm:backup:dl:{backup_id}")],
@@ -65,7 +66,6 @@ def _item_keyboard(backup_id: str) -> InlineKeyboardMarkup:
                 )
             ],
             [InlineKeyboardButton(text="🗑 حذف", callback_data=f"adm:backup:del:{backup_id}")],
-            [InlineKeyboardButton(text="⬅️ لیست بکاپ", callback_data="adm:backup")],
         ]
     )
 

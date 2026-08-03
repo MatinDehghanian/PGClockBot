@@ -33,6 +33,13 @@ NAV_RESELLER_PLANS = "reseller_plans"
 NAV_PAY = "pay"
 NAV_TOPUP_PAY = "topup_pay"
 NAV_USER_PREVIEW = "user_preview"
+NAV_SERVICE = "service"
+NAV_REVIEW = "review"
+
+# FSM payload keys for selected entities
+SERVICE_ID = "_svc_id"
+REVIEW_KIND = "_rev_kind"  # order | payment | resapp
+REVIEW_ID = "_rev_id"
 
 
 async def user_has_services(session: AsyncSession, user_id: int) -> bool:
@@ -189,6 +196,10 @@ async def show_nav_keyboard(
         markup = kb.reseller_settings_reply_keyboard(ui)
     elif level == NAV_RESELLER_PLANS:
         markup = kb.reseller_plans_reply_keyboard(ui)
+    elif level == NAV_SERVICE:
+        markup = kb.service_actions_reply_keyboard(ui)
+    elif level == NAV_REVIEW:
+        markup = kb.review_reply_keyboard(ui)
     elif level == NAV_PAY:
         oid = order_id
         if oid is None and state is not None:

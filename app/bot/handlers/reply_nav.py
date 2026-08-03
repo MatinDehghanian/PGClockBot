@@ -104,6 +104,12 @@ class ReplyMenuTextFilter(BaseFilter):
         elif level == nav.NAV_PAY:
             for key, label in kb._pay_method_entries(ui):
                 mapping[(label or "").strip()] = key
+        elif level == nav.NAV_SERVICE:
+            for key, label in kb._service_action_entries(ui):
+                mapping[(label or "").strip()] = key
+        elif level == nav.NAV_REVIEW:
+            for key, label in kb._review_submenu_entries(ui):
+                mapping[(label or "").strip()] = key
         if kb.is_home_text(text, ui):
             action = kb.REPLY_ACTION_HOME
         elif text in {kb._back_label(ui), kb.BTN_BACK}:
@@ -480,6 +486,8 @@ async def open_reseller_home(
         state=state,
         push=push,
         profile=profile,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
     )
 
 
@@ -941,7 +949,7 @@ async def _soft_admin(
         elif data == "adm:dash":
             await admin_h.adm_dash(cb, session, db_user)
         elif data == "adm:resellers":
-            await admin_h.adm_resellers(cb, db_user)
+            await admin_h.adm_resellers(cb, db_user, state)
         elif data == "adm:backup":
             await backup_h.backup_hub(cb, db_user, state)
         elif data == "adm:backup:create":
@@ -1040,6 +1048,30 @@ async def handle_back(
             state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
+            push=False,
+        )
+        return
+    if level == nav.NAV_RESELLER_PLANS:
+        await open_reseller_plans_hub(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            push=False,
+        )
+        return
+    if level == nav.NAV_SERVICE:
+        # Re-show service actions KB; entity list is under previous messages
+        ui = await get_all_settings(session)
+        await nav.show_nav_keyboard(
+            message,
+            session,
+            db_user,
+            nav.NAV_SERVICE,
+            text="عملیات سرویس:",
+            state=state,
             push=False,
         )
         return
@@ -1324,6 +1356,38 @@ async def reply_main_nav(
         "adm_plan_add",
         "res_plan_add",
         "backup_upload",
+        # Keep nav stack when opening reseller sub-hubs / sections
+        "res_settings",
+        "res_plans",
+        "res_dash",
+        "res_users",
+        "res_stats",
+        "res_orders",
+        "res_payments",
+        "res_tickets",
+        "res_st_shop",
+        "res_st_menu",
+        "res_st_pay",
+        "res_st_support",
+        "res_st_access",
+        "res_st_bot",
+        "res_st_notify",
+        kb.REPLY_ACTION_REV_OK,
+        kb.REPLY_ACTION_REV_NO,
+        kb.REPLY_ACTION_SVC_LINK,
+        kb.REPLY_ACTION_SVC_RENEW,
+        kb.REPLY_ACTION_SVC_REFRESH,
+        # Keep admin hub stack when opening list screens
+        kb.REPLY_ACTION_ADMIN_DASH,
+        kb.REPLY_ACTION_ADMIN_ORDERS,
+        kb.REPLY_ACTION_ADMIN_PAYMENTS,
+        kb.REPLY_ACTION_ADMIN_TICKETS,
+        kb.REPLY_ACTION_ADM_USERS_LIST,
+        kb.REPLY_ACTION_ADM_USERS_SEARCH,
+        kb.REPLY_ACTION_ADM_USERS_WEB,
+        kb.REPLY_ACTION_ADM_RES_LIST,
+        kb.REPLY_ACTION_ADM_RES_APPS,
+        kb.REPLY_ACTION_ADM_RES_ADD,
     }
     if not preserve_state:
         await state.clear()
@@ -1558,6 +1622,33 @@ async def reply_main_nav(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
+    elif action in {
+        kb.REPLY_ACTION_SVC_LINK,
+        kb.REPLY_ACTION_SVC_RENEW,
+        kb.REPLY_ACTION_SVC_REFRESH,
+    }:
+        data = await state.get_data()
+        svc_id = data.get(nav.SERVICE_ID)
+        if not svc_id:
+            await message.answer("سرویسی انتخاب نشده — از لیست سرویس‌ها یکی را بزنید.")
+            return
+        from app.bot.handlers import services as svc_h
+
+        bubble = await message.answer("⏳")
+        if action == kb.REPLY_ACTION_SVC_LINK:
+            cb_data = f"svc:link:{int(svc_id)}"
+            fn = svc_h.svc_link
+        elif action == kb.REPLY_ACTION_SVC_RENEW:
+            cb_data = f"svc:renew:{int(svc_id)}"
+            fn = svc_h.svc_renew
+        else:
+            cb_data = f"svc:view:{int(svc_id)}"
+            fn = svc_h.svc_view
+        cb = _SoftCallback(bubble, cb_data)
+        try:
+            await fn(cb, session, db_user, state)
+        except TypeError:
+            await fn(cb, session, db_user)
     elif action.startswith("pay_"):
         await _handle_pay_action(message, session, db_user, state, action)
     elif action.startswith("topup_"):

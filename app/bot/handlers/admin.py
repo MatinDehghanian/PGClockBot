@@ -118,6 +118,7 @@ async def _plan_detail_text(p: Plan) -> str:
 
 
 def _plan_detail_keyboard(p: Plan) -> InlineKeyboardMarkup:
+    """Plan link/toggle actions only — list nav via reply Back."""
     rows = [
         [
             InlineKeyboardButton(
@@ -147,7 +148,6 @@ def _plan_detail_keyboard(p: Plan) -> InlineKeyboardMarkup:
                 )
             ]
         )
-    rows.append([InlineKeyboardButton(text="⬅️ لیست پلن‌ها", callback_data="adm:plans")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 router = Router(name="admin")
@@ -236,10 +236,10 @@ async def adm_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         f"🔢 نسخه: <code>v{local_version()}</code>"
     )
     rows = [
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
+        # no inline back — reply KB Back restores admin hub
     ]
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+        await callback.message.edit_text(text, reply_markup=None)
 
 
 def _order_actions(order: Order, payment: Payment | None) -> list[list[InlineKeyboardButton]]:
@@ -283,10 +283,10 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     for o in orders:
         label = f"#{o.id} · {order_status_fa(o.status)} · {format_toman(o.amount, get_settings().currency)}"
         rows.append([InlineKeyboardButton(text=label[:64], callback_data=f"adm:order:{o.id}")])
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")])
     if callback.message:
         await callback.message.edit_text(
-            "🛒 <b>سفارش‌ها</b>\nیکی را برای جزئیات و تأیید/رد انتخاب کنید:",
+            "🛒 <b>سفارش‌ها</b>\nیکی را برای جزئیات و تأیید/رد انتخاب کنید:\n"
+            "<i>بازگشت از کیبورد پایین</i>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
@@ -1128,7 +1128,7 @@ async def adm_custom_grp_done(callback: CallbackQuery, session: AsyncSession, st
 
 
 @router.callback_query(F.data == "adm:users")
-async def adm_users(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def adm_users(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext | None = None):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -1143,10 +1143,20 @@ async def adm_users(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         f"کل: {total}\n"
         f"مسدود: {blocked}\n"
         f"سفارش‌ها: {orders}\n\n"
-        "لیست صفحه‌بندی‌شده یا جستجو با آیدی تلگرام."
+        "از کیبورد پایین لیست یا جستجو را انتخاب کنید."
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=None)
+        from app.bot.tg_utils import safe_edit_text
+
+        await safe_edit_text(callback.message, text, reply_markup=None)
+        await callback.message.answer(
+            "کاربران:",
+            reply_markup=kb.admin_users_reply_keyboard(),
+        )
+        if state is not None:
+            from app.bot import menu_nav as nav
+
+            await nav.set_nav_level(state, nav.NAV_ADMIN_USERS, push=False)
 
 
 USERS_PAGE_SIZE = 10
@@ -1559,16 +1569,27 @@ async def adm_users_unreseller_reason(
 
 
 @router.callback_query(F.data == "adm:resellers")
-async def adm_resellers(callback: CallbackQuery, db_user: BotUser):
+async def adm_resellers(callback: CallbackQuery, db_user: BotUser, state: FSMContext | None = None):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
     if callback.message:
-        await callback.message.edit_text(
-            "🤝 <b>نمایندگان</b>\nلیست فعال، درخواست‌ها، یا افزودن دستی.",
+        from app.bot.tg_utils import safe_edit_text
+
+        await safe_edit_text(
+            callback.message,
+            "🤝 <b>نمایندگان</b>\nاز کیبورد پایین بخش موردنظر را انتخاب کنید.",
             reply_markup=None,
         )
+        await callback.message.answer(
+            "پنل نمایندگان:",
+            reply_markup=kb.admin_resellers_reply_keyboard(),
+        )
+        if state is not None:
+            from app.bot import menu_nav as nav
+
+            await nav.set_nav_level(state, nav.NAV_ADMIN_RESELLERS, push=False)
 
 
 RESELLERS_PAGE_SIZE = 10
@@ -1860,10 +1881,9 @@ async def adm_tickets(callback: CallbackQuery, session: AsyncSession, db_user: B
         [InlineKeyboardButton(text=f"#{t.id} {t.subject[:24]}", callback_data=f"adm:ticket:{t.id}")]
         for t in tickets[:20]
     ]
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")])
     if callback.message:
         await callback.message.edit_text(
-            "🎫 تیکت‌های باز:",
+            "🎫 تیکت‌های باز:\n<i>بازگشت از کیبورد پایین</i>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 

@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.6.4": [
+        "رفع منوی نمایندگان/کاربران: هاب‌ها دوباره Reply Keyboard را برمی‌گردانند",
+        "ناوبری نماینده: preserve stack، بازگشت از پلن‌ها، ACL fail-closed بدون پروفایل",
+        "منوهای ثابت روی Reply؛ اینلاین فقط نام کاربر/نماینده/سرویس/پلن (+صفحه‌بندی لیست)",
+        "عملیات سرویس (لینک/تمدید/رفرش) روی کیبورد پایین؛ حذف کروم بازگشت اینلاین از لیست‌ها",
+    ],
     "3.6.3": [
         "ایزوله سخت سفارش/رسید فروشگاه در وب و ربات ادمین اصلی (لیست، داشبورد، تأیید/رد)",
         "تأیید رسید از مسیر سفارش فقط با دسترسی payments؛ نمای کلی وب با permission dashboard",

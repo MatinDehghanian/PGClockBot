@@ -68,6 +68,7 @@ def _plans_kb(plans: list[Plan]) -> InlineKeyboardMarkup:
 
 
 def _plan_item_kb(plan: Plan) -> InlineKeyboardMarkup:
+    """Plan actions only (no list-back chrome — use reply Back)."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -77,7 +78,6 @@ def _plan_item_kb(plan: Plan) -> InlineKeyboardMarkup:
                 ),
                 InlineKeyboardButton(text="🗑 حذف", callback_data=f"res:plan:del:{plan.id}"),
             ],
-            [InlineKeyboardButton(text="⬅️ لیست پلن‌ها", callback_data="res:plans")],
         ]
     )
 
@@ -269,7 +269,10 @@ async def res_plan_name(
         return
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
+        await message.answer(
+            "لغو شد.",
+            reply_markup=kb.reseller_plans_reply_keyboard(),
+        )
         return
     await state.update_data(name=(message.text or "").strip(), owner_id=owner_id)
     await state.set_state(ResellerPlanStates.price)
@@ -280,7 +283,10 @@ async def res_plan_name(
 async def res_plan_price(message: Message, state: FSMContext, db_user: BotUser):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
+        await message.answer(
+            "لغو شد.",
+            reply_markup=kb.reseller_plans_reply_keyboard(),
+        )
         return
     try:
         price = int((message.text or "").replace(",", "").replace("٬", ""))
@@ -296,7 +302,10 @@ async def res_plan_price(message: Message, state: FSMContext, db_user: BotUser):
 async def res_plan_days(message: Message, state: FSMContext):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
+        await message.answer(
+            "لغو شد.",
+            reply_markup=kb.reseller_plans_reply_keyboard(),
+        )
         return
     try:
         days = max(1, int(message.text or "30"))
@@ -318,7 +327,10 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
 ):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
+        await message.answer(
+            "لغو شد.",
+            reply_markup=kb.reseller_plans_reply_keyboard(),
+        )
         return
     raw = (message.text or "").strip().replace(",", ".")
     try:

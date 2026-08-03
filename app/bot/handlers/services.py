@@ -51,7 +51,12 @@ async def svc_list(
 
 
 @router.callback_query(F.data.startswith("svc:view:"))
-async def svc_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def svc_view(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     ui = await get_all_settings(session)
     svc_id = int(callback.data.split(":")[-1])
     svc = await session.get(UserService, svc_id)
@@ -67,7 +72,16 @@ async def svc_view(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         except Exception as e:
             text = format_message("📦 سرویس", f"🔹 <b>{svc.pg_username}</b>\n\nخطا در دریافت وضعیت: {e}")
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=kb.service_actions(svc.id, ui))
+        await safe_edit_text(callback.message, text, reply_markup=None)
+        await callback.message.answer(
+            "عملیات سرویس را از کیبورد پایین انتخاب کنید:",
+            reply_markup=kb.service_actions_reply_keyboard(ui),
+        )
+    if state is not None:
+        from app.bot import menu_nav as nav
+
+        await state.update_data(**{nav.SERVICE_ID: svc_id})
+        await nav.set_nav_level(state, nav.NAV_SERVICE, push=True)
 
 
 @router.callback_query(F.data.startswith("svc:link:"))
@@ -105,9 +119,9 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     text = format_message("📱 اشتراک", "\n\n".join(parts))
     if callback.message:
         try:
-            await safe_edit_text(callback.message, text, reply_markup=kb.service_actions(svc.id, ui))
+            await safe_edit_text(callback.message, text, reply_markup=None)
         except Exception:
-            await callback.message.answer(text, reply_markup=kb.service_actions(svc.id, ui))
+            await callback.message.answer(text)
     if url:
         await send_subscription_qr_photo(
             callback.bot,
@@ -141,17 +155,10 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         ]
         for p in plans
     ]
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text=ui.get("btn_back", "⬅️ بازگشت"),
-                callback_data=f"svc:view:{svc_id}",
-            )
-        ]
-    )
     if callback.message:
-        await safe_edit_text(callback.message, 
-            "پلن تمدید را انتخاب کنید:",
+        await safe_edit_text(
+            callback.message,
+            "پلن تمدید را انتخاب کنید:\n<i>بازگشت از کیبورد پایین</i>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
@@ -198,12 +205,12 @@ async def svc_renew_pay(
             except Exception:
                 pass
             if callback.message:
-                await safe_edit_text(callback.message, f"❌ {e}", reply_markup=kb.service_actions(svc.id, ui))
+                await safe_edit_text(callback.message, f"❌ {e}", reply_markup=None)
             return
         if callback.message:
             await safe_edit_text(callback.message, 
                 format_message("✅ تمدید رایگان", f"سفارش #{order.id}"),
-                reply_markup=kb.service_actions(svc.id, ui),
+                reply_markup=None,
             )
         return
 

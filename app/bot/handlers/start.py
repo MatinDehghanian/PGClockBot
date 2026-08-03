@@ -445,5 +445,5 @@ async def _link_subscription(
 
     await message.answer(
         format_message("✅ اتصال سرویس", service_card(info)),
-        reply_markup=kb.service_actions(svc.id, ui),
+        reply_markup=kb.service_actions_reply_keyboard(ui),
     )

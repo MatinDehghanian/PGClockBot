@@ -458,21 +458,24 @@ def _support_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
 def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
     from app.services.resellers import has_bot_perm
 
+    # Fail closed: without a live profile show nothing (matches reply_action_map)
+    if profile is None:
+        return []
     entries: list[tuple[str, str]] = []
-    if profile is None or has_bot_perm(profile, "dashboard"):
+    if has_bot_perm(profile, "dashboard"):
         entries.append(("res_dash", "🏠 خانه نماینده"))
         entries.append(("res_users", "👥 مشتریان من"))
-    if profile is None or has_bot_perm(profile, "stats"):
+    if has_bot_perm(profile, "stats"):
         entries.append(("res_stats", "📊 آمار و کمیسیون"))
-    if profile is not None and has_bot_perm(profile, "plans"):
+    if has_bot_perm(profile, "plans"):
         entries.append(("res_plans", "💎 پلن‌های فروش"))
-    if profile is not None and has_bot_perm(profile, "orders"):
+    if has_bot_perm(profile, "orders"):
         entries.append(("res_orders", "🛒 سفارش‌های مشتریان"))
-    if profile is not None and has_bot_perm(profile, "payments"):
+    if has_bot_perm(profile, "payments"):
         entries.append(("res_payments", "🧾 رسیدهای در انتظار"))
-    if profile is not None and has_bot_perm(profile, "tickets"):
+    if has_bot_perm(profile, "tickets"):
         entries.append(("res_tickets", "🎫 تیکت‌های مشتریان"))
-    if profile is not None and has_bot_perm(profile, "shop_settings"):
+    if has_bot_perm(profile, "shop_settings"):
         entries.append(("res_settings", "⚙️ تنظیمات فروشگاه"))
     return entries
 
@@ -957,21 +960,22 @@ def custom_days_keyboard(
 
 
 def custom_confirm_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    _ = ui
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🟢✅ ادامه خرید", callback_data="shop:custom:buy")],
             [InlineKeyboardButton(text="✏️ تغییر روز", callback_data="shop:custom:gb:next")],
             [InlineKeyboardButton(text="✏️ تغییر حجم", callback_data="shop:custom")],
-            [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:list")],
         ]
     )
 
 
 def plan_actions(plan_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
+    """One-shot buy confirm under the plan message (no back chrome)."""
+    _ = ui
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🟢✅ ادامه خرید", callback_data=f"shop:buy:{plan_id}")],
-            [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:list")],
         ]
     )
 
@@ -1089,6 +1093,8 @@ def topup_pay_methods(ui: dict | None = None) -> InlineKeyboardMarkup:
 
 
 def services_keyboard(services: list, ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Entity names only — actions/back live on reply keyboard."""
+    _ = ui
     rows = [
         [
             InlineKeyboardButton(
@@ -1098,39 +1104,33 @@ def services_keyboard(services: list, ui: dict | None = None) -> InlineKeyboardM
         ]
         for s in services
     ]
-    rows.append(
-        [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="menu:home")]
-    )
+    if not rows:
+        rows = [[InlineKeyboardButton(text="سرویسی نیست", callback_data="svc:list")]]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+REPLY_ACTION_SVC_LINK = "svc_link"
+REPLY_ACTION_SVC_RENEW = "svc_renew"
+REPLY_ACTION_SVC_REFRESH = "svc_refresh"
+
+
+def _service_action_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    return [
+        (REPLY_ACTION_SVC_LINK, _t(ui, "btn_sub_link")),
+        (REPLY_ACTION_SVC_RENEW, _t(ui, "btn_renew")),
+        (REPLY_ACTION_SVC_REFRESH, "♻️ رفرش وضعیت"),
+    ]
+
+
+def service_actions_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(_service_action_entries(ui), ui, footer_row=_submenu_footer(ui))
+    return _reply_markup(rows, placeholder="عملیات سرویس…")
+
+
 def service_actions(service_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=_t(ui, "btn_sub_link"),
-                    callback_data=f"svc:link:{service_id}",
-                ),
-                InlineKeyboardButton(
-                    text=_t(ui, "btn_renew"),
-                    callback_data=f"svc:renew:{service_id}",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="♻️ رفرش وضعیت",
-                    callback_data=f"svc:view:{service_id}",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text=_t(ui, "btn_back"),
-                    callback_data="svc:list",
-                )
-            ],
-        ]
-    )
+    """Legacy stub — prefer service_actions_reply_keyboard."""
+    _ = service_id, ui
+    return InlineKeyboardMarkup(inline_keyboard=[])
 
 
 def wallet_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
@@ -1224,6 +1224,7 @@ def admin_users_list_keyboard(
     has_next: bool,
     rows: list[list[InlineKeyboardButton]],
 ) -> InlineKeyboardMarkup:
+    """Entity names only (+ page nav). Static chrome on admin_users_reply_keyboard."""
     nav: list[InlineKeyboardButton] = []
     if has_prev:
         nav.append(InlineKeyboardButton(text="◀️ قبل", callback_data=f"adm:users:list:{page - 1}"))
@@ -1234,12 +1235,13 @@ def admin_users_list_keyboard(
     kb_rows = chunk_buttons(flat, cols=2)
     if nav:
         kb_rows.append(nav)
-    kb_rows.append([InlineKeyboardButton(text="🔎 جستجو", callback_data="adm:users:search")])
-    kb_rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:users")])
+    if not kb_rows:
+        kb_rows = [[InlineKeyboardButton(text="کاربری نیست", callback_data="adm:users:list:0")]]
     return InlineKeyboardMarkup(inline_keyboard=kb_rows)
 
 
 def admin_resellers_menu(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Legacy inline hub — prefer admin_resellers_reply_keyboard."""
     buttons = [
         InlineKeyboardButton(text="📋 لیست نمایندگان", callback_data="adm:resellers:list:0"),
         InlineKeyboardButton(text="📋 درخواست‌های منتظر", callback_data="adm:resapp:list"),
@@ -1258,6 +1260,7 @@ def admin_resellers_list_keyboard(
     has_next: bool,
     rows: list[list[InlineKeyboardButton]],
 ) -> InlineKeyboardMarkup:
+    """Entity names (+ optional page nav). Static chrome lives on reply KB."""
     nav: list[InlineKeyboardButton] = []
     if has_prev:
         nav.append(InlineKeyboardButton(text="◀️ قبل", callback_data=f"adm:resellers:list:{page - 1}"))
@@ -1267,7 +1270,8 @@ def admin_resellers_list_keyboard(
     kb_rows = chunk_buttons(flat, cols=2)
     if nav:
         kb_rows.append(nav)
-    kb_rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:resellers")])
+    if not kb_rows:
+        kb_rows = [[InlineKeyboardButton(text="نماینده‌ای نیست", callback_data="adm:resellers:list:0")]]
     return InlineKeyboardMarkup(inline_keyboard=kb_rows)
 
 
@@ -1312,61 +1316,44 @@ def admin_user_actions(
                 )
             ]
         )
-        rows.append(
-            [InlineKeyboardButton(text="🔎 جستجوی دیگر", callback_data="adm:users:search")]
-        )
-        rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:users")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+# Review action labels (order / payment / reseller-app) — reply keyboard
+REPLY_ACTION_REV_OK = "rev_ok"
+REPLY_ACTION_REV_NO = "rev_no"
+BTN_REV_OK = "🟢✅ تأیید"
+BTN_REV_NO = "🔴❌ رد"
+
+
+def _review_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    _ = ui
+    return [
+        (REPLY_ACTION_REV_OK, BTN_REV_OK),
+        (REPLY_ACTION_REV_NO, BTN_REV_NO),
+    ]
+
+
+def review_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    """Approve / reject on reply KB (entity already selected via FSM)."""
+    rows = _pack_reply_rows(_review_submenu_entries(ui), ui, footer_row=_submenu_footer(ui))
+    return _reply_markup(rows, placeholder="تأیید یا رد…")
+
+
 def order_review(order_id: int) -> InlineKeyboardMarkup:
+    """Message-scoped approve/reject (notifications). No nav chrome."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(text="🟢✅ تأیید سفارش", callback_data=f"ordrev:ok:{order_id}"),
                 InlineKeyboardButton(text="🔴❌ رد", callback_data=f"ordrev:no:{order_id}"),
             ],
-            [InlineKeyboardButton(text="⬅️ لیست سفارش‌ها", callback_data="adm:orders")],
-        ]
-    )
-
-
-def pg_admin_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    buttons = [
-        InlineKeyboardButton(text="🏠 نمای کلی", callback_data="adm:pg:stats"),
-        InlineKeyboardButton(text="👥 کاربران VPN", callback_data="adm:pg:users"),
-        InlineKeyboardButton(text="➕ ساخت کاربر", callback_data="adm:pg:create"),
-        InlineKeyboardButton(text="🔎 جستجوی یوزر", callback_data="adm:pg:search"),
-        InlineKeyboardButton(text="🕸 نودها", callback_data="adm:pg:nodes"),
-        InlineKeyboardButton(text="📁 ساخت گروه", callback_data="adm:pg:group"),
-        InlineKeyboardButton(text="📋 ساخت تمپلیت", callback_data="adm:pg:template"),
-    ]
-    back = InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")
-    return InlineKeyboardMarkup(
-        inline_keyboard=layout_rows(buttons, ui, full_width=[back])
-    )
-
-
-def reseller_home(profile=None, ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Legacy inline reseller hub — prefer reseller_reply_keyboard (3.6+)."""
-    _ = profile
-    back = InlineKeyboardButton(text="⬅️ بازگشت", callback_data="menu:home")
-    return InlineKeyboardMarkup(inline_keyboard=[[back]])
-
-
-def reseller_app_review(app_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🟢✅ تأیید", callback_data=f"adm:resapp:ok:{app_id}"),
-                InlineKeyboardButton(text="🔴❌ رد", callback_data=f"adm:resapp:no:{app_id}"),
-            ],
-            [InlineKeyboardButton(text="⬅️ درخواست‌ها", callback_data="adm:resapp:list")],
         ]
     )
 
 
 def payment_review(payment_id: int) -> InlineKeyboardMarkup:
+    """Message-scoped approve/reject (notifications). No nav chrome."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -1377,12 +1364,34 @@ def payment_review(payment_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def back_home(ui: dict | None = None) -> InlineKeyboardMarkup:
+def reseller_app_review(app_id: int) -> InlineKeyboardMarkup:
+    """Message-scoped approve/reject (notifications). No nav chrome."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="menu:home")]
+            [
+                InlineKeyboardButton(text="🟢✅ تأیید", callback_data=f"adm:resapp:ok:{app_id}"),
+                InlineKeyboardButton(text="🔴❌ رد", callback_data=f"adm:resapp:no:{app_id}"),
+            ],
         ]
     )
+
+
+def pg_admin_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Legacy — prefer pg_reply_keyboard."""
+    _ = ui
+    return InlineKeyboardMarkup(inline_keyboard=[])
+
+
+def reseller_home(profile=None, ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Legacy stub — navigation is on reseller_reply_keyboard."""
+    _ = profile, ui
+    return InlineKeyboardMarkup(inline_keyboard=[])
+
+
+def back_home(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Legacy stub — use main reply keyboard / Back+Home footer instead of inline back."""
+    _ = ui
+    return InlineKeyboardMarkup(inline_keyboard=[])
 
 
 BTN_CANCEL = "انصراف"

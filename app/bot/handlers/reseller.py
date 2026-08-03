@@ -72,7 +72,7 @@ async def res_creds(
                 await safe_edit_text(
                     callback.message,
                     format_message("🤝 پنل نماینده", "دسترسی‌ها با وب‌پنل یکسان است."),
-                    reply_markup=kb.reseller_home(profile),
+                    reply_markup=None,
                 )
             return
     if db_user.role != Role.RESELLER.value:
@@ -84,22 +84,22 @@ async def res_creds(
         return
     await callback.answer()
     text = await format_reseller_access_card(session, profile)
-    rows = [[InlineKeyboardButton(text="⬅️ بازگشت", callback_data="menu:home")]]
+    # URL button is allowed (not a menu); nav via reply KB
+    rows: list[list[InlineKeyboardButton]] = []
     if profile.bot_username:
-        rows.insert(
-            0,
+        rows.append(
             [
                 InlineKeyboardButton(
                     text=f"باز کردن @{profile.bot_username}",
                     url=f"https://t.me/{profile.bot_username}",
                 )
-            ],
+            ]
         )
     if callback.message:
         await safe_edit_text(
             callback.message,
             text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,
         )
 
 
@@ -192,7 +192,7 @@ async def res_dash(
         f"💼 کمیسیون: {profile.commission_percent}٪"
     )
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=kb.reseller_home(profile))
+        await safe_edit_text(callback.message, text, reply_markup=None)
 
 
 RES_USERS_PAGE = 10
@@ -250,7 +250,6 @@ async def res_users_list(
         nav.append(InlineKeyboardButton(text="بعد ▶️", callback_data=f"res:users:{page + 1}"))
     if nav:
         rows.append(nav)
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="res:home")])
     text = (
         f"👥 <b>مشتریان من</b>\n"
         f"صفحه {page + 1} از {max(1, (total + RES_USERS_PAGE - 1) // RES_USERS_PAGE)}"
@@ -262,7 +261,7 @@ async def res_users_list(
         await safe_edit_text(
             callback.message,
             text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,
         )
 
 
@@ -300,12 +299,7 @@ async def res_user_view(
         f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
         f"مسدود: {blocked}"
     )
-    markup = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ لیست مشتریان", callback_data="res:users:0")],
-            [InlineKeyboardButton(text="🏠 خانه نماینده", callback_data="res:home")],
-        ]
-    )
+    markup = None  # navigation via reply keyboard Back/Home
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=markup)
 
@@ -338,7 +332,7 @@ async def res_stats(
         f"ادمین PG: <code>{profile.pg_admin_username or '—'}</code>"
     )
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=kb.reseller_home(profile))
+        await safe_edit_text(callback.message, text, reply_markup=None)
 
 
 @router.callback_query(F.data == "res:orders")
@@ -371,7 +365,7 @@ async def res_orders(
             await safe_edit_text(
                 callback.message,
                 "سفارشی برای مشتریان شما ثبت نشده.",
-                reply_markup=kb.reseller_home(profile),
+                reply_markup=None,
             )
         return
     lines = ["🛒 <b>آخرین سفارش‌های مشتریان</b>\n"]
@@ -384,7 +378,7 @@ async def res_orders(
         await safe_edit_text(
             callback.message,
             "\n".join(lines),
-            reply_markup=kb.reseller_home(profile),
+            reply_markup=None,
         )
 
 
@@ -422,7 +416,7 @@ async def res_tickets(
             await safe_edit_text(
                 callback.message,
                 "تیکت بازی از مشتریان نیست.",
-                reply_markup=kb.reseller_home(profile),
+                reply_markup=None,
             )
         return
     lines = ["🎫 <b>تیکت‌های مشتریان</b>\n"]
@@ -433,7 +427,7 @@ async def res_tickets(
         await safe_edit_text(
             callback.message,
             "\n".join(lines),
-            reply_markup=kb.reseller_home(profile),
+            reply_markup=None,
         )
 
 
@@ -469,7 +463,7 @@ async def res_payments(
     rows = result.all()
     if not rows:
         if callback.message:
-            await safe_edit_text(callback.message, "رسید معلقی نیست.", reply_markup=kb.reseller_home(profile))
+            await safe_edit_text(callback.message, "رسید معلقی نیست.", reply_markup=None)
         return
     for payment, user in rows:
         caption = (
@@ -493,7 +487,7 @@ async def res_payments(
         except Exception:
             pass
     if callback.message:
-        await safe_edit_text(callback.message, "رسیدهای باز ارسال شد.", reply_markup=kb.reseller_home(profile))
+        await safe_edit_text(callback.message, "رسیدهای باز ارسال شد.", reply_markup=None)
 
 
 @router.callback_query(F.data == "resapply:home")
