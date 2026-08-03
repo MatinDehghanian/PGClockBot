@@ -618,7 +618,7 @@ async def settings_edit_save(
     key = data.get("edit_key")
     loc = data.get("edit_loc")
     text = (message.text or "").strip()
-    if text == "انصراف" or not key:
+    if kb.is_cancel_text(text) or not key:
         await state.clear()
         await message.answer(
             "لغو شد.",
@@ -730,7 +730,7 @@ async def support_title_msg(message: Message, state: FSMContext, db_user: BotUse
         await message.answer("ادمین نیستید")
         return
     text = (message.text or "").strip()
-    if text == "انصراف":
+    if kb.is_cancel_text(text):
         await state.clear()
         await message.answer(
             "لغو شد.",
@@ -754,7 +754,7 @@ async def support_telegram_msg(
         await message.answer("ادمین نیستید")
         return
     text = (message.text or "").strip()
-    if text == "انصراف":
+    if kb.is_cancel_text(text):
         await state.clear()
         await message.answer(
             "لغو شد.",
@@ -927,7 +927,7 @@ async def trial_save_name(
         await message.answer("ادمین نیستید")
         return
     text = (message.text or "").strip()
-    if text == "انصراف":
+    if kb.is_cancel_text(text):
         await state.clear()
         await message.answer(
             "لغو شد.",
@@ -964,7 +964,7 @@ async def trial_save_days(
         await message.answer("ادمین نیستید")
         return
     text = (message.text or "").strip()
-    if text == "انصراف":
+    if kb.is_cancel_text(text):
         await state.clear()
         await message.answer(
             "لغو شد.",
@@ -1006,7 +1006,7 @@ async def trial_save_gb(
         await message.answer("ادمین نیستید")
         return
     text = (message.text or "").strip()
-    if text == "انصراف":
+    if kb.is_cancel_text(text):
         await state.clear()
         await message.answer(
             "لغو شد.",

@@ -113,6 +113,25 @@ def _migrate_sqlite(sync_conn) -> None:
                 text("ALTER TABLE orders ADD COLUMN quantity INTEGER DEFAULT 1")
             )
 
+    if insp.has_table("tickets"):
+        ticols = {c["name"] for c in insp.get_columns("tickets")}
+        if "reseller_id" not in ticols:
+            sync_conn.execute(
+                text("ALTER TABLE tickets ADD COLUMN reseller_id INTEGER")
+            )
+            # Backfill from sticky BotUser.reseller_id for existing rows
+            try:
+                sync_conn.execute(
+                    text(
+                        "UPDATE tickets SET reseller_id = ("
+                        "SELECT bot_users.reseller_id FROM bot_users "
+                        "WHERE bot_users.id = tickets.user_id"
+                        ") WHERE reseller_id IS NULL"
+                    )
+                )
+            except Exception:
+                pass
+
     # Ensure core shop perms exist on legacy reseller profiles / plans (1.7+)
     # Skip after a successful one-time migration (new rows already get core perms).
     marker = None

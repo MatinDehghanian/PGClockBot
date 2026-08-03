@@ -199,6 +199,10 @@ class Ticket(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    # Shop that owns this ticket (None = platform main bot). Same pattern as Order.reseller_id.
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
     subject: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(32), default=TicketStatus.OPEN.value, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

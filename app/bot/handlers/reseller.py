@@ -5,7 +5,7 @@ import html
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
@@ -404,8 +404,11 @@ async def res_tickets(
         select(Ticket, BotUser)
         .join(BotUser, BotUser.id == Ticket.user_id)
         .where(
-            BotUser.reseller_id == owner_id,
             Ticket.status.in_([TicketStatus.OPEN.value, TicketStatus.ANSWERED.value]),
+            or_(
+                Ticket.reseller_id == owner_id,
+                (Ticket.reseller_id.is_(None)) & (BotUser.reseller_id == owner_id),
+            ),
         )
         .order_by(Ticket.id.desc())
         .limit(15)
@@ -422,7 +425,7 @@ async def res_tickets(
     lines = ["🎫 <b>تیکت‌های مشتریان</b>\n"]
     for t, u in rows:
         lines.append(f"#{t.id} — {t.subject[:40]} — {u.full_name or u.telegram_id}")
-    lines.append("\nپاسخ کامل از وب‌پنل نماینده.")
+    lines.append("\nاز اعلان تلگرام روی «پاسخ» بزنید یا تیکت را باز کنید.")
     if callback.message:
         await safe_edit_text(
             callback.message,

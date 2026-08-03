@@ -1708,34 +1708,18 @@ async def global_cancel_restore(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    """Fallback: انصراف restores the main reply keyboard.
-
-    If a later router has a state-specific cancel handler (e.g. broadcast),
-    skip so that handler can run.
-    """
-    from aiogram.exceptions import SkipHandler
+    """Fallback انصراف: outside FSM → home; inside FSM → defer to state handlers."""
+    from aiogram.dispatcher.event.bases import SkipHandler
 
     current = await state.get_state()
-    if current and str(current).endswith(":broadcast_text"):
+    if current is not None:
+        # State-specific handlers (shop/wallet/admin/…) own cancel + context restore
         raise SkipHandler()
-    if current is None:
-        # Not in a flow — treat as home
-        await restore_main_reply(
-            message,
-            session,
-            db_user,
-            text="🏠 منوی اصلی",
-            state=state,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-        )
-        return
-    # Let specific handlers run first when they match; if we got here, restore.
     await restore_main_reply(
         message,
         session,
         db_user,
-        text="لغو شد.",
+        text="🏠 منوی اصلی",
         state=state,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,

@@ -267,7 +267,7 @@ async def res_plan_name(
     if not owner_id or not profile:
         await state.clear()
         return
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer(
             "لغو شد.",
@@ -281,7 +281,7 @@ async def res_plan_name(
 
 @router.message(ResellerPlanStates.price)
 async def res_plan_price(message: Message, state: FSMContext, db_user: BotUser):
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer(
             "لغو شد.",
@@ -300,7 +300,7 @@ async def res_plan_price(message: Message, state: FSMContext, db_user: BotUser):
 
 @router.message(ResellerPlanStates.days)
 async def res_plan_days(message: Message, state: FSMContext):
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer(
             "لغو شد.",
@@ -325,7 +325,7 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer(
             "لغو شد.",

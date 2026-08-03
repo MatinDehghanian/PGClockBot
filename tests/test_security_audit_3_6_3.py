@@ -13,10 +13,10 @@ class Version363Tests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.6.5")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.6.5")
+        self.assertEqual(__version__, "3.6.6")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.6.6")
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"3.6.5"', notes)
+        self.assertIn('"3.6.6"', notes)
 
 
 class WebShopOrderIsolationTests(unittest.TestCase):

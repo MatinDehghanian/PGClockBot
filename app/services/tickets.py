@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import BotUser, Ticket, TicketMessage, TicketStatus
+from app.services.users import current_shop_reseller_id
 
 
 async def create_ticket(
@@ -13,8 +14,17 @@ async def create_ticket(
     subject: str,
     body: str,
     sender_tg: int,
+    *,
+    reseller_id: int | None = None,
 ) -> Ticket:
-    ticket = Ticket(user_id=user_id, subject=subject[:250], status=TicketStatus.OPEN.value)
+    """Create a support ticket scoped to the current shop bot (or platform)."""
+    shop_rid = reseller_id if reseller_id is not None else current_shop_reseller_id()
+    ticket = Ticket(
+        user_id=user_id,
+        subject=subject[:250],
+        status=TicketStatus.OPEN.value,
+        reseller_id=int(shop_rid) if shop_rid else None,
+    )
     session.add(ticket)
     await session.flush()
     session.add(
@@ -84,13 +94,32 @@ async def list_open_tickets(
     platform_only: bool = False,
     reseller_id: int | None = None,
 ) -> list[Ticket]:
-    """List open tickets. platform_only excludes shop customers; reseller_id scopes to a shop."""
-    q = select(Ticket).where(Ticket.status != TicketStatus.CLOSED.value)
+    """List open tickets scoped by Ticket.reseller_id (with legacy sticky fallback)."""
+    base = Ticket.status != TicketStatus.CLOSED.value
     if platform_only:
-        q = q.join(BotUser, BotUser.id == Ticket.user_id).where(BotUser.reseller_id.is_(None))
-    elif reseller_id is not None:
-        q = q.join(BotUser, BotUser.id == Ticket.user_id).where(
-            BotUser.reseller_id == int(reseller_id)
+        q = (
+            select(Ticket)
+            .outerjoin(BotUser, BotUser.id == Ticket.user_id)
+            .where(
+                base,
+                Ticket.reseller_id.is_(None),
+                BotUser.reseller_id.is_(None),
+            )
         )
+    elif reseller_id is not None:
+        rid = int(reseller_id)
+        q = (
+            select(Ticket)
+            .outerjoin(BotUser, BotUser.id == Ticket.user_id)
+            .where(
+                base,
+                or_(
+                    Ticket.reseller_id == rid,
+                    (Ticket.reseller_id.is_(None)) & (BotUser.reseller_id == rid),
+                ),
+            )
+        )
+    else:
+        q = select(Ticket).where(base)
     result = await session.execute(q.order_by(Ticket.id.desc()).limit(limit))
     return list(result.scalars().all())

@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.6.6": [
+        "رفع خطای دکمه انصراف در تقریباً همه جریان‌های ورودی (SkipHandler درست + defer به handlerهای FSM)",
+        "ایزوله سخت تنظیمات فروشگاه: ربات نماینده دیگر از Settingهای زنده پلتفرم ارث نمی‌برد (منو/پرداخت/force-join/...)",
+        "چیدمان کیبورد نماینده با برچسب فارسی جفتی/تکی؛ ذخیره فقط روی ResellerSetting",
+        "تیکت پشتیبانی با Ticket.reseller_id؛ نوتیف و پاسخ روی ربات همان فروشگاه؛ ادمین پلتفرم به تیکت فروشگاه دسترسی ندارد",
+    ],
     "3.6.5": [
         "رفع باگ منوی نمایندگان: برخورد برچسب «🤝 نمایندگان» با مخاطب پیام گروهی",
         "انصراف از پیام گروهی دیگر خطا نمی‌دهد و به کیبورد مخاطب برمی‌گردد",

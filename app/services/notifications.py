@@ -277,6 +277,7 @@ async def _resolve_shop_reseller_id(
     order: Order | None = None,
     payment: Payment | None = None,
     ticket_user_id: int | None = None,
+    ticket_reseller_id: int | None = None,
 ) -> int | None:
     if order is not None and order.reseller_id:
         return int(order.reseller_id)
@@ -287,6 +288,9 @@ async def _resolve_shop_reseller_id(
             ord_row = await session.get(Order, payment.order_id)
             if ord_row and ord_row.reseller_id:
                 return int(ord_row.reseller_id)
+    # Prefer explicit ticket shop scope (Ticket.reseller_id)
+    if ticket_reseller_id is not None:
+        return int(ticket_reseller_id)
     if ticket_user_id is not None:
         user = await session.get(BotUser, int(ticket_user_id))
         if user and user.reseller_id:
@@ -345,6 +349,7 @@ async def _dispatch_dual_notify(
     order: Order | None = None,
     payment: Payment | None = None,
     ticket_user_id: int | None = None,
+    ticket_reseller_id: int | None = None,
     platform: bool = True,
     shop: bool = True,
 ) -> None:
@@ -357,7 +362,11 @@ async def _dispatch_dual_notify(
     rid: int | None = None
     if shop and key not in PLATFORM_ONLY_NOTIFY_KEYS:
         rid = await _resolve_shop_reseller_id(
-            session, order=order, payment=payment, ticket_user_id=ticket_user_id
+            session,
+            order=order,
+            payment=payment,
+            ticket_user_id=ticket_user_id,
+            ticket_reseller_id=ticket_reseller_id,
         )
 
     # --- Shop-scoped: never fan-out to platform owner ---
@@ -612,6 +621,7 @@ async def notify_new_ticket(
     subject: str,
     user_name: str | None,
     ticket_user_id: int | None = None,
+    ticket_reseller_id: int | None = None,
 ) -> None:
     text = format_message(
         "🎫 تیکت جدید",
@@ -630,6 +640,7 @@ async def notify_new_ticket(
         text,
         markup=ticket_action_markup(ticket_id),
         ticket_user_id=ticket_user_id,
+        ticket_reseller_id=ticket_reseller_id,
     )
 
 
@@ -643,6 +654,7 @@ async def notify_ticket_message(
     from_staff: bool,
     ticket_user_id: int,
     actor_name: str | None = None,
+    ticket_reseller_id: int | None = None,
 ) -> None:
     """Notify the other party of a ticket reply — always with پاسخ / بستن buttons."""
     markup = ticket_action_markup(ticket_id)
@@ -664,12 +676,34 @@ async def notify_ticket_message(
                 ]
             ),
         )
+        send_bot = bot
+        close_bot = False
+        rid = ticket_reseller_id
+        if rid is None:
+            from app.db.models import Ticket as TicketModel
+
+            trow = await session.get(TicketModel, int(ticket_id))
+            if trow is not None and trow.reseller_id:
+                rid = int(trow.reseller_id)
+        if rid:
+            from app.services.reseller_bots import open_notify_bot_for_reseller
+
+            shop_bot, should_close = await open_notify_bot_for_reseller(session, int(rid))
+            if shop_bot is not None:
+                send_bot = shop_bot
+                close_bot = should_close
         try:
-            await bot.send_message(
+            await send_bot.send_message(
                 int(user.telegram_id), text, reply_markup=markup, parse_mode="HTML"
             )
         except Exception:
             pass
+        finally:
+            if close_bot:
+                try:
+                    await send_bot.session.close()
+                except Exception:
+                    pass
         return
 
     text = format_message(
@@ -690,6 +724,7 @@ async def notify_ticket_message(
         text,
         markup=markup,
         ticket_user_id=ticket_user_id,
+        ticket_reseller_id=ticket_reseller_id,
     )
 
 

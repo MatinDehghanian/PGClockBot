@@ -71,9 +71,7 @@ SECTIONS: dict[str, dict] = {
     "menu": {
         "title": "کیبورد اصلی",
         "subs": [
-            ("layout", "چیدمان کیبورد", [
-                ("menu_layout", "چیدمان کیبورد", "text"),
-            ]),
+            ("layout", "چیدمان کیبورد", "menu_layout"),
         ],
     },
     "pay": {
@@ -350,6 +348,26 @@ async def _render_sub(
             title = label
             fields = payload
             break
+    if fields == "menu_layout":
+        with _Scoped(reseller_id):
+            cur = await get_setting(session, "menu_layout", reseller_id=reseller_id) or "compact"
+            label = "فشرده (جفتی)" if cur == "compact" else "کلاسیک (تکی)"
+            rows = [
+                [
+                    InlineKeyboardButton(
+                        text=f"حالت: {label}",
+                        callback_data="res:st:menu:layout",
+                    )
+                ],
+                [InlineKeyboardButton(text="⬅️ بازگشت", callback_data=f"res:st:sec:{sec_id}")],
+            ]
+            if callback.message:
+                await safe_edit_text(
+                    callback.message,
+                    "<b>چیدمان منو</b>\nروی دکمه بزنید تا بین فشرده (جفتی) و کلاسیک (تکی) عوض شود.",
+                    reply_markup=_kb(rows),
+                )
+        return
     if not isinstance(fields, list):
         await callback.answer("نامعتبر", show_alert=True)
         return
@@ -459,6 +477,32 @@ async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_use
         await _render_sub(callback, session, loc[0], loc[1], profile.user_id)
 
 
+@router.callback_query(F.data == "res:st:menu:layout")
+async def menu_layout_toggle(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    profile, err = await _gate(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if err:
+        await callback.answer(err, show_alert=True)
+        return
+    with _Scoped(profile.user_id):
+        cur = await get_setting(session, "menu_layout", reseller_id=profile.user_id) or "compact"
+        await set_setting(
+            session,
+            "menu_layout",
+            "compact" if cur == "classic" else "classic",
+            reseller_id=profile.user_id,
+        )
+    await callback.answer("ذخیره شد")
+    await _render_sub(callback, session, "menu", "layout", profile.user_id)
+
+
 @router.callback_query(F.data.startswith("res:st:ntog:"))
 async def settings_notify_toggle(
     callback: CallbackQuery,
@@ -542,7 +586,7 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
     data = await state.get_data()
     key = data.get("edit_key")
     text = (message.text or "").strip()
-    if text == "انصراف" or not key:
+    if kb.is_cancel_text(text) or not key:
         await state.clear()
         await message.answer(
             "لغو شد.",
@@ -585,7 +629,7 @@ async def support_title_save(message: Message, state: FSMContext, session: Async
         await state.clear()
         return
     text = (message.text or "").strip()
-    if text == "انصراف":
+    if kb.is_cancel_text(text):
         await state.clear()
         await message.answer("لغو شد.")
         return
@@ -603,7 +647,7 @@ async def support_telegram_save(message: Message, state: FSMContext, session: As
         await state.clear()
         return
     text = (message.text or "").strip()
-    if text == "انصراف":
+    if kb.is_cancel_text(text):
         await state.clear()
         await message.answer("لغو شد.")
         return
@@ -667,7 +711,7 @@ async def bot_token_save(message: Message, state: FSMContext, session: AsyncSess
         await state.clear()
         return
     text = (message.text or "").strip()
-    if text == "انصراف":
+    if kb.is_cancel_text(text):
         await state.clear()
         await message.answer("لغو شد.")
         return

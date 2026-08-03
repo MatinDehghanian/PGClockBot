@@ -322,11 +322,13 @@ async def get_setting(
         row = result.scalar_one_or_none()
         if row is not None:
             return row.value
+        # Shop isolation: never fall through to live platform Setting rows
+        return DEFAULT_SETTINGS.get(key, default)
     result = await session.execute(select(Setting).where(Setting.key == key))
     row = result.scalar_one_or_none()
     if row:
         return row.value
-    return DEFAULT_SETTINGS.get(key, default) if rid else default
+    return default
 
 
 async def set_setting(
@@ -363,7 +365,8 @@ async def set_setting(
     else:
         session.add(Setting(key=key, value=value))
     await session.commit()
-    clear_settings_cache()
+    # Only invalidate platform cache — do not flush isolated shop caches
+    clear_settings_cache(0)
 
 
 async def set_settings_bulk(
@@ -407,7 +410,7 @@ async def set_settings_bulk(
         else:
             session.add(Setting(key=key, value=value))
     await session.commit()
-    clear_settings_cache()
+    clear_settings_cache(0)
 
 
 DEFAULT_SETTINGS = {
@@ -859,9 +862,8 @@ async def get_all_settings(
     if rid:
         from app.db.models import ResellerSetting
 
-        # Start from global (fallback), overlay reseller overrides
-        result = await session.execute(select(Setting))
-        data.update({r.key: r.value for r in result.scalars().all()})
+        # Shop isolation: defaults + reseller overrides ONLY.
+        # Never inherit live platform Setting rows (payment, menu, force-join, …).
         r_result = await session.execute(
             select(ResellerSetting).where(ResellerSetting.reseller_user_id == rid)
         )

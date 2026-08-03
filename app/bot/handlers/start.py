@@ -313,7 +313,7 @@ async def orphan_cancel(
     reseller_owner_id: int | None = None,
 ):
     """انصراف outside FSM restores main KB; inside FSM let state handlers run first."""
-    from aiogram.exceptions import SkipHandler
+    from aiogram.dispatcher.event.bases import SkipHandler
 
     cur = await state.get_state()
     if cur:

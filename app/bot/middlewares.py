@@ -386,6 +386,11 @@ class ErrorLogMiddleware(BaseMiddleware):
         try:
             return await handler(event, data)
         except Exception as e:
+            # Propagate control-flow exceptions so later handlers / filters can run
+            from aiogram.dispatcher.event.bases import CancelHandler, SkipHandler
+
+            if isinstance(e, (SkipHandler, CancelHandler)):
+                raise
             if _is_benign_telegram_error(e):
                 logger.debug("Ignored benign Telegram error: %s", e)
                 return None

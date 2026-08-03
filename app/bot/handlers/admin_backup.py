@@ -246,7 +246,7 @@ async def backup_restore_confirm(message: Message, db_user: BotUser, state: FSMC
         await state.clear()
         return
     text = (message.text or "").strip()
-    if text == "انصراف":
+    if kb.is_cancel_text(text):
         await state.clear()
         await message.answer("لغو شد.")
         return
@@ -341,7 +341,7 @@ async def backup_upload_file(message: Message, db_user: BotUser, state: FSMConte
 @router.message(BackupStates.waiting_upload)
 async def backup_upload_cancel(message: Message, state: FSMContext):
     text = (message.text or "").strip()
-    if text == "انصراف":
+    if kb.is_cancel_text(text):
         await state.clear()
         await message.answer("لغو شد.")
         return

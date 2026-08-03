@@ -70,12 +70,20 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             show_tg = True
             rid = shop_owner_id(staff)
             if rid:
+                from sqlalchemy import or_
+
                 tg_tickets = list(
                     (
                         await session.execute(
                             select(Ticket)
-                            .join(BotUser, BotUser.id == Ticket.user_id)
-                            .where(BotUser.reseller_id == rid)
+                            .outerjoin(BotUser, BotUser.id == Ticket.user_id)
+                            .where(
+                                or_(
+                                    Ticket.reseller_id == rid,
+                                    (Ticket.reseller_id.is_(None))
+                                    & (BotUser.reseller_id == rid),
+                                )
+                            )
                             .order_by(Ticket.id.desc())
                             .limit(100)
                         )

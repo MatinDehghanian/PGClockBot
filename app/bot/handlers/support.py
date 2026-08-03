@@ -148,6 +148,7 @@ async def support_body(
         data.get("subject") or "پشتیبانی",
         body,
         db_user.telegram_id,
+        reseller_id=reseller_owner_id,
     )
     from app.bot.menu_nav import restore_main_reply
 
@@ -173,6 +174,7 @@ async def support_body(
             subject=ticket.subject,
             user_name=db_user.full_name or db_user.username,
             ticket_user_id=db_user.id,
+            ticket_reseller_id=ticket.reseller_id,
         )
     except Exception:
         pass

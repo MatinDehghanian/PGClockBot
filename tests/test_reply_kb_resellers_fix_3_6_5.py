@@ -1,4 +1,4 @@
-"""3.6.5 — fix نمایندگان label collision; shop chrome on reply; no static inline hubs."""
+"""3.6.6 — fix نمایندگان label collision; shop chrome on reply; no static inline hubs."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ class Version365Tests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.6.5")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.6.5")
+        self.assertEqual(__version__, "3.6.6")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.6.6")
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"3.6.5"', notes)
+        self.assertIn('"3.6.6"', notes)
 
 
 class ResellersLabelCollisionTests(unittest.TestCase):
@@ -111,10 +111,12 @@ class ShopChromeReplyTests(unittest.TestCase):
 
 
 class CancelBroadcastSkipTests(unittest.TestCase):
-    def test_global_cancel_skips_broadcast_state(self):
+    def test_global_cancel_skips_fsm_to_state_handlers(self):
         src = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
-        self.assertIn("broadcast_text", src)
-        self.assertIn("SkipHandler", src)
+        self.assertIn("aiogram.dispatcher.event.bases", src)
+        chunk = src.split("async def global_cancel_restore")[1].split("@router.")[0]
+        self.assertIn("if current is not None", chunk)
+        self.assertIn("SkipHandler", chunk)
         admin = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
         chunk = admin.split("async def adm_broadcast_send")[1].split("async def")[0]
         self.assertIn("is_cancel_text", chunk)

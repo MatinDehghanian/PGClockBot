@@ -563,7 +563,7 @@ async def plan_name(message: Message, state: FSMContext, db_user: BotUser):
         await state.clear()
         await message.answer("ادمین نیستید")
         return
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
         return
@@ -578,7 +578,7 @@ async def plan_price(message: Message, state: FSMContext, db_user: BotUser):
         await state.clear()
         await message.answer("ادمین نیستید")
         return
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
         return
@@ -598,7 +598,7 @@ async def plan_days(message: Message, state: FSMContext, db_user: BotUser):
         await state.clear()
         await message.answer("ادمین نیستید")
         return
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
         return
@@ -621,7 +621,7 @@ async def plan_gb(message: Message, state: FSMContext, db_user: BotUser):
         await state.clear()
         await message.answer("ادمین نیستید")
         return
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
         return
@@ -1380,7 +1380,8 @@ async def adm_users_block(
     if callback.message:
         await callback.message.answer(
             f"علت مسدودسازی کاربر <code>{user.telegram_id}</code> را بنویسید "
-            "(حداقل ۳ کاراکتر — برای کاربر ارسال می‌شود):"
+            "(حداقل ۳ کاراکتر — برای کاربر ارسال می‌شود):",
+            reply_markup=kb.cancel_reply(),
         )
 
 
@@ -1390,6 +1391,10 @@ async def adm_users_block_reason(
 ):
     if not _is_admin(db_user):
         await state.clear()
+        return
+    if kb.is_cancel_text(message.text):
+        await state.clear()
+        await message.answer("لغو شد.", reply_markup=kb.admin_users_reply_keyboard())
         return
     data = await state.get_data()
     user_id = int(data.get("block_user_id") or 0)
@@ -1519,7 +1524,7 @@ async def adm_users_unreseller_reason(
     if not _is_admin(db_user):
         await state.clear()
         return
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.admin_users_reply_keyboard())
         return
@@ -1809,7 +1814,7 @@ async def make_res(
         await state.clear()
         await message.answer("ادمین نیستید")
         return
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.admin_reply_keyboard())
         return
@@ -1897,6 +1902,13 @@ async def adm_ticket_view(callback: CallbackQuery, session: AsyncSession, db_use
     if not ticket:
         await callback.answer("یافت نشد", show_alert=True)
         return
+    if ticket.reseller_id:
+        await callback.answer("این تیکت متعلق به فروشگاه نماینده است", show_alert=True)
+        return
+    ticket_user = await session.get(BotUser, int(ticket.user_id))
+    if ticket_user and ticket_user.reseller_id:
+        await callback.answer("این تیکت متعلق به فروشگاه نماینده است", show_alert=True)
+        return
     await callback.answer()
     lines = [f"🎫 #{ticket.id} — {html.escape(ticket.subject or '')}"]
     for m in ticket.messages[-12:]:
@@ -1911,7 +1923,7 @@ async def adm_ticket_view(callback: CallbackQuery, session: AsyncSession, db_use
 
 @router.message(AdminStates.ticket_reply)
 async def adm_ticket_reply(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.admin_reply_keyboard())
         return
@@ -1919,6 +1931,10 @@ async def adm_ticket_reply(message: Message, state: FSMContext, session: AsyncSe
     ticket = await session.get(Ticket, data.get("ticket_id"))
     if not ticket:
         await state.clear()
+        return
+    if ticket.reseller_id:
+        await state.clear()
+        await message.answer("دسترسی به تیکت فروشگاه ندارید.", reply_markup=kb.admin_reply_keyboard())
         return
     await reply_ticket(session, ticket, message.text or "", db_user.telegram_id, is_staff=True)
     await state.clear()
@@ -1934,6 +1950,7 @@ async def adm_ticket_reply(message: Message, state: FSMContext, session: AsyncSe
             from_staff=True,
             ticket_user_id=ticket.user_id,
             actor_name=db_user.full_name or db_user.username,
+            ticket_reseller_id=ticket.reseller_id,
         )
     except Exception:
         pass

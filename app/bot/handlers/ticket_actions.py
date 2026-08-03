@@ -33,8 +33,11 @@ async def _actor_role(
     reseller_owner_id: int | None = None,
 ) -> str | None:
     """Return 'staff' | 'owner' | None for this ticket."""
+    shop_rid = getattr(ticket, "reseller_id", None)
     if is_platform_admin(db_user) and not is_reseller_bot:
-        # Platform staff may only handle platform customers — never shop tickets
+        # Platform staff may only handle platform tickets — never shop tickets
+        if shop_rid:
+            return None
         ticket_user = await session.get(BotUser, int(ticket.user_id))
         if ticket_user and ticket_user.reseller_id:
             return None
@@ -47,12 +50,14 @@ async def _actor_role(
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
-    if (
-        owner_id
-        and profile
-        and has_bot_perm(profile, "tickets")
-        and await reseller_owns_user(session, owner_id, ticket.user_id)
-    ):
+    if not owner_id or not profile or not has_bot_perm(profile, "tickets"):
+        return None
+    # Prefer Ticket.reseller_id; fall back to sticky ownership
+    if shop_rid is not None:
+        if int(shop_rid) == int(owner_id):
+            return "staff"
+        return None
+    if await reseller_owns_user(session, owner_id, ticket.user_id):
         return "staff"
     return None
 
@@ -209,6 +214,7 @@ async def tkt_reply_body(
             from_staff=as_staff,
             ticket_user_id=ticket.user_id,
             actor_name=db_user.full_name or db_user.username,
+            ticket_reseller_id=ticket.reseller_id,
         )
     except Exception:
         pass
