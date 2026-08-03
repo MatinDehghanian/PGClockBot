@@ -861,19 +861,13 @@ async def apply_discount_msg(
     if not order or order.user_id != db_user.id:
         await message.answer("سفارش معتبر نیست.")
         return
-    from app.services.orders import apply_discount
+    from app.services.orders import apply_discount_to_order
 
-    discount, code = await apply_discount(
-        session, code_raw, order.amount + order.discount_amount
-    )
-    if not code:
-        await message.answer("کد تخفیف نامعتبر است.", reply_markup=kb.pay_methods(order.id, ui))
+    try:
+        order = await apply_discount_to_order(session, order, code_raw)
+    except ValueError as e:
+        await message.answer(str(e), reply_markup=kb.pay_methods(order.id, ui))
         return
-    base = order.amount + order.discount_amount
-    order.discount_amount = discount
-    order.discount_code = code
-    order.amount = max(0, base - discount)
-    await session.commit()
     await message.answer(
         f"تخفیف اعمال شد ✅\nمبلغ جدید: {format_toman(order.amount, get_settings().currency)}",
         reply_markup=kb.pay_methods(order.id, ui),

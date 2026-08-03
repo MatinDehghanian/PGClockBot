@@ -283,9 +283,10 @@ def update_env_keys(updates: dict[str, str | int | None]) -> Path:
 
 def ensure_web_secret() -> str:
     """Return current WEB_SECRET, generating and persisting one if missing."""
-    placeholders = {"", "change-me", "change-this-long-random-secret"}
+    from app.services.security_policy import PLACEHOLDER_SECRETS, is_placeholder_secret
+
     secret = (_env_get("WEB_SECRET") or "").strip()
-    if secret in placeholders:
+    if is_placeholder_secret(secret) or secret in PLACEHOLDER_SECRETS:
         secret = secrets.token_hex(32)
         update_env_keys({"WEB_SECRET": secret})
         return secret

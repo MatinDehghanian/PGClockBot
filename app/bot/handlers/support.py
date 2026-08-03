@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.tg_utils import safe_edit_text
-from app.db.models import BotUser, Ticket
+from app.db.models import BotUser, Ticket, TicketStatus
 from app.services.formatting import format_message, ticket_status_fa
 from app.services.support_contacts import (
     active_support_contacts,
@@ -206,6 +206,10 @@ async def support_reply(message: Message, state: FSMContext, session: AsyncSessi
     if not ticket or ticket.user_id != db_user.id:
         await state.clear()
         await message.answer("تیکت نامعتبر")
+        return
+    if ticket.status == TicketStatus.CLOSED.value:
+        await state.clear()
+        await message.answer("تیکت قبلاً بسته شده است.", reply_markup=kb.back_home())
         return
     await reply_ticket(session, ticket, message.text or "", db_user.telegram_id, is_staff=False)
     await state.clear()

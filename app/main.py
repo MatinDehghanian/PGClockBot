@@ -225,19 +225,26 @@ def main() -> None:
 
         @api.post(settings.webhook_path)
         async def telegram_webhook(request: Request):
+            import hashlib
             import secrets as _secrets
 
             from app.services.security_policy import WEBHOOK_MAX_BODY_BYTES, content_length_ok
 
             header = (request.headers.get("X-Telegram-Bot-Api-Secret-Token") or "").strip()
-            if not header or not _secrets.compare_digest(header, webhook_secret):
+            # Hash both sides so compare_digest never raises on length mismatch
+            expected = hashlib.sha256(webhook_secret.encode("utf-8")).digest()
+            got = hashlib.sha256(header.encode("utf-8")).digest()
+            if not header or not _secrets.compare_digest(got, expected):
                 return JSONResponse({"ok": False}, status_code=403)
             if not content_length_ok(request.headers.get("content-length"), WEBHOOK_MAX_BODY_BYTES):
                 return JSONResponse({"ok": False}, status_code=413)
             body = await request.body()
             if len(body) > WEBHOOK_MAX_BODY_BYTES:
                 return JSONResponse({"ok": False}, status_code=413)
-            data = json.loads(body)
+            try:
+                data = json.loads(body)
+            except json.JSONDecodeError:
+                return JSONResponse({"ok": False}, status_code=400)
             update = Update.model_validate(data, context={"bot": bot})
             await dp.feed_update(bot, update)
             return {"ok": True}

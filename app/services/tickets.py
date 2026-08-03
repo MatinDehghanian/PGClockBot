@@ -38,6 +38,8 @@ async def reply_ticket(
     *,
     is_staff: bool,
 ) -> Ticket:
+    if ticket.status == TicketStatus.CLOSED.value:
+        raise ValueError("تیکت بسته شده است")
     session.add(
         TicketMessage(
             ticket_id=ticket.id,

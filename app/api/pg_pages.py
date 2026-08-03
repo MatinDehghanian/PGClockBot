@@ -723,6 +723,7 @@ def register_pg_pages(
         data_limit_gb: str = Form(""),
         expire_days: str = Form("30"),
         staff: dict = Depends(require_pg_perm("pg_templates")),
+        session: AsyncSession = Depends(get_db),
     ):
         if not staff_pg_action(staff, "templates", "create"):
             return RedirectResponse(f"/pg/templates?err={_q('اجازه ساخت ندارید')}", status_code=303)
@@ -741,7 +742,8 @@ def register_pg_pages(
         try:
             days = int(expire_days or "30")
             gb = float(data_limit_gb) if str(data_limit_gb).strip() else None
-            await get_pg().create_user_template(
+            pg, _as_owner = await _staff_pg(session, staff)
+            await pg.create_user_template(
                 {
                     "name": name.strip(),
                     "group_ids": group_ids,
@@ -755,7 +757,11 @@ def register_pg_pages(
         return RedirectResponse(f"/pg/templates?ok={_q('تمپلیت ساخته شد')}", status_code=303)
 
     @app.post("/pg/templates/{template_id}/delete")
-    async def pg_templates_delete(template_id: int, staff: dict = Depends(require_pg_perm("pg_templates"))):
+    async def pg_templates_delete(
+        template_id: int,
+        staff: dict = Depends(require_pg_perm("pg_templates")),
+        session: AsyncSession = Depends(get_db),
+    ):
         if not staff_pg_action(staff, "templates", "delete"):
             return RedirectResponse(f"/pg/templates?err={_q('اجازه حذف ندارید')}", status_code=303)
         from app.services.plans_catalog import template_allowed_for_staff
@@ -767,7 +773,8 @@ def register_pg_pages(
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/templates?err={_q(qe.message)}", status_code=303)
         try:
-            await get_pg().delete_user_template(template_id)
+            pg, _as_owner = await _staff_pg(session, staff)
+            await pg.delete_user_template(template_id)
         except Exception as e:
             return RedirectResponse(f"/pg/templates?err={_q(e)}", status_code=303)
         return RedirectResponse(f"/pg/templates?ok={_q('تمپلیت حذف شد')}", status_code=303)
@@ -818,6 +825,7 @@ def register_pg_pages(
         request: Request,
         name: str = Form(...),
         staff: dict = Depends(require_pg_perm("pg_groups")),
+        session: AsyncSession = Depends(get_db),
     ):
         if not staff_pg_action(staff, "groups", "create"):
             return RedirectResponse(f"/pg/groups?err={_q('اجازه ساخت ندارید')}", status_code=303)
@@ -830,7 +838,8 @@ def register_pg_pages(
         if not tags:
             return RedirectResponse(f"/pg/groups?err={_q('حداقل یک اینباند انتخاب کنید')}", status_code=303)
         try:
-            await get_pg().create_group({"name": name.strip(), "inbound_tags": tags})
+            pg, _as_owner = await _staff_pg(session, staff)
+            await pg.create_group({"name": name.strip(), "inbound_tags": tags})
         except Exception as e:
             return RedirectResponse(f"/pg/groups?err={_q(e)}", status_code=303)
         return RedirectResponse(f"/pg/groups?ok={_q('گروه ساخته شد')}", status_code=303)
@@ -841,6 +850,7 @@ def register_pg_pages(
         group_id: int,
         name: str = Form(...),
         staff: dict = Depends(require_pg_perm("pg_groups")),
+        session: AsyncSession = Depends(get_db),
     ):
         if not staff_pg_action(staff, "groups", "update"):
             return RedirectResponse(f"/pg/groups?err={_q('اجازه ویرایش ندارید')}", status_code=303)
@@ -856,7 +866,8 @@ def register_pg_pages(
         tags = [str(v) for k, v in form.items() if str(k).startswith("tag_")]
         disabled = bool(form.get("is_disabled"))
         try:
-            await get_pg().modify_group(
+            pg, _as_owner = await _staff_pg(session, staff)
+            await pg.modify_group(
                 group_id,
                 {"name": name.strip(), "inbound_tags": tags, "is_disabled": disabled},
             )
@@ -865,7 +876,11 @@ def register_pg_pages(
         return RedirectResponse(f"/pg/groups?ok={_q('گروه به‌روز شد')}", status_code=303)
 
     @app.post("/pg/groups/{group_id}/delete")
-    async def pg_groups_delete(group_id: int, staff: dict = Depends(require_pg_perm("pg_groups"))):
+    async def pg_groups_delete(
+        group_id: int,
+        staff: dict = Depends(require_pg_perm("pg_groups")),
+        session: AsyncSession = Depends(get_db),
+    ):
         if not staff_pg_action(staff, "groups", "delete"):
             return RedirectResponse(f"/pg/groups?err={_q('اجازه حذف ندارید')}", status_code=303)
         from app.services.plans_catalog import groups_allowed_for_staff
@@ -877,7 +892,8 @@ def register_pg_pages(
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/groups?err={_q(qe.message)}", status_code=303)
         try:
-            await get_pg().delete_group(group_id)
+            pg, _as_owner = await _staff_pg(session, staff)
+            await pg.delete_group(group_id)
         except Exception as e:
             return RedirectResponse(f"/pg/groups?err={_q(e)}", status_code=303)
         return RedirectResponse(f"/pg/groups?ok={_q('گروه حذف شد')}", status_code=303)
@@ -916,6 +932,7 @@ def register_pg_pages(
         inbound_tag: str = Form(...),
         priority: int = Form(0),
         staff: dict = Depends(require_pg_perm("pg_hosts")),
+        session: AsyncSession = Depends(get_db),
     ):
         if not staff_pg_action(staff, "hosts", "create"):
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه ساخت ندارید')}", status_code=303)
@@ -936,13 +953,18 @@ def register_pg_pages(
         if str(port).strip().isdigit():
             payload["port"] = int(port)
         try:
-            await get_pg().create_host(payload)
+            pg, _as_owner = await _staff_pg(session, staff)
+            await pg.create_host(payload)
         except Exception as e:
             return RedirectResponse(f"/pg/hosts?err={_q(e)}", status_code=303)
         return RedirectResponse(f"/pg/hosts?ok={_q('هاست ساخته شد')}", status_code=303)
 
     @app.post("/pg/hosts/{host_id}/toggle")
-    async def pg_hosts_toggle(host_id: int, staff: dict = Depends(require_pg_perm("pg_hosts"))):
+    async def pg_hosts_toggle(
+        host_id: int,
+        staff: dict = Depends(require_pg_perm("pg_hosts")),
+        session: AsyncSession = Depends(get_db),
+    ):
         if not staff_pg_action(staff, "hosts", "update"):
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه ندارید')}", status_code=303)
         try:
@@ -950,15 +972,20 @@ def register_pg_pages(
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
         try:
-            host = await get_pg().get_host(host_id)
+            pg, _as_owner = await _staff_pg(session, staff)
+            host = await pg.get_host(host_id)
             disabled = bool(host.get("is_disabled"))
-            await get_pg().set_host_disabled(host_id, not disabled)
+            await pg.set_host_disabled(host_id, not disabled)
         except Exception as e:
             return RedirectResponse(f"/pg/hosts?err={_q(e)}", status_code=303)
         return RedirectResponse(f"/pg/hosts?ok={_q('وضعیت هاست تغییر کرد')}", status_code=303)
 
     @app.post("/pg/hosts/{host_id}/delete")
-    async def pg_hosts_delete(host_id: int, staff: dict = Depends(require_pg_perm("pg_hosts"))):
+    async def pg_hosts_delete(
+        host_id: int,
+        staff: dict = Depends(require_pg_perm("pg_hosts")),
+        session: AsyncSession = Depends(get_db),
+    ):
         # PasarGuard host ACL often exposes update without a distinct delete bit
         if not (
             staff_pg_action(staff, "hosts", "delete")
@@ -970,7 +997,8 @@ def register_pg_pages(
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
         try:
-            await get_pg().delete_host(host_id)
+            pg, _as_owner = await _staff_pg(session, staff)
+            await pg.delete_host(host_id)
         except Exception as e:
             return RedirectResponse(f"/pg/hosts?err={_q(e)}", status_code=303)
         return RedirectResponse(f"/pg/hosts?ok={_q('هاست حذف شد')}", status_code=303)
@@ -999,7 +1027,11 @@ def register_pg_pages(
         )
 
     @app.post("/pg/nodes/{node_id}/reconnect")
-    async def pg_node_reconnect(node_id: int, staff: dict = Depends(require_pg_perm("pg_nodes"))):
+    async def pg_node_reconnect(
+        node_id: int,
+        staff: dict = Depends(require_pg_perm("pg_nodes")),
+        session: AsyncSession = Depends(get_db),
+    ):
         if not staff_pg_action(staff, "nodes", "reconnect"):
             return RedirectResponse(f"/pg/nodes?err={_q('اجازه اتصال مجدد ندارید')}", status_code=303)
         try:
@@ -1007,7 +1039,8 @@ def register_pg_pages(
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/nodes?err={_q(qe.message)}", status_code=303)
         try:
-            await get_pg().reconnect_node(node_id)
+            pg, _as_owner = await _staff_pg(session, staff)
+            await pg.reconnect_node(node_id)
         except Exception as e:
             return RedirectResponse(f"/pg/nodes?err={_q(e)}", status_code=303)
         return RedirectResponse(f"/pg/nodes?ok={_q('درخواست اتصال مجدد ارسال شد')}", status_code=303)

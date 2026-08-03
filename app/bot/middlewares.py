@@ -25,6 +25,13 @@ def _extract_from_user(event: TelegramObject):
         return event.from_user
     if isinstance(event, CallbackQuery) and event.from_user:
         return event.from_user
+    try:
+        from aiogram.types import PreCheckoutQuery
+
+        if isinstance(event, PreCheckoutQuery) and event.from_user:
+            return event.from_user
+    except Exception:
+        pass
     if isinstance(event, Update):
         if event.message and event.message.from_user:
             return event.message.from_user
@@ -32,6 +39,8 @@ def _extract_from_user(event: TelegramObject):
             return event.callback_query.from_user
         if event.edited_message and event.edited_message.from_user:
             return event.edited_message.from_user
+        if event.pre_checkout_query and event.pre_checkout_query.from_user:
+            return event.pre_checkout_query.from_user
     return None
 
 
@@ -113,6 +122,61 @@ async def check_force_join_member(bot: Bot, telegram_id: int, channel: str) -> b
 
 _FORCE_JOIN_MEMBER_CACHE: dict[tuple[int, str], tuple[float, bool | None]] = {}
 _FORCE_JOIN_MEMBER_TTL = 120.0
+
+# Simple per-user flood guard (process-local)
+_RATE_BUCKETS: dict[int, list[float]] = {}
+_RATE_WINDOW_SEC = 10.0
+_RATE_MAX_EVENTS = 25
+
+
+def _rate_limited(telegram_id: int) -> bool:
+    """Return True when the user exceeds the soft flood limit."""
+    import time
+
+    now = time.monotonic()
+    bucket = _RATE_BUCKETS.get(telegram_id)
+    if bucket is None:
+        _RATE_BUCKETS[telegram_id] = [now]
+        return False
+    # Drop timestamps outside the window
+    cutoff = now - _RATE_WINDOW_SEC
+    bucket[:] = [t for t in bucket if t >= cutoff]
+    if len(bucket) >= _RATE_MAX_EVENTS:
+        return True
+    bucket.append(now)
+    if len(_RATE_BUCKETS) > 8000:
+        # Opportunistic prune of idle keys
+        stale = [k for k, v in _RATE_BUCKETS.items() if not v or v[-1] < cutoff]
+        for k in stale[:2000]:
+            _RATE_BUCKETS.pop(k, None)
+    return False
+
+
+class RateLimitMiddleware(BaseMiddleware):
+    """Soft flood protection for message/callback spam."""
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any],
+    ) -> Any:
+        tg_user = _extract_from_user(event)
+        if tg_user and _rate_limited(int(tg_user.id)):
+            if isinstance(event, CallbackQuery):
+                try:
+                    await event.answer("لطفاً کمی صبر کنید", show_alert=False)
+                except Exception:
+                    pass
+            else:
+                msg = _reply_message(event)
+                if msg:
+                    try:
+                        await msg.answer("تعداد درخواست‌ها زیاد است — چند ثانیه صبر کنید.")
+                    except Exception:
+                        pass
+            return None
+        return await handler(event, data)
 
 
 async def check_force_join_all(

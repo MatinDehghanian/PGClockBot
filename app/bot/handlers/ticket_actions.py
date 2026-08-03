@@ -119,6 +119,8 @@ async def tkt_reply_body(
     state: FSMContext,
     session: AsyncSession,
     db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
 ):
     if kb.is_cancel_text(message.text):
         await state.clear()
@@ -139,8 +141,20 @@ async def tkt_reply_body(
         await message.answer("تیکت قبلاً بسته شده است.", reply_markup=kb.back_home())
         return
     as_staff = bool(data.get("as_staff"))
-    # Re-check ownership for user replies
-    if not as_staff and ticket.user_id != db_user.id:
+    # Re-validate staff ACL on every reply (role may have changed mid-FSM)
+    if as_staff:
+        role = await _actor_role(
+            session,
+            db_user,
+            ticket,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        if role != "staff":
+            await state.clear()
+            await message.answer("دسترسی ندارید.", reply_markup=kb.back_home())
+            return
+    elif ticket.user_id != db_user.id:
         await state.clear()
         await message.answer("دسترسی ندارید.", reply_markup=kb.back_home())
         return

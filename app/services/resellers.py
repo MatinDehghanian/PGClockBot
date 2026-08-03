@@ -123,7 +123,14 @@ def has_perm(profile: ResellerProfile | None, key: str, *, role: str | None = No
         return True
     if not profile or not profile.is_active:
         return False
-    perms = with_shop_settings(parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS))
+    # Explicit empty string = intentionally restricted (do not soft-upgrade to DEFAULT).
+    # None / unset → DEFAULT feature set. Always ensure core shop keys when any perms exist.
+    raw = profile.web_permissions
+    if raw is None:
+        perms = with_shop_settings(parse_perms(DEFAULT_FEATURE_PERMS))
+    else:
+        parsed = parse_perms(raw)
+        perms = with_shop_settings(parsed) if parsed else parsed
     return key in perms
 
 

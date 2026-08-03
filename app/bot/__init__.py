@@ -12,6 +12,7 @@ from app.bot.middlewares import (
     DbSessionMiddleware,
     ErrorLogMiddleware,
     ForceJoinMiddleware,
+    RateLimitMiddleware,
     UserMiddleware,
 )
 from app.config import get_settings
@@ -42,6 +43,7 @@ def create_bot(token: str | None = None) -> Bot:
 def create_dispatcher() -> Dispatcher:
     dp = Dispatcher(storage=MemoryStorage())
     dp.update.middleware(ErrorLogMiddleware())
+    dp.update.middleware(RateLimitMiddleware())
     dp.update.middleware(DbSessionMiddleware())
     dp.update.middleware(UserMiddleware())
     dp.update.middleware(ForceJoinMiddleware())

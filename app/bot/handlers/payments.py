@@ -16,14 +16,40 @@ router = Router(name="payments")
 
 
 @router.pre_checkout_query()
-async def stars_pre_checkout(query: PreCheckoutQuery):
-    # Accept Telegram Stars invoices created by this bot
+async def stars_pre_checkout(query: PreCheckoutQuery, session: AsyncSession, db_user: BotUser):
+    # Accept Telegram Stars invoices created by this bot — verify payment row
     payload = query.invoice_payload or ""
-    if payload.startswith("stars:"):
-        await query.answer(ok=True)
-    else:
+    if not payload.startswith("stars:"):
         await query.answer(ok=False, error_message="پرداخت نامعتبر")
-
+        return
+    parts = payload.split(":")
+    if len(parts) < 2:
+        await query.answer(ok=False, error_message="پرداخت نامعتبر")
+        return
+    try:
+        payment_id = int(parts[1])
+    except ValueError:
+        await query.answer(ok=False, error_message="پرداخت نامعتبر")
+        return
+    payment = await session.get(Payment, payment_id)
+    if (
+        not payment
+        or payment.user_id != db_user.id
+        or payment.method != PaymentMethod.STARS.value
+        or payment.status not in {PaymentStatus.PENDING.value}
+    ):
+        await query.answer(ok=False, error_message="پرداخت نامعتبر")
+        return
+    if len(parts) >= 3:
+        try:
+            expected = int(parts[2])
+            if int(query.total_amount or 0) != expected:
+                await query.answer(ok=False, error_message="مبلغ نامعتبر")
+                return
+        except ValueError:
+            await query.answer(ok=False, error_message="پرداخت نامعتبر")
+            return
+    await query.answer(ok=True)
 
 @router.message(F.successful_payment)
 async def stars_successful_payment(message: Message, session: AsyncSession, db_user: BotUser):

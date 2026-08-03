@@ -184,12 +184,16 @@ async def svc_renew_pay(callback: CallbackQuery, session: AsyncSession, db_user:
     await callback.answer()
 
     if order.amount <= 0:
-        from app.services.orders import apply_renewal, mark_order_free_paid
+        from app.services.orders import apply_renewal, mark_order_free_paid, revert_failed_free_delivery
 
         await mark_order_free_paid(session, order, db_user.id)
         try:
             order = await apply_renewal(session, order, svc, plan)
         except Exception as e:
+            try:
+                await revert_failed_free_delivery(session, order)
+            except Exception:
+                pass
             if callback.message:
                 await safe_edit_text(callback.message, f"❌ {e}", reply_markup=kb.service_actions(svc.id, ui))
             return

@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -226,6 +227,24 @@ async def get_or_create_user(
         if is_admin and user.role != Role.ADMIN.value:
             user.role = Role.ADMIN.value
             changed = True
+        # Demote sticky ADMIN when removed from ADMIN_IDS (unless still a reseller)
+        elif (
+            not is_admin
+            and user.role == Role.ADMIN.value
+            and telegram_id not in settings.admin_ids
+        ):
+            from app.db.models import ResellerProfile
+
+            profile = (
+                await session.execute(
+                    select(ResellerProfile).where(ResellerProfile.user_id == user.id)
+                )
+            ).scalar_one_or_none()
+            if profile and profile.is_active:
+                user.role = Role.RESELLER.value
+            else:
+                user.role = Role.USER.value
+            changed = True
         # Sticky first-touch attribution for reseller shop bots
         if (
             reseller_owner_id
@@ -263,7 +282,17 @@ async def get_or_create_user(
         reseller_id=assign_reseller,
     )
     session.add(user)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        result = await session.execute(
+            select(BotUser).where(BotUser.telegram_id == telegram_id)
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            return existing
+        raise
     await session.refresh(user)
     # Don't attribute the reseller owner to themselves
     if assign_reseller and user.id == assign_reseller:

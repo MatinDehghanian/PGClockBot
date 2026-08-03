@@ -504,12 +504,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                 origin = request.headers.get("origin")
                 referer = request.headers.get("referer")
                 host = request.headers.get("host")
-                if origin or referer:
-                    if not (
-                        request_host_allowed(host, origin)
-                        or request_host_allowed(host, referer)
-                    ):
-                        return HTMLResponse("CSRF rejected", status_code=403)
+                # Require Origin or Referer for cookie-authenticated mutations
+                if not origin and not referer:
+                    return HTMLResponse("CSRF rejected", status_code=403)
+                if not (
+                    request_host_allowed(host, origin)
+                    or request_host_allowed(host, referer)
+                ):
+                    return HTMLResponse("CSRF rejected", status_code=403)
         path = request.url.path
         if request.method == "POST" and path in {"/login", "/setup", "/setup/save", "/"}:
             if not content_length_ok(request.headers.get("content-length"), PUBLIC_FORM_MAX_BODY_BYTES):
@@ -2047,10 +2049,25 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_perm("payments")),
         session: AsyncSession = Depends(get_db),
     ):
-        q = select(Payment).order_by(Payment.id.desc()).limit(100)
+        from sqlalchemy import or_
+
         from app.services.shop_scope import is_platform_admin, shop_owner_id
 
-        if not is_platform_admin(staff):
+        if is_platform_admin(staff):
+            # Platform admin: wallet top-ups + main-bot orders only (hard shop isolation)
+            q = (
+                select(Payment)
+                .outerjoin(Order, Order.id == Payment.order_id)
+                .where(
+                    or_(
+                        Payment.is_wallet_topup.is_(True),
+                        Order.reseller_id.is_(None),
+                    )
+                )
+                .order_by(Payment.id.desc())
+                .limit(100)
+            )
+        else:
             rid = shop_owner_id(staff)
             if not rid:
                 return render(
@@ -2116,6 +2133,14 @@ def create_api_app(lifespan=None) -> FastAPI:
             order_row = await session.get(Order, payment.order_id)
             if not order_row or order_row.reseller_id != rid:
                 return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
+        elif payment.order_id and not payment.is_wallet_topup:
+            # Platform admin must not approve shop-tenant payments (match bot isolation)
+            order_row = await session.get(Order, payment.order_id)
+            if order_row and order_row.reseller_id is not None:
+                return _redirect_msg(
+                    "/payments",
+                    err="پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه تأیید می‌شود",
+                )
         if payment.status != PaymentStatus.PENDING.value:
             return _redirect_msg("/payments", err="این پرداخت قابل تأیید نیست")
         try:
@@ -2177,6 +2202,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             order_row = await session.get(Order, payment.order_id)
             if not order_row or order_row.reseller_id != rid:
                 return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
+        elif payment.order_id and not payment.is_wallet_topup:
+            order_row = await session.get(Order, payment.order_id)
+            if order_row and order_row.reseller_id is not None:
+                return _redirect_msg(
+                    "/payments",
+                    err="پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه رد می‌شود",
+                )
         try:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
         except Exception as e:

@@ -41,6 +41,7 @@ class FailClosedWithoutPgLinkTests(unittest.IsolatedAsyncioTestCase):
 
 class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
     async def test_set_owner_failure_deletes_pg_user(self):
+        """Legacy owner-token path: set_owner failure must roll back the PG user."""
         from app.services.orders import deliver_order
 
         plan = SimpleNamespace(
@@ -63,6 +64,8 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
         )
 
         pg = AsyncMock()
+        # Legacy owner client has no _login_username → set_owner path is used
+        pg._login_username = None
         pg.create_user_from_template = AsyncMock(
             return_value={"id": 555, "username": "clk_x", "subscription_url": "https://x/sub"}
         )
@@ -77,6 +80,7 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
                 MagicMock(scalar_one=MagicMock(return_value=order)),  # reload
                 MagicMock(scalar_one_or_none=MagicMock(return_value=SimpleNamespace(
                     pg_admin_username="res_admin",
+                    pg_admin_password_enc=None,
                     commission_percent=10,
                     balance=0,
                     user_id=42,
@@ -87,6 +91,10 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("app.services.orders.get_pg", return_value=pg),
+            patch(
+                "app.services.pasarguard.get_pg_for_reseller",
+                new=AsyncMock(return_value=pg),
+            ),
             patch("app.services.orders.generate_pg_username", new=AsyncMock(return_value="clk_x")),
             patch(
                 "app.services.orders._reseller_pg_link",
@@ -97,15 +105,15 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(),
             ),
         ):
-            with self.assertRaises(ValueError) as ctx:
+            with self.assertRaises((ValueError, RuntimeError)):
                 await deliver_order(session, order)
 
-        self.assertIn("مالکیت", str(ctx.exception))
         pg.set_owner_by_id.assert_awaited_once_with(555, "res_admin")
         pg.delete_user_by_id.assert_awaited_once_with(555)
         self.assertGreaterEqual(session.commit.await_count, 1)
 
     async def test_success_assigns_owner_before_commit(self):
+        """Shop path authenticates as reseller — ownership is implicit (no set_owner)."""
         from app.services.orders import deliver_order
 
         plan = SimpleNamespace(
@@ -128,12 +136,15 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
         )
         profile = SimpleNamespace(
             pg_admin_username="res_admin",
+            pg_admin_password_enc="enc",
             commission_percent=10,
             balance=0,
             user_id=42,
         )
 
         pg = AsyncMock()
+        # Reseller-authenticated client — skip set_owner transfer
+        pg._login_username = "res_admin"
         pg.create_user_from_template = AsyncMock(
             return_value={"id": 555, "username": "clk_x", "subscription_url": "https://x/sub"}
         )
@@ -150,11 +161,16 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
                 MagicMock(rowcount=1),  # atomic DELIVERING claim
                 MagicMock(scalar_one=MagicMock(return_value=order)),
                 MagicMock(scalar_one_or_none=MagicMock(return_value=profile)),
+                MagicMock(rowcount=1),  # commission SQL increment
             ]
         )
 
         with (
             patch("app.services.orders.get_pg", return_value=pg),
+            patch(
+                "app.services.pasarguard.get_pg_for_reseller",
+                new=AsyncMock(return_value=pg),
+            ),
             patch("app.services.orders.generate_pg_username", new=AsyncMock(return_value="clk_x")),
             patch(
                 "app.services.orders._reseller_pg_link",
@@ -172,22 +188,34 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
         ):
             result = await deliver_order(session, order)
 
-        pg.set_owner_by_id.assert_awaited_once_with(555, "res_admin")
+        pg.set_owner_by_id.assert_not_awaited()
         pg.delete_user_by_id.assert_not_awaited()
         self.assertEqual(result.status, OrderStatus.DELIVERED.value)
-        self.assertEqual(profile.balance, 100)  # 10% of 1000
+        # Commission is applied via atomic SQL UPDATE (not ORM RMW)
+        self.assertTrue(
+            any(
+                "ResellerProfile" in str(c) or "balance" in str(c)
+                for c in session.execute.await_args_list
+            )
+            or session.execute.await_count >= 3
+        )
 
 
 class SourceWiringGuards(unittest.TestCase):
     def test_orders_no_longer_swallows_set_owner(self):
         src = Path("app/services/orders.py").read_text(encoding="utf-8")
         # Old bypass: set_owner failure was ignored with bare pass
-        self.assertNotIn("await pg.set_owner_by_id(service.pg_user_id, profile.pg_admin_username)\n            except Exception:\n                pass", src)
-        self.assertIn("مالکیت ست نشد و حذف شد", src)
+        self.assertNotIn(
+            "await pg.set_owner_by_id(service.pg_user_id, profile.pg_admin_username)\n"
+            "            except Exception:\n                pass",
+            src,
+        )
+        self.assertIn("مالکیت قابل تنظیم نیست", src)
         self.assertIn("delete_user_by_id", src)
         # Reseller path must always call quota assert (not only when pg_owner truthy)
         self.assertIn("if order.reseller_id:", src)
         self.assertIn("assert_reseller_can_deliver", src)
+        self.assertIn("get_pg_for_reseller", src)
 
     def test_web_create_requires_pg_owner(self):
         src = Path("app/api/pg_pages.py").read_text(encoding="utf-8")

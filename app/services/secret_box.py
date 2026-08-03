@@ -13,8 +13,15 @@ def _fernet():
     from cryptography.fernet import Fernet
 
     from app.config import get_settings
+    from app.services.security_policy import is_placeholder_secret
 
-    raw = (get_settings().web_secret or "change-me").encode("utf-8")
+    raw_secret = (get_settings().web_secret or "").strip()
+    if is_placeholder_secret(raw_secret):
+        # Refuse to encrypt under a known/weak key — force ensure_web_secret first.
+        from app.services.setup_wizard import ensure_web_secret
+
+        raw_secret = ensure_web_secret()
+    raw = raw_secret.encode("utf-8")
     key = base64.urlsafe_b64encode(hashlib.sha256(raw).digest())
     return Fernet(key)
 
