@@ -225,6 +225,8 @@ async def _send_to_chats(
         targets.append(aid)
 
     async def _one(admin_id: int) -> None:
+        if admin_id <= 0:
+            return
         try:
             if photo:
                 await bot.send_photo(
@@ -239,6 +241,11 @@ async def _send_to_chats(
                     admin_id, text, reply_markup=markup, parse_mode="HTML"
                 )
         except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "notify send failed chat_id=%s", admin_id, exc_info=True
+            )
             if photo:
                 try:
                     await bot.send_message(

@@ -72,6 +72,7 @@ SECTIONS: dict[str, dict] = {
         "title": "کیبورد اصلی",
         "subs": [
             ("layout", "چیدمان کیبورد", "menu_layout"),
+            ("order", "دکمه‌های فعال / ترتیب", "menu_order"),
         ],
     },
     "pay": {
@@ -170,6 +171,77 @@ def _preview(value: str | None, *, limit: int = 120) -> str:
     if len(text) > limit:
         return text[: limit - 1] + "…"
     return text
+
+
+MENU_ORDER_LABELS = {
+    "shop": "خرید",
+    "services": "سرویس‌ها",
+    "wallet": "کیف پول",
+    "support": "پشتیبانی",
+    "referral": "دعوت",
+    "miniapp": "مینی‌اپ",
+}
+
+
+async def _render_menu_order(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    reseller_id: int,
+    *,
+    back: str,
+) -> None:
+    from app.bot.keyboards import DEFAULT_MENU_ORDER
+
+    with _Scoped(reseller_id):
+        raw = await get_setting(session, "menu_order", reseller_id=reseller_id) or ""
+    order = [
+        p.strip()
+        for p in raw.split(",")
+        if p.strip() and p.strip() in DEFAULT_MENU_ORDER and p.strip() != "reseller_apply"
+    ]
+    if "shop" not in order:
+        order.insert(0, "shop")
+    rows: list[list[InlineKeyboardButton]] = []
+    for i, key in enumerate(order[:10]):
+        label = MENU_ORDER_LABELS.get(key, key)
+        row = [InlineKeyboardButton(text=f"{i + 1}. {label}", callback_data="res:st:noop")]
+        if i > 0:
+            row.append(InlineKeyboardButton(text="⬆️", callback_data=f"res:st:menu:up:{i}"))
+        if i < len(order) - 1:
+            row.append(InlineKeyboardButton(text="⬇️", callback_data=f"res:st:menu:dn:{i}"))
+        rows.append(row)
+    # Offer pool items to add
+    pool = [k for k in DEFAULT_MENU_ORDER if k not in order and k != "reseller_apply"]
+    for key in pool[:6]:
+        label = MENU_ORDER_LABELS.get(key, key)
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"➕ {label}",
+                    callback_data=f"res:st:menu:add:{key}",
+                )
+            ]
+        )
+    # Removable (non-required)
+    for key in order:
+        if key == "shop":
+            continue
+        label = MENU_ORDER_LABELS.get(key, key)
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"🗑 حذف {label}",
+                    callback_data=f"res:st:menu:rm:{key}",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data=back)])
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            "<b>منوی فعال</b>\nترتیب را با فلش عوض کنید؛ از وب‌پنل هم می‌توانید کامل‌تر مدیریت کنید.",
+            reply_markup=_kb(rows),
+        )
 
 
 def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
@@ -368,6 +440,9 @@ async def _render_sub(
                     reply_markup=_kb(rows),
                 )
         return
+    if fields == "menu_order":
+        await _render_menu_order(callback, session, reseller_id, back=f"res:st:sec:{sec_id}")
+        return
     if not isinstance(fields, list):
         await callback.answer("نامعتبر", show_alert=True)
         return
@@ -501,6 +576,72 @@ async def menu_layout_toggle(
         )
     await callback.answer("ذخیره شد")
     await _render_sub(callback, session, "menu", "layout", profile.user_id)
+
+
+@router.callback_query(F.data == "res:st:noop")
+async def settings_noop(callback: CallbackQuery):
+    await callback.answer()
+
+
+@router.callback_query(
+    F.data.startswith("res:st:menu:up:")
+    | F.data.startswith("res:st:menu:dn:")
+    | F.data.startswith("res:st:menu:add:")
+    | F.data.startswith("res:st:menu:rm:")
+)
+async def menu_order_edit(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    profile, err = await _gate(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if err:
+        await callback.answer(err, show_alert=True)
+        return
+    from app.bot.keyboards import DEFAULT_MENU_ORDER, sync_show_flags_for_order
+    from app.services.users import set_settings_bulk
+
+    parts = (callback.data or "").split(":")
+    op = parts[3] if len(parts) > 3 else ""
+    with _Scoped(profile.user_id):
+        raw = await get_setting(session, "menu_order", reseller_id=profile.user_id) or ""
+    order = [
+        p.strip()
+        for p in raw.split(",")
+        if p.strip() and p.strip() in DEFAULT_MENU_ORDER and p.strip() != "reseller_apply"
+    ]
+    if "shop" not in order:
+        order.insert(0, "shop")
+    if op in {"up", "dn"}:
+        try:
+            idx = int(parts[4])
+        except (IndexError, ValueError):
+            await callback.answer()
+            return
+        swap = idx - 1 if op == "up" else idx + 1
+        if idx < 0 or idx >= len(order) or swap < 0 or swap >= len(order):
+            await callback.answer("انتهای لیست")
+            return
+        order[idx], order[swap] = order[swap], order[idx]
+    elif op == "add":
+        key = parts[4] if len(parts) > 4 else ""
+        if key in DEFAULT_MENU_ORDER and key != "reseller_apply" and key not in order:
+            order.append(key)
+    elif op == "rm":
+        key = parts[4] if len(parts) > 4 else ""
+        if key and key != "shop" and key in order:
+            order = [k for k in order if k != key]
+    payload = {"menu_order": ",".join(order), **sync_show_flags_for_order(order)}
+    payload["show_reseller_apply"] = "0"
+    await set_settings_bulk(session, payload, reseller_id=profile.user_id)
+    await callback.answer("ذخیره شد")
+    await _render_menu_order(
+        callback, session, profile.user_id, back="res:st:sec:menu"
+    )
 
 
 @router.callback_query(F.data.startswith("res:st:ntog:"))

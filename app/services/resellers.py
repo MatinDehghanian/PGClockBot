@@ -46,6 +46,7 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("payment", "پرداخت"),
     ("supports", "پشتیبان‌ها"),
     ("forcejoin", "کانال اجباری"),
+    ("naming", "نام‌گذاری سرویس"),
     ("notifications", "نوتیفیکیشن"),
     ("bot", "ربات اختصاصی"),
 ]
@@ -99,7 +100,7 @@ def parse_perms(raw: str | None) -> list[str]:
 def with_shop_settings(perms: list[str] | None) -> list[str]:
     """Ensure core shop capabilities are present for resellers."""
     out = list(perms or [])
-    for key in ("shop_settings", "plans"):
+    for key in ("dashboard", "shop_settings", "plans", "tickets", "orders", "payments"):
         if key not in out:
             out.append(key)
     return out
@@ -124,7 +125,7 @@ def has_perm(profile: ResellerProfile | None, key: str, *, role: str | None = No
     if not profile or not profile.is_active:
         return False
     # Explicit empty string = intentionally restricted (do not soft-upgrade to DEFAULT).
-    # None / unset → DEFAULT feature set. Always ensure core shop keys when any perms exist.
+    # None / unset → DEFAULT feature set. Non-empty lists always get core shop keys.
     raw = profile.web_permissions
     if raw is None:
         perms = with_shop_settings(parse_perms(DEFAULT_FEATURE_PERMS))
@@ -880,11 +881,14 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
         "menu_order",
         "shop_title",
         "welcome_text",
-        "card_enabled",
-        "gateway_enabled",
-        "crypto_enabled",
+        "pay_card_enabled",
+        "pay_gateway_enabled",
+        "pay_crypto_enabled",
+        "pay_wallet_enabled",
         "force_join_enabled",
         "force_join_channel",
+        "notify_new_ticket",
+        "notify_ticket_message",
     )
     added = False
     for key in seed_keys:

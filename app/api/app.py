@@ -312,12 +312,12 @@ def create_api_app(lifespan=None) -> FastAPI:
                 if not allowed:
                     raise NotAuthenticated(login_error=deny_msg)
             # Always re-read ACL from DB — never trust stale cookie permissions.
-            # Match bot has_perm: soft-ensure core shop keys when any perms exist.
-            from app.services.resellers import with_shop_settings
+            # Soft-ensure core shop keys even when the stored list is empty.
+            from app.services.resellers import DEFAULT_FEATURE_PERMS, with_shop_settings
 
             user = dict(user)
-            parsed = parse_perms(profile.web_permissions) or []
-            user["permissions"] = with_shop_settings(parsed) if parsed else parsed
+            parsed = parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
+            user["permissions"] = with_shop_settings(parsed)
             user["bot_user_id"] = int(bot_user_id)
             if profile.pg_admin_username:
                 user["pg_admin_username"] = profile.pg_admin_username

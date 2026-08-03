@@ -177,7 +177,13 @@ async def support_body(
             ticket_reseller_id=ticket.reseller_id,
         )
     except Exception:
-        pass
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "notify_new_ticket failed ticket_id=%s reseller_id=%s",
+            ticket.id,
+            ticket.reseller_id,
+        )
 
 
 @router.callback_query(F.data == "support:list")

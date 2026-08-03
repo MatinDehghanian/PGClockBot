@@ -12,10 +12,10 @@ class Version366Tests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.6.6")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.6.6")
+        self.assertEqual(__version__, "3.6.7")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.6.7")
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"3.6.6"', notes)
+        self.assertIn('"3.6.7"', notes)
 
 
 class CancelSkipHandlerTests(unittest.TestCase):

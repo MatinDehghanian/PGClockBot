@@ -177,10 +177,13 @@ async def res_dash(
     open_tickets = await session.scalar(
         select(func.count())
         .select_from(Ticket)
-        .join(BotUser, BotUser.id == Ticket.user_id)
+        .outerjoin(BotUser, BotUser.id == Ticket.user_id)
         .where(
-            BotUser.reseller_id == owner_id,
-            Ticket.status == TicketStatus.OPEN.value,
+            or_(
+                Ticket.reseller_id == owner_id,
+                (Ticket.reseller_id.is_(None)) & (BotUser.reseller_id == owner_id),
+            ),
+            Ticket.status.in_([TicketStatus.OPEN.value, TicketStatus.ANSWERED.value]),
         )
     ) or 0
     text = (
@@ -423,14 +426,28 @@ async def res_tickets(
             )
         return
     lines = ["🎫 <b>تیکت‌های مشتریان</b>\n"]
+    rows_kb: list[list[InlineKeyboardButton]] = []
     for t, u in rows:
-        lines.append(f"#{t.id} — {t.subject[:40]} — {u.full_name or u.telegram_id}")
-    lines.append("\nاز اعلان تلگرام روی «پاسخ» بزنید یا تیکت را باز کنید.")
+        who = u.full_name or u.username or str(u.telegram_id)
+        lines.append(f"#{t.id} — {t.subject[:40]} — {who}")
+        rows_kb.append(
+            [
+                InlineKeyboardButton(
+                    text=f"💬 #{t.id}",
+                    callback_data=f"tkt:reply:{t.id}",
+                ),
+                InlineKeyboardButton(
+                    text=f"🗃 بستن #{t.id}",
+                    callback_data=f"tkt:close:{t.id}",
+                ),
+            ]
+        )
+    lines.append("\nروی دکمه پاسخ بزنید یا تیکت را ببندید.")
     if callback.message:
         await safe_edit_text(
             callback.message,
             "\n".join(lines),
-            reply_markup=None,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows_kb) if rows_kb else None,
         )
 
 

@@ -240,6 +240,7 @@ REPLY_ACTION_ADMIN_TICKETS = "adm_tickets"
 REPLY_ACTION_ADMIN_PLANS = "adm_plans"
 REPLY_ACTION_ADMIN_PG = "adm_pg"
 REPLY_ACTION_ADMIN_PREVIEW = "adm_preview"
+REPLY_ACTION_RES_PREVIEW = "res_preview"
 REPLY_ACTION_ADMIN_USERS = "adm_users"
 REPLY_ACTION_ADMIN_SETTINGS = "adm_settings"
 REPLY_ACTION_ADMIN_BROADCAST = "adm_broadcast"
@@ -478,7 +479,19 @@ def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
         entries.append(("res_tickets", "🎫 تیکت‌های مشتریان"))
     if has_bot_perm(profile, "shop_settings"):
         entries.append(("res_settings", "⚙️ تنظیمات فروشگاه"))
+    # Shop owner is admin of their bot — preview customer keyboard
+    entries.append((REPLY_ACTION_RES_PREVIEW, "👁 پیش‌نمایش منوی کاربر"))
     return entries
+
+
+def reseller_hub_main_keyboard(profile=None, ui: dict | None = None) -> ReplyKeyboardMarkup:
+    """Primary keyboard for shop owner/staff on their dedicated bot (like admin hub)."""
+    entries = _reseller_submenu_entries(profile)
+    rows = _pack_reply_rows(entries, ui, footer=[_home_label(ui)])
+    return _reply_markup(
+        rows or [[KeyboardButton(text=_home_label(ui))]],
+        placeholder="پنل مدیریت فروشگاه…",
+    )
 
 
 def _pay_method_entries(ui: dict | None = None) -> list[tuple[str, str]]:
@@ -555,11 +568,13 @@ def main_reply_keyboard(
         entries = _reply_admin_entries(ui)
         rows = _pack_reply_rows(entries, ui, footer=[home_label])
     else:
+        # Preview / customer surface — never append staff-only buttons
+        map_role = Role.USER.value if as_user else role
         entries = _reply_user_entries(
-            role,
+            map_role,
             has_services=has_services,
             ui=ui,
-            show_reseller_creds=show_reseller_creds,
+            show_reseller_creds=False if as_user else show_reseller_creds,
         )
         rows = _pack_reply_rows(entries, ui, footer=[home_label])
     return _reply_markup(rows, placeholder="از منوی پایین انتخاب کنید…")

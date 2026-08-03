@@ -139,6 +139,21 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if tab == "menu":
             for name, fields in list(groups.items()):
                 groups[name] = [f for f in fields if f[0] != "show_reseller_apply"]
+        if tab == "buttons":
+            # Shop bots don't need platform-admin / apply button labels
+            _shop_btn_block = {
+                "btn_admin",
+                "btn_adm_orders",
+                "btn_adm_payments",
+                "btn_adm_tickets",
+                "btn_adm_plans",
+                "btn_adm_pg",
+                "btn_adm_preview",
+                "btn_reseller_apply",
+                "btn_reseller_creds",
+            }
+            for name, fields in list(groups.items()):
+                groups[name] = [f for f in fields if f[0] not in _shop_btn_block]
 
         profile = await _load_profile(session, rid)
         ctx: dict = {

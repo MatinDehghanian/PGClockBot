@@ -59,7 +59,7 @@ async def build_main_reply_keyboard(
     as_user: bool = False,
     ui: dict | None = None,
 ) -> tuple[ReplyKeyboardMarkup, dict, str]:
-    from app.services.reseller_access import effective_menu_role, is_shop_owner_on_main_bot
+    from app.services.reseller_access import effective_menu_role, is_shop_owner_on_main_bot, load_reseller_actor
 
     if ui is None:
         ui = await get_all_settings(session)
@@ -69,6 +69,16 @@ async def build_main_reply_keyboard(
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
+    # Shop owner/staff on their dedicated bot → management hub (like platform admin)
+    if role == "reseller" and is_reseller_bot and not as_user:
+        _, profile = await load_reseller_actor(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        markup = kb.reseller_hub_main_keyboard(profile, ui)
+        return markup, ui, role
     has = False if (role == "admin" and not as_user) else await user_has_services(session, db_user.id)
     show_creds = is_shop_owner_on_main_bot(db_user, is_reseller_bot=is_reseller_bot)
     markup = kb.main_reply_keyboard(
@@ -217,9 +227,12 @@ async def show_nav_keyboard(
     elif level == NAV_TOPUP_PAY:
         markup = kb.topup_pay_reply_keyboard(ui)
     elif level == NAV_USER_PREVIEW:
+        # Always customer keyboard — never leak reseller/admin hub buttons
+        from app.db.models import Role as _Role
+
         has = await user_has_services(session, db_user.id)
         markup = kb.main_reply_keyboard(
-            db_user.role,
+            _Role.USER.value,
             has_services=has,
             ui=ui,
             as_user=True,

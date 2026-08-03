@@ -85,7 +85,7 @@ class ReplyMenuTextFilter(BaseFilter):
             is_reseller_bot=is_reseller_bot,
             profile=profile,
         )
-        # Main-bot admin can also hit user-preview labels
+        # Main-bot admin / shop reseller can also hit user-preview labels
         if role == "admin" and not is_reseller_bot:
             for k, v in kb.reply_action_map(
                 "user",
@@ -96,6 +96,20 @@ class ReplyMenuTextFilter(BaseFilter):
                 is_reseller_bot=False,
             ).items():
                 mapping.setdefault(k, v)
+        if role == Role.RESELLER.value and is_reseller_bot:
+            for k, v in kb.reply_action_map(
+                Role.USER.value,
+                has_services=has,
+                ui=ui,
+                as_user=True,
+                include_submenus=True,
+                is_reseller_bot=True,
+                profile=None,
+            ).items():
+                mapping.setdefault(k, v)
+            # Escape from preview back to shop hub
+            mapping[(kb._t(ui, "btn_reseller") or "🤝 پنل نماینده").strip()] = kb.REPLY_ACTION_RESELLER
+            mapping["👁 پیش‌نمایش منوی کاربر"] = kb.REPLY_ACTION_RES_PREVIEW
         # Shared / colliding labels — resolve by current nav level
         level = await nav.get_nav_level(state)
         if level == nav.NAV_TOPUP_PAY:
@@ -1397,6 +1411,7 @@ async def reply_main_nav(
         "res_orders",
         "res_payments",
         "res_tickets",
+        "res_preview",
         "res_st_shop",
         "res_st_menu",
         "res_st_pay",
@@ -1496,6 +1511,11 @@ async def reply_main_nav(
             message, session, db_user, state, is_reseller_bot=is_reseller_bot
         )
     elif action == kb.REPLY_ACTION_ADMIN_PREVIEW:
+        await open_user_preview(message, session, db_user, state)
+    elif action == kb.REPLY_ACTION_RES_PREVIEW:
+        if not is_reseller_bot:
+            await message.answer("پیش‌نمایش فقط روی ربات فروشگاه شما فعال است.")
+            return
         await open_user_preview(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_ADMIN_DASH:
         await _soft_admin(

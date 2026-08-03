@@ -62,6 +62,21 @@ async def render_home(
             "پنل مدیریت فروشگاه\nاز کیبورد پایین گزینه را انتخاب کنید.",
         )
         reply_kb = kb.main_reply_keyboard(effective_role, has_services=False, ui=ui)
+    elif effective_role == "reseller" and is_reseller_bot:
+        from app.services.reseller_access import load_reseller_actor
+
+        _, profile = await load_reseller_actor(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        text = format_message(
+            f"🛠 {ui.get('shop_title', 'فروشگاه')}",
+            "پنل مدیریت فروشگاه شما\nاز کیبورد پایین گزینه را انتخاب کنید.\n"
+            "برای دیدن منوی مشتری: «پیش‌نمایش منوی کاربر».",
+        )
+        reply_kb = kb.reseller_hub_main_keyboard(profile, ui)
     else:
         welcome = ui.get("welcome_text", "")
         title = ui.get("shop_title", "")
