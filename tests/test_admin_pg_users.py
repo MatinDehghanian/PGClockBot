@@ -10,21 +10,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 class PgUsersKeyboardTests(unittest.TestCase):
     def test_hub_has_users_and_create(self):
-        from app.bot.keyboards import pg_admin_keyboard
+        from app.bot.keyboards import pg_reply_keyboard
 
-        kb = pg_admin_keyboard()
-        dumped = kb.model_dump()
-        flat = str(dumped)
-        self.assertIn("adm:pg:users", flat)
-        self.assertIn("adm:pg:create", flat)
-        self.assertIn("adm:pg:search", flat)
+        kb = pg_reply_keyboard({"btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"})
+        flat = [b.text for row in kb.keyboard for b in row]
+        self.assertIn("👥 کاربران VPN", flat)
+        self.assertIn("➕ ساخت کاربر", flat)
+        self.assertIn("🔎 جستجوی یوزر", flat)
 
     def test_overview_is_first_button(self):
-        from app.bot.keyboards import pg_admin_keyboard
+        from app.bot.keyboards import pg_reply_keyboard
 
-        kb = pg_admin_keyboard()
-        first = kb.inline_keyboard[0][0]
-        self.assertEqual(first.callback_data, "adm:pg:stats")
+        kb = pg_reply_keyboard({"btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی", "menu_layout": "classic"})
+        first = kb.keyboard[0][0]
         self.assertIn("نمای کلی", first.text)
 
 

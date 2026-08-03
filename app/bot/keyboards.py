@@ -403,10 +403,11 @@ def _admin_backup_submenu_entries(ui: dict | None = None) -> list[tuple[str, str
 
 def _admin_broadcast_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     _ = ui
+    # Labels must NOT collide with admin hub («🤝 نمایندگان» → adm_resellers).
     return [
         ("bc_aud_all", "📢 همه"),
         ("bc_aud_users", "👥 کاربران عادی"),
-        ("bc_aud_resellers", "🤝 نمایندگان"),
+        ("bc_aud_resellers", "🤝 فقط نمایندگان"),
         ("bc_aud_admins", "🛠 ادمین‌ها"),
     ]
 
@@ -782,6 +783,16 @@ def reply_action_map(
                 mapping[(text or "").strip()] = key
             for key, text in _admin_plans_submenu_entries(ui):
                 mapping[(text or "").strip()] = key
+            # Hub labels win over any accidental submenu collisions
+            for key, text in _reply_admin_entries(ui):
+                mapping[(text or "").strip()] = key
+
+        # Shop chrome labels (custom/wholesale) — always registered; keyboard
+        # only shows them when enabled.
+        for key, text in _shop_submenu_entries(
+            ui, custom_enabled=True, wholesale_enabled=True
+        ):
+            mapping.setdefault((text or "").strip(), key)
 
         if reseller_actor:
             from app.services.resellers import has_bot_perm
@@ -820,22 +831,44 @@ def miniapp_inline_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup | No
 
 
 def admin_main_menu(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Primary home for bot owner — management tools only."""
-    buttons = [
-        InlineKeyboardButton(text=_t(ui, "btn_admin"), callback_data="adm:home"),
-        InlineKeyboardButton(text="🛒 سفارش‌ها", callback_data="adm:orders"),
-        InlineKeyboardButton(text="🧾 رسیدها", callback_data="adm:payments"),
-        InlineKeyboardButton(text="🎫 تیکت‌ها", callback_data="adm:tickets"),
-        InlineKeyboardButton(text="📦 پلن‌ها", callback_data="adm:plans"),
-        InlineKeyboardButton(text="🖥 پاسارگارد", callback_data="adm:pg"),
-    ]
-    preview = InlineKeyboardButton(
-        text="👁 پیش‌نمایش منوی کاربر",
-        callback_data="menu:as_user",
+    """Legacy stub — live admin home uses admin_reply_keyboard / main_reply_keyboard."""
+    _ = ui
+    return InlineKeyboardMarkup(inline_keyboard=[])
+
+
+REPLY_ACTION_SHOP_CUSTOM = "shop_custom"
+REPLY_ACTION_SHOP_WHOLESALE = "shop_wholesale"
+
+
+def _shop_submenu_entries(
+    ui: dict | None = None,
+    *,
+    custom_enabled: bool = False,
+    wholesale_enabled: bool = False,
+) -> list[tuple[str, str]]:
+    """Static shop chrome (custom/wholesale). Plan names stay inline."""
+    entries: list[tuple[str, str]] = []
+    if custom_enabled:
+        entries.append((REPLY_ACTION_SHOP_CUSTOM, "✨ پلن دلخواه"))
+    if wholesale_enabled:
+        entries.append(
+            (REPLY_ACTION_SHOP_WHOLESALE, _t(ui, "btn_wholesale") or "📦 فروش عمده")
+        )
+    return entries
+
+
+def shop_reply_keyboard(
+    ui: dict | None = None,
+    *,
+    custom_enabled: bool = False,
+    wholesale_enabled: bool = False,
+) -> ReplyKeyboardMarkup:
+    """Shop chrome on reply KB; plan picks are inline under the message."""
+    entries = _shop_submenu_entries(
+        ui, custom_enabled=custom_enabled, wholesale_enabled=wholesale_enabled
     )
-    return InlineKeyboardMarkup(
-        inline_keyboard=layout_rows(buttons, ui, full_width=[preview])
-    )
+    rows = _pack_reply_rows(entries, ui, footer_row=_submenu_footer(ui))
+    return _reply_markup(rows, placeholder="فروشگاه — پلن را از زیر پیام انتخاب کنید…")
 
 
 def plans_keyboard(
@@ -845,6 +878,8 @@ def plans_keyboard(
     custom_enabled: bool = False,
     wholesale_enabled: bool = False,
 ) -> InlineKeyboardMarkup:
+    """Plan name rows only — custom/wholesale/back live on shop_reply_keyboard."""
+    _ = custom_enabled, wholesale_enabled, ui  # kept for call-site compat
     rows = [
         [
             InlineKeyboardButton(
@@ -854,26 +889,8 @@ def plans_keyboard(
         ]
         for p in plans
     ]
-    extras: list[InlineKeyboardButton] = []
-    if custom_enabled:
-        extras.append(
-            InlineKeyboardButton(
-                text="✨ پلن دلخواه",
-                callback_data="shop:custom",
-            )
-        )
-    if wholesale_enabled:
-        extras.append(
-            InlineKeyboardButton(
-                text=_t(ui, "btn_wholesale") or "📦 فروش عمده",
-                callback_data="shop:wholesale",
-            )
-        )
-    if extras:
-        rows.extend(layout_rows(extras, ui))
-    rows.append(
-        [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="menu:home")]
-    )
+    if not rows:
+        rows = [[InlineKeyboardButton(text="پلنی نیست", callback_data="shop:list")]]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -881,6 +898,8 @@ def wholesale_plans_keyboard(
     plans: list[Plan],
     ui: dict | None = None,
 ) -> InlineKeyboardMarkup:
+    """Wholesale plan names only (back/chrome on reply KB)."""
+    _ = ui
     rows = [
         [
             InlineKeyboardButton(
@@ -890,7 +909,8 @@ def wholesale_plans_keyboard(
         ]
         for p in plans
     ]
-    rows.append([InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:list")])
+    if not rows:
+        rows = [[InlineKeyboardButton(text="پلنی نیست", callback_data="shop:wholesale")]]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -1152,16 +1172,14 @@ def support_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
 
 
 def support_contacts_keyboard(contacts: list[dict], ui: dict | None = None) -> InlineKeyboardMarkup:
+    """URL contact rows only — ticket/back live on support_reply_keyboard."""
+    _ = ui
     rows: list[list[InlineKeyboardButton]] = []
     for c in contacts:
         url = support_chat_url(c.get("telegram") or "")
         title = str(c.get("title") or "پشتیبان")[:64]
         if url:
             rows.append([InlineKeyboardButton(text=f"💬 {title}", url=url)])
-    rows.append(
-        [InlineKeyboardButton(text="🟣✉️ تیکت پشتیبانی", callback_data="support:tickets")]
-    )
-    rows.append([InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="menu:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -1241,16 +1259,9 @@ def admin_users_list_keyboard(
 
 
 def admin_resellers_menu(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Legacy inline hub — prefer admin_resellers_reply_keyboard."""
-    buttons = [
-        InlineKeyboardButton(text="📋 لیست نمایندگان", callback_data="adm:resellers:list:0"),
-        InlineKeyboardButton(text="📋 درخواست‌های منتظر", callback_data="adm:resapp:list"),
-        InlineKeyboardButton(text="➕ افزودن دستی", callback_data="adm:resellers:add"),
-    ]
-    back = InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")
-    return InlineKeyboardMarkup(
-        inline_keyboard=layout_rows(buttons, ui, full_width=[back])
-    )
+    """Legacy stub — prefer admin_resellers_reply_keyboard."""
+    _ = ui
+    return InlineKeyboardMarkup(inline_keyboard=[])
 
 
 def admin_resellers_list_keyboard(

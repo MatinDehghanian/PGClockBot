@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "3.6.5": [
+        "رفع باگ منوی نمایندگان: برخورد برچسب «🤝 نمایندگان» با مخاطب پیام گروهی",
+        "انصراف از پیام گروهی دیگر خطا نمی‌دهد و به کیبورد مخاطب برمی‌گردد",
+        "کروم فروشگاه (پلن دلخواه/عمده) و پشتیبانی/کیف‌پول روی Reply؛ اینلاین فقط نام پلن/URL",
+        "هاب‌های قدیمی اینلاین ادمین/نمایندگان خالی شدند — فقط Reply Keyboard",
+    ],
     "3.6.4": [
         "رفع منوی نمایندگان/کاربران: هاب‌ها دوباره Reply Keyboard را برمی‌گردانند",
         "ناوبری نماینده: preserve stack، بازگشت از پلن‌ها، ACL fail-closed بدون پروفایل",

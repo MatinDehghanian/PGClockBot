@@ -10,17 +10,25 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class CompactAdminMenuTests(unittest.TestCase):
-    def test_admin_home_pairs_in_compact(self):
-        from app.bot.keyboards import admin_home
+    def test_admin_home_is_legacy_stub(self):
+        from app.bot.keyboards import admin_home, admin_reply_keyboard
 
         kb = admin_home({"menu_layout": "compact"})
-        rows = kb.inline_keyboard
-        self.assertEqual(len(rows[0]), 2)
-        self.assertEqual(rows[0][0].callback_data, "adm:payments")
-        self.assertEqual(rows[0][1].callback_data, "adm:orders")
-        # back stays full-width
-        self.assertEqual(len(rows[-1]), 1)
-        self.assertEqual(rows[-1][0].callback_data, "menu:home")
+        # Inline hub gutted — live nav is reply keyboard
+        self.assertEqual(len(kb.inline_keyboard), 1)
+        flat = [
+            b.text
+            for row in admin_reply_keyboard(
+                {
+                    "menu_layout": "compact",
+                    "btn_back": "⬅️ بازگشت",
+                    "btn_menu_home": "🏠 منوی اصلی",
+                    "btn_adm_payments": "🧾 رسیدها",
+                }
+            ).keyboard
+            for b in row
+        ]
+        self.assertIn("🧾 رسیدها", flat)
 
     def test_admin_home_classic_singles(self):
         from app.bot.keyboards import admin_home
@@ -28,27 +36,27 @@ class CompactAdminMenuTests(unittest.TestCase):
         kb = admin_home({"menu_layout": "classic"})
         self.assertTrue(all(len(r) == 1 for r in kb.inline_keyboard))
 
-    def test_pg_admin_compact(self):
-        from app.bot.keyboards import pg_admin_keyboard
+    def test_pg_admin_is_legacy_stub(self):
+        from app.bot.keyboards import pg_admin_keyboard, pg_reply_keyboard
 
         kb = pg_admin_keyboard({"menu_layout": "compact"})
-        self.assertEqual(len(kb.inline_keyboard[0]), 2)
-        self.assertEqual(kb.inline_keyboard[0][0].callback_data, "adm:pg:stats")
-        self.assertEqual(len(kb.inline_keyboard[-1]), 1)
+        self.assertEqual(kb.inline_keyboard, [])
+        flat = [b.text for row in pg_reply_keyboard({"menu_layout": "compact", "btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"}).keyboard for b in row]
+        self.assertIn("🏠 نمای کلی", flat)
 
-    def test_admin_main_menu_compact(self):
-        from app.bot.keyboards import admin_main_menu
+    def test_admin_main_menu_is_legacy_stub(self):
+        from app.bot.keyboards import admin_main_menu, admin_reply_keyboard
 
         kb = admin_main_menu({"menu_layout": "compact"})
-        self.assertEqual(len(kb.inline_keyboard[0]), 2)
-        self.assertEqual(kb.inline_keyboard[-1][0].callback_data, "menu:as_user")
+        self.assertEqual(kb.inline_keyboard, [])
+        flat = [b.text for row in admin_reply_keyboard({"menu_layout": "compact", "btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"}).keyboard for b in row]
+        self.assertIn("📊 داشبورد", flat)
 
-    def test_reseller_home_compact(self):
+    def test_reseller_home_is_legacy_stub(self):
         from app.bot.keyboards import reseller_home
 
         kb = reseller_home(None, ui={"menu_layout": "compact"})
-        self.assertEqual(len(kb.inline_keyboard[0]), 2)
-        self.assertEqual(kb.inline_keyboard[-1][0].callback_data, "menu:home")
+        self.assertEqual(kb.inline_keyboard, [])
 
 
 class QrPreviewBackgroundTests(unittest.TestCase):
@@ -96,7 +104,7 @@ class WholesaleLogicTests(unittest.TestCase):
         self.assertIn("5", desc)
 
     def test_plans_keyboard_has_wholesale(self):
-        from app.bot.keyboards import plans_keyboard
+        from app.bot.keyboards import plans_keyboard, shop_reply_keyboard
 
         p = MagicMock()
         p.id = 1
@@ -105,7 +113,15 @@ class WholesaleLogicTests(unittest.TestCase):
         p.is_trial = False
         kb = plans_keyboard([p], {"btn_wholesale": "فروش عمده"}, wholesale_enabled=True)
         flat = [b.callback_data for row in kb.inline_keyboard for b in row]
-        self.assertIn("shop:wholesale", flat)
+        # Plan names only — wholesale chrome moved to reply KB
+        self.assertTrue(any(str(x).startswith("shop:plan:") for x in flat))
+        self.assertNotIn("shop:wholesale", flat)
+        shop = shop_reply_keyboard(
+            {"btn_wholesale": "فروش عمده", "btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"},
+            wholesale_enabled=True,
+        )
+        sflat = [b.text for row in shop.keyboard for b in row]
+        self.assertIn("فروش عمده", sflat)
 
     def test_web_modal_and_route_exist(self):
         html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")

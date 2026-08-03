@@ -154,13 +154,22 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
             or "در حال حاضر پلنی برای فروش فعال نیست.",
         )
         if callback.message:
-            await safe_edit_text(callback.message, text, reply_markup=kb.back_home(ui))
+            await safe_edit_text(callback.message, text, reply_markup=None)
+            await callback.message.answer(text, reply_markup=kb.persistent_reply_keyboard(ui))
         return
     if callback.message:
-        await safe_edit_text(callback.message, 
+        await safe_edit_text(
+            callback.message,
             format_message("🛒 انتخاب پلن", "یکی از پلن‌ها را انتخاب کنید:"),
             reply_markup=kb.plans_keyboard(
                 plans, ui, custom_enabled=custom_on, wholesale_enabled=wholesale_on
+            ),
+        )
+        await state.update_data(_shop_custom=custom_on, _shop_wholesale=wholesale_on)
+        await callback.message.answer(
+            "فروشگاه:",
+            reply_markup=kb.shop_reply_keyboard(
+                ui, custom_enabled=custom_on, wholesale_enabled=wholesale_on
             ),
         )
 

@@ -96,7 +96,7 @@ class ReplyMenuTextFilter(BaseFilter):
                 is_reseller_bot=False,
             ).items():
                 mapping.setdefault(k, v)
-        # Pay vs topup share labels — resolve by current nav level
+        # Shared / colliding labels — resolve by current nav level
         level = await nav.get_nav_level(state)
         if level == nav.NAV_TOPUP_PAY:
             for key, label in kb._topup_method_entries(ui):
@@ -109,6 +109,18 @@ class ReplyMenuTextFilter(BaseFilter):
                 mapping[(label or "").strip()] = key
         elif level == nav.NAV_REVIEW:
             for key, label in kb._review_submenu_entries(ui):
+                mapping[(label or "").strip()] = key
+        elif level == nav.NAV_ADMIN_BROADCAST:
+            for key, label in kb._admin_broadcast_submenu_entries(ui):
+                mapping[(label or "").strip()] = key
+        elif level == nav.NAV_SHOP:
+            for key, label in kb._shop_submenu_entries(
+                ui, custom_enabled=True, wholesale_enabled=True
+            ):
+                mapping[(label or "").strip()] = key
+        elif role == "admin" and not is_reseller_bot:
+            # Prefer admin hub labels outside broadcast (e.g. «نمایندگان»)
+            for key, label in kb._reply_admin_entries(ui):
                 mapping[(label or "").strip()] = key
         if kb.is_home_text(text, ui):
             action = kb.REPLY_ACTION_HOME
@@ -147,14 +159,17 @@ async def _nav_context(
 
 
 async def open_shop_list(
-    message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    *,
+    push: bool = True,
 ) -> None:
     from app.bot.handlers.shop import _custom_available_for_users
-    from app.bot.menu_nav import build_main_reply_keyboard
     from app.services.orders import list_active_plans
     from app.services.users import on
 
-    await state.clear()
     ui = await get_all_settings(session)
     trial_on = on(ui.get("trial_enabled"))
     plans = await list_active_plans(session, include_trial=True)
@@ -165,18 +180,30 @@ async def open_shop_list(
         plans = [p for p in plans if not p.is_trial]
     custom_on = await _custom_available_for_users(session, ui, plans=plans)
     wholesale_on = on(ui.get("wholesale_enabled")) and any(not p.is_trial for p in plans)
-    main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
     if not plans and not custom_on:
+        from app.bot.menu_nav import build_main_reply_keyboard
+
         text = format_message(
             "🛒 فروشگاه",
             ui.get("shop_empty_text") or "در حال حاضر پلنی برای فروش فعال نیست.",
         )
+        main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
         await message.answer(text, reply_markup=main_kb)
         return
-    # Keep main reply KB visible; plan picks are inline under the message
-    await message.answer(
-        format_message("🛒 انتخاب پلن", "یکی از پلن‌ها را انتخاب کنید:"),
-        reply_markup=main_kb,
+    await state.set_state(None)
+    await state.update_data(_shop_custom=custom_on, _shop_wholesale=wholesale_on)
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_SHOP,
+        text=format_message(
+            "🛒 انتخاب پلن",
+            "پلن را از دکمه‌های زیر پیام انتخاب کنید."
+            + ("\nپلن دلخواه / عمده از کیبورد پایین." if (custom_on or wholesale_on) else ""),
+        ),
+        state=state,
+        push=push,
     )
     await message.answer(
         "📦 پلن‌ها:",
@@ -994,6 +1021,9 @@ async def handle_back(
     if level == nav.NAV_WALLET:
         await open_wallet_home(message, session, db_user, state, push=False)
         return
+    if level == nav.NAV_SHOP:
+        await open_shop_list(message, session, db_user, state, push=False)
+        return
     if level == nav.NAV_SUPPORT:
         await open_support_home(message, session, db_user, state, push=False)
         return
@@ -1349,6 +1379,8 @@ async def reply_main_nav(
         kb.REPLY_ACTION_TOPUP_CRYPTO,
         kb.REPLY_ACTION_WALLET_TOPUP,
         kb.REPLY_ACTION_SUPPORT_NEW,
+        kb.REPLY_ACTION_SHOP_CUSTOM,
+        kb.REPLY_ACTION_SHOP_WHOLESALE,
         "bc_aud_all",
         "bc_aud_users",
         "bc_aud_resellers",
@@ -1418,6 +1450,18 @@ async def reply_main_nav(
 
     if action == kb.REPLY_ACTION_SHOP:
         await open_shop_list(message, session, db_user, state)
+    elif action == kb.REPLY_ACTION_SHOP_CUSTOM:
+        bubble = await message.answer("⏳")
+        from app.bot.handlers import shop as shop_h
+
+        cb = _SoftCallback(bubble, "shop:custom")
+        await shop_h.custom_start(cb, session, state)
+    elif action == kb.REPLY_ACTION_SHOP_WHOLESALE:
+        bubble = await message.answer("⏳")
+        from app.bot.handlers import shop as shop_h
+
+        cb = _SoftCallback(bubble, "shop:wholesale")
+        await shop_h.wholesale_start(cb, session, state)
     elif action == kb.REPLY_ACTION_SERVICES:
         await open_services_list(message, session, db_user)
     elif action == kb.REPLY_ACTION_WALLET:
@@ -1664,12 +1708,16 @@ async def global_cancel_restore(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    """Fallback: انصراف always restores the main reply keyboard.
+    """Fallback: انصراف restores the main reply keyboard.
 
-    Specific FSM handlers registered earlier may handle cancel first; this
-    catches remaining cases so the main menu never stays stuck on cancel-only KB.
+    If a later router has a state-specific cancel handler (e.g. broadcast),
+    skip so that handler can run.
     """
+    from aiogram.exceptions import SkipHandler
+
     current = await state.get_state()
+    if current and str(current).endswith(":broadcast_text"):
+        raise SkipHandler()
     if current is None:
         # Not in a flow — treat as home
         await restore_main_reply(

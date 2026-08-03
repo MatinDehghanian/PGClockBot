@@ -1969,9 +1969,15 @@ async def adm_broadcast_audience(callback: CallbackQuery, db_user: BotUser, stat
     await callback.answer()
     await state.set_state(AdminStates.broadcast_text)
     await state.update_data(broadcast_audience=audience)
+    audience_fa = {
+        "all": "همه",
+        "users": "کاربران عادی",
+        "resellers": "نمایندگان",
+        "admins": "ادمین‌ها",
+    }.get(audience, audience)
     if callback.message:
         await callback.message.edit_text(
-            f"📢 مخاطب: <b>{audience}</b>\nمتن پیام را بفرستید (HTML ساده).\nبرای لغو: انصراف"
+            f"📢 مخاطب: <b>{audience_fa}</b>\nمتن پیام را بفرستید (HTML ساده).\nبرای لغو: انصراف"
         )
         await callback.message.answer("متن پیام:", reply_markup=kb.cancel_reply())
 
@@ -1981,9 +1987,12 @@ async def adm_broadcast_send(message: Message, state: FSMContext, session: Async
     if not _is_admin(db_user):
         await state.clear()
         return
-    if (message.text or "").strip() == "انصراف":
+    if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_reply_keyboard())
+        await message.answer(
+            "لغو شد.",
+            reply_markup=kb.admin_broadcast_reply_keyboard(),
+        )
         return
     data = await state.get_data()
     audience = data.get("broadcast_audience") or "all"

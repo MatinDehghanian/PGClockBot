@@ -17,6 +17,7 @@ NAV_STACK = "_kb_stack"
 PAY_ORDER_ID = "_pay_order_id"
 
 NAV_MAIN = "main"
+NAV_SHOP = "shop"
 NAV_WALLET = "wallet"
 NAV_SUPPORT = "support"
 NAV_ADMIN = "admin"
@@ -170,7 +171,14 @@ async def show_nav_keyboard(
         if order_id is not None:
             await state.update_data(**{PAY_ORDER_ID: int(order_id)})
 
-    if level == NAV_WALLET:
+    if level == NAV_SHOP:
+        data = await state.get_data() if state is not None else {}
+        markup = kb.shop_reply_keyboard(
+            ui,
+            custom_enabled=bool(data.get("_shop_custom")),
+            wholesale_enabled=bool(data.get("_shop_wholesale")),
+        )
+    elif level == NAV_WALLET:
         markup = kb.wallet_reply_keyboard(ui)
     elif level == NAV_SUPPORT:
         markup = kb.support_reply_keyboard(ui)
