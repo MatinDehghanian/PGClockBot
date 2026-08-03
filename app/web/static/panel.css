@@ -1522,6 +1522,16 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   font-size: 12px;
   line-height: 1.45;
   opacity: 0.92;
+  color: inherit;
+}
+/* Captions inside flash boxes match the box severity color (not muted gray) */
+.flash .muted,
+.flash small.muted,
+.flash p.muted,
+.flash span.muted,
+.flash .home-update-copy .muted,
+.flash .dash-bot-setup-inner .muted {
+  color: inherit;
 }
 
 .auth-wrap {
@@ -4253,8 +4263,8 @@ html[data-theme="light"] .setup-progress span.done {
   min-width: 0;
   flex: 1 1 auto;
 }
-.home-update-copy strong { font-size: 13px; font-weight: 600; }
-.home-update-copy .muted { font-size: 12px; }
+.home-update-copy strong { font-size: 13px; font-weight: 600; color: inherit; }
+.home-update-copy .muted { font-size: 12px; color: inherit; }
 .home-top {
   margin-bottom: var(--section-gap);
 }
@@ -4403,11 +4413,13 @@ html[data-theme="light"] .setup-progress span.done {
   font-size: 14px;
   font-weight: 600;
   line-height: 1.5;
+  color: inherit;
 }
 .dash-bot-setup-inner .muted {
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
+  color: inherit;
 }
 .dash-bot-setup-inner .btn {
   margin-top: var(--space-1);
