@@ -390,7 +390,11 @@
         if (sel.disabled) return;
         const open = wrap.classList.contains('open');
         closeUiSelects();
-        closeRowActions();
+        /* Nested select inside kebab/عملیات must not dismiss the parent menu */
+        const nestedInRowMenu = !!wrap.closest('.row-actions-menu, .row-actions');
+        if (!nestedInRowMenu) {
+          closeRowActions();
+        }
         if (!open) {
           wrap.classList.add('open');
           toggle.setAttribute('aria-expanded', 'true');
@@ -440,18 +444,23 @@
         }
         return;
       }
-      if (!e.target.closest('.row-actions') && !e.target.closest('.row-actions-menu')) {
+      const inRowMenu = !!(e.target.closest('.row-actions')
+        || e.target.closest('.row-actions-menu')
+        || e.target.closest('.ui-select-menu'));
+      if (!inRowMenu) {
         closeRowActions();
       }
-      if (!e.target.closest('.ui-select')) {
+      if (!e.target.closest('.ui-select') && !e.target.closest('.ui-select-menu')) {
         closeUiSelects();
       }
     });
     window.addEventListener('resize', closeRowActions);
     window.addEventListener('scroll', (e) => {
       if (!document.querySelector('.row-actions.open')) return;
-      /* ignore scrolls inside the open menu itself */
-      if (e.target && e.target.closest && e.target.closest('.row-actions-menu')) return;
+      /* ignore scrolls inside the open menu or a nested select popup */
+      if (e.target && e.target.closest && (
+        e.target.closest('.row-actions-menu') || e.target.closest('.ui-select-menu')
+      )) return;
       closeRowActions();
     }, true);
 
