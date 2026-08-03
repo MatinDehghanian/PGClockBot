@@ -224,8 +224,10 @@ async def open_notify_bot_for_user(session, user) -> tuple[Bot, bool]:
 
     Prefers the dedicated reseller shop bot when the user belongs to a shop;
     otherwise creates a short-lived main-bot instance that the caller must close.
+
+    Always returns a bot with HTML parse_mode so format_message / <b> tags render.
     """
-    from app.config import get_settings
+    from app.bot import create_bot
     from app.services.resellers import get_reseller_profile
 
     reseller_id = getattr(user, "reseller_id", None)
@@ -237,7 +239,7 @@ async def open_notify_bot_for_user(session, user) -> tuple[Bot, bool]:
                 shop = mgr.bot_for_profile_id(int(profile.id))
                 if shop is not None:
                     return shop, False
-    return Bot(token=get_settings().bot_token), True
+    return create_bot(), True
 
 
 def init_reseller_bot_manager(dispatcher: Dispatcher) -> ResellerBotManager:

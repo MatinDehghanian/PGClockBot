@@ -195,6 +195,7 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
                 user.telegram_id,
                 format_message("❌ پرداخت رد شد", reject_body),
                 reply_markup=kb.back_home(ui),
+                parse_mode="HTML",
             )
         except Exception:
             pass

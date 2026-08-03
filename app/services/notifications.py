@@ -146,14 +146,22 @@ async def _send_admins(
         try:
             if photo:
                 await bot.send_photo(
-                    admin_id, photo=photo, caption=text[:1024], reply_markup=markup
+                    admin_id,
+                    photo=photo,
+                    caption=text[:1024],
+                    reply_markup=markup,
+                    parse_mode="HTML",
                 )
             else:
-                await bot.send_message(admin_id, text, reply_markup=markup)
+                await bot.send_message(
+                    admin_id, text, reply_markup=markup, parse_mode="HTML"
+                )
         except Exception:
             if photo:
                 try:
-                    await bot.send_message(admin_id, text, reply_markup=markup)
+                    await bot.send_message(
+                        admin_id, text, reply_markup=markup, parse_mode="HTML"
+                    )
                 except Exception:
                     pass
 
@@ -406,7 +414,9 @@ async def notify_ticket_message(
             ),
         )
         try:
-            await bot.send_message(int(user.telegram_id), text, reply_markup=markup)
+            await bot.send_message(
+                int(user.telegram_id), text, reply_markup=markup, parse_mode="HTML"
+            )
         except Exception:
             pass
         return
@@ -628,7 +638,7 @@ async def _send_to_user_chat(
 
         bot, should_close = await open_notify_bot_for_user(session, user)
         try:
-            await bot.send_message(int(user.telegram_id), text)
+            await bot.send_message(int(user.telegram_id), text, parse_mode="HTML")
             return True
         finally:
             if should_close:

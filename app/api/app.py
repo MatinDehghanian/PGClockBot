@@ -2029,6 +2029,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                         await bot.send_message(
                             user.telegram_id,
                             format_message("❌ سفارش رد شد", f"سفارش #{order_id} رد شد."),
+                            parse_mode="HTML",
                         )
                     finally:
                         if should_close:
@@ -2196,6 +2197,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     await bot.send_message(
                         user.telegram_id,
                         format_message("❌ پرداخت رد شد", body),
+                        parse_mode="HTML",
                     )
                 finally:
                     if should_close:

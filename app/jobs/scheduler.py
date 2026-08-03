@@ -184,6 +184,7 @@ async def check_expiring_services(bot: Bot) -> None:
                                     f"⏰ زمان سرویس <b>{svc.pg_username}</b> به کمتر از "
                                     f"<b>{time_pct}٪</b> رسیده است.\n"
                                     "از بخش سرویس‌ها تمدید کنید.",
+                                    parse_mode="HTML",
                                 )
                                 svc.notified_expire = True
                             except Exception:
@@ -209,6 +210,7 @@ async def check_expiring_services(bot: Bot) -> None:
                                     f"📉 حجم باقی‌مانده سرویس <b>{svc.pg_username}</b> کمتر از "
                                     f"<b>{traffic_pct}٪</b> است "
                                     f"({format_bytes(used)} از {format_bytes(limit_f)}).",
+                                    parse_mode="HTML",
                                 )
                                 svc.notified_traffic = True
                             except Exception:
