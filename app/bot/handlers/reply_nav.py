@@ -65,14 +65,17 @@ class ReplyMenuTextFilter(BaseFilter):
             ui=ui,
             show_reseller_creds=show_creds,
             include_submenus=True,
+            is_reseller_bot=is_reseller_bot,
         )
-        if role == "admin":
+        # Main-bot admin can also hit user-preview labels
+        if role == "admin" and not is_reseller_bot:
             for k, v in kb.reply_action_map(
                 "user",
                 has_services=has,
                 ui=ui,
                 as_user=True,
                 include_submenus=True,
+                is_reseller_bot=False,
             ).items():
                 mapping.setdefault(k, v)
         # Pay vs topup share labels — resolve by current nav level
@@ -497,9 +500,10 @@ async def open_pg_home(
     state: FSMContext | None = None,
     *,
     push: bool = True,
+    is_reseller_bot: bool = False,
 ) -> None:
-    if db_user.role != Role.ADMIN.value:
-        await message.answer("ادمین نیستید.")
+    if is_reseller_bot or db_user.role != Role.ADMIN.value:
+        await message.answer("دسترسی ندارید.")
         return
     await nav.show_nav_keyboard(
         message,
@@ -522,9 +526,10 @@ async def open_admin_users_hub(
     state: FSMContext | None = None,
     *,
     push: bool = True,
+    is_reseller_bot: bool = False,
 ) -> None:
-    if db_user.role != Role.ADMIN.value:
-        await message.answer("ادمین نیستید.")
+    if is_reseller_bot or db_user.role != Role.ADMIN.value:
+        await message.answer("دسترسی ندارید.")
         return
     from sqlalchemy import func
     from app.db.models import Order
@@ -558,9 +563,10 @@ async def open_admin_resellers_hub(
     state: FSMContext | None = None,
     *,
     push: bool = True,
+    is_reseller_bot: bool = False,
 ) -> None:
-    if db_user.role != Role.ADMIN.value:
-        await message.answer("ادمین نیستید.")
+    if is_reseller_bot or db_user.role != Role.ADMIN.value:
+        await message.answer("دسترسی ندارید.")
         return
     await nav.show_nav_keyboard(
         message,
@@ -580,9 +586,10 @@ async def open_admin_settings_hub(
     state: FSMContext | None = None,
     *,
     push: bool = True,
+    is_reseller_bot: bool = False,
 ) -> None:
-    if db_user.role != Role.ADMIN.value:
-        await message.answer("ادمین نیستید.")
+    if is_reseller_bot or db_user.role != Role.ADMIN.value:
+        await message.answer("دسترسی ندارید.")
         return
     await nav.show_nav_keyboard(
         message,
@@ -595,6 +602,142 @@ async def open_admin_settings_hub(
     )
 
 
+async def open_admin_backup_hub(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+    is_reseller_bot: bool = False,
+) -> None:
+    import asyncio
+
+    from app.bot.handlers import admin_backup as backup_h
+    from app.services.backup import list_backups
+
+    if is_reseller_bot or db_user.role != Role.ADMIN.value:
+        await _refuse_admin(message)
+        return
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_ADMIN_BACKUP,
+        text="💾 <b>بکاپ / ریستور</b>\nعملیات ثابت از کیبورد پایین؛ فایل‌های بکاپ زیر پیام اینلاین هستند.",
+        state=state,
+        push=push,
+    )
+    backups = await asyncio.to_thread(list_backups)
+    await message.answer(
+        backup_h._hub_text(backups),
+        reply_markup=kb.backup_files_keyboard(backups),
+    )
+
+
+async def open_admin_broadcast_hub(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+    is_reseller_bot: bool = False,
+) -> None:
+    if is_reseller_bot or db_user.role != Role.ADMIN.value:
+        await _refuse_admin(message)
+        return
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_ADMIN_BROADCAST,
+        text="📢 <b>پیام گروهی</b>\nمخاطب را از کیبورد پایین انتخاب کنید:",
+        state=state,
+        push=push,
+    )
+
+
+async def open_admin_plans_hub(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+    is_reseller_bot: bool = False,
+) -> None:
+    from app.db.models import Plan
+
+    if is_reseller_bot or db_user.role != Role.ADMIN.value:
+        await _refuse_admin(message)
+        return
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_ADMIN_PLANS,
+        text="💎 <b>پلن‌های فروش</b>\nساخت/دلخواه/تست از کیبورد؛ انتخاب پلن زیر پیام اینلاین است.",
+        state=state,
+        push=push,
+    )
+    result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
+    plans = list(result.scalars().all())
+    if not plans:
+        body = "هنوز پلنی ثبت نشده است."
+    else:
+        from app.bot.handlers.admin import _plan_line
+
+        body = "\n\n".join(_plan_line(p) for p in plans[:20])
+    await message.answer(
+        f"📦 <b>لیست پلن‌ها</b>\n\n{body}",
+        reply_markup=kb.admin_plans_list_keyboard(plans),
+    )
+
+
+async def open_reseller_settings_hub(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
+    push: bool = True,
+) -> None:
+    from app.services.reseller_access import load_reseller_actor
+
+    if not is_reseller_bot:
+        await open_reseller_creds(message, session, db_user)
+        return
+    owner_id, profile = await load_reseller_actor(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not owner_id or not profile:
+        await message.answer("دسترسی نماینده یافت نشد.")
+        return
+    bot_line = f"@{profile.bot_username}" if profile.bot_username else "توکن ثبت نشده"
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_RESELLER_SETTINGS,
+        text=(
+            "⚙️ <b>تنظیمات فروشگاه</b>\n"
+            f"ربات: <code>{bot_line}</code>\n"
+            "بخش‌ها از کیبورد پایین — بدون تنظیمات پلتفرم."
+        ),
+        state=state,
+        push=push,
+        profile=profile,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+
+
 async def open_admin_home(
     message: Message,
     session: AsyncSession,
@@ -602,11 +745,12 @@ async def open_admin_home(
     state: FSMContext | None = None,
     *,
     push: bool = True,
+    is_reseller_bot: bool = False,
 ) -> None:
     from app.version import __version__ as local_version
 
-    if db_user.role != Role.ADMIN.value:
-        await message.answer("ادمین نیستید.")
+    if is_reseller_bot or db_user.role != Role.ADMIN.value:
+        await message.answer("دسترسی ندارید.")
         return
     await nav.show_nav_keyboard(
         message,
@@ -643,19 +787,25 @@ async def open_user_preview(
     )
 
 
+async def _refuse_admin(message: Message) -> None:
+    await message.answer("دسترسی ادمین فقط روی ربات اصلی پلتفرم مجاز است.")
+
+
 async def _soft_admin(
     message: Message,
     session: AsyncSession,
     db_user: BotUser,
     data: str,
     state: FSMContext | None = None,
+    *,
+    is_reseller_bot: bool = False,
 ) -> None:
     from app.bot.handlers import admin as admin_h
     from app.bot.handlers import admin_backup as backup_h
     from app.bot.handlers import admin_settings as settings_h
 
-    if db_user.role != Role.ADMIN.value:
-        await message.answer("ادمین نیستید.")
+    if is_reseller_bot or db_user.role != Role.ADMIN.value:
+        await _refuse_admin(message)
         return
     bubble = await message.answer("⏳")
     cb = _SoftCallback(bubble, data)
@@ -668,6 +818,12 @@ async def _soft_admin(
             await admin_h.adm_tickets(cb, session, db_user)
         elif data == "adm:plans":
             await admin_h.adm_plans(cb, session, db_user)
+        elif data == "adm:plan:add":
+            await admin_h.adm_plan_add(cb, state, db_user)
+        elif data == "adm:st:sub:service:custom":
+            await settings_h.settings_sub(cb, session, db_user)
+        elif data == "adm:st:sub:service:trial":
+            await settings_h.settings_sub(cb, session, db_user)
         elif data == "adm:pg":
             await admin_h.adm_pg(cb, db_user)
         elif data == "adm:pg:stats":
@@ -703,8 +859,6 @@ async def _soft_admin(
         elif data == "adm:resellers:add":
             await admin_h.adm_resellers_add(cb, state, db_user)
         elif data.startswith("adm:st:sec:"):
-            from app.bot.handlers import admin_settings as settings_h
-
             await settings_h.settings_section(cb, session, db_user)
         elif data == "adm:dash":
             await admin_h.adm_dash(cb, session, db_user)
@@ -712,27 +866,22 @@ async def _soft_admin(
             await admin_h.adm_resellers(cb, db_user)
         elif data == "adm:backup":
             await backup_h.backup_hub(cb, db_user, state)
+        elif data == "adm:backup:create":
+            await backup_h.backup_create(cb, db_user)
+        elif data == "adm:backup:create:noenv":
+            await backup_h.backup_create(cb, db_user)
+        elif data == "adm:backup:upload":
+            await backup_h.backup_upload_ask(cb, db_user, state)
         elif data == "adm:broadcast":
-            await bubble.edit_text(
-                "📢 پیام گروهی:",
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [InlineKeyboardButton(text="شروع پیام گروهی", callback_data="adm:broadcast")]
-                    ]
-                ),
-            )
+            # Audience is chosen on reply keyboard (open_broadcast_hub)
+            await bubble.edit_text("مخاطب را از کیبورد پایین انتخاب کنید.")
+        elif data.startswith("adm:broadcast:aud:"):
+            await admin_h.adm_broadcast_audience(cb, db_user, state)
         elif data == "adm:settings":
             if state is not None:
                 await settings_h.settings_hub(cb, state, db_user)
             else:
-                await bubble.edit_text(
-                    "⚙️ تنظیمات:",
-                    reply_markup=InlineKeyboardMarkup(
-                        inline_keyboard=[
-                            [InlineKeyboardButton(text="باز کردن تنظیمات", callback_data="adm:settings")]
-                        ]
-                    ),
-                )
+                await bubble.edit_text("⚙️ تنظیمات را از کیبورد پایین انتخاب کنید.")
         else:
             await bubble.edit_text("این بخش در دسترس نیست.")
     except Exception as e:
@@ -763,22 +912,50 @@ async def handle_back(
         await open_support_home(message, session, db_user, state, push=False)
         return
     if level == nav.NAV_ADMIN:
-        await open_admin_home(message, session, db_user, state, push=False)
+        await open_admin_home(message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot)
         return
     if level == nav.NAV_ADMIN_PG:
-        await open_pg_home(message, session, db_user, state, push=False)
+        await open_pg_home(message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot)
         return
     if level == nav.NAV_ADMIN_USERS:
-        await open_admin_users_hub(message, session, db_user, state, push=False)
+        await open_admin_users_hub(message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot)
         return
     if level == nav.NAV_ADMIN_RESELLERS:
-        await open_admin_resellers_hub(message, session, db_user, state, push=False)
+        await open_admin_resellers_hub(message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot)
         return
     if level == nav.NAV_ADMIN_SETTINGS:
-        await open_admin_settings_hub(message, session, db_user, state, push=False)
+        await open_admin_settings_hub(
+            message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
+        return
+    if level == nav.NAV_ADMIN_BACKUP:
+        await open_admin_backup_hub(
+            message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
+        return
+    if level == nav.NAV_ADMIN_BROADCAST:
+        await open_admin_broadcast_hub(
+            message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
+        return
+    if level == nav.NAV_ADMIN_PLANS:
+        await open_admin_plans_hub(
+            message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
         return
     if level == nav.NAV_RESELLER:
         await open_reseller_home(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            push=False,
+        )
+        return
+    if level == nav.NAV_RESELLER_SETTINGS:
+        await open_reseller_settings_hub(
             message,
             session,
             db_user,
@@ -917,54 +1094,82 @@ async def _soft_reseller(
     session: AsyncSession,
     db_user: BotUser,
     action: str,
+    state: FSMContext | None = None,
     *,
     is_reseller_bot: bool,
     reseller_owner_id: int | None,
 ) -> None:
     from app.bot.handlers import reseller as res_h
+    from app.bot.handlers import reseller_plans as res_plans_h
+    from app.bot.handlers import reseller_settings as res_st_h
+    from app.services.reseller_access import load_reseller_actor
 
-    mapping = {
-        "res_dash": "res:dash",
-        "res_users": "res:users:0",
-        "res_stats": "res:stats",
-        "res_plans": "res:plans",
-        "res_orders": "res:orders",
-        "res_payments": "res:payments",
-        "res_tickets": "res:tickets",
-        "res_settings": "res:st:hub",
-    }
-    data = mapping.get(action)
-    if not data:
+    if not is_reseller_bot:
+        await open_reseller_creds(message, session, db_user)
         return
-    bubble = await message.answer("⏳")
-    cb = _SoftCallback(bubble, data)
-    # Call the matching reseller callback by name when available
-    name_map = {
-        "res:dash": "res_dash",
-        "res:users:0": "res_users",
-        "res:stats": "res_stats",
-        "res:plans": "res_plans",
-        "res:orders": "res_orders",
-        "res:payments": "res_payments",
-        "res:tickets": "res_tickets",
-        "res:st:hub": "res_st_hub",
-    }
-    fn_name = name_map.get(data)
-    fn = getattr(res_h, fn_name, None) if fn_name else None
-    if fn is None:
-        # Fallback: open reseller home inline
-        from app.services.reseller_access import load_reseller_actor
+    owner_id, profile = await load_reseller_actor(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not owner_id or not profile:
+        await message.answer("دسترسی نماینده یافت نشد.")
+        return
 
-        _oid, profile = await load_reseller_actor(
+    if action == "res_settings":
+        await open_reseller_settings_hub(
+            message,
             session,
             db_user,
+            state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
-        await bubble.edit_text(
-            format_message("🤝 پنل نماینده", "بخش را از دکمه‌های زیر انتخاب کنید."),
-            reply_markup=kb.reseller_home(profile),
-        )
+        return
+    if action.startswith("res_st_"):
+        sec = action.replace("res_st_", "", 1)
+        bubble = await message.answer("⏳")
+        cb = _SoftCallback(bubble, f"res:st:sec:{sec}")
+        try:
+            await res_st_h.settings_section(
+                cb,
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
+        except Exception as e:
+            try:
+                await bubble.edit_text(f"خطا: {e}")
+            except Exception:
+                pass
+        return
+
+    mapping = {
+        "res_dash": ("res:dash", "res_dash"),
+        "res_users": ("res:users:0", "res_users"),
+        "res_stats": ("res:stats", "res_stats"),
+        "res_plans": ("res:plans", "res_plans"),
+        "res_orders": ("res:orders", "res_orders"),
+        "res_payments": ("res:payments", "res_payments"),
+        "res_tickets": ("res:tickets", "res_tickets"),
+    }
+    pair = mapping.get(action)
+    if not pair:
+        return
+    data, fn_name = pair
+    # res_users handler name
+    if fn_name == "res_users":
+        fn_name = "res_users_list"
+    bubble = await message.answer("⏳")
+    cb = _SoftCallback(bubble, data)
+    if fn_name == "res_plans":
+        fn = getattr(res_plans_h, "res_plans", None)
+    else:
+        fn = getattr(res_h, fn_name, None)
+    if fn is None:
+        await bubble.edit_text("این بخش در دسترس نیست — از کیبورد نماینده استفاده کنید.")
         return
     try:
         await fn(
@@ -1010,6 +1215,12 @@ async def reply_main_nav(
         kb.REPLY_ACTION_TOPUP_CRYPTO,
         kb.REPLY_ACTION_WALLET_TOPUP,
         kb.REPLY_ACTION_SUPPORT_NEW,
+        "bc_aud_all",
+        "bc_aud_users",
+        "bc_aud_resellers",
+        "bc_aud_admins",
+        "adm_plan_add",
+        "backup_upload",
     }
     if not preserve_state:
         await state.clear()
@@ -1070,66 +1281,177 @@ async def reply_main_nav(
     elif action == kb.REPLY_ACTION_CREDS:
         await open_reseller_creds(message, session, db_user)
     elif action == kb.REPLY_ACTION_ADMIN:
-        await open_admin_home(message, session, db_user, state)
+        await open_admin_home(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADMIN_PREVIEW:
         await open_user_preview(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_ADMIN_DASH:
-        await _soft_admin(message, session, db_user, "adm:dash", state)
+        await _soft_admin(
+            message, session, db_user, "adm:dash", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADMIN_ORDERS:
-        await _soft_admin(message, session, db_user, "adm:orders", state)
+        await _soft_admin(
+            message, session, db_user, "adm:orders", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADMIN_PAYMENTS:
-        await _soft_admin(message, session, db_user, "adm:payments", state)
+        await _soft_admin(
+            message, session, db_user, "adm:payments", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADMIN_TICKETS:
-        await _soft_admin(message, session, db_user, "adm:tickets", state)
+        await _soft_admin(
+            message, session, db_user, "adm:tickets", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADMIN_PLANS:
-        await _soft_admin(message, session, db_user, "adm:plans", state)
+        await open_admin_plans_hub(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADMIN_PG:
-        await open_pg_home(message, session, db_user, state)
+        await open_pg_home(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADMIN_USERS:
-        await open_admin_users_hub(message, session, db_user, state)
+        await open_admin_users_hub(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADMIN_SETTINGS:
-        await open_admin_settings_hub(message, session, db_user, state)
+        await open_admin_settings_hub(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADMIN_BROADCAST:
-        await _soft_admin(message, session, db_user, "adm:broadcast", state)
+        await open_admin_broadcast_hub(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADMIN_RESELLERS:
-        await open_admin_resellers_hub(message, session, db_user, state)
+        await open_admin_resellers_hub(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADMIN_BACKUP:
-        await _soft_admin(message, session, db_user, "adm:backup", state)
+        await open_admin_backup_hub(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
+    elif action == "adm_plan_add":
+        await _soft_admin(
+            message, session, db_user, "adm:plan:add", state, is_reseller_bot=is_reseller_bot
+        )
+    elif action == "adm_plan_custom":
+        await _soft_admin(
+            message,
+            session,
+            db_user,
+            "adm:st:sub:service:custom",
+            state,
+            is_reseller_bot=is_reseller_bot,
+        )
+    elif action == "adm_plan_trial":
+        await _soft_admin(
+            message,
+            session,
+            db_user,
+            "adm:st:sub:service:trial",
+            state,
+            is_reseller_bot=is_reseller_bot,
+        )
+    elif action == "backup_create":
+        await _soft_admin(
+            message, session, db_user, "adm:backup:create", state, is_reseller_bot=is_reseller_bot
+        )
+    elif action == "backup_create_noenv":
+        await _soft_admin(
+            message,
+            session,
+            db_user,
+            "adm:backup:create:noenv",
+            state,
+            is_reseller_bot=is_reseller_bot,
+        )
+    elif action == "backup_upload":
+        await _soft_admin(
+            message, session, db_user, "adm:backup:upload", state, is_reseller_bot=is_reseller_bot
+        )
+    elif action == "backup_refresh":
+        await open_admin_backup_hub(
+            message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
+    elif action.startswith("bc_aud_"):
+        aud = action.replace("bc_aud_", "", 1)
+        await _soft_admin(
+            message,
+            session,
+            db_user,
+            f"adm:broadcast:aud:{aud}",
+            state,
+            is_reseller_bot=is_reseller_bot,
+        )
     elif action == kb.REPLY_ACTION_PG_STATS:
-        await _soft_admin(message, session, db_user, "adm:pg:stats", state)
+        await _soft_admin(
+            message, session, db_user, "adm:pg:stats", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_PG_USERS:
-        await _soft_admin(message, session, db_user, "adm:pg:users", state)
+        await _soft_admin(
+            message, session, db_user, "adm:pg:users", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_PG_CREATE:
-        await _soft_admin(message, session, db_user, "adm:pg:create", state)
+        await _soft_admin(
+            message, session, db_user, "adm:pg:create", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_PG_SEARCH:
-        await _soft_admin(message, session, db_user, "adm:pg:search", state)
+        await _soft_admin(
+            message, session, db_user, "adm:pg:search", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_PG_NODES:
-        await _soft_admin(message, session, db_user, "adm:pg:nodes", state)
+        await _soft_admin(
+            message, session, db_user, "adm:pg:nodes", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_PG_GROUP:
-        await _soft_admin(message, session, db_user, "adm:pg:group", state)
+        await _soft_admin(
+            message, session, db_user, "adm:pg:group", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_PG_TEMPLATE:
-        await _soft_admin(message, session, db_user, "adm:pg:template", state)
+        await _soft_admin(
+            message, session, db_user, "adm:pg:template", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADM_USERS_LIST:
-        await _soft_admin(message, session, db_user, "adm:users:list:0", state)
+        await _soft_admin(
+            message, session, db_user, "adm:users:list:0", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADM_USERS_SEARCH:
-        await _soft_admin(message, session, db_user, "adm:users:search", state)
+        await _soft_admin(
+            message, session, db_user, "adm:users:search", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADM_USERS_WEB:
-        await _soft_admin(message, session, db_user, "adm:users:webhint", state)
+        await _soft_admin(
+            message, session, db_user, "adm:users:webhint", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADM_RES_LIST:
-        await _soft_admin(message, session, db_user, "adm:resellers:list:0", state)
+        await _soft_admin(
+            message, session, db_user, "adm:resellers:list:0", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADM_RES_APPS:
-        await _soft_admin(message, session, db_user, "adm:resapp:list", state)
+        await _soft_admin(
+            message, session, db_user, "adm:resapp:list", state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADM_RES_ADD:
-        await _soft_admin(message, session, db_user, "adm:resellers:add", state)
+        await _soft_admin(
+            message, session, db_user, "adm:resellers:add", state, is_reseller_bot=is_reseller_bot
+        )
     elif action.startswith("adm_st_"):
         sec = action.replace("adm_st_", "", 1)
-        await _soft_admin(message, session, db_user, f"adm:st:sec:{sec}", state)
+        await _soft_admin(
+            message,
+            session,
+            db_user,
+            f"adm:st:sec:{sec}",
+            state,
+            is_reseller_bot=is_reseller_bot,
+        )
     elif action.startswith("res_"):
         await _soft_reseller(
             message,
             session,
             db_user,
             action,
+            state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )

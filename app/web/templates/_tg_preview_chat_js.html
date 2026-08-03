@@ -164,9 +164,10 @@
         map.reseller_apply = val('btn_reseller_apply', map.reseller_apply);
         map.miniapp = val('btn_miniapp', map.miniapp);
       }
-      // miniapp is WebApp (inline only) — skip on reply keyboard preview
-      const labels = order.filter(k => k !== 'miniapp').map(k => map[k]).filter(Boolean);
-      renderReplyKeys(labels);
+  // miniapp is WebApp (inline only) — skip on reply keyboard preview
+  // Static menus/submenus → reply keyboard; dynamic entity lists stay inline under messages.
+  const labels = order.filter(k => k !== 'miniapp').map(k => map[k]).filter(Boolean);
+  renderReplyKeys(labels);
     } else if (keysEl) {
       keysEl.innerHTML = '';
     }

@@ -48,34 +48,14 @@ async def _render_plans_list(callback: CallbackQuery, session: AsyncSession) -> 
     result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
     plans = list(result.scalars().all())
     if not plans:
-        text = "📦 <b>پلن‌های فروش</b>\n\nهنوز پلنی ثبت نشده است."
+        text = "📦 <b>پلن‌های فروش</b>\n\nهنوز پلنی ثبت نشده است.\nساخت پلن از کیبورد پایین."
     else:
         cards = "\n\n".join(_plan_line(p) for p in plans[:20])
         text = f"📦 <b>پلن‌های فروش</b>\n\n{cards}"
-    rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="➕ پلن جدید", callback_data="adm:plan:add")],
-    ]
-    for p in plans[:12]:
-        warn = " ⚠️" if _plan_needs_link(p) else ""
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{'✅' if p.is_active else '⏸'} #{p.id} {p.name}{warn}"[:60],
-                    callback_data=f"adm:plan:view:{p.id}",
-                )
-            ]
-        )
-    rows.append(
-        [
-            InlineKeyboardButton(text="پلن دلخواه", callback_data="adm:st:sub:service:custom"),
-            InlineKeyboardButton(text="پلن تست", callback_data="adm:st:sub:service:trial"),
-        ]
-    )
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")])
     if callback.message:
         await callback.message.edit_text(
             text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            reply_markup=kb.admin_plans_list_keyboard(plans),
         )
 
 
@@ -199,7 +179,7 @@ async def adm_home(callback: CallbackQuery, db_user: BotUser):
             f"🛠 <b>پنل ادمین</b>\n"
             f"<code>v{local_version()}</code>\n\n"
             "از منوی زیر بخش موردنظر را انتخاب کنید.",
-            reply_markup=kb.admin_home(),
+            reply_markup=kb.admin_reply_keyboard(),
         )
 
 
@@ -233,10 +213,6 @@ async def adm_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         f"🔢 نسخه: <code>v{local_version()}</code>"
     )
     rows = [
-        [
-            InlineKeyboardButton(text="🛒 سفارش‌ها", callback_data="adm:orders"),
-            InlineKeyboardButton(text="🧾 رسیدها", callback_data="adm:payments"),
-        ],
         [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
     ]
     if callback.message:
@@ -270,7 +246,7 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     orders = list(result.scalars().all())
     if not orders:
         if callback.message:
-            await callback.message.edit_text("سفارشی نیست.", reply_markup=kb.admin_home())
+            await callback.message.edit_text("سفارشی نیست.", reply_markup=None)
         return
     rows = []
     for o in orders:
@@ -481,7 +457,7 @@ async def adm_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
     payments = list(result.scalars().all())
     if not payments:
         if callback.message:
-            await callback.message.edit_text("رسید معلقی نیست.", reply_markup=kb.admin_home())
+            await callback.message.edit_text("رسید معلقی نیست.", reply_markup=None)
         return
     for p in payments:
         caption = f"پرداخت #{p.id} — {format_toman(p.amount, get_settings().currency)}"
@@ -497,7 +473,7 @@ async def adm_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
                 db_user.telegram_id, caption, reply_markup=kb.payment_review(p.id)
             )
     if callback.message:
-        await callback.message.edit_text("رسیدها ارسال شد.", reply_markup=kb.admin_home())
+        await callback.message.edit_text("رسیدها ارسال شد.", reply_markup=None)
 
 
 @router.callback_query(F.data == "adm:plans")
@@ -1216,7 +1192,7 @@ async def adm_users_search(
     if kb.is_cancel_text(message.text):
         await state.clear()
         await message.answer("لغو شد.", reply_markup=kb.persistent_reply_keyboard())
-        await message.answer("👥 کاربران", reply_markup=kb.admin_users_keyboard())
+        await message.answer("👥 کاربران", reply_markup=kb.admin_users_reply_keyboard())
         return
     try:
         tg_id = int((message.text or "").strip())
@@ -1232,7 +1208,7 @@ async def adm_users_search(
     if not user:
         await message.answer(
             "کاربری با این آیدی یافت نشد.",
-            reply_markup=kb.admin_users_keyboard(),
+            reply_markup=kb.admin_users_reply_keyboard(),
         )
         return
     svc_count = await session.scalar(
@@ -1450,7 +1426,7 @@ async def adm_users_delete(callback: CallbackQuery, session: AsyncSession, db_us
     if callback.message:
         await callback.message.edit_text(
             f"🗑 کاربر <code>{info.get('telegram_id')}</code> ({info.get('name')}) حذف شد.",
-            reply_markup=kb.admin_users_keyboard(),
+            reply_markup=kb.admin_users_reply_keyboard(),
         )
 
 
@@ -1491,7 +1467,7 @@ async def adm_users_unreseller_reason(
         return
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_users_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.admin_users_reply_keyboard())
         return
     reason = (message.text or "").strip()
     if len(reason) < 3:
@@ -1511,10 +1487,10 @@ async def adm_users_unreseller_reason(
             session, user_id, delete_pg_admin=True, reason=reason
         )
     except ValueError as e:
-        await message.answer(f"خطا: {e}", reply_markup=kb.admin_users_keyboard())
+        await message.answer(f"خطا: {e}", reply_markup=kb.admin_users_reply_keyboard())
         return
     except Exception as e:
-        await message.answer(f"خطا: {e}", reply_markup=kb.admin_users_keyboard())
+        await message.answer(f"خطا: {e}", reply_markup=kb.admin_users_reply_keyboard())
         return
 
     user = await session.get(BotUser, user_id)
@@ -1532,7 +1508,7 @@ async def adm_users_unreseller_reason(
     note = "پیام علت ارسال شد ✅" if notified else "پیام تلگرام ارسال نشد ⚠️"
     await message.answer(
         f"🤝 نمایندگی حذف شد.\nعلت: {reason}\n{note}",
-        reply_markup=kb.admin_users_keyboard(),
+        reply_markup=kb.admin_users_reply_keyboard(),
     )
     if user:
         await _render_user_card(message, session, user)
@@ -1770,7 +1746,7 @@ async def make_res(
         return
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        await message.answer("لغو شد.", reply_markup=kb.admin_reply_keyboard())
         return
     parts = (message.text or "").split()
     try:
@@ -1821,7 +1797,7 @@ async def make_res(
         pass
     await message.answer(
         f"کاربر {tg_id} نماینده شد ✅ — اطلاعات ورود ارسال شد",
-        reply_markup=kb.admin_home(),
+        reply_markup=kb.admin_reply_keyboard(),
     )
 
 
@@ -1834,7 +1810,7 @@ async def adm_tickets(callback: CallbackQuery, session: AsyncSession, db_user: B
     tickets = await list_open_tickets(session, platform_only=True)
     if not tickets:
         if callback.message:
-            await callback.message.edit_text("تیکت بازی نیست.", reply_markup=kb.admin_home())
+            await callback.message.edit_text("تیکت بازی نیست.", reply_markup=None)
         return
     rows = [
         [InlineKeyboardButton(text=f"#{t.id} {t.subject[:24]}", callback_data=f"adm:ticket:{t.id}")]
@@ -1873,7 +1849,7 @@ async def adm_ticket_view(callback: CallbackQuery, session: AsyncSession, db_use
 async def adm_ticket_reply(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        await message.answer("لغو شد.", reply_markup=kb.admin_reply_keyboard())
         return
     data = await state.get_data()
     ticket = await session.get(Ticket, data.get("ticket_id"))
@@ -1897,7 +1873,7 @@ async def adm_ticket_reply(message: Message, state: FSMContext, session: AsyncSe
         )
     except Exception:
         pass
-    await message.answer("ارسال شد ✅", reply_markup=kb.admin_home())
+    await message.answer("ارسال شد ✅", reply_markup=kb.admin_reply_keyboard())
 
 
 @router.callback_query(F.data == "adm:broadcast")
@@ -1906,18 +1882,14 @@ async def adm_broadcast_start(callback: CallbackQuery, db_user: BotUser, state: 
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(AdminStates.broadcast_audience)
-    rows = [
-        [InlineKeyboardButton(text="همه", callback_data="adm:broadcast:aud:all")],
-        [InlineKeyboardButton(text="کاربران عادی", callback_data="adm:broadcast:aud:users")],
-        [InlineKeyboardButton(text="نمایندگان", callback_data="adm:broadcast:aud:resellers")],
-        [InlineKeyboardButton(text="ادمین‌ها", callback_data="adm:broadcast:aud:admins")],
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
-    ]
+    await state.clear()
     if callback.message:
         await callback.message.edit_text(
-            "📢 <b>پیام گروهی</b>\nمخاطبان را انتخاب کنید:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            "📢 <b>پیام گروهی</b>\nمخاطب را از کیبورد پایین انتخاب کنید."
+        )
+        await callback.message.answer(
+            "مخاطب پیام گروهی:",
+            reply_markup=kb.admin_broadcast_reply_keyboard(),
         )
 
 
@@ -1947,7 +1919,7 @@ async def adm_broadcast_send(message: Message, state: FSMContext, session: Async
         return
     if (message.text or "").strip() == "انصراف":
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_home())
+        await message.answer("لغو شد.", reply_markup=kb.admin_reply_keyboard())
         return
     data = await state.get_data()
     audience = data.get("broadcast_audience") or "all"
@@ -1964,14 +1936,14 @@ async def adm_broadcast_send(message: Message, state: FSMContext, session: Async
             created_by=str(db_user.telegram_id),
         )
     except ValueError as e:
-        await message.answer(str(e), reply_markup=kb.admin_home())
+        await message.answer(str(e), reply_markup=kb.admin_reply_keyboard())
         return
     except Exception as e:
-        await message.answer(f"خطا: {e}", reply_markup=kb.admin_home())
+        await message.answer(f"خطا: {e}", reply_markup=kb.admin_reply_keyboard())
         return
     await message.answer(
         f"✅ ارسال شد\nموفق: {result['ok']} / {result['total']}\nناموفق: {result['fail']}",
-        reply_markup=kb.admin_home(),
+        reply_markup=kb.admin_reply_keyboard(),
     )
 
 

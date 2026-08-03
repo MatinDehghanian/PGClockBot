@@ -131,8 +131,12 @@ async def res_home(
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("🤝 پنل نماینده", "دسترسی‌ها با وب‌پنل یکسان است."),
-            reply_markup=kb.reseller_home(profile),
+            format_message("🤝 پنل نماینده", "دسترسی‌ها با وب‌پنل یکسان است — از کیبورد پایین انتخاب کنید."),
+            reply_markup=None,
+        )
+        await callback.message.answer(
+            "پنل نماینده:",
+            reply_markup=kb.reseller_reply_keyboard(profile),
         )
 
 

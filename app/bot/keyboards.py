@@ -391,6 +391,49 @@ def _admin_settings_submenu_entries(ui: dict | None = None) -> list[tuple[str, s
     ]
 
 
+def _admin_backup_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    _ = ui
+    return [
+        ("backup_create", "🆕 ساخت بکاپ کامل"),
+        ("backup_create_noenv", "🆕 بکاپ بدون .env"),
+        ("backup_upload", "📤 آپلود فایل بکاپ"),
+        ("backup_refresh", "🔄 تازه‌سازی لیست"),
+    ]
+
+
+def _admin_broadcast_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    _ = ui
+    return [
+        ("bc_aud_all", "📢 همه"),
+        ("bc_aud_users", "👥 کاربران عادی"),
+        ("bc_aud_resellers", "🤝 نمایندگان"),
+        ("bc_aud_admins", "🛠 ادمین‌ها"),
+    ]
+
+
+def _admin_plans_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    _ = ui
+    return [
+        ("adm_plan_add", "➕ پلن جدید"),
+        ("adm_plan_custom", "پلن دلخواه"),
+        ("adm_plan_trial", "پلن تست"),
+    ]
+
+
+def _reseller_settings_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    _ = ui
+    # Labels MUST match reseller_settings.SECTIONS[*]["title"] / HUB_ORDER
+    return [
+        ("res_st_shop", "فروشگاه و متون"),
+        ("res_st_menu", "کیبورد اصلی"),
+        ("res_st_pay", "پرداخت"),
+        ("res_st_support", "پشتیبان‌ها"),
+        ("res_st_access", "دسترسی و QR"),
+        ("res_st_bot", "ربات اختصاصی"),
+        ("res_st_notify", "نوتیفیکیشن‌ها"),
+    ]
+
+
 def _wallet_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return [
         (REPLY_ACTION_WALLET_TOPUP, "🟢➕ شارژ کیف پول"),
@@ -582,6 +625,34 @@ def admin_settings_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup
     return _reply_markup(rows, placeholder="تنظیمات…")
 
 
+def admin_backup_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _admin_backup_submenu_entries(ui), ui, footer_row=_submenu_footer(ui)
+    )
+    return _reply_markup(rows, placeholder="بکاپ / ریستور…")
+
+
+def admin_broadcast_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _admin_broadcast_submenu_entries(ui), ui, footer_row=_submenu_footer(ui)
+    )
+    return _reply_markup(rows, placeholder="مخاطب پیام گروهی…")
+
+
+def admin_plans_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _admin_plans_submenu_entries(ui), ui, footer_row=_submenu_footer(ui)
+    )
+    return _reply_markup(rows, placeholder="پلن‌های فروش…")
+
+
+def reseller_settings_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _reseller_settings_submenu_entries(ui), ui, footer_row=_submenu_footer(ui)
+    )
+    return _reply_markup(rows, placeholder="تنظیمات فروشگاه نماینده…")
+
+
 def reply_action_map(
     role: str,
     *,
@@ -590,8 +661,13 @@ def reply_action_map(
     as_user: bool = False,
     show_reseller_creds: bool = False,
     include_submenus: bool = True,
+    is_reseller_bot: bool = False,
 ) -> dict[str, str]:
-    """Map button label → action key for the current role/settings."""
+    """Map button label → action key for the current role/bot.
+
+    Security: admin/PG labels are never registered on reseller bots or for
+    non-admin roles. Reseller panel labels only for reseller actors on shop bots.
+    """
     home_label = _home_label(ui)
     back_label = _back_label(ui)
     mapping: dict[str, str] = {
@@ -603,48 +679,80 @@ def reply_action_map(
     mapping[BTN_RESTART] = REPLY_ACTION_HOME
     mapping["شروع مجدد"] = REPLY_ACTION_HOME
     mapping["🏠 شروع مجدد"] = REPLY_ACTION_HOME
-    if role == Role.ADMIN.value and not as_user:
+
+    # Platform admin tools only on the main (non-reseller) bot
+    platform_admin = (
+        role == Role.ADMIN.value and not as_user and not is_reseller_bot
+    )
+    reseller_actor = role == Role.RESELLER.value and is_reseller_bot
+
+    if platform_admin:
         for key, text in _reply_admin_entries(ui):
             mapping[(text or "").strip()] = key
     else:
+        # On reseller bots, never expose platform-admin entry even if role string is admin
+        map_role = Role.USER.value if (is_reseller_bot and role == Role.ADMIN.value) else role
         for key, text in _reply_user_entries(
-            role,
+            map_role,
             has_services=has_services,
             ui=ui,
             show_reseller_creds=show_reseller_creds,
         ):
             mapping[(text or "").strip()] = key
-        if role == Role.ADMIN.value and as_user:
+        # Preview escape on main bot only
+        if role == Role.ADMIN.value and as_user and not is_reseller_bot:
             mapping[(_t(ui, "btn_admin") or "").strip()] = REPLY_ACTION_ADMIN
+
     if include_submenus:
-        for key, text in _wallet_submenu_entries(ui):
-            mapping[(text or "").strip()] = key
-        for key, text in _support_submenu_entries(ui):
-            mapping[(text or "").strip()] = key
-        for key, text in _reply_admin_entries(ui):
-            mapping[(text or "").strip()] = key
-        for key, text in _reseller_submenu_entries(None):
-            mapping[text] = key
-        for key, text in (
-            ("res_plans", "💎 پلن‌های فروش"),
-            ("res_orders", "🛒 سفارش‌های مشتریان"),
-            ("res_payments", "🧾 رسیدهای در انتظار"),
-            ("res_tickets", "🎫 تیکت‌های مشتریان"),
-            ("res_settings", "⚙️ تنظیمات فروشگاه"),
-        ):
-            mapping[text] = key
-        for key, text in _pay_method_entries(ui):
-            mapping[(text or "").strip()] = key
-        for key, text in _topup_method_entries(ui):
-            mapping[(text or "").strip()] = key
-        for key, text in _pg_submenu_entries(ui):
-            mapping[(text or "").strip()] = key
-        for key, text in _admin_users_submenu_entries(ui):
-            mapping[(text or "").strip()] = key
-        for key, text in _admin_resellers_submenu_entries(ui):
-            mapping[(text or "").strip()] = key
-        for key, text in _admin_settings_submenu_entries(ui):
-            mapping[(text or "").strip()] = key
+        # Customer surfaces (wallet/support/pay) — everyone except pure admin hub
+        if not platform_admin:
+            for key, text in _wallet_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _support_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _pay_method_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _topup_method_entries(ui):
+                mapping[(text or "").strip()] = key
+
+        if platform_admin:
+            for key, text in _wallet_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _support_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _pay_method_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _topup_method_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _pg_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _admin_users_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _admin_resellers_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _admin_settings_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _admin_backup_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _admin_broadcast_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _admin_plans_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+
+        if reseller_actor:
+            for key, text in _reseller_submenu_entries(None):
+                mapping[(text or "").strip()] = key
+            for key, text in (
+                ("res_plans", "💎 پلن‌های فروش"),
+                ("res_orders", "🛒 سفارش‌های مشتریان"),
+                ("res_payments", "🧾 رسیدهای در انتظار"),
+                ("res_tickets", "🎫 تیکت‌های مشتریان"),
+                ("res_settings", "⚙️ تنظیمات فروشگاه"),
+            ):
+                mapping[text] = key
+            for key, text in _reseller_settings_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+
     return {k: v for k, v in mapping.items() if k}
 
 
@@ -985,20 +1093,18 @@ def service_actions(service_id: int, ui: dict | None = None) -> InlineKeyboardMa
 
 
 def wallet_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Legacy inline wallet hub — prefer wallet_reply_keyboard (3.6+)."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🟢➕ شارژ کیف پول", callback_data="wallet:topup")],
-            [InlineKeyboardButton(text="🟡📜 تراکنش‌ها", callback_data="wallet:tx")],
             [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="menu:home")],
         ]
     )
 
 
 def support_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Legacy inline support hub — prefer support_reply_keyboard (3.6+)."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🟣✉️ تیکت جدید", callback_data="support:new")],
-            [InlineKeyboardButton(text="📋 تیکت‌های من", callback_data="support:list")],
             [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="menu:home")],
         ]
     )
@@ -1019,38 +1125,55 @@ def support_contacts_keyboard(contacts: list[dict], ui: dict | None = None) -> I
 
 
 def admin_home(ui: dict | None = None) -> InlineKeyboardMarkup:
-    buttons = [
-        InlineKeyboardButton(text="🧾 رسیدها", callback_data="adm:payments"),
-        InlineKeyboardButton(text="🛒 سفارش‌ها", callback_data="adm:orders"),
-        InlineKeyboardButton(text="🎫 تیکت‌ها", callback_data="adm:tickets"),
-        InlineKeyboardButton(text="📊 داشبورد", callback_data="adm:dash"),
-        InlineKeyboardButton(text="💎 پلن‌ها", callback_data="adm:plans"),
-        InlineKeyboardButton(text="👥 کاربران", callback_data="adm:users"),
-        InlineKeyboardButton(text="🤝 نمایندگان", callback_data="adm:resellers"),
-        InlineKeyboardButton(text="📢 پیام گروهی", callback_data="adm:broadcast"),
-        InlineKeyboardButton(text="🖥 پاسارگارد", callback_data="adm:pg"),
-        InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="adm:settings"),
-        InlineKeyboardButton(text="💾 بکاپ / ریستور", callback_data="adm:backup"),
-    ]
+    """Legacy inline admin hub — prefer admin_reply_keyboard (3.6+).
+
+    Kept for rare edit_text fallbacks; callers should migrate to reply KB.
+    """
     back = InlineKeyboardButton(text="⬅️ منوی اصلی", callback_data="menu:home")
-    return InlineKeyboardMarkup(
-        inline_keyboard=layout_rows(buttons, ui, full_width=[back])
-    )
+    return InlineKeyboardMarkup(inline_keyboard=[[back]])
+
+
+def admin_plans_list_keyboard(plans: list) -> InlineKeyboardMarkup:
+    """Dynamic plan rows only (static chrome lives on admin_plans_reply_keyboard)."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for p in plans[:12]:
+        warn = ""
+        if not getattr(p, "pg_template_id", None) and not (getattr(p, "pg_group_ids", None) or "").strip():
+            warn = " ⚠️"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{'✅' if p.is_active else '⏸'} #{p.id} {p.name}{warn}"[:60],
+                    callback_data=f"adm:plan:view:{p.id}",
+                )
+            ]
+        )
+    if not rows:
+        rows.append(
+            [InlineKeyboardButton(text="پلنی نیست — از کیبورد «پلن جدید»", callback_data="adm:plans")]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def backup_files_keyboard(backups: list[dict] | None = None) -> InlineKeyboardMarkup:
+    """Dynamic backup file rows only (static actions on admin_backup_reply_keyboard)."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for b in (backups or [])[:8]:
+        label = f"📦 {b.get('id', '')[:18]} · {b.get('size_human')}"
+        rows.append(
+            [InlineKeyboardButton(text=label, callback_data=f"adm:backup:item:{b['id']}")]
+        )
+    if not rows:
+        rows.append(
+            [InlineKeyboardButton(text="بکاپی نیست — از کیبورد بسازید", callback_data="adm:backup")]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def admin_users_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    buttons = [
-        InlineKeyboardButton(text="📋 لیست کاربران", callback_data="adm:users:list:0"),
-        InlineKeyboardButton(text="🔎 جستجو با آیدی تلگرام", callback_data="adm:users:search"),
-        InlineKeyboardButton(
-            text="🌐 مدیریت کامل در وب‌پنل",
-            callback_data="adm:users:webhint",
-        ),
-    ]
+    """Legacy — prefer admin_users_reply_keyboard."""
     back = InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")
-    return InlineKeyboardMarkup(
-        inline_keyboard=layout_rows(buttons, ui, full_width=[back])
-    )
+    return InlineKeyboardMarkup(inline_keyboard=[[back]])
 
 
 def admin_users_list_keyboard(
@@ -1184,32 +1307,10 @@ def pg_admin_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
 
 
 def reseller_home(profile=None, ui: dict | None = None) -> InlineKeyboardMarkup:
-    from app.services.resellers import has_bot_perm
-
-    buttons: list[InlineKeyboardButton] = []
-    if profile is None or has_bot_perm(profile, "dashboard"):
-        buttons.append(InlineKeyboardButton(text="🏠 خانه نماینده", callback_data="res:dash"))
-        buttons.append(InlineKeyboardButton(text="👥 مشتریان من", callback_data="res:users:0"))
-    if profile is None or has_bot_perm(profile, "stats"):
-        buttons.append(InlineKeyboardButton(text="📊 آمار و کمیسیون", callback_data="res:stats"))
-    if profile is not None and has_bot_perm(profile, "plans"):
-        buttons.append(InlineKeyboardButton(text="💎 پلن‌های فروش", callback_data="res:plans"))
-    if profile is not None and has_bot_perm(profile, "orders"):
-        buttons.append(InlineKeyboardButton(text="🛒 سفارش‌های مشتریان", callback_data="res:orders"))
-    if profile is not None and has_bot_perm(profile, "payments"):
-        buttons.append(
-            InlineKeyboardButton(text="🧾 رسیدهای در انتظار", callback_data="res:payments")
-        )
-    if profile is not None and has_bot_perm(profile, "tickets"):
-        buttons.append(InlineKeyboardButton(text="🎫 تیکت‌های مشتریان", callback_data="res:tickets"))
-    if profile is not None and has_bot_perm(profile, "shop_settings"):
-        buttons.append(
-            InlineKeyboardButton(text="⚙️ تنظیمات فروشگاه", callback_data="res:st:hub")
-        )
+    """Legacy inline reseller hub — prefer reseller_reply_keyboard (3.6+)."""
+    _ = profile
     back = InlineKeyboardButton(text="⬅️ بازگشت", callback_data="menu:home")
-    return InlineKeyboardMarkup(
-        inline_keyboard=layout_rows(buttons, ui, full_width=[back])
-    )
+    return InlineKeyboardMarkup(inline_keyboard=[[back]])
 
 
 def reseller_app_review(app_id: int) -> InlineKeyboardMarkup:

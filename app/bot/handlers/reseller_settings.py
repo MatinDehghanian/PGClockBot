@@ -217,19 +217,23 @@ class _Scoped:
 
 
 async def _render_hub(callback: CallbackQuery, profile):
-    rows = [
-        [InlineKeyboardButton(text=SECTIONS[sid]["title"], callback_data=f"res:st:sec:{sid}")]
-        for sid in HUB_ORDER
-    ]
-    rows.append([InlineKeyboardButton(text="⬅️ پنل نماینده", callback_data="res:home")])
+    """Hub chrome is on reply keyboard; keep a short note under the message."""
     bot_line = f"@{profile.bot_username}" if profile.bot_username else "توکن ثبت نشده"
     text = (
         "⚙️ <b>تنظیمات فروشگاه</b>\n\n"
         f"ربات: <code>{bot_line}</code>\n"
+        "بخش‌ها را از کیبورد پایین انتخاب کنید.\n"
         "فقط تنظیمات مجاز فروشگاه شما — بدون تنظیمات پلتفرم."
     )
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=_kb(rows))
+        await safe_edit_text(callback.message, text, reply_markup=None)
+        try:
+            await callback.message.answer(
+                "کیبورد تنظیمات:",
+                reply_markup=kb.reseller_settings_reply_keyboard(),
+            )
+        except Exception:
+            pass
 
 
 async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id: str, reseller_id: int):

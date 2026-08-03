@@ -44,19 +44,8 @@ def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
 
 
 def _hub_keyboard(backups: list[dict] | None = None) -> InlineKeyboardMarkup:
-    rows = [
-        [InlineKeyboardButton(text="🆕 ساخت بکاپ کامل", callback_data="adm:backup:create")],
-        [InlineKeyboardButton(text="🆕 بکاپ بدون .env", callback_data="adm:backup:create:noenv")],
-        [InlineKeyboardButton(text="📤 آپلود فایل بکاپ", callback_data="adm:backup:upload")],
-        [InlineKeyboardButton(text="🔄 تازه‌سازی لیست", callback_data="adm:backup")],
-    ]
-    for b in (backups or [])[:8]:
-        label = f"📦 {b.get('id', '')[:18]} · {b.get('size_human')}"
-        rows.append(
-            [InlineKeyboardButton(text=label, callback_data=f"adm:backup:item:{b['id']}")]
-        )
-    rows.append([InlineKeyboardButton(text="⬅️ پنل ادمین", callback_data="adm:home")])
-    return _kb(rows)
+    """Dynamic backup file rows only — static actions live on reply keyboard."""
+    return kb.backup_files_keyboard(backups)
 
 
 def _item_keyboard(backup_id: str) -> InlineKeyboardMarkup:

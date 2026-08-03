@@ -236,16 +236,19 @@ def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
 
 
 async def _render_hub(callback: CallbackQuery) -> None:
-    rows = [
-        [InlineKeyboardButton(text=SECTIONS[sid]["title"], callback_data=f"adm:st:sec:{sid}")]
-        for sid in HUB_ORDER
-    ]
-    rows.append(_back_row(("⬅️ پنل ادمین", "adm:home")))
+    """Static section list lives on reply keyboard (admin_settings_reply_keyboard)."""
     if callback.message:
         await callback.message.edit_text(
-            "⚙️ <b>تنظیمات</b>\nیک بخش را انتخاب کنید:",
-            reply_markup=_kb(rows),
+            "⚙️ <b>تنظیمات</b>\nبخش‌ها را از کیبورد پایین انتخاب کنید.",
+            reply_markup=None,
         )
+        try:
+            await callback.message.answer(
+                "کیبورد تنظیمات:",
+                reply_markup=kb.admin_settings_reply_keyboard(),
+            )
+        except Exception:
+            pass
 
 
 async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id: str) -> None:
