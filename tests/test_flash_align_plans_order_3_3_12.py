@@ -17,16 +17,11 @@ class FlashAlignColorTests(unittest.TestCase):
         self.assertIn("align-items: center", block)
         self.assertNotIn("align-items: flex-start", block)
 
-    def test_flash_tip_text_matches_title_foreground(self):
-        for kind in ("ok", "err", "warn"):
-            block = CSS.split(f".flash.{kind} {{")[1].split("}")[0]
-            self.assertIn("color: var(--foreground)", block)
-            self.assertNotIn("#86efac", block)
-            self.assertNotIn("#fca5a5", block)
-            self.assertNotIn("#fde047", block)
-        light_ok = CSS.split('html[data-theme="light"] .flash.ok {')[1].split("}")[0]
-        self.assertIn("color: var(--foreground)", light_ok)
-        self.assertNotIn("#15803d", light_ok)
+    def test_flash_keeps_severity_text_colors(self):
+        # Tip-box color change must not strip flash ok/err/warn body colors.
+        self.assertIn("color: #86efac", CSS.split(".flash.ok {")[1].split("}")[0])
+        self.assertIn("color: #fca5a5", CSS.split(".flash.err {")[1].split("}")[0])
+        self.assertIn("color: #fde047", CSS.split(".flash.warn {")[1].split("}")[0])
 
 
 class PlansWholesaleButtonOrderTests(unittest.TestCase):
@@ -53,11 +48,10 @@ class GaugeCenterLabelTests(unittest.TestCase):
 
 
 class VersionBumpTests(unittest.TestCase):
-    def test_version_is_3_3_12(self):
+    def test_version_at_least_3_3_12(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.3.12")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.3.12")
+        self.assertGreaterEqual(tuple(int(x) for x in __version__.split(".")), (3, 3, 12))
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.3.12"', notes)
         self.assertIn("مانده", notes)

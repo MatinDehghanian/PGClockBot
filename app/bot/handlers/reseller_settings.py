@@ -63,6 +63,7 @@ SECTIONS: dict[str, dict] = {
                 ("btn_cancel", "انصراف", "text"),
                 ("btn_renew", "تمدید", "text"),
                 ("btn_sub_link", "لینک/QR", "text"),
+                ("btn_wholesale", "فروش عمده", "text"),
             ]),
         ],
     },

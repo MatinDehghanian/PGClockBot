@@ -591,6 +591,7 @@ SETTING_GROUPS = {
         ("btn_referral", "دکمه دعوت", "text", ""),
         ("btn_reseller_apply", "دکمه درخواست نمایندگی", "text", ""),
         ("btn_miniapp", "دکمه مینی‌اپ", "text", ""),
+        ("btn_wholesale", "دکمه فروش عمده", "text", "در لیست پلن‌های فروشگاه نمایش داده می‌شود"),
         ("btn_reseller", "دکمه نماینده", "text", ""),
         ("btn_admin", "دکمه ادمین", "text", ""),
         ("btn_back", "دکمه بازگشت", "text", ""),
