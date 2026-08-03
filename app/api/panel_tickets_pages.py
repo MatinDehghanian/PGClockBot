@@ -54,7 +54,17 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
         if is_platform_admin(staff):
             show_tg = True
             tg_tickets = list(
-                (await session.execute(select(Ticket).order_by(Ticket.id.desc()).limit(100))).scalars().all()
+                (
+                    await session.execute(
+                        select(Ticket)
+                        .join(BotUser, BotUser.id == Ticket.user_id)
+                        .where(BotUser.reseller_id.is_(None))
+                        .order_by(Ticket.id.desc())
+                        .limit(100)
+                    )
+                )
+                .scalars()
+                .all()
             )
         elif staff.get("role") == "reseller" and "tickets" in (staff.get("permissions") or []):
             show_tg = True

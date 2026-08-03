@@ -48,20 +48,17 @@ async def resolve_reseller_owner_id(
     Return the shop owner user_id if this Telegram user may open the reseller panel
     in the current bot context.
 
-    - Dedicated reseller bot: owner OR configured bot_admin_ids → that shop only.
-    - Main bot: only users with role=reseller → their own shop.
-      bot_admin_ids on the main bot still see the normal user menu.
+    - Dedicated reseller bot only: owner OR configured bot_admin_ids → that shop.
+    - Main (platform) bot: never — panel ops live on the shop's own bot.
+      On the main bot, resellers only see credentials / deep-link info.
     """
-    if is_reseller_bot and reseller_owner_id:
-        if db_user.id == reseller_owner_id:
-            return int(reseller_owner_id)
-        profile = await get_reseller_profile(session, int(reseller_owner_id))
-        if is_bot_admin_id(profile, db_user.telegram_id):
-            return int(reseller_owner_id)
+    if not is_reseller_bot or not reseller_owner_id:
         return None
-
-    if db_user.role == Role.RESELLER.value:
-        return int(db_user.id)
+    if db_user.id == reseller_owner_id:
+        return int(reseller_owner_id)
+    profile = await get_reseller_profile(session, int(reseller_owner_id))
+    if is_bot_admin_id(profile, db_user.telegram_id):
+        return int(reseller_owner_id)
     return None
 
 
@@ -102,7 +99,19 @@ async def effective_menu_role(
     )
     if owner_id and profile:
         return Role.RESELLER.value
-    # Dedicated shop bot: platform staff still shop as customers
-    if is_reseller_bot and db_user.role in (Role.ADMIN.value, Role.RESELLER.value):
+    # Dedicated shop bot: platform staff / foreign resellers shop as customers
+    if is_reseller_bot:
+        return Role.USER.value
+    # Main bot: shop owners see the user menu (+ credentials button), not a second panel
+    if db_user.role == Role.RESELLER.value:
         return Role.USER.value
     return db_user.role
+
+
+def is_shop_owner_on_main_bot(
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool = False,
+) -> bool:
+    """True when a reseller opens the platform bot (credentials-only surface)."""
+    return (not is_reseller_bot) and db_user.role == Role.RESELLER.value

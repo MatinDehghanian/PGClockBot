@@ -46,6 +46,62 @@ async def _actor(
     )
 
 
+@router.callback_query(F.data == "res:creds")
+async def res_creds(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    """Credentials / deep-link card — available on the main bot for shop owners."""
+    from app.services.resellers import format_reseller_access_card, get_reseller_profile
+
+    if is_reseller_bot:
+        # On shop bot, send them to the real panel
+        owner_id, profile = await _actor(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        if owner_id and profile:
+            await callback.answer()
+            if callback.message:
+                await safe_edit_text(
+                    callback.message,
+                    format_message("🤝 پنل نماینده", "دسترسی‌ها با وب‌پنل یکسان است."),
+                    reply_markup=kb.reseller_home(profile),
+                )
+            return
+    if db_user.role != Role.RESELLER.value:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    profile = await get_reseller_profile(session, db_user.id)
+    if not profile or not profile.is_active:
+        await callback.answer("پروفایل نماینده یافت نشد", show_alert=True)
+        return
+    await callback.answer()
+    text = await format_reseller_access_card(session, profile)
+    rows = [[InlineKeyboardButton(text="⬅️ بازگشت", callback_data="menu:home")]]
+    if profile.bot_username:
+        rows.insert(
+            0,
+            [
+                InlineKeyboardButton(
+                    text=f"باز کردن @{profile.bot_username}",
+                    url=f"https://t.me/{profile.bot_username}",
+                )
+            ],
+        )
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
 @router.callback_query(F.data == "res:home")
 async def res_home(
     callback: CallbackQuery,
@@ -54,6 +110,16 @@ async def res_home(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
+    # Full panel only on dedicated shop bot — main bot redirects to credentials
+    if not is_reseller_bot:
+        await res_creds(
+            callback,
+            session,
+            db_user,
+            is_reseller_bot=False,
+            reseller_owner_id=None,
+        )
+        return
     owner_id, profile = await _actor(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )

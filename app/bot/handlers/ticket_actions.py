@@ -34,6 +34,10 @@ async def _actor_role(
 ) -> str | None:
     """Return 'staff' | 'owner' | None for this ticket."""
     if is_platform_admin(db_user) and not is_reseller_bot:
+        # Platform staff may only handle platform customers — never shop tickets
+        ticket_user = await session.get(BotUser, int(ticket.user_id))
+        if ticket_user and ticket_user.reseller_id:
+            return None
         return "staff"
     if ticket.user_id == db_user.id:
         return "owner"

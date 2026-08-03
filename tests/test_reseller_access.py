@@ -38,12 +38,13 @@ class BotAdminIdTests(unittest.TestCase):
 
 
 class ResolveOwnerTests(unittest.IsolatedAsyncioTestCase):
-    async def test_main_bot_reseller_role(self):
+    async def test_main_bot_reseller_has_no_panel_actor(self):
+        """Shop panel ops are dedicated-bot only — main bot never elevates."""
         user = SimpleNamespace(id=5, role="reseller", telegram_id=100)
         owner = await resolve_reseller_owner_id(
             MagicMock(), user, is_reseller_bot=False, reseller_owner_id=None
         )
-        self.assertEqual(owner, 5)
+        self.assertIsNone(owner)
 
     async def test_main_bot_bot_admin_stays_user(self):
         user = SimpleNamespace(id=9, role="user", telegram_id=777)
@@ -97,7 +98,7 @@ class ResolveOwnerTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(role, "user")
 
-    async def test_effective_menu_role_reseller_panel(self):
+    async def test_effective_menu_role_reseller_panel_on_shop_bot(self):
         user = SimpleNamespace(id=5, role="reseller", telegram_id=100)
         profile = SimpleNamespace(is_active=True, user_id=5)
         with patch(
@@ -108,6 +109,17 @@ class ResolveOwnerTests(unittest.IsolatedAsyncioTestCase):
                 MagicMock(), user, is_reseller_bot=True, reseller_owner_id=5
             )
         self.assertEqual(role, "reseller")
+
+    async def test_effective_menu_role_demotes_reseller_on_main_bot(self):
+        user = SimpleNamespace(id=5, role="reseller", telegram_id=100)
+        with patch(
+            "app.services.reseller_access.load_reseller_actor",
+            new=AsyncMock(return_value=(None, None)),
+        ):
+            role = await effective_menu_role(
+                MagicMock(), user, is_reseller_bot=False, reseller_owner_id=None
+            )
+        self.assertEqual(role, "user")
 
 
 class PgOverviewHelpersTests(unittest.TestCase):

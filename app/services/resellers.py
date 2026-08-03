@@ -150,22 +150,29 @@ async def reseller_can_review_payment(
     reviewer: BotUser,
     payment: Payment,
 ) -> bool:
-    """Admins (main bot): yes. Shop owner / dedicated-bot admins: payments perm + tenancy.
+    """Shop staff on their bot: payments perm + tenancy.
 
-    Wallet top-ups credit a global balance — only platform admins may approve/reject them.
-    Order payments must belong to the reviewer's shop (``Order.reseller_id``), not merely
-    sticky customer attribution (which would allow cross-tenant approval).
+    Platform admins on the main bot may only review platform-scoped payments
+    (wallet top-ups / orders with no reseller_id) — never shop tenants' traffic.
     """
     from app.services.reseller_access import resolve_reseller_owner_id
     from app.services.users import current_shop_reseller_id
 
     shop_rid = current_shop_reseller_id()
-    if reviewer.role == Role.ADMIN.value and shop_rid is None:
-        return True
 
     # Global wallet must never be mintable by a tenant reviewer.
     if payment.is_wallet_topup:
-        return False
+        return reviewer.role == Role.ADMIN.value and shop_rid is None
+
+    order = None
+    if payment.order_id:
+        order = await session.get(Order, payment.order_id)
+
+    # Platform admin on main bot: only non-shop orders
+    if reviewer.role == Role.ADMIN.value and shop_rid is None:
+        if order and order.reseller_id:
+            return False
+        return True
 
     owner_id = await resolve_reseller_owner_id(
         session,
@@ -178,9 +185,6 @@ async def reseller_can_review_payment(
     profile = await get_reseller_profile(session, owner_id)
     if not has_bot_perm(profile, "payments"):
         return False
-    if not payment.order_id:
-        return False
-    order = await session.get(Order, payment.order_id)
     if not order or order.reseller_id != owner_id:
         return False
     return True
@@ -282,6 +286,7 @@ async def make_reseller(
     commission_percent: int = 10,
     can_approve_receipts: bool = False,
     pg_admin_username: str | None = None,
+    pg_admin_password_enc: str | None = None,
     pg_role_id: int | None = None,
     web_username: str | None = None,
     web_password_hash: str | None = None,
@@ -306,6 +311,8 @@ async def make_reseller(
         profile.can_approve_receipts = approve
         if pg_admin_username is not None:
             profile.pg_admin_username = pg_admin_username
+        if pg_admin_password_enc is not None:
+            profile.pg_admin_password_enc = pg_admin_password_enc
         if pg_role_id is not None:
             profile.pg_role_id = pg_role_id
         if web_username:
@@ -322,6 +329,7 @@ async def make_reseller(
             commission_percent=commission_percent,
             can_approve_receipts=approve,
             pg_admin_username=pg_admin_username,
+            pg_admin_password_enc=pg_admin_password_enc,
             pg_role_id=pg_role_id,
             web_username=web_username,
             web_password_hash=web_password_hash,
@@ -509,9 +517,13 @@ async def provision_reseller(
 
     pg_username = None
     pg_password = None
+    pg_password_enc = None
     if do_pg:
+        from app.services.secret_box import encrypt_secret
+
         pg_username = _rand_username("pg")
         pg_password = _rand_password(14)
+        pg_password_enc = encrypt_secret(pg_password)
         payload: dict = {
             "username": pg_username,
             "password": pg_password,
@@ -549,6 +561,7 @@ async def provision_reseller(
         commission_percent=commission,
         can_approve_receipts=approve,
         pg_admin_username=pg_username,
+        pg_admin_password_enc=pg_password_enc,
         pg_role_id=role_id,
         web_username=web_username,
         web_password_hash=web_hash,
@@ -632,8 +645,42 @@ def format_credentials_message(creds: dict) -> str:
             "لینک یک‌بارمصرف است — با کسی به اشتراک نگذارید.",
         ]
 
-    lines += ["", "از منوی ربات به امکانات مجاز «پنل نماینده» دسترسی دارید."]
+    lines += [
+        "",
+        "مدیریت فروشگاه فقط از <b>ربات اختصاصی</b> و <b>وب‌پنل</b> شماست — "
+        "در ربات اصلی ادمین، پنل نماینده نمایش داده نمی‌شود.",
+    ]
     return "\n".join(lines)
+
+
+async def format_reseller_access_card(session: AsyncSession, profile) -> str:
+    """Non-secret access info for a reseller on the main bot (no plaintext passwords)."""
+    from app.services.formatting import format_message, info_block, kv_line
+
+    panel = (await get_reseller_panel_base_url(session)).rstrip("/")
+    lines = [
+        "مدیریت فروشگاه فقط از وب‌پنل و ربات اختصاصی خودتان انجام می‌شود.",
+        "در ربات اصلی ادمین، پنل عملیاتی نماینده وجود ندارد.",
+        "",
+    ]
+    block = [
+        kv_line("🌐", "وب‌پنل", f"{panel}/login" if panel else "—"),
+        kv_line("👤", "نام کاربری وب", profile.web_username or "—"),
+    ]
+    if profile.bot_username:
+        block.append(kv_line("🤖", "ربات اختصاصی", f"@{profile.bot_username}"))
+    else:
+        block.append(
+            kv_line("🤖", "ربات اختصاصی", "هنوز ثبت نشده — از وب‌پنل توکن را تنظیم کنید")
+        )
+    if profile.pg_admin_username:
+        block.append(kv_line("🛡", "کاربر پاسارگارد", profile.pg_admin_username))
+    lines.append(info_block(block))
+    lines.append("")
+    lines.append(
+        "رمز ورود فقط یک‌بار هنگام فعال‌سازی ارسال شده؛ در صورت فراموشی از ادمین بخواهید بازنشانی کند."
+    )
+    return format_message("🔐 اطلاعات نمایندگی", "\n".join(lines))
 
 
 async def complete_reseller_setup(

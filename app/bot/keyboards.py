@@ -120,10 +120,12 @@ def main_menu(
     has_services: bool = False,
     ui: dict | None = None,
     as_user: bool = False,
+    show_reseller_creds: bool = False,
 ) -> InlineKeyboardMarkup:
     """
     User/reseller: shop-style sales menu.
     Admin: management home only (no customer shop clutter), unless as_user=True.
+    On the main bot, shop owners get a credentials button instead of a full panel.
     """
     if role == Role.ADMIN.value and not as_user:
         return admin_main_menu(ui)
@@ -178,7 +180,7 @@ def main_menu(
             buttons.append(
                 InlineKeyboardButton(text=_t(ui, "btn_referral"), callback_data="ref:home")
             )
-        elif key == "reseller_apply" and role == Role.USER.value:
+        elif key == "reseller_apply" and role == Role.USER.value and not show_reseller_creds:
             buttons.append(
                 InlineKeyboardButton(
                     text=_t(ui, "btn_reseller_apply"),
@@ -196,8 +198,17 @@ def main_menu(
     # compact = pair left-to-right like the web-panel live preview; classic = one per row
     full_width: list[InlineKeyboardButton] = []
     if role == Role.RESELLER.value:
+        # Full shop panel — only on the dedicated reseller bot
         full_width.append(
             InlineKeyboardButton(text=_t(ui, "btn_reseller"), callback_data="res:home")
+        )
+    elif show_reseller_creds:
+        # Main bot: credentials / deep-link only — no panel ops here
+        full_width.append(
+            InlineKeyboardButton(
+                text="🔐 اطلاعات ورود پنل و ربات",
+                callback_data="res:creds",
+            )
         )
     if role == Role.ADMIN.value and as_user:
         full_width.append(
