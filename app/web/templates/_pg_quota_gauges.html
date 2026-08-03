@@ -4,27 +4,17 @@
 {% macro pg_quota_exhausted_banners(users=None, traffic=None) -%}
 {% if users and users.exhausted %}
 <div class="flash err pg-quota-banner" role="alert">
-  <div class="pg-quota-banner-inner">
-    <span class="pg-quota-banner-ico" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/></svg>
-    </span>
-    <div class="pg-quota-banner-copy">
-      <strong>سقف تعداد کاربران پر شده است</strong>
-      <span>محدودیت تعداد کاربران شما به پایان رسیده — تا افزایش سهمیه، ساخت کاربر جدید ممکن نیست.</span>
-    </div>
+  <div class="flash-copy">
+    <strong>سقف تعداد کاربران پر شده است</strong>
+    <span>محدودیت تعداد کاربران شما به پایان رسیده — تا افزایش سهمیه، ساخت کاربر جدید ممکن نیست.</span>
   </div>
 </div>
 {% endif %}
 {% if traffic and traffic.exhausted %}
 <div class="flash err pg-quota-banner" role="alert">
-  <div class="pg-quota-banner-inner">
-    <span class="pg-quota-banner-ico" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-    </span>
-    <div class="pg-quota-banner-copy">
-      <strong>سقف حجم تمام شده است</strong>
-      <span>محدودیت حجم شما به پایان رسیده — تا افزایش سهمیه، تحویل سرویس جدید ممکن نیست.</span>
-    </div>
+  <div class="flash-copy">
+    <strong>سقف حجم تمام شده است</strong>
+    <span>محدودیت حجم شما به پایان رسیده — تا افزایش سهمیه، تحویل سرویس جدید ممکن نیست.</span>
   </div>
 </div>
 {% endif %}

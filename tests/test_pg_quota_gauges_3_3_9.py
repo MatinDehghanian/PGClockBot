@@ -79,6 +79,7 @@ class PgQuotaGaugeUiTests(unittest.TestCase):
         self.assertIn("home-gauge-caution", css)
         self.assertIn(".home-gauge.is-exhausted", css)
         self.assertIn(".pg-quota-gauges", css)
+        self.assertIn(".flash.ok::before", css)
         self.assertNotIn("pg-gauge-blink", css)
         self.assertNotIn("pg-gauge-pulse", css)
 

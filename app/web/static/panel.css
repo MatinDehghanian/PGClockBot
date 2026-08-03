@@ -1450,6 +1450,9 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 }
 
 .flash {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
   border-radius: var(--radius);
   padding: var(--space-2);
   margin: 0 0 var(--section-gap);
@@ -1457,11 +1460,68 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   font-size: 13px;
   line-height: 1.5;
   background: var(--bg-card);
-  text-align: center;
+  text-align: start;
+}
+.flash > .flash-copy,
+.flash > .home-update-copy,
+.flash > .dash-bot-setup-inner {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.flash > .btn,
+.flash > a.btn {
+  flex: 0 0 auto;
+  align-self: center;
 }
 .flash.ok { background: rgba(34, 197, 94, 0.1); color: #86efac; border-color: rgba(34, 197, 94, 0.28); }
 .flash.err { background: rgba(239, 68, 68, 0.1); color: #fca5a5; border-color: rgba(239, 68, 68, 0.28); }
 .flash.warn { background: rgba(234, 179, 8, 0.1); color: #fde047; border-color: rgba(234, 179, 8, 0.28); }
+
+/* Icon box — same footprint as .stat-ico; shape encodes severity */
+.flash.ok::before,
+.flash.warn::before,
+.flash.err::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 15px 15px;
+}
+/* Green: square + check */
+.flash.ok::before {
+  background-color: rgba(34, 197, 94, 0.16);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2386efac' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='4' width='16' height='16' rx='2'/%3E%3Cpath d='M8 12.2l2.8 2.8L16.5 9'/%3E%3C/svg%3E");
+}
+/* Yellow: triangle + ! */
+.flash.warn::before {
+  background-color: rgba(234, 179, 8, 0.16);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fde047' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.8L21 19.2H3L12 3.8z'/%3E%3Cpath d='M12 9.2v5'/%3E%3Ccircle cx='12' cy='16.6' r='0.9' fill='%23fde047' stroke='none'/%3E%3C/svg%3E");
+}
+/* Red: circle + X */
+.flash.err::before {
+  background-color: rgba(239, 68, 68, 0.16);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fca5a5' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M9 9l6 6M15 9l-6 6'/%3E%3C/svg%3E");
+}
+.flash-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.flash-copy strong {
+  font-size: 13px;
+  font-weight: 650;
+  color: inherit;
+}
+.flash-copy span,
+.flash-copy .muted {
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.92;
+}
 
 .auth-wrap {
   min-height: 100vh;
@@ -3999,6 +4059,18 @@ html[data-theme="light"] .flash.warn {
   border-color: rgba(202, 138, 4, 0.28);
   color: #a16207;
 }
+html[data-theme="light"] .flash.ok::before {
+  background-color: rgba(22, 163, 74, 0.14);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2315803d' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='4' width='16' height='16' rx='2'/%3E%3Cpath d='M8 12.2l2.8 2.8L16.5 9'/%3E%3C/svg%3E");
+}
+html[data-theme="light"] .flash.warn::before {
+  background-color: rgba(202, 138, 4, 0.14);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a16207' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.8L21 19.2H3L12 3.8z'/%3E%3Cpath d='M12 9.2v5'/%3E%3Ccircle cx='12' cy='16.6' r='0.9' fill='%23a16207' stroke='none'/%3E%3C/svg%3E");
+}
+html[data-theme="light"] .flash.err::before {
+  background-color: rgba(220, 38, 38, 0.12);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b91c1c' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M9 9l6 6M15 9l-6 6'/%3E%3C/svg%3E");
+}
 html[data-theme="light"] .quick-links a,
 html[data-theme="light"] .section-tabs a {
   background: rgba(24, 24, 27, 0.03);
@@ -4170,11 +4242,15 @@ html[data-theme="light"] .setup-progress span.done {
   flex-wrap: wrap;
   margin-bottom: var(--section-gap);
 }
+.home-update-banner::before {
+  align-self: center;
+}
 .home-update-copy {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
+  flex: 1 1 auto;
 }
 .home-update-copy strong { font-size: 13px; font-weight: 600; }
 .home-update-copy .muted { font-size: 12px; }
@@ -4233,66 +4309,14 @@ html[data-theme="light"] .setup-progress span.done {
 .home-gauge-err .home-gauge-val { stroke: var(--destructive-fg); }
 .home-gauge-neutral .home-gauge-val { stroke: var(--muted-fg); }
 
-/* PG quota — exhausted: red border (no blink indicator) */
+/* PG quota — exhausted: clean red border only (no shadow/gradient) */
 .home-gauge.is-exhausted {
-  border-color: color-mix(in srgb, var(--destructive-fg) 72%, transparent);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--destructive-fg) 28%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--destructive-fg) 12%, transparent);
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--destructive-fg) 8%, transparent),
-      transparent 42%
-    ),
-    var(--bg-card);
+  border-color: var(--destructive-fg);
 }
 .pg-quota-top { margin-bottom: var(--section-gap); }
 .pg-quota-gauges-embed { margin-top: var(--space-2); }
 .pg-quota-banner {
-  text-align: start;
-  padding: var(--space-2) var(--card-pad);
-}
-.pg-quota-banner-inner {
-  display: flex;
   align-items: flex-start;
-  gap: var(--space-2);
-  text-align: start;
-}
-.pg-quota-banner-ico {
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--destructive-fg) 14%, transparent);
-  color: var(--destructive-fg);
-}
-.pg-quota-banner-ico svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.pg-quota-banner-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.pg-quota-banner-copy strong {
-  font-size: 13px;
-  font-weight: 650;
-  color: inherit;
-}
-.pg-quota-banner-copy span {
-  font-size: 12px;
-  line-height: 1.45;
-  opacity: 0.92;
 }
 .home-gauge-meta > small.muted {
   font-size: 12px;
@@ -4355,18 +4379,24 @@ html[data-theme="light"] .setup-progress span.done {
 
 .dash-bot-setup {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: start;
   padding: var(--card-pad);
+}
+.dash-bot-setup::before {
+  margin-top: 2px;
 }
 .dash-bot-setup-inner {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-1);
   max-width: 28rem;
   width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .dash-bot-setup-inner strong {
   font-size: 14px;
@@ -4692,26 +4722,7 @@ html[data-theme="light"] .home-panel-pg a.btn {
   background: color-mix(in srgb, #2563eb 12%, transparent);
 }
 html[data-theme="light"] .home-gauge.is-exhausted {
-  border-color: color-mix(in srgb, var(--destructive-fg) 55%, transparent);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--destructive-fg) 18%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--destructive-fg) 8%, transparent);
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--destructive-fg) 6%, transparent),
-      transparent 42%
-    ),
-    var(--bg-card);
-}
-html[data-theme="light"] .pg-quota-banner.flash.err {
-  background: rgba(220, 38, 38, 0.08);
-  color: #b91c1c;
-  border-color: rgba(220, 38, 38, 0.28);
-}
-html[data-theme="light"] .pg-quota-banner-ico {
-  background: rgba(220, 38, 38, 0.1);
-  color: #dc2626;
+  border-color: var(--destructive-fg);
 }
 
 @media (max-width: 1100px) {
