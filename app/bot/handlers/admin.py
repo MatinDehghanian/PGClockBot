@@ -431,6 +431,7 @@ async def order_reject_cb(callback: CallbackQuery, session: AsyncSession, db_use
                 await callback.bot.send_message(
                     user.telegram_id,
                     format_message("❌ سفارش رد شد", f"سفارش #{order_id} رد شد."),
+                    parse_mode="HTML",
                 )
             except Exception:
                 pass

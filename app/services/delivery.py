@@ -234,10 +234,10 @@ async def send_delivery_to_user(
     sub_info = payload.get("sub_info")
 
     try:
-        await bot.send_message(chat_id, text, reply_markup=markup)
+        await bot.send_message(chat_id, text, reply_markup=markup, parse_mode="HTML")
     except Exception:
         try:
-            await bot.send_message(chat_id, text)
+            await bot.send_message(chat_id, text, parse_mode="HTML")
         except Exception:
             pass
 
@@ -254,7 +254,7 @@ async def send_delivery_to_user(
         )
         if detailed["text"] != text:
             try:
-                await bot.send_message(chat_id, detailed["text"])
+                await bot.send_message(chat_id, detailed["text"], parse_mode="HTML")
             except Exception:
                 pass
             text = detailed["text"]
