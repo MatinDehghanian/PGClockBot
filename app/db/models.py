@@ -137,6 +137,7 @@ class Order(Base):
     )
     amount: Mapped[int] = mapped_column(Integer)
     discount_amount: Mapped[int] = mapped_column(Integer, default=0)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
     status: Mapped[str] = mapped_column(String(32), default=OrderStatus.PENDING.value, index=True)
     payment_method: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     discount_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

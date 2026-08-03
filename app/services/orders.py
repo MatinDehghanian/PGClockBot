@@ -503,6 +503,155 @@ async def create_custom_order(
     return order
 
 
+def parse_wholesale_tiers(raw: str | None) -> list[dict]:
+    """Parse wholesale discount tiers from settings JSON.
+
+    Expected shape: [{"min":5,"percent":10},{"min":20,"percent":20}]
+    Invalid entries are skipped. Sorted by min ascending.
+    """
+    import json
+
+    text = (raw or "").strip()
+    if not text:
+        return []
+    try:
+        data = json.loads(text)
+    except Exception:
+        return []
+    if not isinstance(data, list):
+        return []
+    tiers: list[dict] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        try:
+            mn = int(item.get("min"))
+            pct = int(item.get("percent"))
+        except (TypeError, ValueError):
+            continue
+        if mn < 1 or pct < 0 or pct > 100:
+            continue
+        tiers.append({"min": mn, "percent": pct})
+    tiers.sort(key=lambda t: t["min"])
+    return tiers
+
+
+def wholesale_bounds(ui: dict | None) -> tuple[int, int]:
+    ui = ui or {}
+    try:
+        mn = int(float(ui.get("wholesale_min_qty") or 5))
+    except (TypeError, ValueError):
+        mn = 5
+    try:
+        mx = int(float(ui.get("wholesale_max_qty") or 20))
+    except (TypeError, ValueError):
+        mx = 20
+    mn = max(1, mn)
+    mx = max(mn, mx)
+    return mn, mx
+
+
+def wholesale_tier_percent(qty: int, tiers: list[dict]) -> int:
+    best = 0
+    for t in tiers:
+        if int(qty) >= int(t["min"]):
+            best = int(t["percent"])
+    return best
+
+
+def calc_wholesale_price(*, unit_price: int, quantity: int, percent: int) -> tuple[int, int]:
+    """Return (payable_amount, discount_amount) for wholesale qty."""
+    gross = max(0, int(unit_price)) * max(1, int(quantity))
+    pct = max(0, min(100, int(percent)))
+    discount = int(gross * pct / 100)
+    return max(0, gross - discount), discount
+
+
+def wholesale_description(ui: dict | None) -> str:
+    """Persian help text shown in the bot wholesale flow."""
+    ui = ui or {}
+    mn, mx = wholesale_bounds(ui)
+    tiers = parse_wholesale_tiers(ui.get("wholesale_tiers"))
+    lines = [
+        f"حداقل خرید: <b>{mn}</b> عدد",
+        f"حداکثر خرید: <b>{mx}</b> عدد",
+    ]
+    if tiers:
+        lines.append("")
+        lines.append("تخفیف پلکانی:")
+        for t in tiers:
+            lines.append(
+                f"• خرید از <b>{t['min']}</b> عدد به بالا → <b>{t['percent']}٪</b> تخفیف"
+            )
+    else:
+        lines.append("")
+        lines.append("در حال حاضر تخفیف پلکانی تعریف نشده است.")
+    return "\n".join(lines)
+
+
+def order_quantity(order: Order) -> int:
+    qty = getattr(order, "quantity", None)
+    try:
+        n = int(qty or 1)
+    except (TypeError, ValueError):
+        n = 1
+    if n < 1:
+        note = (order.note or "").strip()
+        if note.startswith("wholesale:"):
+            try:
+                n = int(note.split(":", 1)[1])
+            except (TypeError, ValueError):
+                n = 1
+    return max(1, n)
+
+
+async def create_wholesale_order(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    plan_id: int,
+    quantity: int,
+    reseller_id: int | None = None,
+) -> Order:
+    """Create a bulk order for N identical services of one catalog plan."""
+    from app.services.users import get_all_settings, on
+
+    ui = await get_all_settings(session)
+    if not on(ui.get("wholesale_enabled")):
+        raise ValueError("فروش عمده فعال نیست")
+    plan = await get_catalog_plan(session, plan_id)
+    if not plan or not plan.is_active or plan.is_trial:
+        raise ValueError("پلن برای فروش عمده در دسترس نیست")
+
+    mn, mx = wholesale_bounds(ui)
+    qty = int(quantity)
+    if qty < mn or qty > mx:
+        raise ValueError(f"تعداد باید بین {mn} تا {mx} باشد")
+
+    tiers = parse_wholesale_tiers(ui.get("wholesale_tiers"))
+    pct = wholesale_tier_percent(qty, tiers)
+    amount, discount = calc_wholesale_price(
+        unit_price=plan.price, quantity=qty, percent=pct
+    )
+    shop_rid = _shop_reseller_id()
+    _ = reseller_id
+    order = Order(
+        user_id=user_id,
+        plan_id=plan.id,
+        reseller_id=shop_rid,
+        amount=amount,
+        discount_amount=discount,
+        discount_code=f"wholesale:{pct}%" if pct else None,
+        quantity=qty,
+        status=OrderStatus.PENDING.value,
+        note=f"wholesale:{qty}",
+    )
+    session.add(order)
+    await session.commit()
+    await session.refresh(order)
+    return order
+
+
 _PAYABLE_ORDER_STATUSES = frozenset(
     {
         OrderStatus.PENDING.value,
@@ -906,7 +1055,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
 
     try:
         pg = get_pg()
-        username = await generate_pg_username(session, user_id=order.user_id, plan=plan)
+        qty = order_quantity(order)
 
         pg_owner, pg_role_id = await _reseller_pg_link(session, order.reseller_id)
         data_limit = None
@@ -934,78 +1083,89 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                     data_limit=data_limit,
                     expire_ts=expire,
                     from_template=bool(plan.pg_template_id),
+                    quantity=qty,
                 )
             except PgQuotaError as e:
                 raise ValueError(e.message) from e
 
-        pg_user: dict
-        if plan.pg_template_id:
-            payload = {
-                "username": username,
-                "user_template_id": plan.pg_template_id,
-                "note": f"PGClockBot order #{order.id}",
-            }
-            pg_user = await pg.create_user_from_template(payload)
-        else:
-            from app.services.pasarguard import build_user_create_payload, parse_group_ids
+        from app.services.pasarguard import build_user_create_payload, parse_group_ids
 
+        group_ids = None
+        if not plan.pg_template_id:
             group_ids = parse_group_ids(getattr(plan, "pg_group_ids", None))
             if not group_ids:
                 raise ValueError(
                     "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
                 )
-            pg_user = await pg.create_user(
-                build_user_create_payload(
-                    username=username,
-                    group_ids=group_ids,
-                    data_limit=data_limit,
-                    expire_ts=expire,
-                    note=f"PGClockBot order #{order.id}",
-                )
-            )
 
-        pg_uid = pg_user.get("id")
-        # Fail closed: reseller delivery must transfer ownership or roll back the PG user.
-        if order.reseller_id:
-            owner_name = (pg_owner or "").strip()
-            if not owner_name or not pg_uid:
-                if pg_uid:
-                    try:
-                        await pg.delete_user_by_id(int(pg_uid))
-                    except Exception:
-                        pass
-                raise ValueError(
-                    "کاربر ساخته شد ولی مالکیت قابل تنظیم نیست — تحویل لغو شد"
+        created_pg_ids: list[int] = []
+        services: list[UserService] = []
+
+        async def _create_one(index: int) -> UserService:
+            username = await generate_pg_username(session, user_id=order.user_id, plan=plan)
+            note = f"PGClockBot order #{order.id}"
+            if qty > 1:
+                note = f"{note} ({index}/{qty})"
+            if plan.pg_template_id:
+                payload = {
+                    "username": username,
+                    "user_template_id": plan.pg_template_id,
+                    "note": note,
+                }
+                pg_user = await pg.create_user_from_template(payload)
+            else:
+                pg_user = await pg.create_user(
+                    build_user_create_payload(
+                        username=username,
+                        group_ids=group_ids or [],
+                        data_limit=data_limit,
+                        expire_ts=expire,
+                        note=note,
+                    )
                 )
-            try:
+            pg_uid = pg_user.get("id")
+            if pg_uid:
+                created_pg_ids.append(int(pg_uid))
+            # Fail closed: reseller delivery must transfer ownership or roll back the PG user.
+            if order.reseller_id:
+                owner_name = (pg_owner or "").strip()
+                if not owner_name or not pg_uid:
+                    raise ValueError(
+                        "کاربر ساخته شد ولی مالکیت قابل تنظیم نیست — تحویل لغو شد"
+                    )
                 await pg.set_owner_by_id(int(pg_uid), owner_name)
-            except Exception as e:
+
+            sub_url = pg_user.get("subscription_url")
+            service = UserService(
+                bot_user_id=order.user_id,
+                plan_id=plan.id,
+                pg_user_id=pg_uid,
+                pg_username=pg_user.get("username", username),
+                subscription_url=sub_url,
+                subscription_token=extract_sub_token(sub_url),
+                remark=f"order:{order.id}",
+            )
+            session.add(service)
+            await session.flush()
+            return service
+
+        try:
+            for i in range(1, qty + 1):
+                services.append(await _create_one(i))
+        except Exception:
+            # Roll back PG users created so far (atomic wholesale delivery)
+            for pg_uid in reversed(created_pg_ids):
                 try:
                     await pg.delete_user_by_id(int(pg_uid))
                 except Exception:
                     pass
-                raise ValueError(
-                    f"کاربر ساخته شد ولی مالکیت ست نشد و حذف شد: {e}"
-                ) from e
-
-        sub_url = pg_user.get("subscription_url")
-        service = UserService(
-            bot_user_id=order.user_id,
-            plan_id=plan.id,
-            pg_user_id=pg_uid,
-            pg_username=pg_user.get("username", username),
-            subscription_url=sub_url,
-            subscription_token=extract_sub_token(sub_url),
-            remark=f"order:{order.id}",
-        )
-        session.add(service)
-        await session.flush()
+            raise
 
         if profile is not None:
             commission = int(order.amount * profile.commission_percent / 100)
             profile.balance += commission
 
-        order.service_id = service.id
+        order.service_id = services[0].id if services else None
         order.status = OrderStatus.DELIVERED.value
         await session.commit()
         await session.refresh(order)

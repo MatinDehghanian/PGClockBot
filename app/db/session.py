@@ -105,6 +105,13 @@ def _migrate_sqlite(sync_conn) -> None:
             if col not in mcols:
                 sync_conn.execute(text(f"ALTER TABLE panel_ticket_messages ADD COLUMN {col} {typ}"))
 
+    if insp.has_table("orders"):
+        ocols = {c["name"] for c in insp.get_columns("orders")}
+        if "quantity" not in ocols:
+            sync_conn.execute(
+                text("ALTER TABLE orders ADD COLUMN quantity INTEGER DEFAULT 1")
+            )
+
     # Ensure core shop perms exist on legacy reseller profiles / plans (1.7+)
     # Skip after a successful one-time migration (new rows already get core perms).
     marker = None

@@ -51,6 +51,39 @@ def chunk_buttons(
     return rows
 
 
+def _resolve_ui(ui: dict | None) -> dict | None:
+    if ui is not None:
+        return ui
+    try:
+        from app.services.users import current_ui_snapshot
+
+        return current_ui_snapshot()
+    except Exception:
+        return None
+
+
+def _menu_layout(ui: dict | None) -> str:
+    resolved = _resolve_ui(ui)
+    return (_t(resolved, "menu_layout") or "classic").strip()
+
+
+def layout_rows(
+    buttons: list[InlineKeyboardButton],
+    ui: dict | None = None,
+    *,
+    full_width: list[InlineKeyboardButton] | None = None,
+) -> list[list[InlineKeyboardButton]]:
+    """Apply panel menu_layout: compact = 2-col, classic = 1-col; append full-width rows."""
+    layout = _menu_layout(ui)
+    if layout == "compact":
+        rows = chunk_buttons(buttons, cols=2)
+    else:
+        rows = [[b] for b in buttons]
+    for b in full_width or []:
+        rows.append([b])
+    return rows
+
+
 def _menu_order(ui: dict | None) -> list[str]:
     """Active menu keys from menu_order only (no re-inject of removed items)."""
     raw = _t(ui, "menu_order")
@@ -96,7 +129,6 @@ def main_menu(
         return admin_main_menu(ui)
 
     settings = get_settings()
-    layout = (_t(ui, "menu_layout") or "classic").strip()
     buttons: list[InlineKeyboardButton] = []
 
     for key in _menu_order(ui):
@@ -162,45 +194,35 @@ def main_menu(
             )
 
     # compact = pair left-to-right like the web-panel live preview; classic = one per row
-    if layout == "compact":
-        rows = chunk_buttons(buttons, cols=2)
-    else:
-        rows = [[b] for b in buttons]
-
+    full_width: list[InlineKeyboardButton] = []
     if role == Role.RESELLER.value:
-        rows.append(
-            [InlineKeyboardButton(text=_t(ui, "btn_reseller"), callback_data="res:home")]
+        full_width.append(
+            InlineKeyboardButton(text=_t(ui, "btn_reseller"), callback_data="res:home")
         )
     if role == Role.ADMIN.value and as_user:
-        rows.append(
-            [InlineKeyboardButton(text=_t(ui, "btn_admin"), callback_data="adm:home")]
+        full_width.append(
+            InlineKeyboardButton(text=_t(ui, "btn_admin"), callback_data="adm:home")
         )
+    rows = layout_rows(buttons, ui, full_width=full_width)
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def admin_main_menu(ui: dict | None = None) -> InlineKeyboardMarkup:
     """Primary home for bot owner — management tools only."""
+    buttons = [
+        InlineKeyboardButton(text=_t(ui, "btn_admin"), callback_data="adm:home"),
+        InlineKeyboardButton(text="🛒 سفارش‌ها", callback_data="adm:orders"),
+        InlineKeyboardButton(text="🧾 رسیدها", callback_data="adm:payments"),
+        InlineKeyboardButton(text="🎫 تیکت‌ها", callback_data="adm:tickets"),
+        InlineKeyboardButton(text="📦 پلن‌ها", callback_data="adm:plans"),
+        InlineKeyboardButton(text="🖥 پاسارگارد", callback_data="adm:pg"),
+    ]
+    preview = InlineKeyboardButton(
+        text="👁 پیش‌نمایش منوی کاربر",
+        callback_data="menu:as_user",
+    )
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=_t(ui, "btn_admin"), callback_data="adm:home")],
-            [
-                InlineKeyboardButton(text="🛒 سفارش‌ها", callback_data="adm:orders"),
-                InlineKeyboardButton(text="🧾 رسیدها", callback_data="adm:payments"),
-            ],
-            [
-                InlineKeyboardButton(text="🎫 تیکت‌ها", callback_data="adm:tickets"),
-                InlineKeyboardButton(text="📦 پلن‌ها", callback_data="adm:plans"),
-            ],
-            [
-                InlineKeyboardButton(text="🖥 پاسارگارد", callback_data="adm:pg"),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="👁 پیش‌نمایش منوی کاربر",
-                    callback_data="menu:as_user",
-                )
-            ],
-        ]
+        inline_keyboard=layout_rows(buttons, ui, full_width=[preview])
     )
 
 
@@ -209,6 +231,7 @@ def plans_keyboard(
     ui: dict | None = None,
     *,
     custom_enabled: bool = False,
+    wholesale_enabled: bool = False,
 ) -> InlineKeyboardMarkup:
     rows = [
         [
@@ -219,19 +242,74 @@ def plans_keyboard(
         ]
         for p in plans
     ]
+    extras: list[InlineKeyboardButton] = []
     if custom_enabled:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text="✨ پلن دلخواه",
-                    callback_data="shop:custom",
-                )
-            ]
+        extras.append(
+            InlineKeyboardButton(
+                text="✨ پلن دلخواه",
+                callback_data="shop:custom",
+            )
         )
+    if wholesale_enabled:
+        extras.append(
+            InlineKeyboardButton(
+                text=_t(ui, "btn_wholesale") or "📦 فروش عمده",
+                callback_data="shop:wholesale",
+            )
+        )
+    if extras:
+        rows.extend(layout_rows(extras, ui))
     rows.append(
         [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="menu:home")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def wholesale_plans_keyboard(
+    plans: list[Plan],
+    ui: dict | None = None,
+) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"💎 {p.name} — {p.price:,} ت".replace(",", "٬"),
+                callback_data=f"shop:wholesale:plan:{p.id}",
+            )
+        ]
+        for p in plans
+    ]
+    rows.append([InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:list")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def wholesale_qty_keyboard(
+    qty: int,
+    ui: dict | None = None,
+    *,
+    plan_id: int,
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(text="➖", callback_data="shop:wholesale:qty:-"),
+            InlineKeyboardButton(text=f"{qty} عدد", callback_data="shop:wholesale:noop"),
+            InlineKeyboardButton(text="➕", callback_data="shop:wholesale:qty:+"),
+        ],
+        [InlineKeyboardButton(text="✏️ ورود دستی تعداد", callback_data="shop:wholesale:qty:input")],
+        [InlineKeyboardButton(text="ادامه ← تأیید", callback_data="shop:wholesale:confirm")],
+        [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:wholesale")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def wholesale_confirm_keyboard(
+    ui: dict | None = None,
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ تأیید و پرداخت", callback_data="shop:wholesale:buy")],
+            [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:wholesale:qty")],
+        ]
+    )
 
 
 def custom_gb_keyboard(
@@ -480,44 +558,38 @@ def support_contacts_keyboard(contacts: list[dict], ui: dict | None = None) -> I
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def admin_home() -> InlineKeyboardMarkup:
+def admin_home(ui: dict | None = None) -> InlineKeyboardMarkup:
+    buttons = [
+        InlineKeyboardButton(text="🧾 رسیدها", callback_data="adm:payments"),
+        InlineKeyboardButton(text="🛒 سفارش‌ها", callback_data="adm:orders"),
+        InlineKeyboardButton(text="🎫 تیکت‌ها", callback_data="adm:tickets"),
+        InlineKeyboardButton(text="📊 داشبورد", callback_data="adm:dash"),
+        InlineKeyboardButton(text="💎 پلن‌ها", callback_data="adm:plans"),
+        InlineKeyboardButton(text="👥 کاربران", callback_data="adm:users"),
+        InlineKeyboardButton(text="🤝 نمایندگان", callback_data="adm:resellers"),
+        InlineKeyboardButton(text="📢 پیام گروهی", callback_data="adm:broadcast"),
+        InlineKeyboardButton(text="🖥 پاسارگارد", callback_data="adm:pg"),
+        InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="adm:settings"),
+        InlineKeyboardButton(text="💾 بکاپ / ریستور", callback_data="adm:backup"),
+    ]
+    back = InlineKeyboardButton(text="⬅️ منوی اصلی", callback_data="menu:home")
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🧾 رسیدها", callback_data="adm:payments"),
-                InlineKeyboardButton(text="🛒 سفارش‌ها", callback_data="adm:orders"),
-            ],
-            [
-                InlineKeyboardButton(text="🎫 تیکت‌ها", callback_data="adm:tickets"),
-                InlineKeyboardButton(text="📊 داشبورد", callback_data="adm:dash"),
-            ],
-            [InlineKeyboardButton(text="💎 پلن‌ها", callback_data="adm:plans")],
-            [
-                InlineKeyboardButton(text="👥 کاربران", callback_data="adm:users"),
-                InlineKeyboardButton(text="🤝 نمایندگان", callback_data="adm:resellers"),
-            ],
-            [InlineKeyboardButton(text="📢 پیام گروهی", callback_data="adm:broadcast")],
-            [InlineKeyboardButton(text="🖥 پاسارگارد", callback_data="adm:pg")],
-            [InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="adm:settings")],
-            [InlineKeyboardButton(text="💾 بکاپ / ریستور", callback_data="adm:backup")],
-            [InlineKeyboardButton(text="⬅️ منوی اصلی", callback_data="menu:home")],
-        ]
+        inline_keyboard=layout_rows(buttons, ui, full_width=[back])
     )
 
 
-def admin_users_keyboard() -> InlineKeyboardMarkup:
+def admin_users_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    buttons = [
+        InlineKeyboardButton(text="📋 لیست کاربران", callback_data="adm:users:list:0"),
+        InlineKeyboardButton(text="🔎 جستجو با آیدی تلگرام", callback_data="adm:users:search"),
+        InlineKeyboardButton(
+            text="🌐 مدیریت کامل در وب‌پنل",
+            callback_data="adm:users:webhint",
+        ),
+    ]
+    back = InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📋 لیست کاربران", callback_data="adm:users:list:0")],
-            [InlineKeyboardButton(text="🔎 جستجو با آیدی تلگرام", callback_data="adm:users:search")],
-            [
-                InlineKeyboardButton(
-                    text="🌐 مدیریت کامل در وب‌پنل",
-                    callback_data="adm:users:webhint",
-                )
-            ],
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
-        ]
+        inline_keyboard=layout_rows(buttons, ui, full_width=[back])
     )
 
 
@@ -543,14 +615,15 @@ def admin_users_list_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=kb_rows)
 
 
-def admin_resellers_menu() -> InlineKeyboardMarkup:
+def admin_resellers_menu(ui: dict | None = None) -> InlineKeyboardMarkup:
+    buttons = [
+        InlineKeyboardButton(text="📋 لیست نمایندگان", callback_data="adm:resellers:list:0"),
+        InlineKeyboardButton(text="📋 درخواست‌های منتظر", callback_data="adm:resapp:list"),
+        InlineKeyboardButton(text="➕ افزودن دستی", callback_data="adm:resellers:add"),
+    ]
+    back = InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📋 لیست نمایندگان", callback_data="adm:resellers:list:0")],
-            [InlineKeyboardButton(text="📋 درخواست‌های منتظر", callback_data="adm:resapp:list")],
-            [InlineKeyboardButton(text="➕ افزودن دستی", callback_data="adm:resellers:add")],
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
-        ]
+        inline_keyboard=layout_rows(buttons, ui, full_width=[back])
     )
 
 
@@ -634,50 +707,49 @@ def order_review(order_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def pg_admin_keyboard() -> InlineKeyboardMarkup:
+def pg_admin_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    buttons = [
+        InlineKeyboardButton(text="🏠 نمای کلی", callback_data="adm:pg:stats"),
+        InlineKeyboardButton(text="👥 کاربران VPN", callback_data="adm:pg:users"),
+        InlineKeyboardButton(text="➕ ساخت کاربر", callback_data="adm:pg:create"),
+        InlineKeyboardButton(text="🔎 جستجوی یوزر", callback_data="adm:pg:search"),
+        InlineKeyboardButton(text="🕸 نودها", callback_data="adm:pg:nodes"),
+        InlineKeyboardButton(text="📁 ساخت گروه", callback_data="adm:pg:group"),
+        InlineKeyboardButton(text="📋 ساخت تمپلیت", callback_data="adm:pg:template"),
+    ]
+    back = InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🏠 نمای کلی", callback_data="adm:pg:stats")],
-            [
-                InlineKeyboardButton(text="👥 کاربران VPN", callback_data="adm:pg:users"),
-                InlineKeyboardButton(text="➕ ساخت کاربر", callback_data="adm:pg:create"),
-            ],
-            [InlineKeyboardButton(text="🔎 جستجوی یوزر", callback_data="adm:pg:search")],
-            [InlineKeyboardButton(text="🕸 نودها", callback_data="adm:pg:nodes")],
-            [
-                InlineKeyboardButton(text="📁 ساخت گروه", callback_data="adm:pg:group"),
-                InlineKeyboardButton(text="📋 ساخت تمپلیت", callback_data="adm:pg:template"),
-            ],
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")],
-        ]
+        inline_keyboard=layout_rows(buttons, ui, full_width=[back])
     )
 
 
-def reseller_home(profile=None) -> InlineKeyboardMarkup:
+def reseller_home(profile=None, ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.services.resellers import has_bot_perm
 
-    rows: list[list[InlineKeyboardButton]] = []
+    buttons: list[InlineKeyboardButton] = []
     if profile is None or has_bot_perm(profile, "dashboard"):
-        rows.append([InlineKeyboardButton(text="🏠 خانه نماینده", callback_data="res:dash")])
-        rows.append([InlineKeyboardButton(text="👥 مشتریان من", callback_data="res:users:0")])
+        buttons.append(InlineKeyboardButton(text="🏠 خانه نماینده", callback_data="res:dash"))
+        buttons.append(InlineKeyboardButton(text="👥 مشتریان من", callback_data="res:users:0"))
     if profile is None or has_bot_perm(profile, "stats"):
-        rows.append([InlineKeyboardButton(text="📊 آمار و کمیسیون", callback_data="res:stats")])
+        buttons.append(InlineKeyboardButton(text="📊 آمار و کمیسیون", callback_data="res:stats"))
     if profile is not None and has_bot_perm(profile, "plans"):
-        rows.append([InlineKeyboardButton(text="💎 پلن‌های فروش", callback_data="res:plans")])
+        buttons.append(InlineKeyboardButton(text="💎 پلن‌های فروش", callback_data="res:plans"))
     if profile is not None and has_bot_perm(profile, "orders"):
-        rows.append([InlineKeyboardButton(text="🛒 سفارش‌های مشتریان", callback_data="res:orders")])
+        buttons.append(InlineKeyboardButton(text="🛒 سفارش‌های مشتریان", callback_data="res:orders"))
     if profile is not None and has_bot_perm(profile, "payments"):
-        rows.append(
-            [InlineKeyboardButton(text="🧾 رسیدهای در انتظار", callback_data="res:payments")]
+        buttons.append(
+            InlineKeyboardButton(text="🧾 رسیدهای در انتظار", callback_data="res:payments")
         )
     if profile is not None and has_bot_perm(profile, "tickets"):
-        rows.append([InlineKeyboardButton(text="🎫 تیکت‌های مشتریان", callback_data="res:tickets")])
+        buttons.append(InlineKeyboardButton(text="🎫 تیکت‌های مشتریان", callback_data="res:tickets"))
     if profile is not None and has_bot_perm(profile, "shop_settings"):
-        rows.append(
-            [InlineKeyboardButton(text="⚙️ تنظیمات فروشگاه", callback_data="res:st:hub")]
+        buttons.append(
+            InlineKeyboardButton(text="⚙️ تنظیمات فروشگاه", callback_data="res:st:hub")
         )
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="menu:home")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+    back = InlineKeyboardButton(text="⬅️ بازگشت", callback_data="menu:home")
+    return InlineKeyboardMarkup(
+        inline_keyboard=layout_rows(buttons, ui, full_width=[back])
+    )
 
 
 def reseller_app_review(app_id: int) -> InlineKeyboardMarkup:

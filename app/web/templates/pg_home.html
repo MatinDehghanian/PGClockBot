@@ -57,6 +57,71 @@
           {% endif %}
         </div>
         {% endif %}
+        {% set us = ov.user_stats or {} %}
+        {% if us %}
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
+            </span>
+            <span>کل کاربران من</span>
+          </div>
+          <strong class="stat-value" dir="ltr">{{ us.total }}</strong>
+          <small class="muted">فقط کاربران این حساب</small>
+        </div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+            </span>
+            <span>آنلاین</span>
+          </div>
+          <strong class="stat-value" dir="ltr">{{ us.online }}</strong>
+          <small class="muted">۲ دقیقه اخیر</small>
+        </div>
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+            </span>
+            <span>فعال</span>
+          </div>
+          <strong class="stat-value" dir="ltr">{{ us.active }}</strong>
+        </div>
+        {% if us.limited %}
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/></svg>
+            </span>
+            <span>محدود</span>
+          </div>
+          <strong class="stat-value" dir="ltr">{{ us.limited }}</strong>
+        </div>
+        {% endif %}
+        {% if us.expired %}
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            </span>
+            <span>منقضی</span>
+          </div>
+          <strong class="stat-value" dir="ltr">{{ us.expired }}</strong>
+        </div>
+        {% endif %}
+        {% if us.disabled %}
+        <div class="stat">
+          <div class="stat-top">
+            <span class="stat-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 8l8 8"/></svg>
+            </span>
+            <span>غیرفعال</span>
+          </div>
+          <strong class="stat-value" dir="ltr">{{ us.disabled }}</strong>
+        </div>
+        {% endif %}
+        {% endif %}
         {% if ov.traffic %}
         <div class="stat">
           <div class="stat-top">

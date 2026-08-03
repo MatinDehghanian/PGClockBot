@@ -174,6 +174,20 @@ def current_shop_reseller_id() -> int | None:
     return _shop_reseller_id.get()
 
 
+def current_ui_snapshot() -> dict[str, str]:
+    """Best-effort settings snapshot for sync keyboard builders.
+
+    Prefers the per-request shop cache warmed by ``get_all_settings``;
+    falls back to defaults when the cache is cold.
+    """
+    rid = _shop_reseller_id.get()
+    cache_key = int(rid or 0)
+    hit = _SETTINGS_CACHE.get(cache_key)
+    if hit:
+        return dict(hit[1])
+    return dict(DEFAULT_SETTINGS)
+
+
 def _effective_reseller_id(reseller_id: int | None) -> int | None:
     if reseller_id is not None:
         return reseller_id
@@ -482,6 +496,13 @@ DEFAULT_SETTINGS = {
     "custom_plan_username_prefix": "",
     "custom_plan_username_suffix": "",
     "custom_plan_username_pattern": "",
+    # Wholesale / bulk sales
+    "wholesale_enabled": "0",
+    "wholesale_min_qty": "5",
+    "wholesale_max_qty": "20",
+    # JSON list: [{"min":5,"percent":10},{"min":20,"percent":20}]
+    "wholesale_tiers": '[{"min":5,"percent":10},{"min":20,"percent":20}]',
+    "btn_wholesale": "📦 فروش عمده",
     # Payment methods
     "pay_wallet_enabled": "1",
     "pay_card_enabled": "1",

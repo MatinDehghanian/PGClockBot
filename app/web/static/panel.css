@@ -2864,6 +2864,33 @@ a.btn.btn-star:hover {
   letter-spacing: 0.08em;
   font-size: 18px;
   position: relative;
+  overflow: hidden;
+}
+.tg-qr-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+}
+.tg-qr-box.has-bg {
+  background: #0e1621;
+}
+.tg-qr-box.has-bg::after {
+  inset: 22%;
+  border-radius: 10px;
+  z-index: 1;
+  background:
+    #fff
+    linear-gradient(#111, #111) center/38% 3px no-repeat,
+    linear-gradient(#111, #111) center/3px 38% no-repeat;
+  border: 3px solid #fff;
+  box-shadow: 0 2px 10px rgba(0,0,0,.35);
+}
+.tg-qr-fake {
+  position: relative;
+  z-index: 1;
 }
 .tg-qr-box::after {
   content: "";
@@ -2874,7 +2901,9 @@ a.btn.btn-star:hover {
   background:
     linear-gradient(#d7e7f5, #d7e7f5) center/40% 3px no-repeat,
     linear-gradient(#d7e7f5, #d7e7f5) center/3px 40% no-repeat;
+  z-index: 1;
 }
+.tg-qr-box.has-bg .tg-qr-fake { display: none; }
 .tg-qr-cap {
   padding: var(--space-1);
   font-size: 11px;

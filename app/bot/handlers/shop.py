@@ -15,16 +15,22 @@ from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import (
     calc_custom_plan_price,
+    calc_wholesale_price,
     create_custom_order,
     create_order,
+    create_wholesale_order,
     get_catalog_plan,
     get_plan,
     list_active_plans,
     mark_order_free_paid,
+    parse_wholesale_tiers,
     pay_with_wallet,
     stars_amount_for_toman,
     start_card_payment,
     start_method_payment,
+    wholesale_bounds,
+    wholesale_description,
+    wholesale_tier_percent,
 )
 from app.services.users import get_all_settings, on
 
@@ -35,6 +41,7 @@ class ShopStates(StatesGroup):
     discount = State()
     custom_gb_input = State()
     custom_days_input = State()
+    wholesale_qty_input = State()
 
 
 def _custom_bounds(ui: dict) -> tuple[int, int, int, int, int, int]:
@@ -124,6 +131,7 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         plans = [p for p in plans if not p.is_trial]
     # Custom plan only when catalog plans exist (and setting/link OK)
     custom_on = await _custom_available_for_users(session, ui, plans=plans)
+    wholesale_on = on(ui.get("wholesale_enabled")) and any(not p.is_trial for p in plans)
     if not plans and not custom_on:
         text = format_message(
             "🛒 فروشگاه",
@@ -136,7 +144,9 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if callback.message:
         await safe_edit_text(callback.message, 
             format_message("🛒 انتخاب پلن", "یکی از پلن‌ها را انتخاب کنید:"),
-            reply_markup=kb.plans_keyboard(plans, ui, custom_enabled=custom_on),
+            reply_markup=kb.plans_keyboard(
+                plans, ui, custom_enabled=custom_on, wholesale_enabled=wholesale_on
+            ),
         )
 
 
@@ -444,6 +454,286 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=kb.pay_methods(order.id, ui))
     await _notify_new_order(callback.bot, session, order, db_user, "پلن دلخواه")
+
+
+@router.callback_query(F.data == "shop:wholesale:noop")
+async def wholesale_noop(callback: CallbackQuery):
+    await callback.answer()
+
+
+@router.callback_query(F.data == "shop:wholesale")
+async def wholesale_start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    ui = await get_all_settings(session)
+    if not on(ui.get("wholesale_enabled")):
+        await callback.answer("فروش عمده فعال نیست", show_alert=True)
+        return
+    plans = await list_active_plans(session, include_trial=False)
+    if not plans:
+        await callback.answer("پلنی برای فروش عمده نیست", show_alert=True)
+        return
+    await state.clear()
+    await callback.answer()
+    text = format_message(
+        "📦 فروش عمده",
+        wholesale_description(ui) + "\n\nابتدا نوع سرویس (پلن) را انتخاب کنید:",
+    )
+    if callback.message:
+        await safe_edit_text(
+            callback.message, text, reply_markup=kb.wholesale_plans_keyboard(plans, ui)
+        )
+
+
+@router.callback_query(F.data.startswith("shop:wholesale:plan:"))
+async def wholesale_pick_plan(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    ui = await get_all_settings(session)
+    if not on(ui.get("wholesale_enabled")):
+        await callback.answer("فروش عمده فعال نیست", show_alert=True)
+        return
+    plan_id = int(callback.data.split(":")[-1])
+    plan = await get_catalog_plan(session, plan_id)
+    if not plan or not plan.is_active or plan.is_trial:
+        await callback.answer("پلن پیدا نشد", show_alert=True)
+        return
+    mn, mx = wholesale_bounds(ui)
+    await state.update_data(wholesale_plan_id=plan.id, wholesale_qty=mn)
+    await callback.answer()
+    text = format_message(
+        "📦 فروش عمده — تعداد",
+        f"پلن: <b>{plan.name}</b>\n"
+        f"قیمت واحد: <b>{format_toman(plan.price, get_settings().currency)}</b>\n\n"
+        f"{wholesale_description(ui)}\n\n"
+        f"تعداد درخواستی را انتخاب کنید ({mn} تا {mx}):\n"
+        f"فعلی: <b>{mn}</b> عدد",
+    )
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=kb.wholesale_qty_keyboard(mn, ui, plan_id=plan.id),
+        )
+
+
+@router.callback_query(F.data == "shop:wholesale:qty")
+async def wholesale_qty_back(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    ui = await get_all_settings(session)
+    data = await state.get_data()
+    plan_id = int(data.get("wholesale_plan_id") or 0)
+    plan = await get_catalog_plan(session, plan_id) if plan_id else None
+    if not plan:
+        await wholesale_start(callback, session, state)
+        return
+    mn, mx = wholesale_bounds(ui)
+    qty = int(data.get("wholesale_qty") or mn)
+    qty = max(mn, min(mx, qty))
+    await state.update_data(wholesale_qty=qty)
+    await callback.answer()
+    text = format_message(
+        "📦 فروش عمده — تعداد",
+        f"پلن: <b>{plan.name}</b>\n"
+        f"قیمت واحد: <b>{format_toman(plan.price, get_settings().currency)}</b>\n\n"
+        f"{wholesale_description(ui)}\n\n"
+        f"تعداد درخواستی را انتخاب کنید ({mn} تا {mx}):\n"
+        f"فعلی: <b>{qty}</b> عدد",
+    )
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id),
+        )
+
+
+@router.callback_query(F.data.in_({"shop:wholesale:qty:+", "shop:wholesale:qty:-"}))
+async def wholesale_qty_step(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    ui = await get_all_settings(session)
+    if not on(ui.get("wholesale_enabled")):
+        await callback.answer("فروش عمده فعال نیست", show_alert=True)
+        return
+    data = await state.get_data()
+    plan_id = int(data.get("wholesale_plan_id") or 0)
+    plan = await get_catalog_plan(session, plan_id) if plan_id else None
+    if not plan:
+        await callback.answer("ابتدا پلن را انتخاب کنید", show_alert=True)
+        return
+    mn, mx = wholesale_bounds(ui)
+    qty = int(data.get("wholesale_qty") or mn)
+    if callback.data.endswith("+"):
+        qty = min(mx, qty + 1)
+    else:
+        qty = max(mn, qty - 1)
+    await state.update_data(wholesale_qty=qty)
+    await callback.answer()
+    tiers = parse_wholesale_tiers(ui.get("wholesale_tiers"))
+    pct = wholesale_tier_percent(qty, tiers)
+    payable, discount = calc_wholesale_price(
+        unit_price=plan.price, quantity=qty, percent=pct
+    )
+    disc_line = f"\nتخفیف فعلی: <b>{pct}٪</b> (−{format_toman(discount, get_settings().currency)})" if pct else ""
+    text = format_message(
+        "📦 فروش عمده — تعداد",
+        f"پلن: <b>{plan.name}</b>\n"
+        f"قیمت واحد: <b>{format_toman(plan.price, get_settings().currency)}</b>\n\n"
+        f"{wholesale_description(ui)}\n\n"
+        f"فعلی: <b>{qty}</b> عدد{disc_line}\n"
+        f"جمع: <b>{format_toman(payable, get_settings().currency)}</b>",
+    )
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id),
+        )
+
+
+@router.callback_query(F.data == "shop:wholesale:qty:input")
+async def wholesale_qty_ask(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    ui = await get_all_settings(session)
+    if not on(ui.get("wholesale_enabled")):
+        await callback.answer("فروش عمده فعال نیست", show_alert=True)
+        return
+    mn, mx = wholesale_bounds(ui)
+    await state.set_state(ShopStates.wholesale_qty_input)
+    await callback.answer()
+    if callback.message:
+        await callback.message.answer(
+            f"تعداد را عددی بین {mn} تا {mx} بفرستید:",
+            reply_markup=kb.cancel_reply(),
+        )
+
+
+@router.message(ShopStates.wholesale_qty_input)
+async def wholesale_qty_entered(message: Message, state: FSMContext, session: AsyncSession):
+    ui = await get_all_settings(session)
+    if (message.text or "").strip() == "انصراف":
+        await state.set_state(None)
+        await message.answer("لغو شد.", reply_markup=kb.back_home(ui))
+        return
+    mn, mx = wholesale_bounds(ui)
+    raw = (message.text or "").strip().replace(",", "").replace("٬", "")
+    try:
+        qty = int(raw)
+    except ValueError:
+        await message.answer(f"عدد معتبر بین {mn} تا {mx} بفرستید.")
+        return
+    if qty < mn or qty > mx:
+        await message.answer(f"تعداد باید بین {mn} تا {mx} باشد.")
+        return
+    data = await state.get_data()
+    plan_id = int(data.get("wholesale_plan_id") or 0)
+    plan = await get_catalog_plan(session, plan_id) if plan_id else None
+    if not plan:
+        await state.clear()
+        await message.answer("پلن نامعتبر است — دوباره از فروشگاه شروع کنید.")
+        return
+    await state.set_state(None)
+    await state.update_data(wholesale_qty=qty)
+    tiers = parse_wholesale_tiers(ui.get("wholesale_tiers"))
+    pct = wholesale_tier_percent(qty, tiers)
+    payable, discount = calc_wholesale_price(
+        unit_price=plan.price, quantity=qty, percent=pct
+    )
+    disc_line = f"\nتخفیف: <b>{pct}٪</b> (−{format_toman(discount, get_settings().currency)})" if pct else ""
+    text = format_message(
+        "📦 فروش عمده — تعداد",
+        f"پلن: <b>{plan.name}</b>\n"
+        f"فعلی: <b>{qty}</b> عدد{disc_line}\n"
+        f"جمع: <b>{format_toman(payable, get_settings().currency)}</b>",
+    )
+    await message.answer(
+        text,
+        reply_markup=kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id),
+    )
+
+
+@router.callback_query(F.data == "shop:wholesale:confirm")
+async def wholesale_confirm(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    ui = await get_all_settings(session)
+    if not on(ui.get("wholesale_enabled")):
+        await callback.answer("فروش عمده فعال نیست", show_alert=True)
+        return
+    data = await state.get_data()
+    plan_id = int(data.get("wholesale_plan_id") or 0)
+    plan = await get_catalog_plan(session, plan_id) if plan_id else None
+    if not plan:
+        await callback.answer("ابتدا پلن را انتخاب کنید", show_alert=True)
+        return
+    mn, mx = wholesale_bounds(ui)
+    qty = int(data.get("wholesale_qty") or mn)
+    qty = max(mn, min(mx, qty))
+    await state.update_data(wholesale_qty=qty)
+    tiers = parse_wholesale_tiers(ui.get("wholesale_tiers"))
+    pct = wholesale_tier_percent(qty, tiers)
+    payable, discount = calc_wholesale_price(
+        unit_price=plan.price, quantity=qty, percent=pct
+    )
+    await callback.answer()
+    limit = f"{plan.data_limit_gb:g} گیگ" if plan.data_limit_gb is not None else "نامحدود"
+    disc_block = ""
+    if pct:
+        disc_block = (
+            f"\n{kv_line('🏷', 'تخفیف عمده', f'<b>{pct}٪</b> (−{format_toman(discount, get_settings().currency)})')}"
+        )
+    text = format_message(
+        "📦 تأیید فروش عمده",
+        f"{wholesale_description(ui)}\n\n"
+        f"{kv_line('💎', 'پلن', plan.name)}\n"
+        f"{kv_line('📦', 'تعداد', f'<b>{qty}</b>')}\n"
+        f"{kv_line('📅', 'مدت هر سرویس', f'{plan.duration_days} روز')}\n"
+        f"{kv_line('📶', 'حجم هر سرویس', limit)}\n"
+        f"{kv_line('💰', 'قیمت واحد', format_toman(plan.price, get_settings().currency))}"
+        f"{disc_block}\n"
+        f"{kv_line('💳', 'مبلغ قابل پرداخت', f'<b>{format_toman(payable, get_settings().currency)}</b>')}",
+    )
+    if callback.message:
+        await safe_edit_text(
+            callback.message, text, reply_markup=kb.wholesale_confirm_keyboard(ui)
+        )
+
+
+@router.callback_query(F.data == "shop:wholesale:buy")
+async def wholesale_buy(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+):
+    ui = await get_all_settings(session)
+    if not on(ui.get("wholesale_enabled")):
+        await callback.answer("فروش عمده فعال نیست", show_alert=True)
+        return
+    data = await state.get_data()
+    plan_id = int(data.get("wholesale_plan_id") or 0)
+    mn, _mx = wholesale_bounds(ui)
+    qty = int(data.get("wholesale_qty") or mn)
+    if not plan_id:
+        await callback.answer("پلن انتخاب نشده", show_alert=True)
+        return
+    if not kb.any_checkout_method_enabled(ui):
+        await callback.answer("هیچ روش پرداختی فعال نیست", show_alert=True)
+        return
+    try:
+        order = await create_wholesale_order(
+            session,
+            user_id=db_user.id,
+            plan_id=plan_id,
+            quantity=qty,
+            reseller_id=db_user.reseller_id,
+        )
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
+    await state.clear()
+    await callback.answer()
+    plan = await get_catalog_plan(session, plan_id)
+    plan_name = plan.name if plan else "پلن"
+    text = format_message(
+        f"🧾 سفارش عمده #{order.id}",
+        f"{plan_name} × <b>{order.quantity}</b>\n"
+        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}\n\n"
+        "روش پرداخت را انتخاب کنید:",
+    )
+    if callback.message:
+        await safe_edit_text(callback.message, text, reply_markup=kb.pay_methods(order.id, ui))
+    await _notify_new_order(
+        callback.bot, session, order, db_user, f"فروش عمده ×{order.quantity}"
+    )
 
 
 @router.callback_query(F.data.startswith("shop:plan:"))

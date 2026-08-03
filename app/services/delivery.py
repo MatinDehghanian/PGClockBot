@@ -6,6 +6,7 @@ from typing import Any
 
 from aiogram import Bot
 from aiogram.types import BufferedInputFile, InlineKeyboardMarkup
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Payment, UserService
@@ -46,10 +47,51 @@ async def build_delivery_content(
     body_parts: list[str] = []
 
     if order and order.service_id:
+        from app.services.orders import order_quantity
+
+        qty = order_quantity(order)
         svc = await session.get(UserService, order.service_id)
         success = _subscription_success_body(ui, order)
         if success:
             body_parts.append(success)
+        if qty > 1:
+            body_parts.append(f"📦 تعداد سرویس تحویل‌شده: <b>{qty}</b>")
+            siblings = (
+                await session.execute(
+                    select(UserService)
+                    .where(UserService.remark == f"order:{order.id}")
+                    .order_by(UserService.id)
+                )
+            ).scalars().all()
+            if siblings:
+                lines = []
+                for i, s in enumerate(siblings, 1):
+                    uname = s.pg_username or f"#{s.id}"
+                    if s.subscription_url and on(ui.get("show_sub_link_in_text", "1")):
+                        lines.append(f"{i}. <b>{uname}</b>\n<code>{s.subscription_url}</code>")
+                    else:
+                        lines.append(f"{i}. <b>{uname}</b>")
+                body_parts.append("\n\n".join(lines))
+            markup = kb.back_home(ui)
+            # Prefer first service for QR if enabled
+            sub_url = svc.subscription_url if svc else None
+            sub_info = None
+            if svc and svc.subscription_token:
+                try:
+                    info = await get_pg().subscription_info(svc.subscription_token)
+                    sub_info = info if isinstance(info, dict) else None
+                except Exception:
+                    pass
+            body = "\n\n".join(body_parts)
+            return {
+                "title": title,
+                "text": format_message(title, body),
+                "markup": markup,
+                "sub_url": sub_url,
+                "sub_info": sub_info,
+                "ui": ui,
+                "is_subscription": True,
+            }
 
         if svc and svc.subscription_token:
             try:

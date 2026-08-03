@@ -231,6 +231,7 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
         "status_badge": None,
         "lifetime_text": None,
         "role_name": None,
+        "user_stats": None,
     }
     if not owner:
         out["error"] = "ادمین پاسارگارد برای این حساب تنظیم نشده است"
@@ -310,7 +311,105 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
         # Admin-account day/expire is not supported by PasarGuard — omit time meter.
         out["time"] = None
         out["constraints"] = _role_constraint_boxes(limits)
+        out["user_stats"] = await _owned_user_stats(pg, owner, fallback_total=total_users)
         return out
     except Exception as e:
         out["error"] = str(e)
         return out
+
+
+def _owner_username_of(user: dict) -> str:
+    admin = user.get("admin") or user.get("owner_username") or ""
+    if isinstance(admin, dict):
+        admin = admin.get("username") or ""
+    return str(admin or "").strip().lower()
+
+
+def _is_online(user: dict, *, window_sec: int = 120) -> bool:
+    """True when online_at is within the recent window (default 2 minutes)."""
+    from datetime import datetime, timezone
+
+    from app.services.formatting import parse_expire
+
+    raw = user.get("online_at") or user.get("last_online_at")
+    if not raw:
+        return False
+    dt = parse_expire(raw)
+    if not dt:
+        # Some APIs return epoch seconds
+        try:
+            ts = float(raw)
+            if ts > 1_000_000_000_000:
+                ts /= 1000.0
+            dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+        except (TypeError, ValueError, OSError):
+            return False
+    now = datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return (now - dt).total_seconds() <= window_sec
+
+
+async def _owned_user_stats(pg, owner: str, *, fallback_total: int = 0) -> dict[str, Any]:
+    """Count status/online for users owned by this PG admin only — never system-wide."""
+    mine = (owner or "").strip().lower()
+    stats = {
+        "total": int(fallback_total or 0),
+        "online": 0,
+        "active": 0,
+        "limited": 0,
+        "expired": 0,
+        "disabled": 0,
+        "on_hold": 0,
+        "other": 0,
+        "sampled": False,
+        "sample_cap": 500,
+    }
+    if not mine:
+        return stats
+
+    users: list[dict] = []
+    try:
+        # Prefer server-side admin filter when supported by PasarGuard.
+        data = await pg.get_users(admin=owner, limit=stats["sample_cap"], offset=0)
+        raw = data.get("users") if isinstance(data, dict) else data
+        if isinstance(raw, list):
+            users = [u for u in raw if isinstance(u, dict)]
+    except Exception:
+        users = []
+
+    if not users:
+        try:
+            data = await pg.get_users(limit=stats["sample_cap"], offset=0)
+            raw = data.get("users") if isinstance(data, dict) else data
+            if isinstance(raw, list):
+                users = [u for u in raw if isinstance(u, dict)]
+        except Exception:
+            users = []
+
+    # Always filter client-side — never trust unscoped payloads.
+    users = [u for u in users if _owner_username_of(u) == mine]
+
+    if not users:
+        return stats
+
+    if len(users) >= stats["sample_cap"]:
+        stats["sampled"] = True
+    else:
+        # Exact total from the owned list when we got the full set
+        stats["total"] = len(users)
+
+    for u in users:
+        st = str(u.get("status") or "").strip().lower()
+        if st in ("active", "limited", "expired", "disabled", "on_hold"):
+            stats[st] = int(stats.get(st) or 0) + 1
+        elif st:
+            stats["other"] = int(stats.get("other") or 0) + 1
+        if _is_online(u):
+            stats["online"] += 1
+
+    # Prefer admin.total_users when list was capped
+    if stats["sampled"] and fallback_total:
+        stats["total"] = int(fallback_total)
+
+    return stats

@@ -175,7 +175,7 @@ def _check_expire_bounds(
             )
 
 
-def _check_max_users(admin: dict, limits: dict[str, Any]) -> None:
+def _check_max_users(admin: dict, limits: dict[str, Any], *, need: int = 1) -> None:
     max_users = _as_int(limits.get("max_users")) or _as_int(admin.get("max_users"))
     if max_users is None or max_users <= 0:
         return
@@ -184,8 +184,14 @@ def _check_max_users(admin: dict, limits: dict[str, Any]) -> None:
         or _as_int(admin.get("users_count"))
         or 0
     )
-    if current >= max_users:
-        raise PgQuotaError(f"سقف تعداد کاربران شما پر شده است (حداکثر {max_users})")
+    need_n = max(1, int(need or 1))
+    if current + need_n - 1 >= max_users:
+        remain = max(0, max_users - current)
+        raise PgQuotaError(
+            f"سقف تعداد کاربران شما پر شده است (حداکثر {max_users}"
+            + (f" — ظرفیت باقی‌مانده {remain}" if remain else "")
+            + ")"
+        )
 
 
 async def _load_admin_and_role(staff: dict) -> tuple[dict, dict | None]:
@@ -229,6 +235,7 @@ async def assert_can_create_user(
     data_limit: int | None = None,
     expire_ts: int | None = None,
     from_template: bool = False,
+    quantity: int = 1,
 ) -> None:
     """Enforce quotas before creating a user that will be owned by this staff."""
     if not staff_needs_quota_check(staff):
@@ -237,7 +244,7 @@ async def assert_can_create_user(
     admin, role = await _load_admin_and_role(staff)
     assert_admin_can_write(admin, role)
     limits = merge_role_limits(admin, role)
-    _check_max_users(admin, limits)
+    _check_max_users(admin, limits, need=max(1, int(quantity or 1)))
 
     if from_template:
         # PasarGuard: template create only checks max_users (+ write gate).
@@ -290,6 +297,7 @@ async def assert_reseller_can_deliver(
     data_limit: int | None = None,
     expire_ts: int | None = None,
     from_template: bool = False,
+    quantity: int = 1,
 ) -> None:
     """Quota check for shop delivery assigned to a reseller PG admin.
 
@@ -311,6 +319,7 @@ async def assert_reseller_can_deliver(
         data_limit=data_limit,
         expire_ts=expire_ts,
         from_template=from_template,
+        quantity=quantity,
     )
 
 

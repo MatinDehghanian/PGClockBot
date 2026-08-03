@@ -1658,6 +1658,53 @@ def create_api_app(lifespan=None) -> FastAPI:
             status_code=303,
         )
 
+    @app.post("/plans/wholesale")
+    async def plans_wholesale_save(
+        request: Request,
+        staff: dict = Depends(require_perm("plans")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from urllib.parse import quote
+
+        from app.services.orders import parse_wholesale_tiers
+        from app.services.plans_catalog import require_catalog_owner_id
+        from app.services.shop_scope import ShopScopeError
+
+        form = await request.form()
+        try:
+            owner_id = require_catalog_owner_id(staff)
+        except ShopScopeError as e:
+            return RedirectResponse(f"/plans?err={quote(e.message)}", status_code=303)
+        enabled = str(form.get("wholesale_enabled") or "") in {"1", "on", "true", "yes"}
+        await set_setting(
+            session, "wholesale_enabled", "1" if enabled else "0", reseller_id=owner_id
+        )
+        try:
+            mn = max(1, int(float(str(form.get("wholesale_min_qty") or "5"))))
+        except (TypeError, ValueError):
+            mn = 5
+        try:
+            mx = max(mn, int(float(str(form.get("wholesale_max_qty") or "20"))))
+        except (TypeError, ValueError):
+            mx = max(mn, 20)
+        await set_setting(session, "wholesale_min_qty", str(mn), reseller_id=owner_id)
+        await set_setting(session, "wholesale_max_qty", str(mx), reseller_id=owner_id)
+        btn = str(form.get("btn_wholesale") or "").strip() or "📦 فروش عمده"
+        await set_setting(session, "btn_wholesale", btn, reseller_id=owner_id)
+        tiers = parse_wholesale_tiers(str(form.get("wholesale_tiers") or ""))
+        import json
+
+        await set_setting(
+            session,
+            "wholesale_tiers",
+            json.dumps(tiers, ensure_ascii=False),
+            reseller_id=owner_id,
+        )
+        return RedirectResponse(
+            f"/plans?ok={quote('تنظیمات فروش عمده ذخیره شد')}",
+            status_code=303,
+        )
+
     async def _plans_context(session: AsyncSession, request: Request, staff: dict, extra: dict | None = None):
         from app.services.plans_catalog import list_catalog_plans, load_pg_plan_options
 

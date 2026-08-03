@@ -8,14 +8,45 @@
   const keysEl = document.getElementById('pv-keys');
   const qrCard = document.getElementById('pv-qr');
   const qrCap = document.getElementById('pv-qr-cap');
+  const qrBox = document.getElementById('pv-qr-box');
+  const qrBg = document.getElementById('pv-qr-bg');
+  const qrFake = document.getElementById('pv-qr-fake');
   let focusKey = null;
+  let qrObjectUrl = null;
 
   function val(name, fallback){
     if (!form) return (values[name] || fallback || '');
     const el = form.querySelector('[name="s_'+name+'"]');
     if (!el) return (values[name] || fallback || '');
     if (el.type === 'checkbox') return el.checked ? '1' : '0';
+    if (el.type === 'file') return (values[name] || fallback || '');
     return el.value;
+  }
+  function qrBackgroundUrl(){
+    const fileInput = form && form.querySelector('input[type="file"][name="s_qr_background"]');
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      if (!qrObjectUrl) qrObjectUrl = URL.createObjectURL(fileInput.files[0]);
+      return qrObjectUrl;
+    }
+    const saved = (values.qr_background || '').trim();
+    if (saved) return '/media/' + saved.replace(/^\/+/, '');
+    return '';
+  }
+  function applyQrBackground(){
+    const url = qrBackgroundUrl();
+    if (qrBg) {
+      if (url) {
+        qrBg.src = url;
+        qrBg.hidden = false;
+        if (qrBox) qrBox.classList.add('has-bg');
+        if (qrFake) qrFake.hidden = true;
+      } else {
+        qrBg.removeAttribute('src');
+        qrBg.hidden = true;
+        if (qrBox) qrBox.classList.remove('has-bg');
+        if (qrFake) qrFake.hidden = false;
+      }
+    }
   }
   function esc(s){
     return String(s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -124,6 +155,7 @@
         cap += '\n\n🔗 https://example.com/sub/demo\n📦 ۱۰ گیگ · 📅 ۳۰ روز';
       }
       if (qrCap) qrCap.textContent = cap;
+      applyQrBackground();
     }
     if (textEl) textEl.innerHTML = esc(text).replace(/\n/g,'<br>');
     if (qrCard) qrCard.hidden = !showQr;
@@ -138,6 +170,13 @@
         render();
       }
     });
+    const qrFile = form.querySelector('input[type="file"][name="s_qr_background"]');
+    if (qrFile) {
+      qrFile.addEventListener('change', () => {
+        if (qrObjectUrl) { URL.revokeObjectURL(qrObjectUrl); qrObjectUrl = null; }
+        render();
+      });
+    }
   }
   const mo = document.getElementById('menu_order');
   if (mo) mo.addEventListener('change', render);
