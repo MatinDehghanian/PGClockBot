@@ -51,7 +51,7 @@ SECTIONS: dict[str, dict] = {
                 ("wallet_success_text", "موفقیت شارژ", "textarea"),
                 ("payment_reject_text", "رد پرداخت", "textarea"),
             ]),
-            ("btn_labels", "متن دکمه‌های منو", [
+            ("btn_labels", "متن دکمه‌های کیبورد / منو", [
                 ("btn_shop", "خرید", "text"),
                 ("btn_services", "سرویس‌ها", "text"),
                 ("btn_wallet", "کیف پول", "text"),
@@ -59,7 +59,8 @@ SECTIONS: dict[str, dict] = {
                 ("btn_guide", "راهنما", "text"),
                 ("btn_faq", "سوالات", "text"),
                 ("btn_referral", "دعوت", "text"),
-                ("btn_back", "بازگشت", "text"),
+                ("btn_menu_home", "منوی اصلی (کیبورد)", "text"),
+                ("btn_back", "بازگشت (زیر پیام)", "text"),
                 ("btn_cancel", "انصراف", "text"),
                 ("btn_renew", "تمدید", "text"),
                 ("btn_sub_link", "لینک/QR", "text"),
@@ -68,10 +69,10 @@ SECTIONS: dict[str, dict] = {
         ],
     },
     "menu": {
-        "title": "منوی کاربر",
+        "title": "کیبورد اصلی",
         "subs": [
-            ("layout", "چیدمان", [
-                ("menu_layout", "چیدمان منو", "text"),
+            ("layout", "چیدمان کیبورد", [
+                ("menu_layout", "چیدمان کیبورد", "text"),
             ]),
         ],
     },

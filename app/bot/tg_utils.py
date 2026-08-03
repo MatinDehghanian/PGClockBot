@@ -47,27 +47,30 @@ async def safe_edit_text(
             return False
 
 
-async def seed_persistent_reply_kb(message: Message) -> None:
-    """Attach «شروع مجدد» reply keyboard without a lasting second bubble.
-
-    Must never raise after the real home message was already sent.
-    """
-    from app.bot import keyboards as kb
-
+async def seed_reply_keyboard(message: Message, reply_markup, *, tip: str = "·") -> None:
+    """Attach a reply keyboard without leaving a lasting second bubble."""
     try:
-        tip = await message.answer("·", reply_markup=kb.persistent_reply_keyboard())
+        tip_msg = await message.answer(tip or "·", reply_markup=reply_markup)
     except Exception:
         logger.warning("Could not seed reply keyboard", exc_info=True)
         return
     try:
-        await tip.delete()
+        await tip_msg.delete()
     except Exception:
         pass
 
 
+async def seed_persistent_reply_kb(message: Message) -> None:
+    """Backward-compat: seed home-only reply keyboard."""
+    from app.bot import keyboards as kb
+
+    await seed_reply_keyboard(message, kb.persistent_reply_keyboard())
+
+
 async def clear_fsm_with_reply(message: Message, state, *, note: str = "لغو شد.") -> None:
-    """Clear FSM and replace sticky انصراف keyboard with persistent شروع مجدد."""
+    """Clear FSM and restore the main reply keyboard when possible."""
     from app.bot import keyboards as kb
 
     await state.clear()
+    # Prefer full main keyboard if caller attached context later; fallback home btn
     await message.answer(note, reply_markup=kb.persistent_reply_keyboard())

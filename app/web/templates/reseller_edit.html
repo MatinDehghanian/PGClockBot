@@ -46,13 +46,20 @@
       </div>
     </div>
 
-    <p class="muted">وب: <code>{{ profile.web_username or 'هنوز ساخته نشده' }}</code>
-      · ربات: <code>{% if profile.bot_username %}@{{ profile.bot_username }}{% else %}—{% endif %}</code></p>
+    <p class="muted">
+      {% if profile.web_username and profile.pg_admin_username and profile.web_username == profile.pg_admin_username %}
+      یوزر یکپارچه (وب‌پنل + پاسارگارد): <code>{{ profile.web_username }}</code>
+      {% else %}
+      وب: <code>{{ profile.web_username or 'هنوز ساخته نشده' }}</code>
+      {% if profile.pg_admin_username %} · پاسارگارد: <code>{{ profile.pg_admin_username }}</code>{% endif %}
+      {% endif %}
+      · ربات: <code>{% if profile.bot_username %}@{{ profile.bot_username }}{% else %}—{% endif %}</code>
+    </p>
 
     {% if profile.web_username %}
-    <label class="form-field">رمز عبور وب‌پنل
+    <label class="form-field">رمز عبور (وب‌پنل{% if profile.pg_admin_username %} + پاسارگارد{% endif %})
       <input name="web_password" type="password" autocomplete="new-password" placeholder="خالی = حفظ رمز فعلی" />
-      <small class="muted">اختیاری — فقط در صورت وارد کردن مقدار جدید، رمز عوض می‌شود</small>
+      <small class="muted">اختیاری — با وارد کردن رمز جدید،{% if profile.pg_admin_username %} رمز پاسارگارد هم{% endif %} هم‌زمان عوض می‌شود</small>
     </label>
     {% endif %}
 

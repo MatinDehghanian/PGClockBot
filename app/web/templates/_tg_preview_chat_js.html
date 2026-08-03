@@ -66,7 +66,7 @@
       || document.getElementById('menu_layout')
       || document.getElementById('menu_layout_ui');
     if (sel && sel.value) return sel.value;
-    return values.menu_layout || 'classic';
+                return values.menu_layout || 'compact';
   }
   function fillVars(text){
     return String(text||'')

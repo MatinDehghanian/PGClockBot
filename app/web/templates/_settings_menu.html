@@ -1,15 +1,15 @@
 <div class="card menu-layout-intro">
-  <h2>چیدمان دکمه‌های منو</h2>
+  <h2>چیدمان دکمه‌های کیبورد</h2>
   <p class="muted update-card-caption">
-    آیتم‌های «منوی فعال» همان دکمه‌هایی هستند که کاربر در ربات می‌بیند.
-    از مخزن اضافه کنید، با حذف به مخزن برگردانید، و با بالا/پایین ترتیب را عوض کنید.
+    منوی اصلی داخل <b>کیبورد پایین</b> ربات است؛ انتخاب‌ها (پلن، پرداخت، …) به‌صورت دکمه زیر پیام می‌آیند.
+    آیتم‌های «منوی فعال» همان دکمه‌های کیبورد هستند. از مخزن اضافه کنید و ترتیب را عوض کنید.
   </p>
   <div class="settings-grid menu-layout-mode">
     <label class="setting-item">
-      <span>حالت چیدمان</span>
+      <span>حالت چیدمان کیبورد</span>
       <select name="menu_layout_ui" id="menu_layout_select" form="menu-form">
-        <option value="classic" {% if values.get('menu_layout','classic')=='classic' %}selected{% endif %}>کلاسیک — هر دکمه یک ردیف</option>
-        <option value="compact" {% if values.get('menu_layout')=='compact' %}selected{% endif %}>فشرده — دکمه‌ها جفتی</option>
+        <option value="classic" {% if values.get('menu_layout','compact')=='classic' %}selected{% endif %}>کلاسیک — هر دکمه یک ردیف</option>
+        <option value="compact" {% if values.get('menu_layout','compact')=='compact' %}selected{% endif %}>فشرده — دکمه‌ها جفتی (پیشنهادی)</option>
       </select>
     </label>
   </div>

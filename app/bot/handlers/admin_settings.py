@@ -54,7 +54,7 @@ SECTIONS: dict[str, dict] = {
                 ("wallet_success_text", "موفقیت شارژ", "textarea"),
                 ("payment_reject_text", "رد پرداخت", "textarea"),
             ]),
-            ("btn_labels", "متن دکمه‌های منو", [
+            ("btn_labels", "متن دکمه‌های کیبورد / منو", [
                 ("btn_shop", "خرید", "text"),
                 ("btn_services", "سرویس‌ها", "text"),
                 ("btn_wallet", "کیف پول", "text"),
@@ -62,9 +62,11 @@ SECTIONS: dict[str, dict] = {
                 ("btn_guide", "راهنما", "text"),
                 ("btn_faq", "سوالات", "text"),
                 ("btn_referral", "دعوت", "text"),
-                ("btn_miniapp", "مینی‌اپ", "text"),
+                ("btn_reseller_apply", "درخواست نمایندگی", "text"),
+                ("btn_miniapp", "مینی‌اپ (اینلاین)", "text"),
                 ("btn_wholesale", "فروش عمده", "text"),
-                ("btn_back", "بازگشت", "text"),
+                ("btn_menu_home", "منوی اصلی (کیبورد)", "text"),
+                ("btn_back", "بازگشت (زیر پیام)", "text"),
                 ("btn_cancel", "انصراف", "text"),
                 ("btn_renew", "تمدید", "text"),
                 ("btn_sub_link", "لینک/QR", "text"),
@@ -72,10 +74,10 @@ SECTIONS: dict[str, dict] = {
         ],
     },
     "menu": {
-        "title": "منوی کاربر",
+        "title": "کیبورد اصلی",
         "subs": [
-            ("layout", "چیدمان", "menu_layout"),
-            ("order", "منوی فعال / ترتیب", "menu_order"),
+            ("layout", "چیدمان کیبورد", "menu_layout"),
+            ("order", "دکمه‌های فعال / ترتیب", "menu_order"),
         ],
     },
     "pay": {
@@ -314,7 +316,7 @@ async def _render_sub(callback: CallbackQuery, session: AsyncSession, sec_id: st
 
     if payload == "menu_layout":
         ui = await get_all_settings(session)
-        layout = ui.get("menu_layout") or "classic"
+        layout = ui.get("menu_layout") or "compact"
         label = "فشرده (جفتی)" if layout == "compact" else "کلاسیک (تکی)"
         rows = [
             [InlineKeyboardButton(text=f"حالت: {label}", callback_data="adm:st:menu:layout")],
@@ -653,7 +655,7 @@ async def menu_layout_toggle(callback: CallbackQuery, session: AsyncSession, db_
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
-    cur = await get_setting(session, "menu_layout") or "classic"
+    cur = await get_setting(session, "menu_layout") or "compact"
     await set_setting(session, "menu_layout", "compact" if cur == "classic" else "classic")
     await callback.answer("ذخیره شد")
     await _render_sub(callback, session, "menu", "layout")

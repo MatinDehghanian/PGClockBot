@@ -64,7 +64,7 @@ def _resolve_ui(ui: dict | None) -> dict | None:
 
 def _menu_layout(ui: dict | None) -> str:
     resolved = _resolve_ui(ui)
-    return (_t(resolved, "menu_layout") or "classic").strip()
+    return (_t(resolved, "menu_layout") or "compact").strip()
 
 
 def layout_rows(
@@ -123,9 +123,8 @@ def main_menu(
     show_reseller_creds: bool = False,
 ) -> InlineKeyboardMarkup:
     """
-    User/reseller: shop-style sales menu.
-    Admin: management home only (no customer shop clutter), unless as_user=True.
-    On the main bot, shop owners get a credentials button instead of a full panel.
+    Legacy/preview inline main menu (also used for admin «پیش‌نمایش»).
+    Live home navigation uses ``main_reply_keyboard`` instead.
     """
     if role == Role.ADMIN.value and not as_user:
         return admin_main_menu(ui)
@@ -206,7 +205,7 @@ def main_menu(
         # Main bot: credentials / deep-link only — no panel ops here
         full_width.append(
             InlineKeyboardButton(
-                text="🔐 اطلاعات ورود پنل و ربات",
+                text=_t(ui, "btn_reseller_creds"),
                 callback_data="res:creds",
             )
         )
@@ -216,6 +215,184 @@ def main_menu(
         )
     rows = layout_rows(buttons, ui, full_width=full_width)
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+# Reply-keyboard action keys (text labels resolved from settings)
+REPLY_ACTION_HOME = "home"
+REPLY_ACTION_SHOP = "shop"
+REPLY_ACTION_SERVICES = "services"
+REPLY_ACTION_WALLET = "wallet"
+REPLY_ACTION_SUPPORT = "support"
+REPLY_ACTION_GUIDE = "guide"
+REPLY_ACTION_FAQ = "faq"
+REPLY_ACTION_REFERRAL = "referral"
+REPLY_ACTION_RESELLER_APPLY = "reseller_apply"
+REPLY_ACTION_RESELLER = "reseller"
+REPLY_ACTION_CREDS = "reseller_creds"
+REPLY_ACTION_ADMIN = "admin"
+REPLY_ACTION_ADMIN_ORDERS = "adm_orders"
+REPLY_ACTION_ADMIN_PAYMENTS = "adm_payments"
+REPLY_ACTION_ADMIN_TICKETS = "adm_tickets"
+REPLY_ACTION_ADMIN_PLANS = "adm_plans"
+REPLY_ACTION_ADMIN_PG = "adm_pg"
+REPLY_ACTION_ADMIN_PREVIEW = "adm_preview"
+
+
+def _reply_user_entries(
+    role: str,
+    *,
+    has_services: bool,
+    ui: dict | None,
+    show_reseller_creds: bool = False,
+) -> list[tuple[str, str]]:
+    """Ordered (action_key, button_text) for the customer/reseller reply keyboard."""
+    entries: list[tuple[str, str]] = []
+    for key in _menu_order(ui):
+        if key == "shop":
+            entries.append((REPLY_ACTION_SHOP, _t(ui, "btn_shop")))
+        elif key == "services" and has_services:
+            entries.append((REPLY_ACTION_SERVICES, _t(ui, "btn_services")))
+        elif key == "wallet":
+            entries.append((REPLY_ACTION_WALLET, _t(ui, "btn_wallet")))
+        elif key == "support":
+            entries.append((REPLY_ACTION_SUPPORT, _t(ui, "btn_support")))
+        elif key == "guide":
+            entries.append((REPLY_ACTION_GUIDE, _t(ui, "btn_guide")))
+        elif key == "faq":
+            entries.append((REPLY_ACTION_FAQ, _t(ui, "btn_faq")))
+        elif key == "referral":
+            entries.append((REPLY_ACTION_REFERRAL, _t(ui, "btn_referral")))
+        elif key == "reseller_apply" and role == Role.USER.value and not show_reseller_creds:
+            entries.append((REPLY_ACTION_RESELLER_APPLY, _t(ui, "btn_reseller_apply")))
+        elif key == "miniapp":
+            # WebApp requires inline buttons — shown separately under welcome
+            continue
+        elif key == "services" and not has_services:
+            continue
+    if role == Role.RESELLER.value:
+        entries.append((REPLY_ACTION_RESELLER, _t(ui, "btn_reseller")))
+    elif show_reseller_creds:
+        entries.append((REPLY_ACTION_CREDS, _t(ui, "btn_reseller_creds")))
+    if role == Role.ADMIN.value:
+        entries.append((REPLY_ACTION_ADMIN, _t(ui, "btn_admin")))
+    return entries
+
+
+def _reply_admin_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    return [
+        (REPLY_ACTION_ADMIN, _t(ui, "btn_admin")),
+        (REPLY_ACTION_ADMIN_ORDERS, _t(ui, "btn_adm_orders")),
+        (REPLY_ACTION_ADMIN_PAYMENTS, _t(ui, "btn_adm_payments")),
+        (REPLY_ACTION_ADMIN_TICKETS, _t(ui, "btn_adm_tickets")),
+        (REPLY_ACTION_ADMIN_PLANS, _t(ui, "btn_adm_plans")),
+        (REPLY_ACTION_ADMIN_PG, _t(ui, "btn_adm_pg")),
+        (REPLY_ACTION_ADMIN_PREVIEW, _t(ui, "btn_adm_preview")),
+    ]
+
+
+def _pack_reply_rows(
+    entries: list[tuple[str, str]],
+    ui: dict | None,
+    *,
+    footer: list[str] | None = None,
+) -> list[list[KeyboardButton]]:
+    layout = _menu_layout(ui)
+    texts = [t for _, t in entries if (t or "").strip()]
+    rows: list[list[KeyboardButton]] = []
+    if layout == "compact":
+        for i in range(0, len(texts), 2):
+            chunk = texts[i : i + 2]
+            rows.append([KeyboardButton(text=x) for x in chunk])
+    else:
+        for t in texts:
+            rows.append([KeyboardButton(text=t)])
+    for label in footer or []:
+        if label:
+            rows.append([KeyboardButton(text=label)])
+    return rows
+
+
+def main_reply_keyboard(
+    role: str,
+    *,
+    has_services: bool = False,
+    ui: dict | None = None,
+    as_user: bool = False,
+    show_reseller_creds: bool = False,
+) -> ReplyKeyboardMarkup:
+    """Persistent reply keyboard — primary navigation (like professional VPN bots)."""
+    home_label = _t(ui, "btn_menu_home") or BTN_RESTART
+    if role == Role.ADMIN.value and not as_user:
+        entries = _reply_admin_entries(ui)
+        # Admin also gets a quick jump to customer menu preview via dedicated button
+        rows = _pack_reply_rows(entries, ui, footer=[home_label])
+    else:
+        entries = _reply_user_entries(
+            role,
+            has_services=has_services,
+            ui=ui,
+            show_reseller_creds=show_reseller_creds,
+        )
+        rows = _pack_reply_rows(entries, ui, footer=[home_label])
+    return ReplyKeyboardMarkup(
+        keyboard=rows or [[KeyboardButton(text=home_label)]],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        is_persistent=True,
+        input_field_placeholder="از منوی پایین انتخاب کنید…",
+    )
+
+
+def reply_action_map(
+    role: str,
+    *,
+    has_services: bool = False,
+    ui: dict | None = None,
+    as_user: bool = False,
+    show_reseller_creds: bool = False,
+) -> dict[str, str]:
+    """Map button label → action key for the current role/settings."""
+    home_label = (_t(ui, "btn_menu_home") or BTN_RESTART).strip()
+    mapping: dict[str, str] = {home_label: REPLY_ACTION_HOME}
+    # Always recognize restart aliases
+    mapping[BTN_RESTART] = REPLY_ACTION_HOME
+    mapping["شروع مجدد"] = REPLY_ACTION_HOME
+    mapping["restart"] = REPLY_ACTION_HOME
+    if role == Role.ADMIN.value and not as_user:
+        for key, text in _reply_admin_entries(ui):
+            mapping[(text or "").strip()] = key
+    else:
+        for key, text in _reply_user_entries(
+            role,
+            has_services=has_services,
+            ui=ui,
+            show_reseller_creds=show_reseller_creds,
+        ):
+            mapping[(text or "").strip()] = key
+        # Admin previewing as user still may press admin btn if present
+        if role == Role.ADMIN.value and as_user:
+            mapping[(_t(ui, "btn_admin") or "").strip()] = REPLY_ACTION_ADMIN
+    # Drop empty keys
+    return {k: v for k, v in mapping.items() if k}
+
+
+def miniapp_inline_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup | None:
+    """WebApp can only live on inline keyboards."""
+    settings = get_settings()
+    if not settings.miniapp_enabled:
+        return None
+    if "miniapp" not in _menu_order(ui):
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=_t(ui, "btn_miniapp"),
+                    web_app=WebAppInfo(url=settings.miniapp_url),
+                )
+            ]
+        ]
+    )
 
 
 def admin_main_menu(ui: dict | None = None) -> InlineKeyboardMarkup:
@@ -810,10 +987,11 @@ def cancel_reply() -> ReplyKeyboardMarkup:
     )
 
 
-def persistent_reply_keyboard() -> ReplyKeyboardMarkup:
-    """Always-on reply keyboard so users can restart the bot flow anytime."""
+def persistent_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    """Fallback reply keyboard (home only) when role context is unavailable."""
+    home = _t(ui, "btn_menu_home") if ui else BTN_RESTART
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=BTN_RESTART)]],
+        keyboard=[[KeyboardButton(text=home or BTN_RESTART)]],
         resize_keyboard=True,
         one_time_keyboard=False,
         is_persistent=True,
@@ -826,4 +1004,4 @@ def is_cancel_text(text: str | None) -> bool:
 
 def is_restart_text(text: str | None) -> bool:
     t = (text or "").strip()
-    return t in {BTN_RESTART, "شروع مجدد", "restart"}
+    return t in {BTN_RESTART, "شروع مجدد", "restart"} or t.endswith("شروع مجدد")

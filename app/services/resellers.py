@@ -211,6 +211,7 @@ def _rand_username(prefix: str = "res") -> str:
 
 
 async def _unique_web_username(session: AsyncSession, prefix: str = "web") -> str:
+    """Unique username usable for both web panel and Pasarguard admin."""
     from app.db.models import PgStaffAccess
     from app.services.web_auth import load_web_admin
 
@@ -224,6 +225,11 @@ async def _unique_web_username(session: AsyncSession, prefix: str = "web") -> st
         )
         if clash.scalar_one_or_none() is not None:
             continue
+        clash_pg = await session.execute(
+            select(ResellerProfile).where(ResellerProfile.pg_admin_username == uname)
+        )
+        if clash_pg.scalar_one_or_none() is not None:
+            continue
         clash_staff = await session.execute(
             select(PgStaffAccess).where(PgStaffAccess.web_username == uname)
         )
@@ -231,6 +237,36 @@ async def _unique_web_username(session: AsyncSession, prefix: str = "web") -> st
             continue
         return uname
     return f"{prefix}_{secrets.token_hex(6)}"
+
+
+async def apply_reseller_panel_password(
+    session: AsyncSession,
+    profile: ResellerProfile,
+    password: str,
+    *,
+    sync_pg: bool = True,
+) -> None:
+    """Set web panel password and optionally the linked Pasarguard admin password (same secret)."""
+    from app.services.pasarguard import get_pg, reset_pg
+    from app.services.secret_box import encrypt_secret
+    from app.services.web_auth import hash_password
+
+    pwd = (password or "").strip()
+    if not pwd:
+        raise ValueError("رمز عبور الزامی است")
+    profile.web_password_hash = hash_password(pwd)
+    if not sync_pg or not (profile.pg_admin_username or "").strip():
+        return
+    profile.pg_admin_password_enc = encrypt_secret(pwd)
+    try:
+        await get_pg().modify_admin(profile.pg_admin_username, {"password": pwd})
+    except Exception as e:
+        raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}") from e
+    # Drop cached PG clients so next shop op uses the new password
+    try:
+        reset_pg()
+    except Exception:
+        pass
 
 
 def new_setup_token() -> tuple[str, datetime]:
@@ -515,14 +551,21 @@ async def provision_reseller(
     else:
         share_pg = False
 
+    # One username + password for Pasarguard admin AND bot web panel (when both created).
+    from app.services.secret_box import encrypt_secret
+
+    shared_username = None
+    shared_password = None
+    if do_pg or do_web:
+        shared_username = await _unique_web_username(session, "shop")
+        shared_password = _rand_password(14)
+
     pg_username = None
     pg_password = None
     pg_password_enc = None
     if do_pg:
-        from app.services.secret_box import encrypt_secret
-
-        pg_username = _rand_username("pg")
-        pg_password = _rand_password(14)
+        pg_username = shared_username
+        pg_password = shared_password
         pg_password_enc = encrypt_secret(pg_password)
         payload: dict = {
             "username": pg_username,
@@ -551,8 +594,8 @@ async def provision_reseller(
     web_password = None
     web_hash = None
     if do_web:
-        web_username = await _unique_web_username(session, "web")
-        web_password = _rand_password(14)
+        web_username = shared_username
+        web_password = shared_password
         web_hash = hash_password(web_password)
 
     profile = await make_reseller(
@@ -579,15 +622,19 @@ async def provision_reseller(
         base = await get_reseller_panel_base_url(session)
     setup_url = f"{base}/rsetup/{profile.setup_token}" if base and profile.setup_token else ""
     pg_panel = await get_reseller_pg_panel_base_url(session) if share_pg else ""
+    unified = bool(do_pg and do_web and shared_username and shared_password)
 
     return {
         "profile": profile,
-        "pg_username": pg_username if share_pg else None,
-        "pg_password": pg_password if share_pg else None,
+        "pg_username": pg_username,
+        "pg_password": pg_password if (share_pg or unified) else None,
         "pg_panel_url": pg_panel,
         "share_pg_panel_url": share_pg,
         "web_username": web_username,
         "web_password": web_password,
+        "panel_username": shared_username if unified else (web_username or pg_username),
+        "panel_password": shared_password if unified else (web_password or pg_password),
+        "unified_credentials": unified,
         "setup_url": setup_url,
         "setup_token": profile.setup_token,
         "panel_url": base,
@@ -604,37 +651,63 @@ def format_credentials_message(creds: dict) -> str:
         f"کمیسیون شما: <b>{creds.get('commission_percent', 0)}٪</b>",
     ]
 
+    panel = (creds.get("panel_url") or "").strip().rstrip("/")
     pg_panel = (creds.get("pg_panel_url") or "").strip().rstrip("/")
     share_pg = bool(creds.get("share_pg_panel_url")) or bool(pg_panel and creds.get("pg_username"))
-    if share_pg or creds.get("pg_username"):
-        lines += ["", "🛡 <b>پنل پاسارگارد</b>"]
-        if pg_panel:
-            lines.append(f"آدرس پنل: {pg_panel}")
-        if creds.get("pg_username") and creds.get("pg_password"):
-            lines += [
-                f"نام کاربری: <code>{creds['pg_username']}</code>",
-                f"رمز: <code>{creds['pg_password']}</code>",
-                "رمز را عوض کنید و در جای امن نگه دارید.",
-            ]
-        elif not pg_panel:
-            lines.append("ادمین پاسارگارد برای این پلن ساخته نشد.")
-    else:
+    unified = bool(creds.get("unified_credentials"))
+    panel_user = creds.get("panel_username") or creds.get("web_username") or creds.get("pg_username")
+    panel_pass = creds.get("panel_password") or creds.get("web_password") or creds.get("pg_password")
+
+    if unified and panel_user and panel_pass:
         lines += [
             "",
-            "🛡 مدیریت VPN از طریق همین وب‌پنل ربات انجام می‌شود (لینک پنل پاسارگارد ارسال نشده).",
+            "🔐 <b>ورود یکپارچه (وب‌پنل ربات + پاسارگارد)</b>",
+            "همان یوزر و رمز برای هر دو پنل استفاده می‌شود.",
         ]
-
-    panel = (creds.get("panel_url") or "").strip().rstrip("/")
-    lines += ["", "🌐 <b>وب‌پنل ربات (نماینده)</b>"]
-    if panel:
-        lines += [f"آدرس پنل: {panel}", f"آدرس ورود: {panel}/login"]
-    else:
-        lines.append("آدرس پنل هنوز تنظیم نشده — از ادمین بپرسید.")
-    if creds.get("web_username") and creds.get("web_password"):
+        if panel:
+            lines += [f"آدرس وب‌پنل: {panel}", f"ورود وب‌پنل: {panel}/login"]
+        else:
+            lines.append("آدرس وب‌پنل هنوز تنظیم نشده — از ادمین بپرسید.")
+        if share_pg and pg_panel:
+            lines.append(f"آدرس پاسارگارد: {pg_panel}")
+        elif not share_pg:
+            lines.append(
+                "لینک مستقیم پاسارگارد ارسال نشده؛ مدیریت VPN از وب‌پنل ربات هم ممکن است."
+            )
         lines += [
-            f"نام کاربری: <code>{creds['web_username']}</code>",
-            f"رمز: <code>{creds['web_password']}</code>",
+            f"نام کاربری: <code>{panel_user}</code>",
+            f"رمز: <code>{panel_pass}</code>",
+            "رمز را عوض کنید و در جای امن نگه دارید (تغییر رمز در وب‌پنل هر دو جا را یکی نگه می‌دارد).",
         ]
+    else:
+        if share_pg or creds.get("pg_username"):
+            lines += ["", "🛡 <b>پنل پاسارگارد</b>"]
+            if pg_panel:
+                lines.append(f"آدرس پنل: {pg_panel}")
+            if creds.get("pg_username") and creds.get("pg_password"):
+                lines += [
+                    f"نام کاربری: <code>{creds['pg_username']}</code>",
+                    f"رمز: <code>{creds['pg_password']}</code>",
+                    "رمز را عوض کنید و در جای امن نگه دارید.",
+                ]
+            elif not pg_panel:
+                lines.append("ادمین پاسارگارد برای این پلن ساخته نشد.")
+        else:
+            lines += [
+                "",
+                "🛡 مدیریت VPN از طریق همین وب‌پنل ربات انجام می‌شود (لینک پنل پاسارگارد ارسال نشده).",
+            ]
+
+        lines += ["", "🌐 <b>وب‌پنل ربات (نماینده)</b>"]
+        if panel:
+            lines += [f"آدرس پنل: {panel}", f"آدرس ورود: {panel}/login"]
+        else:
+            lines.append("آدرس پنل هنوز تنظیم نشده — از ادمین بپرسید.")
+        if creds.get("web_username") and creds.get("web_password"):
+            lines += [
+                f"نام کاربری: <code>{creds['web_username']}</code>",
+                f"رمز: <code>{creds['web_password']}</code>",
+            ]
 
     if creds.get("setup_url"):
         lines += [
@@ -663,23 +736,35 @@ async def format_reseller_access_card(session: AsyncSession, profile) -> str:
         "در ربات اصلی ادمین، پنل عملیاتی نماینده وجود ندارد.",
         "",
     ]
+    pg_u = (profile.pg_admin_username or "").strip()
+    web_u = (profile.web_username or "").strip()
+    unified = bool(pg_u and web_u and pg_u.lower() == web_u.lower())
     block = [
         kv_line("🌐", "وب‌پنل", f"{panel}/login" if panel else "—"),
-        kv_line("👤", "نام کاربری وب", profile.web_username or "—"),
     ]
+    if unified:
+        block.append(kv_line("👤", "یوزر (وب‌پنل + پاسارگارد)", web_u or "—"))
+    else:
+        block.append(kv_line("👤", "نام کاربری وب", web_u or "—"))
+        if pg_u:
+            block.append(kv_line("🛡", "کاربر پاسارگارد", pg_u))
     if profile.bot_username:
         block.append(kv_line("🤖", "ربات اختصاصی", f"@{profile.bot_username}"))
     else:
         block.append(
             kv_line("🤖", "ربات اختصاصی", "هنوز ثبت نشده — از وب‌پنل توکن را تنظیم کنید")
         )
-    if profile.pg_admin_username:
-        block.append(kv_line("🛡", "کاربر پاسارگارد", profile.pg_admin_username))
     lines.append(info_block(block))
     lines.append("")
-    lines.append(
-        "رمز ورود فقط یک‌بار هنگام فعال‌سازی ارسال شده؛ در صورت فراموشی از ادمین بخواهید بازنشانی کند."
-    )
+    if unified:
+        lines.append(
+            "یک یوزر/رمز برای وب‌پنل ربات و پنل پاسارگارد است. "
+            "رمز فقط یک‌بار هنگام فعال‌سازی ارسال شده؛ بازنشانی از ادمین یا صفحه امنیت وب‌پنل."
+        )
+    else:
+        lines.append(
+            "رمز ورود فقط یک‌بار هنگام فعال‌سازی ارسال شده؛ در صورت فراموشی از ادمین بخواهید بازنشانی کند."
+        )
     return format_message("🔐 اطلاعات نمایندگی", "\n".join(lines))
 
 
@@ -880,6 +965,14 @@ async def provision_existing_pg_admin(
         if conflict and staff_row is None:
             return None, None, conflict
 
+    # Unified login: web username must match the Pasarguard admin username.
+    if cleaned != pg_u:
+        return (
+            None,
+            None,
+            "برای ورود یکپارچه، نام کاربری وب باید دقیقاً همان نام ادمین پاسارگارد باشد",
+        )
+
     # Password: empty on edit/upgrade keeps previous hash (reseller or legacy staff).
     pwd = (password or "").strip()
     if pwd:
@@ -941,6 +1034,17 @@ async def provision_existing_pg_admin(
         # Store operator note on profile via unused field if present; else ignore
         pass
     profile.is_active = True
+    # Keep Pasarguard password in sync when operator sets a new shared password
+    if pwd:
+        from app.services.pasarguard import get_pg, reset_pg
+        from app.services.secret_box import encrypt_secret
+
+        profile.pg_admin_password_enc = encrypt_secret(pwd)
+        try:
+            await get_pg().modify_admin(pg_u, {"password": pwd})
+            reset_pg()
+        except Exception as e:
+            return None, None, f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}"
     await session.commit()
     await session.refresh(profile)
 

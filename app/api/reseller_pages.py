@@ -265,7 +265,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         )
         new_pass = str(form.get("web_password") or "").strip()
         if new_pass:
-            from app.services.web_auth import hash_password, validate_password_strength
+            from app.services.resellers import apply_reseller_panel_password
+            from app.services.web_auth import validate_password_strength
 
             ok, perr = validate_password_strength(new_pass)
             if not ok:
@@ -273,7 +274,13 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                     f"/resellers/{user_id}/edit?err={_q(perr)}",
                     status_code=303,
                 )
-            profile.web_password_hash = hash_password(new_pass)
+            try:
+                await apply_reseller_panel_password(session, profile, new_pass, sync_pg=True)
+            except ValueError as e:
+                return RedirectResponse(
+                    f"/resellers/{user_id}/edit?err={_q(str(e))}",
+                    status_code=303,
+                )
             if profile.web_username and not profile.setup_completed_at:
                 profile.setup_completed_at = datetime.now(timezone.utc)
         if bool(form.get("reissue_setup")):

@@ -133,21 +133,21 @@
 
   {% elif tab == 'menu' %}
     <div class="card menu-layout-intro">
-      <h2>چیدمان دکمه‌های منو</h2>
-      <p class="muted update-card-caption">با دکمه‌های بالا/پایین جابه‌جا کنید.</p>
+      <h2>چیدمان دکمه‌های کیبورد</h2>
+      <p class="muted update-card-caption">منوی اصلی داخل کیبورد پایین است؛ انتخاب‌ها زیر پیام. با دکمه‌های بالا/پایین جابه‌جا کنید.</p>
       <div class="settings-grid menu-layout-mode">
         <label class="setting-item">
-          <span>حالت چیدمان</span>
+          <span>حالت چیدمان کیبورد</span>
           <select name="menu_layout_ui" id="menu_layout_ui" form="menu-form">
-            <option value="classic" {% if values.get('menu_layout','classic')=='classic' %}selected{% endif %}>کلاسیک (هر دکمه یک ردیف)</option>
-            <option value="compact" {% if values.get('menu_layout')=='compact' %}selected{% endif %}>فشرده (دو ستونه)</option>
+            <option value="classic" {% if values.get('menu_layout','compact')=='classic' %}selected{% endif %}>کلاسیک (هر دکمه یک ردیف)</option>
+            <option value="compact" {% if values.get('menu_layout','compact')=='compact' %}selected{% endif %}>فشرده (دو ستونه — پیشنهادی)</option>
           </select>
         </label>
       </div>
     </div>
     <form method="post" action="/shop-settings/menu-layout" id="menu-form" class="menu-layout-form">
       <input type="hidden" name="menu_order" id="menu_order" value="{{ order_csv }}" />
-      <input type="hidden" name="menu_layout" id="menu_layout" value="{{ values.get('menu_layout', 'classic') }}" />
+      <input type="hidden" name="menu_layout" id="menu_layout" value="{{ values.get('menu_layout', 'compact') }}" />
       <div class="dnd-cols">
         <div class="card dnd-card">
           <h2>منوی فعال</h2>

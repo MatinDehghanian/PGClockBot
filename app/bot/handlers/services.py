@@ -35,19 +35,11 @@ async def svc_list(
     services = list(result.scalars().all())
     if not services:
         if callback.message:
-            from app.services.reseller_access import effective_menu_role
-
-            role = await effective_menu_role(
-                session,
-                db_user,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-            )
             await safe_edit_text(
                 callback.message,
                 ui.get("empty_services_text")
                 or "هنوز سرویسی ندارید.\nاز بخش «خرید سرویس» شروع کنید.",
-                reply_markup=kb.main_menu(role, has_services=False, ui=ui),
+                reply_markup=kb.back_home(ui),
             )
         return
     if callback.message:

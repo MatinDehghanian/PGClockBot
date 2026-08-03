@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
-from app.bot.tg_utils import safe_edit_text, seed_persistent_reply_kb
+from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
@@ -54,13 +54,14 @@ async def render_home(
         )
 
     show_creds = is_shop_owner_on_main_bot(db_user, is_reseller_bot=is_reseller_bot)
+    has = False if effective_role == "admin" else await _has_services(session, db_user.id)
 
     if effective_role == "admin":
         text = format_message(
             f"🛠 {ui.get('shop_title', 'کلاک')}",
-            "پنل مدیریت فروشگاه\nاز گزینه‌های زیر استفاده کنید.",
+            "پنل مدیریت فروشگاه\nاز کیبورد پایین گزینه را انتخاب کنید.",
         )
-        markup = kb.main_menu(effective_role, has_services=False, ui=ui)
+        reply_kb = kb.main_reply_keyboard(effective_role, has_services=False, ui=ui)
     else:
         welcome = ui.get("welcome_text", "")
         title = ui.get("shop_title", "")
@@ -69,39 +70,54 @@ async def render_home(
         except Exception:
             body = welcome
         text = format_message(f"✨ {title}", body)
-        has = await _has_services(session, db_user.id)
-        markup = kb.main_menu(
+        reply_kb = kb.main_reply_keyboard(
             effective_role,
             has_services=has,
             ui=ui,
             show_reseller_creds=show_creds,
         )
 
+    mini = kb.miniapp_inline_keyboard(ui)
+
     if edit:
         from aiogram.exceptions import TelegramBadRequest
 
         try:
-            await message.edit_text(text, reply_markup=markup)
-            return
+            # Inline «بازگشت» — update the bubble text; reply kb is re-seeded below
+            await message.edit_text(text, reply_markup=None)
         except TelegramBadRequest as e:
-            if "message is not modified" in str(e).lower():
-                return
-            # Legacy photo home messages cannot be edit_text'd — replace once
-            if getattr(message, "photo", None):
-                try:
-                    await message.delete()
-                except Exception:
-                    pass
-                await message.answer(text, reply_markup=markup)
-                return
+            if "message is not modified" not in str(e).lower():
+                if getattr(message, "photo", None):
+                    try:
+                        await message.delete()
+                    except Exception:
+                        pass
+                    await message.answer(text, reply_markup=reply_kb)
+                    if mini:
+                        await message.answer("📱", reply_markup=mini)
+                    return
         except Exception:
             pass
+        await seed_main_reply_kb(
+            message,
+            reply_kb,
+            tip=ui.get("btn_menu_home") or "⌨️ منوی اصلی",
+        )
+        if mini:
+            await message.answer("📱", reply_markup=mini)
+        return
 
-    # One message: welcome + inline menu (Telegram cannot mix reply+inline markups)
-    await message.answer(text, reply_markup=markup)
+    await message.answer(text, reply_markup=reply_kb)
+    if mini:
+        await message.answer("📱", reply_markup=mini)
+    # seed_reply_kb kept for API compat — reply kb already attached to welcome
+    _ = seed_reply_kb
 
-    if seed_reply_kb:
-        await seed_persistent_reply_kb(message)
+
+async def seed_main_reply_kb(message: Message, reply_kb, *, tip: str = "⌨️") -> None:
+    from app.bot.tg_utils import seed_reply_keyboard
+
+    await seed_reply_keyboard(message, reply_kb, tip=tip)
 
 
 @router.message(F.text.func(kb.is_restart_text))
@@ -218,19 +234,27 @@ async def cb_home(
 
 @router.callback_query(F.data == "menu:as_user")
 async def cb_home_as_user(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    """Admin preview of the customer menu."""
+    """Admin preview of the customer menu (reply keyboard)."""
     from app.services.formatting import format_message
 
     await callback.answer()
     ui = await get_all_settings(session)
     has = await _has_services(session, db_user.id)
-    markup = kb.main_menu(db_user.role, has_services=has, ui=ui, as_user=True)
-    text = format_message("👁 پیش‌نمایش منوی کاربر", "این همان منویی است که مشتری می‌بیند.")
+    text = format_message(
+        "👁 پیش‌نمایش منوی کاربر",
+        "کیبورد پایین همان منویی است که مشتری می‌بیند.",
+    )
     if callback.message:
         try:
-            await callback.message.edit_text(text, reply_markup=markup)
+            await callback.message.edit_text(text)
         except Exception:
-            await callback.message.answer(text, reply_markup=markup)
+            pass
+        await callback.message.answer(
+            text,
+            reply_markup=kb.main_reply_keyboard(
+                db_user.role, has_services=has, ui=ui, as_user=True
+            ),
+        )
 
 
 @router.message(Command("menu"))

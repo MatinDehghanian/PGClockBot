@@ -52,6 +52,7 @@ def create_dispatcher() -> Dispatcher:
         admin_pg_users,
         admin_settings,
         payments,
+        reply_nav,
         reseller,
         reseller_plans,
         reseller_settings,
@@ -77,6 +78,8 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(admin_backup.router)
     dp.include_router(admin_pg_users.router)
     dp.include_router(admin.router)
+    # Reply-keyboard nav last among message routers; filter only matches menu labels
+    dp.include_router(reply_nav.router)
 
     block = _BlockPlatformAdminOnResellerBot()
     for r in (admin.router, admin_backup.router, admin_settings.router, admin_pg_users.router):

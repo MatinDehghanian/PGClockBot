@@ -185,7 +185,13 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
         if uerr:
             return _err(uerr)
 
-        if cleaned != profile.web_username:
+        pg_u = (profile.pg_admin_username or "").strip().lower()
+        if pg_u and cleaned != pg_u:
+            return _err(
+                "نام کاربری باید همان یوزر پاسارگارد باشد (ورود یکپارچه وب‌پنل و پاسارگارد)"
+            )
+
+        if cleaned != (profile.web_username or ""):
             from app.services.pg_staff_access import access_by_web_username
 
             clash = await session.execute(
@@ -203,7 +209,12 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
                 return _err("این نام کاربری برای ادمین اصلی رزرو است")
             profile.web_username = cleaned
 
-        profile.web_password_hash = hash_password(new_pass)
+        try:
+            from app.services.resellers import apply_reseller_panel_password
+
+            await apply_reseller_panel_password(session, profile, new_pass, sync_pg=True)
+        except ValueError as e:
+            return _err(str(e))
         await session.commit()
         return _refresh_session(
             request,
@@ -327,7 +338,12 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
         profile = result.scalar_one_or_none()
         if not profile or not verify_password_hash(current_password, profile.web_password_hash):
             return _err("رمز فعلی اشتباه است")
-        profile.web_password_hash = hash_password(new_password)
+        try:
+            from app.services.resellers import apply_reseller_panel_password
+
+            await apply_reseller_panel_password(session, profile, new_password, sync_pg=True)
+        except ValueError as e:
+            return _err(str(e))
         await session.commit()
         return _refresh_session(
             request,
