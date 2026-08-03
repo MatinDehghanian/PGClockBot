@@ -50,7 +50,7 @@
           <div class="support-actions">
             <button class="btn" type="submit">ذخیره</button>
             <button class="btn btn-danger" type="submit" formaction="/shop-supports/delete" formmethod="post"
-                    onclick="return confirm('این پشتیبان حذف شود؟')">حذف</button>
+                    data-confirm="این پشتیبان حذف شود؟" data-confirm-title="تأیید" data-confirm-danger="1" data-confirm-label="تأیید">حذف</button>
           </div>
         </form>
         {% endfor %}

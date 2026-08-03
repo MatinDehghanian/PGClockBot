@@ -37,16 +37,16 @@
             <span class="muted">—</span>
           {% elif pay and pay.status == 'pending' %}
             {% call row_actions() %}
-              <form method="post" action="/orders/{{ o.id }}/approve">
+              <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="این سفارش تأیید شود؟" data-confirm-title="تأیید سفارش" data-confirm-label="تأیید">
                 <button class="btn btn-ok btn-sm" type="submit">تأیید</button>
               </form>
-              <form method="post" action="/orders/{{ o.id }}/reject">
+              <form method="post" action="/orders/{{ o.id }}/reject" data-confirm="این سفارش رد شود؟" data-confirm-title="رد سفارش" data-confirm-danger="1" data-confirm-label="رد">
                 <button class="btn btn-danger btn-sm" type="submit">رد</button>
               </form>
             {% endcall %}
           {% elif o.status in ['paid','awaiting_approval'] %}
             {% call row_actions() %}
-              <form method="post" action="/orders/{{ o.id }}/approve">
+              <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="سفارش تأیید و تحویل شود؟" data-confirm-title="تأیید و تحویل" data-confirm-label="تأیید و تحویل">
                 <button class="btn btn-ok btn-sm" type="submit">تأیید و تحویل</button>
               </form>
             {% endcall %}

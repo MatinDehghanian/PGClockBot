@@ -55,7 +55,7 @@
           {% if can_write %}
           {% call row_actions() %}
             <a class="btn btn-ghost btn-sm" href="/pg/groups?edit={{ g.get('id') }}">ویرایش</a>
-            <form method="post" action="/pg/groups/{{ g.get('id') }}/delete" onsubmit="return confirm('حذف شود؟')">
+            <form method="post" action="/pg/groups/{{ g.get('id') }}/delete" data-confirm="این گروه حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
               <button class="btn btn-sm btn-danger" type="submit">حذف</button>
             </form>
           {% endcall %}

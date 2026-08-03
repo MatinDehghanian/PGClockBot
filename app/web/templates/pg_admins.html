@@ -82,7 +82,7 @@
               </button>
             </form>
             <form method="post" action="/pg/admins/{{ uname }}/web-access/revoke"
-              onsubmit="return confirm('دسترسی وب‌پنل حذف شود؟')">
+              data-confirm="دسترسی وب‌پنل حذف شود؟" data-confirm-title="حذف دسترسی وب" data-confirm-danger="1" data-confirm-label="حذف دسترسی">
               <button class="btn btn-sm btn-danger" type="submit">حذف دسترسی</button>
             </form>
             {% elif src == 'none' %}
@@ -90,7 +90,7 @@
               data-modal-open="modal-web-{{ loop.index }}">اعطای دسترسی وب</button>
             {% endif %}
             {% if uname and src != 'owner' %}
-            <form method="post" action="/pg/admins/{{ uname }}/delete" onsubmit="return confirm('حذف شود؟')">
+            <form method="post" action="/pg/admins/{{ uname }}/delete" data-confirm="این ادمین حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
               <button class="btn btn-sm btn-danger" type="submit">حذف ادمین</button>
             </form>
             {% endif %}

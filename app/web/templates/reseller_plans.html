@@ -31,7 +31,11 @@
           {% call row_actions() %}
           <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>
           <form method="post" action="/resellers/plans/{{ p.id }}/toggle"><button class="btn btn-ghost btn-sm" type="submit">روشن/خاموش</button></form>
-          <form method="post" action="/resellers/plans/{{ p.id }}/delete" onsubmit="return confirm('حذف شود؟')"><button class="btn btn-danger btn-sm" type="submit">حذف</button></form>
+          <form method="post" action="/resellers/plans/{{ p.id }}/delete"
+                data-confirm="این پلن نمایندگی حذف شود؟"
+                data-confirm-title="تأیید حذف"
+                data-confirm-danger="1"
+                data-confirm-label="حذف"><button class="btn btn-danger btn-sm" type="submit">حذف</button></form>
           {% endcall %}
         </td>
       </tr>

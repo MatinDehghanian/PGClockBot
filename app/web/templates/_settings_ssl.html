@@ -179,9 +179,23 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
         timer = setInterval(function () { if (!document.hidden) poll(); }, 800);
       }
       if (action === 'enable') {
-        if (!confirm('بعد از فعال‌سازی، پنل با HTTPS ری‌استارت می‌شود.\\nاز این لحظه با آدرس https://دامنه وارد شوید (نه IP با http).')) {
-          e.preventDefault();
-        }
+        e.preventDefault();
+        const form = this;
+        const ask = (window.panelConfirm
+          ? window.panelConfirm({
+              title: 'فعال‌سازی HTTPS',
+              message: 'بعد از فعال‌سازی، پنل با HTTPS ری‌استارت می‌شود. از این لحظه با آدرس https://دامنه وارد شوید (نه IP با http).',
+              warn: true,
+              confirmLabel: 'فعال‌سازی',
+            })
+          : Promise.resolve({ ok: window.confirm('بعد از فعال‌سازی، پنل با HTTPS ری‌استارت می‌شود.') }));
+        ask.then(function (result) {
+          if (!result || !result.ok) return;
+          form.dataset.confirmSkip = '1';
+          if (typeof form.requestSubmit === 'function') form.requestSubmit();
+          else form.submit();
+        });
+        return;
       }
     });
   }

@@ -415,7 +415,16 @@
     rollbackBtn.addEventListener('click', async () => {
       const ver = (rollbackSelect.value || '').trim();
       if (!ver) return;
-      if (!confirm('بازگشت به نسخه v' + ver + '؟\nسرویس بعد از اعمال، دوباره راه‌اندازی می‌شود.')) return;
+      const ask = (window.panelConfirm
+        ? window.panelConfirm({
+            title: 'بازگشت نسخه',
+            message: 'بازگشت به نسخه v' + ver + '؟ سرویس بعد از اعمال دوباره راه‌اندازی می‌شود.',
+            warn: true,
+            confirmLabel: 'شروع بازگشت',
+          })
+        : Promise.resolve({ ok: window.confirm('بازگشت به نسخه v' + ver + '؟') }));
+      const result = await ask;
+      if (!result || !result.ok) return;
       showOps(true);
       setBusy(true, 'شروع بازگشت…');
       waitingRestart = false;

@@ -40,8 +40,8 @@
         <td class="col-actions">
           {% if a.status == 'awaiting_approval' %}
           {% call row_actions() %}
-          <form method="post" action="/resellers/applications/{{ a.id }}/approve"><button class="btn btn-sm" type="submit">تأیید</button></form>
-          <form method="post" action="/resellers/applications/{{ a.id }}/reject"><button class="btn btn-ghost btn-sm" type="submit">رد</button></form>
+          <form method="post" action="/resellers/applications/{{ a.id }}/approve" data-confirm="این درخواست نمایندگی تأیید شود؟" data-confirm-title="تأیید درخواست" data-confirm-label="تأیید"><button class="btn btn-sm" type="submit">تأیید</button></form>
+          <form method="post" action="/resellers/applications/{{ a.id }}/reject" data-confirm="این درخواست رد شود؟" data-confirm-title="رد درخواست" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-ghost btn-sm" type="submit">رد</button></form>
           {% endcall %}
           {% else %}
           <span class="muted">—</span>
