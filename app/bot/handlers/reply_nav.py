@@ -1,8 +1,8 @@
-"""Reply-keyboard main + submenu navigation (3.6.0).
+"""Reply-keyboard main + submenu navigation (3.6.0+).
 
-All navigation (including submenus + pay methods) uses the reply keyboard.
+All navigation (including submenus + pay methods + shop chrome) uses the reply keyboard.
 Every submenu has «بازگشت» (one level) and «منوی اصلی».
-Inline under messages: plans, services list, approve/reject only.
+Inline under messages: plans, services/user/reseller names, approve/reject, URL contacts.
 """
 
 from __future__ import annotations
