@@ -404,7 +404,8 @@ async def _render_notify(callback: CallbackQuery, session: AsyncSession) -> None
     rows.append(_back_row(("⬅️ تنظیمات", "adm:settings")))
     if callback.message:
         await callback.message.edit_text(
-            "🔔 <b>اعلان‌های ادمین</b>\nروشن/خاموش کنید:",
+            "🔔 <b>اعلان‌های ادمین اصلی</b>\n"
+            "روشن/خاموش کنید (مستقل از نمایندگان):",
             reply_markup=_kb(rows),
         )
 

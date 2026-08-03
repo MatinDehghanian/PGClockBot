@@ -130,9 +130,13 @@ SECTIONS: dict[str, dict] = {
         "title": "ربات اختصاصی",
         "kind": "bot",
     },
+    "notify": {
+        "title": "نوتیفیکیشن‌ها",
+        "kind": "notify",
+    },
 }
 
-HUB_ORDER = ["shop", "menu", "pay", "support", "access", "bot"]
+HUB_ORDER = ["shop", "menu", "pay", "support", "access", "bot", "notify"]
 
 
 class ResellerSettingsStates(StatesGroup):
@@ -270,6 +274,10 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
                 await safe_edit_text(callback.message, text, reply_markup=_kb(rows))
             return
 
+        if sec.get("kind") == "notify":
+            await _render_notify(callback, session, reseller_id)
+            return
+
         rows = []
         for sub_id, label, _fields in sec.get("subs") or []:
             rows.append(
@@ -287,6 +295,34 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
                 f"⚙️ <b>{sec['title']}</b>",
                 reply_markup=_kb(rows),
             )
+
+
+async def _render_notify(callback: CallbackQuery, session: AsyncSession, reseller_id: int):
+    from app.services.notifications import get_shop_notify_prefs, shop_notify_catalog
+    from app.services.resellers import parse_perms, with_shop_settings
+
+    profile = await get_reseller_profile(session, reseller_id)
+    perms = with_shop_settings(parse_perms(profile.web_permissions if profile else None))
+    catalog = shop_notify_catalog(perms)
+    prefs = await get_shop_notify_prefs(session, reseller_id)
+    rows: list[list[InlineKeyboardButton]] = []
+    for key, title, _, _default in catalog:
+        mark = "✅" if prefs.get(key) else "⬜️"
+        rows.append(
+            [InlineKeyboardButton(text=f"{mark} {title}", callback_data=f"res:st:ntog:{key}")]
+        )
+    if not rows:
+        rows.append(
+            [InlineKeyboardButton(text="— اعلانی برای دسترسی شما نیست —", callback_data="res:st:hub")]
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ تنظیمات", callback_data="res:st:hub")])
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            "🔔 <b>نوتیفیکیشن فروشگاه</b>\n"
+            "مستقل از ادمین اصلی — فقط رویدادهای مجاز با دسترسی شما:",
+            reply_markup=_kb(rows),
+        )
 
 
 async def _render_sub(
@@ -400,7 +436,7 @@ async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_use
         await callback.answer(err, show_alert=True)
         return
     key = callback.data.split(":", 3)[-1]
-    if key not in FIELDS:
+    if key.startswith("notify_") or key not in FIELDS:
         await callback.answer("نامعتبر", show_alert=True)
         return
     with _Scoped(profile.user_id):
@@ -411,6 +447,43 @@ async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_use
     loc = _owner_screen_for_key(key)
     if loc:
         await _render_sub(callback, session, loc[0], loc[1], profile.user_id)
+
+
+@router.callback_query(F.data.startswith("res:st:ntog:"))
+async def settings_notify_toggle(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    """Toggle shop notify prefs — ResellerSetting only, ACL + no platform-only keys."""
+    profile, err = await _gate(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if err:
+        await callback.answer(err, show_alert=True)
+        return
+    key = callback.data.split(":", 3)[-1]
+    from app.services.notifications import (
+        PLATFORM_ONLY_NOTIFY_KEYS,
+        get_shop_notify_prefs,
+        shop_notify_allowed_keys,
+    )
+    from app.services.resellers import parse_perms, with_shop_settings
+
+    if key in PLATFORM_ONLY_NOTIFY_KEYS or not key.startswith("notify_"):
+        await callback.answer("این اعلان برای فروشگاه مجاز نیست", show_alert=True)
+        return
+    perms = with_shop_settings(parse_perms(profile.web_permissions))
+    if key not in shop_notify_allowed_keys(perms):
+        await callback.answer("دسترسی این اعلان را ندارید", show_alert=True)
+        return
+    prefs = await get_shop_notify_prefs(session, profile.user_id)
+    new_val = "0" if prefs.get(key) else "1"
+    await set_setting(session, key, new_val, reseller_id=profile.user_id)
+    await callback.answer("ذخیره شد")
+    await _render_notify(callback, session, profile.user_id)
 
 
 @router.callback_query(F.data.startswith("res:st:edit:"))

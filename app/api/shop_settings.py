@@ -182,6 +182,19 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             from app.services.support_contacts import get_support_contacts
 
             ctx["support_contacts"] = await get_support_contacts(session, reseller_id=rid)
+        elif tab == "notifications":
+            from app.services.notifications import (
+                get_shop_notify_prefs,
+                shop_notify_catalog,
+            )
+            from app.services.resellers import parse_perms, with_shop_settings
+
+            perms = with_shop_settings(
+                list(staff.get("permissions") or [])
+                or parse_perms(profile.web_permissions if profile else None)
+            )
+            ctx["notify_items"] = shop_notify_catalog(perms)
+            ctx["notify_prefs"] = await get_shop_notify_prefs(session, rid)
 
         return render(request, "shop_settings.html", ctx)
 
@@ -324,10 +337,59 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
 
         # Always keep apply button off on reseller shops
         payload["show_reseller_apply"] = "0"
+        # Never allow notify_* smuggling into ResellerSetting via generic settings save
+        # (shop notify prefs go through /shop-notifications with an ACL allowlist).
+        for k in list(payload.keys()):
+            if str(k).startswith("notify_"):
+                payload.pop(k, None)
         from app.services.users import set_settings_bulk
 
         await set_settings_bulk(session, payload, reseller_id=rid)
         return RedirectResponse(f"/shop-settings?tab={tab}&saved=1", status_code=303)
+
+    @app.post("/shop-notifications")
+    async def shop_notifications_save(
+        request: Request,
+        staff: dict = Depends(shop_dep),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Save shop Telegram notify prefs — ResellerSetting only, ACL-filtered."""
+        if staff.get("role") != "reseller":
+            return RedirectResponse("/settings", status_code=303)
+        rid = _rid(staff)
+        if not rid:
+            return _deny_scope()
+        profile = await _load_profile(session, rid)
+        if not profile:
+            return RedirectResponse("/logout", status_code=303)
+
+        from app.services.notifications import (
+            PLATFORM_ONLY_NOTIFY_KEYS,
+            save_shop_notify_prefs,
+            shop_notify_allowed_keys,
+        )
+        from app.services.resellers import parse_perms, with_shop_settings
+
+        perms = with_shop_settings(
+            list(staff.get("permissions") or [])
+            or parse_perms(profile.web_permissions)
+        )
+        allowed = shop_notify_allowed_keys(perms)
+        # Belt-and-suspenders: never accept platform-only keys from the form
+        allowed -= set(PLATFORM_ONLY_NOTIFY_KEYS)
+
+        form = await request.form()
+        await save_shop_notify_prefs(
+            session,
+            rid,
+            dict(form),
+            allowed_keys=allowed,
+        )
+        return RedirectResponse(
+            "/shop-settings?tab=notifications&saved=1&msg="
+            + quote("نوتیفیکیشن‌های فروشگاه ذخیره شد"),
+            status_code=303,
+        )
 
     @app.post("/shop-settings/menu-layout")
     async def shop_menu_layout_save(
