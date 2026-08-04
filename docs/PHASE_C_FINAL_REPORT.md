@@ -38,10 +38,11 @@ Authorization is centralized (`authz.py`), tenant-safe for PasarGuard reads/writ
 ## Ops follow-ups
 
 - Legacy staff remediation: `docs/PHASE_C_LEGACY_MIGRATION.md`  
-- Phase D planning (identity / Owner UI): `docs/PHASE_D_PLAN.md` — **not implemented**
+- Phase D planning (identity / credentials): `docs/PHASE_D_PLAN.md`, `docs/PHASE_D0_IDENTITY_ANALYSIS.md` — **not implemented**  
+- Binding: **pg_staff stays first-class** (not reseller-only)
 
-## Out of scope (Phase D+)
+## Out of scope until Phase D approval
 
-- First-class Sub-admin DB role  
-- Broader identity unification / Owner grant UI for bare pg_staff  
+- Owner UI dual grant (pg_staff vs reseller)  
+- Credential policy unification / username sync  
 - Bot PG surface for reseller/pg_staff (still platform-admin only on Bot)

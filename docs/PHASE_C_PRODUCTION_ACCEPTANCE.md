@@ -113,7 +113,7 @@ These do **not** reintroduce Owner fallback.
 
 **CONDITIONAL on ops:** Owners must remediate legacy `PgStaffAccess` rows (or upgrade them to reseller with password) before those accounts can use PG data pages.
 
-Proceed to **Phase D planning only** (no implementation in this pass).
+Proceed to **Phase D planning** under binding decision: **pg_staff remains first-class** (see `docs/PHASE_D_PLAN.md`). No Phase D implementation until plan approval.
 
 ---
 

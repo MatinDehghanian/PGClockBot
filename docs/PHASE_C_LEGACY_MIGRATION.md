@@ -43,15 +43,23 @@ Rows with `missing_enc = true` need remediation before PG data access works.
 4. `change_staff_credentials` syncs PasarGuard password via Owner `modify_admin` and stores `pg_admin_password_enc`.  
 5. Re-login (or refreshed session) → `pg_credentials_ready=true` → full mapped PG menus.
 
-### Option B — Upgrade to reseller (shop + PG) — current Owner UI
+### Option B — Stay pg_staff via Owner (preferred once Phase D UI lands)
 
-1. Owner → `/pg/admins` → row source `pg_staff` → **ویرایش دسترسی / ارتقای دسترسی وب**.  
-2. Select a **reseller plan** (required).  
-3. Set a **new password** (do not leave blank if enc was null — blank keeps old web hash but may leave PG enc empty).  
-4. Submit → `provision_existing_pg_admin` creates `ResellerProfile`, syncs enc when password provided, **deletes** the `PgStaffAccess` row.  
-5. Account thereafter logs in as **reseller** (shop ACL from plan + PG from role).
+Phase D will expose Owner «اعطای / ویرایش دسترسی pg_staff» → `grant_web_access` / `update_web_access` (no reseller conversion).
 
-### Option C — Revoke
+Until then: use Option A (self-serve `/security`) or service-level `update_web_access`.
+
+### Option C — Attach shop (become reseller) — explicit only
+
+Only if the operator **wants** shop features:
+
+1. Owner → `/pg/admins` → «ارتقای دسترسی وب» with plan + **new password**.  
+2. Creates `ResellerProfile` and may remove `PgStaffAccess` (current UI).  
+3. Account thereafter is a **reseller**, not pg_staff.
+
+This is **not** required for PG panel access under the approved architecture.
+
+### Option D — Revoke
 
 Owner → revoke web access on `/pg/admins` if the account should not use the panel.
 
