@@ -458,13 +458,13 @@ async def grant_web_access(
         return None, "نام ادمین پاسارگارد الزامی است"
     if not (password or "").strip():
         return None, "رمز عبور الزامی است"
-    ok, err = validate_password_strength(password)
-    if not ok:
-        return None, err
 
     cleaned, uerr = validate_web_username(web_username, lowercase=True)
     if uerr:
         return None, uerr
+    ok, err = validate_password_strength(password, username=cleaned or pg_u)
+    if not ok:
+        return None, err
 
     conflict = await conflict_message_for_new_grant(session, pg_u)
     if conflict:
@@ -485,12 +485,15 @@ async def grant_web_access(
     except Exception as e:
         return None, f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}"
 
+    enc = encrypt_secret(password)
+    if not enc:
+        return None, "رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید"
     role_id = await resolve_pg_role_id_for_admin(pg_u)
     row = PgStaffAccess(
         pg_username=pg_u,
         web_username=cleaned,
         web_password_hash=hash_password(password),
-        pg_admin_password_enc=encrypt_secret(password),
+        pg_admin_password_enc=enc,
         pg_role_id=int(role_id) if role_id else None,
         is_active=bool(is_active),
         note=(note or "").strip() or None,
@@ -529,7 +532,10 @@ async def update_web_access(
         # Keep existing password on edit
         pass
     else:
-        ok, err = validate_password_strength(password)
+        cleaned_tmp, _ = validate_web_username(web_username, lowercase=True)
+        ok, err = validate_password_strength(
+            password, username=(cleaned_tmp or pg_u)
+        )
         if not ok:
             return None, err
     cleaned, uerr = validate_web_username(web_username, lowercase=True)
@@ -549,8 +555,11 @@ async def update_web_access(
             reset_pg()
         except Exception as e:
             return None, f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}"
+        enc = encrypt_secret(pwd)
+        if not enc:
+            return None, "رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید"
         existing.web_password_hash = hash_password(pwd)
-        existing.pg_admin_password_enc = encrypt_secret(pwd)
+        existing.pg_admin_password_enc = enc
     if is_active is not None:
         existing.is_active = bool(is_active)
     if note is not None:
@@ -644,7 +653,9 @@ async def change_staff_credentials(
         return None, "یوزر یا رمز قدیم اشتباه است"
     if not verify_password_hash(current_password or "", row.web_password_hash):
         return None, "یوزر یا رمز قدیم اشتباه است"
-    ok, err = validate_password_strength(new_password or "")
+    ok, err = validate_password_strength(
+        new_password or "", username=(new_username or row.pg_username)
+    )
     if not ok:
         return None, err
     cleaned, uerr = validate_web_username(new_username, lowercase=True)
@@ -663,7 +674,10 @@ async def change_staff_credentials(
         reset_pg()
     except Exception as e:
         return None, f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}"
-    row.pg_admin_password_enc = encrypt_secret(new_password)
+    enc = encrypt_secret(new_password)
+    if not enc:
+        return None, "رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید"
+    row.pg_admin_password_enc = enc
     await session.commit()
     await session.refresh(row)
     return row, None

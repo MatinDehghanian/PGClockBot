@@ -134,7 +134,7 @@ class ConflictGrantTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(),
                 pg_username="x",
                 web_username="newuser",
-                password="Aa1!aaaa",
+                password="AaBb12!secret",
             )
         self.assertIsNone(row)
         self.assertEqual(err, "قبلاً دسترسی دارد")

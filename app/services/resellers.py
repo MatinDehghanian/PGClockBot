@@ -191,19 +191,47 @@ async def reseller_can_review_payment(
 
 
 def _rand_password(length: int = 14) -> str:
-    """PasarGuard-compatible password: ≥14 chars, ≥2 lower, ≥2 upper, ≥1 special."""
-    length = max(14, int(length))
-    specials = "!@#$%^&*"
-    required = (
-        [secrets.choice(string.ascii_lowercase) for _ in range(2)]
-        + [secrets.choice(string.ascii_uppercase) for _ in range(2)]
-        + [secrets.choice(specials)]
-        + [secrets.choice(string.digits) for _ in range(2)]
-    )
-    alphabet = string.ascii_letters + string.digits + specials
-    required += [secrets.choice(alphabet) for _ in range(length - len(required))]
-    secrets.SystemRandom().shuffle(required)
-    return "".join(required)
+    """PasarGuard-compatible password (Phase D1 shared generator)."""
+    from app.services.credential_policy import generate_compliant_password
+
+    return generate_compliant_password(length)
+
+
+async def apply_reseller_panel_password(
+    session: AsyncSession,
+    profile: ResellerProfile,
+    password: str,
+    *,
+    sync_pg: bool = True,
+) -> None:
+    """Set web panel password and optionally the linked Pasarguard admin password (same secret)."""
+    from app.services.credential_policy import validate_password_strength
+    from app.services.pasarguard import get_pg, reset_pg
+    from app.services.secret_box import encrypt_secret
+    from app.services.web_auth import hash_password
+
+    pwd = (password or "").strip()
+    if not pwd:
+        raise ValueError("رمز عبور الزامی است")
+    ok, err = validate_password_strength(pwd, username=profile.web_username or profile.pg_admin_username)
+    if not ok:
+        raise ValueError(err)
+    profile.web_password_hash = hash_password(pwd)
+    if not sync_pg or not (profile.pg_admin_username or "").strip():
+        return
+    enc = encrypt_secret(pwd)
+    if not enc:
+        raise ValueError("رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید")
+    profile.pg_admin_password_enc = enc
+    try:
+        await get_pg().modify_admin(profile.pg_admin_username, {"password": pwd})
+    except Exception as e:
+        raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}") from e
+    # Drop cached PG clients so next shop op uses the new password
+    try:
+        reset_pg()
+    except Exception:
+        pass
 
 
 def _rand_username(prefix: str = "res") -> str:
@@ -237,36 +265,6 @@ async def _unique_web_username(session: AsyncSession, prefix: str = "web") -> st
             continue
         return uname
     return f"{prefix}_{secrets.token_hex(6)}"
-
-
-async def apply_reseller_panel_password(
-    session: AsyncSession,
-    profile: ResellerProfile,
-    password: str,
-    *,
-    sync_pg: bool = True,
-) -> None:
-    """Set web panel password and optionally the linked Pasarguard admin password (same secret)."""
-    from app.services.pasarguard import get_pg, reset_pg
-    from app.services.secret_box import encrypt_secret
-    from app.services.web_auth import hash_password
-
-    pwd = (password or "").strip()
-    if not pwd:
-        raise ValueError("رمز عبور الزامی است")
-    profile.web_password_hash = hash_password(pwd)
-    if not sync_pg or not (profile.pg_admin_username or "").strip():
-        return
-    profile.pg_admin_password_enc = encrypt_secret(pwd)
-    try:
-        await get_pg().modify_admin(profile.pg_admin_username, {"password": pwd})
-    except Exception as e:
-        raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}") from e
-    # Drop cached PG clients so next shop op uses the new password
-    try:
-        reset_pg()
-    except Exception:
-        pass
 
 
 def new_setup_token() -> tuple[str, datetime]:
@@ -567,6 +565,8 @@ async def provision_reseller(
         pg_username = shared_username
         pg_password = shared_password
         pg_password_enc = encrypt_secret(pg_password)
+        if not pg_password_enc:
+            raise ValueError("رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید")
         payload: dict = {
             "username": pg_username,
             "password": pg_password,
@@ -1148,7 +1148,10 @@ async def provision_existing_pg_admin(
         from app.services.pasarguard import get_pg, reset_pg
         from app.services.secret_box import encrypt_secret
 
-        profile.pg_admin_password_enc = encrypt_secret(pwd)
+        enc = encrypt_secret(pwd)
+        if not enc:
+            return None, None, "رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید"
+        profile.pg_admin_password_enc = enc
         try:
             await get_pg().modify_admin(pg_u, {"password": pwd})
             reset_pg()

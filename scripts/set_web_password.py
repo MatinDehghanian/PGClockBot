@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.services.web_auth import save_web_admin  # noqa: E402
+from app.services.web_auth import save_web_admin, validate_password_strength  # noqa: E402
 
 
 def _sync_env(user: str, password: str) -> None:
@@ -46,6 +46,10 @@ def main() -> None:
         p2 = getpass.getpass("Confirm password: ").replace("\r", "").strip()
         if p1 != p2:
             print("Passwords do not match.")
+            continue
+        ok, err = validate_password_strength(p1, username=user)
+        if not ok:
+            print(err)
             continue
         break
     path = save_web_admin(user, p1)

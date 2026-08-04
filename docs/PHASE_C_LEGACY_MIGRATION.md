@@ -65,12 +65,14 @@ Owner → revoke web access on `/pg/admins` if the account should not use the pa
 
 ---
 
-## New grants after C5
+## New grants after C5 (until Phase D)
 
-| Intent | What to do |
-|--------|------------|
-| Shop + PG secondary admin | Create PG admin with role → «اعطای دسترسی وب» with plan + password → becomes **reseller** |
-| PG-only staff without shop | Service `grant_web_access` exists but is **not** exposed in Owner UI today — use Option A after a staff row exists, or treat as Phase D UI work |
+| Intent | What to do today |
+|--------|------------------|
+| Shop + PG secondary admin | Create PG admin with role → «اعطای دسترسی وب» with plan + password → **reseller** |
+| PG-only staff (pg_staff) | No Owner UI yet — Phase D will wire `grant_web_access`. Workaround: create staff row via service / legacy, then Option A password change |
+
+Do **not** convert pg_staff to reseller solely to obtain PG credentials — that contradicts the approved architecture.
 
 ---
 

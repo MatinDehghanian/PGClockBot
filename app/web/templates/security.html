@@ -20,7 +20,7 @@
     <strong dir="ltr">{{ current_username }}</strong>.
     برای تغییر، یوزر و رمز قدیم را خودتان وارد کنید؛ سپس مقادیر جدید را بنویسید.
     {% if staff.role == 'reseller' %}نام کاربری نماینده فقط حروف کوچک انگلیسی، عدد و _ مجاز است. اگر ادمین پاسارگارد دارید، یوزر باید همان یوزر پاسارگارد بماند و تغییر رمز هر دو پنل را یکی می‌کند.{% else %}نام کاربری فقط حروف انگلیسی، عدد و _ مجاز است.{% endif %}
-    رمز جدید حداقل ۸ کاراکتر با حرف بزرگ و کوچک انگلیسی و یک کاراکتر خاص.
+    رمز جدید: حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ، دو حرف کوچک و یک کاراکتر خاص.
   </p>
   {% if ok %}<div class="flash ok">{{ ok }}</div>{% endif %}
   {% if err %}<div class="flash err">{{ err }}</div>{% endif %}
@@ -57,12 +57,12 @@
       <div class="setting-item">
         <label>رمز جدید
           <div class="pw-field">
-            <input id="sec-new-pass" name="new_password" type="password" required minlength="8" autocomplete="new-password" placeholder="••••••••" />
+            <input id="sec-new-pass" name="new_password" type="password" required minlength="12" autocomplete="new-password" placeholder="••••••••" />
             <button type="button" class="pw-toggle" data-pw-for="sec-new-pass" aria-label="نمایش رمز" aria-pressed="false">
               <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
           </div>
-          <small class="muted">حداقل ۸ کاراکتر با حرف بزرگ، کوچک و کاراکتر خاص</small>
+          <small class="muted">حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
         </label>
       </div>
     </div>

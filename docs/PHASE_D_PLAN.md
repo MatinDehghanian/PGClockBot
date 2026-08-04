@@ -399,16 +399,14 @@ D0 decisions (answers)  →  D1 policy module  →  D2 sync + Owner UI dual gran
 
 ---
 
-## 9. Approval checklist
+## 9. Approval checklist — D0 RESOLVED
 
-Please confirm before any Phase D coding:
+- [x] **pg_staff** stays first-class; grant UI must create `PgStaffAccess`, not reseller (D2).  
+- [x] Reseller grant remains a **separate** Owner action (D2).  
+- [x] Username equality for PG-linked principals: **enforce** (D2).  
+- [x] Owner web vs Owner PG: **keep separate** by default.  
+- [x] Password policy: PasarGuard rules (incl. ≥2 digits) — **D1**.  
+- [x] Slice order D1 → D2 → D3 → D4.  
+- [x] Explicit staff→reseller only as opt-in migrate (not default).
 
-- [ ] **pg_staff** stays first-class; grant UI must create `PgStaffAccess`, not reseller.  
-- [ ] Reseller grant remains a **separate** Owner action.  
-- [ ] Username equality for PG-linked principals: **approve/reject** recommendation (enforce equality).  
-- [ ] Owner web vs Owner PG: keep separate / optional sync.  
-- [ ] Password policy: add digit requirement or not.  
-- [ ] Approve slice order D1 → D2 → D3 → D4.  
-- [ ] Explicit staff→reseller only as opt-in migrate (not default).
-
-**STOP — wait for approval before implementation.**
+**D1 implemented** on `cursor/phase-d1-credential-policy-b96b`. **STOP — await approval before D2.**

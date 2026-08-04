@@ -180,7 +180,8 @@ class PasswordByteLimitTests(unittest.TestCase):
         from app.services.web_auth import validate_password_strength
 
         # 73 ascii bytes with required character classes
-        long_pw = "Aa1!" + ("x" * 69)
+        # Over 72 UTF-8 bytes (PasarGuard limit) — must fail
+        long_pw = "AaBb12!" + ("x" * 70)
         ok, err = validate_password_strength(long_pw)
         self.assertFalse(ok)
         self.assertIn("۷۲", err)

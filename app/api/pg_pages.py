@@ -1290,6 +1290,11 @@ def register_pg_pages(
         form = await request.form()
         role_raw = str(form.get("role_id") or "").strip()
         note = str(form.get("note") or "").strip()
+        from app.services.credential_policy import validate_password_strength
+
+        ok, perr = validate_password_strength(password, username=username.strip())
+        if not ok:
+            return RedirectResponse(f"/pg/admins?err={_q(perr)}", status_code=303)
         payload: dict = {
             "username": username.strip(),
             "password": password,

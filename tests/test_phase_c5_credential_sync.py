@@ -246,13 +246,13 @@ class GrantStoresEncryptedPasswordTests(unittest.IsolatedAsyncioTestCase):
                 session,
                 pg_username="PgStaff1",
                 web_username="webstaff1",
-                password="Aa1!bbbb",
+                password="AaBb12!secret",
             )
         self.assertIsNone(err)
         self.assertIsNotNone(row)
         self.assertEqual(row.pg_admin_password_enc, "enc-token")
         self.assertEqual(row.pg_role_id, 42)
-        pg.modify_admin.assert_awaited_once_with("pgstaff1", {"password": "Aa1!bbbb"})
+        pg.modify_admin.assert_awaited_once_with("pgstaff1", {"password": "AaBb12!secret"})
         self.assertTrue(created)
         self.assertEqual(row.pg_username, "pgstaff1")
 

@@ -51,18 +51,12 @@ See full detail in `PHASE_D_PLAN.md` §1–2.
 
 ---
 
-## Open decisions (must answer before D1 code)
+## Open decisions — RESOLVED
 
-1. **Username equality** for pg_staff: enforce `web == pg` (recommended) or allow divergence?  
-2. **Owner dual credentials:** keep web and `PG_PASSWORD` separate, or optional sync when names match?  
-3. **platform Admin split:** defer distinguishing Owner in session until D4?  
-4. **Opt-in migrate staff→reseller:** allowed with confirmation, or never?  
-5. **Password digits:** require digit in shared policy?
+1. Username equality for pg_staff: **yes** (`web == pg`) — enforce in D2.  
+2. Owner dual credentials: **keep separate** by default.  
+3. platform Admin split: **defer** to D4.  
+4. Opt-in migrate staff→reseller: **allowed later**, never automatic.  
+5. Password digits: **yes** — PasarGuard requires ≥2 digits; mirror exactly.
 
----
-
-## Exit criteria for D0
-
-- Binding answers to open decisions recorded (PR comment or checklist tick).  
-- Phase D plan §9 checklist approved.  
-- No implementation until then.
+D1 implementation: see `docs/PHASE_D1_CREDENTIAL_POLICY.md`.

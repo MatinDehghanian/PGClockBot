@@ -145,7 +145,7 @@ class WebAuthRepairTests(unittest.TestCase):
     def test_password_max_length(self):
         from app.services.web_auth import validate_password_strength
 
-        ok, err = validate_password_strength("Aa1!" + ("x" * 80))
+        ok, err = validate_password_strength("AaBb12!" + ("x" * 80))
         self.assertFalse(ok)
         self.assertIn("۷۲", err)
 
