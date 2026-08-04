@@ -1739,13 +1739,21 @@ async def adm_resapp_view(callback: CallbackQuery, session: AsyncSession, db_use
     await callback.answer()
     u = app.user
     plan = app.plan
+    from app.services.resellers import format_reseller_plan_apply_detail, reseller_billing_mode_label, reseller_plan_mode_of
+
+    mode_label = reseller_billing_mode_label(reseller_plan_mode_of(plan)) if plan else "—"
+    detail = (
+        format_reseller_plan_apply_detail(plan, currency=get_settings().currency)
+        if plan
+        else "—"
+    )
     text = (
         f"🤝 درخواست #{app.id}\n"
         f"وضعیت: <b>{app.status}</b>\n"
         f"کاربر: {u.full_name or u.username or u.telegram_id if u else '—'}\n"
         f"تلگرام: <code>{u.telegram_id if u else '—'}</code>\n"
-        f"پلن: {plan.name if plan else '—'}\n"
-        f"مبلغ: {format_toman(plan.price if plan else 0, get_settings().currency)}"
+        f"نوع: <b>{mode_label}</b>\n\n"
+        f"{detail}"
     )
     if callback.message:
         await callback.message.edit_text(text, reply_markup=kb.reseller_app_review(app.id))

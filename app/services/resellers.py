@@ -298,13 +298,67 @@ async def get_profile_by_setup_token(session: AsyncSession, token: str) -> Resel
     return profile
 
 
-async def list_active_reseller_plans(session: AsyncSession) -> list[ResellerPlan]:
-    result = await session.execute(
-        select(ResellerPlan)
-        .where(ResellerPlan.is_active.is_(True))
-        .order_by(ResellerPlan.sort_order, ResellerPlan.id)
-    )
+async def list_active_reseller_plans(
+    session: AsyncSession,
+    *,
+    billing_mode: str | None = None,
+) -> list[ResellerPlan]:
+    """Active reseller packages. Optionally filter by ``fixed`` / ``payg``."""
+    from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
+
+    q = select(ResellerPlan).where(ResellerPlan.is_active.is_(True))
+    if billing_mode is not None:
+        mode = str(billing_mode).strip().lower()
+        if mode not in {BILLING_MODE_FIXED, BILLING_MODE_PAYG}:
+            mode = BILLING_MODE_FIXED
+        q = q.where(ResellerPlan.billing_mode == mode)
+    result = await session.execute(q.order_by(ResellerPlan.sort_order, ResellerPlan.id))
     return list(result.scalars().all())
+
+
+def normalize_reseller_billing_mode(raw: str | None) -> str:
+    from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
+
+    mode = str(raw or "").strip().lower()
+    return mode if mode in {BILLING_MODE_FIXED, BILLING_MODE_PAYG} else BILLING_MODE_FIXED
+
+
+def reseller_billing_mode_label(mode: str | None) -> str:
+    from app.services.billing import BILLING_MODE_PAYG
+
+    return "Pay As You Go" if normalize_reseller_billing_mode(mode) == BILLING_MODE_PAYG else "ثابت (کمیسیون)"
+
+
+def reseller_plan_mode_of(plan: ResellerPlan | None) -> str:
+    return normalize_reseller_billing_mode(getattr(plan, "billing_mode", None) if plan else None)
+
+
+def format_reseller_plan_apply_detail(plan: ResellerPlan, *, currency: str) -> str:
+    """Type-specific Persian body for apply / review screens."""
+    import html
+
+    from app.services.billing import BILLING_MODE_PAYG
+    from app.services.formatting import format_toman
+
+    mode = reseller_plan_mode_of(plan)
+    desc = html.escape((plan.description or "").strip() or "بدون توضیح")
+    lines = [
+        desc,
+        "",
+        f"نوع: <b>{reseller_billing_mode_label(mode)}</b>",
+        f"قیمت ورود: <b>{format_toman(plan.price, currency) if plan.price else 'رایگان'}</b>",
+    ]
+    if mode == BILLING_MODE_PAYG:
+        rate = int(getattr(plan, "price_per_gb", 0) or 0)
+        lines.append(
+            f"نرخ مصرف: <b>{format_toman(rate, currency) if rate else '—'} / GB</b>"
+        )
+        groups = (getattr(plan, "pg_group_ids", None) or "").strip()
+        if groups:
+            lines.append(f"گروه‌های پاسارگارد: <code>{html.escape(groups)}</code>")
+    else:
+        lines.append(f"کمیسیون: <b>{int(plan.commission_percent or 0)}٪</b>")
+    return "\n".join(lines)
 
 
 async def list_reseller_plans(session: AsyncSession) -> list[ResellerPlan]:

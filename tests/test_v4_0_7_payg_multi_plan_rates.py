@@ -36,7 +36,7 @@ class PaygPlanUiTests(unittest.TestCase):
         self.assertIn("reseller-price-per-gb-field", html)
         self.assertIn('name="price_per_gb"', html)
         self.assertIn("reseller-payg-groups", html)
-        self.assertIn("/GB", html)
+        self.assertIn("نرخ / GB", html)
 
     def test_edit_has_payg_rate(self):
         html = (ROOT / "app/web/templates/reseller_plan_edit.html").read_text(encoding="utf-8")
@@ -88,8 +88,8 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.0.8")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.0.8")
+        self.assertEqual(__version__, "4.0.9")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.0.9")
 
 
 if __name__ == "__main__":
