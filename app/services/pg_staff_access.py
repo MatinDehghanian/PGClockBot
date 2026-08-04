@@ -747,12 +747,17 @@ async def inventory_staff_remediation(
     return out
 
 
-async def revoke_web_access(session: AsyncSession, pg_username: str) -> bool:
+async def revoke_web_access(
+    session: AsyncSession, pg_username: str, *, commit: bool = True
+) -> bool:
     row = await access_by_pg_username(session, pg_username)
     if not row:
         return False
     await session.delete(row)
-    await session.commit()
+    if commit:
+        await session.commit()
+    else:
+        await session.flush()
     try:
         from app.services.pasarguard import reset_pg
 

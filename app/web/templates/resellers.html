@@ -116,24 +116,24 @@
             </form>
             <a class="btn btn-ghost btn-sm" href="/resellers/{{ u.id }}/edit">ویرایش</a>
             <form method="post" action="/resellers/{{ u.id }}/delete"
-                  data-confirm="نمایندگی حذف شود و علت برای کاربر ارسال شود؟"
-                  data-confirm-title="حذف نمایندگی"
+                  data-confirm="نمایندگی حذف شود؟ ادمین پاسارگارد متصل هم حذف می‌شود و علت برای کاربر ارسال می‌گردد."
+                  data-confirm-title="حذف نمایندگی (+ ادمین پاسارگارد)"
                   data-confirm-danger="1"
                   data-confirm-reason="1"
                   data-confirm-reason-label="علت حذف نمایندگی"
                   data-confirm-reason-name="reason"
-                  data-confirm-label="حذف نمایندگی">
+                  data-confirm-label="حذف نمایندگی و ادمین">
               <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف نمایندگی</button>
             </form>
             <form method="post" action="/resellers/{{ u.id }}/delete-user"
-                  data-confirm="کاربر و تمام داده‌های مرتبط کامل حذف شوند؟ برگشت‌ناپذیر است."
-                  data-confirm-title="حذف کامل کاربر"
+                  data-confirm="کاربر، نمایندگی، ادمین پاسارگارد متصل و تمام داده‌های مرتبط کامل حذف شوند؟ برگشت‌ناپذیر است."
+                  data-confirm-title="حذف کامل (+ ادمین پاسارگارد)"
                   data-confirm-danger="1"
                   data-confirm-reason="1"
                   data-confirm-reason-label="علت حذف کامل کاربر"
                   data-confirm-reason-name="reason"
-                  data-confirm-label="حذف کاربر">
+                  data-confirm-label="حذف کامل">
               <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف کاربر</button>
             </form>

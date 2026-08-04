@@ -2513,7 +2513,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.notifications import actor_label_from_staff, notify_account_edit
-        from app.services.users import delete_bot_user
+        from app.services.users import delete_bot_user, friendly_user_delete_error
 
         form = await request.form()
         reason = str(form.get("reason") or "").strip()
@@ -2555,7 +2555,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         except ValueError as e:
             return _redirect_msg("/users", err=str(e))
         except Exception as e:
-            return _redirect_msg("/users", err=str(e))
+            return _redirect_msg("/users", err=friendly_user_delete_error(e))
         label = info.get("name") or info.get("telegram_id")
         return _redirect_msg("/users", ok=f"کاربر {label} حذف شد")
 

@@ -421,7 +421,11 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         except ValueError as e:
             return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
         except Exception as e:
-            return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
+            from app.services.users import friendly_user_delete_error
+
+            return RedirectResponse(
+                f"/resellers?err={_q(friendly_user_delete_error(e))}", status_code=303
+            )
         from app.services.notifications import actor_label_from_staff
 
         user = await session.get(BotUser, user_id)
@@ -438,8 +442,17 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             notified = await notify_reseller_revoked(int(info["telegram_id"]), reason)
         label = info.get("telegram_id") or user_id
         note = " — پیام علت ارسال شد" if notified else " — پیام تلگرام ارسال نشد"
+        pg_note = ""
+        if info.get("pg_admin_username"):
+            if info.get("pg_admin_deleted"):
+                pg_note = f" — ادمین پاسارگارد «{info['pg_admin_username']}» هم حذف شد"
+            else:
+                pg_note = (
+                    f" — ادمین پاسارگارد «{info['pg_admin_username']}» حذف نشد "
+                    "(ممکن است از قبل نبوده باشد)"
+                )
         return RedirectResponse(
-            f"/resellers?ok={_q(f'نمایندگی {label} حذف شد{note}')}",
+            f"/resellers?ok={_q(f'نمایندگی {label} حذف شد{note}{pg_note}')}",
             status_code=303,
         )
 
@@ -547,7 +560,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 f"/resellers?err={_q('علت حذف کاربر الزامی است')}",
                 status_code=303,
             )
-        from app.services.users import delete_bot_user
+        from app.services.users import delete_bot_user, friendly_user_delete_error
         from app.services.notifications import actor_label_from_staff, notify_account_edit
 
         # Notify before delete while telegram_id still available
@@ -570,7 +583,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         except ValueError as e:
             return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
         except Exception as e:
-            return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
+            return RedirectResponse(
+                f"/resellers?err={_q(friendly_user_delete_error(e))}", status_code=303
+            )
         label = info.get("name") or info.get("telegram_id")
         return RedirectResponse(
             f"/resellers?ok={_q(f'کاربر {label} کامل حذف شد')}",

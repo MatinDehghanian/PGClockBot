@@ -1184,6 +1184,61 @@ async def provision_existing_pg_admin(
     return profile, setup_hint, None
 
 
+async def convert_staff_to_reseller(
+    session: AsyncSession,
+    *,
+    pg_username: str,
+    plan_id: int,
+    password: str = "",
+    note: str = "",
+) -> tuple[ResellerProfile | None, str | None, str | None]:
+    """Owner-approved explicit migration: pg_staff → reseller (one web path).
+
+    Removes the staff row first, then provisions reseller with the same PG admin.
+    Does not create a second grant; keeps fail-closed credential/quota isolation.
+    """
+    from app.services.pg_staff_access import access_by_pg_username, revoke_web_access
+    from app.services.secret_box import decrypt_secret
+
+    pg_u = (pg_username or "").strip().lower()
+    if not pg_u:
+        return None, None, "نام ادمین پاسارگارد الزامی است"
+
+    staff = await access_by_pg_username(session, pg_u)
+    if staff is None:
+        return None, None, "دسترسی ادمین فرعی برای این ادمین وجود ندارد"
+
+    pwd = (password or "").strip()
+    if not pwd:
+        pwd = (decrypt_secret(staff.pg_admin_password_enc) or "").strip()
+    if not pwd:
+        return (
+            None,
+            None,
+            "رمز عبور الزامی است. "
+            "علت: اعتبارنامه پاسارگارد برای ادمین فرعی ذخیره نشده. "
+            "راه حل: رمز مشترک را در فرم وارد کنید.",
+        )
+
+    web_u = (staff.web_username or pg_u).strip().lower() or pg_u
+    # Drop staff row without committing so a failed provision can roll back.
+    await revoke_web_access(session, pg_u, commit=False)
+
+    profile, hint, err = await provision_existing_pg_admin(
+        session,
+        pg_username=pg_u,
+        web_username=web_u,
+        password=pwd,
+        plan_id=plan_id,
+        note=note or "converted from pg_staff",
+    )
+    if err:
+        # Staff delete was flushed but not committed; restore prior state.
+        await session.rollback()
+        return None, None, f"تبدیل به نماینده ناموفق بود: {err}"
+    return profile, hint, None
+
+
 def bot_needs_setup(profile: ResellerProfile | None) -> bool:
     """True when reseller/shop owner has web access but no dedicated Telegram bot yet."""
     if not profile or not profile.is_active:

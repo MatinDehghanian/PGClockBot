@@ -1459,15 +1459,20 @@ def register_pg_pages(
         form = await request.form()
         role_raw = str(form.get("role_id") or "").strip()
         note = str(form.get("note") or "").strip()
+        # as_reseller: checkbox absent when OFF (default UI is ON/checked)
+        as_reseller = str(form.get("as_reseller") or "").strip().lower() in {
+            "1",
+            "on",
+            "true",
+            "yes",
+        }
         grant_web = str(form.get("grant_web") or "").strip().lower() in {
             "1",
             "on",
             "true",
             "yes",
         }
-        # Default ON when checkbox present in form; if missing (old clients) still grant
-        if "grant_web" not in form:
-            grant_web = True
+        plan_raw = str(form.get("plan_id") or "").strip()
         data_limit_gb = str(form.get("data_limit_gb") or "").strip()
         max_users = str(form.get("max_users") or "").strip()
         max_hwid = str(form.get("max_hwid_per_user") or "").strip()
@@ -1477,6 +1482,11 @@ def register_pg_pages(
         uname, cerr = validate_credentials(username, password, lowercase_username=False)
         if cerr:
             return RedirectResponse(f"/pg/admins?err={_q(cerr)}", status_code=303)
+        if as_reseller and not plan_raw.isdigit():
+            return RedirectResponse(
+                f"/pg/admins?err={_q('برای ساخت به‌عنوان نماینده، انتخاب پلن نمایندگی الزامی است')}",
+                status_code=303,
+            )
         payload: dict = {
             "username": uname,
             "password": password,
@@ -1519,7 +1529,27 @@ def register_pg_pages(
                 return RedirectResponse(f"/pg/admins?err={_pg_err(e)}", status_code=303)
 
         msg = f"ادمین «{uname}» در پاسارگارد ساخته شد"
-        if grant_web:
+        # One web path only: reseller XOR pg_staff (never both)
+        if as_reseller:
+            from app.services.resellers import provision_existing_pg_admin
+
+            _profile, hint, werr = await provision_existing_pg_admin(
+                session,
+                pg_username=uname,
+                web_username=uname,
+                password=password,
+                plan_id=int(plan_raw),
+                note=note or "auto reseller from create admin",
+            )
+            if werr:
+                return RedirectResponse(
+                    f"/pg/admins?err={_q(f'{msg} — ولی نمایندگی ساخته نشد: {werr}')}",
+                    status_code=303,
+                )
+            msg += " و به‌عنوان نماینده (پنل ربات + پاسارگارد) فعال شد"
+            if hint:
+                msg += " — ربات شخصی را از تنظیمات فروشگاه راه‌اندازی کنید"
+        elif grant_web:
             from app.services.pg_staff_access import grant_web_access
 
             row, werr = await grant_web_access(
@@ -1535,7 +1565,7 @@ def register_pg_pages(
                     f"/pg/admins?err={_q(f'{msg} — ولی دسترسی وب ساخته نشد: {werr}')}",
                     status_code=303,
                 )
-            msg += " و دسترسی وب‌پنل با همان یوزر/رمز فعال شد"
+            msg += " و دسترسی وب ادمین فرعی (فقط پاسارگارد) فعال شد"
         return RedirectResponse(f"/pg/admins?ok={_q(msg)}", status_code=303)
 
     @app.post("/pg/admins/{username}/web-access")
@@ -1677,6 +1707,45 @@ def register_pg_pages(
         )
         return RedirectResponse(f"/pg/admins?ok={_q(msg)}", status_code=303)
 
+    @app.post("/pg/admins/{username}/convert-to-reseller")
+    async def pg_admins_convert_to_reseller(
+        username: str,
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session=Depends(get_db),
+    ):
+        """Explicit Owner action: pg_staff → reseller (never silent)."""
+        from app.services.resellers import convert_staff_to_reseller
+
+        form = await request.form()
+        plan_raw = str(form.get("plan_id") or "").strip()
+        web_password = str(form.get("web_password") or "")
+        note = str(form.get("note") or "").strip()
+        pg_u = (username or "").strip()
+        if not pg_u:
+            return RedirectResponse(f"/pg/admins?err={_q('نام ادمین نامعتبر است')}", status_code=303)
+        if not plan_raw.isdigit():
+            return RedirectResponse(
+                f"/pg/admins?err={_q('انتخاب پلن نمایندگی الزامی است')}",
+                status_code=303,
+            )
+        _profile, hint, err = await convert_staff_to_reseller(
+            session,
+            pg_username=pg_u,
+            plan_id=int(plan_raw),
+            password=web_password,
+            note=note,
+        )
+        if err:
+            return RedirectResponse(f"/pg/admins?err={_q(err)}", status_code=303)
+        msg = (
+            f"ادمین فرعی «{pg_u}» به نماینده تبدیل شد "
+            "(دسترسی ادمین فرعی حذف و پنل ربات/فروشگاه فعال شد)"
+        )
+        if hint:
+            msg += " — ربات شخصی را از تنظیمات فروشگاه راه‌اندازی کنید"
+        return RedirectResponse(f"/pg/admins?ok={_q(msg)}", status_code=303)
+
     @app.post("/pg/admins/{username}/web-access/revoke")
     async def pg_admins_web_access_revoke(
         username: str,
@@ -1732,14 +1801,57 @@ def register_pg_pages(
         staff: dict = Depends(require_admin),
         session=Depends(get_db),
     ):
-        from app.services.pg_staff_access import revoke_web_access
+        from app.services.pg_staff_access import (
+            access_by_pg_username,
+            reseller_by_pg_username,
+            revoke_web_access,
+        )
+        from app.services.resellers import revoke_reseller
 
-        try:
-            await get_pg().delete_admin(username)
-        except Exception as e:
-            return RedirectResponse(f"/pg/admins?err={_q(e)}", status_code=303)
-        try:
-            await revoke_web_access(session, username)
-        except Exception:
-            pass
-        return RedirectResponse(f"/pg/admins?ok={_q('حذف شد')}", status_code=303)
+        pg_u = (username or "").strip()
+        if not pg_u:
+            return RedirectResponse(f"/pg/admins?err={_q('نام ادمین نامعتبر است')}", status_code=303)
+
+        reseller = await reseller_by_pg_username(session, pg_u)
+        staff_row = await access_by_pg_username(session, pg_u)
+        notes: list[str] = []
+
+        if reseller is not None:
+            # Cascade: removing PG admin removes linked shop/reseller path too
+            try:
+                info = await revoke_reseller(
+                    session,
+                    int(reseller.user_id),
+                    delete_pg_admin=True,
+                    reason="حذف ادمین پاسارگارد از وب‌پنل",
+                )
+                notes.append("نمایندگی/ربات فروشگاه هم حذف شد")
+                if info.get("pg_admin_deleted"):
+                    notes.append("ادمین پاسارگارد حذف شد")
+                else:
+                    # Profile removed; PG may already be gone — try direct delete
+                    try:
+                        await get_pg().delete_admin(pg_u)
+                        notes.append("ادمین پاسارگارد حذف شد")
+                    except Exception:
+                        notes.append("ادمین پاسارگارد از قبل نبود یا حذف نشد")
+            except Exception as e:
+                return RedirectResponse(f"/pg/admins?err={_pg_err(e)}", status_code=303)
+        else:
+            try:
+                await get_pg().delete_admin(pg_u)
+                notes.append("ادمین پاسارگارد حذف شد")
+            except Exception as e:
+                return RedirectResponse(f"/pg/admins?err={_pg_err(e)}", status_code=303)
+
+        if staff_row is not None or await access_by_pg_username(session, pg_u):
+            try:
+                await revoke_web_access(session, pg_u)
+                notes.append("دسترسی ادمین فرعی وب حذف شد")
+            except Exception:
+                pass
+
+        msg = "حذف شد"
+        if notes:
+            msg += " — " + "؛ ".join(notes)
+        return RedirectResponse(f"/pg/admins?ok={_q(msg)}", status_code=303)

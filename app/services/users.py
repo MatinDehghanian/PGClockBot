@@ -962,10 +962,17 @@ async def delete_bot_user(
 
     from app.db.models import (
         Order,
+        PanelTicket,
+        PanelTicketMessage,
         Payment,
+        Plan,
         ResellerApplication,
+        ResellerBillingRate,
+        ResellerBillingTransaction,
+        ResellerSetting,
         Ticket,
         TicketMessage,
+        TrialClaim,
         UserService,
         WalletTransaction,
     )
@@ -1073,6 +1080,46 @@ async def delete_bot_user(
         delete(WalletTransaction).where(WalletTransaction.user_id == user_id)
     )
 
+    # Shop/reseller rows that FK to bot_users (no ON DELETE CASCADE in schema)
+    await session.execute(
+        delete(ResellerSetting).where(ResellerSetting.reseller_user_id == user_id)
+    )
+    await session.execute(
+        delete(ResellerBillingTransaction).where(
+            ResellerBillingTransaction.reseller_user_id == user_id
+        )
+    )
+    await session.execute(
+        delete(ResellerBillingRate).where(ResellerBillingRate.reseller_user_id == user_id)
+    )
+    plan_ids = list(
+        (
+            await session.execute(select(Plan.id).where(Plan.owner_reseller_id == user_id))
+        ).scalars().all()
+    )
+    if plan_ids:
+        await session.execute(
+            update(Order).where(Order.plan_id.in_(plan_ids)).values(plan_id=None)
+        )
+        await session.execute(delete(Plan).where(Plan.id.in_(plan_ids)))
+    panel_ticket_ids = list(
+        (
+            await session.execute(
+                select(PanelTicket.id).where(PanelTicket.opener_reseller_user_id == user_id)
+            )
+        ).scalars().all()
+    )
+    if panel_ticket_ids:
+        await session.execute(
+            delete(PanelTicketMessage).where(
+                PanelTicketMessage.ticket_id.in_(panel_ticket_ids)
+            )
+        )
+        await session.execute(
+            delete(PanelTicket).where(PanelTicket.id.in_(panel_ticket_ids))
+        )
+    await session.execute(delete(TrialClaim).where(TrialClaim.user_id == user_id))
+
     await session.delete(user)
     await session.commit()
 
@@ -1083,3 +1130,21 @@ async def delete_bot_user(
         "services_removed": len(svc_ids),
         "pg_services_deleted": pg_services_deleted,
     }
+
+
+def friendly_user_delete_error(exc: Exception) -> str:
+    """Short Persian message for hard-delete failures (hide raw SQL)."""
+    text = str(exc or "")
+    low = text.lower()
+    if (
+        "foreign key" in low
+        or "integrityerror" in low
+        or "constraint failed" in low
+        or isinstance(exc, IntegrityError)
+    ):
+        return (
+            "حذف کاربر ممکن نشد چون هنوز دادهٔ وابسته‌ای به این حساب وصل است. "
+            "علت: محدودیت یکپارچگی پایگاه‌داده (کلید خارجی). "
+            "راه حل: دوباره تلاش کنید؛ اگر تکرار شد از پشتیبانی بخواهید لاگ سرور را بررسی کند."
+        )
+    return (text or "حذف ناموفق بود")[:320]
