@@ -81,13 +81,13 @@ pgclock health
 
 ---
 
-## Rollback
+## Final verification (Phase B complete)
 
-```bash
-sudo rm -f /usr/local/bin/pgclock \
-  /usr/local/lib/pgclockbot/install_root \
-  /usr/local/lib/pgclockbot/pgclock-wrapper
-# Optional: keep ctl/sudoers if panel restart helper is still needed.
+```text
+Fresh shell (env -i) from random dir → pgclock status OK (resolves install_root)
+Service detect: status shows pgclockbot (active|inactive); start/stop/restart OK
+  (verified with systemctl shim — this agent host has no systemd PID 1)
+Health against live panel → /health {"ok": true}
+Failure messages: unknown cmd exit 2; bad restore id / migrate usage exit 1 with clear text
+backup.py unchanged in Phase B (diff vs Phase A tip = 0); CLI wraps create_backup/restore_backup
 ```
-
-Interactive `bash pgclock.sh` continues to work without the global binary.
