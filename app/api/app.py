@@ -1418,11 +1418,16 @@ def create_api_app(lifespan=None) -> FastAPI:
             feature_perms = FEATURE_PERMS
             try:
                 reseller_plans = await list_reseller_plans(session)
-            except Exception as e:
+            except Exception:
                 # Missing additive columns (e.g. billing_mode before migrate) must
                 # not 500 the whole plans page — user catalog still loads.
+                import logging
+
+                logging.getLogger(__name__).exception("list_reseller_plans failed on /plans")
                 reseller_plans = []
-                reseller_plans_err = str(e)
+                reseller_plans_err = (
+                    "بارگذاری پلن‌های نمایندگی ناموفق بود — پس از به‌روزرسانی، سرویس را یک‌بار ری‌استارت کنید."
+                )
             try:
                 from app.services.pasarguard import get_pg
 
