@@ -225,7 +225,7 @@
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
 
-    <div class="form-row" style="margin-bottom: var(--space-2)">
+    <div class="form-row" style="margin-bottom: var(--space-2)" data-ui-select-watch>
       <label class="form-field">مخاطب
         <select id="plan-audience">
           <option value="users">کاربران</option>
@@ -235,11 +235,9 @@
         </select>
       </label>
       <label class="form-field">نوع پلن
-        <select id="plan-kind">
+        {# Options are filled by JS from USER_KINDS / RESELLER_KINDS — must stay dynamic #}
+        <select id="plan-kind" data-plan-kind-dynamic="1">
           <option value="fixed">ثابت</option>
-          <option value="custom">دلخواه</option>
-          <option value="trial">تست</option>
-          <option value="wholesale">فروش عمده</option>
         </select>
       </label>
     </div>
@@ -588,20 +586,46 @@
     {value: 'payg', label: 'Pay As You Go'}
   ];
 
+  function currentAudience(){
+    if (!audienceSel) return 'users';
+    const raw = audienceSel.value;
+    if (raw === 'resellers' && isPlatformAdmin) return 'resellers';
+    return 'users';
+  }
+
+  function kindsFor(audience){
+    return audience === 'resellers' ? RESELLER_KINDS : USER_KINDS;
+  }
+
+  /** Rebuild نوع پلن options for the active audience. Custom ui-select watches mutations. */
   function setKindOptions(audience, preferKind){
     if (!kindSel) return;
-    const opts = audience === 'resellers' ? RESELLER_KINDS : USER_KINDS;
+    const opts = kindsFor(audience);
     const allowed = opts.map((o) => o.value);
-    let next = preferKind && allowed.indexOf(preferKind) >= 0 ? preferKind : (kindSel.value && allowed.indexOf(kindSel.value) >= 0 ? kindSel.value : opts[0].value);
-    kindSel.innerHTML = '';
+    let next = opts[0].value;
+    if (preferKind && allowed.indexOf(preferKind) >= 0) {
+      next = preferKind;
+    } else if (kindSel.value && allowed.indexOf(kindSel.value) >= 0) {
+      next = kindSel.value;
+    }
+    // Replace options atomically so MutationObserver rebuilds the custom menu
+    const frag = document.createDocumentFragment();
     opts.forEach((o) => {
       const el = document.createElement('option');
       el.value = o.value;
       el.textContent = o.label;
       if (o.value === next) el.selected = true;
-      kindSel.appendChild(el);
+      frag.appendChild(el);
     });
+    kindSel.innerHTML = '';
+    kindSel.appendChild(frag);
     kindSel.value = next;
+  }
+
+  function setVisible(el, show){
+    if (!el) return;
+    el.hidden = !show;
+    el.style.display = show ? '' : 'none';
   }
 
   function syncResellerBilling(){
@@ -611,26 +635,34 @@
     const commissionInput = document.getElementById('reseller-commission-input');
     const rateField = document.getElementById('reseller-price-per-gb-field');
     const groupsField = document.getElementById('reseller-payg-groups');
+    const hint = document.getElementById('reseller-mode-hint');
     const isPayg = kind === 'payg';
     if (billing) billing.value = isPayg ? 'payg' : 'fixed';
-    if (commissionField) {
-      commissionField.style.display = isPayg ? 'none' : '';
-      if (isPayg && commissionInput) commissionInput.value = '0';
+    setVisible(commissionField, !isPayg);
+    if (isPayg && commissionInput) commissionInput.value = '0';
+    setVisible(rateField, isPayg);
+    setVisible(groupsField, isPayg);
+    if (hint) {
+      hint.textContent = isPayg
+        ? 'نوع: Pay As You Go — نرخ هر گیگ و گروه‌های پاسارگارد را تنظیم کنید.'
+        : 'نوع: ثابت — کمیسیون فروش را تنظیم کنید.';
     }
-    if (rateField) rateField.hidden = !isPayg;
-    if (groupsField) groupsField.hidden = !isPayg;
   }
 
-  function syncAudienceAndKind(){
-    if (!audienceSel || !kindSel) return;
-    const audience = audienceSel.value === 'resellers' && isPlatformAdmin ? 'resellers' : 'users';
-    if (audienceSel.value !== audience) audienceSel.value = audience;
-    setKindOptions(audience, kindSel.value);
-    const kind = kindSel.value;
+  function hideAllPanels(){
     Object.keys(panels).forEach((k) => {
       const el = panels[k];
       if (el) el.hidden = true;
     });
+  }
+
+  function syncAudienceAndKind(){
+    if (!audienceSel || !kindSel) return;
+    const audience = currentAudience();
+    if (audienceSel.value !== audience) audienceSel.value = audience;
+    setKindOptions(audience, kindSel.value);
+    const kind = kindSel.value;
+    hideAllPanels();
     if (audience === 'resellers') {
       if (panels.resellers) panels.resellers.hidden = false;
       syncResellerBilling();
@@ -645,15 +677,26 @@
     let aud = audience || 'users';
     if (aud === 'resellers' && !isPlatformAdmin) aud = 'users';
     audienceSel.value = aud;
-    setKindOptions(aud, kind || 'fixed');
-    if (kind) kindSel.value = kind;
+    // Force kind options for this audience first, then apply preferred kind
+    setKindOptions(aud, kind || kindsFor(aud)[0].value);
     syncAudienceAndKind();
   }
 
-  if (audienceSel) audienceSel.addEventListener('change', () => {
-    setKindOptions(audienceSel.value, null);
-    syncAudienceAndKind();
-  });
+  if (audienceSel) {
+    audienceSel.addEventListener('change', () => {
+      const audience = currentAudience();
+      // Switching audience: reset to the first kind of that audience
+      setKindOptions(audience, kindsFor(audience)[0].value);
+      hideAllPanels();
+      if (audience === 'resellers') {
+        if (panels.resellers) panels.resellers.hidden = false;
+        syncResellerBilling();
+      } else {
+        const key = 'users:' + kindSel.value;
+        if (panels[key]) panels[key].hidden = false;
+      }
+    });
+  }
   if (kindSel) kindSel.addEventListener('change', syncAudienceAndKind);
 
   document.addEventListener('click', (e) => {
@@ -664,7 +707,6 @@
     if (hasKind || hasAud) {
       applyPlanOpen(btn.getAttribute('data-plan-audience') || 'users', btn.getAttribute('data-plan-kind') || 'fixed');
     } else {
-      // «افزودن پلن»: users/fixed، یا resellers بر اساس هش
       const preferReseller = isPlatformAdmin && (location.hash === '#reseller-plans' || location.hash === '#reseller-plans-fixed' || location.hash === '#reseller-plans-payg');
       const preferPayg = location.hash === '#reseller-plans-payg';
       applyPlanOpen(preferReseller ? 'resellers' : 'users', preferPayg ? 'payg' : 'fixed');
@@ -762,6 +804,8 @@
     if (form) form.addEventListener('submit', syncHidden);
   })();
 
+  // Initial: user kinds
+  setKindOptions('users', 'fixed');
   syncAudienceAndKind();
 
   const hash = location.hash || '';
