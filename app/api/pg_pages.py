@@ -289,6 +289,31 @@ def register_pg_pages(
                 unread=getattr(request.state, "panel_tickets_unread", None),
             )
 
+        # Phase D3 Q3: staff overview CTA when enc missing or username mismatched
+        staff_remediation = None
+        if staff.get("role") == "pg_staff":
+            from app.services.pg_staff_access import (
+                access_by_web_username,
+                staff_remediation_flags,
+                staff_username_aligned,
+            )
+
+            login_u = (
+                (request.session.get("username") or staff.get("username") or "")
+                .strip()
+            )
+            staff_row = await access_by_web_username(session, login_u) if login_u else None
+            if staff_row is not None:
+                flags = staff_remediation_flags(staff_row)
+                if flags["needs_remediation"]:
+                    staff_remediation = {
+                        **flags,
+                        # Self-serve /security only when username already equals PG
+                        "can_self_serve": staff_username_aligned(staff_row),
+                        "web_username": staff_row.web_username,
+                        "pg_username": staff_row.pg_username,
+                    }
+
         return render(
             request,
             "pg_home.html",
@@ -301,6 +326,7 @@ def register_pg_pages(
                 flash_err=err,
                 active="pg",
                 ticket_alert=ticket_alert,
+                staff_remediation=staff_remediation,
             ),
         )
 
@@ -1347,6 +1373,13 @@ def register_pg_pages(
         form = await request.form()
         web_password = str(form.get("web_password") or "")
         note = str(form.get("note") or "").strip()
+        # D3 Q1 A: explicit confirm-align checkbox (never silent rename)
+        confirm_align = str(form.get("confirm_align") or "").strip().lower() in {
+            "1",
+            "on",
+            "true",
+            "yes",
+        }
         pg_u = (username or "").strip()
         if not pg_u:
             return RedirectResponse(f"/pg/admins?err={_q('نام ادمین نامعتبر است')}", status_code=303)
@@ -1376,6 +1409,7 @@ def register_pg_pages(
                 password=web_password,
                 note=note,
                 is_active=True,
+                confirm_align=confirm_align,
             )
         else:
             row, err = await grant_web_access(

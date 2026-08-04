@@ -18,6 +18,28 @@
 </div>
 {% endif %}
 
+{% if staff_remediation %}
+{# Phase D3 Q3: CTA when pg_staff credentials incomplete or username mismatched #}
+<div class="flash warn home-update-banner">
+  <div class="home-update-copy">
+    {% if not staff_remediation.username_aligned %}
+    <strong>نام کاربری وب با پاسارگارد هماهنگ نیست</strong>
+    <span class="muted">ورود وب کار می‌کند، ولی ویرایش/همگام‌سازی رمز تا هم‌ترازسازی توسط Owner ممکن نیست.
+      از ادمین اصلی بخواهید در «ادمین‌ها» دسترسی ادمین فرعی را ویرایش کند.</span>
+    {% elif not staff_remediation.credentials_ready %}
+    <strong>اعتبارنامه پاسارگارد ذخیره نشده</strong>
+    <span class="muted">منوهای داده تا همگام‌سازی رمز محدود می‌مانند. رمز را از امنیت تغییر دهید یا از Owner بخواهید رمز را تنظیم کند.</span>
+    {% else %}
+    <strong>نیاز به تکمیل دسترسی پاسارگارد</strong>
+    <span class="muted">برای دسترسی کامل به منوهای داده، همگام‌سازی رمز لازم است.</span>
+    {% endif %}
+  </div>
+  {% if staff_remediation.can_self_serve %}
+  <a class="btn btn-sm" href="/security">تغییر رمز</a>
+  {% endif %}
+</div>
+{% endif %}
+
 {% if not is_admin %}
   {% set ov = reseller_overview or {} %}
   {% if ov.ready %}

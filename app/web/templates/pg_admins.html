@@ -64,6 +64,14 @@
               {% if st.get('is_active') %}فعال{% else %}غیرفعال{% endif %}
             </span>
             <span class="mono" dir="ltr">{{ st.get('web_username') }}</span>
+            {% if st.get('credentials_ready') %}
+            <span class="badge approved">رمز PG ذخیره‌شده</span>
+            {% else %}
+            <span class="badge warn">نیاز به همگام‌سازی رمز</span>
+            {% endif %}
+            {% if st.get('username_aligned') is sameas false %}
+            <span class="badge danger">نام کاربری ناهماهنگ</span>
+            {% endif %}
           </div>
           {% else %}
           <span class="muted">—</span>
@@ -124,11 +132,27 @@
     <form method="post" action="/pg/admins/{{ uname }}/web-access/staff" class="form-stack">
       <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
         — فقط منوی پاسارگارد؛ فروشگاه/ربات ساخته نمی‌شود.</p>
+      {% if src == 'pg_staff' and st.get('username_aligned') is sameas false %}
+      <div class="flash warn">
+        نام کاربری وب فعلی (<span class="mono" dir="ltr">{{ st.get('web_username') }}</span>)
+        با پاسارگارد (<span class="mono" dir="ltr">{{ uname|lower }}</span>) یکی نیست.
+        برای ادامه، هم‌ترازسازی را صریحاً تأیید کنید.
+      </div>
+      {% endif %}
       <label class="form-field">نام کاربری وب‌پنل
         <input name="web_username" required autocomplete="off" dir="ltr" readonly
           value="{{ uname|lower }}" />
         <small class="muted">باید دقیقاً همان نام ادمین پاسارگارد باشد (ورود یکپارچه)</small>
       </label>
+      {% if src == 'pg_staff' and st.get('username_aligned') is sameas false %}
+      <label class="form-field">
+        <span class="ui-check">
+          <input type="checkbox" name="confirm_align" value="1" required />
+          هم‌ترازسازی نام کاربری با پاسارگارد
+        </span>
+        <small class="muted">بدون این تأیید، نام کاربری تغییر نمی‌کند (فاز D3)</small>
+      </label>
+      {% endif %}
       <label class="form-field">رمز عبور وب‌پنل
         <input name="web_password" type="password" {% if src == 'none' %}required{% endif %} autocomplete="new-password"
           placeholder="{% if src == 'pg_staff' %}خالی = حفظ رمز فعلی (اگر اعتبارنامه ذخیره شده){% else %}رمز قوی{% endif %}" />
