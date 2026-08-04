@@ -1465,6 +1465,10 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   background: var(--bg-card);
   text-align: start;
 }
+/* Author .flash { display:flex } would otherwise override UA [hidden] on login */
+.flash[hidden] {
+  display: none !important;
+}
 .flash > .flash-copy,
 .flash > .home-update-copy,
 .flash > .dash-bot-setup-inner {

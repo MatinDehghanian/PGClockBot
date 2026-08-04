@@ -97,13 +97,15 @@
             {% elif src == 'pg_staff' %}
             <button type="button" class="btn btn-sm btn-ghost"
               data-modal-open="modal-staff-{{ loop.index }}">ویرایش دسترسی ادمین فرعی</button>
+            <button type="button" class="btn btn-sm"
+              data-modal-open="modal-convert-{{ loop.index }}">تبدیل به نماینده</button>
             <form method="post" action="/pg/admins/{{ uname }}/web-access/toggle">
               <button class="btn btn-sm btn-ghost" type="submit">
                 {% if st.get('is_active') %}غیرفعال کردن{% else %}فعال کردن{% endif %}
               </button>
             </form>
             <form method="post" action="/pg/admins/{{ uname }}/web-access/revoke"
-              data-confirm="دسترسی وب‌پنل حذف شود؟" data-confirm-title="حذف دسترسی وب" data-confirm-danger="1" data-confirm-label="حذف دسترسی">
+              data-confirm="دسترسی وب ادمین فرعی حذف شود؟ ادمین پاسارگارد باقی می‌ماند." data-confirm-title="حذف دسترسی وب" data-confirm-danger="1" data-confirm-label="حذف دسترسی">
               <button class="btn btn-sm btn-danger" type="submit">حذف دسترسی</button>
             </form>
             {% elif src == 'none' %}
@@ -113,7 +115,18 @@
               data-modal-open="modal-reseller-{{ loop.index }}">اعطای نماینده</button>
             {% endif %}
             {% if uname and src != 'owner' %}
-            <form method="post" action="/pg/admins/{{ uname }}/delete" data-confirm="این ادمین حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
+            <form method="post" action="/pg/admins/{{ uname }}/delete"
+              {% if src == 'reseller' %}
+              data-confirm="ادمین پاسارگارد «{{ uname }}» و نمایندگی/ربات فروشگاه متصل هم حذف شوند؟ این عمل برگشت‌ناپذیر است."
+              data-confirm-title="حذف ادمین + نماینده"
+              {% elif src == 'pg_staff' %}
+              data-confirm="ادمین پاسارگارد «{{ uname }}» و دسترسی وب ادمین فرعی حذف شوند؟"
+              data-confirm-title="حذف ادمین پاسارگارد"
+              {% else %}
+              data-confirm="ادمین پاسارگارد «{{ uname }}» حذف شود؟"
+              data-confirm-title="تأیید حذف"
+              {% endif %}
+              data-confirm-danger="1" data-confirm-label="حذف">
               <button class="btn btn-sm btn-danger" type="submit">حذف ادمین</button>
             </form>
             {% endif %}
@@ -177,6 +190,47 @@
       </label>
       <div class="actions">
         <button class="btn" type="submit">{% if src == 'pg_staff' %}ذخیره{% else %}اعطای دسترسی ادمین فرعی{% endif %}</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% if src == 'pg_staff' %}
+<div class="ui-modal" id="modal-convert-{{ loop.index }}" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true">
+    <div class="ui-modal-head">
+      <h2>تبدیل به نماینده</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form method="post" action="/pg/admins/{{ uname }}/convert-to-reseller" class="form-stack js-busy-form" data-busy-label="در حال تبدیل…">
+      <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
+        — دسترسی «ادمین فرعی» حذف می‌شود و مسیر «نماینده» (پنل ربات + فروشگاه) جایگزین می‌شود.
+        هر ادمین فقط یکی از این دو مسیر را می‌تواند داشته باشد. محدودیت‌های نقش پاسارگارد و پلن نمایندگی همچنان اعمال می‌شوند.</p>
+      {% if not reseller_plans %}
+      <div class="flash warn">هنوز پلن نمایندگی فعالی ندارید — ابتدا از بخش نمایندگان یک پلن بسازید.</div>
+      {% endif %}
+      <label class="form-field">پلن نمایندگی
+        <select name="plan_id" required {% if not reseller_plans %}disabled{% endif %}>
+          <option value="">— انتخاب پلن —</option>
+          {% for p in reseller_plans or [] %}
+          <option value="{{ p.id }}">{{ p.name }}{% if p.commission_percent is not none %} · کمیسیون {{ p.commission_percent }}٪{% endif %}</option>
+          {% endfor %}
+        </select>
+        <small class="muted">دسترسی‌های داشبورد، پلن، سفارش، تنظیمات ربات و… از این پلن می‌آید</small>
+      </label>
+      <label class="form-field">رمز عبور مشترک
+        <input name="web_password" type="password" autocomplete="new-password"
+          placeholder="{% if st.get('credentials_ready') %}خالی = استفاده از رمز ذخیره‌شده{% else %}رمز الزامی است{% endif %}"
+          {% if not st.get('credentials_ready') %}required{% endif %} />
+        <small class="muted">همان رمز برای وب و پاسارگارد — اگر رمز ذخیره‌شده دارید می‌توانید خالی بگذارید</small>
+      </label>
+      <label class="form-field">یادداشت
+        <input name="note" placeholder="تبدیل از ادمین فرعی" />
+      </label>
+      <div class="actions">
+        <button class="btn" type="submit" {% if not reseller_plans %}disabled{% endif %}>تبدیل به نماینده</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
       </div>
     </form>
@@ -290,7 +344,26 @@
         <small class="muted">اختیاری — در پاسارگارد ذخیره می‌شود</small>
       </label>
       <div class="ui-switch-list">
-        {{ switch('grant_web', 'ساخت خودکار دسترسی وب‌پنل', checked=true, help='با همان یوزر و رمز — منوی پاسارگارد مطابق نقش') }}
+        {{ switch('as_reseller', 'این ادمین نماینده شود (ربات شخصی + پنل فروشگاه)', checked=true, help='ادمین پاسارگارد + دسترسی وب نماینده؛ محدودیت‌های نقش و پلن اعمال می‌شود. پیش‌فرض: فعال', id='create-as-reseller') }}
+      </div>
+      <div id="create-reseller-fields">
+        {% if not reseller_plans %}
+        <div class="flash warn">برای ساخت نماینده ابتدا از بخش نمایندگان یک پلن فعال بسازید — یا سوییچ بالا را خاموش کنید.</div>
+        {% endif %}
+        <label class="form-field">پلن نمایندگی
+          <select name="plan_id" id="create-plan-id" {% if not reseller_plans %}disabled{% endif %}>
+            <option value="">— انتخاب پلن —</option>
+            {% for p in reseller_plans or [] %}
+            <option value="{{ p.id }}">{{ p.name }}{% if p.commission_percent is not none %} · کمیسیون {{ p.commission_percent }}٪{% endif %}</option>
+            {% endfor %}
+          </select>
+          <small class="muted">دسترسی‌های پنل ربات/فروشگاه از این پلن کپی می‌شود؛ سهمیه کاربران از نقش پاسارگارد</small>
+        </label>
+      </div>
+      <div class="ui-switch-list" id="create-staff-web-wrap" hidden>
+        {{ switch('grant_web', 'دسترسی وب ادمین فرعی (فقط پاسارگارد)', checked=true, help='بدون فروشگاه/ربات — فقط منوی پاسارگارد مطابق نقش', id='create-grant-web') }}
+      </div>
+      <div class="ui-switch-list">
         {{ switch('is_sudo', 'دسترسی کامل (قدیمی)', help='فقط پنل‌های قدیمی؛ در نسخه‌های جدید از نقش استفاده کنید') }}
       </div>
       <div class="actions">
@@ -302,6 +375,25 @@
 </div>
 <script>
 (function () {
+  function syncCreateAdminMode() {
+    var asRes = document.getElementById('create-as-reseller');
+    var planWrap = document.getElementById('create-reseller-fields');
+    var staffWrap = document.getElementById('create-staff-web-wrap');
+    var planSel = document.getElementById('create-plan-id');
+    if (!asRes || !planWrap || !staffWrap) return;
+    var on = !!asRes.checked;
+    planWrap.hidden = !on;
+    staffWrap.hidden = on;
+    if (planSel) {
+      if (on) planSel.setAttribute('required', 'required');
+      else planSel.removeAttribute('required');
+    }
+  }
+  var asRes = document.getElementById('create-as-reseller');
+  if (asRes) {
+    asRes.addEventListener('change', syncCreateAdminMode);
+    syncCreateAdminMode();
+  }
   document.querySelectorAll('form.js-busy-form').forEach(function (form) {
     form.addEventListener('submit', function () {
       const btn = form.querySelector('button[type="submit"]');

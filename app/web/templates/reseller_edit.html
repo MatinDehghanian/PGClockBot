@@ -175,12 +175,12 @@
 
 <div class="card">
   <h2>حذف نمایندگی</h2>
-  <p class="muted">پروفایل نماینده و در صورت وجود ادمین پاسارگارد حذف می‌شود. علت برای کاربر در ربات ارسال می‌شود و نقشش به «کاربر» برمی‌گردد.</p>
+  <p class="muted">پروفایل نماینده و ادمین پاسارگارد متصل حذف می‌شود. علت برای کاربر در ربات ارسال می‌شود و نقشش به «کاربر» برمی‌گردد.</p>
   <form method="post" action="/resellers/{{ user.id }}/delete" class="form-stack"
-        data-confirm="نمایندگی حذف شود و علت برای کاربر ارسال شود؟"
-        data-confirm-title="حذف نمایندگی"
+        data-confirm="نمایندگی و ادمین پاسارگارد متصل حذف شوند؟ علت برای کاربر ارسال می‌شود."
+        data-confirm-title="حذف نمایندگی (+ ادمین پاسارگارد)"
         data-confirm-danger="1"
-        data-confirm-label="حذف نمایندگی">
+        data-confirm-label="حذف نمایندگی و ادمین">
     <label class="form-field">علت حذف
       
       <textarea name="reason" required minlength="3" rows="3" placeholder="مثال: نقض قوانین / عدم فعالیت / درخواست خود کاربر"></textarea>
@@ -192,10 +192,10 @@
 
 <div class="card">
   <h2>حذف کامل کاربر</h2>
-  <p class="muted">کاربر بات و تمام سفارش‌ها، سرویس‌ها و تیکت‌های مرتبط حذف می‌شوند. برگشت‌ناپذیر است.</p>
+  <p class="muted">کاربر بات، نمایندگی، ادمین پاسارگارد متصل و تمام سفارش‌ها/سرویس‌ها/تیکت‌ها حذف می‌شوند. برگشت‌ناپذیر است.</p>
   <form method="post" action="/resellers/{{ user.id }}/delete-user" class="form-stack"
-        data-confirm="کاربر کامل حذف شود؟ این عمل برگشت‌ناپذیر است."
-        data-confirm-title="حذف کامل کاربر"
+        data-confirm="کاربر کامل به‌همراه نمایندگی و ادمین پاسارگارد حذف شود؟ برگشت‌ناپذیر است."
+        data-confirm-title="حذف کامل (+ ادمین پاسارگارد)"
         data-confirm-danger="1"
         data-confirm-label="حذف کامل">
     <label class="form-field">علت حذف
