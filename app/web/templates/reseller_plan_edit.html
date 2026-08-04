@@ -6,11 +6,14 @@
   <div>
     {{ page_title('plan-edit', 'ویرایش پلن') }}
   </div>
-  <a class="btn btn-ghost" href="/resellers/plans">بازگشت</a>
+  <a class="btn btn-ghost" href="/plans#reseller-plans">بازگشت</a>
 </div>
 
+{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+
 <div class="card">
-  <form method="post" action="/resellers/plans/{{ plan.id }}/edit" class="form-stack">
+  <form method="post" action="/resellers/plans/{{ plan.id }}/edit" class="form-stack" id="reseller-plan-edit-form">
     <div class="form-row">
       <div>
         <label class="form-field">نام
@@ -23,9 +26,18 @@
         </label>
       </div>
       <div>
-        <label class="form-field">کمیسیون ٪
-          <input name="commission_percent" type="number" value="{{ plan.commission_percent }}" />
+        <label class="form-field">حالت Billing
+          <select name="billing_mode" id="edit-billing-mode">
+            <option value="fixed" {% if (plan.billing_mode or 'fixed') == 'fixed' %}selected{% endif %}>ثابت (کمیسیون)</option>
+            <option value="payg" {% if plan.billing_mode == 'payg' %}selected{% endif %}>Pay As You Go</option>
+          </select>
         </label>
+      </div>
+      <div id="edit-commission-field">
+        <label class="form-field">کمیسیون ٪
+          <input name="commission_percent" id="edit-commission-input" type="number" min="0" max="100" value="{{ plan.commission_percent if plan.commission_percent is not none else 0 }}" />
+        </label>
+        <small class="muted">اختیاری — پیش‌فرض ۰؛ فقط در حالت ثابت</small>
       </div>
       <div>
         <label class="form-field">ترتیب
@@ -64,4 +76,20 @@
     <div class="actions"><button class="btn" type="submit">ذخیره</button></div>
   </form>
 </div>
+
+<script>
+(function(){
+  const mode = document.getElementById('edit-billing-mode');
+  const field = document.getElementById('edit-commission-field');
+  const input = document.getElementById('edit-commission-input');
+  if (!mode || !field) return;
+  function sync(){
+    const payg = mode.value === 'payg';
+    field.style.display = payg ? 'none' : '';
+    if (payg && input) input.value = '0';
+  }
+  mode.addEventListener('change', sync);
+  sync();
+})();
+</script>
 {% endblock %}
