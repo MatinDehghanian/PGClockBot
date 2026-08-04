@@ -525,7 +525,10 @@ async def update_web_access(
         )
 
     pwd = (password or "").strip()
-    if pwd:
+    if not pwd:
+        # Keep existing password on edit
+        pass
+    else:
         ok, err = validate_password_strength(password)
         if not ok:
             return None, err
