@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.0.6": [
+        "رفع خطای ۵۰۰ صفحه پلن‌ها: مایگریشن ستون billing_mode برای دیتابیس‌های Alembic",
+        "حذف تب تکراری «پلن‌ها» از بخش نمایندگان (همه در /plans)",
+    ],
     "4.0.5": [
         "حذف کاربر/نماینده: هشدار موجودی کیف پول در تأیید؛ تأکید بر حذف کامل سفارش/سرویس",
         "ادغام پلن کاربران و نمایندگی در یک صفحه با مودال واحد (مخاطب + نوع پلن)",

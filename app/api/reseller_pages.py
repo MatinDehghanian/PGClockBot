@@ -48,9 +48,9 @@ def _feature_perms_from_form(form) -> str:
 
 def register_reseller_pages(app, *, render, require_admin, get_db):
     def _tabs(active: str) -> list[dict]:
+        # Plans live under unified /plans — no duplicate «پلن‌ها» tab here.
         return [
             {"href": "/resellers", "label": "لیست", "id": "list"},
-            {"href": "/plans#reseller-plans", "label": "پلن‌ها", "id": "plans"},
             {"href": "/resellers/applications", "label": "درخواست‌ها", "id": "apps"},
         ]
 

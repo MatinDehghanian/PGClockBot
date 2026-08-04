@@ -103,12 +103,17 @@ async def init_db() -> None:
             else:
                 raise
 
-    if _engine_info.is_sqlite:
-        async with engine.begin() as conn:
+    # Idempotent additive columns for DBs already stamped at an older Alembic
+    # head (create_all in 0001 only runs once). Keeps ORM fields like
+    # reseller_plans.billing_mode from 500'ing /plans before a new revision lands.
+    async with engine.begin() as conn:
+        await conn.run_sync(_migrate_sqlite_legacy)
+        if _engine_info.is_sqlite:
             await conn.execute(text("PRAGMA journal_mode=WAL"))
             await conn.execute(text("PRAGMA busy_timeout=30000"))
             await conn.execute(text("PRAGMA synchronous=NORMAL"))
             await conn.execute(text("PRAGMA foreign_keys=ON"))
+            await conn.run_sync(_ensure_indexes)
 
 
 # ---------------------------------------------------------------------------
