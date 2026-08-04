@@ -11,7 +11,13 @@
     <div><span class="muted">تعداد بکاپ‌ها</span> <strong>{{ backups|length }}</strong></div>
   </div>
 
-  <form method="post" action="/backup/create" class="settings-form">
+  <div id="backup-op-status" class="flash warn" {% if not st.state or st.state == 'idle' or st.state == 'done' %}hidden{% endif %}>
+    <strong id="backup-op-title">{% if st.state == 'running' %}عملیات در حال اجرا{% elif st.state == 'error' %}خطا{% else %}وضعیت{% endif %}</strong>
+    <span class="muted" id="backup-op-msg" style="display:block">{{ st.message or st.state or '' }}</span>
+    {% if st.safety_id %}<small id="backup-op-safety">بکاپ ایمنی: <code>{{ st.safety_id }}</code></small>{% endif %}
+  </div>
+
+  <form method="post" action="/backup/create" class="settings-form" id="backup-create-form" data-busy-label="در حال ساخت بکاپ…">
     <div class="settings-grid">
       <div class="setting-item full">
         <label>یادداشت (اختیاری)
@@ -29,7 +35,7 @@
       </div>
     </div>
     <div class="actions sticky-actions">
-      <button class="btn" type="submit">ساخت بکاپ جدید</button>
+      <button class="btn" type="submit" id="backup-create-btn">ساخت بکاپ جدید</button>
     </div>
   </form>
 </div>
@@ -37,7 +43,7 @@
 <div class="card settings-card">
   <h2>آپلود بکاپ</h2>
   <p class="muted update-card-caption">فایل ZIP بکاپ قبلی را برای بازیابی یا نگه‌داری آپلود کنید.</p>
-  <form method="post" action="/backup/upload" enctype="multipart/form-data" class="settings-form" id="backup-upload-form">
+  <form method="post" action="/backup/upload" enctype="multipart/form-data" class="settings-form" id="backup-upload-form" data-busy-label="در حال آپلود…">
     <label class="upload-box">
       <input type="file" name="file" accept=".zip,application/zip" required />
       <span class="upload-box-plus" aria-hidden="true">+</span>
@@ -47,7 +53,7 @@
       <span class="upload-box-progress" hidden aria-hidden="true"><i class="upload-box-progress-bar"></i></span>
     </label>
     <div class="actions sticky-actions">
-      <button class="btn" type="submit">آپلود</button>
+      <button class="btn" type="submit" id="backup-upload-btn">آپلود</button>
     </div>
   </form>
 </div>
@@ -104,7 +110,7 @@
       <h2 id="backup-restore-title">تأیید ریستور بکاپ</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <form method="post" action="/backup/restore/0" class="form-stack" id="backup-restore-form">
+    <form method="post" action="/backup/restore/0" class="form-stack" id="backup-restore-form" data-busy-label="در حال ریستور…">
       <input type="hidden" name="confirm" value="1" />
       <p class="muted" style="margin: 0">
         همه داده‌های فعلی با بکاپ
@@ -119,7 +125,7 @@
         </span>
       </label>
       <div class="actions">
-        <button class="btn btn-danger" type="submit">تأیید ریستور</button>
+        <button class="btn btn-danger" type="submit" id="backup-restore-btn">تأیید ریستور</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
       </div>
     </form>
@@ -140,6 +146,68 @@
   const form = document.getElementById('backup-restore-form');
   const nameEl = document.getElementById('backup-restore-name');
   const envEl = document.getElementById('backup-restore-env');
+  const statusBox = document.getElementById('backup-op-status');
+  const statusTitle = document.getElementById('backup-op-title');
+  const statusMsg = document.getElementById('backup-op-msg');
+  let pollTimer = null;
+
+  function setFormBusy(f, busy, label) {
+    if (!f) return;
+    const btn = f.querySelector('button[type="submit"]');
+    if (btn) {
+      btn.disabled = !!busy;
+      if (busy && label) {
+        if (!btn.dataset.idleLabel) btn.dataset.idleLabel = btn.textContent;
+        btn.textContent = label;
+      } else if (!busy && btn.dataset.idleLabel) {
+        btn.textContent = btn.dataset.idleLabel;
+      }
+    }
+  }
+
+  function showOp(title, msg, kind) {
+    if (!statusBox) return;
+    statusBox.hidden = false;
+    statusBox.className = 'flash ' + (kind || 'warn');
+    if (statusTitle) statusTitle.textContent = title || 'وضعیت';
+    if (statusMsg) statusMsg.textContent = msg || '';
+  }
+
+  function applyRestoreStatus(d) {
+    if (!d || !d.state || d.state === 'idle') return;
+    if (d.state === 'running') {
+      showOp('ریستور در حال اجرا', d.message || 'لطفاً صبر کنید…', 'warn');
+      setFormBusy(form, true, 'در حال ریستور…');
+      setFormBusy(document.getElementById('backup-create-form'), true);
+    } else if (d.state === 'error') {
+      showOp('ریستور ناموفق', d.message || d.error || 'خطای ناشناخته', 'err');
+      setFormBusy(form, false);
+      setFormBusy(document.getElementById('backup-create-form'), false);
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    } else if (d.state === 'done') {
+      showOp('ریستور انجام شد', d.message || 'موفق', 'ok');
+      setFormBusy(form, false);
+      setFormBusy(document.getElementById('backup-create-form'), false);
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+  }
+
+  async function pollStatus() {
+    try {
+      const res = await fetch('/backup/status', { credentials: 'same-origin', cache: 'no-store' });
+      if (!res.ok) return;
+      applyRestoreStatus(await res.json());
+    } catch (_) {}
+  }
+
+  function startPoll() {
+    if (pollTimer) return;
+    pollTimer = setInterval(function () {
+      if (!document.hidden) pollStatus();
+    }, 1200);
+    pollStatus();
+  }
+
   document.addEventListener('click', function (e) {
     const btn = e.target.closest('[data-modal-open="modal-backup-restore"]');
     if (!btn || !form) return;
@@ -148,5 +216,20 @@
     if (nameEl) nameEl.textContent = btn.getAttribute('data-backup-name') || '—';
     if (envEl) envEl.checked = btn.getAttribute('data-backup-env') === '1';
   });
+
+  ['backup-create-form', 'backup-upload-form', 'backup-restore-form'].forEach(function (id) {
+    const f = document.getElementById(id);
+    if (!f) return;
+    f.addEventListener('submit', function () {
+      const label = f.getAttribute('data-busy-label') || 'در حال انجام…';
+      setFormBusy(f, true, label);
+      showOp('عملیات در حال اجرا', label, 'warn');
+      if (id === 'backup-restore-form') startPoll();
+    });
+  });
+
+  {% if st.state == 'running' %}
+  startPoll();
+  {% endif %}
 })();
 </script>

@@ -222,8 +222,8 @@ class NoConversionContracts(unittest.TestCase):
 
     def test_admins_template_badges_and_checkbox(self):
         tpl = Path("app/web/templates/pg_admins.html").read_text(encoding="utf-8")
-        self.assertIn("رمز PG ذخیره‌شده", tpl)
-        self.assertIn("نیاز به همگام‌سازی رمز", tpl)
+        self.assertIn("رمز پاسارگارد ذخیره‌شده", tpl)
+        self.assertIn("نیاز به ذخیره رمز", tpl)
         self.assertIn("نام کاربری ناهماهنگ", tpl)
         self.assertIn('name="confirm_align"', tpl)
         self.assertIn("هم‌ترازسازی نام کاربری با پاسارگارد", tpl)

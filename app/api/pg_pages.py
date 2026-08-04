@@ -58,8 +58,9 @@ async def _staff_pg(session: AsyncSession, staff: dict):
             staff_id=staff.get("pg_staff_id"),
         ), False
     raise PasarGuardError(
-        "عملیات نوشتن پاسارگارد بدون اعتبارنامه اختصاصی مجاز نیست "
-        "(ادمین فرعی تا همگام‌سازی اعتبارنامه نمی‌تواند mutate کند)"
+        "تغییر در پاسارگارد بدون اعتبارنامه اختصاصی ممکن نیست. "
+        "علت محتمل: رمز ادمین فرعی هنوز با پاسارگارد همگام نشده. "
+        "راه حل: ادمین اصلی از «ادمین‌ها» دسترسی ادمین فرعی را با رمز جدید ویرایش کند."
     )
 
 
@@ -298,10 +299,8 @@ def register_pg_pages(
                 staff_username_aligned,
             )
 
-            login_u = (
-                (request.session.get("username") or staff.get("username") or "")
-                .strip()
-            )
+            # Cookie auth only — no SessionMiddleware; never touch request.session
+            login_u = (staff.get("username") or "").strip()
             staff_row = await access_by_web_username(session, login_u) if login_u else None
             if staff_row is not None:
                 flags = staff_remediation_flags(staff_row)
@@ -1402,13 +1401,14 @@ def register_pg_pages(
 
         existing = await access_by_pg_username(session, pg_u)
         if existing:
+            # Preserve is_active on edit — use toggle for enable/disable
             row, err = await update_web_access(
                 session,
                 pg_username=pg_u,
                 web_username=web_username,
                 password=web_password,
                 note=note,
-                is_active=True,
+                is_active=None,
                 confirm_align=confirm_align,
             )
         else:

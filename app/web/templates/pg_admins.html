@@ -35,7 +35,7 @@
         <td dir="ltr">{{ uname or '—' }}</td>
         <td class="mono muted col-hide-sm">
           {% if a.get('role') and a.get('role').get('name') %}{{ a.get('role').get('name') }} · {% endif %}
-          {% if a.get('is_sudo') %}sudo · {% endif %}
+          {% if a.get('is_sudo') %}دسترسی کامل · {% endif %}
           {% if a.get('status') %}{{ a.get('status') }}{% endif %}
           {% if a.get('note') %}<br><small class="muted">{{ a.get('note') }}</small>{% endif %}
         </td>
@@ -51,7 +51,11 @@
             {% if not st.get('is_active') and st.get('web_username') %}
             <span class="badge neutral">غیرفعال</span>
             {% endif %}
+            {% if st.get('staff_id') %}
+            <span class="badge warn">ردیف ادمین فرعی یتیم</span>
+            {% else %}
             <small class="muted">دسترسی جداگانه ساخته نمی‌شود</small>
+            {% endif %}
           </div>
           {% elif src == 'owner' %}
           <div class="web-access-cell">
@@ -65,9 +69,9 @@
             </span>
             <span class="mono" dir="ltr">{{ st.get('web_username') }}</span>
             {% if st.get('credentials_ready') %}
-            <span class="badge approved">رمز PG ذخیره‌شده</span>
+            <span class="badge approved">رمز پاسارگارد ذخیره‌شده</span>
             {% else %}
-            <span class="badge warn">نیاز به همگام‌سازی رمز</span>
+            <span class="badge warn">نیاز به ذخیره رمز</span>
             {% endif %}
             {% if st.get('username_aligned') is sameas false %}
             <span class="badge danger">نام کاربری ناهماهنگ</span>
@@ -81,6 +85,15 @@
           {% call row_actions() %}
             {% if src == 'reseller' and st.get('reseller_user_id') %}
             <a class="btn btn-sm btn-ghost" href="/resellers/{{ st.get('reseller_user_id') }}/edit">مدیریت نماینده</a>
+            {% if st.get('staff_id') %}
+            <form method="post" action="/pg/admins/{{ uname }}/web-access/revoke"
+              data-confirm="ردیف ادمین فرعی یتیم حذف شود؟ (دسترسی نماینده باقی می‌ماند)"
+              data-confirm-title="حذف ردیف یتیم"
+              data-confirm-danger="1"
+              data-confirm-label="حذف ردیف">
+              <button class="btn btn-sm btn-danger" type="submit">حذف ردیف ادمین فرعی</button>
+            </form>
+            {% endif %}
             {% elif src == 'pg_staff' %}
             <button type="button" class="btn btn-sm btn-ghost"
               data-modal-open="modal-staff-{{ loop.index }}">ویرایش دسترسی ادمین فرعی</button>
@@ -129,7 +142,7 @@
       <h2>{% if src == 'pg_staff' %}ویرایش ادمین فرعی{% else %}اعطای ادمین فرعی (فقط پاسارگارد){% endif %}</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <form method="post" action="/pg/admins/{{ uname }}/web-access/staff" class="form-stack">
+    <form method="post" action="/pg/admins/{{ uname }}/web-access/staff" class="form-stack js-busy-form" data-busy-label="در حال ذخیره…">
       <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
         — فقط منوی پاسارگارد؛ فروشگاه/ربات ساخته نمی‌شود.</p>
       {% if src == 'pg_staff' and st.get('username_aligned') is sameas false %}
@@ -150,7 +163,7 @@
           <input type="checkbox" name="confirm_align" value="1" required />
           هم‌ترازسازی نام کاربری با پاسارگارد
         </span>
-        <small class="muted">بدون این تأیید، نام کاربری تغییر نمی‌کند (فاز D3)</small>
+        <small class="muted">بدون این تأیید، نام کاربری تغییر نمی‌کند</small>
       </label>
       {% endif %}
       <label class="form-field">رمز عبور وب‌پنل
@@ -179,7 +192,7 @@
       <h2>اعطای دسترسی نماینده (فروشگاه)</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <form method="post" action="/pg/admins/{{ uname }}/web-access/reseller" class="form-stack">
+    <form method="post" action="/pg/admins/{{ uname }}/web-access/reseller" class="form-stack js-busy-form" data-busy-label="در حال ذخیره…">
       <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
         — منوی پاسارگارد از نقش ادمین؛ فروشگاه/ربات از پلن نمایندگی.
         اگر این ادمین قبلاً ادمین فرعی باشد، ابتدا آن دسترسی را حذف کنید.</p>
@@ -244,10 +257,10 @@
             <select name="role_id">
               <option value="">— بدون نقش (سازگاری قدیم) —</option>
               {% for r in pg_roles or [] %}
-              <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}{% if r.get('is_owner') %} (owner){% endif %}</option>
+              <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}{% if r.get('is_owner') %} (ادمین اصلی){% endif %}</option>
               {% endfor %}
             </select>
-            <small class="muted">سطح دسترسی — از نقش‌های تعریف‌شده owner</small>
+            <small class="muted">سطح دسترسی — از نقش‌های تعریف‌شده در پاسارگارد</small>
           </label>
         </div>
       </div>
@@ -256,7 +269,7 @@
         <small class="muted">اختیاری — فقط در پاسارگارد ذخیره می‌شود</small>
       </label>
       <div class="ui-switch-list">
-        {{ switch('is_sudo', 'دسترسی sudo', help='فقط پنل‌های قدیمی؛ در نسخه‌های جدید از نقش استفاده کنید') }}
+        {{ switch('is_sudo', 'دسترسی کامل (قدیمی)', help='فقط پنل‌های قدیمی؛ در نسخه‌های جدید از نقش استفاده کنید') }}
       </div>
       <div class="actions">
         <button class="btn" type="submit">ساخت در پاسارگارد</button>
@@ -265,4 +278,20 @@
     </form>
   </div>
 </div>
+<script>
+(function () {
+  document.querySelectorAll('form.js-busy-form').forEach(function (form) {
+    form.addEventListener('submit', function () {
+      const btn = form.querySelector('button[type="submit"]');
+      if (!btn || btn.disabled) return;
+      btn.disabled = true;
+      const label = form.getAttribute('data-busy-label');
+      if (label) {
+        btn.dataset.idleLabel = btn.textContent;
+        btn.textContent = label;
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

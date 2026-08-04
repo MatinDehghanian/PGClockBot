@@ -46,7 +46,14 @@ class ConflictGrantTests(unittest.IsolatedAsyncioTestCase):
     async def test_grant_blocked_when_staff_exists(self):
         from app.services.pg_staff_access import conflict_message_for_new_grant
 
-        staff = SimpleNamespace(id=5, web_username="staff1", is_active=True, note=None)
+        staff = SimpleNamespace(
+            id=5,
+            web_username="staff1",
+            pg_username="pg_x",
+            is_active=True,
+            note=None,
+            pg_admin_password_enc=None,
+        )
         with (
             patch(
                 "app.services.pg_staff_access.access_by_pg_username",
