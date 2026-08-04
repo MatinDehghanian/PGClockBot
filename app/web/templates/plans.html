@@ -131,7 +131,7 @@
         <th>نام</th>
         <th>قیمت</th>
         <th>حالت</th>
-        <th class="col-hide-sm">کمیسیون</th>
+        <th class="col-hide-sm">نرخ / کمیسیون</th>
         <th>وضعیت</th>
         <th class="col-actions"></th>
       </tr>
@@ -140,7 +140,12 @@
     {% for p in reseller_plans %}
       {% set mode = (p.billing_mode or 'fixed') %}
       <tr>
-        <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
+        <td>
+          {{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}
+          {% if mode == 'payg' and p.pg_group_ids %}
+          <br><small class="muted mono">گروه {{ p.pg_group_ids }}</small>
+          {% endif %}
+        </td>
         <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
         <td>
           {% if mode == 'payg' %}
@@ -149,7 +154,13 @@
           <span class="badge fixed">ثابت</span>
           {% endif %}
         </td>
-        <td class="mono col-hide-sm">{% if mode == 'fixed' %}{{ p.commission_percent }}٪{% else %}—{% endif %}</td>
+        <td class="mono col-hide-sm">
+          {% if mode == 'payg' %}
+            {% if p.price_per_gb %}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }} /GB{% else %}—{% endif %}
+          {% else %}
+            {{ p.commission_percent }}٪
+          {% endif %}
+        </td>
         <td>{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -465,6 +476,11 @@
             <input name="commission_percent" id="reseller-commission-input" type="number" min="0" max="100" value="0" />
             <small class="muted">اختیاری — پیش‌فرض ۰</small>
           </label>
+          <label class="form-field" id="reseller-price-per-gb-field" hidden>
+            نرخ هر گیگ (تومان)
+            <input name="price_per_gb" id="reseller-price-per-gb-input" type="number" min="0" value="0" />
+            <small class="muted">برای این پلن PAYG — گروه‌های مختلف می‌توانند پلن جدا با نرخ جدا داشته باشند</small>
+          </label>
           <label class="form-field">ترتیب
             <input name="sort_order" type="number" value="0" />
           </label>
@@ -472,6 +488,18 @@
         <label class="form-field">توضیح
           <textarea name="description" rows="2"></textarea>
         </label>
+
+        <div id="reseller-payg-groups" class="form-field" hidden>
+          <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد این نرخ (اختیاری)</span>
+          <p class="muted update-card-caption">اگر چند گروه قیمت متفاوت دارند، برای هر گروه (یا دسته) یک پلن PAYG جدا بسازید.</p>
+          <div class="ui-switch-grid">
+            {% for g in groups %}
+            {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
+            {% else %}
+            <span class="muted">گروهی از پاسارگارد لود نشد — بعداً در ویرایش می‌توانید انتخاب کنید.</span>
+            {% endfor %}
+          </div>
+        </div>
 
         <div class="ui-switch-section">
           <span class="ui-switch-section-title">دسترسی پیش‌فرض (وب = بات)</span>
@@ -551,12 +579,16 @@
     const billing = document.getElementById('reseller-billing-mode');
     const commissionField = document.getElementById('reseller-commission-field');
     const commissionInput = document.getElementById('reseller-commission-input');
-    if (billing) billing.value = kind === 'payg' ? 'payg' : 'fixed';
+    const rateField = document.getElementById('reseller-price-per-gb-field');
+    const groupsField = document.getElementById('reseller-payg-groups');
+    const isPayg = kind === 'payg';
+    if (billing) billing.value = isPayg ? 'payg' : 'fixed';
     if (commissionField) {
-      const show = kind !== 'payg';
-      commissionField.style.display = show ? '' : 'none';
-      if (!show && commissionInput) commissionInput.value = '0';
+      commissionField.style.display = isPayg ? 'none' : '';
+      if (isPayg && commissionInput) commissionInput.value = '0';
     }
+    if (rateField) rateField.hidden = !isPayg;
+    if (groupsField) groupsField.hidden = !isPayg;
   }
 
   function syncAudienceAndKind(){
