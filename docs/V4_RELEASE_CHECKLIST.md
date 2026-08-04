@@ -3,7 +3,7 @@
 **Audience:** Operators deploying Phase C0–C5 + D1–D4  
 **Audited tip:** `68163de` (`cursor/phase-d4-identity-consistency-b96b`)  
 **Companion:** `docs/FINAL_RELEASE_AUDIT.md` (no release blockers)  
-**Product `VERSION` file on tip:** `3.8.3` (label this ship as **v4** of the Phase C/D architecture)  
+**Product `VERSION` file:** `4.0.0` (must match GitHub tag `v4.0.0` for in-panel update)  
 **Mode:** Checklist only — **no code in this document**
 
 Use this as a runbook. Tick every box in order. Prefer **forward remediation** over schema downgrade.

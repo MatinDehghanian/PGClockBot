@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.0.0": [
+        "فاز A/B: پایه PostgreSQL/Alembic و دستور سراسری pgclock",
+        "فاز C: لایه دسترسی یکپارچه، ایزوله خواندن/نوشتن پاسارگارد، بدون Owner fallback",
+        "فاز C5: ذخیره رمز رمزنگاری‌شده ادمین فرعی (pg_staff) و همگام‌سازی با پاسارگارد",
+        "فاز D: سیاست رمز یکپارچه، اعطای جداگانه ادمین فرعی/نماینده، رفع حساب‌های قدیمی",
+        "هویت وب و ربات مستند شد؛ راهنما در صفحه امنیت؛ تگ نسخه با فایل VERSION هم‌تراز است",
+    ],
     "3.8.3": [
         "امنیت: قالب‌های متنی فروشگاه دیگر attribute traversal از str.format را اجرا نمی‌کنند",
         "امنیت: کشف ریشه API پاسارگارد فقط با openapi هویت‌دار — مسیر ضعیف /api/system حذف شد",

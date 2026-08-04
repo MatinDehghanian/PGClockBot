@@ -3,7 +3,7 @@
 **Status:** AUDIT ONLY — **no code changes**  
 **Audited tip:** `68163de` (`cursor/phase-d4-identity-consistency-b96b`) — C0–C5 + D1–D4  
 **Branch (docs):** `cursor/phase-final-release-audit-b96b`  
-**Product version file:** `3.8.3`  
+**Product version file:** `4.0.0` (bumped to match tag `v4.0.0`)  
 **Date:** 2026-08-04  
 
 ---
