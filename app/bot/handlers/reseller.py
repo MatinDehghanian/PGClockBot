@@ -23,8 +23,12 @@ from app.services.formatting import format_message, format_toman, order_status_f
 from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import (
     create_application,
+    format_reseller_plan_apply_detail,
     has_bot_perm,
     list_active_reseller_plans,
+    normalize_reseller_billing_mode,
+    reseller_billing_mode_label,
+    reseller_plan_mode_of,
 )
 from app.bot.tg_utils import safe_edit_text
 from app.services.users import get_all_settings
@@ -45,6 +49,69 @@ async def _actor(
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
+
+
+def _can_start_reseller_apply(db_user: BotUser, owner_id: int | None) -> str | None:
+    """Return Persian deny reason, or None if allowed."""
+    if owner_id or db_user.role == Role.RESELLER.value:
+        return "شما هم‌اکنون نماینده هستید"
+    if db_user.role == Role.ADMIN.value:
+        return "ادمین نیاز به درخواست ندارد"
+    return None
+
+
+async def _resapply_mode_keyboard(session: AsyncSession, ui: dict) -> InlineKeyboardMarkup:
+    from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
+
+    fixed_n = len(await list_active_reseller_plans(session, billing_mode=BILLING_MODE_FIXED))
+    payg_n = len(await list_active_reseller_plans(session, billing_mode=BILLING_MODE_PAYG))
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"📦 ثابت (کمیسیون) — {fixed_n} پلن",
+                callback_data="resapply:mode:fixed",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"⚡ Pay As You Go — {payg_n} پلن",
+                callback_data="resapply:mode:payg",
+            )
+        ],
+        [InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="menu:home")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _resapply_plan_list_keyboard(
+    plans: list,
+    *,
+    mode: str,
+    ui: dict,
+) -> InlineKeyboardMarkup:
+    rows = []
+    for p in plans:
+        price = format_toman(p.price, get_settings().currency) if p.price else "رایگان"
+        if reseller_plan_mode_of(p) == "payg":
+            rate = int(getattr(p, "price_per_gb", 0) or 0)
+            extra = f" · {format_toman(rate, get_settings().currency)}/GB" if rate else ""
+        else:
+            extra = f" · {int(p.commission_percent or 0)}٪"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{p.name} — {price}{extra}",
+                    callback_data=f"resapply:plan:{p.id}",
+                )
+            ]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="⬅️ انتخاب نوع پلن", callback_data="resapply:home")]
+    )
+    rows.append(
+        [InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="menu:home")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 @router.callback_query(F.data == "res:creds")
@@ -578,17 +645,19 @@ async def resapply_home(
     owner_id, _profile = await _actor(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
-    if owner_id or db_user.role == Role.RESELLER.value:
-        await callback.answer("شما هم‌اکنون نماینده هستید", show_alert=True)
+    deny = _can_start_reseller_apply(db_user, owner_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
         return
-    if db_user.role == Role.ADMIN.value:
-        await callback.answer("ادمین نیاز به درخواست ندارد", show_alert=True)
-        return
-    plans = await list_active_reseller_plans(session)
+    from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
+
+    fixed_n = len(await list_active_reseller_plans(session, billing_mode=BILLING_MODE_FIXED))
+    payg_n = len(await list_active_reseller_plans(session, billing_mode=BILLING_MODE_PAYG))
     await callback.answer()
-    if not plans:
+    if fixed_n == 0 and payg_n == 0:
         if callback.message:
-            await safe_edit_text(callback.message, 
+            await safe_edit_text(
+                callback.message,
                 format_message(
                     "🤝 نمایندگی",
                     "در حال حاضر پلن نمایندگی فعالی تعریف نشده است.\nبعداً دوباره بررسی کنید.",
@@ -596,25 +665,59 @@ async def resapply_home(
                 reply_markup=kb.back_home(ui),
             )
         return
-    rows = []
-    for p in plans:
-        price = format_toman(p.price, get_settings().currency) if p.price else "رایگان"
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{p.name} — {price}",
-                    callback_data=f"resapply:plan:{p.id}",
-                )
-            ]
-        )
-    rows.append([InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="menu:home")])
     if callback.message:
-        await safe_edit_text(callback.message, 
+        await safe_edit_text(
+            callback.message,
             format_message(
                 "🤝 درخواست نمایندگی",
-                "یکی از پلن‌های زیر را انتخاب کنید. پس از پرداخت (در صورت نیاز) ادمین درخواست را بررسی می‌کند.",
+                "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
+                "• <b>ثابت</b> — کمیسیون روی فروش\n"
+                "• <b>Pay As You Go</b> — پرداخت بر اساس مصرف ترافیک\n\n"
+                "بعد از انتخاب نوع، پلن‌های همان دسته نمایش داده می‌شود.",
             ),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            reply_markup=await _resapply_mode_keyboard(session, ui),
+        )
+
+
+@router.callback_query(F.data.startswith("resapply:mode:"))
+async def resapply_mode(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, _profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    deny = _can_start_reseller_apply(db_user, owner_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
+        return
+    mode = normalize_reseller_billing_mode(callback.data.split(":")[-1])
+    ui = await get_all_settings(session)
+    plans = await list_active_reseller_plans(session, billing_mode=mode)
+    await callback.answer()
+    label = reseller_billing_mode_label(mode)
+    if not plans:
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                format_message(
+                    f"🤝 {label}",
+                    "برای این نوع، پلن فعالی تعریف نشده است.\nنوع دیگری را انتخاب کنید.",
+                ),
+                reply_markup=await _resapply_mode_keyboard(session, ui),
+            )
+        return
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(
+                f"🤝 پلن‌های {label}",
+                "یکی از پلن‌های این دسته را انتخاب کنید.",
+            ),
+            reply_markup=await _resapply_plan_list_keyboard(plans, mode=mode, ui=ui),
         )
 
 
@@ -623,15 +726,15 @@ async def resapply_plan(
     callback: CallbackQuery,
     session: AsyncSession,
     db_user: BotUser,
-    state: FSMContext,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
     owner_id, _profile = await _actor(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
-    if owner_id or db_user.role in (Role.RESELLER.value, Role.ADMIN.value):
-        await callback.answer("اجازه درخواست نمایندگی ندارید", show_alert=True)
+    deny = _can_start_reseller_apply(db_user, owner_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
         return
     plan_id = int(callback.data.split(":")[-1])
     plans = {p.id: p for p in await list_active_reseller_plans(session)}
@@ -639,19 +742,17 @@ async def resapply_plan(
     if not plan:
         await callback.answer("پلن یافت نشد", show_alert=True)
         return
-    desc = html.escape(plan.description or "بدون توضیح")
-    body = (
-        f"{desc}\n\n"
-        f"قیمت: <b>{format_toman(plan.price, get_settings().currency) if plan.price else 'رایگان'}</b>\n"
-        f"کمیسیون: <b>{plan.commission_percent}٪</b>"
-    )
+    mode = reseller_plan_mode_of(plan)
+    body = format_reseller_plan_apply_detail(plan, currency=get_settings().currency)
     rows = [
         [InlineKeyboardButton(text="✅ ثبت درخواست", callback_data=f"resapply:buy:{plan.id}")],
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="resapply:home")],
+        [InlineKeyboardButton(text="⬅️ بازگشت به لیست", callback_data=f"resapply:mode:{mode}")],
+        [InlineKeyboardButton(text="🔀 تغییر نوع پلن", callback_data="resapply:home")],
     ]
     await callback.answer()
     if callback.message:
-        await safe_edit_text(callback.message, 
+        await safe_edit_text(
+            callback.message,
             format_message(f"🤝 {plan.name}", body),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
@@ -662,14 +763,16 @@ async def resapply_buy(
     callback: CallbackQuery,
     session: AsyncSession,
     db_user: BotUser,
+    state: FSMContext,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
     owner_id, _profile = await _actor(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
-    if owner_id or db_user.role in (Role.RESELLER.value, Role.ADMIN.value):
-        await callback.answer("اجازه درخواست نمایندگی ندارید", show_alert=True)
+    deny = _can_start_reseller_apply(db_user, owner_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
         return
     ui = await get_all_settings(session)
     plan_id = int(callback.data.split(":")[-1])
@@ -685,12 +788,14 @@ async def resapply_buy(
         return
 
     await callback.answer()
+    mode_label = reseller_billing_mode_label(reseller_plan_mode_of(plan))
     if order is None:
         if callback.message:
-            await safe_edit_text(callback.message, 
+            await safe_edit_text(
+                callback.message,
                 format_message(
                     "✅ درخواست ثبت شد",
-                    f"درخواست #{app.id} برای پلن «{plan.name}» ثبت شد.\n"
+                    f"درخواست #{app.id} برای پلن «{plan.name}» ({mode_label}) ثبت شد.\n"
                     "پس از تأیید ادمین، لینک راه‌اندازی وب‌پنل و ثبت ربات اختصاصی برایتان ارسال می‌شود.",
                 ),
                 reply_markup=kb.back_home(ui),
@@ -698,6 +803,7 @@ async def resapply_buy(
         notify = (
             f"🤝 درخواست نمایندگی جدید #{app.id}\n"
             f"کاربر: {db_user.full_name or db_user.telegram_id}\n"
+            f"نوع: {mode_label}\n"
             f"پلن: {plan.name}"
         )
         for aid in get_settings().admin_ids:
@@ -713,7 +819,8 @@ async def resapply_buy(
 
     if not kb.any_checkout_method_enabled(ui):
         if callback.message:
-            await safe_edit_text(callback.message, 
+            await safe_edit_text(
+                callback.message,
                 format_message("⚠️ پرداخت غیرفعال", "روش پرداختی فعال نیست. با پشتیبانی تماس بگیرید."),
                 reply_markup=kb.back_home(ui),
             )
@@ -721,7 +828,8 @@ async def resapply_buy(
 
     text = format_message(
         f"🧾 سفارش نمایندگی #{order.id}",
-        f"پلن: {plan.name}\nمبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>\n\n"
+        f"نوع: {mode_label}\nپلن: {plan.name}\n"
+        f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>\n\n"
         "روش پرداخت را انتخاب کنید:",
     )
     if callback.message:

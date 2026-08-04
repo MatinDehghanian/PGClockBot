@@ -119,48 +119,33 @@
 </div>
 
 {% if is_platform_admin %}
+{% set payg_reseller_plans = reseller_plans | selectattr('billing_mode', 'equalto', 'payg') | list %}
+{% set fixed_reseller_plans = reseller_plans | rejectattr('billing_mode', 'equalto', 'payg') | list %}
 <div class="card card-flush" id="reseller-plans">
   <h2>پلن‌های نمایندگان</h2>
+  <p class="muted update-card-caption">دو دسته جدا: <b>ثابت (کمیسیون)</b> و <b>Pay As You Go</b>. در ربات کاربر اول نوع را انتخاب می‌کند، بعد پلن همان دسته.</p>
   {% if reseller_plans_err %}
   <div class="flash warn">{{ reseller_plans_err }}</div>
   {% endif %}
+
+  <h3 id="reseller-plans-fixed" style="margin-top: var(--space-3)">📦 ثابت (کمیسیون)</h3>
   <div class="table-wrap">
   <table class="table-compact">
     <thead>
       <tr>
         <th>نام</th>
-        <th>قیمت</th>
-        <th>حالت</th>
-        <th class="col-hide-sm">نرخ / کمیسیون</th>
+        <th>قیمت ورود</th>
+        <th class="col-hide-sm">کمیسیون</th>
         <th>وضعیت</th>
         <th class="col-actions"></th>
       </tr>
     </thead>
     <tbody>
-    {% for p in reseller_plans %}
-      {% set mode = (p.billing_mode or 'fixed') %}
+    {% for p in fixed_reseller_plans %}
       <tr>
-        <td>
-          {{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}
-          {% if mode == 'payg' and p.pg_group_ids %}
-          <br><small class="muted mono">گروه {{ p.pg_group_ids }}</small>
-          {% endif %}
-        </td>
+        <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
         <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
-        <td>
-          {% if mode == 'payg' %}
-          <span class="badge info">PAYG</span>
-          {% else %}
-          <span class="badge fixed">ثابت</span>
-          {% endif %}
-        </td>
-        <td class="mono col-hide-sm">
-          {% if mode == 'payg' %}
-            {% if p.price_per_gb %}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }} /GB{% else %}—{% endif %}
-          {% else %}
-            {{ p.commission_percent }}٪
-          {% endif %}
-        </td>
+        <td class="mono col-hide-sm">{{ p.commission_percent }}٪</td>
         <td>{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -179,7 +164,51 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="muted">پلن نمایندگی نیست — از «افزودن پلن» بسازید.</td></tr>
+      <tr><td colspan="5" class="muted">پلن ثابت نیست — از «افزودن پلن» با نوع ثابت بسازید.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  <h3 id="reseller-plans-payg" style="margin-top: var(--space-4)">⚡ Pay As You Go</h3>
+  <div class="table-wrap">
+  <table class="table-compact">
+    <thead>
+      <tr>
+        <th>نام</th>
+        <th>قیمت ورود</th>
+        <th class="col-hide-sm">نرخ / GB</th>
+        <th class="col-hide-sm">گروه‌ها</th>
+        <th>وضعیت</th>
+        <th class="col-actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for p in payg_reseller_plans %}
+      <tr>
+        <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
+        <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
+        <td class="mono col-hide-sm">{% if p.price_per_gb %}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }}{% else %}—{% endif %}</td>
+        <td class="mono col-hide-sm">{{ p.pg_group_ids or '—' }}</td>
+        <td>{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+        <td class="col-actions">
+          {% call row_actions() %}
+            <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>
+            <form method="post" action="/resellers/plans/{{ p.id }}/toggle">
+              <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
+            </form>
+            <form method="post" action="/resellers/plans/{{ p.id }}/delete"
+                  data-confirm="این پلن نمایندگی حذف شود؟"
+                  data-confirm-title="تأیید حذف"
+                  data-confirm-danger="1"
+                  data-confirm-label="حذف">
+              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+            </form>
+          {% endcall %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="muted">پلن PAYG نیست — از «افزودن پلن» با نوع Pay As You Go بسازید.</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -464,22 +493,23 @@
     <div id="panel-reseller" class="plan-panel" hidden>
       <form method="post" action="/resellers/plans" class="form-stack" id="reseller-plan-form">
         <input type="hidden" name="billing_mode" id="reseller-billing-mode" value="fixed" />
+        <p class="muted update-card-caption" id="reseller-mode-hint">نوع پلن را از بالا انتخاب کنید — فیلدهای مخصوص همان نوع نمایش داده می‌شود.</p>
         <div class="form-row">
           <label class="form-field">نام
             <input name="name" required placeholder="نمایندگی نقره‌ای" />
           </label>
-          <label class="form-field">قیمت (تومان)
+          <label class="form-field">قیمت ورود (تومان)
             <input name="price" type="number" value="0" />
-            <small class="muted">۰ = رایگان؛ فقط تأیید ادمین</small>
+            <small class="muted">هزینه خرید پکیج نمایندگی — ۰ = رایگان؛ فقط تأیید ادمین</small>
           </label>
           <label class="form-field" id="reseller-commission-field">کمیسیون ٪
             <input name="commission_percent" id="reseller-commission-input" type="number" min="0" max="100" value="0" />
-            <small class="muted">اختیاری — پیش‌فرض ۰</small>
+            <small class="muted">فقط برای پلن ثابت</small>
           </label>
           <label class="form-field" id="reseller-price-per-gb-field" hidden>
             نرخ هر گیگ (تومان)
             <input name="price_per_gb" id="reseller-price-per-gb-input" type="number" min="0" value="0" />
-            <small class="muted">برای این پلن PAYG — گروه‌های مختلف می‌توانند پلن جدا با نرخ جدا داشته باشند</small>
+            <small class="muted">فقط برای PAYG — هر پلن می‌تواند نرخ جدا داشته باشد</small>
           </label>
           <label class="form-field">ترتیب
             <input name="sort_order" type="number" value="0" />
@@ -554,7 +584,7 @@
     {value: 'wholesale', label: 'فروش عمده'}
   ];
   const RESELLER_KINDS = [
-    {value: 'fixed', label: 'ثابت'},
+    {value: 'fixed', label: 'ثابت (کمیسیون)'},
     {value: 'payg', label: 'Pay As You Go'}
   ];
 
@@ -634,9 +664,10 @@
     if (hasKind || hasAud) {
       applyPlanOpen(btn.getAttribute('data-plan-audience') || 'users', btn.getAttribute('data-plan-kind') || 'fixed');
     } else {
-      // «افزودن پلن»: users/fixed، یا resellers/fixed اگر روی #reseller-plans باشیم
-      const preferReseller = isPlatformAdmin && location.hash === '#reseller-plans';
-      applyPlanOpen(preferReseller ? 'resellers' : 'users', 'fixed');
+      // «افزودن پلن»: users/fixed، یا resellers بر اساس هش
+      const preferReseller = isPlatformAdmin && (location.hash === '#reseller-plans' || location.hash === '#reseller-plans-fixed' || location.hash === '#reseller-plans-payg');
+      const preferPayg = location.hash === '#reseller-plans-payg';
+      applyPlanOpen(preferReseller ? 'resellers' : 'users', preferPayg ? 'payg' : 'fixed');
     }
   });
 
@@ -733,13 +764,14 @@
 
   syncAudienceAndKind();
 
-  if (location.hash === '#reseller-plans') {
-    const section = document.getElementById('reseller-plans');
+  const hash = location.hash || '';
+  if (hash === '#reseller-plans' || hash === '#reseller-plans-fixed' || hash === '#reseller-plans-payg') {
+    const section = document.getElementById(hash.slice(1)) || document.getElementById('reseller-plans');
     if (section) {
       setTimeout(() => section.scrollIntoView({behavior: 'smooth', block: 'start'}), 50);
     }
     if (isPlatformAdmin) {
-      applyPlanOpen('resellers', 'fixed');
+      applyPlanOpen('resellers', hash === '#reseller-plans-payg' ? 'payg' : 'fixed');
     }
   }
 })();

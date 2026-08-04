@@ -445,8 +445,7 @@ async def open_referral(message: Message, session: AsyncSession, db_user: BotUse
 
 async def open_reseller_apply(message: Message, session: AsyncSession, db_user: BotUser) -> None:
     from app.bot.menu_nav import build_main_reply_keyboard
-    from app.config import get_settings
-    from app.services.formatting import format_toman
+    from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
     from app.services.resellers import list_active_reseller_plans
 
     ui = await get_all_settings(session)
@@ -461,8 +460,9 @@ async def open_reseller_apply(message: Message, session: AsyncSession, db_user: 
     if db_user.role == Role.ADMIN.value:
         await message.answer("ادمین نیاز به درخواست ندارد.", reply_markup=main_kb)
         return
-    plans = await list_active_reseller_plans(session)
-    if not plans:
+    fixed_n = len(await list_active_reseller_plans(session, billing_mode=BILLING_MODE_FIXED))
+    payg_n = len(await list_active_reseller_plans(session, billing_mode=BILLING_MODE_PAYG))
+    if fixed_n == 0 and payg_n == 0:
         await message.answer(
             format_message(
                 "🤝 نمایندگی",
@@ -471,26 +471,31 @@ async def open_reseller_apply(message: Message, session: AsyncSession, db_user: 
             reply_markup=main_kb,
         )
         return
-    rows = []
-    for p in plans:
-        price = format_toman(p.price, get_settings().currency) if p.price else "رایگان"
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{p.name} — {price}",
-                    callback_data=f"resapply:plan:{p.id}",
-                )
-            ]
-        )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"📦 ثابت (کمیسیون) — {fixed_n} پلن",
+                callback_data="resapply:mode:fixed",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"⚡ Pay As You Go — {payg_n} پلن",
+                callback_data="resapply:mode:payg",
+            )
+        ],
+    ]
     await message.answer(
         format_message(
             "🤝 درخواست نمایندگی",
-            "یکی از پلن‌های زیر را انتخاب کنید.",
+            "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
+            "• <b>ثابت</b> — کمیسیون روی فروش\n"
+            "• <b>Pay As You Go</b> — پرداخت بر اساس مصرف ترافیک",
         ),
         reply_markup=main_kb,
     )
     await message.answer(
-        "پلن‌ها:",
+        "نوع پلن:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
 
