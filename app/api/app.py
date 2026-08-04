@@ -1365,7 +1365,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         plans = await list_catalog_plans(session, staff, include_trial=True)
         trial = next((p for p in plans if p.is_trial), None)
         sale_plans = [p for p in plans if not p.is_trial]
-        templates, groups, pg_error = await load_pg_plan_options(staff)
+        templates, groups, pg_error = await load_pg_plan_options(staff, session=session)
         rid = catalog_owner_id(staff)
         # Non-admin without shop id must never load platform (admin) settings.
         if not is_platform_admin(staff) and not rid:
@@ -1747,7 +1747,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.plans_catalog import list_catalog_plans, load_pg_plan_options
 
         plans = await list_catalog_plans(session, staff, include_trial=True)
-        templates, groups, pg_error = await load_pg_plan_options(staff)
+        templates, groups, pg_error = await load_pg_plan_options(staff, session=session)
         ctx = {
             "staff": staff,
             "plans": plans,

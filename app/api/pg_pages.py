@@ -155,9 +155,10 @@ async def _assert_owned_user(
 
 
 def _pg_ctx(staff: dict, **extra) -> dict:
+    from app.services.pg_read import effective_pg_menu_keys
+
     writes = staff_pg_writes(staff)
     actions = staff_user_actions(staff)
-    pg_perms = list(staff.get("pg_permissions") or [])
     if _is_admin(staff):
         pg_perms = [
             "pg_overview",
@@ -169,8 +170,14 @@ def _pg_ctx(staff: dict, **extra) -> dict:
             "pg_nodes",
             "pg_admins",
         ]
+    else:
+        pg_perms = effective_pg_menu_keys(staff)
+    # Sidebar reads staff.pg_permissions — keep menu/data aligned (C1).
+    staff_view = dict(staff)
+    if not _is_admin(staff):
+        staff_view["pg_permissions"] = list(pg_perms)
     ctx = {
-        "staff": staff,
+        "staff": staff_view,
         "is_admin": _is_admin(staff),
         "pg_perms": pg_perms,
         "pg_writes": writes,
@@ -203,8 +210,8 @@ def register_pg_pages(
         counts = {"admins": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0}
         reseller_overview = None
         try:
-            pg = get_pg()
             if _is_admin(staff):
+                pg = get_pg()
                 raw, nodes, admins, groups, hosts = await asyncio.gather(
                     pg.get_system_stats(),
                     pg.get_nodes_simple(),
@@ -258,8 +265,8 @@ def register_pg_pages(
                 counts["groups"] = len(groups) if isinstance(groups, list) else 0
                 counts["hosts"] = len(hosts) if isinstance(hosts, list) else 0
             else:
-                # Reseller: only own users/usage/limits — never server/hardware stats
-                reseller_overview = await build_reseller_pg_overview(staff)
+                # Reseller/pg_staff: tenant-safe overview only (no owner-token lists)
+                reseller_overview = await build_reseller_pg_overview(staff, session=session)
                 # Keep overview.error in template; don't blank the page via flash_err
         except Exception as e:
             err = str(e)
@@ -290,7 +297,13 @@ def register_pg_pages(
 
     # ---- VPN users ----
     @app.get("/pg/users", response_class=HTMLResponse)
-    async def pg_users(request: Request, staff: dict = Depends(require_pg_perm("pg_users"))):
+    async def pg_users(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_users")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.pg_read import PgReadDenied, staff_pg_read_client
+
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         form_err = request.query_params.get("form_err")
@@ -303,7 +316,7 @@ def register_pg_pages(
         access = staff.get("pg_access") or {}
         require_template = bool(access.get("require_template")) and not _is_admin(staff)
         try:
-            pg = get_pg()
+            pg = await staff_pg_read_client(session, staff)
             params: dict = {"offset": 0, "limit": 200}
             if q:
                 params["username"] = q
@@ -346,6 +359,8 @@ def register_pg_pages(
             elif not isinstance(groups_raw, Exception):
                 groups = []
             groups = _filter_groups(groups, staff)
+        except PgReadDenied as e:
+            err = e.message
         except Exception as e:
             err = str(e)
         actions = staff_user_actions(staff)
@@ -754,12 +769,18 @@ def register_pg_pages(
 
     # ---- templates ----
     @app.get("/pg/templates", response_class=HTMLResponse)
-    async def pg_templates(request: Request, staff: dict = Depends(require_pg_perm("pg_templates"))):
+    async def pg_templates(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_templates")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.pg_read import PgReadDenied, staff_pg_read_client
+
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         templates, groups = [], []
         try:
-            pg = get_pg()
+            pg = await staff_pg_read_client(session, staff)
             templates_raw, groups_raw = await asyncio.gather(
                 pg.get_user_templates(),
                 pg.get_groups_simple(),
@@ -773,6 +794,8 @@ def register_pg_pages(
                 raise templates_raw
             templates = _filter_templates(templates, staff)
             groups = _filter_groups(groups_raw if isinstance(groups_raw, list) else [], staff)
+        except PgReadDenied as e:
+            err = e.message
         except Exception as e:
             err = str(e)
         return render(
@@ -854,14 +877,20 @@ def register_pg_pages(
 
     # ---- groups ----
     @app.get("/pg/groups", response_class=HTMLResponse)
-    async def pg_groups(request: Request, staff: dict = Depends(require_pg_perm("pg_groups"))):
+    async def pg_groups(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_groups")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.pg_read import PgReadDenied, staff_pg_read_client
+
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         groups, inbound_tags = [], []
         edit_id = request.query_params.get("edit")
         edit_group = None
         try:
-            pg = get_pg()
+            pg = await staff_pg_read_client(session, staff)
             full = await pg.get_groups()
             groups = full if isinstance(full, list) else as_list(full, "groups")
             if not groups:
@@ -876,6 +905,8 @@ def register_pg_pages(
                     edit_group = await pg.get_group(eid)
                 else:
                     err = err or "گروه خارج از دسترسی شماست"
+        except PgReadDenied as e:
+            err = e.message
         except Exception as e:
             err = str(e)
         return render(
@@ -973,14 +1004,22 @@ def register_pg_pages(
 
     # ---- hosts ----
     @app.get("/pg/hosts", response_class=HTMLResponse)
-    async def pg_hosts(request: Request, staff: dict = Depends(require_pg_perm("pg_hosts"))):
+    async def pg_hosts(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_hosts")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.pg_read import PgReadDenied, staff_pg_read_client
+
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         hosts, inbound_tags = [], []
         try:
-            pg = get_pg()
+            pg = await staff_pg_read_client(session, staff)
             hosts = await pg.get_hosts()
             inbound_tags = _inbound_tags(await pg.get_inbounds())
+        except PgReadDenied as e:
+            err = e.message
         except Exception as e:
             err = str(e)
         return render(
@@ -1078,12 +1117,21 @@ def register_pg_pages(
 
     # ---- nodes / inbounds / admins ----
     @app.get("/pg/nodes", response_class=HTMLResponse)
-    async def pg_nodes(request: Request, staff: dict = Depends(require_pg_perm("pg_nodes"))):
+    async def pg_nodes(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_nodes")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.pg_read import PgReadDenied, staff_pg_read_client
+
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         nodes = []
         try:
-            nodes = await get_pg().get_nodes()
+            pg = await staff_pg_read_client(session, staff)
+            nodes = await pg.get_nodes()
+        except PgReadDenied as e:
+            err = e.message
         except Exception as e:
             err = str(e)
         return render(
@@ -1119,13 +1167,21 @@ def register_pg_pages(
         return RedirectResponse(f"/pg/nodes?ok={_q('درخواست اتصال مجدد ارسال شد')}", status_code=303)
 
     @app.get("/pg/inbounds", response_class=HTMLResponse)
-    async def pg_inbounds(request: Request, staff: dict = Depends(require_pg_perm("pg_inbounds"))):
+    async def pg_inbounds(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_inbounds")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.pg_read import PgReadDenied, staff_pg_read_client
+
         err = request.query_params.get("err")
         inbounds, details = [], None
         try:
-            pg = get_pg()
+            pg = await staff_pg_read_client(session, staff)
             inbounds = await pg.get_inbounds()
             details = await pg.get_inbounds_details()
+        except PgReadDenied as e:
+            err = e.message
         except Exception as e:
             err = str(e)
         return render(

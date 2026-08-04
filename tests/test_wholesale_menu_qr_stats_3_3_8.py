@@ -197,9 +197,17 @@ class ScopedPgUserStatsTests(unittest.IsolatedAsyncioTestCase):
                 ]
             }
         )
-        with patch("app.services.pg_overview.get_pg", return_value=pg):
+        with patch(
+            "app.services.pg_read.get_pg_for_reseller",
+            new=AsyncMock(return_value=pg),
+        ):
             out = await build_reseller_pg_overview(
-                {"pg_admin_username": "res1", "role": "reseller"}
+                {
+                    "pg_admin_username": "res1",
+                    "role": "reseller",
+                    "bot_user_id": 42,
+                },
+                session=MagicMock(),
             )
         self.assertTrue(out["ready"])
         self.assertIsNotNone(out.get("user_stats"))
