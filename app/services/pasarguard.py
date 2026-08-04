@@ -512,10 +512,84 @@ class PasarGuardClient:
         return await self.request("POST", "/api/admin", json=payload)
 
     async def modify_admin(self, username: str, payload: dict) -> dict:
-        return await self.request("PUT", f"/api/admin/{username}", json=payload)
+        """Update admin — prefer by-id (case-safe); username path is case-sensitive in PG."""
+        uname = (username or "").strip()
+        if not uname:
+            raise PasarGuardError(
+                "نام ادمین نامعتبر است. "
+                "علت محتمل: نام خالی. "
+                "راه حل: نام ادمین پاسارگارد را دوباره انتخاب کنید.",
+                400,
+            )
+        admin = await self.get_admin(uname)
+        if not admin:
+            raise PasarGuardError(
+                f"ادمین «{uname}» در پاسارگارد یافت نشد. "
+                "علت محتمل: نام اشتباه یا حذف‌شده. "
+                "راه حل: لیست ادمین‌ها را رفرش کنید و دوباره تلاش کنید.",
+                404,
+            )
+        admin_id = admin.get("id")
+        exact = str(admin.get("username") or uname).strip()
+        errors: list[str] = []
+        if admin_id is not None:
+            try:
+                return await self.request(
+                    "PUT", f"/api/admin/by-id/{int(admin_id)}", json=payload
+                )
+            except PasarGuardError as e:
+                if e.status_code not in (404, 405):
+                    raise
+                errors.append(str(e))
+        for path in (
+            f"/api/admin/by-username/{exact}",
+            f"/api/admin/{exact}",
+        ):
+            try:
+                return await self.request("PUT", path, json=payload)
+            except PasarGuardError as e:
+                if e.status_code not in (404, 405):
+                    raise
+                errors.append(str(e))
+        detail = errors[-1] if errors else "مسیر به‌روزرسانی ادمین در دسترس نیست"
+        raise PasarGuardError(
+            f"به‌روزرسانی ادمین پاسارگارد ناموفق بود: {detail}. "
+            "علت محتمل: نسخه پنل پاسارگارد یا دسترسی نقش. "
+            "راه حل: نقش ادمین اصلی و نسخه پاسارگارد را بررسی کنید.",
+            404,
+        )
 
     async def delete_admin(self, username: str) -> Any:
-        return await self.request("DELETE", f"/api/admin/{username}")
+        """Delete admin — prefer by-id (case-safe)."""
+        uname = (username or "").strip()
+        if not uname:
+            raise PasarGuardError("نام ادمین نامعتبر است", 400)
+        admin = await self.get_admin(uname)
+        if not admin:
+            raise PasarGuardError(f"ادمین «{uname}» در پاسارگارد یافت نشد", 404)
+        admin_id = admin.get("id")
+        exact = str(admin.get("username") or uname).strip()
+        if admin_id is not None:
+            try:
+                return await self.request("DELETE", f"/api/admin/by-id/{int(admin_id)}")
+            except PasarGuardError as e:
+                if e.status_code not in (404, 405):
+                    raise
+        for path in (
+            f"/api/admin/by-username/{exact}",
+            f"/api/admin/{exact}",
+        ):
+            try:
+                return await self.request("DELETE", path)
+            except PasarGuardError as e:
+                if e.status_code not in (404, 405):
+                    raise
+        raise PasarGuardError(
+            f"حذف ادمین «{exact}» ناموفق بود. "
+            "علت محتمل: ادمین مالک یا دسترسی ناکافی. "
+            "راه حل: از پنل اصلی پاسارگارد وضعیت را بررسی کنید.",
+            404,
+        )
 
     async def get_system_stats(self) -> dict:
         data = await self.request("GET", "/api/system")
@@ -532,8 +606,30 @@ class PasarGuardClient:
     async def get_nodes_realtime(self) -> Any:
         return await self.request("GET", "/api/nodes/realtime_stats")
 
+    async def get_node(self, node_id: int) -> dict:
+        data = await self.request("GET", f"/api/node/{int(node_id)}")
+        return data if isinstance(data, dict) else {}
+
+    async def create_node(self, payload: dict) -> dict:
+        return await self.request("POST", "/api/node", json=payload)
+
+    async def modify_node(self, node_id: int, payload: dict) -> dict:
+        return await self.request("PUT", f"/api/node/{int(node_id)}", json=payload)
+
+    async def delete_node(self, node_id: int) -> Any:
+        return await self.request("DELETE", f"/api/node/{int(node_id)}")
+
+    async def reset_node(self, node_id: int) -> Any:
+        return await self.request("POST", f"/api/node/{int(node_id)}/reset")
+
+    async def sync_node(self, node_id: int) -> Any:
+        return await self.request("PUT", f"/api/node/{int(node_id)}/sync")
+
     async def reconnect_node(self, node_id: int) -> Any:
-        return await self.request("POST", f"/api/node/{node_id}/reconnect")
+        return await self.request("POST", f"/api/node/{int(node_id)}/reconnect")
+
+    async def reconnect_all_nodes(self) -> Any:
+        return await self.request("POST", "/api/nodes/reconnect")
 
     async def subscription_info(self, token: str) -> dict:
         return await self.request("GET", f"/sub/{token}/info", auth=False)
