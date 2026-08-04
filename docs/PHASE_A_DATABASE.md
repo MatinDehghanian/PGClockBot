@@ -120,3 +120,15 @@ Executed in the migration environment before Phase A merge:
 .venv/bin/python -m scripts.migrate_sqlite_to_pg … → ok=true, counts matched
 pytest tests/test_phase0_baseline.py tests/test_phase_a_database.py → 6 passed
 ```
+
+## Final verification pass (pre-approval)
+
+```text
+Full suite: 826 passed, 22 failed (848 total)
+  - Same 22 failures reproduce on origin/main (pre-existing; not Phase A regressions)
+  - Prior Phase A audit flake BackupManifestPathTests: fixed and passing
+SQLite smoke (clean): init / login / health / backup / restore → all ok
+PostgreSQL smoke (clean DB pgclock_smoke): init / login / health / backup / restore → all ok
+```
+
+**Recommendation:** Approve Phase A. Do not start Phase B until explicitly requested.
