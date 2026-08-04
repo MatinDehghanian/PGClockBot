@@ -79,25 +79,49 @@ def _allowed_id_set(raw) -> set[int] | None:
         return None
 
 
-def filter_templates_for_staff(items: list[dict], staff: dict | None) -> list[dict]:
+def filter_templates_for_staff(
+    items: list[dict],
+    staff: dict | None,
+    *,
+    trust_client_scope: bool | None = None,
+) -> list[dict]:
+    """Filter templates for restricted staff.
+
+    When ``allowed_template_ids`` is None:
+    - trust_client_scope True (reseller own-token lists) → keep items
+    - trust_client_scope False → fail closed ``[]`` (no unrestricted owner lists)
+    """
     if not staff or staff.get("role") == "admin":
         return items
+    if trust_client_scope is None:
+        from app.services.pg_read import trust_pg_list_scope
+
+        trust_client_scope = trust_pg_list_scope(staff)
     access = staff.get("pg_access") or {}
     allowed = _allowed_id_set(access.get("allowed_template_ids"))
     if allowed is None:
-        return items
+        return items if trust_client_scope else []
     if not allowed:
         return []
     return [t for t in items if int(t.get("id") or 0) in allowed]
 
 
-def filter_groups_for_staff(items: list[dict], staff: dict | None) -> list[dict]:
+def filter_groups_for_staff(
+    items: list[dict],
+    staff: dict | None,
+    *,
+    trust_client_scope: bool | None = None,
+) -> list[dict]:
     if not staff or staff.get("role") == "admin":
         return items
+    if trust_client_scope is None:
+        from app.services.pg_read import trust_pg_list_scope
+
+        trust_client_scope = trust_pg_list_scope(staff)
     access = staff.get("pg_access") or {}
     allowed = _allowed_id_set(access.get("allowed_group_ids"))
     if allowed is None:
-        return items
+        return items if trust_client_scope else []
     if not allowed:
         return []
     return [g for g in items if int(g.get("id") or 0) in allowed]
@@ -134,13 +158,29 @@ def staff_can_create_pg_template(staff: dict | None) -> bool:
     return bool(writes.get("templates"))
 
 
-async def load_pg_plan_options(staff: dict | None = None) -> tuple[list[dict], list[dict], str | None]:
-    """Templates + groups for plan forms, filtered to staff PG access."""
+async def load_pg_plan_options(
+    staff: dict | None = None,
+    *,
+    session=None,
+) -> tuple[list[dict], list[dict], str | None]:
+    """Templates + groups for plan forms, filtered to staff PG access.
+
+    Uses tenant-safe read client (C1). Restricted staff without own credentials
+    get empty lists (no owner-token fetch).
+    """
     templates: list[dict] = []
     groups: list[dict] = []
     pg_error = None
     try:
-        pg = get_pg()
+        from app.services.pg_read import PgReadDenied, staff_pg_read_client, trust_pg_list_scope
+
+        if staff and staff.get("role") != "admin":
+            try:
+                pg = await staff_pg_read_client(session, staff)
+            except PgReadDenied as e:
+                return [], [], e.message
+        else:
+            pg = get_pg()
         templates = await pg.get_user_templates_simple()
         full = await pg.get_user_templates()
         if isinstance(full, list) and full:
@@ -152,8 +192,9 @@ async def load_pg_plan_options(staff: dict | None = None) -> tuple[list[dict], l
         pg_error = str(e)
     templates = [t for t in templates if isinstance(t, dict)]
     groups = [g for g in groups if isinstance(g, dict)]
-    templates = filter_templates_for_staff(templates, staff)
-    groups = filter_groups_for_staff(groups, staff)
+    trust = trust_pg_list_scope(staff) if staff else True
+    templates = filter_templates_for_staff(templates, staff, trust_client_scope=trust)
+    groups = filter_groups_for_staff(groups, staff, trust_client_scope=trust)
     return templates, groups, pg_error
 
 

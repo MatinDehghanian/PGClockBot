@@ -38,15 +38,11 @@ def _q(msg: str) -> str:
 
 
 async def _staff_pg(session: AsyncSession, staff: dict):
-    """Return (client, as_owner).
+    """Return (client, as_owner) for mutations (Phase C2 + C5).
 
     - Platform admin → owner credentials (as_owner=True)
-    - Reseller → shop PG admin credentials (as_owner=False; ownership implicit)
-    - pg_staff → owner credentials (as_owner=True) then set_owner after create
-
-    PgStaffAccess does not store a PasarGuard password, so staff must create via
-    the owner client and transfer ownership (create paths already do this when
-    as_owner=True for non-admin principals).
+    - Reseller → shop PG admin credentials (as_owner=False)
+    - pg_staff → own PG credentials when stored (as_owner=False); else fail closed
     """
     if is_platform_admin(staff):
         return get_pg(), True
@@ -54,10 +50,54 @@ async def _staff_pg(session: AsyncSession, staff: dict):
     if rid:
         return await get_pg_for_reseller(session, int(rid)), False
     if staff.get("role") == "pg_staff":
-        if not _pg_owner(staff):
-            raise PasarGuardError("ادمین پاسارگارد برای این حساب تنظیم نشده است")
-        return get_pg(), True
-    raise PasarGuardError("محدوده فروشگاه مشخص نیست — عملیات پاسارگارد مجاز نیست")
+        from app.services.pasarguard import get_pg_for_staff
+
+        return await get_pg_for_staff(
+            session,
+            pg_username=staff.get("pg_admin_username"),
+            staff_id=staff.get("pg_staff_id"),
+        ), False
+    raise PasarGuardError(
+        "عملیات نوشتن پاسارگارد بدون اعتبارنامه اختصاصی مجاز نیست "
+        "(ادمین فرعی تا همگام‌سازی اعتبارنامه نمی‌تواند mutate کند)"
+    )
+
+
+async def _assert_owned_user(
+    staff: dict, user_id: int, *, session: AsyncSession | None = None
+) -> dict | None:
+    """Fetch a PG user only when the staff principal is allowed to see/mutate it.
+
+    Resellers and credentialed pg_staff authenticate as themselves (no owner-token probe).
+    """
+    if _is_admin(staff):
+        info = await get_pg().get_user_by_id(user_id)
+        return info if isinstance(info, dict) else None
+
+    rid = shop_owner_id(staff)
+    if rid and session is not None:
+        try:
+            pg = await get_pg_for_reseller(session, int(rid))
+            info = await pg.get_user_by_id(user_id)
+        except Exception:
+            return None
+        return info if isinstance(info, dict) else None
+
+    if staff.get("role") == "pg_staff" and session is not None:
+        try:
+            from app.services.pasarguard import get_pg_for_staff
+
+            pg = await get_pg_for_staff(
+                session,
+                pg_username=staff.get("pg_admin_username"),
+                staff_id=staff.get("pg_staff_id"),
+            )
+            info = await pg.get_user_by_id(user_id)
+        except Exception:
+            return None
+        return info if isinstance(info, dict) else None
+
+    return None
 
 
 def _pg_form_err(msg: str, *, modal: str, uid: str | int | None = None) -> RedirectResponse:
@@ -123,41 +163,11 @@ def _filter_groups(items: list[dict], staff: dict) -> list[dict]:
     return filter_groups_for_staff(items, staff)
 
 
-async def _assert_owned_user(
-    staff: dict, user_id: int, *, session: AsyncSession | None = None
-) -> dict | None:
-    """Fetch a PG user only when the staff principal is allowed to see it.
-
-    Resellers authenticate as themselves (no owner-token probe). pg_staff has no
-    stored PG password, so reads use the owner client then filter by ownership.
-    """
-    if _is_admin(staff):
-        info = await get_pg().get_user_by_id(user_id)
-        return info if isinstance(info, dict) else None
-
-    rid = shop_owner_id(staff)
-    if rid and session is not None:
-        try:
-            pg = await get_pg_for_reseller(session, int(rid))
-            info = await pg.get_user_by_id(user_id)
-        except Exception:
-            return None
-        return info if isinstance(info, dict) else None
-
-    # pg_staff (or reseller without session): owner read + ownership filter
-    info = await get_pg().get_user_by_id(user_id)
-    if not isinstance(info, dict):
-        return None
-    mine = _pg_owner(staff).lower()
-    if not mine or _owner_of(info) != mine:
-        return None
-    return info
-
-
 def _pg_ctx(staff: dict, **extra) -> dict:
+    from app.services.pg_read import effective_pg_menu_keys
+
     writes = staff_pg_writes(staff)
     actions = staff_user_actions(staff)
-    pg_perms = list(staff.get("pg_permissions") or [])
     if _is_admin(staff):
         pg_perms = [
             "pg_overview",
@@ -169,8 +179,14 @@ def _pg_ctx(staff: dict, **extra) -> dict:
             "pg_nodes",
             "pg_admins",
         ]
+    else:
+        pg_perms = effective_pg_menu_keys(staff)
+    # Sidebar reads staff.pg_permissions — keep menu/data aligned (C1).
+    staff_view = dict(staff)
+    if not _is_admin(staff):
+        staff_view["pg_permissions"] = list(pg_perms)
     ctx = {
-        "staff": staff,
+        "staff": staff_view,
         "is_admin": _is_admin(staff),
         "pg_perms": pg_perms,
         "pg_writes": writes,
@@ -203,8 +219,8 @@ def register_pg_pages(
         counts = {"admins": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0}
         reseller_overview = None
         try:
-            pg = get_pg()
             if _is_admin(staff):
+                pg = get_pg()
                 raw, nodes, admins, groups, hosts = await asyncio.gather(
                     pg.get_system_stats(),
                     pg.get_nodes_simple(),
@@ -258,8 +274,8 @@ def register_pg_pages(
                 counts["groups"] = len(groups) if isinstance(groups, list) else 0
                 counts["hosts"] = len(hosts) if isinstance(hosts, list) else 0
             else:
-                # Reseller: only own users/usage/limits — never server/hardware stats
-                reseller_overview = await build_reseller_pg_overview(staff)
+                # Reseller/pg_staff: tenant-safe overview only (no owner-token lists)
+                reseller_overview = await build_reseller_pg_overview(staff, session=session)
                 # Keep overview.error in template; don't blank the page via flash_err
         except Exception as e:
             err = str(e)
@@ -273,6 +289,31 @@ def register_pg_pages(
                 unread=getattr(request.state, "panel_tickets_unread", None),
             )
 
+        # Phase D3 Q3: staff overview CTA when enc missing or username mismatched
+        staff_remediation = None
+        if staff.get("role") == "pg_staff":
+            from app.services.pg_staff_access import (
+                access_by_web_username,
+                staff_remediation_flags,
+                staff_username_aligned,
+            )
+
+            login_u = (
+                (request.session.get("username") or staff.get("username") or "")
+                .strip()
+            )
+            staff_row = await access_by_web_username(session, login_u) if login_u else None
+            if staff_row is not None:
+                flags = staff_remediation_flags(staff_row)
+                if flags["needs_remediation"]:
+                    staff_remediation = {
+                        **flags,
+                        # Self-serve /security only when username already equals PG
+                        "can_self_serve": staff_username_aligned(staff_row),
+                        "web_username": staff_row.web_username,
+                        "pg_username": staff_row.pg_username,
+                    }
+
         return render(
             request,
             "pg_home.html",
@@ -285,12 +326,19 @@ def register_pg_pages(
                 flash_err=err,
                 active="pg",
                 ticket_alert=ticket_alert,
+                staff_remediation=staff_remediation,
             ),
         )
 
     # ---- VPN users ----
     @app.get("/pg/users", response_class=HTMLResponse)
-    async def pg_users(request: Request, staff: dict = Depends(require_pg_perm("pg_users"))):
+    async def pg_users(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_users")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.pg_read import PgReadDenied, staff_pg_read_client
+
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         form_err = request.query_params.get("form_err")
@@ -303,7 +351,7 @@ def register_pg_pages(
         access = staff.get("pg_access") or {}
         require_template = bool(access.get("require_template")) and not _is_admin(staff)
         try:
-            pg = get_pg()
+            pg = await staff_pg_read_client(session, staff)
             params: dict = {"offset": 0, "limit": 200}
             if q:
                 params["username"] = q
@@ -346,6 +394,8 @@ def register_pg_pages(
             elif not isinstance(groups_raw, Exception):
                 groups = []
             groups = _filter_groups(groups, staff)
+        except PgReadDenied as e:
+            err = e.message
         except Exception as e:
             err = str(e)
         actions = staff_user_actions(staff)
@@ -466,8 +516,10 @@ def register_pg_pages(
 
                 gb_raw = str(form.get("data_limit_gb") or "").strip()
                 days_raw = str(form.get("duration_days") or "").strip()
+                hwid_raw = str(form.get("hwid_limit") or "").strip()
                 data_limit = None
                 expire_ts = None
+                hwid_limit = None
                 if gb_raw:
                     try:
                         gb = float(gb_raw.replace(",", "."))
@@ -486,6 +538,13 @@ def register_pg_pages(
                             expire_ts = int(time.time()) + days * 86400
                     except ValueError:
                         return _pg_form_err("مدت نامعتبر است", modal="create")
+                if hwid_raw:
+                    try:
+                        hwid_limit = int(float(hwid_raw))
+                        if hwid_limit < 0:
+                            raise ValueError
+                    except ValueError:
+                        return _pg_form_err("سقف دستگاه (HWID) نامعتبر است", modal="create")
 
                 try:
                     await assert_provision_create(
@@ -493,6 +552,7 @@ def register_pg_pages(
                         staff=staff,
                         data_limit=data_limit,
                         expire_ts=expire_ts,
+                        hwid_limit=hwid_limit,
                         from_template=False,
                     )
                 except (ProvisionError, PgQuotaError) as qe:
@@ -505,6 +565,7 @@ def register_pg_pages(
                         group_ids=ids,
                         data_limit=data_limit,
                         expire_ts=expire_ts,
+                        hwid_limit=hwid_limit,
                         note=note,
                     )
                 )
@@ -598,8 +659,11 @@ def register_pg_pages(
 
         gb_raw = str(form.get("data_limit_gb") or "").strip()
         days_raw = str(form.get("duration_days") or "").strip()
+        hwid_raw = str(form.get("hwid_limit") or "").strip()
         data_limit = 0  # 0 = unlimited
         expire_ts = 0  # clear expire when empty
+        hwid_limit = None
+        hwid_changed = False
         if gb_raw:
             try:
                 gb = float(gb_raw.replace(",", "."))
@@ -616,6 +680,17 @@ def register_pg_pages(
                 expire_ts = int(time.time()) + days * 86400 if days > 0 else 0
             except ValueError:
                 return _pg_form_err("مدت نامعتبر است", modal="edit", uid=user_id)
+        if "hwid_limit" in form:
+            hwid_changed = True
+            if hwid_raw:
+                try:
+                    hwid_limit = int(float(hwid_raw))
+                    if hwid_limit < 0:
+                        raise ValueError
+                except ValueError:
+                    return _pg_form_err("سقف دستگاه (HWID) نامعتبر است", modal="edit", uid=user_id)
+            else:
+                hwid_limit = 0  # unlimited
 
         try:
             current = await _assert_owned_user(staff, user_id, session=session)
@@ -627,8 +702,10 @@ def register_pg_pages(
                     staff,
                     data_limit=data_limit,
                     expire_ts=expire_ts,
+                    hwid_limit=hwid_limit,
                     data_limit_changed=True,
                     expire_changed=True,
+                    hwid_changed=hwid_changed,
                 )
             except (ProvisionError, PgQuotaError) as qe:
                 return _pg_form_err(getattr(qe, "message", str(qe)), modal="edit", uid=user_id)
@@ -638,6 +715,7 @@ def register_pg_pages(
                 group_ids=ids,
                 data_limit=data_limit,
                 expire_ts=expire_ts,
+                hwid_limit=hwid_limit if hwid_changed else None,
                 status=str(current.get("status") or "") or None,
             )
             pg, _as_owner = await _staff_pg(session, staff)
@@ -754,12 +832,18 @@ def register_pg_pages(
 
     # ---- templates ----
     @app.get("/pg/templates", response_class=HTMLResponse)
-    async def pg_templates(request: Request, staff: dict = Depends(require_pg_perm("pg_templates"))):
+    async def pg_templates(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_templates")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.pg_read import PgReadDenied, staff_pg_read_client
+
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         templates, groups = [], []
         try:
-            pg = get_pg()
+            pg = await staff_pg_read_client(session, staff)
             templates_raw, groups_raw = await asyncio.gather(
                 pg.get_user_templates(),
                 pg.get_groups_simple(),
@@ -773,6 +857,8 @@ def register_pg_pages(
                 raise templates_raw
             templates = _filter_templates(templates, staff)
             groups = _filter_groups(groups_raw if isinstance(groups_raw, list) else [], staff)
+        except PgReadDenied as e:
+            err = e.message
         except Exception as e:
             err = str(e)
         return render(
@@ -854,14 +940,20 @@ def register_pg_pages(
 
     # ---- groups ----
     @app.get("/pg/groups", response_class=HTMLResponse)
-    async def pg_groups(request: Request, staff: dict = Depends(require_pg_perm("pg_groups"))):
+    async def pg_groups(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_groups")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.pg_read import PgReadDenied, staff_pg_read_client
+
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         groups, inbound_tags = [], []
         edit_id = request.query_params.get("edit")
         edit_group = None
         try:
-            pg = get_pg()
+            pg = await staff_pg_read_client(session, staff)
             full = await pg.get_groups()
             groups = full if isinstance(full, list) else as_list(full, "groups")
             if not groups:
@@ -876,6 +968,8 @@ def register_pg_pages(
                     edit_group = await pg.get_group(eid)
                 else:
                     err = err or "گروه خارج از دسترسی شماست"
+        except PgReadDenied as e:
+            err = e.message
         except Exception as e:
             err = str(e)
         return render(
@@ -973,14 +1067,22 @@ def register_pg_pages(
 
     # ---- hosts ----
     @app.get("/pg/hosts", response_class=HTMLResponse)
-    async def pg_hosts(request: Request, staff: dict = Depends(require_pg_perm("pg_hosts"))):
+    async def pg_hosts(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_hosts")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.pg_read import PgReadDenied, staff_pg_read_client
+
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         hosts, inbound_tags = [], []
         try:
-            pg = get_pg()
+            pg = await staff_pg_read_client(session, staff)
             hosts = await pg.get_hosts()
             inbound_tags = _inbound_tags(await pg.get_inbounds())
+        except PgReadDenied as e:
+            err = e.message
         except Exception as e:
             err = str(e)
         return render(
@@ -1078,12 +1180,21 @@ def register_pg_pages(
 
     # ---- nodes / inbounds / admins ----
     @app.get("/pg/nodes", response_class=HTMLResponse)
-    async def pg_nodes(request: Request, staff: dict = Depends(require_pg_perm("pg_nodes"))):
+    async def pg_nodes(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_nodes")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.pg_read import PgReadDenied, staff_pg_read_client
+
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
         nodes = []
         try:
-            nodes = await get_pg().get_nodes()
+            pg = await staff_pg_read_client(session, staff)
+            nodes = await pg.get_nodes()
+        except PgReadDenied as e:
+            err = e.message
         except Exception as e:
             err = str(e)
         return render(
@@ -1119,13 +1230,21 @@ def register_pg_pages(
         return RedirectResponse(f"/pg/nodes?ok={_q('درخواست اتصال مجدد ارسال شد')}", status_code=303)
 
     @app.get("/pg/inbounds", response_class=HTMLResponse)
-    async def pg_inbounds(request: Request, staff: dict = Depends(require_pg_perm("pg_inbounds"))):
+    async def pg_inbounds(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_inbounds")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.pg_read import PgReadDenied, staff_pg_read_client
+
         err = request.query_params.get("err")
         inbounds, details = [], None
         try:
-            pg = get_pg()
+            pg = await staff_pg_read_client(session, staff)
             inbounds = await pg.get_inbounds()
             details = await pg.get_inbounds_details()
+        except PgReadDenied as e:
+            err = e.message
         except Exception as e:
             err = str(e)
         return render(
@@ -1197,6 +1316,11 @@ def register_pg_pages(
         form = await request.form()
         role_raw = str(form.get("role_id") or "").strip()
         note = str(form.get("note") or "").strip()
+        from app.services.credential_policy import validate_password_strength
+
+        ok, perr = validate_password_strength(password, username=username.strip())
+        if not ok:
+            return RedirectResponse(f"/pg/admins?err={_q(perr)}", status_code=303)
         payload: dict = {
             "username": username.strip(),
             "password": password,
@@ -1221,23 +1345,106 @@ def register_pg_pages(
         return RedirectResponse(f"/pg/admins?ok={_q('ادمین پنل ساخته شد')}", status_code=303)
 
     @app.post("/pg/admins/{username}/web-access")
-    async def pg_admins_web_access(
+    async def pg_admins_web_access_legacy(
+        username: str,
+        staff: dict = Depends(require_admin),
+    ):
+        """Phase D2 Q2: old single grant path hard-fails (no silent alias/conversion)."""
+        return RedirectResponse(
+            f"/pg/admins?err={_q('این مسیر منسوخ شده است — از «اعطای ادمین فرعی» یا «اعطای نماینده» استفاده کنید')}",
+            status_code=303,
+        )
+
+    @app.post("/pg/admins/{username}/web-access/staff")
+    async def pg_admins_web_access_staff(
         username: str,
         request: Request,
         staff: dict = Depends(require_admin),
         session=Depends(get_db),
     ):
+        """PG-only secondary admin (pg_staff) — never creates a reseller."""
+        from app.services.pg_staff_access import (
+            access_by_pg_username,
+            classify_pg_admin_dict,
+            grant_web_access,
+            update_web_access,
+        )
+
+        form = await request.form()
+        web_password = str(form.get("web_password") or "")
+        note = str(form.get("note") or "").strip()
+        # D3 Q1 A: explicit confirm-align checkbox (never silent rename)
+        confirm_align = str(form.get("confirm_align") or "").strip().lower() in {
+            "1",
+            "on",
+            "true",
+            "yes",
+        }
+        pg_u = (username or "").strip()
+        if not pg_u:
+            return RedirectResponse(f"/pg/admins?err={_q('نام ادمین نامعتبر است')}", status_code=303)
+        # D2: web username must match PG username (Q1: error-only — form locks to pg_u)
+        web_username = str(form.get("web_username") or pg_u).strip() or pg_u
+        try:
+            admin = await get_pg().get_admin(pg_u)
+        except Exception as e:
+            return RedirectResponse(f"/pg/admins?err={_q(e)}", status_code=303)
+        if not admin:
+            return RedirectResponse(
+                f"/pg/admins?err={_q('این ادمین در پاسارگارد یافت نشد')}",
+                status_code=303,
+            )
+        if classify_pg_admin_dict(admin) == "disabled":
+            return RedirectResponse(
+                f"/pg/admins?err={_q('این ادمین در پاسارگارد غیرفعال است — ابتدا فعالش کنید')}",
+                status_code=303,
+            )
+
+        existing = await access_by_pg_username(session, pg_u)
+        if existing:
+            row, err = await update_web_access(
+                session,
+                pg_username=pg_u,
+                web_username=web_username,
+                password=web_password,
+                note=note,
+                is_active=True,
+                confirm_align=confirm_align,
+            )
+        else:
+            row, err = await grant_web_access(
+                session,
+                pg_username=pg_u,
+                web_username=web_username,
+                password=web_password,
+                note=note,
+                is_active=True,
+            )
+        if err:
+            return RedirectResponse(f"/pg/admins?err={_q(err)}", status_code=303)
+        uname = row.web_username if row else web_username
+        msg = f"دسترسی ادمین فرعی «{uname}» ذخیره شد — فقط منوی پاسارگارد (بدون فروشگاه)"
+        return RedirectResponse(f"/pg/admins?ok={_q(msg)}", status_code=303)
+
+    @app.post("/pg/admins/{username}/web-access/reseller")
+    async def pg_admins_web_access_reseller(
+        username: str,
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session=Depends(get_db),
+    ):
+        """Shop reseller grant — refuses when pg_staff row exists (no conversion)."""
         from app.services.pg_staff_access import classify_pg_admin_dict
         from app.services.resellers import provision_existing_pg_admin
 
         form = await request.form()
-        web_username = str(form.get("web_username") or "").strip()
         web_password = str(form.get("web_password") or "")
         note = str(form.get("note") or "").strip()
         plan_raw = str(form.get("plan_id") or "").strip()
         pg_u = (username or "").strip()
         if not pg_u:
             return RedirectResponse(f"/pg/admins?err={_q('نام ادمین نامعتبر است')}", status_code=303)
+        web_username = str(form.get("web_username") or pg_u).strip() or pg_u
         if not plan_raw.isdigit():
             return RedirectResponse(
                 f"/pg/admins?err={_q('انتخاب پلن نمایندگی الزامی است')}",

@@ -132,23 +132,28 @@ class ConflictGrantTests(unittest.IsolatedAsyncioTestCase):
         ):
             row, err = await grant_web_access(
                 AsyncMock(),
-                pg_username="x",
+                pg_username="newuser",
                 web_username="newuser",
-                password="Aa1!aaaa",
+                password="AaBb12!secret",
             )
         self.assertIsNone(row)
         self.assertEqual(err, "قبلاً دسترسی دارد")
 
 
 class UiTemplateGuards(unittest.TestCase):
-    def test_admins_template_shows_reseller_block(self):
+    def test_admins_template_dual_grants(self):
         from pathlib import Path
 
         src = Path("app/web/templates/pg_admins.html").read_text(encoding="utf-8")
         self.assertIn("src == 'reseller'", src)
         self.assertIn("دسترسی جداگانه ساخته نمی‌شود", src)
+        self.assertIn("web-access/staff", src)
+        self.assertIn("web-access/reseller", src)
+        self.assertIn("اعطای ادمین فرعی", src)
+        self.assertIn("اعطای نماینده", src)
         self.assertIn('name="plan_id"', src)
-        self.assertIn("پلن نمایندگی", src)
+        self.assertNotIn("فعال‌سازی فروشگاه", src)
+        self.assertNotIn('action="/pg/admins/{{ uname }}/web-access"', src)
 
 
 if __name__ == "__main__":

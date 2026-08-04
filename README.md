@@ -166,6 +166,33 @@ Or set `PUBLIC_BASE_URL` in the web setup wizard / Settings.
 
 ---
 
+## Database (production)
+
+PostgreSQL is the recommended production database:
+
+```bash
+sudo bash scripts/setup_postgres.sh
+# then set DATABASE_URL=postgresql+asyncpg://pgclock:SECRET@127.0.0.1:5432/pgclock
+.venv/bin/python -m scripts.alembic_upgrade
+```
+
+Existing SQLite installs: run Phase 0 baseline, then migrate (see `docs/PHASE_A_DATABASE.md`).
+
+Installer hint: export `PGCLOCK_DATABASE_URL` before `bash pgclock.sh install` to write PostgreSQL into `.env`.
+
+### Global CLI
+
+```bash
+sudo bash scripts/install_global_cli.sh
+pgclock status
+pgclock doctor
+pgclock backup
+```
+
+See `docs/PHASE_B_CLI.md` for the full command list.
+
+---
+
 ## Security
 
 - Do not commit `.env` or `data/`

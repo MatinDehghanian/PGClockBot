@@ -348,7 +348,7 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
         await message.answer("نماینده نیستید.")
         return
     staff = await _staff_ctx(profile)
-    templates, groups, pg_error = await load_pg_plan_options(staff)
+    templates, groups, pg_error = await load_pg_plan_options(staff, session=session)
     await state.update_data(templates=templates, groups=groups, owner_id=owner_id)
     rows: list[list[InlineKeyboardButton]] = []
     if groups:

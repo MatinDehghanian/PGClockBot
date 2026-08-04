@@ -236,8 +236,16 @@ def _role_constraint_boxes(limits: dict) -> list[dict[str, Any]]:
     return boxes
 
 
-async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
-    """Metrics for a staff member's own PG admin account (reseller or pg_staff)."""
+async def build_reseller_pg_overview(
+    staff: dict,
+    *,
+    session=None,
+) -> dict[str, Any]:
+    """Metrics for a staff member's own PG admin account (reseller or pg_staff).
+
+    C1: uses tenant-safe read client — never owner token for resellers.
+    pg_staff without stored PG credentials gets a fail-closed error (until C5).
+    """
     owner = str(staff.get("pg_admin_username") or "").strip()
     out: dict[str, Any] = {
         "username": owner or None,
@@ -259,7 +267,17 @@ async def build_reseller_pg_overview(staff: dict) -> dict[str, Any]:
         return out
 
     try:
-        pg = get_pg()
+        from app.services.pg_read import PgReadDenied, staff_pg_read_client
+        from app.services.shop_scope import is_platform_admin
+
+        if is_platform_admin(staff):
+            pg = get_pg()
+        else:
+            try:
+                pg = await staff_pg_read_client(session, staff)
+            except PgReadDenied as e:
+                out["error"] = e.message
+                return out
         admin = await pg.get_admin(owner)
         if not admin:
             out["error"] = f"ادمین «{owner}» در پاسارگارد یافت نشد"
@@ -399,15 +417,7 @@ async def _owned_user_stats(pg, owner: str, *, fallback_total: int = 0) -> dict[
     except Exception:
         users = []
 
-    if not users:
-        try:
-            data = await pg.get_users(limit=stats["sample_cap"], offset=0)
-            raw = data.get("users") if isinstance(data, dict) else data
-            if isinstance(raw, list):
-                users = [u for u in raw if isinstance(u, dict)]
-        except Exception:
-            users = []
-
+    # C1: never fall back to an unscoped owner-wide user list.
     # Always filter client-side — never trust unscoped payloads.
     users = [u for u in users if _owner_username_of(u) == mine]
 

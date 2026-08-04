@@ -3,8 +3,11 @@ fastapi>=0.115,<1
 uvicorn[standard]>=0.32,<1
 sqlalchemy[asyncio]>=2.0,<3
 aiosqlite>=0.20
-# Optional: only needed when DATABASE_URL uses postgresql+asyncpg
+# Production PostgreSQL async driver
 asyncpg>=0.30
+# Sync driver for Alembic / ETL (postgresql+psycopg://)
+psycopg[binary]>=3.1,<4
+alembic>=1.14,<2
 httpx>=0.28
 pydantic>=2.9,<3
 pydantic-settings>=2.6

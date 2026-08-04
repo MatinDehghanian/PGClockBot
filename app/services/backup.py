@@ -2,11 +2,14 @@
 
 Archive format (ZIP):
   manifest.json
-  data/bot.db
+  data/bot.db                  (SQLite engine)
+  data/postgres.dump           (PostgreSQL engine — pg_dump -Fc)
   data/web_admin.json          (if present)
   data/uploads/**              (if present)
   data/setup_complete.flag     (if present)
   env/.env                     (optional; included by default for full restore)
+
+Manifest includes db_engine: sqlite | postgresql. Restore refuses engine mismatch.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ import os
 import re
 import shutil
 import sqlite3
+import subprocess
 import tempfile
 import threading
 import zipfile
@@ -27,6 +31,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.config import DATA_DIR, ROOT_DIR, get_settings
+from app.db.engine_url import parse_engine, pg_connection_parts
 from app.services.updates import local_version
 
 log = logging.getLogger(__name__)
@@ -37,6 +42,8 @@ MANIFEST_NAME = "manifest.json"
 MAX_BACKUPS = 20
 RESTORE_STATUS_FILE = DATA_DIR / "backup_restore.json"
 MAGIC = "pgclock-backup-v1"
+SQLITE_DB_MEMBER = "data/bot.db"
+POSTGRES_DUMP_MEMBER = "data/postgres.dump"
 
 # RLock: restore creates a safety backup while already holding the lock.
 _lock = threading.RLock()
@@ -54,6 +61,12 @@ def sqlite_db_path() -> Path:
     """Resolve on-disk SQLite path from DATABASE_URL (best-effort)."""
     url = (get_settings().database_url or "").strip()
     if "sqlite" in url:
+        try:
+            info = parse_engine(url)
+            if info.sqlite_path:
+                return info.sqlite_path
+        except Exception:
+            pass
         m = re.search(r":///(.+)$", url)
         if m:
             raw = m.group(1)
@@ -61,6 +74,88 @@ def sqlite_db_path() -> Path:
                 return Path(raw)
             return (ROOT_DIR / raw).resolve()
     return DATA_DIR / "bot.db"
+
+
+def current_db_engine() -> str:
+    """Return 'sqlite' or 'postgresql' for the configured DATABASE_URL."""
+    try:
+        return parse_engine(get_settings().database_url).dialect
+    except Exception:
+        return "sqlite"
+
+
+def _which(cmd: str) -> str | None:
+    return shutil.which(cmd)
+
+
+def _dump_postgres(dest: Path) -> dict[str, Any]:
+    """Create a custom-format pg_dump at dest."""
+    pg_dump = _which("pg_dump")
+    if not pg_dump:
+        raise RuntimeError("pg_dump not found — install postgresql-client")
+    parts = pg_connection_parts(get_settings().database_url)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        dest.unlink()
+    env = os.environ.copy()
+    if parts.get("password"):
+        env["PGPASSWORD"] = str(parts["password"])
+    cmd = [
+        pg_dump,
+        "--format=custom",
+        "--no-owner",
+        "--no-acl",
+        "--file",
+        str(dest),
+        "--host",
+        str(parts["host"]),
+        "--port",
+        str(parts["port"]),
+        "--username",
+        str(parts["user"]),
+        "--dbname",
+        str(parts["dbname"]),
+    ]
+    proc = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=600)
+    if proc.returncode != 0 or not dest.is_file() or dest.stat().st_size < 1:
+        raise RuntimeError(
+            f"pg_dump failed (code={proc.returncode}): {(proc.stderr or proc.stdout or '')[:500]}"
+        )
+    return {"path": POSTGRES_DUMP_MEMBER, "size": dest.stat().st_size}
+
+
+def _restore_postgres_dump(dump_path: Path) -> None:
+    """Restore a custom-format dump into the configured PostgreSQL database."""
+    pg_restore = _which("pg_restore")
+    if not pg_restore:
+        raise RuntimeError("pg_restore not found — install postgresql-client")
+    parts = pg_connection_parts(get_settings().database_url)
+    env = os.environ.copy()
+    if parts.get("password"):
+        env["PGPASSWORD"] = str(parts["password"])
+    # Drop+recreate public schema objects via --clean --if-exists
+    cmd = [
+        pg_restore,
+        "--clean",
+        "--if-exists",
+        "--no-owner",
+        "--no-acl",
+        "--host",
+        str(parts["host"]),
+        "--port",
+        str(parts["port"]),
+        "--username",
+        str(parts["user"]),
+        "--dbname",
+        str(parts["dbname"]),
+        str(dump_path),
+    ]
+    proc = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=600)
+    # pg_restore may return non-zero for benign notices; require DB connectivity after
+    if proc.returncode not in (0, 1):
+        raise RuntimeError(
+            f"pg_restore failed (code={proc.returncode}): {(proc.stderr or proc.stdout or '')[:800]}"
+        )
 
 
 def _sha256_file(path: Path, *, chunk: int = 1024 * 1024) -> str:
@@ -181,8 +276,22 @@ def validate_backup_archive(zip_path: Path) -> tuple[bool, str, dict[str, Any] |
             manifest = json.loads(zf.read(MANIFEST_NAME).decode("utf-8"))
             if not isinstance(manifest, dict) or manifest.get("magic") != MAGIC:
                 return False, "فرمت بکاپ نامعتبر است", None
-            if "data/bot.db" not in names:
+            db_engine = str(manifest.get("db_engine") or "").strip().lower()
+            has_sqlite = SQLITE_DB_MEMBER in names
+            has_pg = POSTGRES_DUMP_MEMBER in names
+            if not has_sqlite and not has_pg:
                 return False, "دیتابیس داخل بکاپ نیست", None
+            if not db_engine:
+                db_engine = "postgresql" if has_pg and not has_sqlite else "sqlite"
+                manifest["db_engine"] = db_engine
+            if db_engine == "sqlite" and not has_sqlite:
+                return False, "بکاپ SQLite بدون data/bot.db", None
+            if db_engine == "postgresql" and not has_pg:
+                # Allow legacy archives that only had bot.db while claiming nothing
+                if has_sqlite:
+                    manifest["db_engine"] = "sqlite"
+                else:
+                    return False, "بکاپ PostgreSQL بدون data/postgres.dump", None
             # Verify declared file hashes when present (newer backups)
             files_meta = manifest.get("files")
             if isinstance(files_meta, list):
@@ -211,31 +320,45 @@ def create_backup(
     include_env: bool = True,
     created_by: str = "panel",
 ) -> dict[str, Any]:
-    """Create a full backup ZIP under data/backups/. Thread-safe."""
+    """Create a full backup ZIP under data/backups/. Thread-safe. Engine-aware."""
     with _lock:
         ensure_backup_dir()
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         stamp = _utcnow_stamp()
         backup_id = f"{stamp}-{uuid4().hex[:8]}"
         out_path = BACKUP_DIR / f"{BACKUP_PREFIX}{backup_id}.zip"
-        db_src = sqlite_db_path()
+        db_engine = current_db_engine()
 
         with tempfile.TemporaryDirectory(prefix="pgclock-bak-") as tmp:
             tmp_root = Path(tmp)
             data_tmp = tmp_root / "data"
             data_tmp.mkdir(parents=True, exist_ok=True)
 
-            # DB (online-safe)
-            db_copy = data_tmp / "bot.db"
-            _safe_copy_sqlite(db_src, db_copy)
+            files_meta: list[dict[str, Any]] = []
+            db_member = SQLITE_DB_MEMBER
 
-            files_meta: list[dict[str, Any]] = [
-                {
-                    "path": "data/bot.db",
-                    "sha256": _sha256_file(db_copy),
-                    "size": db_copy.stat().st_size,
-                }
-            ]
+            if db_engine == "postgresql":
+                dump_copy = data_tmp / "postgres.dump"
+                _dump_postgres(dump_copy)
+                db_member = POSTGRES_DUMP_MEMBER
+                files_meta.append(
+                    {
+                        "path": POSTGRES_DUMP_MEMBER,
+                        "sha256": _sha256_file(dump_copy),
+                        "size": dump_copy.stat().st_size,
+                    }
+                )
+            else:
+                db_src = sqlite_db_path()
+                db_copy = data_tmp / "bot.db"
+                _safe_copy_sqlite(db_src, db_copy)
+                files_meta.append(
+                    {
+                        "path": SQLITE_DB_MEMBER,
+                        "sha256": _sha256_file(db_copy),
+                        "size": db_copy.stat().st_size,
+                    }
+                )
 
             # web_admin.json
             auth = DATA_DIR / "web_admin.json"
@@ -308,7 +431,8 @@ def create_backup(
                 "created_by": created_by,
                 "note": (note or "").strip()[:200],
                 "include_env": include_env_ok,
-                "db_path": "data/bot.db",
+                "db_engine": db_engine,
+                "db_path": db_member,
                 "files": files_meta,
                 "file_count": len(files_meta),
             }
@@ -323,7 +447,6 @@ def create_backup(
                     zf.write(tmp_root / item["path"], item["path"])
 
         archive_sha = _sha256_file(out_path)
-        # Rewrite manifest inside zip with archive hash (best-effort sidecar)
         sidecar = out_path.with_suffix(".json")
         manifest["archive_sha256"] = archive_sha
         manifest["archive_size"] = out_path.stat().st_size
@@ -355,6 +478,7 @@ def create_backup(
             "created_at": manifest["created_at"],
             "file_count": manifest["file_count"],
             "note": manifest["note"],
+            "db_engine": db_engine,
         }
 
 
@@ -464,8 +588,20 @@ def restore_backup(
                 tmp_root = extract_root
 
                 extracted_db = tmp_root / "data" / "bot.db"
-                if not extracted_db.is_file():
+                extracted_pg = tmp_root / "data" / "postgres.dump"
+                archive_engine = str(manifest.get("db_engine") or "").strip().lower()
+                if not archive_engine:
+                    archive_engine = "postgresql" if extracted_pg.is_file() and not extracted_db.is_file() else "sqlite"
+                live_engine = current_db_engine()
+                if archive_engine != live_engine:
+                    raise RuntimeError(
+                        f"بکاپ مربوط به موتور {archive_engine} است ولی DATABASE_URL فعلی {live_engine} است. "
+                        "قبل از ریستور DATABASE_URL را هم‌خوان کنید."
+                    )
+                if archive_engine == "sqlite" and not extracted_db.is_file():
                     raise FileNotFoundError("bot.db در بکاپ نیست")
+                if archive_engine == "postgresql" and not extracted_pg.is_file():
+                    raise FileNotFoundError("postgres.dump در بکاپ نیست")
 
                 _set_restore_status(
                     {
@@ -475,15 +611,23 @@ def restore_backup(
                         "started_at": _now_iso(),
                         "actor": actor,
                         "safety_id": safety_id,
+                        "db_engine": archive_engine,
                     }
                 )
                 DATA_DIR.mkdir(parents=True, exist_ok=True)
-                live_db = sqlite_db_path()
-                live_db.parent.mkdir(parents=True, exist_ok=True)
-                # Replace DB via temp then rename (atomic on same FS)
-                tmp_db = live_db.with_suffix(".db.restoring")
-                shutil.copy2(extracted_db, tmp_db)
-                os.replace(tmp_db, live_db)
+                if archive_engine == "postgresql":
+                    _restore_postgres_dump(extracted_pg)
+                else:
+                    live_db = sqlite_db_path()
+                    live_db.parent.mkdir(parents=True, exist_ok=True)
+                    # Replace DB via temp then rename (atomic on same FS)
+                    tmp_db = live_db.with_suffix(".db.restoring")
+                    shutil.copy2(extracted_db, tmp_db)
+                    os.replace(tmp_db, live_db)
+                    try:
+                        live_db.chmod(0o600)
+                    except OSError:
+                        pass
 
                 # web_admin.json
                 auth_src = tmp_root / "data" / "web_admin.json"
@@ -534,7 +678,6 @@ def restore_backup(
                     priv = DATA_DIR / "private"
                     if priv.is_dir():
                         priv.chmod(0o700)
-                    live_db.chmod(0o600)
                 except OSError:
                     pass
 

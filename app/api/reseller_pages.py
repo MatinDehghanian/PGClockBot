@@ -201,9 +201,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             roles = await get_pg().get_admin_roles()
         except Exception:
             roles = []
-        perms = with_shop_settings(
-            parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
-        )
+        from app.services.authz import resolve_shop_permissions_from_profile
+
+        perms = list(resolve_shop_permissions_from_profile(profile) or [])
         from app.services.billing import is_payg, list_billing_transactions
         from app.services.formatting import format_toman
         import secrets

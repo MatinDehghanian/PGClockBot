@@ -32,25 +32,15 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def validate_password_strength(password: str) -> tuple[bool, str]:
-    """Return (ok, persian_error). Empty error string when ok."""
-    from app.services.security_policy import is_placeholder_password
+def validate_password_strength(
+    password: str,
+    *,
+    username: str | None = None,
+) -> tuple[bool, str]:
+    """Delegate to Phase D1 shared policy (PasarGuard-aligned)."""
+    from app.services.credential_policy import validate_password_strength as _v
 
-    p = password or ""
-    if len(p) < 8:
-        return False, "رمز عبور باید حداقل ۸ کاراکتر باشد."
-    # bcrypt truncates at 72 bytes — enforce the real limit, not just char count
-    if len(p.encode("utf-8")) > 72:
-        return False, "رمز عبور حداکثر ۷۲ بایت باشد."
-    if is_placeholder_password(p):
-        return False, "این رمز عبور نمونه/ضعیف است؛ رمز قوی‌تری انتخاب کنید."
-    if not any(c.isupper() for c in p):
-        return False, "رمز عبور باید حداقل یک حرف بزرگ انگلیسی داشته باشد."
-    if not any(c.islower() for c in p):
-        return False, "رمز عبور باید حداقل یک حرف کوچک انگلیسی داشته باشد."
-    if not any(not c.isalnum() for c in p):
-        return False, "رمز عبور باید حداقل یک کاراکتر خاص (غیر حرف و عدد) داشته باشد."
-    return True, ""
+    return _v(password, username=username)
 
 
 def save_web_admin(username: str, password: str) -> Path:

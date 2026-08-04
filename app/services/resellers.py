@@ -119,26 +119,19 @@ def normalize_feature_perms(raw: str | None) -> str:
 
 
 def has_perm(profile: ResellerProfile | None, key: str, *, role: str | None = None) -> bool:
-    """Unified permission check for web + bot."""
-    if role == Role.ADMIN.value:
-        return True
-    if not profile or not profile.is_active:
-        return False
-    # Explicit empty string = intentionally restricted (do not soft-upgrade to DEFAULT).
-    # None / unset → DEFAULT feature set. Non-empty lists always get core shop keys.
-    raw = profile.web_permissions
-    if raw is None:
-        perms = with_shop_settings(parse_perms(DEFAULT_FEATURE_PERMS))
-    else:
-        parsed = parse_perms(raw)
-        perms = with_shop_settings(parsed) if parsed else parsed
-    return key in perms
+    """Unified permission check for web + bot (authz decision layer)."""
+    from app.services.authz import shop_feature_allowed
+
+    return shop_feature_allowed(key=key, profile=profile, role=role)
 
 
-def has_bot_perm(profile: ResellerProfile | None, key: str) -> bool:
-    if key == "approve_receipts":
-        key = "payments"
-    return has_perm(profile, key)
+def has_bot_perm(profile: ResellerProfile | None, key: str, *, role: str | None = None) -> bool:
+    """Bot menu/action check — identical to web shop ACL (``web_permissions``).
+
+    Phase D4 Q3: ``bot_permissions`` is a mirrored DB column only; decisions
+    never read it (keep writing both columns in sync).
+    """
+    return has_perm(profile, key, role=role)
 
 
 def setup_is_complete(profile: ResellerProfile | None) -> bool:
@@ -199,19 +192,47 @@ async def reseller_can_review_payment(
 
 
 def _rand_password(length: int = 14) -> str:
-    """PasarGuard-compatible password: ≥14 chars, ≥2 lower, ≥2 upper, ≥1 special."""
-    length = max(14, int(length))
-    specials = "!@#$%^&*"
-    required = (
-        [secrets.choice(string.ascii_lowercase) for _ in range(2)]
-        + [secrets.choice(string.ascii_uppercase) for _ in range(2)]
-        + [secrets.choice(specials)]
-        + [secrets.choice(string.digits) for _ in range(2)]
-    )
-    alphabet = string.ascii_letters + string.digits + specials
-    required += [secrets.choice(alphabet) for _ in range(length - len(required))]
-    secrets.SystemRandom().shuffle(required)
-    return "".join(required)
+    """PasarGuard-compatible password (Phase D1 shared generator)."""
+    from app.services.credential_policy import generate_compliant_password
+
+    return generate_compliant_password(length)
+
+
+async def apply_reseller_panel_password(
+    session: AsyncSession,
+    profile: ResellerProfile,
+    password: str,
+    *,
+    sync_pg: bool = True,
+) -> None:
+    """Set web panel password and optionally the linked Pasarguard admin password (same secret)."""
+    from app.services.credential_policy import validate_password_strength
+    from app.services.pasarguard import get_pg, reset_pg
+    from app.services.secret_box import encrypt_secret
+    from app.services.web_auth import hash_password
+
+    pwd = (password or "").strip()
+    if not pwd:
+        raise ValueError("رمز عبور الزامی است")
+    ok, err = validate_password_strength(pwd, username=profile.web_username or profile.pg_admin_username)
+    if not ok:
+        raise ValueError(err)
+    profile.web_password_hash = hash_password(pwd)
+    if not sync_pg or not (profile.pg_admin_username or "").strip():
+        return
+    enc = encrypt_secret(pwd)
+    if not enc:
+        raise ValueError("رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید")
+    profile.pg_admin_password_enc = enc
+    try:
+        await get_pg().modify_admin(profile.pg_admin_username, {"password": pwd})
+    except Exception as e:
+        raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}") from e
+    # Drop cached PG clients so next shop op uses the new password
+    try:
+        reset_pg()
+    except Exception:
+        pass
 
 
 def _rand_username(prefix: str = "res") -> str:
@@ -245,36 +266,6 @@ async def _unique_web_username(session: AsyncSession, prefix: str = "web") -> st
             continue
         return uname
     return f"{prefix}_{secrets.token_hex(6)}"
-
-
-async def apply_reseller_panel_password(
-    session: AsyncSession,
-    profile: ResellerProfile,
-    password: str,
-    *,
-    sync_pg: bool = True,
-) -> None:
-    """Set web panel password and optionally the linked Pasarguard admin password (same secret)."""
-    from app.services.pasarguard import get_pg, reset_pg
-    from app.services.secret_box import encrypt_secret
-    from app.services.web_auth import hash_password
-
-    pwd = (password or "").strip()
-    if not pwd:
-        raise ValueError("رمز عبور الزامی است")
-    profile.web_password_hash = hash_password(pwd)
-    if not sync_pg or not (profile.pg_admin_username or "").strip():
-        return
-    profile.pg_admin_password_enc = encrypt_secret(pwd)
-    try:
-        await get_pg().modify_admin(profile.pg_admin_username, {"password": pwd})
-    except Exception as e:
-        raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}") from e
-    # Drop cached PG clients so next shop op uses the new password
-    try:
-        reset_pg()
-    except Exception:
-        pass
 
 
 def new_setup_token() -> tuple[str, datetime]:
@@ -575,6 +566,8 @@ async def provision_reseller(
         pg_username = shared_username
         pg_password = shared_password
         pg_password_enc = encrypt_secret(pg_password)
+        if not pg_password_enc:
+            raise ValueError("رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید")
         payload: dict = {
             "username": pg_username,
             "password": pg_password,
@@ -937,6 +930,9 @@ def _synthetic_telegram_id(pg_username: str, *, salt: int = 0) -> int:
 
     Uses CRC32 for backward-compatible ids. Optional *salt* disambiguates rare
     collisions without reshuffling existing mappings (salt=0 preserves legacy).
+
+    Phase D4: these ids are internal — ``is_synthetic_telegram_id`` / notify
+    paths must not treat them as real Telegram users.
     """
     import hashlib
     import zlib
@@ -1030,13 +1026,12 @@ async def provision_existing_pg_admin(
     """Grant web + shop access to an existing PG admin using a reseller plan.
 
     Creates/updates a ResellerProfile linked to ``pg_username`` (no new PG admin).
-    Removes any legacy PgStaffAccess row for the same admin.
+    Refuses when a PgStaffAccess row exists (Phase D2 — no automatic conversion).
     Returns ``(profile, setup_hint, error)``.
     """
     from app.services.pg_staff_access import (
         access_by_pg_username,
         conflict_message_for_reseller_link,
-        revoke_web_access,
     )
     from app.services.pg_staff_access import resolve_pg_role_id_for_admin
     from app.services.web_auth import (
@@ -1062,6 +1057,16 @@ async def provision_existing_pg_admin(
     if cleaned == owner_u:
         return None, None, "این نام کاربری برای ادمین اصلی پنل رزرو است"
 
+    # Phase D2: never silently convert pg_staff → reseller
+    staff_row = await access_by_pg_username(session, pg_u)
+    if staff_row is not None:
+        return (
+            None,
+            None,
+            "این ادمین دسترسی ادمین فرعی (pg_staff) دارد — ابتدا آن را حذف کنید؛ "
+            "تبدیل خودکار به نماینده مجاز نیست",
+        )
+
     # Allow updating the reseller already linked to THIS pg admin; block other links.
     linked = (
         await session.execute(
@@ -1075,11 +1080,9 @@ async def provision_existing_pg_admin(
         if (row.pg_admin_username or "").strip().lower() == pg_u:
             current = row
             break
-    staff_row = await access_by_pg_username(session, pg_u)
     if current is None:
         conflict = await conflict_message_for_reseller_link(session, pg_u)
-        # conflict_message blocks when pg_staff exists — we'll convert that path
-        if conflict and staff_row is None:
+        if conflict:
             return None, None, conflict
 
     # Unified login: web username must match the Pasarguard admin username.
@@ -1090,19 +1093,25 @@ async def provision_existing_pg_admin(
             "برای ورود یکپارچه، نام کاربری وب باید دقیقاً همان نام ادمین پاسارگارد باشد",
         )
 
-    # Password: empty on edit/upgrade keeps previous hash (reseller or legacy staff).
+    # Password: empty on edit keeps previous hash only when enc already present.
     pwd = (password or "").strip()
     if pwd:
-        ok, err = validate_password_strength(pwd)
+        ok, err = validate_password_strength(pwd, username=cleaned)
         if not ok:
             return None, None, err
         web_hash = hash_password(pwd)
     else:
-        web_hash = (current.web_password_hash if current else None) or (
-            staff_row.web_password_hash if staff_row else None
-        )
+        web_hash = current.web_password_hash if current else None
         if not web_hash:
             return None, None, "رمز عبور الزامی است"
+        from app.services.secret_box import decrypt_secret
+
+        if current and not decrypt_secret(current.pg_admin_password_enc):
+            return (
+                None,
+                None,
+                "رمز عبور الزامی است — اعتبارنامه پاسارگارد ذخیره نشده",
+            )
 
     # Username uniqueness (exclude current profile)
     from app.db.models import PgStaffAccess
@@ -1119,8 +1128,7 @@ async def provision_existing_pg_admin(
             select(PgStaffAccess).where(PgStaffAccess.web_username == cleaned)
         )
     ).scalar_one_or_none()
-    # Same PG admin's staff row will be deleted after conversion; other rows block.
-    if taken_staff and (taken_staff.pg_username or "").lower() != pg_u:
+    if taken_staff:
         return None, None, "این نام کاربری قبلاً برای دسترسی وب ادمین پاسارگارد گرفته شده"
 
     role_id = await resolve_pg_role_id_for_admin(pg_u)
@@ -1156,7 +1164,10 @@ async def provision_existing_pg_admin(
         from app.services.pasarguard import get_pg, reset_pg
         from app.services.secret_box import encrypt_secret
 
-        profile.pg_admin_password_enc = encrypt_secret(pwd)
+        enc = encrypt_secret(pwd)
+        if not enc:
+            return None, None, "رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید"
+        profile.pg_admin_password_enc = enc
         try:
             await get_pg().modify_admin(pg_u, {"password": pwd})
             reset_pg()
@@ -1164,12 +1175,6 @@ async def provision_existing_pg_admin(
             return None, None, f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}"
     await session.commit()
     await session.refresh(profile)
-
-    # Convert legacy pg_staff row away so one-path invariant holds
-    try:
-        await revoke_web_access(session, pg_u)
-    except Exception:
-        pass
 
     setup_hint = None
     if not (profile.bot_token or "").strip():

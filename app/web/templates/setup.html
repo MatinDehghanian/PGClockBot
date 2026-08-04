@@ -35,7 +35,7 @@
     <form class="auth-form setup-step" data-step="1" method="post" action="/setup/admin" hidden novalidate>
       <h2 class="setup-title">۱ · مدیر پنل</h2>
       <p class="muted setup-hint">
-        رمز حداقل ۸ کاراکتر، با حرف بزرگ، حرف کوچک و یک کاراکتر خاص.
+        حداقل ۱۲ کاراکتر، شامل حداقل دو رقم، دو حرف بزرگ، دو حرف کوچک و یک کاراکتر خاص.
       </p>
       <label>نام کاربری
         
@@ -44,10 +44,10 @@
         <small class="muted">حروف انگلیسی، عدد و _ — بعداً قابل تغییر است</small>
       </label>
       <label>رمز عبور
-        <input name="password" type="password" required autocomplete="new-password" minlength="8" />
+        <input name="password" type="password" required autocomplete="new-password" minlength="12" />
       </label>
       <label>تکرار رمز عبور
-        <input name="password_confirm" type="password" required autocomplete="new-password" minlength="8" />
+        <input name="password_confirm" type="password" required autocomplete="new-password" minlength="12" />
       </label>
       <div class="setup-actions">
         <button type="button" class="btn btn-ghost" data-prev="0">قبلی</button>
@@ -210,7 +210,7 @@
       }
       if (p1.length < 8) {
         e.preventDefault();
-        showErr('رمز عبور باید حداقل ۸ کاراکتر باشد.');
+        showErr('رمز عبور باید حداقل ۱۲ کاراکتر باشد.');
         return;
       }
       if (!/[A-Z]/.test(p1) || !/[a-z]/.test(p1) || !/[^A-Za-z0-9]/.test(p1)) {

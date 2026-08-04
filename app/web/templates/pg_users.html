@@ -84,6 +84,7 @@
               data-username="{{ u.get('username') or '' }}"
               data-gb="{{ gb_left if gb_left is not none else '' }}"
               data-days="{{ days_left if days_left is not none else '' }}"
+              data-hwid="{{ u.get('hwid_limit') if u.get('hwid_limit') is not none else '' }}"
               data-groups="{{ gids|join(',') }}">ویرایش</button>
             {% endif %}
             {% if can_disable and not disabled and uid %}
@@ -163,6 +164,10 @@
             <small class="muted">از الان محاسبه می‌شود — خالی = بدون انقضا</small>
           </label>
         </div>
+        <label class="form-field">سقف دستگاه (HWID)
+          <input name="hwid_limit" type="number" min="0" step="1" placeholder="مثلاً 2" inputmode="numeric" />
+          <small class="muted">خالی = طبق سقف نقش (در صورت وجود) یا نامحدود</small>
+        </label>
         <div class="form-field">
           <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد (حداقل یکی)</span>
           <div class="ui-switch-grid">
@@ -227,6 +232,10 @@
           <small class="muted">از الان محاسبه می‌شود — خالی = بدون انقضا</small>
         </label>
       </div>
+      <label class="form-field">سقف دستگاه (HWID)
+        <input id="pg-edit-hwid" name="hwid_limit" type="number" min="0" step="1" placeholder="مثلاً 2" inputmode="numeric" />
+        <small class="muted">۰ یا خالی = نامحدود</small>
+      </label>
       <div class="form-field">
         <span class="muted" style="font-size:12px;font-weight:500">گروه‌ها (حداقل یکی)</span>
         <div class="ui-switch-grid" id="pg-edit-groups">
@@ -335,9 +344,11 @@
       const uname = document.getElementById('pg-edit-username');
       const gb = document.getElementById('pg-edit-gb');
       const days = document.getElementById('pg-edit-days');
+      const hwid = document.getElementById('pg-edit-hwid');
       if (uname) uname.value = btn.getAttribute('data-username') || '';
       if (gb) gb.value = btn.getAttribute('data-gb') || '';
       if (days) days.value = btn.getAttribute('data-days') || '';
+      if (hwid) hwid.value = btn.getAttribute('data-hwid') || '';
       const gset = new Set((btn.getAttribute('data-groups') || '').split(',').filter(Boolean));
       editForm.querySelectorAll('input[name^="edit_group_"]').forEach(function(inp){
         inp.checked = gset.has(String(inp.value));
@@ -374,9 +385,11 @@
         const uname = document.getElementById('pg-edit-username');
         const gb = document.getElementById('pg-edit-gb');
         const days = document.getElementById('pg-edit-days');
+        const hwid = document.getElementById('pg-edit-hwid');
         if (uname) uname.value = src.getAttribute('data-username') || '';
         if (gb) gb.value = src.getAttribute('data-gb') || '';
         if (days) days.value = src.getAttribute('data-days') || '';
+        if (hwid) hwid.value = src.getAttribute('data-hwid') || '';
         const gset = new Set((src.getAttribute('data-groups') || '').split(',').filter(Boolean));
         editForm.querySelectorAll('input[name^="edit_group_"]').forEach(function(inp){
           inp.checked = gset.has(String(inp.value));

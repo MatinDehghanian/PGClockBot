@@ -106,10 +106,16 @@ def ensure_restart_helper() -> tuple[bool, str]:
                 "# Managed by PGClockBot — passwordless service control via constrained helper only\n"
                 f"{user} ALL=(root) NOPASSWD: {HELPER_INSTALL_PATH} *\n"
                 f"{user} ALL=(root) NOPASSWD: "
+                f"/bin/systemctl start {SERVICE_NAME}, "
+                f"/usr/bin/systemctl start {SERVICE_NAME}, "
+                f"/bin/systemctl stop {SERVICE_NAME}, "
+                f"/usr/bin/systemctl stop {SERVICE_NAME}, "
                 f"/bin/systemctl restart {SERVICE_NAME}, "
                 f"/usr/bin/systemctl restart {SERVICE_NAME}, "
                 f"/bin/systemctl try-restart {SERVICE_NAME}, "
                 f"/usr/bin/systemctl try-restart {SERVICE_NAME}, "
+                f"/bin/systemctl enable {SERVICE_NAME}, "
+                f"/usr/bin/systemctl enable {SERVICE_NAME}, "
                 f"/bin/systemctl is-active {SERVICE_NAME}, "
                 f"/usr/bin/systemctl is-active {SERVICE_NAME}\n",
                 encoding="utf-8",

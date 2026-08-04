@@ -224,50 +224,37 @@ def enrich_staff_pg_from_role(user: dict, features: list[str], role: dict | None
 
 
 def staff_pg_writes(staff: dict) -> dict[str, bool]:
-    if staff.get("role") == "admin":
-        return {k: True for k in ("users", "templates", "groups", "hosts", "nodes")}
-    raw = staff.get("pg_writes") or {}
-    return {
-        "users": bool(raw.get("users")),
-        "templates": bool(raw.get("templates")),
-        "groups": bool(raw.get("groups")),
-        "hosts": bool(raw.get("hosts")),
-        "nodes": bool(raw.get("nodes")),
-    }
+    """Broad write flags — decisions via authz (Owner/admin bypass preserved)."""
+    from app.services.authz import authz_from_staff, can_pg_write_resource, is_platform_admin
+
+    ctx = authz_from_staff(staff)
+    keys = ("users", "templates", "groups", "hosts", "nodes")
+    if is_platform_admin(ctx):
+        return {k: True for k in keys}
+    return {k: can_pg_write_resource(ctx, k) for k in keys}
 
 
 def staff_pg_action(staff: dict, resource: str, action: str) -> bool:
     """True when staff may perform the exact PG action on a resource."""
-    if staff.get("role") == "admin":
-        return True
-    matrix = staff.get("pg_actions") or {}
-    block = matrix.get(resource) if isinstance(matrix, dict) else None
-    if isinstance(block, dict) and action in block:
-        return bool(block.get(action))
-    # Legacy cookies without pg_actions: fail closed for mutations
-    return False
+    from app.services.authz import authz_from_staff, can_pg_action
+
+    return can_pg_action(authz_from_staff(staff), resource, action)
 
 
 def staff_user_actions(staff: dict) -> dict[str, bool]:
-    if staff.get("role") == "admin":
-        return {
-            "create": True,
-            "read": True,
-            "update": True,
-            "delete": True,
-            "reset_usage": True,
-            "revoke_sub": True,
-            "disable": True,
-            "enable": True,
-        }
-    raw = staff.get("pg_user_actions") or {}
-    return {
-        "create": bool(raw.get("create")),
-        "read": bool(raw.get("read")),
-        "update": bool(raw.get("update")),
-        "delete": bool(raw.get("delete")),
-        "reset_usage": bool(raw.get("reset_usage")),
-        "revoke_sub": bool(raw.get("revoke_sub")),
-        "disable": bool(raw.get("disable") or raw.get("update")),
-        "enable": bool(raw.get("enable") or raw.get("update")),
-    }
+    from app.services.authz import authz_from_staff, can_pg_user_action, is_platform_admin
+
+    ctx = authz_from_staff(staff)
+    keys = (
+        "create",
+        "read",
+        "update",
+        "delete",
+        "reset_usage",
+        "revoke_sub",
+        "disable",
+        "enable",
+    )
+    if is_platform_admin(ctx):
+        return {k: True for k in keys}
+    return {k: can_pg_user_action(ctx, k) for k in keys}

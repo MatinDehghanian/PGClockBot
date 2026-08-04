@@ -64,6 +64,14 @@
               {% if st.get('is_active') %}فعال{% else %}غیرفعال{% endif %}
             </span>
             <span class="mono" dir="ltr">{{ st.get('web_username') }}</span>
+            {% if st.get('credentials_ready') %}
+            <span class="badge approved">رمز PG ذخیره‌شده</span>
+            {% else %}
+            <span class="badge warn">نیاز به همگام‌سازی رمز</span>
+            {% endif %}
+            {% if st.get('username_aligned') is sameas false %}
+            <span class="badge danger">نام کاربری ناهماهنگ</span>
+            {% endif %}
           </div>
           {% else %}
           <span class="muted">—</span>
@@ -75,7 +83,7 @@
             <a class="btn btn-sm btn-ghost" href="/resellers/{{ st.get('reseller_user_id') }}/edit">مدیریت نماینده</a>
             {% elif src == 'pg_staff' %}
             <button type="button" class="btn btn-sm btn-ghost"
-              data-modal-open="modal-web-{{ loop.index }}">ویرایش دسترسی</button>
+              data-modal-open="modal-staff-{{ loop.index }}">ویرایش دسترسی ادمین فرعی</button>
             <form method="post" action="/pg/admins/{{ uname }}/web-access/toggle">
               <button class="btn btn-sm btn-ghost" type="submit">
                 {% if st.get('is_active') %}غیرفعال کردن{% else %}فعال کردن{% endif %}
@@ -87,7 +95,9 @@
             </form>
             {% elif src == 'none' %}
             <button type="button" class="btn btn-sm"
-              data-modal-open="modal-web-{{ loop.index }}">اعطای دسترسی وب</button>
+              data-modal-open="modal-staff-{{ loop.index }}">اعطای ادمین فرعی</button>
+            <button type="button" class="btn btn-sm btn-ghost"
+              data-modal-open="modal-reseller-{{ loop.index }}">اعطای نماینده</button>
             {% endif %}
             {% if uname and src != 'owner' %}
             <form method="post" action="/pg/admins/{{ uname }}/delete" data-confirm="این ادمین حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
@@ -111,16 +121,68 @@
 {% set st = (web_status or {}).get(key) or {} %}
 {% set src = st.get('source') or 'none' %}
 {% if src == 'pg_staff' or src == 'none' %}
-<div class="ui-modal" id="modal-web-{{ loop.index }}" hidden>
+{# Phase D2: PG-only pg_staff grant/edit — no reseller plan, no conversion #}
+<div class="ui-modal" id="modal-staff-{{ loop.index }}" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>{% if src == 'pg_staff' %}ارتقای دسترسی وب{% else %}اعطای دسترسی وب‌پنل{% endif %}</h2>
+      <h2>{% if src == 'pg_staff' %}ویرایش ادمین فرعی{% else %}اعطای ادمین فرعی (فقط پاسارگارد){% endif %}</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <form method="post" action="/pg/admins/{{ uname }}/web-access" class="form-stack">
+    <form method="post" action="/pg/admins/{{ uname }}/web-access/staff" class="form-stack">
       <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
-        — منوی پاسارگارد از نقش همین ادمین می‌آید؛ منوی ربات/فروشگاه از پلن نمایندگی.</p>
+        — فقط منوی پاسارگارد؛ فروشگاه/ربات ساخته نمی‌شود.</p>
+      {% if src == 'pg_staff' and st.get('username_aligned') is sameas false %}
+      <div class="flash warn">
+        نام کاربری وب فعلی (<span class="mono" dir="ltr">{{ st.get('web_username') }}</span>)
+        با پاسارگارد (<span class="mono" dir="ltr">{{ uname|lower }}</span>) یکی نیست.
+        برای ادامه، هم‌ترازسازی را صریحاً تأیید کنید.
+      </div>
+      {% endif %}
+      <label class="form-field">نام کاربری وب‌پنل
+        <input name="web_username" required autocomplete="off" dir="ltr" readonly
+          value="{{ uname|lower }}" />
+        <small class="muted">باید دقیقاً همان نام ادمین پاسارگارد باشد (ورود یکپارچه)</small>
+      </label>
+      {% if src == 'pg_staff' and st.get('username_aligned') is sameas false %}
+      <label class="form-field">
+        <span class="ui-check">
+          <input type="checkbox" name="confirm_align" value="1" required />
+          هم‌ترازسازی نام کاربری با پاسارگارد
+        </span>
+        <small class="muted">بدون این تأیید، نام کاربری تغییر نمی‌کند (فاز D3)</small>
+      </label>
+      {% endif %}
+      <label class="form-field">رمز عبور وب‌پنل
+        <input name="web_password" type="password" {% if src == 'none' %}required{% endif %} autocomplete="new-password"
+          placeholder="{% if src == 'pg_staff' %}خالی = حفظ رمز فعلی (اگر اعتبارنامه ذخیره شده){% else %}رمز قوی{% endif %}" />
+        <small class="muted">{% if src == 'pg_staff' %}اگر اعتبارنامه پاسارگارد ذخیره نشده، رمز الزامی است — {% endif %}حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
+      </label>
+      <label class="form-field">یادداشت
+        <input name="note" value="{{ st.get('note') if src == 'pg_staff' and st.get('note') else '' }}" placeholder="ادمین فرعی محدود" />
+        <small class="muted">اختیاری</small>
+      </label>
+      <div class="actions">
+        <button class="btn" type="submit">{% if src == 'pg_staff' %}ذخیره{% else %}اعطای دسترسی ادمین فرعی{% endif %}</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% if src == 'none' %}
+{# Phase D2: separate shop/reseller grant #}
+<div class="ui-modal" id="modal-reseller-{{ loop.index }}" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true">
+    <div class="ui-modal-head">
+      <h2>اعطای دسترسی نماینده (فروشگاه)</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form method="post" action="/pg/admins/{{ uname }}/web-access/reseller" class="form-stack">
+      <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
+        — منوی پاسارگارد از نقش ادمین؛ فروشگاه/ربات از پلن نمایندگی.
+        اگر این ادمین قبلاً ادمین فرعی باشد، ابتدا آن دسترسی را حذف کنید.</p>
       {% if not reseller_plans %}
       <div class="flash warn">هنوز پلن نمایندگی فعالی ندارید — ابتدا از بخش نمایندگان یک پلن بسازید.</div>
       {% endif %}
@@ -134,23 +196,20 @@
         <small class="muted">دسترسی‌های داشبورد، پلن، سفارش، تنظیمات ربات و… از این پلن کپی می‌شود</small>
       </label>
       <label class="form-field">نام کاربری وب‌پنل
-        <input name="web_username" required autocomplete="off" dir="ltr"
-          value="{{ st.get('web_username') if src == 'pg_staff' else '' }}"
-          placeholder="مثلاً staff1" />
-        <small class="muted">فقط برای ورود به این وب‌پنل؛ جدا از یوزر پاسارگارد</small>
+        <input name="web_username" required autocomplete="off" dir="ltr" readonly
+          value="{{ uname|lower }}" />
+        <small class="muted">باید دقیقاً همان نام ادمین پاسارگارد باشد</small>
       </label>
       <label class="form-field">رمز عبور وب‌پنل
-        <input name="web_password" type="password" {% if src == 'none' %}required{% endif %} autocomplete="new-password" placeholder="{% if src == 'pg_staff' %}خالی = حفظ رمز فعلی{% else %}رمز قوی{% endif %}" />
-        <small class="muted">{% if src == 'pg_staff' %}اختیاری — اگر خالی بماند همان رمز قبلی می‌ماند{% else %}حداقل ۸ کاراکتر با حرف بزرگ/کوچک و کاراکتر خاص{% endif %}</small>
+        <input name="web_password" type="password" required autocomplete="new-password" placeholder="رمز قوی" />
+        <small class="muted">حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
       </label>
       <label class="form-field">یادداشت
-        <input name="note" value="{{ st.get('note') if src == 'pg_staff' and st.get('note') else '' }}" placeholder="دسترسی محدود فروش" />
+        <input name="note" placeholder="نماینده فروش" />
         <small class="muted">اختیاری</small>
       </label>
       <div class="actions">
-        <button class="btn" type="submit" {% if not reseller_plans %}disabled{% endif %}>
-          {% if src == 'pg_staff' %}ذخیره و فعال‌سازی فروشگاه{% else %}اعطای دسترسی{% endif %}
-        </button>
+        <button class="btn" type="submit" {% if not reseller_plans %}disabled{% endif %}>اعطای دسترسی نماینده</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
       </div>
     </form>
@@ -177,7 +236,7 @@
         <div>
           <label class="form-field">رمز عبور
             <input name="password" type="password" required autocomplete="new-password" placeholder="رمز قوی" />
-            <small class="muted">حداقل ۸ کاراکتر با حرف بزرگ/کوچک و کاراکتر خاص</small>
+            <small class="muted">حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
           </label>
         </div>
         <div>

@@ -362,22 +362,29 @@ async def _shop_recipient_chat_ids(
             )
             return []
 
+    from app.services.platform_identity import (
+        deliverable_telegram_id,
+        is_synthetic_telegram_id,
+    )
+
     ids: list[int] = []
     seen: set[int] = set()
     owner = await session.get(BotUser, int(reseller_id))
-    if owner and owner.telegram_id:
-        tid = int(owner.telegram_id)
-        if tid > 0:
+    if owner and owner.telegram_id is not None:
+        raw_tid = int(owner.telegram_id)
+        tid = deliverable_telegram_id(raw_tid)
+        if tid is not None:
             seen.add(tid)
             ids.append(tid)
-        else:
+        elif is_synthetic_telegram_id(raw_tid):
             log.warning(
                 "shop notify: owner telegram_id is synthetic/invalid rid=%s tid=%s",
                 reseller_id,
-                tid,
+                raw_tid,
             )
-    for tid in parse_telegram_ids(profile.bot_admin_ids):
-        if tid > 0 and tid not in seen:
+    for raw in parse_telegram_ids(profile.bot_admin_ids):
+        tid = deliverable_telegram_id(raw)
+        if tid is not None and tid not in seen:
             seen.add(tid)
             ids.append(tid)
     if not ids:

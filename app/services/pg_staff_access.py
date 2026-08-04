@@ -156,6 +156,10 @@ class ExistingWebAccess:
     staff_id: int | None = None
     note: str | None = None
     detail: str | None = None
+    # Phase D3 — pg_staff remediation visibility (None for non-staff sources)
+    credentials_ready: bool | None = None
+    username_aligned: bool | None = None
+    needs_remediation: bool | None = None
 
     @property
     def has_access(self) -> bool:
@@ -174,6 +178,9 @@ class ExistingWebAccess:
             "note": self.note,
             "detail": self.detail,
             "has_access": self.has_access,
+            "credentials_ready": self.credentials_ready,
+            "username_aligned": self.username_aligned,
+            "needs_remediation": self.needs_remediation,
         }
 
 
@@ -277,6 +284,7 @@ async def resolve_existing_web_access(
         )
 
     if staff is not None:
+        flags = staff_remediation_flags(staff)
         return ExistingWebAccess(
             source="pg_staff",
             pg_username=pg_u,
@@ -285,6 +293,7 @@ async def resolve_existing_web_access(
             staff_id=int(staff.id),
             note=staff.note,
             detail="دسترسی وب‌پنل از قبل برای این ادمین ساخته شده",
+            **flags,
         )
 
     return ExistingWebAccess(source="none", pg_username=pg_u)
@@ -346,6 +355,7 @@ async def web_access_status_map(
             ).as_dict()
             continue
         if staff is not None:
+            flags = staff_remediation_flags(staff)
             out[key] = ExistingWebAccess(
                 source="pg_staff",
                 pg_username=key,
@@ -354,6 +364,7 @@ async def web_access_status_map(
                 staff_id=int(staff.id),
                 note=staff.note,
                 detail="دسترسی وب ادمین پاسارگارد",
+                **flags,
             ).as_dict()
             continue
         out[key] = ExistingWebAccess(source="none", pg_username=key).as_dict()
@@ -443,6 +454,20 @@ async def _username_taken(
     return None
 
 
+def assert_web_matches_pg(web_username: str, pg_username: str) -> str | None:
+    """Phase D2: pg_staff web login must equal PG admin username (error-only, no rename)."""
+    web = (web_username or "").strip().lower()
+    pg = _norm_pg(pg_username)
+    if not web or not pg:
+        return "نام کاربری وب و پاسارگارد الزامی است"
+    if web != pg:
+        return (
+            "برای ادمین فرعی، نام کاربری وب باید دقیقاً همان نام ادمین پاسارگارد باشد "
+            f"(«{pg}») — تغییر خودکار انجام نمی‌شود"
+        )
+    return None
+
+
 async def grant_web_access(
     session: AsyncSession,
     *,
@@ -458,13 +483,16 @@ async def grant_web_access(
         return None, "نام ادمین پاسارگارد الزامی است"
     if not (password or "").strip():
         return None, "رمز عبور الزامی است"
-    ok, err = validate_password_strength(password)
-    if not ok:
-        return None, err
 
     cleaned, uerr = validate_web_username(web_username, lowercase=True)
     if uerr:
         return None, uerr
+    mismatch = assert_web_matches_pg(cleaned, pg_u)
+    if mismatch:
+        return None, mismatch
+    ok, err = validate_password_strength(password, username=cleaned or pg_u)
+    if not ok:
+        return None, err
 
     conflict = await conflict_message_for_new_grant(session, pg_u)
     if conflict:
@@ -474,10 +502,27 @@ async def grant_web_access(
     if taken:
         return None, taken
 
+    from app.services.pasarguard import get_pg, reset_pg
+    from app.services.secret_box import encrypt_secret
+
+    # Store the same password for web hash + PG login (reseller pattern).
+    # Sync to PasarGuard so the staff token works; never use owner client for staff ops.
+    try:
+        await get_pg().modify_admin(pg_u, {"password": password})
+        reset_pg()
+    except Exception as e:
+        return None, f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}"
+
+    enc = encrypt_secret(password)
+    if not enc:
+        return None, "رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید"
+    role_id = await resolve_pg_role_id_for_admin(pg_u)
     row = PgStaffAccess(
         pg_username=pg_u,
         web_username=cleaned,
         web_password_hash=hash_password(password),
+        pg_admin_password_enc=enc,
+        pg_role_id=int(role_id) if role_id else None,
         is_active=bool(is_active),
         note=(note or "").strip() or None,
     )
@@ -495,8 +540,13 @@ async def update_web_access(
     password: str,
     note: str = "",
     is_active: bool | None = None,
+    confirm_align: bool = False,
 ) -> tuple[PgStaffAccess | None, str | None]:
-    """Update credentials for an existing PgStaffAccess row only."""
+    """Update credentials for an existing PgStaffAccess row only.
+
+    Phase D3 Q1 A: when DB ``web_username ≠ pg_username``, setting web to the
+    PG name is an explicit align (requires ``confirm_align``) — never silent.
+    """
     pg_u = _norm_pg(pg_username)
     existing = await access_by_pg_username(session, pg_u)
     if not existing:
@@ -510,27 +560,60 @@ async def update_web_access(
             "از بخش نمایندگان مدیریت کنید یا اتصال نماینده را بردارید."
         )
 
-    if not (password or "").strip():
-        # Keep existing password on edit
-        pass
+    pwd = (password or "").strip()
+    if not pwd:
+        # Keep existing password on edit — but not when PG enc is missing
+        if not staff_has_stored_pg_password(existing):
+            return None, "رمز عبور الزامی است — اعتبارنامه پاسارگارد ذخیره نشده"
     else:
-        ok, err = validate_password_strength(password)
+        cleaned_tmp, _ = validate_web_username(web_username, lowercase=True)
+        ok, err = validate_password_strength(
+            password, username=(cleaned_tmp or pg_u)
+        )
         if not ok:
             return None, err
     cleaned, uerr = validate_web_username(web_username, lowercase=True)
     if uerr:
         return None, uerr
+
+    existing_web = (existing.web_username or "").strip().lower()
+    # D3 Q1 A: aligning a mismatched username requires explicit Owner confirmation
+    if existing_web and existing_web != pg_u and cleaned == pg_u and not confirm_align:
+        return None, (
+            f"نام کاربری وب («{existing_web}») با پاسارگارد («{pg_u}») یکی نیست. "
+            "برای هم‌ترازسازی، گزینه تأیید را علامت بزنید — تغییر خودکار انجام نمی‌شود"
+        )
+
+    mismatch = assert_web_matches_pg(cleaned, pg_u)
+    if mismatch:
+        return None, mismatch
     taken = await _username_taken(session, cleaned, exclude_staff_id=existing.id)
     if taken:
         return None, taken
 
     existing.web_username = cleaned
-    if (password or "").strip():
-        existing.web_password_hash = hash_password(password)
+    if pwd:
+        from app.services.pasarguard import get_pg, reset_pg
+        from app.services.secret_box import encrypt_secret
+
+        try:
+            await get_pg().modify_admin(pg_u, {"password": pwd})
+            reset_pg()
+        except Exception as e:
+            return None, f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}"
+        enc = encrypt_secret(pwd)
+        if not enc:
+            return None, "رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید"
+        existing.web_password_hash = hash_password(pwd)
+        existing.pg_admin_password_enc = enc
     if is_active is not None:
         existing.is_active = bool(is_active)
     if note is not None:
         existing.note = (note or "").strip() or None
+    # Refresh cached role id when possible
+    role_id = await resolve_pg_role_id_for_admin(pg_u)
+    if role_id:
+        existing.pg_role_id = int(role_id)
     await session.commit()
     await session.refresh(existing)
     return existing, None
@@ -544,6 +627,7 @@ async def upsert_web_access(
     password: str,
     note: str = "",
     is_active: bool = True,
+    confirm_align: bool = False,
 ) -> tuple[PgStaffAccess | None, str | None]:
     """Backward-compatible entry: update if staff row exists, else grant (with guards)."""
     existing = await access_by_pg_username(session, pg_username)
@@ -555,6 +639,7 @@ async def upsert_web_access(
             password=password,
             note=note,
             is_active=is_active,
+            confirm_align=confirm_align,
         )
     return await grant_web_access(
         session,
@@ -566,12 +651,94 @@ async def upsert_web_access(
     )
 
 
+def staff_has_stored_pg_password(row: PgStaffAccess | None) -> bool:
+    """True when encrypted PasarGuard password decrypts to a non-empty secret."""
+    if row is None:
+        return False
+    from app.services.secret_box import decrypt_secret
+
+    return bool(decrypt_secret(getattr(row, "pg_admin_password_enc", None)))
+
+
+def staff_username_aligned(row: PgStaffAccess | None) -> bool:
+    """True when web login username equals PG admin username (case-insensitive)."""
+    if row is None:
+        return False
+    web = (row.web_username or "").strip().lower()
+    pg = _norm_pg(row.pg_username)
+    return bool(web and pg and web == pg)
+
+
+def staff_needs_remediation(row: PgStaffAccess | None) -> bool:
+    """True when enc is missing or username is misaligned (active or not)."""
+    if row is None:
+        return False
+    return (not staff_has_stored_pg_password(row)) or (not staff_username_aligned(row))
+
+
+def staff_remediation_flags(row: PgStaffAccess) -> dict[str, bool]:
+    """Flags for Owner UI / status map (Phase D3)."""
+    ready = staff_has_stored_pg_password(row)
+    aligned = staff_username_aligned(row)
+    return {
+        "credentials_ready": ready,
+        "username_aligned": aligned,
+        "needs_remediation": (not ready) or (not aligned),
+    }
+
+
+def classify_staff_cohort(row: PgStaffAccess) -> str:
+    """Legacy cohort label (L1–L5) for inventory / docs."""
+    if not bool(row.is_active):
+        return "L5"
+    ready = staff_has_stored_pg_password(row)
+    aligned = staff_username_aligned(row)
+    if not ready and aligned:
+        return "L1"
+    if not ready and not aligned:
+        return "L2"
+    if ready and aligned:
+        return "L3"
+    return "L4"  # ready + misaligned
+
+
+async def inventory_staff_remediation(
+    session: AsyncSession,
+) -> list[dict[str, Any]]:
+    """Read-only inventory of pg_staff rows with cohort + readiness flags.
+
+    Never returns passwords or encrypted blobs — ops visibility only.
+    """
+    rows = await list_access_rows(session)
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        flags = staff_remediation_flags(row)
+        out.append(
+            {
+                "id": int(row.id),
+                "pg_username": row.pg_username,
+                "web_username": row.web_username,
+                "is_active": bool(row.is_active),
+                "cohort": classify_staff_cohort(row),
+                "pg_role_id": int(row.pg_role_id) if row.pg_role_id else None,
+                **flags,
+            }
+        )
+    return out
+
+
 async def revoke_web_access(session: AsyncSession, pg_username: str) -> bool:
     row = await access_by_pg_username(session, pg_username)
     if not row:
         return False
     await session.delete(row)
     await session.commit()
+    try:
+        from app.services.pasarguard import reset_pg
+
+        reset_pg()
+    except Exception:
+        pass
     return True
 
 
@@ -601,17 +768,34 @@ async def change_staff_credentials(
         return None, "یوزر یا رمز قدیم اشتباه است"
     if not verify_password_hash(current_password or "", row.web_password_hash):
         return None, "یوزر یا رمز قدیم اشتباه است"
-    ok, err = validate_password_strength(new_password or "")
+    ok, err = validate_password_strength(
+        new_password or "", username=(new_username or row.pg_username)
+    )
     if not ok:
         return None, err
     cleaned, uerr = validate_web_username(new_username, lowercase=True)
     if uerr:
         return None, uerr
+    mismatch = assert_web_matches_pg(cleaned, row.pg_username)
+    if mismatch:
+        return None, mismatch
     taken = await _username_taken(session, cleaned, exclude_staff_id=row.id)
     if taken:
         return None, taken
     row.web_username = cleaned
     row.web_password_hash = hash_password(new_password)
+    from app.services.pasarguard import get_pg, reset_pg
+    from app.services.secret_box import encrypt_secret
+
+    try:
+        await get_pg().modify_admin(row.pg_username, {"password": new_password})
+        reset_pg()
+    except Exception as e:
+        return None, f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}"
+    enc = encrypt_secret(new_password)
+    if not enc:
+        return None, "رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید"
+    row.pg_admin_password_enc = enc
     await session.commit()
     await session.refresh(row)
     return row, None
