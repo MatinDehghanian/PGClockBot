@@ -222,14 +222,15 @@ class SourceWiringGuards(unittest.TestCase):
     def test_web_create_requires_pg_owner(self):
         src = Path("app/api/pg_pages.py").read_text(encoding="utf-8")
         self.assertIn("ادمین پاسارگارد برای این حساب تنظیم نشده است", src)
-        # hosts + nodes mutations gated for limited admins
+        # hosts mutations gated for limited admins; nodes gated by role action
         hosts_idx = src.find("async def pg_hosts_create")
         nodes_idx = src.find("async def pg_node_reconnect")
         self.assertGreater(hosts_idx, 0)
         self.assertGreater(nodes_idx, 0)
         self.assertIn("assert_can_mutate_owned_users", src[hosts_idx : hosts_idx + 800])
-        self.assertIn("assert_can_mutate_owned_users", src[nodes_idx : nodes_idx + 700])
         self.assertIn('staff_pg_action(staff, "nodes", "reconnect")', src[nodes_idx : nodes_idx + 700])
+        # Node reconnect uses role ACL + staff PG client (not owned-users mutate gate)
+        self.assertIn("_staff_pg", src[nodes_idx : nodes_idx + 700])
 
     def test_bot_pg_users_still_platform_admin_only(self):
         src = Path("app/bot/handlers/admin_pg_users.py").read_text(encoding="utf-8")
