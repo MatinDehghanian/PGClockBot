@@ -376,7 +376,9 @@ payload = {
     "WEB_SECRET": os.environ["WEB_SECRET"],
     "WEB_ADMIN_USER": os.environ["WEB_ADMIN_USER"],
     "WEB_ADMIN_PASSWORD": os.environ["WEB_ADMIN_PASSWORD"],
-    "DATABASE_URL": f"sqlite+aiosqlite:///{Path.cwd() / 'data' / 'bot.db'}",
+    # Production default: PostgreSQL when PGCLOCK_DATABASE_URL is set; else SQLite for zero-config labs.
+    "DATABASE_URL": os.environ.get("PGCLOCK_DATABASE_URL")
+        or f"sqlite+aiosqlite:///{Path.cwd() / 'data' / 'bot.db'}",
     "WEBHOOK_URL": "",
     "WEBHOOK_PATH": "/telegram/webhook",
     "PUBLIC_BASE_URL": os.environ.get("PUBLIC_BASE_URL", ""),
