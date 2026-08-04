@@ -1411,11 +1411,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         reseller_plans = []
         feature_perms = []
         pg_roles = []
+        reseller_plans_err = None
         if is_platform_admin(staff):
             from app.services.resellers import FEATURE_PERMS, list_reseller_plans
 
-            reseller_plans = await list_reseller_plans(session)
             feature_perms = FEATURE_PERMS
+            try:
+                reseller_plans = await list_reseller_plans(session)
+            except Exception as e:
+                # Missing additive columns (e.g. billing_mode before migrate) must
+                # not 500 the whole plans page — user catalog still loads.
+                reseller_plans = []
+                reseller_plans_err = str(e)
             try:
                 from app.services.pasarguard import get_pg
 
@@ -1439,6 +1446,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 or bool((staff.get("pg_writes") or {}).get("templates")),
                 "is_platform_admin": is_platform_admin(staff),
                 "reseller_plans": reseller_plans,
+                "reseller_plans_err": reseller_plans_err,
                 "feature_perms": feature_perms,
                 "pg_roles": pg_roles,
                 "flash_err": request.query_params.get("err"),
