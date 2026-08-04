@@ -1,10 +1,12 @@
 # PGClockBot v4.0.0 — Release Notes
 
 **Tag:** `v4.0.0`  
-**Commit:** `c792b6acde6711c10f3cc098669471e37411113f` (merge of tested tip `68163de` + release docs)  
+**App version:** `4.0.0` (`VERSION` + `app/version.py` — required for panel/server update)  
 **Includes:** Phase A/B + C0–C5 + D1–D4  
 **Ops runbook:** `docs/V4_RELEASE_CHECKLIST.md`  
 **Audit:** `docs/FINAL_RELEASE_AUDIT.md`
+
+> **Note:** The first `v4.0.0` tag pointed at code that still had `VERSION=3.8.3`, so the panel offered “4.0.0” forever while `git pull` left the app at 3.8.3. That packaging mismatch is fixed by aligning `VERSION` with the tag.
 
 ---
 
