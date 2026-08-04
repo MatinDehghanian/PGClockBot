@@ -353,7 +353,7 @@ async def res_billing(
         is_payg,
         list_billing_transactions,
         resolve_price_per_gb,
-        RateContext,
+        rate_context_for_profile,
     )
 
     owner_id, profile = await _actor(
@@ -367,7 +367,7 @@ async def res_billing(
         return
     await callback.answer()
     enabled = await is_billing_enabled(session)
-    rate = await resolve_price_per_gb(session, RateContext(reseller_user_id=int(owner_id)))
+    rate = await resolve_price_per_gb(session, rate_context_for_profile(profile))
     txs = await list_billing_transactions(session, int(owner_id), limit=5)
     lines = [
         "💰 <b>کیف پول Billing</b>",

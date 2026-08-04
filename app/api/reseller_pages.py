@@ -46,6 +46,30 @@ def _feature_perms_from_form(form) -> str:
     return normalize_feature_perms(join_perms(selected) or DEFAULT_FEATURE_PERMS)
 
 
+def _parse_price_per_gb(form) -> int:
+    try:
+        return max(0, int(str(form.get("price_per_gb") or "0").replace(",", "").replace("٬", "")))
+    except ValueError:
+        return 0
+
+
+def _parse_pg_group_ids(form) -> str | None:
+    ids: list[str] = []
+    for k, v in form.items():
+        key = str(k)
+        if key.startswith("group_") and str(v).strip():
+            ids.append(str(v).strip())
+        elif key == "pg_group_ids" and str(v).strip():
+            # comma-separated fallback
+            ids.extend(x.strip() for x in str(v).split(",") if x.strip())
+    # Preserve order, unique
+    seen: list[str] = []
+    for x in ids:
+        if x not in seen:
+            seen.append(x)
+    return ",".join(seen) if seen else None
+
+
 def register_reseller_pages(app, *, render, require_admin, get_db):
     def _tabs(active: str) -> list[dict]:
         # Plans live under unified /plans — no duplicate «پلن‌ها» tab here.
@@ -204,13 +228,20 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         from app.services.authz import resolve_shop_permissions_from_profile
 
         perms = list(resolve_shop_permissions_from_profile(profile) or [])
-        from app.services.billing import is_payg, list_billing_transactions
+        from app.services.billing import (
+            is_payg,
+            list_billing_transactions,
+            rate_context_for_profile,
+            resolve_price_per_gb,
+        )
         from app.services.formatting import format_toman
         import secrets
 
         billing_txs = []
+        billing_rate = 0
         if is_payg(profile):
             billing_txs = await list_billing_transactions(session, int(user_id), limit=15)
+            billing_rate = await resolve_price_per_gb(session, rate_context_for_profile(profile))
         return render(
             request,
             "reseller_edit.html",
@@ -223,6 +254,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 "pg_roles": roles,
                 "is_payg": is_payg(profile),
                 "billing_txs": billing_txs,
+                "billing_rate": billing_rate,
                 "format_toman": format_toman,
                 "topup_nonce": secrets.token_hex(8),
                 "flash_ok": request.query_params.get("ok"),
@@ -625,6 +657,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         if billing_mode == "payg":
             commission = 0
         commission = max(0, min(100, commission))
+        price_per_gb = _parse_price_per_gb(form) if billing_mode == "payg" else 0
+        pg_group_ids = _parse_pg_group_ids(form) if billing_mode == "payg" else None
         perms = _feature_perms_from_form(form)
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         plan = ResellerPlan(
@@ -633,6 +667,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             price=max(0, price),
             commission_percent=commission,
             billing_mode=billing_mode,
+            price_per_gb=price_per_gb,
+            pg_group_ids=pg_group_ids,
             can_approve_receipts="payments" in parse_perms(perms),
             web_permissions=perms,
             bot_permissions=perms,
@@ -644,6 +680,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             sort_order=int(str(form.get("sort_order") or "0") or "0"),
         )
         session.add(plan)
+        await session.flush()
+        from app.services.billing import sync_plan_billing_rate
+
+        await sync_plan_billing_rate(session, plan)
         await session.commit()
         return RedirectResponse(f"/plans?ok={_q('پلن نمایندگی ذخیره شد')}#reseller-plans", status_code=303)
 
@@ -662,6 +702,19 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             roles = await get_pg().get_admin_roles()
         except Exception:
             roles = []
+        groups = []
+        try:
+            groups = await get_pg().get_groups_simple()
+            if not isinstance(groups, list):
+                groups = []
+            groups = [g for g in groups if isinstance(g, dict)]
+        except Exception:
+            groups = []
+        plan_group_ids = {
+            x.strip()
+            for x in (plan.pg_group_ids or "").split(",")
+            if x.strip()
+        }
         return render(
             request,
             "reseller_plan_edit.html",
@@ -673,6 +726,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                     parse_perms(plan.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
                 ),
                 "pg_roles": roles,
+                "groups": groups,
+                "plan_group_ids": plan_group_ids,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -710,8 +765,12 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         plan.billing_mode = billing_mode
         if billing_mode == "payg":
             plan.commission_percent = 0
+            plan.price_per_gb = _parse_price_per_gb(form)
+            plan.pg_group_ids = _parse_pg_group_ids(form)
         else:
             plan.commission_percent = max(0, min(100, int(plan.commission_percent or 0)))
+            plan.price_per_gb = 0
+            plan.pg_group_ids = None
         try:
             plan.sort_order = int(str(form.get("sort_order") or "0") or "0")
         except ValueError:
@@ -725,6 +784,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         plan.is_active = bool(form.get("is_active"))
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         plan.pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
+        from app.services.billing import sync_plan_billing_rate
+
+        await sync_plan_billing_rate(session, plan)
         await session.commit()
         return RedirectResponse(
             f"/plans?ok={_q('پلن نمایندگی ذخیره شد')}#reseller-plans", status_code=303
@@ -739,6 +801,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         plan = await session.get(ResellerPlan, plan_id)
         if plan:
             plan.is_active = not plan.is_active
+            from app.services.billing import sync_plan_billing_rate
+
+            await sync_plan_billing_rate(session, plan)
             await session.commit()
         return RedirectResponse("/plans#reseller-plans", status_code=303)
 
@@ -750,6 +815,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
     ):
         plan = await session.get(ResellerPlan, plan_id)
         if plan:
+            from app.services.billing import delete_plan_billing_rate
+
+            await delete_plan_billing_rate(session, int(plan.id))
             await session.delete(plan)
             await session.commit()
         return RedirectResponse(f"/plans?ok={_q('حذف شد')}#reseller-plans", status_code=303)

@@ -138,7 +138,7 @@ SCOPE_PRIORITY = (
 
 
 async def resolve_price_per_gb(session: AsyncSession, ctx: RateContext | None = None) -> int:
-    """Resolve toman/GB. Rates table overrides win by specificity; else Setting."""
+    """Resolve toman/GB. Rates table overrides win by specificity; else plan; else Setting."""
     ctx = ctx or RateContext()
     rows = (
         await session.execute(
@@ -190,6 +190,14 @@ async def resolve_price_per_gb(session: AsyncSession, ctx: RateContext | None = 
         hit = _match("plan", str(int(ctx.plan_id)), None)
         if hit is not None:
             return hit
+        # Fallback: read ResellerPlan.price_per_gb directly (PAYG packages)
+        from app.db.models import ResellerPlan
+
+        plan = await session.get(ResellerPlan, int(ctx.plan_id))
+        if plan is not None:
+            plan_rate = max(0, int(getattr(plan, "price_per_gb", 0) or 0))
+            if plan_rate > 0:
+                return plan_rate
 
     if rid is not None:
         hit = _match("reseller", "", rid)
@@ -204,6 +212,76 @@ async def resolve_price_per_gb(session: AsyncSession, ctx: RateContext | None = 
 
     raw = await get_setting(session, SETTING_PRICE_PER_GB, "0")
     return max(0, _as_int(raw, 0))
+
+
+async def sync_plan_billing_rate(session: AsyncSession, plan) -> None:
+    """Upsert/deactivate global plan-scoped rate from a ResellerPlan PAYG package."""
+    plan_id = int(getattr(plan, "id", 0) or 0)
+    if plan_id <= 0:
+        return
+    mode = str(getattr(plan, "billing_mode", "") or "").strip().lower()
+    price = max(0, int(getattr(plan, "price_per_gb", 0) or 0))
+    active = bool(getattr(plan, "is_active", True)) and mode == BILLING_MODE_PAYG and price > 0
+
+    row = (
+        await session.execute(
+            select(ResellerBillingRate).where(
+                ResellerBillingRate.scope_kind == "plan",
+                ResellerBillingRate.scope_key == str(plan_id),
+                ResellerBillingRate.reseller_user_id.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not active:
+        if row is not None:
+            row.is_active = False
+            row.price_per_gb = 0
+        return
+
+    if row is None:
+        session.add(
+            ResellerBillingRate(
+                scope_kind="plan",
+                scope_key=str(plan_id),
+                reseller_user_id=None,
+                price_per_gb=price,
+                is_active=True,
+            )
+        )
+    else:
+        row.price_per_gb = price
+        row.is_active = True
+
+
+async def delete_plan_billing_rate(session: AsyncSession, plan_id: int) -> None:
+    rows = (
+        await session.execute(
+            select(ResellerBillingRate).where(
+                ResellerBillingRate.scope_kind == "plan",
+                ResellerBillingRate.scope_key == str(int(plan_id)),
+            )
+        )
+    ).scalars().all()
+    for row in rows:
+        await session.delete(row)
+
+
+def rate_context_for_profile(profile: ResellerProfile | None) -> RateContext:
+    """Build RateContext so PAYG plan package rates apply."""
+    if profile is None:
+        return RateContext()
+    plan_id = getattr(profile, "plan_id", None)
+    try:
+        pid = int(plan_id) if plan_id is not None else None
+    except (TypeError, ValueError):
+        pid = None
+    if pid is not None and pid <= 0:
+        pid = None
+    return RateContext(
+        reseller_user_id=int(profile.user_id) if profile.user_id else None,
+        plan_id=pid,
+    )
 
 
 def bytes_to_charge_toman(bytes_delta: int, price_per_gb: int) -> int:
@@ -518,8 +596,7 @@ async def tick_reseller_usage(
 
     rate = await resolve_price_per_gb(
         session,
-        rate_ctx
-        or RateContext(reseller_user_id=int(profile.user_id)),
+        rate_ctx or rate_context_for_profile(profile),
     )
     key = f"usage:{int(profile.user_id)}:{watermark}:{used}"
     return await debit_usage(

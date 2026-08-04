@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, page_title %}
+{% from "macros.html" import switch, switch_chip, page_title %}
 {% block title %}ویرایش پلن نمایندگی{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -23,6 +23,7 @@
       <div>
         <label class="form-field">قیمت (تومان)
           <input name="price" type="number" value="{{ plan.price }}" />
+          <small class="muted">قیمت خرید پکیج نمایندگی — ۰ = رایگان</small>
         </label>
       </div>
       <div>
@@ -39,6 +40,12 @@
         </label>
         <small class="muted">اختیاری — پیش‌فرض ۰؛ فقط در حالت ثابت</small>
       </div>
+      <div id="edit-price-per-gb-field" hidden>
+        <label class="form-field">نرخ هر گیگ (تومان)
+          <input name="price_per_gb" id="edit-price-per-gb-input" type="number" min="0" value="{{ plan.price_per_gb or 0 }}" />
+        </label>
+        <small class="muted">نرخ مصرف این پلن PAYG — برای گروه‌های با قیمت متفاوت، پلن جدا بسازید</small>
+      </div>
       <div>
         <label class="form-field">ترتیب
           <input name="sort_order" type="number" value="{{ plan.sort_order }}" />
@@ -48,6 +55,19 @@
     <label class="form-field">توضیح
       <textarea name="description" rows="2">{{ plan.description or '' }}</textarea>
     </label>
+
+    <div id="edit-payg-groups" class="form-field" hidden>
+      <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد این نرخ (اختیاری)</span>
+      <p class="muted update-card-caption">برچسب‌گذاری برای تمایز پلن‌های PAYG با قیمت متفاوت؛ مصرف از موجودی نماینده با نرخ همین پلن کم می‌شود.</p>
+      <div class="ui-switch-grid">
+        {% for g in groups or [] %}
+        {% set gid = g.get('id')|string %}
+        {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), checked=(gid in plan_group_ids), value=g.get('id')) }}
+        {% else %}
+        <span class="muted">گروهی لود نشد.</span>
+        {% endfor %}
+      </div>
+    </div>
 
     <div class="ui-switch-section">
       <span class="ui-switch-section-title">دسترسی (وب = بات)</span>
@@ -80,13 +100,17 @@
 <script>
 (function(){
   const mode = document.getElementById('edit-billing-mode');
-  const field = document.getElementById('edit-commission-field');
-  const input = document.getElementById('edit-commission-input');
-  if (!mode || !field) return;
+  const commissionField = document.getElementById('edit-commission-field');
+  const commissionInput = document.getElementById('edit-commission-input');
+  const rateField = document.getElementById('edit-price-per-gb-field');
+  const groupsField = document.getElementById('edit-payg-groups');
+  if (!mode) return;
   function sync(){
     const payg = mode.value === 'payg';
-    field.style.display = payg ? 'none' : '';
-    if (payg && input) input.value = '0';
+    if (commissionField) commissionField.style.display = payg ? 'none' : '';
+    if (payg && commissionInput) commissionInput.value = '0';
+    if (rateField) rateField.hidden = !payg;
+    if (groupsField) groupsField.hidden = !payg;
   }
   mode.addEventListener('change', sync);
   sync();

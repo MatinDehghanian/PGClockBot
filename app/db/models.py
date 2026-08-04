@@ -420,6 +420,10 @@ class ResellerPlan(Base):
     pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # Default billing for new resellers on this package: fixed (commission) | payg
     billing_mode: Mapped[str] = mapped_column(String(16), default="fixed")
+    # PAYG: toman per GB for resellers on this package (overrides global Setting via plan rate)
+    price_per_gb: Mapped[int] = mapped_column(Integer, default=0)
+    # Optional PasarGuard group ids this PAYG price is intended for (comma-separated)
+    pg_group_ids: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

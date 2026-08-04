@@ -182,6 +182,14 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
                     "ALTER TABLE reseller_plans ADD COLUMN billing_mode VARCHAR(16) DEFAULT 'fixed'"
                 )
             )
+        if "price_per_gb" not in pcols:
+            sync_conn.execute(
+                sql_text("ALTER TABLE reseller_plans ADD COLUMN price_per_gb INTEGER DEFAULT 0")
+            )
+        if "pg_group_ids" not in pcols:
+            sync_conn.execute(
+                sql_text("ALTER TABLE reseller_plans ADD COLUMN pg_group_ids VARCHAR(255)")
+            )
 
     if insp.has_table("pg_staff_access"):
         scols = {c["name"] for c in insp.get_columns("pg_staff_access")}

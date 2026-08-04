@@ -94,6 +94,7 @@
 <div class="card">
   <h2>Billing — Pay As You Go</h2>
   <p class="muted">موجودی فعلی: <b>{{ format_toman(profile.billing_balance or 0) }}</b>
+    · نرخ مؤثر: <b>{{ format_toman(billing_rate or 0) }}</b> / GB
     · watermark: <span dir="ltr">{{ profile.billing_watermark_bytes or 0 }}</span> بایت</p>
   <form method="post" action="/resellers/{{ user.id }}/billing-topup" class="form-stack">
     <input type="hidden" name="nonce" value="{{ topup_nonce }}" />
