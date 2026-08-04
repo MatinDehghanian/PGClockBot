@@ -94,7 +94,7 @@ class SourceGuardTests(unittest.TestCase):
     def test_pg_admins_create_validates(self):
         src = Path("app/api/pg_pages.py").read_text(encoding="utf-8")
         fn = src[src.find("async def pg_admins_create") : src.find("async def pg_admins_web_access")]
-        self.assertIn("validate_password_strength", fn)
+        self.assertIn("validate_credentials", fn)
 
     def test_cli_validates(self):
         src = Path("scripts/set_web_password.py").read_text(encoding="utf-8")

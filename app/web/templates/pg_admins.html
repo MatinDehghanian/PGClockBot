@@ -169,7 +169,7 @@
       <label class="form-field">رمز عبور وب‌پنل
         <input name="web_password" type="password" {% if src == 'none' %}required{% endif %} autocomplete="new-password"
           placeholder="{% if src == 'pg_staff' %}خالی = حفظ رمز فعلی (اگر اعتبارنامه ذخیره شده){% else %}رمز قوی{% endif %}" />
-        <small class="muted">{% if src == 'pg_staff' %}اگر اعتبارنامه پاسارگارد ذخیره نشده، رمز الزامی است — {% endif %}حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
+        <small class="muted">{% if src == 'pg_staff' %}اگر اعتبارنامه پاسارگارد ذخیره نشده، رمز الزامی است — {% endif %}طبق پاسارگارد: حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
       </label>
       <label class="form-field">یادداشت
         <input name="note" value="{{ st.get('note') if src == 'pg_staff' and st.get('note') else '' }}" placeholder="ادمین فرعی محدود" />
@@ -215,7 +215,7 @@
       </label>
       <label class="form-field">رمز عبور وب‌پنل
         <input name="web_password" type="password" required autocomplete="new-password" placeholder="رمز قوی" />
-        <small class="muted">حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
+        <small class="muted">طبق پاسارگارد: حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
       </label>
       <label class="form-field">یادداشت
         <input name="note" placeholder="نماینده فروش" />
@@ -243,14 +243,14 @@
       <div class="form-row">
         <div>
           <label class="form-field">نام کاربری
-            <input name="username" required autocomplete="off" placeholder="admin_name" dir="ltr" />
-            <small class="muted">همین نام برای ورود وب‌پنل هم استفاده می‌شود</small>
+            <input name="username" required autocomplete="off" placeholder="admin_name" dir="ltr" minlength="3" maxlength="128" pattern="[a-zA-Z0-9\-_@.]+" title="۳ تا ۱۲۸ کاراکتر؛ فقط حروف انگلیسی، عدد و - _ @ ." />
+            <small class="muted">۳ تا ۱۲۸ کاراکتر؛ فقط a-z 0-9 و - _ @ . — بدون دو نماد پشت‌سرهم (قوانین پاسارگارد). همین نام برای ورود وب هم استفاده می‌شود</small>
           </label>
         </div>
         <div>
           <label class="form-field">رمز عبور
-            <input name="password" type="password" required autocomplete="new-password" placeholder="رمز قوی" />
-            <small class="muted">حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص — برای پاسارگارد و وب یکی است</small>
+            <input name="password" type="password" required autocomplete="new-password" placeholder="رمز قوی" minlength="12" />
+            <small class="muted">حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ، دو حرف کوچک و یک کاراکتر خاص — طبق قوانین پاسارگارد؛ برای پاسارگارد و وب یکی است</small>
           </label>
         </div>
         <div>

@@ -18,13 +18,13 @@ class PasarGuardError(Exception):
 
     def user_message(self, *, fallback: str | None = None) -> str:
         """Short Persian-friendly message extracted from API error body."""
+        from app.services.credential_policy import humanize_pg_validation_error
+
         detail = _pg_error_detail(self.body)
         if detail:
-            return detail[:400]
+            return humanize_pg_validation_error(detail)[:500]
         base = str(self.args[0] if self.args else "") or (fallback or "خطای پاسارگارد")
-        if self.status_code:
-            return f"{base}"
-        return base
+        return humanize_pg_validation_error(base)[:500]
 
 
 def _pg_error_detail(body: Any) -> str | None:
