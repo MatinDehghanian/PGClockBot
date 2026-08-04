@@ -171,6 +171,12 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
             sync_conn.execute(
                 sql_text("ALTER TABLE reseller_plans ADD COLUMN share_pg_panel_url BOOLEAN DEFAULT 0")
             )
+        if "billing_mode" not in pcols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE reseller_plans ADD COLUMN billing_mode VARCHAR(16) DEFAULT 'fixed'"
+                )
+            )
 
     if insp.has_table("pg_staff_access"):
         scols = {c["name"] for c in insp.get_columns("pg_staff_access")}

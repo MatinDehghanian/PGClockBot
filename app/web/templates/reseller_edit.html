@@ -175,7 +175,7 @@
 
 <div class="card">
   <h2>حذف نمایندگی</h2>
-  <p class="muted">پروفایل نماینده و ادمین پاسارگارد متصل حذف می‌شود. علت برای کاربر در ربات ارسال می‌شود و نقشش به «کاربر» برمی‌گردد.</p>
+  <p class="muted">پروفایل نماینده و ادمین پاسارگارد متصل حذف می‌شود. علت برای کاربر در ربات ارسال می‌شود و نقشش به «کاربر» برمی‌گردد. سفارش‌ها و کیف پول حساب بات باقی می‌ماند.</p>
   <form method="post" action="/resellers/{{ user.id }}/delete" class="form-stack"
         data-confirm="نمایندگی و ادمین پاسارگارد متصل حذف شوند؟ علت برای کاربر ارسال می‌شود."
         data-confirm-title="حذف نمایندگی (+ ادمین پاسارگارد)"
@@ -192,9 +192,15 @@
 
 <div class="card">
   <h2>حذف کامل کاربر</h2>
-  <p class="muted">کاربر بات، نمایندگی، ادمین پاسارگارد متصل و تمام سفارش‌ها/سرویس‌ها/تیکت‌ها حذف می‌شوند. برگشت‌ناپذیر است.</p>
+  <p class="muted">کاربر بات، نمایندگی، ادمین پاسارگارد متصل و تمام سفارش‌ها/سرویس‌ها/پرداخت‌ها/تیکت‌ها حذف می‌شوند. برگشت‌ناپذیر است.</p>
+  {% if user.wallet_balance and user.wallet_balance > 0 %}
+  <div class="flash warn">موجودی کیف پول: {{ user.wallet_balance | num }} تومان — با حذف کامل از بین می‌رود.</div>
+  {% endif %}
+  {% if profile and profile.billing_balance and profile.billing_balance > 0 %}
+  <div class="flash warn">موجودی صورتحساب PAYG: {{ profile.billing_balance | num }} تومان — با حذف کامل از بین می‌رود.</div>
+  {% endif %}
   <form method="post" action="/resellers/{{ user.id }}/delete-user" class="form-stack"
-        data-confirm="کاربر کامل به‌همراه نمایندگی و ادمین پاسارگارد حذف شود؟ برگشت‌ناپذیر است."
+        data-confirm="{% if user.wallet_balance and user.wallet_balance > 0 %}هشدار: موجودی کیف پول {{ user.wallet_balance | num }} تومان از بین می‌رود. {% endif %}{% if profile and profile.billing_balance and profile.billing_balance > 0 %}هشدار: موجودی PAYG {{ profile.billing_balance | num }} تومان از بین می‌رود. {% endif %}کاربر کامل به‌همراه نمایندگی، ادمین پاسارگارد، سفارش‌ها و سرویس‌ها حذف شود؟ برگشت‌ناپذیر است."
         data-confirm-title="حذف کامل (+ ادمین پاسارگارد)"
         data-confirm-danger="1"
         data-confirm-label="حذف کامل">

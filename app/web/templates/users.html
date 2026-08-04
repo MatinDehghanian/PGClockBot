@@ -69,7 +69,7 @@
             </form>
             {% if u.role != 'admin' %}
             <form method="post" action="/users/{{ u.id }}/delete"
-                  data-confirm="کاربر و تمام سفارش‌ها/سرویس‌ها/تیکت‌های مرتبط حذف شوند؟ این عمل برگشت‌ناپذیر است."
+                  data-confirm="{% if u.wallet_balance and u.wallet_balance > 0 %}هشدار: موجودی کیف پول این کاربر {{ u.wallet_balance | num }} تومان است و با حذف از بین می‌رود. {% endif %}کاربر و تمام سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است."
                   data-confirm-title="تأیید حذف کاربر"
                   data-confirm-danger="1"
                   data-confirm-reason="1"

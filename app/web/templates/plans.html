@@ -1,25 +1,25 @@
 ﻿{% extends "base.html" %}
 {% from "macros.html" import switch, switch_chip, page_title %}
 {% from "macros.html" import row_actions %}
-{% block title %}پلن‌های فروش{% endblock %}
+{% block title %}پلن‌ها{% endblock %}
 {% block content %}
-<div class="page-head page-head--stack">
+<div class="page-head">
   <div>
-    {{ page_title('plans', 'پلن‌های فروش') }}
-    <div class="page-title-actions actions">
-      <button type="button" class="btn" data-modal-open="modal-trial">پلن تست</button>
-      <button type="button" class="btn" data-modal-open="modal-custom">پلن دلخواه</button>
-      <button type="button" class="btn" data-modal-open="modal-plan-create">پلن ثابت</button>
-      <button type="button" class="btn" data-modal-open="modal-wholesale">فروش عمده</button>
-    </div>
+    {{ page_title('plans', 'پلن‌ها') }}
   </div>
+  <button type="button" class="btn" id="btn-add-plan" data-modal-open="modal-plan-unified">افزودن پلن</button>
 </div>
 
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 {% if pg_error %}<div class="flash warn">پاسارگارد: {{ pg_error }} — پلن‌ها را می‌توانید ذخیره کنید ولی تحویل نیاز به اتصال دارد.</div>{% endif %}
 
+{% set trial_on = values.get('trial_enabled') in ['1','true','yes','on'] %}
+{% set custom_on = values.get('custom_plan_enabled') in ['1','true','yes','on'] %}
+{% set wholesale_on = values.get('wholesale_enabled') in ['1','true','yes','on'] %}
+
 <div class="card card-flush">
+  <h2>پلن‌های کاربران</h2>
   <div class="table-wrap">
   <table class="table-compact">
     <thead>
@@ -55,284 +55,556 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">پلنی نیست — از «پلن ثابت» بسازید.</td></tr>
+      <tr><td colspan="7" class="muted">پلن ثابتی نیست — از «افزودن پلن» بسازید.</td></tr>
     {% endfor %}
+      <tr>
+        <td>پلن تست{% if trial %} — {{ trial.name }}{% endif %}</td>
+        <td class="mono">رایگان</td>
+        <td class="col-hide-sm">{% if trial %}{{ trial.duration_days }} روز{% else %}—{% endif %}</td>
+        <td>{% if trial and trial.data_limit_gb is not none %}{{ trial.data_limit_gb | gb }}{% elif trial %}نامحدود{% else %}—{% endif %}</td>
+        <td class="mono col-hide-sm">
+          {% if trial and trial.pg_template_id %}تمپلیت #{{ trial.pg_template_id }}
+          {% elif trial and trial.pg_group_ids %}گروه {{ trial.pg_group_ids }}
+          {% else %}—{% endif %}
+        </td>
+        <td>{% if trial_on %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+        <td class="col-actions">
+          {% call row_actions() %}
+            <button type="button" class="btn btn-ghost btn-sm"
+                    data-modal-open="modal-plan-unified"
+                    data-plan-audience="users"
+                    data-plan-kind="trial">تنظیم</button>
+          {% endcall %}
+        </td>
+      </tr>
+      <tr>
+        <td>پلن دلخواه</td>
+        <td class="mono">هر گیگ / روز</td>
+        <td class="col-hide-sm">{{ values.get('custom_plan_min_days','1') }}–{{ values.get('custom_plan_max_days','365') }} روز</td>
+        <td>{{ values.get('custom_plan_min_gb','1') }}–{{ values.get('custom_plan_max_gb','500') }} گیگ</td>
+        <td class="mono col-hide-sm">
+          {% if values.get('custom_plan_template_id') %}تمپلیت #{{ values.get('custom_plan_template_id') }}
+          {% elif values.get('custom_plan_group_ids') %}گروه {{ values.get('custom_plan_group_ids') }}
+          {% else %}—{% endif %}
+        </td>
+        <td>{% if custom_on %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+        <td class="col-actions">
+          {% call row_actions() %}
+            <button type="button" class="btn btn-ghost btn-sm"
+                    data-modal-open="modal-plan-unified"
+                    data-plan-audience="users"
+                    data-plan-kind="custom">تنظیم</button>
+          {% endcall %}
+        </td>
+      </tr>
+      <tr>
+        <td>فروش عمده</td>
+        <td class="mono">تخفیف پلکانی</td>
+        <td class="col-hide-sm">—</td>
+        <td>{{ values.get('wholesale_min_qty','5') }}–{{ values.get('wholesale_max_qty','20') }} عدد</td>
+        <td class="mono col-hide-sm">—</td>
+        <td>{% if wholesale_on %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+        <td class="col-actions">
+          {% call row_actions() %}
+            <button type="button" class="btn btn-ghost btn-sm"
+                    data-modal-open="modal-plan-unified"
+                    data-plan-audience="users"
+                    data-plan-kind="wholesale">تنظیم</button>
+          {% endcall %}
+        </td>
+      </tr>
     </tbody>
   </table>
   </div>
 </div>
 
-{# —— Trial modal —— #}
-<div class="ui-modal" id="modal-trial" hidden>
-  <div class="ui-modal-backdrop" data-modal-close></div>
-  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      <h2>پلن تست رایگان</h2>
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
-    <p class="muted update-card-caption">حجم، مدت و اتصال پاسارگارد برای تست — از فروشگاه فقط یک‌بار به کاربر نشان داده می‌شود.</p>
-    <form method="post" action="/plans/trial" class="form-stack">
-      <div class="ui-switch-list">
-        {{ switch('trial_enabled', 'نمایش پلن تست در فروشگاه', checked=(values.get('trial_enabled') in ['1','true','yes','on'])) }}
-      </div>
-      <div class="form-row">
-        <label class="form-field">نام
-          <input name="name" value="{{ trial.name if trial else 'تست رایگان' }}" required />
-        </label>
-        <label class="form-field">مدت (روز)
-          <input name="duration_days" type="number" min="1" value="{{ trial.duration_days if trial else 1 }}" required />
-        </label>
-        <label class="form-field">حجم (گیگ)
-          <input name="data_limit_gb" type="number" step="0.1" min="0" value="{% if trial and trial.data_limit_gb is not none %}{{ trial.data_limit_gb }}{% endif %}" placeholder="1" />
-          <small class="muted">خالی = نامحدود</small>
-        </label>
-      </div>
-      <label class="form-field">حالت ساخت در پاسارگارد
-        <select name="mode" id="trial-mode">
-          <option value="custom" {% if not trial or not trial.pg_template_id %}selected{% endif %}>سفارشی (گروه + حجم + مدت)</option>
-          <option value="template" {% if trial and trial.pg_template_id %}selected{% endif %}>از تمپلیت آماده</option>
-        </select>
-      </label>
-      <div id="trial-mode-custom" class="form-stack">
-        <div class="form-field">
-          <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد</span>
-          <div class="ui-switch-grid">
-            {% for g in groups %}
-            {% set gid = g.get('id')|string %}
-            {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), checked=(gid in trial_group_ids), value=g.get('id')) }}
-            {% else %}
-            <span class="muted">گروهی نیست.</span>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
-      <div id="trial-mode-template" class="form-stack" style="display:none">
-        <label class="form-field">تمپلیت پاسارگارد
-          <select name="pg_template_id">
-            <option value="">— انتخاب کنید —</option>
-            {% for t in templates %}
-            <option value="{{ t.get('id') }}" {% if trial and trial.pg_template_id == t.get('id') %}selected{% endif %}>#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
-            {% endfor %}
-          </select>
-        </label>
-      </div>
-      {% set naming_prefix = trial.pg_username_prefix if trial else '' %}
-      {% set naming_suffix = trial.pg_username_suffix if trial else '' %}
-      {% set naming_pattern = trial.pg_username_pattern if trial else '' %}
-      {% set naming_preview_id = 'trial-naming-sample' %}
-      {% set global_prefix = values.get('pg_username_prefix','clk') %}
-      {% set global_suffix = values.get('pg_username_suffix','') %}
-      {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
-      {% include "_plan_naming_fields.html" %}
-      <div class="actions">
-        <button class="btn" type="submit">ذخیره پلن تست</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-{# —— Custom plan modal —— #}
-<div class="ui-modal" id="modal-custom" hidden>
-  <div class="ui-modal-backdrop" data-modal-close></div>
-  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      <h2>پلن دلخواه کاربر</h2>
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
-    <p class="muted update-card-caption">کاربر در بات حجم و روز دلخواه می‌چیند؛ قیمت از روی هر گیگ/روز حساب می‌شود.</p>
-    <form method="post" action="/plans/custom" class="form-stack">
-      <div class="ui-switch-list">
-        {{ switch('custom_plan_enabled', 'فعال‌سازی پلن دلخواه در فروشگاه', checked=(values.get('custom_plan_enabled') in ['1','true','yes','on'])) }}
-      </div>
-      <div class="form-row">
-        <label class="form-field">قیمت هر گیگ (تومان)
-          <input name="custom_plan_price_per_gb" type="number" min="0" value="{{ values.get('custom_plan_price_per_gb','1000') }}" />
-        </label>
-        <label class="form-field">قیمت هر روز (تومان)
-          <input name="custom_plan_price_per_day" type="number" min="0" value="{{ values.get('custom_plan_price_per_day','500') }}" />
-        </label>
-        <label class="form-field">حداقل / حداکثر گیگ
-          <div class="form-row" style="margin: 0">
-            <input name="custom_plan_min_gb" type="number" min="1" value="{{ values.get('custom_plan_min_gb','1') }}" />
-            <input name="custom_plan_max_gb" type="number" min="1" value="{{ values.get('custom_plan_max_gb','500') }}" />
-          </div>
-        </label>
-        <label class="form-field">حداقل / حداکثر روز
-          <div class="form-row" style="margin: 0">
-            <input name="custom_plan_min_days" type="number" min="1" value="{{ values.get('custom_plan_min_days','1') }}" />
-            <input name="custom_plan_max_days" type="number" min="1" value="{{ values.get('custom_plan_max_days','365') }}" />
-          </div>
-        </label>
-      </div>
-      <label class="form-field">اتصال پاسارگارد
-        <select name="mode" id="custom-mode">
-          <option value="custom" {% if not values.get('custom_plan_template_id') %}selected{% endif %}>گروه اینباند</option>
-          <option value="template" {% if values.get('custom_plan_template_id') %}selected{% endif %}>تمپلیت</option>
-        </select>
-      </label>
-      <div id="custom-mode-groups" class="form-stack">
-        <div class="form-field">
-          <span class="muted" style="font-size:12px;font-weight:500">گروه‌ها</span>
-          <div class="ui-switch-grid">
-            {% for g in groups %}
-            {% set gid = g.get('id')|string %}
-            {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), checked=(gid in custom_group_ids), value=g.get('id')) }}
-            {% else %}
-            <span class="muted">گروهی نیست.</span>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
-      <div id="custom-mode-template" class="form-stack" style="display:none">
-        <label class="form-field">تمپلیت
-          <select name="custom_plan_template_id">
-            <option value="">— انتخاب کنید —</option>
-            {% for t in templates %}
-            <option value="{{ t.get('id') }}" {% if values.get('custom_plan_template_id')|string == t.get('id')|string %}selected{% endif %}>#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
-            {% endfor %}
-          </select>
-        </label>
-      </div>
-      {% set naming_prefix = values.get('custom_plan_username_prefix','') %}
-      {% set naming_suffix = values.get('custom_plan_username_suffix','') %}
-      {% set naming_pattern = values.get('custom_plan_username_pattern','') %}
-      {% set naming_prefix_name = 'custom_plan_username_prefix' %}
-      {% set naming_suffix_name = 'custom_plan_username_suffix' %}
-      {% set naming_pattern_name = 'custom_plan_username_pattern' %}
-      {% set naming_preview_id = 'custom-naming-sample' %}
-      {% set global_prefix = values.get('pg_username_prefix','clk') %}
-      {% set global_suffix = values.get('pg_username_suffix','') %}
-      {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
-      {% include "_plan_naming_fields.html" %}
-      <div class="actions">
-        <button class="btn" type="submit">ذخیره پلن دلخواه</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-{# —— Wholesale modal —— #}
-<div class="ui-modal" id="modal-wholesale" hidden>
-  <div class="ui-modal-backdrop" data-modal-close></div>
-  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      <h2>فروش عمده</h2>
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
-    <p class="muted update-card-caption">کاربر در ربات نوع سرویس و تعداد را انتخاب می‌کند؛ تخفیف پلکانی بر اساس تعداد اعمال می‌شود.</p>
-    <form method="post" action="/plans/wholesale" class="form-stack" id="wholesale-form">
-      <div class="ui-switch-list">
-        {{ switch('wholesale_enabled', 'فعال‌سازی فروش عمده در فروشگاه', checked=(values.get('wholesale_enabled') in ['1','true','yes','on'])) }}
-      </div>
-      <div class="form-row">
-        <label class="form-field">حداقل تعداد خرید
-          <input name="wholesale_min_qty" type="number" min="1" value="{{ values.get('wholesale_min_qty','5') }}" required />
-        </label>
-        <label class="form-field">حداکثر تعداد خرید
-          <input name="wholesale_max_qty" type="number" min="1" value="{{ values.get('wholesale_max_qty','20') }}" required />
-        </label>
-        <label class="form-field">متن دکمه در ربات
-          <input name="btn_wholesale" value="{{ values.get('btn_wholesale','📦 فروش عمده') }}" />
-        </label>
-      </div>
-      <div class="form-field">
-        <strong>پله‌های تخفیف</strong>
-        <small class="muted">مثلاً از ۵ عدد ۱۰٪ و از ۲۰ عدد ۲۰٪ — تعداد و درصد را تنظیم کنید.</small>
-        <div id="wholesale-tiers" class="form-stack" style="margin-top:8px"></div>
-        <button type="button" class="btn btn-ghost btn-sm" id="wholesale-add-tier">+ پله تخفیف</button>
-        <input type="hidden" name="wholesale_tiers" id="wholesale_tiers_json" value="{{ values.get('wholesale_tiers','[]') }}" />
-      </div>
-      <div class="actions">
-        <button class="btn" type="submit">ذخیره فروش عمده</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-{# —— Create fixed plan modal —— #}
-<div class="ui-modal" id="modal-plan-create" hidden>
-  <div class="ui-modal-backdrop" data-modal-close></div>
-  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
-    <div class="ui-modal-head">
-      <h2>افزودن پلن ثابت</h2>
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
-    <form method="post" action="/plans" class="form-stack">
-      <div class="form-row">
-        <label class="form-field">نام پلن
-          <input name="name" required placeholder="مثلاً ویژه ۴۰ گیگ" />
-        </label>
-        <label class="form-field">قیمت (تومان)
-          <input name="price" type="number" min="0" required placeholder="150000" />
-        </label>
-        <label class="form-field">مدت (روز)
-          <input name="duration_days" type="number" min="1" value="30" required />
-        </label>
-        <label class="form-field">حجم (گیگ)
-          <input name="data_limit_gb" type="number" step="0.1" min="0" placeholder="30" />
-          <small class="muted">خالی = نامحدود</small>
-        </label>
-      </div>
-      <label class="form-field">توضیح کوتاه
-        <input name="description" placeholder="نمایش در بات" />
-      </label>
-      <label class="form-field">حالت ساخت در پاسارگارد
-        <select name="mode" id="plan-mode">
-          <option value="custom">سفارشی (گروه + حجم + مدت)</option>
-          <option value="template">از تمپلیت آماده پاسارگارد</option>
-        </select>
-      </label>
-      <div id="mode-custom" class="form-stack">
-        <div class="form-field">
-          <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد (حداقل یکی)</span>
-          <div class="ui-switch-grid">
-            {% for g in groups %}
-            {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
-            {% else %}
-            <span class="muted">گروهی نیست — از منوی پاسارگارد → گروه‌ها بسازید.</span>
-            {% endfor %}
-          </div>
-        </div>
-        <div class="ui-switch-list">
-          {% if can_create_template is not defined or can_create_template %}
-          {{ switch('also_create_template', 'همزمان تمپلیت مشابه در پاسارگارد هم ساخته شود') }}
+{% if is_platform_admin %}
+<div class="card card-flush" id="reseller-plans">
+  <h2>پلن‌های نمایندگان</h2>
+  <div class="table-wrap">
+  <table class="table-compact">
+    <thead>
+      <tr>
+        <th>نام</th>
+        <th>قیمت</th>
+        <th>حالت</th>
+        <th class="col-hide-sm">کمیسیون</th>
+        <th>وضعیت</th>
+        <th class="col-actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for p in reseller_plans %}
+      {% set mode = (p.billing_mode or 'fixed') %}
+      <tr>
+        <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
+        <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
+        <td>
+          {% if mode == 'payg' %}
+          <span class="badge info">PAYG</span>
+          {% else %}
+          <span class="badge fixed">ثابت</span>
           {% endif %}
+        </td>
+        <td class="mono col-hide-sm">{% if mode == 'fixed' %}{{ p.commission_percent }}٪{% else %}—{% endif %}</td>
+        <td>{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+        <td class="col-actions">
+          {% call row_actions() %}
+            <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>
+            <form method="post" action="/resellers/plans/{{ p.id }}/toggle">
+              <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
+            </form>
+            <form method="post" action="/resellers/plans/{{ p.id }}/delete"
+                  data-confirm="این پلن نمایندگی حذف شود؟"
+                  data-confirm-title="تأیید حذف"
+                  data-confirm-danger="1"
+                  data-confirm-label="حذف">
+              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+            </form>
+          {% endcall %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="muted">پلن نمایندگی نیست — از «افزودن پلن» بسازید.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+{# —— Unified plan modal —— #}
+<div class="ui-modal" id="modal-plan-unified" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
+    <div class="ui-modal-head">
+      <h2>افزودن پلن</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+
+    <div class="form-row" style="margin-bottom: var(--space-2)">
+      <label class="form-field">مخاطب
+        <select id="plan-audience">
+          <option value="users">کاربران</option>
+          {% if is_platform_admin %}
+          <option value="resellers">نمایندگان</option>
+          {% endif %}
+        </select>
+      </label>
+      <label class="form-field">نوع پلن
+        <select id="plan-kind">
+          <option value="fixed">ثابت</option>
+          <option value="custom">دلخواه</option>
+          <option value="trial">تست</option>
+          <option value="wholesale">فروش عمده</option>
+        </select>
+      </label>
+    </div>
+
+    {# —— User fixed —— #}
+    <div id="panel-user-fixed" class="plan-panel">
+      <form method="post" action="/plans" class="form-stack">
+        <div class="form-row">
+          <label class="form-field">نام پلن
+            <input name="name" required placeholder="مثلاً ویژه ۴۰ گیگ" />
+          </label>
+          <label class="form-field">قیمت (تومان)
+            <input name="price" type="number" min="0" required placeholder="150000" />
+          </label>
+          <label class="form-field">مدت (روز)
+            <input name="duration_days" type="number" min="1" value="30" required />
+          </label>
+          <label class="form-field">حجم (گیگ)
+            <input name="data_limit_gb" type="number" step="0.1" min="0" placeholder="30" />
+            <small class="muted">خالی = نامحدود</small>
+          </label>
         </div>
-      </div>
-      <div id="mode-template" class="form-stack" style="display:none">
-        <label class="form-field">تمپلیت پاسارگارد
-          <select name="pg_template_id">
-            <option value="">— انتخاب کنید —</option>
-            {% for t in templates %}
-            <option value="{{ t.get('id') }}">#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
+        <label class="form-field">توضیح کوتاه
+          <input name="description" placeholder="نمایش در بات" />
+        </label>
+        <label class="form-field">حالت ساخت در پاسارگارد
+          <select name="mode" id="plan-mode">
+            <option value="custom">سفارشی (گروه + حجم + مدت)</option>
+            <option value="template">از تمپلیت آماده پاسارگارد</option>
+          </select>
+        </label>
+        <div id="mode-custom" class="form-stack">
+          <div class="form-field">
+            <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد (حداقل یکی)</span>
+            <div class="ui-switch-grid">
+              {% for g in groups %}
+              {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
+              {% else %}
+              <span class="muted">گروهی نیست — از منوی پاسارگارد → گروه‌ها بسازید.</span>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="ui-switch-list">
+            {% if can_create_template is not defined or can_create_template %}
+            {{ switch('also_create_template', 'همزمان تمپلیت مشابه در پاسارگارد هم ساخته شود') }}
+            {% endif %}
+          </div>
+        </div>
+        <div id="mode-template" class="form-stack" style="display:none">
+          <label class="form-field">تمپلیت پاسارگارد
+            <select name="pg_template_id">
+              <option value="">— انتخاب کنید —</option>
+              {% for t in templates %}
+              <option value="{{ t.get('id') }}">#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        {% set naming_prefix = '' %}
+        {% set naming_suffix = '' %}
+        {% set naming_pattern = '' %}
+        {% set naming_prefix_name = 'pg_username_prefix' %}
+        {% set naming_suffix_name = 'pg_username_suffix' %}
+        {% set naming_pattern_name = 'pg_username_pattern' %}
+        {% set naming_preview_id = 'create-naming-sample' %}
+        {% set global_prefix = values.get('pg_username_prefix','clk') %}
+        {% set global_suffix = values.get('pg_username_suffix','') %}
+        {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
+        {% include "_plan_naming_fields.html" %}
+        <div class="actions">
+          <button class="btn" type="submit">ذخیره پلن</button>
+          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+        </div>
+      </form>
+    </div>
+
+    {# —— User trial —— #}
+    <div id="panel-user-trial" class="plan-panel" hidden>
+      <p class="muted update-card-caption">حجم، مدت و اتصال پاسارگارد برای تست — از فروشگاه فقط یک‌بار به کاربر نشان داده می‌شود.</p>
+      <form method="post" action="/plans/trial" class="form-stack">
+        <div class="ui-switch-list">
+          {{ switch('trial_enabled', 'نمایش پلن تست در فروشگاه', checked=trial_on) }}
+        </div>
+        <div class="form-row">
+          <label class="form-field">نام
+            <input name="name" value="{{ trial.name if trial else 'تست رایگان' }}" required />
+          </label>
+          <label class="form-field">مدت (روز)
+            <input name="duration_days" type="number" min="1" value="{{ trial.duration_days if trial else 1 }}" required />
+          </label>
+          <label class="form-field">حجم (گیگ)
+            <input name="data_limit_gb" type="number" step="0.1" min="0" value="{% if trial and trial.data_limit_gb is not none %}{{ trial.data_limit_gb }}{% endif %}" placeholder="1" />
+            <small class="muted">خالی = نامحدود</small>
+          </label>
+        </div>
+        <label class="form-field">حالت ساخت در پاسارگارد
+          <select name="mode" id="trial-mode">
+            <option value="custom" {% if not trial or not trial.pg_template_id %}selected{% endif %}>سفارشی (گروه + حجم + مدت)</option>
+            <option value="template" {% if trial and trial.pg_template_id %}selected{% endif %}>از تمپلیت آماده</option>
+          </select>
+        </label>
+        <div id="trial-mode-custom" class="form-stack">
+          <div class="form-field">
+            <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد</span>
+            <div class="ui-switch-grid">
+              {% for g in groups %}
+              {% set gid = g.get('id')|string %}
+              {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), checked=(gid in trial_group_ids), value=g.get('id')) }}
+              {% else %}
+              <span class="muted">گروهی نیست.</span>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <div id="trial-mode-template" class="form-stack" style="display:none">
+          <label class="form-field">تمپلیت پاسارگارد
+            <select name="pg_template_id">
+              <option value="">— انتخاب کنید —</option>
+              {% for t in templates %}
+              <option value="{{ t.get('id') }}" {% if trial and trial.pg_template_id == t.get('id') %}selected{% endif %}>#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        {% set naming_prefix = trial.pg_username_prefix if trial else '' %}
+        {% set naming_suffix = trial.pg_username_suffix if trial else '' %}
+        {% set naming_pattern = trial.pg_username_pattern if trial else '' %}
+        {% set naming_prefix_name = 'pg_username_prefix' %}
+        {% set naming_suffix_name = 'pg_username_suffix' %}
+        {% set naming_pattern_name = 'pg_username_pattern' %}
+        {% set naming_preview_id = 'trial-naming-sample' %}
+        {% set global_prefix = values.get('pg_username_prefix','clk') %}
+        {% set global_suffix = values.get('pg_username_suffix','') %}
+        {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
+        {% include "_plan_naming_fields.html" %}
+        <div class="actions">
+          <button class="btn" type="submit">ذخیره پلن تست</button>
+          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+        </div>
+      </form>
+    </div>
+
+    {# —— User custom —— #}
+    <div id="panel-user-custom" class="plan-panel" hidden>
+      <p class="muted update-card-caption">کاربر در بات حجم و روز دلخواه می‌چیند؛ قیمت از روی هر گیگ/روز حساب می‌شود.</p>
+      <form method="post" action="/plans/custom" class="form-stack">
+        <div class="ui-switch-list">
+          {{ switch('custom_plan_enabled', 'فعال‌سازی پلن دلخواه در فروشگاه', checked=custom_on) }}
+        </div>
+        <div class="form-row">
+          <label class="form-field">قیمت هر گیگ (تومان)
+            <input name="custom_plan_price_per_gb" type="number" min="0" value="{{ values.get('custom_plan_price_per_gb','1000') }}" />
+          </label>
+          <label class="form-field">قیمت هر روز (تومان)
+            <input name="custom_plan_price_per_day" type="number" min="0" value="{{ values.get('custom_plan_price_per_day','500') }}" />
+          </label>
+          <label class="form-field">حداقل / حداکثر گیگ
+            <div class="form-row" style="margin: 0">
+              <input name="custom_plan_min_gb" type="number" min="1" value="{{ values.get('custom_plan_min_gb','1') }}" />
+              <input name="custom_plan_max_gb" type="number" min="1" value="{{ values.get('custom_plan_max_gb','500') }}" />
+            </div>
+          </label>
+          <label class="form-field">حداقل / حداکثر روز
+            <div class="form-row" style="margin: 0">
+              <input name="custom_plan_min_days" type="number" min="1" value="{{ values.get('custom_plan_min_days','1') }}" />
+              <input name="custom_plan_max_days" type="number" min="1" value="{{ values.get('custom_plan_max_days','365') }}" />
+            </div>
+          </label>
+        </div>
+        <label class="form-field">اتصال پاسارگارد
+          <select name="mode" id="custom-mode">
+            <option value="custom" {% if not values.get('custom_plan_template_id') %}selected{% endif %}>گروه اینباند</option>
+            <option value="template" {% if values.get('custom_plan_template_id') %}selected{% endif %}>تمپلیت</option>
+          </select>
+        </label>
+        <div id="custom-mode-groups" class="form-stack">
+          <div class="form-field">
+            <span class="muted" style="font-size:12px;font-weight:500">گروه‌ها</span>
+            <div class="ui-switch-grid">
+              {% for g in groups %}
+              {% set gid = g.get('id')|string %}
+              {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), checked=(gid in custom_group_ids), value=g.get('id')) }}
+              {% else %}
+              <span class="muted">گروهی نیست.</span>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <div id="custom-mode-template" class="form-stack" style="display:none">
+          <label class="form-field">تمپلیت
+            <select name="custom_plan_template_id">
+              <option value="">— انتخاب کنید —</option>
+              {% for t in templates %}
+              <option value="{{ t.get('id') }}" {% if values.get('custom_plan_template_id')|string == t.get('id')|string %}selected{% endif %}>#{{ t.get('id') }} — {{ t.get('name') or 'بدون نام' }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        {% set naming_prefix = values.get('custom_plan_username_prefix','') %}
+        {% set naming_suffix = values.get('custom_plan_username_suffix','') %}
+        {% set naming_pattern = values.get('custom_plan_username_pattern','') %}
+        {% set naming_prefix_name = 'custom_plan_username_prefix' %}
+        {% set naming_suffix_name = 'custom_plan_username_suffix' %}
+        {% set naming_pattern_name = 'custom_plan_username_pattern' %}
+        {% set naming_preview_id = 'custom-naming-sample' %}
+        {% set global_prefix = values.get('pg_username_prefix','clk') %}
+        {% set global_suffix = values.get('pg_username_suffix','') %}
+        {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
+        {% include "_plan_naming_fields.html" %}
+        <div class="actions">
+          <button class="btn" type="submit">ذخیره پلن دلخواه</button>
+          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+        </div>
+      </form>
+    </div>
+
+    {# —— User wholesale —— #}
+    <div id="panel-user-wholesale" class="plan-panel" hidden>
+      <p class="muted update-card-caption">کاربر در ربات نوع سرویس و تعداد را انتخاب می‌کند؛ تخفیف پلکانی بر اساس تعداد اعمال می‌شود.</p>
+      <form method="post" action="/plans/wholesale" class="form-stack" id="wholesale-form">
+        <div class="ui-switch-list">
+          {{ switch('wholesale_enabled', 'فعال‌سازی فروش عمده در فروشگاه', checked=wholesale_on) }}
+        </div>
+        <div class="form-row">
+          <label class="form-field">حداقل تعداد خرید
+            <input name="wholesale_min_qty" type="number" min="1" value="{{ values.get('wholesale_min_qty','5') }}" required />
+          </label>
+          <label class="form-field">حداکثر تعداد خرید
+            <input name="wholesale_max_qty" type="number" min="1" value="{{ values.get('wholesale_max_qty','20') }}" required />
+          </label>
+          <label class="form-field">متن دکمه در ربات
+            <input name="btn_wholesale" value="{{ values.get('btn_wholesale','📦 فروش عمده') }}" />
+          </label>
+        </div>
+        <div class="form-field">
+          <strong>پله‌های تخفیف</strong>
+          <small class="muted">مثلاً از ۵ عدد ۱۰٪ و از ۲۰ عدد ۲۰٪ — تعداد و درصد را تنظیم کنید.</small>
+          <div id="wholesale-tiers" class="form-stack" style="margin-top:8px"></div>
+          <button type="button" class="btn btn-ghost btn-sm" id="wholesale-add-tier">+ پله تخفیف</button>
+          <input type="hidden" name="wholesale_tiers" id="wholesale_tiers_json" value="{{ values.get('wholesale_tiers','[]') }}" />
+        </div>
+        <div class="actions">
+          <button class="btn" type="submit">ذخیره فروش عمده</button>
+          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+        </div>
+      </form>
+    </div>
+
+    {# —— Reseller —— #}
+    {% if is_platform_admin %}
+    <div id="panel-reseller" class="plan-panel" hidden>
+      <form method="post" action="/resellers/plans" class="form-stack" id="reseller-plan-form">
+        <input type="hidden" name="billing_mode" id="reseller-billing-mode" value="fixed" />
+        <div class="form-row">
+          <label class="form-field">نام
+            <input name="name" required placeholder="نمایندگی نقره‌ای" />
+          </label>
+          <label class="form-field">قیمت (تومان)
+            <input name="price" type="number" value="0" />
+            <small class="muted">۰ = رایگان؛ فقط تأیید ادمین</small>
+          </label>
+          <label class="form-field" id="reseller-commission-field">کمیسیون ٪
+            <input name="commission_percent" id="reseller-commission-input" type="number" min="0" max="100" value="0" />
+            <small class="muted">اختیاری — پیش‌فرض ۰</small>
+          </label>
+          <label class="form-field">ترتیب
+            <input name="sort_order" type="number" value="0" />
+          </label>
+        </div>
+        <label class="form-field">توضیح
+          <textarea name="description" rows="2"></textarea>
+        </label>
+
+        <div class="ui-switch-section">
+          <span class="ui-switch-section-title">دسترسی پیش‌فرض (وب = بات)</span>
+          <p class="ui-switch-section-hint">این دسترسی‌ها هنگام تأیید درخواست نمایندگی اعمال می‌شوند.</p>
+          <div class="ui-switch-list">
+            {% for key, label in feature_perms %}
+            {{ switch('perm_' ~ key, label, checked=true) }}
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="ui-switch-list">
+          {{ switch('create_pg_admin', 'ساخت ادمین پاسارگارد هنگام تأیید', checked=true, help='با نقش پاسارگارد پلن؛ برای مالکیت کاربران لازم است') }}
+          {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=false, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند') }}
+          {{ switch('is_active', 'پلن فعال', checked=true) }}
+        </div>
+
+        <label class="form-field">نقش پاسارگارد
+          <select name="pg_role_id">
+            <option value="">—</option>
+            {% for r in pg_roles %}
+            <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}</option>
             {% endfor %}
           </select>
         </label>
-      </div>
-      {% set naming_prefix = '' %}
-      {% set naming_suffix = '' %}
-      {% set naming_pattern = '' %}
-      {% set naming_prefix_name = 'pg_username_prefix' %}
-      {% set naming_suffix_name = 'pg_username_suffix' %}
-      {% set naming_pattern_name = 'pg_username_pattern' %}
-      {% set naming_preview_id = 'create-naming-sample' %}
-      {% set global_prefix = values.get('pg_username_prefix','clk') %}
-      {% set global_suffix = values.get('pg_username_suffix','') %}
-      {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
-      {% include "_plan_naming_fields.html" %}
-      <div class="actions">
-        <button class="btn" type="submit">ذخیره پلن</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
-      </div>
-    </form>
+        <div class="actions">
+          <button class="btn" type="submit">ذخیره پلن</button>
+          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
   </div>
 </div>
 
 <script>
 (function(){
+  const isPlatformAdmin = {{ 'true' if is_platform_admin else 'false' }};
+  const audienceSel = document.getElementById('plan-audience');
+  const kindSel = document.getElementById('plan-kind');
+  const panels = {
+    'users:fixed': document.getElementById('panel-user-fixed'),
+    'users:trial': document.getElementById('panel-user-trial'),
+    'users:custom': document.getElementById('panel-user-custom'),
+    'users:wholesale': document.getElementById('panel-user-wholesale'),
+    'resellers': document.getElementById('panel-reseller')
+  };
+  const USER_KINDS = [
+    {value: 'fixed', label: 'ثابت'},
+    {value: 'custom', label: 'دلخواه'},
+    {value: 'trial', label: 'تست'},
+    {value: 'wholesale', label: 'فروش عمده'}
+  ];
+  const RESELLER_KINDS = [
+    {value: 'fixed', label: 'ثابت'},
+    {value: 'payg', label: 'Pay As You Go'}
+  ];
+
+  function setKindOptions(audience, preferKind){
+    if (!kindSel) return;
+    const opts = audience === 'resellers' ? RESELLER_KINDS : USER_KINDS;
+    const allowed = opts.map((o) => o.value);
+    let next = preferKind && allowed.indexOf(preferKind) >= 0 ? preferKind : (kindSel.value && allowed.indexOf(kindSel.value) >= 0 ? kindSel.value : opts[0].value);
+    kindSel.innerHTML = '';
+    opts.forEach((o) => {
+      const el = document.createElement('option');
+      el.value = o.value;
+      el.textContent = o.label;
+      if (o.value === next) el.selected = true;
+      kindSel.appendChild(el);
+    });
+    kindSel.value = next;
+  }
+
+  function syncResellerBilling(){
+    const kind = kindSel ? kindSel.value : 'fixed';
+    const billing = document.getElementById('reseller-billing-mode');
+    const commissionField = document.getElementById('reseller-commission-field');
+    const commissionInput = document.getElementById('reseller-commission-input');
+    if (billing) billing.value = kind === 'payg' ? 'payg' : 'fixed';
+    if (commissionField) {
+      const show = kind !== 'payg';
+      commissionField.style.display = show ? '' : 'none';
+      if (!show && commissionInput) commissionInput.value = '0';
+    }
+  }
+
+  function syncAudienceAndKind(){
+    if (!audienceSel || !kindSel) return;
+    const audience = audienceSel.value === 'resellers' && isPlatformAdmin ? 'resellers' : 'users';
+    if (audienceSel.value !== audience) audienceSel.value = audience;
+    setKindOptions(audience, kindSel.value);
+    const kind = kindSel.value;
+    Object.keys(panels).forEach((k) => {
+      const el = panels[k];
+      if (el) el.hidden = true;
+    });
+    if (audience === 'resellers') {
+      if (panels.resellers) panels.resellers.hidden = false;
+      syncResellerBilling();
+    } else {
+      const key = 'users:' + kind;
+      if (panels[key]) panels[key].hidden = false;
+    }
+  }
+
+  function applyPlanOpen(audience, kind){
+    if (!audienceSel || !kindSel) return;
+    let aud = audience || 'users';
+    if (aud === 'resellers' && !isPlatformAdmin) aud = 'users';
+    audienceSel.value = aud;
+    setKindOptions(aud, kind || 'fixed');
+    if (kind) kindSel.value = kind;
+    syncAudienceAndKind();
+  }
+
+  if (audienceSel) audienceSel.addEventListener('change', () => {
+    setKindOptions(audienceSel.value, null);
+    syncAudienceAndKind();
+  });
+  if (kindSel) kindSel.addEventListener('change', syncAudienceAndKind);
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-modal-open="modal-plan-unified"]');
+    if (!btn) return;
+    const hasKind = btn.hasAttribute('data-plan-kind');
+    const hasAud = btn.hasAttribute('data-plan-audience');
+    if (hasKind || hasAud) {
+      applyPlanOpen(btn.getAttribute('data-plan-audience') || 'users', btn.getAttribute('data-plan-kind') || 'fixed');
+    } else {
+      // «افزودن پلن»: users/fixed، یا resellers/fixed اگر روی #reseller-plans باشیم
+      const preferReseller = isPlatformAdmin && location.hash === '#reseller-plans';
+      applyPlanOpen(preferReseller ? 'resellers' : 'users', 'fixed');
+    }
+  });
+
   function bindMode(selectId, customId, tplId){
     const mode = document.getElementById(selectId);
     const custom = document.getElementById(customId);
@@ -423,6 +695,18 @@
     if (addBtn) addBtn.addEventListener('click', () => { addRow({min:1, percent:5}); syncHidden(); });
     if (form) form.addEventListener('submit', syncHidden);
   })();
+
+  syncAudienceAndKind();
+
+  if (location.hash === '#reseller-plans') {
+    const section = document.getElementById('reseller-plans');
+    if (section) {
+      setTimeout(() => section.scrollIntoView({behavior: 'smooth', block: 'start'}), 50);
+    }
+    if (isPlatformAdmin) {
+      applyPlanOpen('resellers', 'fixed');
+    }
+  }
 })();
 </script>
 {% endblock %}

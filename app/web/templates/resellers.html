@@ -116,7 +116,7 @@
             </form>
             <a class="btn btn-ghost btn-sm" href="/resellers/{{ u.id }}/edit">ویرایش</a>
             <form method="post" action="/resellers/{{ u.id }}/delete"
-                  data-confirm="نمایندگی حذف شود؟ ادمین پاسارگارد متصل هم حذف می‌شود و علت برای کاربر ارسال می‌گردد."
+                  data-confirm="نمایندگی حذف شود؟ ادمین پاسارگارد متصل هم حذف می‌شود و علت برای کاربر ارسال می‌گردد. حساب بات، سفارش‌ها و کیف پول کاربر باقی می‌ماند مگر «حذف کاربر» را بزنید."
                   data-confirm-title="حذف نمایندگی (+ ادمین پاسارگارد)"
                   data-confirm-danger="1"
                   data-confirm-reason="1"
@@ -127,7 +127,7 @@
               <button class="btn btn-sm btn-danger" type="submit">حذف نمایندگی</button>
             </form>
             <form method="post" action="/resellers/{{ u.id }}/delete-user"
-                  data-confirm="کاربر، نمایندگی، ادمین پاسارگارد متصل و تمام داده‌های مرتبط کامل حذف شوند؟ برگشت‌ناپذیر است."
+                  data-confirm="{% if u.wallet_balance and u.wallet_balance > 0 %}هشدار: موجودی کیف پول {{ u.wallet_balance | num }} تومان از بین می‌رود. {% endif %}{% if p and p.billing_balance and p.billing_balance > 0 %}هشدار: موجودی صورتحساب PAYG {{ p.billing_balance | num }} تومان از بین می‌رود. {% endif %}کاربر، نمایندگی، ادمین پاسارگارد، تمام سفارش‌ها، سرویس‌ها و پرداخت‌ها کامل حذف شوند؟ برگشت‌ناپذیر است."
                   data-confirm-title="حذف کامل (+ ادمین پاسارگارد)"
                   data-confirm-danger="1"
                   data-confirm-reason="1"

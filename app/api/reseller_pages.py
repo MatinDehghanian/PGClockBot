@@ -50,7 +50,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
     def _tabs(active: str) -> list[dict]:
         return [
             {"href": "/resellers", "label": "لیست", "id": "list"},
-            {"href": "/resellers/plans", "label": "پلن‌ها", "id": "plans"},
+            {"href": "/plans#reseller-plans", "label": "پلن‌ها", "id": "plans"},
             {"href": "/resellers/applications", "label": "درخواست‌ها", "id": "apps"},
         ]
 
@@ -597,28 +597,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
     async def reseller_plans_page(
         request: Request,
         staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
     ):
-        plans = await list_reseller_plans(session)
-        roles = []
-        try:
-            roles = await get_pg().get_admin_roles()
-        except Exception:
-            roles = []
-        return render(
-            request,
-            "reseller_plans.html",
-            {
-                "staff": staff,
-                "plans": plans,
-                "tabs": _tabs("plans"),
-                "tab": "plans",
-                "feature_perms": FEATURE_PERMS,
-                "pg_roles": roles,
-                "flash_ok": request.query_params.get("ok"),
-                "flash_err": request.query_params.get("err"),
-            },
-        )
+        # Unified under /plans (audience=resellers section)
+        return RedirectResponse("/plans#reseller-plans", status_code=303)
 
     @app.post("/resellers/plans")
     async def reseller_plan_create(
@@ -629,15 +610,21 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         form = await request.form()
         name = str(form.get("name") or "").strip()
         if not name:
-            return RedirectResponse(f"/resellers/plans?err={_q('نام الزامی است')}", status_code=303)
+            return RedirectResponse(f"/plans?err={_q('نام الزامی است')}#reseller-plans", status_code=303)
         try:
             price = int(str(form.get("price") or "0").replace(",", "").replace("٬", ""))
         except ValueError:
             price = 0
+        billing_mode = str(form.get("billing_mode") or "fixed").strip().lower()
+        if billing_mode not in {"fixed", "payg"}:
+            billing_mode = "fixed"
         try:
-            commission = int(str(form.get("commission_percent") or "10"))
+            commission = int(str(form.get("commission_percent") or "0"))
         except ValueError:
-            commission = 10
+            commission = 0
+        if billing_mode == "payg":
+            commission = 0
+        commission = max(0, min(100, commission))
         perms = _feature_perms_from_form(form)
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         plan = ResellerPlan(
@@ -645,6 +632,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             description=str(form.get("description") or "").strip() or None,
             price=max(0, price),
             commission_percent=commission,
+            billing_mode=billing_mode,
             can_approve_receipts="payments" in parse_perms(perms),
             web_permissions=perms,
             bot_permissions=perms,
@@ -657,7 +645,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         )
         session.add(plan)
         await session.commit()
-        return RedirectResponse(f"/resellers/plans?ok={_q('پلن ذخیره شد')}", status_code=303)
+        return RedirectResponse(f"/plans?ok={_q('پلن نمایندگی ذخیره شد')}#reseller-plans", status_code=303)
 
     @app.get("/resellers/plans/{plan_id}/edit", response_class=HTMLResponse)
     async def reseller_plan_edit_page(
@@ -668,7 +656,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
     ):
         plan = await session.get(ResellerPlan, plan_id)
         if not plan:
-            return RedirectResponse(f"/resellers/plans?err={_q('یافت نشد')}", status_code=303)
+            return RedirectResponse(f"/plans?err={_q('یافت نشد')}#reseller-plans", status_code=303)
         roles = []
         try:
             roles = await get_pg().get_admin_roles()
@@ -699,7 +687,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
     ):
         plan = await session.get(ResellerPlan, plan_id)
         if not plan:
-            return RedirectResponse(f"/resellers/plans?err={_q('یافت نشد')}", status_code=303)
+            return RedirectResponse(f"/plans?err={_q('یافت نشد')}#reseller-plans", status_code=303)
         form = await request.form()
         name = str(form.get("name") or "").strip()
         if not name:
@@ -713,9 +701,17 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         except ValueError:
             pass
         try:
-            plan.commission_percent = int(str(form.get("commission_percent") or "10"))
+            plan.commission_percent = int(str(form.get("commission_percent") or "0"))
         except ValueError:
             pass
+        billing_mode = str(form.get("billing_mode") or plan.billing_mode or "fixed").strip().lower()
+        if billing_mode not in {"fixed", "payg"}:
+            billing_mode = "fixed"
+        plan.billing_mode = billing_mode
+        if billing_mode == "payg":
+            plan.commission_percent = 0
+        else:
+            plan.commission_percent = max(0, min(100, int(plan.commission_percent or 0)))
         try:
             plan.sort_order = int(str(form.get("sort_order") or "0") or "0")
         except ValueError:
@@ -731,7 +727,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         plan.pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
         await session.commit()
         return RedirectResponse(
-            f"/resellers/plans/{plan_id}/edit?ok={_q('ذخیره شد')}", status_code=303
+            f"/plans?ok={_q('پلن نمایندگی ذخیره شد')}#reseller-plans", status_code=303
         )
 
     @app.post("/resellers/plans/{plan_id}/toggle")
@@ -744,7 +740,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         if plan:
             plan.is_active = not plan.is_active
             await session.commit()
-        return RedirectResponse("/resellers/plans", status_code=303)
+        return RedirectResponse("/plans#reseller-plans", status_code=303)
 
     @app.post("/resellers/plans/{plan_id}/delete")
     async def reseller_plan_delete(
@@ -756,7 +752,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         if plan:
             await session.delete(plan)
             await session.commit()
-        return RedirectResponse(f"/resellers/plans?ok={_q('حذف شد')}", status_code=303)
+        return RedirectResponse(f"/plans?ok={_q('حذف شد')}#reseller-plans", status_code=303)
 
     # ---- applications ----
     @app.get("/resellers/applications", response_class=HTMLResponse)

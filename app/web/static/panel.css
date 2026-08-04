@@ -3522,6 +3522,22 @@ body.modal-open { overflow: hidden; }
   padding: 0 var(--space-2);
   font-size: 12px;
 }
+/* Operations menu: neutral actions; keep warn/danger colored */
+.row-actions-menu .btn:not(.btn-danger):not(.btn-warn),
+.row-actions-menu a.btn:not(.btn-danger):not(.btn-warn),
+.row-actions-menu button.btn:not(.btn-danger):not(.btn-warn) {
+  color: var(--foreground) !important;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  font-weight: 500;
+}
+.row-actions-menu .btn:not(.btn-danger):not(.btn-warn):hover,
+.row-actions-menu a.btn:not(.btn-danger):not(.btn-warn):hover,
+.row-actions-menu button.btn:not(.btn-danger):not(.btn-warn):hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--foreground) !important;
+  opacity: 1;
+}
 .row-actions-menu .ui-select,
 .row-actions-stack .ui-select {
   width: auto;
