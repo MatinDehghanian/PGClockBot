@@ -932,11 +932,22 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
             pass
 
 
-def _synthetic_telegram_id(pg_username: str) -> int:
-    """Stable negative Telegram id for shop owners linked to an existing PG admin."""
+def _synthetic_telegram_id(pg_username: str, *, salt: int = 0) -> int:
+    """Stable negative Telegram id for shop owners linked to an existing PG admin.
+
+    Uses CRC32 for backward-compatible ids. Optional *salt* disambiguates rare
+    collisions without reshuffling existing mappings (salt=0 preserves legacy).
+    """
+    import hashlib
     import zlib
 
-    h = zlib.crc32((pg_username or "").strip().lower().encode("utf-8")) & 0xFFFFFFFF
+    key = (pg_username or "").strip().lower()
+    if salt:
+        # Disambiguation path only — never used for first mapping of a username
+        digest = hashlib.sha256(f"{key}:{salt}".encode("utf-8")).digest()
+        h = int.from_bytes(digest[:8], "big")
+        return -2_100_000_000_000_000 - (h % 900_000_000_000)
+    h = zlib.crc32(key.encode("utf-8")) & 0xFFFFFFFF
     return -2_100_000_000_000_000 - (h % 900_000_000_000)
 
 
@@ -970,7 +981,30 @@ async def get_or_create_pg_linked_bot_user(
         await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))
     ).scalar_one_or_none()
     if user:
-        return user
+        # Collision guard: another PG admin may already own this synthetic id
+        linked = (
+            await session.execute(
+                select(ResellerProfile).where(ResellerProfile.user_id == user.id)
+            )
+        ).scalar_one_or_none()
+        other = (linked.pg_admin_username or "").strip().lower() if linked else ""
+        mine = (pg_username or "").strip().lower()
+        if not other or other == mine:
+            return user
+        # Rare CRC32 collision — find an unused salted id
+        for salt in range(1, 32):
+            cand = _synthetic_telegram_id(pg_username, salt=salt)
+            clash = (
+                await session.execute(select(BotUser).where(BotUser.telegram_id == cand))
+            ).scalar_one_or_none()
+            if clash is None:
+                tg_id = cand
+                user = None
+                break
+        else:
+            raise RuntimeError("امکان تخصیص شناسه پایدار برای ادمین پاسارگارد نیست")
+        if user:
+            return user
 
     user = BotUser(
         telegram_id=tg_id,

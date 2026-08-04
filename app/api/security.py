@@ -39,7 +39,7 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
             "session",
             get_signer().dumps(payload),
             httponly=True,
-            samesite="lax",
+            samesite="strict",
             secure=cookie_secure(request),
             max_age=60 * 60 * 24 * 7,
             path="/",

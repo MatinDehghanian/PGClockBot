@@ -165,7 +165,8 @@ class PasarGuardClient:
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=30.0,
-            follow_redirects=True,
+            # Never follow redirects with Bearer tokens (SSRF / credential forwarding)
+            follow_redirects=False,
         )
 
     async def close(self) -> None:
@@ -185,7 +186,7 @@ class PasarGuardClient:
         self._client = httpx.AsyncClient(
             base_url=base,
             timeout=30.0,
-            follow_redirects=True,
+            follow_redirects=False,
         )
         try:
             await old.aclose()
@@ -203,15 +204,13 @@ class PasarGuardClient:
         for base in candidates:
             try:
                 async with httpx.AsyncClient(
-                    base_url=base, timeout=15.0, follow_redirects=True
+                    base_url=base, timeout=15.0, follow_redirects=False
                 ) as probe:
-                    # Live API: openapi 200, or /api/system 401 without token
+                    # Only accept a candidate that identifies as PasarGuard.
+                    # Do NOT treat bare /api/system 401/403 as proof — that
+                    # pattern matches many unrelated internal services (SSRF).
                     r = await probe.get("/openapi.json")
                     if r.status_code == 200 and "PasarGuard" in (r.text or ""):
-                        await self._rebind_base(base)
-                        break
-                    r2 = await probe.get("/api/system")
-                    if r2.status_code in (200, 401, 403):
                         await self._rebind_base(base)
                         break
             except Exception:

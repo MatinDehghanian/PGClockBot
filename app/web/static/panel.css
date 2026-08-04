@@ -304,6 +304,8 @@ a:hover { opacity: 0.8; }
   color: var(--destructive-fg) !important;
   font-size: 13px;
   font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
   /* Match .btn-star height so side-foot & site-footer share one baseline */
   height: 28px;
   min-height: 28px;
@@ -313,6 +315,7 @@ a:hover { opacity: 0.8; }
   border: 1px solid rgba(239, 68, 68, 0.35);
   background: rgba(239, 68, 68, 0.1);
 }
+.logout-form { margin: 0; display: inline-flex; }
 .logout-link:hover { background: rgba(239, 68, 68, 0.18); opacity: 1; }
 .logout-link .nav-ico { width: 14px; height: 14px; }
 

@@ -59,6 +59,7 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
             reseller_id=42,
             amount=1000,
             discount_code=None,
+            note=None,
             plan=plan,
             user=None,
         )
@@ -131,6 +132,7 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
             reseller_id=42,
             amount=1000,
             discount_code=None,
+            note=None,
             plan=plan,
             user=None,
         )

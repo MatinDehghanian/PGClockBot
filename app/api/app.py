@@ -1190,15 +1190,22 @@ def create_api_app(lifespan=None) -> FastAPI:
             "session",
             get_signer().dumps(payload),
             httponly=True,
-            samesite="lax",
+            samesite="strict",
             secure=_cookie_secure(request),
             max_age=60 * 60 * 24 * 7,
             path="/",
         )
         return resp
 
+    @app.post("/logout")
+    async def logout_post():
+        resp = RedirectResponse("/login", status_code=303)
+        resp.delete_cookie("session", path="/")
+        return resp
+
     @app.get("/logout")
     async def logout():
+        # GET kept for bookmark/back-compat; prefer POST from the panel UI.
         resp = RedirectResponse("/login", status_code=303)
         resp.delete_cookie("session", path="/")
         return resp

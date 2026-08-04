@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 import string
 from typing import Optional
@@ -30,6 +31,8 @@ from app.services.provision_gate import (
     assert_provision_renew,
 )
 from app.services.wallet import credit_wallet, debit_wallet
+
+logger = logging.getLogger(__name__)
 
 
 async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None:
@@ -79,7 +82,12 @@ async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None
         # Unique (user_id, reason) — concurrent first-delivery race
         pass
     except Exception:
-        pass
+        logger.warning(
+            "referral bonus failed buyer=%s referrer=%s",
+            getattr(buyer, "id", None),
+            getattr(referrer, "id", None),
+            exc_info=True,
+        )
 
 
 async def _reseller_pg_link(
@@ -122,15 +130,17 @@ def _random_username(
     prefix = (prefix or "clk").strip() or "clk"
     suffix = suffix or ""
     if pattern and pattern.strip():
-        try:
-            return pattern.format(
-                prefix=prefix,
-                random=random_part,
-                suffix=suffix,
-                id=id_part,
-            )
-        except Exception:
-            pass
+        from app.services.safe_format import safe_format
+
+        built = safe_format(
+            pattern,
+            prefix=prefix,
+            random=random_part,
+            suffix=suffix,
+            id=id_part,
+        ).strip()
+        if built and "{" not in built:
+            return built
     base = f"{prefix}_{random_part}"
     return f"{base}{suffix}" if suffix else base
 

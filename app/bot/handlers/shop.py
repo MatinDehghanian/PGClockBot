@@ -34,6 +34,7 @@ from app.services.orders import (
     wholesale_tier_percent,
 )
 from app.services.users import get_all_settings, on
+from app.services.safe_format import safe_format
 
 router = Router(name="shop")
 
@@ -1154,7 +1155,7 @@ async def pay_card_cb(
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
     try:
-        body = ui["card_pay_text"].format(
+        body = safe_format(ui["card_pay_text"], 
             amount=amount,
             card=ui.get("card_number") or "—",
             holder=ui.get("card_holder") or "—",
@@ -1198,11 +1199,11 @@ async def pay_gateway_cb(
     link = (ui.get("gateway_link") or "").strip()
     if link:
         try:
-            link = link.format(amount=order.amount, order_id=order.id, payment_id=payment.id)
+            link = safe_format(link, amount=order.amount, order_id=order.id, payment_id=payment.id)
         except Exception:
             pass
     try:
-        body = (ui.get("gateway_pay_text") or "").format(
+        body = safe_format(ui.get("gateway_pay_text") or "", 
             amount=amount, order_id=order.id, name=name
         )
     except Exception:
@@ -1252,7 +1253,7 @@ async def pay_crypto_cb(
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
     try:
-        body = (ui.get("crypto_pay_text") or "").format(
+        body = safe_format(ui.get("crypto_pay_text") or "", 
             amount=amount,
             asset=ui.get("crypto_asset") or "USDT",
             network=ui.get("crypto_network") or "—",

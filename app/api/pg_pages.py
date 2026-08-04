@@ -38,13 +38,26 @@ def _q(msg: str) -> str:
 
 
 async def _staff_pg(session: AsyncSession, staff: dict):
-    """Return (client, as_owner). Shop staff always use their PG admin credentials."""
+    """Return (client, as_owner).
+
+    - Platform admin → owner credentials (as_owner=True)
+    - Reseller → shop PG admin credentials (as_owner=False; ownership implicit)
+    - pg_staff → owner credentials (as_owner=True) then set_owner after create
+
+    PgStaffAccess does not store a PasarGuard password, so staff must create via
+    the owner client and transfer ownership (create paths already do this when
+    as_owner=True for non-admin principals).
+    """
     if is_platform_admin(staff):
         return get_pg(), True
     rid = shop_owner_id(staff)
-    if not rid:
-        raise PasarGuardError("محدوده فروشگاه مشخص نیست — عملیات پاسارگارد مجاز نیست")
-    return await get_pg_for_reseller(session, int(rid)), False
+    if rid:
+        return await get_pg_for_reseller(session, int(rid)), False
+    if staff.get("role") == "pg_staff":
+        if not _pg_owner(staff):
+            raise PasarGuardError("ادمین پاسارگارد برای این حساب تنظیم نشده است")
+        return get_pg(), True
+    raise PasarGuardError("محدوده فروشگاه مشخص نیست — عملیات پاسارگارد مجاز نیست")
 
 
 def _pg_form_err(msg: str, *, modal: str, uid: str | int | None = None) -> RedirectResponse:
@@ -110,12 +123,31 @@ def _filter_groups(items: list[dict], staff: dict) -> list[dict]:
     return filter_groups_for_staff(items, staff)
 
 
-async def _assert_owned_user(staff: dict, user_id: int) -> dict | None:
+async def _assert_owned_user(
+    staff: dict, user_id: int, *, session: AsyncSession | None = None
+) -> dict | None:
+    """Fetch a PG user only when the staff principal is allowed to see it.
+
+    Resellers authenticate as themselves (no owner-token probe). pg_staff has no
+    stored PG password, so reads use the owner client then filter by ownership.
+    """
+    if _is_admin(staff):
+        info = await get_pg().get_user_by_id(user_id)
+        return info if isinstance(info, dict) else None
+
+    rid = shop_owner_id(staff)
+    if rid and session is not None:
+        try:
+            pg = await get_pg_for_reseller(session, int(rid))
+            info = await pg.get_user_by_id(user_id)
+        except Exception:
+            return None
+        return info if isinstance(info, dict) else None
+
+    # pg_staff (or reseller without session): owner read + ownership filter
     info = await get_pg().get_user_by_id(user_id)
     if not isinstance(info, dict):
         return None
-    if _is_admin(staff):
-        return info
     mine = _pg_owner(staff).lower()
     if not mine or _owner_of(info) != mine:
         return None
@@ -520,11 +552,15 @@ def register_pg_pages(
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ساخته شد')}", status_code=303)
 
     @app.get("/pg/users/{user_id}/link")
-    async def pg_users_link(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
+    async def pg_users_link(
+        user_id: int,
+        staff: dict = Depends(require_pg_perm("pg_users")),
+        session: AsyncSession = Depends(get_db),
+    ):
         from fastapi.responses import JSONResponse
 
         try:
-            info = await _assert_owned_user(staff, user_id)
+            info = await _assert_owned_user(staff, user_id, session=session)
             if info is None:
                 return JSONResponse({"ok": False, "error": "دسترسی ندارید"}, status_code=403)
             url = user_subscription_url(info)
@@ -582,7 +618,7 @@ def register_pg_pages(
                 return _pg_form_err("مدت نامعتبر است", modal="edit", uid=user_id)
 
         try:
-            current = await _assert_owned_user(staff, user_id)
+            current = await _assert_owned_user(staff, user_id, session=session)
             if current is None:
                 return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
             try:
@@ -604,16 +640,19 @@ def register_pg_pages(
                 expire_ts=expire_ts,
                 status=str(current.get("status") or "") or None,
             )
-            await get_pg().modify_user_by_id(user_id, payload)
+            pg, _as_owner = await _staff_pg(session, staff)
+            await pg.modify_user_by_id(user_id, payload)
             uname = str(current.get("username") or user_id)
         except Exception as e:
             msg = e.user_message(fallback="خطا در ویرایش") if isinstance(e, PasarGuardError) else str(e)
             return _pg_form_err(msg, modal="edit", uid=user_id)
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ویرایش شد')}", status_code=303)
 
-    async def _guard_owned_mutation(staff: dict, user_id: int) -> RedirectResponse | None:
+    async def _guard_owned_mutation(
+        staff: dict, user_id: int, *, session: AsyncSession
+    ) -> RedirectResponse | None:
         """Ownership + limited-admin write gate. Returns redirect on failure."""
-        if await _assert_owned_user(staff, user_id) is None:
+        if await _assert_owned_user(staff, user_id, session=session) is None:
             return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
         try:
             await assert_can_mutate_owned_users(staff)
@@ -622,68 +661,93 @@ def register_pg_pages(
         return None
 
     @app.post("/pg/users/{user_id}/disable")
-    async def pg_users_disable(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
+    async def pg_users_disable(
+        user_id: int,
+        staff: dict = Depends(require_pg_perm("pg_users")),
+        session: AsyncSession = Depends(get_db),
+    ):
         if not staff_user_actions(staff)["disable"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
         try:
-            denied = await _guard_owned_mutation(staff, user_id)
+            denied = await _guard_owned_mutation(staff, user_id, session=session)
             if denied is not None:
                 return denied
-            await get_pg().set_disabled_by_id(user_id, True)
+            pg, _ = await _staff_pg(session, staff)
+            await pg.set_disabled_by_id(user_id, True)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q('کاربر غیرفعال شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/enable")
-    async def pg_users_enable(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
+    async def pg_users_enable(
+        user_id: int,
+        staff: dict = Depends(require_pg_perm("pg_users")),
+        session: AsyncSession = Depends(get_db),
+    ):
         if not staff_user_actions(staff)["enable"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
         try:
-            denied = await _guard_owned_mutation(staff, user_id)
+            denied = await _guard_owned_mutation(staff, user_id, session=session)
             if denied is not None:
                 return denied
-            await get_pg().set_disabled_by_id(user_id, False)
+            pg, _ = await _staff_pg(session, staff)
+            await pg.set_disabled_by_id(user_id, False)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q('کاربر فعال شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/reset")
-    async def pg_users_reset(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
+    async def pg_users_reset(
+        user_id: int,
+        staff: dict = Depends(require_pg_perm("pg_users")),
+        session: AsyncSession = Depends(get_db),
+    ):
         acts = staff_user_actions(staff)
         if not acts["reset_usage"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
         try:
-            denied = await _guard_owned_mutation(staff, user_id)
+            denied = await _guard_owned_mutation(staff, user_id, session=session)
             if denied is not None:
                 return denied
-            await get_pg().reset_user_by_id(user_id)
+            pg, _ = await _staff_pg(session, staff)
+            await pg.reset_user_by_id(user_id)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q('مصرف ریست شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/revoke")
-    async def pg_users_revoke(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
+    async def pg_users_revoke(
+        user_id: int,
+        staff: dict = Depends(require_pg_perm("pg_users")),
+        session: AsyncSession = Depends(get_db),
+    ):
         acts = staff_user_actions(staff)
         if not acts["revoke_sub"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه ندارید')}", status_code=303)
         try:
-            denied = await _guard_owned_mutation(staff, user_id)
+            denied = await _guard_owned_mutation(staff, user_id, session=session)
             if denied is not None:
                 return denied
-            await get_pg().revoke_sub_by_id(user_id)
+            pg, _ = await _staff_pg(session, staff)
+            await pg.revoke_sub_by_id(user_id)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q('سابسکرایب ابطال شد')}", status_code=303)
 
     @app.post("/pg/users/{user_id}/delete")
-    async def pg_users_delete(user_id: int, staff: dict = Depends(require_pg_perm("pg_users"))):
+    async def pg_users_delete(
+        user_id: int,
+        staff: dict = Depends(require_pg_perm("pg_users")),
+        session: AsyncSession = Depends(get_db),
+    ):
         if not staff_user_actions(staff)["delete"]:
             return RedirectResponse(f"/pg/users?err={_q('اجازه حذف ندارید')}", status_code=303)
         try:
-            denied = await _guard_owned_mutation(staff, user_id)
+            denied = await _guard_owned_mutation(staff, user_id, session=session)
             if denied is not None:
                 return denied
-            await get_pg().delete_user_by_id(user_id)
+            pg, _ = await _staff_pg(session, staff)
+            await pg.delete_user_by_id(user_id)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
         return RedirectResponse(f"/pg/users?ok={_q('کاربر حذف شد')}", status_code=303)

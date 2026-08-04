@@ -14,6 +14,7 @@ from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
 from app.services.pasarguard import extract_sub_token, get_pg
 from app.services.users import get_all_settings, on
+from app.services.safe_format import safe_format
 
 router = Router(name="start")
 
@@ -81,7 +82,7 @@ async def render_home(
         welcome = ui.get("welcome_text", "")
         title = ui.get("shop_title", "")
         try:
-            body = welcome.format(name=db_user.full_name or "دوست عزیز")
+            body = safe_format(welcome, name=db_user.full_name or "دوست عزیز")
         except Exception:
             body = welcome
         text = format_message(f"✨ {title}", body)
@@ -387,7 +388,7 @@ async def referral_home(callback: CallbackQuery, session: AsyncSession, db_user:
     uname = me.username or get_settings().bot_username or "bot"
     link = f"https://t.me/{uname}?start=ref_{db_user.referral_code}"
     try:
-        body = ui["referral_text"].format(code=db_user.referral_code, link=link)
+        body = safe_format(ui["referral_text"], code=db_user.referral_code, link=link)
     except Exception:
         body = f"کد: {db_user.referral_code}\n{link}"
     if callback.message:

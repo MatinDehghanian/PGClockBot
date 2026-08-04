@@ -308,7 +308,7 @@ def create_backup(
                 "created_by": created_by,
                 "note": (note or "").strip()[:200],
                 "include_env": include_env_ok,
-                "db_path": str(db_src),
+                "db_path": "data/bot.db",
                 "files": files_meta,
                 "file_count": len(files_meta),
             }

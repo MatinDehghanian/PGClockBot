@@ -302,6 +302,11 @@ async def credit_topup(
     """Manual (or future online) credit — Super Admin MVP path."""
     if amount <= 0:
         raise ValueError("مبلغ شارژ باید مثبت باشد")
+    key = idempotency_key
+    if not key:
+        raise ValueError(
+            "کلید یکتای شارژ (idempotency) الزامی است — از شارژ مجدد با همان فرم خودداری کنید"
+        )
     profile = (
         await session.execute(
             select(ResellerProfile).where(ResellerProfile.user_id == int(reseller_user_id))
@@ -312,7 +317,6 @@ async def credit_topup(
     if not is_payg(profile):
         raise ValueError("شارژ Billing فقط برای حالت Pay As You Go است")
 
-    key = idempotency_key or f"topup:{reseller_user_id}:{amount}:{datetime.now(timezone.utc).timestamp()}"
     existing = await _find_by_idempotency(session, key)
     if existing:
         return existing

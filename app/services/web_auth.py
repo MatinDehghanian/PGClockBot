@@ -90,9 +90,12 @@ def load_web_admin() -> dict[str, str]:
             str(data.get("password", "")) != password
             or str(data.get("username", "")).strip() != username
             or not token
+            or not _is_bcrypt_hash(password)
         ):
             save_web_admin(username, password)
             data = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
+            username = _clean_secret(str(data.get("username", "admin")))
+            password = _clean_secret(str(data.get("password", "")))
             token = _clean_secret(str(data.get("token", "")))
         return {"username": username or "admin", "password": password, "token": token}
 

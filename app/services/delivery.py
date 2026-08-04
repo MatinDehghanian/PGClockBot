@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Send clean delivery messages (+ optional subscription QR photo) to users."""
 
+import logging
 from typing import Any
 
 from aiogram import Bot
@@ -15,15 +16,18 @@ from app.bot import keyboards as kb
 from app.config import get_settings
 from app.services.pasarguard import get_pg
 from app.services.qrcode_gen import make_subscription_qr
+from app.services.safe_format import safe_format
 from app.services.users import get_all_settings, on
+
+logger = logging.getLogger(__name__)
 
 
 def _subscription_success_body(ui: dict[str, str], order) -> str:
-    try:
-        success = (ui.get("purchase_success_text") or "").format(order_id=order.id)
-    except Exception:
-        success = f"سفارش #{order.id} با موفقیت فعال شد."
-    return (success or "").strip()
+    raw = (ui.get("purchase_success_text") or "").strip()
+    if not raw:
+        return f"سفارش #{order.id} با موفقیت فعال شد."
+    success = safe_format(raw, order_id=order.id).strip()
+    return success or f"سفارش #{order.id} با موفقیت فعال شد."
 
 
 async def build_delivery_content(
@@ -124,17 +128,15 @@ async def build_delivery_content(
 
     if payment and payment.is_wallet_topup:
         title = ui.get("wallet_success_title") or "💰 شارژ کیف پول"
-        body = (
+        amount_txt = format_toman(payment.amount, get_settings().currency)
+        body = safe_format(
             ui.get("wallet_success_text")
-            or "✅ مبلغ {amount} به کیف پول شما اضافه شد."
-        )
-        try:
-            body = body.format(
-                amount=format_toman(payment.amount, get_settings().currency),
-                payment_id=payment.id,
-            )
-        except Exception:
-            body = f"✅ کیف پول شما {format_toman(payment.amount, get_settings().currency)} شارژ شد."
+            or "✅ مبلغ {amount} به کیف پول شما اضافه شد.",
+            amount=amount_txt,
+            payment_id=payment.id,
+        ).strip()
+        if not body:
+            body = f"✅ کیف پول شما {amount_txt} شارژ شد."
         return {
             "title": title,
             "text": format_message(title, body),
@@ -278,15 +280,24 @@ async def send_delivery_to_user(
 
     # Prefer main reply keyboard over legacy empty inline stubs.
     send_markup = reply_kb
+    notify_ok = False
     try:
         await bot.send_message(
             chat_id, text, reply_markup=send_markup, parse_mode="HTML"
         )
+        notify_ok = True
     except Exception:
         try:
             await bot.send_message(chat_id, text, parse_mode="HTML")
+            notify_ok = True
         except Exception:
-            pass
+            logger.error(
+                "delivery notify failed order=%s payment=%s chat_id=%s",
+                getattr(order, "id", None),
+                getattr(payment, "id", None) if payment else None,
+                chat_id,
+                exc_info=True,
+            )
 
     qr_sent = False
     if sub_url and not skip_qr:
@@ -299,13 +310,32 @@ async def send_delivery_to_user(
         detailed = await build_delivery_content(
             session, payment, order, include_details=True
         )
-        if detailed["text"] != text:
+        try:
+            await bot.send_message(
+                chat_id,
+                detailed["text"],
+                reply_markup=send_markup,
+                parse_mode="HTML",
+            )
+            notify_ok = True
+        except Exception:
             try:
                 await bot.send_message(chat_id, detailed["text"], parse_mode="HTML")
+                notify_ok = True
             except Exception:
-                pass
-            text = detailed["text"]
+                logger.error(
+                    "delivery detail notify failed order=%s chat_id=%s",
+                    getattr(order, "id", None),
+                    chat_id,
+                    exc_info=True,
+                )
 
+    if not notify_ok and not qr_sent:
+        logger.error(
+            "delivery fully failed to reach user order=%s chat_id=%s",
+            getattr(order, "id", None),
+            chat_id,
+        )
     return text
 
 

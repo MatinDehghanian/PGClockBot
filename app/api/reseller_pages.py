@@ -375,6 +375,12 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         from app.services.billing import credit_topup
 
         actor = str(staff.get("username") or staff.get("role") or "admin")
+        nonce = str(form.get("nonce") or "").strip()
+        if len(nonce) < 8:
+            return RedirectResponse(
+                f"/resellers/{user_id}/edit?err={_q('فرم شارژ منقضی شده — صفحه را تازه کنید')}",
+                status_code=303,
+            )
         try:
             await credit_topup(
                 session,
@@ -382,7 +388,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 amount,
                 created_by=actor,
                 note=note or "شارژ دستی ادمین",
-                idempotency_key=f"manual:{user_id}:{amount}:{note}:{actor}:{form.get('nonce') or ''}",
+                idempotency_key=f"manual:{user_id}:{amount}:{note}:{actor}:{nonce}",
             )
         except ValueError as e:
             return RedirectResponse(

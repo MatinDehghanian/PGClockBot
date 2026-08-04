@@ -98,7 +98,38 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
     try:
         order = await approve_payment(session, payment, reviewer_tg=0)
     except Exception as e:
-        await message.answer(f"پرداخت استارز دریافت شد ولی تحویل ناموفق بود: {e}")
+        import logging
+
+        logging.getLogger(__name__).error(
+            "stars delivery failed payment=%s charge=%s err=%s",
+            payment.id,
+            sp.telegram_payment_charge_id,
+            e,
+            exc_info=True,
+        )
+        await message.answer(
+            f"پرداخت استارز دریافت شد ولی تحویل ناموفق بود: {e}\n"
+            "اگر سرویس فعال نشد با پشتیبانی تماس بگیرید — شناسه پرداخت ثبت شد."
+        )
+        # Alert platform admins so charged-but-undelivered Stars are not silent
+        try:
+            from app.config import get_settings
+
+            charge = sp.telegram_payment_charge_id or "—"
+            alert = (
+                f"⚠️ تحویل استارز ناموفق\n"
+                f"payment=#{payment.id}\n"
+                f"user_tg={db_user.telegram_id}\n"
+                f"charge={charge}\n"
+                f"error={e}"
+            )
+            for aid in get_settings().admin_ids:
+                try:
+                    await message.bot.send_message(aid, alert)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         return
     from app.bot.menu_nav import buyer_main_reply_keyboard, clear_checkout_nav
 

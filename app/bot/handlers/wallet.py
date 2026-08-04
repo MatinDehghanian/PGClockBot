@@ -16,6 +16,7 @@ from app.services.orders import attach_receipt, create_wallet_topup
 from app.services.receipts import process_receipt
 from app.services.users import get_all_settings, on
 from app.services.wallet import list_activity
+from app.services.safe_format import safe_format
 
 router = Router(name="wallet")
 
@@ -154,7 +155,7 @@ async def _topup_instructions(
     rows: list[list[InlineKeyboardButton]] = []
     if method == PaymentMethod.CARD.value:
         try:
-            body = ui["card_pay_text"].format(
+            body = safe_format(ui["card_pay_text"], 
                 amount=amount,
                 card=ui.get("card_number") or "—",
                 holder=ui.get("card_holder") or "—",
@@ -170,11 +171,11 @@ async def _topup_instructions(
         link = (ui.get("gateway_link") or "").strip()
         if link:
             try:
-                link = link.format(amount=payment.amount, order_id=0, payment_id=payment.id)
+                link = safe_format(link, amount=payment.amount, order_id=0, payment_id=payment.id)
             except Exception:
                 pass
         try:
-            body = (ui.get("gateway_pay_text") or "").format(
+            body = safe_format(ui.get("gateway_pay_text") or "", 
                 amount=amount, order_id=0, name=name
             )
         except Exception:
@@ -185,7 +186,7 @@ async def _topup_instructions(
     else:
         address = (ui.get("crypto_address") or "").strip() or "—"
         try:
-            body = (ui.get("crypto_pay_text") or "").format(
+            body = safe_format(ui.get("crypto_pay_text") or "", 
                 amount=amount,
                 asset=ui.get("crypto_asset") or "USDT",
                 network=ui.get("crypto_network") or "—",

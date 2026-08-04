@@ -20,6 +20,7 @@ from app.bot.menu_nav import restore_main_reply, user_has_services
 from app.db.models import BotUser, Order, Role, UserService
 from app.services.formatting import format_message
 from app.services.users import get_all_settings
+from app.services.safe_format import safe_format
 
 router = Router(name="reply_nav")
 
@@ -432,7 +433,7 @@ async def open_referral(message: Message, session: AsyncSession, db_user: BotUse
     uname = me.username or get_settings().bot_username or "bot"
     link = f"https://t.me/{uname}?start=ref_{db_user.referral_code}"
     try:
-        body = ui["referral_text"].format(code=db_user.referral_code, link=link)
+        body = safe_format(ui["referral_text"], code=db_user.referral_code, link=link)
     except Exception:
         body = f"کد: {db_user.referral_code}\n{link}"
     main_kb, _, _ = await build_main_reply_keyboard(session, db_user)

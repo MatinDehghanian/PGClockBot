@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment
+from app.services.safe_format import safe_format
 from app.services.formatting import (
     format_bytes,
     format_expire,
@@ -920,7 +921,7 @@ def build_qr_caption(
     custom = (ui.get("qr_caption") or "").strip()
     if custom:
         try:
-            custom = custom.format(url=sub_url)
+            custom = safe_format(custom, url=sub_url)
         except Exception:
             pass
 
