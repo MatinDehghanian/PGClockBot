@@ -607,8 +607,9 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
     password = decrypt_secret(profile.pg_admin_password_enc)
     if not password:
         raise PasarGuardError(
-            "رمز پاسارگارد نماینده ذخیره نشده — نمایندگی را دوباره provision کنید "
-            "یا رمز را از پنل ادمین بازنشانی کنید"
+            "رمز پاسارگارد نماینده ذخیره نشده. "
+            "علت محتمل: راه‌اندازی ناقص یا کلید رمزنگاری تغییر کرده. "
+            "راه حل: ادمین اصلی از بخش نمایندگان رمز را بازنشانی کند یا دسترسی را دوباره تنظیم کند."
         )
     client = PasarGuardClient(
         username=profile.pg_admin_username,
@@ -635,14 +636,22 @@ async def get_pg_for_staff(
     if staff_id is not None:
         row = await session.get(PgStaffAccess, int(staff_id))
     elif pg_username:
-        uname = str(pg_username).strip()
+        from sqlalchemy import func
+
+        uname = str(pg_username).strip().lower()
         row = (
             await session.execute(
-                select(PgStaffAccess).where(PgStaffAccess.pg_username == uname)
+                select(PgStaffAccess).where(
+                    func.lower(PgStaffAccess.pg_username) == uname
+                )
             )
         ).scalar_one_or_none()
     if not row or not row.is_active:
-        raise PasarGuardError("دسترسی ادمین پاسارگارد فعال نیست")
+        raise PasarGuardError(
+            "دسترسی ادمین پاسارگارد فعال نیست. "
+            "علت محتمل: حساب غیرفعال شده یا ردیف دسترسی حذف شده. "
+            "راه حل: ادمین اصلی از «ادمین‌ها» وضعیت را بررسی و در صورت نیاز دوباره اعطا کند."
+        )
     cache_key = (row.pg_username or "").strip().lower()
     cached = _pg_staff_cache.get(cache_key)
     if cached is not None and cached._token:
@@ -650,8 +659,9 @@ async def get_pg_for_staff(
     password = decrypt_secret(row.pg_admin_password_enc)
     if not password:
         raise PasarGuardError(
-            "رمز پاسارگارد برای این حساب ذخیره نشده — "
-            "مالک باید دسترسی وب را با رمز پاسارگارد دوباره اعطا/ویرایش کند"
+            "رمز پاسارگارد برای این حساب ذخیره نشده. "
+            "علت محتمل: اعطای ناقص یا کلید رمزنگاری تغییر کرده. "
+            "راه حل: ادمین اصلی از «ادمین‌ها» دسترسی ادمین فرعی را با رمز جدید ویرایش کند."
         )
     client = PasarGuardClient(username=row.pg_username, password=password)
     await client.ensure_token()

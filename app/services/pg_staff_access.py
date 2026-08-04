@@ -349,9 +349,11 @@ async def web_access_status_map(
                 reseller_profile_id=int(reseller.id),
                 staff_id=int(staff.id) if staff else None,
                 detail=(
-                    f"نماینده"
+                    "نماینده"
                     f"{f' · {reseller.web_username}' if reseller.web_username else ' · بدون یوزر وب هنوز'}"
+                    + (" · ردیف ادمین فرعی یتیم — حذف کنید" if staff else "")
                 ),
+                note=("orphan_pg_staff" if staff else None),
             ).as_dict()
             continue
         if staff is not None:
@@ -505,17 +507,26 @@ async def grant_web_access(
     from app.services.pasarguard import get_pg, reset_pg
     from app.services.secret_box import encrypt_secret
 
-    # Store the same password for web hash + PG login (reseller pattern).
-    # Sync to PasarGuard so the staff token works; never use owner client for staff ops.
+    # Encrypt first so a Fernet failure never leaves PasarGuard with a new
+    # password while the local row/enc is missing (partial-failure trap).
+    enc = encrypt_secret(password)
+    if not enc:
+        return None, (
+            "رمز‌گذاری رمز پاسارگارد ناموفق بود. "
+            "علت محتمل: کلید رمزنگاری پنل تنظیم نشده یا خراب است. "
+            "راه حل: تنظیمات امنیتی سرور را بررسی کنید و دوباره تلاش کنید — "
+            "رمز پاسارگارد هنوز تغییر نکرده است."
+        )
     try:
         await get_pg().modify_admin(pg_u, {"password": password})
         reset_pg()
     except Exception as e:
-        return None, f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}"
+        return None, (
+            f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}. "
+            "علت محتمل: ارتباط با پاسارگارد یا رد شدن رمز توسط قوانین پنل. "
+            "راه حل: اتصال و قوانین رمز پاسارگارد را بررسی کنید و دوباره تلاش کنید."
+        )
 
-    enc = encrypt_secret(password)
-    if not enc:
-        return None, "رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید"
     role_id = await resolve_pg_role_id_for_admin(pg_u)
     row = PgStaffAccess(
         pg_username=pg_u,
@@ -596,14 +607,23 @@ async def update_web_access(
         from app.services.pasarguard import get_pg, reset_pg
         from app.services.secret_box import encrypt_secret
 
+        enc = encrypt_secret(pwd)
+        if not enc:
+            return None, (
+                "رمز‌گذاری رمز پاسارگارد ناموفق بود. "
+                "علت محتمل: کلید رمزنگاری پنل تنظیم نشده یا خراب است. "
+                "راه حل: تنظیمات امنیتی سرور را بررسی کنید و دوباره تلاش کنید — "
+                "رمز پاسارگارد هنوز تغییر نکرده است."
+            )
         try:
             await get_pg().modify_admin(pg_u, {"password": pwd})
             reset_pg()
         except Exception as e:
-            return None, f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}"
-        enc = encrypt_secret(pwd)
-        if not enc:
-            return None, "رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید"
+            return None, (
+                f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}. "
+                "علت محتمل: ارتباط با پاسارگارد یا رد شدن رمز توسط قوانین پنل. "
+                "راه حل: اتصال و قوانین رمز پاسارگارد را بررسی کنید و دوباره تلاش کنید."
+            )
         existing.web_password_hash = hash_password(pwd)
         existing.pg_admin_password_enc = enc
     if is_active is not None:
@@ -664,8 +684,8 @@ def staff_username_aligned(row: PgStaffAccess | None) -> bool:
     """True when web login username equals PG admin username (case-insensitive)."""
     if row is None:
         return False
-    web = (row.web_username or "").strip().lower()
-    pg = _norm_pg(row.pg_username)
+    web = (getattr(row, "web_username", None) or "").strip().lower()
+    pg = _norm_pg(getattr(row, "pg_username", None))
     return bool(web and pg and web == pg)
 
 
@@ -767,7 +787,11 @@ async def change_staff_credentials(
     if (old_username or "").strip().lower() != (row.web_username or "").lower():
         return None, "یوزر یا رمز قدیم اشتباه است"
     if not verify_password_hash(current_password or "", row.web_password_hash):
-        return None, "یوزر یا رمز قدیم اشتباه است"
+        return None, (
+            "یوزر یا رمز قدیم اشتباه است. "
+            "علت محتمل: تایپ اشتباه یا رمز اخیراً توسط ادمین اصلی تغییر کرده. "
+            "راه حل: مقادیر فعلی را دوباره وارد کنید یا از ادمین اصلی بخواهید رمز را بازنشانی کند."
+        )
     ok, err = validate_password_strength(
         new_password or "", username=(new_username or row.pg_username)
     )
@@ -776,25 +800,45 @@ async def change_staff_credentials(
     cleaned, uerr = validate_web_username(new_username, lowercase=True)
     if uerr:
         return None, uerr
+
+    # D3: misaligned username — Owner confirm_align only (no self-serve rename)
+    existing_web = (row.web_username or "").strip().lower()
+    pg_u = _norm_pg(row.pg_username)
+    if existing_web and pg_u and existing_web != pg_u:
+        return None, (
+            "نام کاربری وب با پاسارگارد یکی نیست. "
+            "علت محتمل: حساب قدیمی قبل از یکپارچه‌سازی نام کاربری. "
+            "راه حل: ادمین اصلی از بخش «ادمین‌ها» با تأیید هم‌ترازسازی، دسترسی ادمین فرعی را ویرایش کند."
+        )
+
     mismatch = assert_web_matches_pg(cleaned, row.pg_username)
     if mismatch:
         return None, mismatch
     taken = await _username_taken(session, cleaned, exclude_staff_id=row.id)
     if taken:
         return None, taken
-    row.web_username = cleaned
-    row.web_password_hash = hash_password(new_password)
     from app.services.pasarguard import get_pg, reset_pg
     from app.services.secret_box import encrypt_secret
 
+    enc = encrypt_secret(new_password)
+    if not enc:
+        return None, (
+            "رمز‌گذاری رمز پاسارگارد ناموفق بود. "
+            "علت محتمل: کلید رمزنگاری پنل تنظیم نشده یا خراب است. "
+            "راه حل: تنظیمات امنیتی سرور را بررسی کنید و دوباره تلاش کنید — "
+            "رمز پاسارگارد هنوز تغییر نکرده است."
+        )
     try:
         await get_pg().modify_admin(row.pg_username, {"password": new_password})
         reset_pg()
     except Exception as e:
-        return None, f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}"
-    enc = encrypt_secret(new_password)
-    if not enc:
-        return None, "رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید"
+        return None, (
+            f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}. "
+            "علت محتمل: ارتباط با پاسارگارد یا رد شدن رمز توسط قوانین پنل. "
+            "راه حل: اتصال و قوانین رمز پاسارگارد را بررسی کنید و دوباره تلاش کنید."
+        )
+    row.web_username = cleaned
+    row.web_password_hash = hash_password(new_password)
     row.pg_admin_password_enc = enc
     await session.commit()
     await session.refresh(row)

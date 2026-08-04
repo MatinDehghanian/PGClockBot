@@ -429,13 +429,19 @@ def create_api_app(lifespan=None) -> FastAPI:
             request: Request,
             session: AsyncSession = Depends(get_db),
         ) -> dict:
-            from app.services.authz import authz_from_staff, can_pg_page
+            from app.services.authz import authz_from_staff, can_pg_page, is_platform_admin
+            from app.services.pg_read import effective_pg_menu_keys
 
             user = await require_staff(request, session)
             ctx = authz_from_staff(user)
             if not can_pg_page(ctx, perm):
                 features = list(ctx.pg_permissions)
                 raise NotAdmin(redirect=_live_pg_home(features))
+            # C1: uncredentialed pg_staff may only open overview (menu clamp alone is insufficient)
+            if not is_platform_admin(ctx):
+                allowed = set(effective_pg_menu_keys(user))
+                if perm not in allowed:
+                    raise NotAdmin(redirect="/pg")
             return user
 
         return _dep

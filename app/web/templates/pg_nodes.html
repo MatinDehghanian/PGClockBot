@@ -29,7 +29,7 @@
         <td class="col-actions">
           {% if can_reconnect and n.get('id') %}
           {% call row_actions() %}
-            <form method="post" action="/pg/nodes/{{ n.get('id') }}/reconnect">
+            <form method="post" action="/pg/nodes/{{ n.get('id') }}/reconnect" class="js-busy-form" data-busy-label="در حال اتصال…">
               <button class="btn btn-ghost btn-sm" type="submit">اتصال مجدد</button>
             </form>
           {% endcall %}
@@ -42,4 +42,20 @@
   </div>
   {% endif %}
 </div>
+<script>
+(function () {
+  document.querySelectorAll('form.js-busy-form').forEach(function (form) {
+    form.addEventListener('submit', function () {
+      const btn = form.querySelector('button[type="submit"]');
+      if (!btn || btn.disabled) return;
+      btn.disabled = true;
+      const label = form.getAttribute('data-busy-label');
+      if (label) {
+        btn.dataset.idleLabel = btn.textContent;
+        btn.textContent = label;
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

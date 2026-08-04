@@ -140,6 +140,7 @@ class EncryptFailClosedTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertIsNone(row)
         self.assertIn("رمز‌گذاری", err or "")
+        gp.return_value.modify_admin.assert_not_awaited()
 
 
 if __name__ == "__main__":

@@ -229,7 +229,7 @@ class OwnerBypassGuardsStillHold(unittest.TestCase):
         # Resellers must still use their own credentials
         self.assertIn("get_pg_for_reseller", src)
         # C2: pg_staff no longer gets owner-token mutations
-        self.assertIn("بدون اعتبارنامه اختصاصی مجاز نیست", src)
+        self.assertIn("بدون اعتبارنامه اختصاصی ممکن نیست", src)
         self.assertNotIn(
             'if staff.get("role") == "pg_staff":\n        if not _pg_owner(staff):\n'
             '            raise PasarGuardError("ادمین پاسارگارد برای این حساب تنظیم نشده است")\n'
@@ -242,8 +242,8 @@ class Version383Tests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.0.0")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.0.0")
+        self.assertEqual(__version__, "4.0.1")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.0.1")
 
 
 if __name__ == "__main__":

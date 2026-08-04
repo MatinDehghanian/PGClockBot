@@ -6,12 +6,13 @@ import asyncio
 from urllib.parse import quote
 
 from fastapi import Depends, File, Form, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
 from app.services.backup import (
     create_backup,
     delete_backup,
     get_backup_path,
+    read_restore_status,
     restore_backup,
     save_uploaded_backup,
 )
@@ -21,6 +22,12 @@ def register_backup_pages(app, *, render, require_admin, get_db):
     @app.get("/settings/backup", response_class=HTMLResponse)
     async def backup_redirect(staff: dict = Depends(require_admin)):
         return RedirectResponse("/settings?tab=backup", status_code=303)
+
+    @app.get("/backup/status")
+    async def backup_status(staff: dict = Depends(require_admin)):
+        """JSON progress for restore (and last known status) — polled by settings UI."""
+        st = read_restore_status() or {"state": "idle"}
+        return JSONResponse(st)
 
     @app.post("/backup/create")
     async def backup_create(
@@ -37,7 +44,12 @@ def register_backup_pages(app, *, render, require_admin, get_db):
             )
         except Exception as e:
             return RedirectResponse(
-                "/settings?tab=backup&err=" + quote(str(e)),
+                "/settings?tab=backup&err="
+                + quote(
+                    f"ساخت بکاپ ناموفق بود: {e}. "
+                    "علت محتمل: فضای دیسک یا قفل فایل. "
+                    "راه حل: فضای دیسک و دسترسی به data/backups را بررسی کنید و دوباره تلاش کنید."
+                ),
                 status_code=303,
             )
         return RedirectResponse(
