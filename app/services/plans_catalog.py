@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlalchemy import select
@@ -11,7 +12,7 @@ from app.db.models import Plan
 from app.services.pasarguard import as_list, get_pg
 from app.services.shop_scope import ShopScopeError, is_platform_admin, shop_owner_id
 
-
+log = logging.getLogger(__name__)
 def catalog_owner_id(staff: dict | None) -> int | None:
     """Reseller bot_user_id for their catalog; None = platform (admin) catalog only.
 
@@ -189,7 +190,9 @@ async def load_pg_plan_options(
             templates = as_list(full, "templates") or templates
         groups = await pg.get_groups_simple()
     except Exception as e:
-        pg_error = str(e)
+        # Never surface raw PG/HTTP exception text to the panel (info leak).
+        log.warning("load_pg_plan_options failed: %s", e)
+        pg_error = "اتصال به پاسارگارد برقرار نشد"
     templates = [t for t in templates if isinstance(t, dict)]
     groups = [g for g in groups if isinstance(g, dict)]
     trust = trust_pg_list_scope(staff) if staff else True

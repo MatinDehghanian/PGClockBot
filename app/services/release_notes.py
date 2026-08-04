@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.0.8": [
+        "سخت‌سازی امنیتی: پیام خطای پاسارگارد در صفحه پلن‌ها بدون جزئیات داخلی/نشتی",
+        "ممیزی امنیت مسیر ادمین↔نماینده، پلن‌ها و PAYG بدون یافته بحرانی",
+    ],
     "4.0.7": [
         "پلن‌های PAYG متعدد با نرخ هر گیگ جدا — مناسب قیمت متفاوت گروه‌های پاسارگارد",
         "برچسب گروه پاسارگارد روی پلن PAYG؛ صورتحساب نماینده از نرخ پلن خودش استفاده می‌کند",

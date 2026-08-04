@@ -122,7 +122,7 @@
 <div class="card card-flush" id="reseller-plans">
   <h2>پلن‌های نمایندگان</h2>
   {% if reseller_plans_err %}
-  <div class="flash warn">بارگذاری پلن‌های نمایندگی ناموفق بود — پس از به‌روزرسانی، سرویس را یک‌بار ری‌استارت کنید. ({{ reseller_plans_err }})</div>
+  <div class="flash warn">{{ reseller_plans_err }}</div>
   {% endif %}
   <div class="table-wrap">
   <table class="table-compact">
