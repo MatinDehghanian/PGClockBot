@@ -78,6 +78,7 @@ def build_user_create_payload(
     group_ids: list[int],
     data_limit: int | None = None,
     expire_ts: int | None = None,
+    hwid_limit: int | None = None,
     note: str | None = None,
     status: str = "active",
 ) -> dict[str, Any]:
@@ -103,6 +104,10 @@ def build_user_create_payload(
                 .isoformat()
                 .replace("+00:00", "Z")
             )
+    if hwid_limit is not None:
+        # 0 / negative → omit (unlimited); positive → device cap
+        if int(hwid_limit) > 0:
+            payload["hwid_limit"] = int(hwid_limit)
     if note:
         payload["note"] = note
     return payload
@@ -114,6 +119,7 @@ def build_user_modify_payload(
     group_ids: list[int] | None = None,
     data_limit: int | None = None,
     expire_ts: int | None = None,
+    hwid_limit: int | None = None,
     status: str | None = None,
 ) -> dict[str, Any]:
     from datetime import datetime, timezone
@@ -135,6 +141,8 @@ def build_user_modify_payload(
                 .isoformat()
                 .replace("+00:00", "Z")
             )
+    if hwid_limit is not None:
+        payload["hwid_limit"] = int(hwid_limit) if int(hwid_limit) > 0 else None
     if status:
         payload["status"] = status
     return payload

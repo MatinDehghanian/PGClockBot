@@ -48,6 +48,7 @@ async def assert_provision_create(
     pg_role_id: int | None = None,
     data_limit: int | None = None,
     expire_ts: int | None = None,
+    hwid_limit: int | None = None,
     from_template: bool = False,
     quantity: int = 1,
 ) -> None:
@@ -67,6 +68,7 @@ async def assert_provision_create(
                 staff,
                 data_limit=data_limit,
                 expire_ts=expire_ts,
+                hwid_limit=hwid_limit,
                 from_template=from_template,
                 quantity=quantity,
             )
@@ -76,6 +78,7 @@ async def assert_provision_create(
                 pg_role_id=pg_role_id,
                 data_limit=data_limit,
                 expire_ts=expire_ts,
+                hwid_limit=hwid_limit,
                 from_template=from_template,
                 quantity=quantity,
             )
@@ -84,6 +87,7 @@ async def assert_provision_create(
                 staff,
                 data_limit=data_limit,
                 expire_ts=expire_ts,
+                hwid_limit=hwid_limit,
                 from_template=from_template,
                 quantity=quantity,
             )
@@ -142,13 +146,15 @@ async def assert_provision_modify(
     *,
     data_limit: int | None = None,
     expire_ts: int | None = None,
+    hwid_limit: int | None = None,
     data_limit_changed: bool = False,
     expire_changed: bool = False,
+    hwid_changed: bool = False,
 ) -> None:
-    """Gate for PG user edit (volume / expire / plan-like changes)."""
+    """Gate for PG user edit (volume / expire / HWID / plan-like changes)."""
     rid = reseller_id_from_staff(staff)
-    # Only block when the mutation increases commitment (volume/time change)
-    if data_limit_changed or expire_changed:
+    # Only block when the mutation increases commitment (volume/time/device change)
+    if data_limit_changed or expire_changed or hwid_changed:
         try:
             await assert_billing_allows_provision(session, reseller_user_id=rid)
         except BillingError as e:
@@ -158,8 +164,10 @@ async def assert_provision_modify(
             staff,
             data_limit=data_limit,
             expire_ts=expire_ts,
+            hwid_limit=hwid_limit,
             data_limit_changed=data_limit_changed,
             expire_changed=expire_changed,
+            hwid_changed=hwid_changed,
         )
     except PgQuotaError as e:
         raise _wrap(e) from e

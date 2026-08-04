@@ -472,8 +472,10 @@ def register_pg_pages(
 
                 gb_raw = str(form.get("data_limit_gb") or "").strip()
                 days_raw = str(form.get("duration_days") or "").strip()
+                hwid_raw = str(form.get("hwid_limit") or "").strip()
                 data_limit = None
                 expire_ts = None
+                hwid_limit = None
                 if gb_raw:
                     try:
                         gb = float(gb_raw.replace(",", "."))
@@ -492,6 +494,13 @@ def register_pg_pages(
                             expire_ts = int(time.time()) + days * 86400
                     except ValueError:
                         return _pg_form_err("مدت نامعتبر است", modal="create")
+                if hwid_raw:
+                    try:
+                        hwid_limit = int(float(hwid_raw))
+                        if hwid_limit < 0:
+                            raise ValueError
+                    except ValueError:
+                        return _pg_form_err("سقف دستگاه (HWID) نامعتبر است", modal="create")
 
                 try:
                     await assert_provision_create(
@@ -499,6 +508,7 @@ def register_pg_pages(
                         staff=staff,
                         data_limit=data_limit,
                         expire_ts=expire_ts,
+                        hwid_limit=hwid_limit,
                         from_template=False,
                     )
                 except (ProvisionError, PgQuotaError) as qe:
@@ -511,6 +521,7 @@ def register_pg_pages(
                         group_ids=ids,
                         data_limit=data_limit,
                         expire_ts=expire_ts,
+                        hwid_limit=hwid_limit,
                         note=note,
                     )
                 )
@@ -604,8 +615,11 @@ def register_pg_pages(
 
         gb_raw = str(form.get("data_limit_gb") or "").strip()
         days_raw = str(form.get("duration_days") or "").strip()
+        hwid_raw = str(form.get("hwid_limit") or "").strip()
         data_limit = 0  # 0 = unlimited
         expire_ts = 0  # clear expire when empty
+        hwid_limit = None
+        hwid_changed = False
         if gb_raw:
             try:
                 gb = float(gb_raw.replace(",", "."))
@@ -622,6 +636,17 @@ def register_pg_pages(
                 expire_ts = int(time.time()) + days * 86400 if days > 0 else 0
             except ValueError:
                 return _pg_form_err("مدت نامعتبر است", modal="edit", uid=user_id)
+        if "hwid_limit" in form:
+            hwid_changed = True
+            if hwid_raw:
+                try:
+                    hwid_limit = int(float(hwid_raw))
+                    if hwid_limit < 0:
+                        raise ValueError
+                except ValueError:
+                    return _pg_form_err("سقف دستگاه (HWID) نامعتبر است", modal="edit", uid=user_id)
+            else:
+                hwid_limit = 0  # unlimited
 
         try:
             current = await _assert_owned_user(staff, user_id, session=session)
@@ -633,8 +658,10 @@ def register_pg_pages(
                     staff,
                     data_limit=data_limit,
                     expire_ts=expire_ts,
+                    hwid_limit=hwid_limit,
                     data_limit_changed=True,
                     expire_changed=True,
+                    hwid_changed=hwid_changed,
                 )
             except (ProvisionError, PgQuotaError) as qe:
                 return _pg_form_err(getattr(qe, "message", str(qe)), modal="edit", uid=user_id)
@@ -644,6 +671,7 @@ def register_pg_pages(
                 group_ids=ids,
                 data_limit=data_limit,
                 expire_ts=expire_ts,
+                hwid_limit=hwid_limit if hwid_changed else None,
                 status=str(current.get("status") or "") or None,
             )
             pg, _as_owner = await _staff_pg(session, staff)

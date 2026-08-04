@@ -1,11 +1,8 @@
-"""Enforce PasarGuard admin role quotas when acting via the owner API token.
+"""Enforce PasarGuard admin role quotas for restricted staff.
 
-PasarGuard itself enforces limits only when the limited admin authenticates.
-This web panel (and shop delivery) always calls the API as the sudo/owner
-account, then reassigns ownership — which bypasses those checks.
-
-This module mirrors PasarGuard's ``_enforce_user_limits`` + limited-admin
-write block so staff/resellers cannot exceed the same role limits here.
+Mirrors PasarGuard ``RoleLimits`` + limited-admin write gate so resellers
+(and credentialed staff) cannot exceed the same role limits when acting
+through PGClock — whether via own credentials or (legacy) owner-token paths.
 """
 
 from __future__ import annotations
@@ -77,6 +74,22 @@ def merge_role_limits(admin: dict | None, role: dict | None) -> dict[str, Any]:
             if v is not None:
                 limits[k] = v
     return limits
+
+
+def hwid_bounds(limits: dict[str, Any]) -> tuple[int | None, int | None]:
+    """Return (min_hwid, max_hwid) from role limits (aliases supported)."""
+    hmin = (
+        _as_int(limits.get("min_hwid_per_user"))
+        or _as_int(limits.get("hwid_limit_min"))
+        or _as_int(limits.get("min_devices"))
+    )
+    hmax = (
+        _as_int(limits.get("max_hwid_per_user"))
+        or _as_int(limits.get("hwid_limit_max"))
+        or _as_int(limits.get("max_devices"))
+        or _as_int(limits.get("device_limit"))
+    )
+    return hmin, hmax
 
 
 def _admin_is_limited(admin: dict) -> bool:
@@ -175,6 +188,29 @@ def _check_expire_bounds(
             )
 
 
+def _check_hwid_bounds(
+    limits: dict[str, Any],
+    hwid_limit: int | None,
+    *,
+    require_finite: bool,
+) -> None:
+    """Enforce PasarGuard RoleLimits min/max HWID (device) per user."""
+    hmin, hmax = hwid_bounds(limits)
+    # None or 0 ⇒ unlimited (common PG / panel convention)
+    unlimited = hwid_limit is None or hwid_limit <= 0
+
+    if hmax is not None and hmax > 0 and require_finite and unlimited:
+        raise PgQuotaError(
+            f"سقف دستگاه (HWID) نمی‌تواند نامحدود باشد؛ حداکثر {hmax}"
+        )
+    if not unlimited:
+        assert hwid_limit is not None
+        if hmin is not None and hmin > 0 and hwid_limit < hmin:
+            raise PgQuotaError(f"سقف دستگاه (HWID) باید حداقل {hmin} باشد")
+        if hmax is not None and hmax > 0 and hwid_limit > hmax:
+            raise PgQuotaError(f"سقف دستگاه (HWID) نمی‌تواند بیشتر از {hmax} باشد")
+
+
 def _check_max_users(admin: dict, limits: dict[str, Any], *, need: int = 1) -> None:
     max_users = _as_int(limits.get("max_users")) or _as_int(admin.get("max_users"))
     if max_users is None or max_users <= 0:
@@ -234,6 +270,7 @@ async def assert_can_create_user(
     *,
     data_limit: int | None = None,
     expire_ts: int | None = None,
+    hwid_limit: int | None = None,
     from_template: bool = False,
     quantity: int = 1,
 ) -> None:
@@ -248,10 +285,20 @@ async def assert_can_create_user(
 
     if from_template:
         # PasarGuard: template create only checks max_users (+ write gate).
+        # HWID/volume come from the template; PG enforces when authenticated as admin.
         return
 
     _check_data_limit_bounds(limits, data_limit, require_finite=True)
     _check_expire_bounds(limits, expire_ts, require_finite=True)
+    # When the form omits HWID but the role caps devices, default to the role max
+    # so existing UIs do not accidentally create unlimited-device users.
+    hmin, hmax = hwid_bounds(limits)
+    effective_hwid = hwid_limit
+    if (effective_hwid is None or effective_hwid <= 0) and hmax is not None and hmax > 0:
+        effective_hwid = hmax
+    elif (effective_hwid is None or effective_hwid <= 0) and hmin is not None and hmin > 0:
+        effective_hwid = hmin
+    _check_hwid_bounds(limits, effective_hwid, require_finite=True)
 
 
 async def assert_can_modify_user(
@@ -259,10 +306,12 @@ async def assert_can_modify_user(
     *,
     data_limit: int | None = None,
     expire_ts: int | None = None,
+    hwid_limit: int | None = None,
     data_limit_changed: bool = True,
     expire_changed: bool = True,
+    hwid_changed: bool = True,
 ) -> None:
-    """Enforce per-user volume/time bounds before modify (no max_users check)."""
+    """Enforce per-user volume/time/HWID bounds before modify (no max_users check)."""
     if not staff_needs_quota_check(staff):
         return
 
@@ -280,6 +329,8 @@ async def assert_can_modify_user(
         expire_ts,
         require_finite=expire_changed,
     )
+    if hwid_changed:
+        _check_hwid_bounds(limits, hwid_limit, require_finite=True)
 
 
 async def assert_can_mutate_owned_users(staff: dict) -> None:
@@ -296,6 +347,7 @@ async def assert_reseller_can_deliver(
     pg_role_id: int | None = None,
     data_limit: int | None = None,
     expire_ts: int | None = None,
+    hwid_limit: int | None = None,
     from_template: bool = False,
     quantity: int = 1,
 ) -> None:
@@ -318,6 +370,7 @@ async def assert_reseller_can_deliver(
         staff,
         data_limit=data_limit,
         expire_ts=expire_ts,
+        hwid_limit=hwid_limit,
         from_template=from_template,
         quantity=quantity,
     )
@@ -329,6 +382,7 @@ async def assert_reseller_can_renew(
     pg_role_id: int | None = None,
     data_limit: int | None = None,
     expire_ts: int | None = None,
+    hwid_limit: int | None = None,
     from_template: bool = False,
 ) -> None:
     """Quota check for shop renewal modifying a reseller-owned user."""
@@ -349,6 +403,8 @@ async def assert_reseller_can_renew(
         staff,
         data_limit=data_limit,
         expire_ts=expire_ts,
+        hwid_limit=hwid_limit,
         data_limit_changed=data_limit is not None,
         expire_changed=expire_ts is not None,
+        hwid_changed=hwid_limit is not None,
     )
