@@ -119,20 +119,19 @@ def normalize_feature_perms(raw: str | None) -> str:
 
 
 def has_perm(profile: ResellerProfile | None, key: str, *, role: str | None = None) -> bool:
-    """Unified permission check for web + bot."""
+    """Unified permission check for web + bot (delegates to authz decision layer)."""
+    from app.services.authz import (
+        authz_from_shop_perm_list,
+        can_shop,
+        resolve_shop_permissions_from_profile,
+    )
+
     if role == Role.ADMIN.value:
-        return True
-    if not profile or not profile.is_active:
+        return can_shop(authz_from_shop_perm_list(None, role="admin"), key)
+    perms = resolve_shop_permissions_from_profile(profile)
+    if perms is None:
         return False
-    # Explicit empty string = intentionally restricted (do not soft-upgrade to DEFAULT).
-    # None / unset → DEFAULT feature set. Non-empty lists always get core shop keys.
-    raw = profile.web_permissions
-    if raw is None:
-        perms = with_shop_settings(parse_perms(DEFAULT_FEATURE_PERMS))
-    else:
-        parsed = parse_perms(raw)
-        perms = with_shop_settings(parsed) if parsed else parsed
-    return key in perms
+    return can_shop(authz_from_shop_perm_list(perms, role=role or Role.RESELLER.value), key)
 
 
 def has_bot_perm(profile: ResellerProfile | None, key: str) -> bool:

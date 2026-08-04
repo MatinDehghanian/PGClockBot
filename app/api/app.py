@@ -388,11 +388,10 @@ def create_api_app(lifespan=None) -> FastAPI:
             request: Request,
             session: AsyncSession = Depends(get_db),
         ) -> dict:
+            from app.services.authz import authz_from_staff, can_shop
+
             user = await require_staff(request, session)
-            if user.get("role") == "admin":
-                return user
-            perms = user.get("permissions") or []
-            if perm not in perms:
+            if not can_shop(authz_from_staff(user), perm):
                 raise NotAdmin()
             return user
 
@@ -423,12 +422,12 @@ def create_api_app(lifespan=None) -> FastAPI:
             request: Request,
             session: AsyncSession = Depends(get_db),
         ) -> dict:
+            from app.services.authz import authz_from_staff, can_pg_page
+
             user = await require_staff(request, session)
-            if user.get("role") == "admin":
-                return user
-            # require_staff already resolved + enriched pg_permissions — reuse it
-            features = user.get("pg_permissions") or []
-            if perm not in features:
+            ctx = authz_from_staff(user)
+            if not can_pg_page(ctx, perm):
+                features = list(ctx.pg_permissions)
                 raise NotAdmin(redirect=_live_pg_home(features))
             return user
 
