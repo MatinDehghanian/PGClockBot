@@ -322,11 +322,19 @@ def create_api_app(lifespan=None) -> FastAPI:
             user["bot_user_id"] = int(bot_user_id)
             if profile.pg_admin_username:
                 user["pg_admin_username"] = profile.pg_admin_username
-            if profile.pg_role_id:
-                user["pg_role_id"] = int(profile.pg_role_id)
-                from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
+            # Prefer live PG role (same as pg_staff) so limited-role ACL stays in sync
+            # even when local profile.pg_role_id is stale.
+            from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
+            from app.services.pg_staff_access import resolve_pg_role_id_for_admin
 
-                features, role = await resolve_reseller_pg_features(int(profile.pg_role_id))
+            role_id = int(profile.pg_role_id) if profile.pg_role_id else None
+            if profile.pg_admin_username:
+                live_role = await resolve_pg_role_id_for_admin(profile.pg_admin_username)
+                if live_role:
+                    role_id = int(live_role)
+            if role_id:
+                user["pg_role_id"] = int(role_id)
+                features, role = await resolve_reseller_pg_features(int(role_id))
                 user = enrich_staff_pg_from_role(user, features, role)
         elif user.get("role") == "pg_staff":
             from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
@@ -1064,11 +1072,21 @@ def create_api_app(lifespan=None) -> FastAPI:
                     permissions = list(resolve_shop_permissions_from_profile(profile) or [])
                     bot_user_id = ru.id
                     pg_admin_username = profile.pg_admin_username
-                    pg_permissions, pg_role = await resolve_reseller_pg_features(profile.pg_role_id)
+                    pg_role_id = int(profile.pg_role_id) if profile.pg_role_id else None
+                    if profile.pg_admin_username:
+                        live_role = await resolve_pg_role_id_for_admin(profile.pg_admin_username)
+                        if live_role:
+                            pg_role_id = int(live_role)
+                            if profile.pg_role_id != pg_role_id:
+                                profile.pg_role_id = pg_role_id
+                                try:
+                                    await session.commit()
+                                except Exception:
+                                    await session.rollback()
+                    pg_permissions, pg_role = await resolve_reseller_pg_features(pg_role_id)
                     pg_user_actions = role_user_actions(pg_role)
                     pg_access = role_access_limits(pg_role)
                     pg_writes = map_pg_role_writes(pg_role)
-                    pg_role_id = profile.pg_role_id
                     reseller_pv = (profile.web_password_hash or "")[:24]
             if not role:
                 from app.services.pg_access import (

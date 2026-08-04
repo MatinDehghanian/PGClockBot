@@ -4,6 +4,8 @@
   --foreground: #fafafa;
   --card: #09090b;
   --card-fg: #fafafa;
+  --control-bg: #18181b;
+  --control-bg-hover: #27272a;
   --muted: #27272a;
   --muted-fg: #a1a1aa;
   --border: #27272a;
@@ -658,7 +660,7 @@ textarea,
 input, select, textarea {
   width: 100%;
   margin-top: var(--space-1);
-  background-color: #09090b;
+  background-color: var(--control-bg);
   color: var(--foreground);
   border: 1px solid var(--input);
   border-radius: var(--radius);
@@ -702,7 +704,7 @@ select {
      Chevron inset matches title inset (space-2); end padding clears the 14px icon. */
   padding-inline-start: var(--space-2);
   padding-inline-end: calc(var(--space-2) + 14px);
-  background-color: #09090b;
+  background-color: var(--control-bg);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4.5 6L8 3l3.5 3' stroke='%23a1a1aa' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M4.5 10L8 13l3.5-3' stroke='%23a1a1aa' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-position: left var(--space-2) center;
   background-size: 14px 14px;
@@ -767,7 +769,7 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
   box-sizing: border-box;
   border-radius: var(--radius);
   border: 1px solid var(--input);
-  background: #09090b;
+  background: var(--control-bg);
   color: var(--foreground);
   font: inherit;
   font-size: var(--control-fs) !important;
@@ -782,10 +784,10 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
   padding-inline-end: var(--space-1);
   min-width: 110px;
 }
-.ui-select-toggle:hover { background: var(--bg-hover); }
+.ui-select-toggle:hover { background: var(--control-bg-hover); }
 .ui-select.open .ui-select-toggle {
   border-color: #3f3f46;
-  background: var(--bg-hover);
+  background: var(--control-bg-hover);
 }
 .ui-select.is-disabled .ui-select-toggle,
 .ui-select-toggle:disabled {
@@ -3907,6 +3909,8 @@ html[data-theme="light"] {
   --foreground: #18181b;
   --card: #ffffff;
   --card-fg: #18181b;
+  --control-bg: #ffffff;
+  --control-bg-hover: #f4f4f5;
   --muted: #f4f4f5;
   --muted-fg: #71717a;
   --border: #e4e4e7;
@@ -4092,12 +4096,13 @@ html[data-theme="light"] .icon-btn.icon-remove {
 html[data-theme="light"] input,
 html[data-theme="light"] select,
 html[data-theme="light"] textarea {
-  background-color: #ffffff;
+  background-color: var(--control-bg);
   color: var(--foreground);
   border-color: var(--border);
   font-size: var(--control-fs);
 }
 html[data-theme="light"] select {
+  background-color: var(--control-bg);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4.5 6L8 3l3.5 3' stroke='%2371717a' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M4.5 10L8 13l3.5-3' stroke='%2371717a' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-size: 14px 14px;
@@ -4110,13 +4115,13 @@ html[data-theme="light"] select.select-sm {
 }
 html[data-theme="light"] select option { background: #ffffff; color: #18181b; }
 html[data-theme="light"] .ui-select-toggle {
-  background: #ffffff;
+  background: var(--control-bg);
   color: var(--foreground);
   border-color: var(--border);
 }
 html[data-theme="light"] .ui-select.open .ui-select-toggle,
 html[data-theme="light"] .ui-select-toggle:hover {
-  background: var(--bg-hover);
+  background: var(--control-bg-hover);
 }
 html[data-theme="light"] .ui-select-menu {
   background: #ffffff;

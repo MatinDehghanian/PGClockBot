@@ -209,6 +209,46 @@ async def send_delivery_to_user(
     ui = await get_all_settings(session, reseller_id=shop_rid)
     reply_kb = await _buyer_reply_markup(session, payment, order)
     if order and order.note and str(order.note).startswith("reseller_app:"):
+        from app.db.models import BotUser, ResellerApplicationStatus
+        from app.services.formatting import format_user_label
+        from app.services.resellers import (
+            format_credentials_message,
+            get_application,
+        )
+
+        try:
+            app_id = int(str(order.note).split(":", 1)[1])
+        except Exception:
+            app_id = 0
+        app = await get_application(session, app_id) if app_id else None
+        creds = order.__dict__.get("_reseller_app_creds")
+        if isinstance(creds, dict) and (
+            not app or app.status == ResellerApplicationStatus.APPROVED.value
+        ):
+            text = format_credentials_message(creds)
+            try:
+                await bot.send_message(
+                    chat_id, text, reply_markup=reply_kb, parse_mode="HTML"
+                )
+            except Exception:
+                try:
+                    await bot.send_message(chat_id, text, parse_mode="HTML")
+                except Exception:
+                    pass
+            user = await session.get(BotUser, order.user_id)
+            notify = (
+                f"✅ نمایندگی فعال شد #{app_id}\n"
+                f"سفارش #{order.id}\n"
+                f"کاربر: {format_user_label(user)}\n"
+                f"(تأیید خودکار پس از پرداخت)"
+            )
+            for aid in get_settings().admin_ids:
+                try:
+                    await bot.send_message(aid, notify, parse_mode="HTML")
+                except Exception:
+                    pass
+            return text
+
         text = (
             "✅ هزینه نمایندگی پرداخت شد.\n"
             "درخواست شما ثبت شد و پس از تأیید ادمین، اطلاعات ورود برایتان ارسال می‌شود."
@@ -222,14 +262,7 @@ async def send_delivery_to_user(
                 await bot.send_message(chat_id, text, parse_mode="HTML")
             except Exception:
                 pass
-        try:
-            app_id = int(str(order.note).split(":", 1)[1])
-        except Exception:
-            app_id = 0
         if app_id:
-            from app.db.models import BotUser
-            from app.services.formatting import format_user_label
-
             user = await session.get(BotUser, order.user_id)
             notify = (
                 f"🤝 درخواست نمایندگی پرداخت‌شده #{app_id}\n"

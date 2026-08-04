@@ -290,7 +290,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         profile.is_active = bool(form.get("is_active"))
         profile.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
-        profile.pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
+        new_pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
+        profile.pg_role_id = new_pg_role_id
         pg_user = str(form.get("pg_admin_username") or "").strip()
         if pg_user:
             from app.services.pg_staff_access import conflict_message_for_reseller_link
@@ -304,6 +305,25 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                     status_code=303,
                 )
         profile.pg_admin_username = pg_user or None
+        # Push role to PasarGuard so edit is not local-only (limited roles depend on live role).
+        if profile.pg_admin_username and new_pg_role_id is not None:
+            from app.services.pasarguard import PasarGuardError, get_pg
+
+            try:
+                await get_pg().modify_admin(
+                    profile.pg_admin_username,
+                    {"role_id": int(new_pg_role_id)},
+                )
+            except PasarGuardError as e:
+                return RedirectResponse(
+                    f"/resellers/{user_id}/edit?err={_q(e.user_message(fallback=str(e)))}",
+                    status_code=303,
+                )
+            except Exception as e:
+                return RedirectResponse(
+                    f"/resellers/{user_id}/edit?err={_q(f'همگام‌سازی نقش پاسارگارد ناموفق: {e}')}",
+                    status_code=303,
+                )
         from app.services.reseller_access import normalize_telegram_ids_csv
 
         profile.bot_admin_ids = normalize_telegram_ids_csv(

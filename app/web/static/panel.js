@@ -489,6 +489,22 @@
       el.hidden = true;
       el.classList.remove('open');
       restoreModalHome(el);
+      /* Drop sticky SSR form errors when closing (create/edit user modals) */
+      el.querySelectorAll('.flash.err[id$="-form-err"]').forEach((err) => {
+        err.hidden = true;
+        err.textContent = '';
+        delete err.dataset.keep;
+      });
+      if (typeof window.history !== 'undefined' && window.location.search.indexOf('form_err') >= 0) {
+        try {
+          const u = new URL(window.location.href);
+          u.searchParams.delete('form_err');
+          u.searchParams.delete('modal');
+          u.searchParams.delete('uid');
+          const next = u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '') + u.hash;
+          window.history.replaceState({}, '', next);
+        } catch (e) {}
+      }
       if (!document.querySelector('.ui-modal.open')) {
         document.body.classList.remove('modal-open');
       }
@@ -506,6 +522,12 @@
       if (!el) return;
       document.querySelectorAll('.ui-modal.open').forEach(closeModal);
       ensureModalPorted(el);
+      /* Fresh open: clear prior form errors unless SSR keep flag is set */
+      el.querySelectorAll('.flash.err[id$="-form-err"]').forEach((err) => {
+        if (err.dataset.keep) return;
+        err.hidden = true;
+        err.textContent = '';
+      });
       el.hidden = false;
       el.classList.add('open');
       document.body.classList.add('modal-open');

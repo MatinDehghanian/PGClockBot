@@ -10,8 +10,7 @@
   <button type="button" class="btn" id="btn-add-plan" data-modal-open="modal-plan-unified">افزودن پلن</button>
 </div>
 
-{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
-{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+{# flash_ok / flash_err rendered once in base.html #}
 {% if pg_error %}<div class="flash warn">پاسارگارد: {{ pg_error }} — پلن‌ها را می‌توانید ذخیره کنید ولی تحویل نیاز به اتصال دارد.</div>{% endif %}
 
 {% set trial_on = values.get('trial_enabled') in ['1','true','yes','on'] %}

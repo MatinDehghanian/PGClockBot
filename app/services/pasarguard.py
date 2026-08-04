@@ -466,10 +466,34 @@ class PasarGuardClient:
         return as_list(data, "admins")
 
     async def get_admin(self, username: str) -> dict | None:
-        """Fetch one admin (with usage metrics) by username."""
+        """Fetch one admin (with usage metrics) by username.
+
+        Prefer direct by-username endpoints first — limited roles often cannot
+        list ``/api/admins`` even when they can read their own account.
+        """
         username = (username or "").strip()
         if not username:
             return None
+        from urllib.parse import quote
+
+        enc = quote(username, safe="")
+        for path in (
+            f"/api/admin/by-username/{enc}",
+            f"/api/admin/{enc}",
+        ):
+            try:
+                data = await self.request("GET", path)
+                if isinstance(data, dict) and (
+                    str(data.get("username") or "").strip().lower() == username.lower()
+                    or data.get("id") is not None
+                ):
+                    # Strict identity when username is present
+                    got = str(data.get("username") or "").strip()
+                    if got and got.lower() != username.lower():
+                        continue
+                    return data
+            except Exception:
+                pass
         try:
             data = await self.request("GET", "/api/admins", params={"username": username, "limit": 20})
             admins = as_list(data, "admins")

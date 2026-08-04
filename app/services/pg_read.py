@@ -138,3 +138,30 @@ def empty_pg_read_payload() -> dict[str, Any]:
         "read_denied": True,
         "read_denied_msg": PG_READ_ISOLATION_MSG,
     }
+
+
+async def fetch_own_admin_meta(username: str) -> dict | None:
+    """Read-only owner-token lookup of ONE admin by exact username.
+
+    Security invariant:
+    - Callers MUST pass the authenticated principal's own PG username.
+    - Never use this as a general PG client or to list other admins.
+    - Returns None unless the payload username matches (case-insensitive).
+
+    Used when a limited role cannot ``GET /api/admins`` (list) but still needs
+    their own quota / role metadata for the web overview — same data they see
+    in native PasarGuard about themselves.
+    """
+    uname = (username or "").strip()
+    if not uname:
+        return None
+    try:
+        admin = await get_pg().get_admin(uname)
+    except Exception:
+        return None
+    if not isinstance(admin, dict):
+        return None
+    got = str(admin.get("username") or "").strip()
+    if not got or got.lower() != uname.lower():
+        return None
+    return admin

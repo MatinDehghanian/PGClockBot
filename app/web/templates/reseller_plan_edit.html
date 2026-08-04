@@ -9,8 +9,7 @@
   <a class="btn btn-ghost" href="/plans#reseller-plans">بازگشت</a>
 </div>
 
-{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
-{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+{# flash_ok / flash_err rendered once in base.html #}
 
 <div class="card">
   <form method="post" action="/resellers/plans/{{ plan.id }}/edit" class="form-stack" id="reseller-plan-edit-form">
