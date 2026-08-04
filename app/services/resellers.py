@@ -1022,13 +1022,12 @@ async def provision_existing_pg_admin(
     """Grant web + shop access to an existing PG admin using a reseller plan.
 
     Creates/updates a ResellerProfile linked to ``pg_username`` (no new PG admin).
-    Removes any legacy PgStaffAccess row for the same admin.
+    Refuses when a PgStaffAccess row exists (Phase D2 — no automatic conversion).
     Returns ``(profile, setup_hint, error)``.
     """
     from app.services.pg_staff_access import (
         access_by_pg_username,
         conflict_message_for_reseller_link,
-        revoke_web_access,
     )
     from app.services.pg_staff_access import resolve_pg_role_id_for_admin
     from app.services.web_auth import (
@@ -1054,6 +1053,16 @@ async def provision_existing_pg_admin(
     if cleaned == owner_u:
         return None, None, "این نام کاربری برای ادمین اصلی پنل رزرو است"
 
+    # Phase D2: never silently convert pg_staff → reseller
+    staff_row = await access_by_pg_username(session, pg_u)
+    if staff_row is not None:
+        return (
+            None,
+            None,
+            "این ادمین دسترسی ادمین فرعی (pg_staff) دارد — ابتدا آن را حذف کنید؛ "
+            "تبدیل خودکار به نماینده مجاز نیست",
+        )
+
     # Allow updating the reseller already linked to THIS pg admin; block other links.
     linked = (
         await session.execute(
@@ -1067,11 +1076,9 @@ async def provision_existing_pg_admin(
         if (row.pg_admin_username or "").strip().lower() == pg_u:
             current = row
             break
-    staff_row = await access_by_pg_username(session, pg_u)
     if current is None:
         conflict = await conflict_message_for_reseller_link(session, pg_u)
-        # conflict_message blocks when pg_staff exists — we'll convert that path
-        if conflict and staff_row is None:
+        if conflict:
             return None, None, conflict
 
     # Unified login: web username must match the Pasarguard admin username.
@@ -1082,19 +1089,25 @@ async def provision_existing_pg_admin(
             "برای ورود یکپارچه، نام کاربری وب باید دقیقاً همان نام ادمین پاسارگارد باشد",
         )
 
-    # Password: empty on edit/upgrade keeps previous hash (reseller or legacy staff).
+    # Password: empty on edit keeps previous hash only when enc already present.
     pwd = (password or "").strip()
     if pwd:
-        ok, err = validate_password_strength(pwd)
+        ok, err = validate_password_strength(pwd, username=cleaned)
         if not ok:
             return None, None, err
         web_hash = hash_password(pwd)
     else:
-        web_hash = (current.web_password_hash if current else None) or (
-            staff_row.web_password_hash if staff_row else None
-        )
+        web_hash = current.web_password_hash if current else None
         if not web_hash:
             return None, None, "رمز عبور الزامی است"
+        from app.services.secret_box import decrypt_secret
+
+        if current and not decrypt_secret(current.pg_admin_password_enc):
+            return (
+                None,
+                None,
+                "رمز عبور الزامی است — اعتبارنامه پاسارگارد ذخیره نشده",
+            )
 
     # Username uniqueness (exclude current profile)
     from app.db.models import PgStaffAccess
@@ -1111,8 +1124,7 @@ async def provision_existing_pg_admin(
             select(PgStaffAccess).where(PgStaffAccess.web_username == cleaned)
         )
     ).scalar_one_or_none()
-    # Same PG admin's staff row will be deleted after conversion; other rows block.
-    if taken_staff and (taken_staff.pg_username or "").lower() != pg_u:
+    if taken_staff:
         return None, None, "این نام کاربری قبلاً برای دسترسی وب ادمین پاسارگارد گرفته شده"
 
     role_id = await resolve_pg_role_id_for_admin(pg_u)
@@ -1159,12 +1171,6 @@ async def provision_existing_pg_admin(
             return None, None, f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}"
     await session.commit()
     await session.refresh(profile)
-
-    # Convert legacy pg_staff row away so one-path invariant holds
-    try:
-        await revoke_web_access(session, pg_u)
-    except Exception:
-        pass
 
     setup_hint = None
     if not (profile.bot_token or "").strip():

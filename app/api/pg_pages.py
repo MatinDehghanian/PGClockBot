@@ -1319,23 +1319,98 @@ def register_pg_pages(
         return RedirectResponse(f"/pg/admins?ok={_q('ادمین پنل ساخته شد')}", status_code=303)
 
     @app.post("/pg/admins/{username}/web-access")
-    async def pg_admins_web_access(
+    async def pg_admins_web_access_legacy(
+        username: str,
+        staff: dict = Depends(require_admin),
+    ):
+        """Phase D2 Q2: old single grant path hard-fails (no silent alias/conversion)."""
+        return RedirectResponse(
+            f"/pg/admins?err={_q('این مسیر منسوخ شده است — از «اعطای ادمین فرعی» یا «اعطای نماینده» استفاده کنید')}",
+            status_code=303,
+        )
+
+    @app.post("/pg/admins/{username}/web-access/staff")
+    async def pg_admins_web_access_staff(
         username: str,
         request: Request,
         staff: dict = Depends(require_admin),
         session=Depends(get_db),
     ):
+        """PG-only secondary admin (pg_staff) — never creates a reseller."""
+        from app.services.pg_staff_access import (
+            access_by_pg_username,
+            classify_pg_admin_dict,
+            grant_web_access,
+            update_web_access,
+        )
+
+        form = await request.form()
+        web_password = str(form.get("web_password") or "")
+        note = str(form.get("note") or "").strip()
+        pg_u = (username or "").strip()
+        if not pg_u:
+            return RedirectResponse(f"/pg/admins?err={_q('نام ادمین نامعتبر است')}", status_code=303)
+        # D2: web username must match PG username (Q1: error-only — form locks to pg_u)
+        web_username = str(form.get("web_username") or pg_u).strip() or pg_u
+        try:
+            admin = await get_pg().get_admin(pg_u)
+        except Exception as e:
+            return RedirectResponse(f"/pg/admins?err={_q(e)}", status_code=303)
+        if not admin:
+            return RedirectResponse(
+                f"/pg/admins?err={_q('این ادمین در پاسارگارد یافت نشد')}",
+                status_code=303,
+            )
+        if classify_pg_admin_dict(admin) == "disabled":
+            return RedirectResponse(
+                f"/pg/admins?err={_q('این ادمین در پاسارگارد غیرفعال است — ابتدا فعالش کنید')}",
+                status_code=303,
+            )
+
+        existing = await access_by_pg_username(session, pg_u)
+        if existing:
+            row, err = await update_web_access(
+                session,
+                pg_username=pg_u,
+                web_username=web_username,
+                password=web_password,
+                note=note,
+                is_active=True,
+            )
+        else:
+            row, err = await grant_web_access(
+                session,
+                pg_username=pg_u,
+                web_username=web_username,
+                password=web_password,
+                note=note,
+                is_active=True,
+            )
+        if err:
+            return RedirectResponse(f"/pg/admins?err={_q(err)}", status_code=303)
+        uname = row.web_username if row else web_username
+        msg = f"دسترسی ادمین فرعی «{uname}» ذخیره شد — فقط منوی پاسارگارد (بدون فروشگاه)"
+        return RedirectResponse(f"/pg/admins?ok={_q(msg)}", status_code=303)
+
+    @app.post("/pg/admins/{username}/web-access/reseller")
+    async def pg_admins_web_access_reseller(
+        username: str,
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session=Depends(get_db),
+    ):
+        """Shop reseller grant — refuses when pg_staff row exists (no conversion)."""
         from app.services.pg_staff_access import classify_pg_admin_dict
         from app.services.resellers import provision_existing_pg_admin
 
         form = await request.form()
-        web_username = str(form.get("web_username") or "").strip()
         web_password = str(form.get("web_password") or "")
         note = str(form.get("note") or "").strip()
         plan_raw = str(form.get("plan_id") or "").strip()
         pg_u = (username or "").strip()
         if not pg_u:
             return RedirectResponse(f"/pg/admins?err={_q('نام ادمین نامعتبر است')}", status_code=303)
+        web_username = str(form.get("web_username") or pg_u).strip() or pg_u
         if not plan_raw.isdigit():
             return RedirectResponse(
                 f"/pg/admins?err={_q('انتخاب پلن نمایندگی الزامی است')}",

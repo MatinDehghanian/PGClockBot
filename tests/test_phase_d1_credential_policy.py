@@ -109,12 +109,11 @@ class SourceGuardTests(unittest.TestCase):
         ]
         self.assertIn("validate_password_strength", fn)
 
-    def test_no_d2_grant_route_change(self):
-        """D1 must not rewire grant UI to grant_web_access yet."""
+    def test_d1_did_not_require_d2_yet_marker_removed(self):
+        """D2 supersedes D1 grant-route freeze; staff path must use grant_web_access."""
         src = Path("app/api/pg_pages.py").read_text(encoding="utf-8")
-        fn = src[src.find("async def pg_admins_web_access") : src.find("async def pg_admins_web_access_revoke")]
-        self.assertIn("provision_existing_pg_admin", fn)
-        self.assertNotIn("grant_web_access", fn)
+        self.assertIn("async def pg_admins_web_access_staff", src)
+        self.assertIn("grant_web_access", src)
 
 
 class EncryptFailClosedTests(unittest.IsolatedAsyncioTestCase):

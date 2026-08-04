@@ -443,6 +443,20 @@ async def _username_taken(
     return None
 
 
+def assert_web_matches_pg(web_username: str, pg_username: str) -> str | None:
+    """Phase D2: pg_staff web login must equal PG admin username (error-only, no rename)."""
+    web = (web_username or "").strip().lower()
+    pg = _norm_pg(pg_username)
+    if not web or not pg:
+        return "نام کاربری وب و پاسارگارد الزامی است"
+    if web != pg:
+        return (
+            "برای ادمین فرعی، نام کاربری وب باید دقیقاً همان نام ادمین پاسارگارد باشد "
+            f"(«{pg}») — تغییر خودکار انجام نمی‌شود"
+        )
+    return None
+
+
 async def grant_web_access(
     session: AsyncSession,
     *,
@@ -462,6 +476,9 @@ async def grant_web_access(
     cleaned, uerr = validate_web_username(web_username, lowercase=True)
     if uerr:
         return None, uerr
+    mismatch = assert_web_matches_pg(cleaned, pg_u)
+    if mismatch:
+        return None, mismatch
     ok, err = validate_password_strength(password, username=cleaned or pg_u)
     if not ok:
         return None, err
@@ -529,8 +546,9 @@ async def update_web_access(
 
     pwd = (password or "").strip()
     if not pwd:
-        # Keep existing password on edit
-        pass
+        # Keep existing password on edit — but not when PG enc is missing
+        if not staff_has_stored_pg_password(existing):
+            return None, "رمز عبور الزامی است — اعتبارنامه پاسارگارد ذخیره نشده"
     else:
         cleaned_tmp, _ = validate_web_username(web_username, lowercase=True)
         ok, err = validate_password_strength(
@@ -541,6 +559,9 @@ async def update_web_access(
     cleaned, uerr = validate_web_username(web_username, lowercase=True)
     if uerr:
         return None, uerr
+    mismatch = assert_web_matches_pg(cleaned, pg_u)
+    if mismatch:
+        return None, mismatch
     taken = await _username_taken(session, cleaned, exclude_staff_id=existing.id)
     if taken:
         return None, taken
@@ -661,6 +682,9 @@ async def change_staff_credentials(
     cleaned, uerr = validate_web_username(new_username, lowercase=True)
     if uerr:
         return None, uerr
+    mismatch = assert_web_matches_pg(cleaned, row.pg_username)
+    if mismatch:
+        return None, mismatch
     taken = await _username_taken(session, cleaned, exclude_staff_id=row.id)
     if taken:
         return None, taken

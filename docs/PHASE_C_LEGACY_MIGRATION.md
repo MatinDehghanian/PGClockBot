@@ -65,14 +65,17 @@ Owner → revoke web access on `/pg/admins` if the account should not use the pa
 
 ---
 
-## New grants after C5 (until Phase D)
+## New grants after D2
 
-| Intent | What to do today |
-|--------|------------------|
-| Shop + PG secondary admin | Create PG admin with role → «اعطای دسترسی وب» with plan + password → **reseller** |
-| PG-only staff (pg_staff) | No Owner UI yet — Phase D will wire `grant_web_access`. Workaround: create staff row via service / legacy, then Option A password change |
+| Intent | What to do |
+|--------|------------|
+| PG-only staff (pg_staff) | `/pg/admins` → **اعطای ادمین فرعی** → `…/web-access/staff` |
+| Shop + PG reseller | `/pg/admins` → **اعطای نماینده** (only if no staff row) → `…/web-access/reseller` |
 
-Do **not** convert pg_staff to reseller solely to obtain PG credentials — that contradicts the approved architecture.
+If a staff row exists and you need a reseller instead: **revoke** staff first, then grant reseller. No automatic conversion.
+
+Mismatched `web_username ≠ pg_username` on staff: fix manually (error-only — no auto-rename). Old `POST …/web-access` hard-fails.
+
 
 ---
 

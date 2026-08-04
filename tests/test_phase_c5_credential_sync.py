@@ -245,7 +245,7 @@ class GrantStoresEncryptedPasswordTests(unittest.IsolatedAsyncioTestCase):
             row, err = await psa.grant_web_access(
                 session,
                 pg_username="PgStaff1",
-                web_username="webstaff1",
+                web_username="pgstaff1",
                 password="AaBb12!secret",
             )
         self.assertIsNone(err)
