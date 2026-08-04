@@ -88,6 +88,10 @@ def map_pg_role_to_features(role: dict | None) -> list[str]:
         out.append("pg_inbounds")
     if _resource_allows(raw, "nodes", "read", "read_simple", "reconnect", "stats"):
         out.append("pg_nodes")
+    # Own-account overview (quota/users) mirrors native PasarGuard home for limited
+    # roles that have resource access but lack system.read.
+    if out and "pg_overview" not in out:
+        out.insert(0, "pg_overview")
     # de-dupe preserve order
     seen: set[str] = set()
     ordered = []

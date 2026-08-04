@@ -546,6 +546,15 @@ async def list_applications(
 
 
 async def mark_application_paid(session: AsyncSession, order: Order) -> ResellerApplication | None:
+    """Mark reseller application paid, then auto-approve (provision) when possible.
+
+    After payment, plan + agency are activated in one step — no second admin click.
+    On provision failure the app stays ``awaiting_approval`` for manual retry.
+    Plaintext credentials (when provisioned) are attached as
+    ``order._reseller_app_creds`` for the delivery / notify layer.
+    """
+    import logging
+
     note = order.note or ""
     if not note.startswith("reseller_app:"):
         return None
@@ -560,6 +569,24 @@ async def mark_application_paid(session: AsyncSession, order: Order) -> Reseller
         app.status = ResellerApplicationStatus.AWAITING_APPROVAL.value
         await session.commit()
         await session.refresh(app)
+
+    if app.status == ResellerApplicationStatus.AWAITING_APPROVAL.value:
+        try:
+            base = await get_reseller_panel_base_url(session)
+            creds = await approve_application(
+                session,
+                app,
+                reviewer_tg=None,
+                panel_base_url=base,
+                admin_note="auto-approved after payment",
+            )
+            await session.refresh(app)
+            if isinstance(creds, dict):
+                order.__dict__["_reseller_app_creds"] = creds
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "auto-approve reseller application %s after payment failed", app.id
+            )
     return app
 
 

@@ -369,6 +369,8 @@
   const formModal = {{ (form_modal|default('', true))|tojson }};
   const formUid = {{ (form_uid|default('', true))|tojson }};
   if (formModal === 'create') {
+    const createErr = document.getElementById('pg-create-form-err');
+    if (createErr) createErr.dataset.keep = '1';
     const m = document.getElementById('modal-pg-user-create');
     if (m) {
       m.hidden = false;
@@ -402,6 +404,17 @@
       document.body.classList.add('modal-open');
     }
   }
+
+  document.addEventListener('click', function(e){
+    const createBtn = e.target.closest('[data-modal-open="modal-pg-user-create"]');
+    if (!createBtn) return;
+    const createErr = document.getElementById('pg-create-form-err');
+    if (createErr) {
+      delete createErr.dataset.keep;
+      createErr.hidden = true;
+      createErr.textContent = '';
+    }
+  });
 
   const linkUserEl = document.getElementById('pg-user-link-user');
   const linkStatusEl = document.getElementById('pg-user-link-status');

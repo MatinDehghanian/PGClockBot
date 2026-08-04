@@ -672,6 +672,54 @@ async def _pending_order_detail_lines(
     if note.startswith("reseller_app:"):
         kind = "درخواست نمایندگی"
         extras.append(kv_line("📝", "بابت", "پرداخت هزینه پلن نمایندگی"))
+        plan_name = "—"
+        try:
+            app_id = int(note.split(":", 1)[1])
+        except ValueError:
+            app_id = 0
+        if app_id:
+            from app.db.models import ResellerApplication, ResellerPlan
+            from app.services.resellers import (
+                format_reseller_plan_apply_detail,
+                reseller_billing_mode_label,
+                reseller_plan_mode_of,
+            )
+
+            app = await session.get(ResellerApplication, app_id)
+            rplan = (
+                await session.get(ResellerPlan, app.plan_id)
+                if app and app.plan_id
+                else None
+            )
+            if rplan is not None:
+                plan_name = rplan.name or "—"
+                extras.append(kv_line("💎", "پلن", plan_name))
+                extras.append(
+                    kv_line(
+                        "🏷",
+                        "نوع",
+                        reseller_billing_mode_label(reseller_plan_mode_of(rplan)),
+                    )
+                )
+                # PAYG / fixed detail lines (rate, groups, commission)
+                detail = format_reseller_plan_apply_detail(
+                    rplan, currency=get_settings().currency
+                )
+                for line in (detail or "").splitlines():
+                    raw = (line or "").strip()
+                    if not raw or raw.startswith("نوع:") or raw.startswith("قیمت ورود:"):
+                        continue
+                    # Strip simple HTML tags from detail for notify kv lines
+                    plain = (
+                        raw.replace("<b>", "")
+                        .replace("</b>", "")
+                        .replace("<code>", "")
+                        .replace("</code>", "")
+                    )
+                    if ":" in plain:
+                        label, _, val = plain.partition(":")
+                        extras.append(kv_line("•", label.strip(), val.strip() or "—"))
+                return kind, extras
         extras.append(kv_line("💎", "پلن", plan_name))
         return kind, extras
 

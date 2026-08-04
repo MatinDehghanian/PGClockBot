@@ -1032,14 +1032,40 @@ async def pay_wallet_cb(
     )
 
     if order.note and str(order.note).startswith("reseller_app:"):
+        from app.db.models import ResellerApplicationStatus
+        from app.services.resellers import format_credentials_message, get_application
+
+        creds = order.__dict__.get("_reseller_app_creds")
+        try:
+            app_id = int(str(order.note).split(":", 1)[1])
+        except Exception:
+            app_id = 0
+        app = await get_application(session, app_id) if app_id else None
+        approved = bool(
+            isinstance(creds, dict)
+            or (app and app.status == ResellerApplicationStatus.APPROVED.value)
+        )
         if callback.message:
-            await safe_edit_text(callback.message, 
-                format_message(
-                    "✅ پرداخت ثبت شد",
-                    "هزینه نمایندگی پرداخت شد.\nدرخواست شما برای تأیید ادمین ارسال شد.",
-                ),
-                reply_markup=None,
-            )
+            if isinstance(creds, dict):
+                body = format_credentials_message(creds)
+                await safe_edit_text(
+                    callback.message,
+                    body,
+                    reply_markup=None,
+                )
+            else:
+                await safe_edit_text(
+                    callback.message,
+                    format_message(
+                        "✅ پرداخت ثبت شد",
+                        (
+                            "نمایندگی شما فعال شد."
+                            if approved
+                            else "هزینه نمایندگی پرداخت شد.\nدرخواست شما برای تأیید ادمین ارسال شد."
+                        ),
+                    ),
+                    reply_markup=None,
+                )
             try:
                 await callback.message.answer(
                     "🏠 منوی اصلی",
@@ -1049,16 +1075,20 @@ async def pay_wallet_cb(
                 pass
         for aid in get_settings().admin_ids:
             try:
-                app_id = int(str(order.note).split(":", 1)[1])
-            except Exception:
-                app_id = 0
-            try:
-                await callback.bot.send_message(
-                    aid,
-                    f"🤝 درخواست نمایندگی پرداخت‌شده — سفارش #{order.id}\n"
-                    f"کاربر: {db_user.full_name or db_user.telegram_id}",
-                    reply_markup=kb.reseller_app_review(app_id) if app_id else None,
-                )
+                if approved:
+                    await callback.bot.send_message(
+                        aid,
+                        f"✅ نمایندگی فعال شد — سفارش #{order.id}\n"
+                        f"کاربر: {db_user.full_name or db_user.telegram_id}\n"
+                        f"(تأیید خودکار پس از پرداخت)",
+                    )
+                else:
+                    await callback.bot.send_message(
+                        aid,
+                        f"🤝 درخواست نمایندگی پرداخت‌شده — سفارش #{order.id}\n"
+                        f"کاربر: {db_user.full_name or db_user.telegram_id}",
+                        reply_markup=kb.reseller_app_review(app_id) if app_id else None,
+                    )
             except Exception:
                 pass
         return
