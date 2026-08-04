@@ -458,13 +458,13 @@ def _support_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
 
 
 def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
-    from app.services.resellers import has_bot_perm
+    from app.services.authz import shop_feature_allowed
 
     # Fail closed: without a live profile show nothing (matches reply_action_map)
     if profile is None:
         return []
     entries: list[tuple[str, str]] = []
-    if has_bot_perm(profile, "dashboard"):
+    if shop_feature_allowed(key="dashboard", profile=profile):
         entries.append(("res_dash", "🏠 خانه نماینده"))
         entries.append(("res_users", "👥 مشتریان من"))
     # PAYG billing wallet — only when mode is payg
@@ -475,17 +475,17 @@ def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
             entries.append(("res_billing", "💰 کیف پول"))
     except Exception:
         pass
-    if has_bot_perm(profile, "stats"):
+    if shop_feature_allowed(key="stats", profile=profile):
         entries.append(("res_stats", "📊 آمار و کمیسیون"))
-    if has_bot_perm(profile, "plans"):
+    if shop_feature_allowed(key="plans", profile=profile):
         entries.append(("res_plans", "💎 پلن‌های فروش"))
-    if has_bot_perm(profile, "orders"):
+    if shop_feature_allowed(key="orders", profile=profile):
         entries.append(("res_orders", "🛒 سفارش‌های مشتریان"))
-    if has_bot_perm(profile, "payments"):
+    if shop_feature_allowed(key="payments", profile=profile):
         entries.append(("res_payments", "🧾 رسیدهای در انتظار"))
-    if has_bot_perm(profile, "tickets"):
+    if shop_feature_allowed(key="tickets", profile=profile):
         entries.append(("res_tickets", "🎫 تیکت‌های مشتریان"))
-    if has_bot_perm(profile, "shop_settings"):
+    if shop_feature_allowed(key="shop_settings", profile=profile):
         entries.append(("res_settings", "⚙️ تنظیمات فروشگاه"))
     # Shop owner is admin of their bot — preview customer keyboard
     entries.append((REPLY_ACTION_RES_PREVIEW, "👁 پیش‌نمایش منوی کاربر"))
@@ -818,16 +818,16 @@ def reply_action_map(
             mapping.setdefault((text or "").strip(), key)
 
         if reseller_actor:
-            from app.services.resellers import has_bot_perm
+            from app.services.authz import shop_feature_allowed
 
             # Fail closed: without a live profile, register no reseller panel labels
             if profile is not None:
                 for key, text in _reseller_submenu_entries(profile):
                     mapping[(text or "").strip()] = key
-                if has_bot_perm(profile, "shop_settings"):
+                if shop_feature_allowed(key="shop_settings", profile=profile):
                     for key, text in _reseller_settings_submenu_entries(ui):
                         mapping[(text or "").strip()] = key
-                if has_bot_perm(profile, "plans"):
+                if shop_feature_allowed(key="plans", profile=profile):
                     for key, text in _reseller_plans_submenu_entries(ui):
                         mapping[(text or "").strip()] = key
 

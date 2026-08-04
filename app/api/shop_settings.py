@@ -195,15 +195,14 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
 
             ctx["support_contacts"] = await get_support_contacts(session, reseller_id=rid)
         elif tab == "notifications":
+            from app.services.authz import resolve_shop_permissions_from_profile
             from app.services.notifications import (
                 get_shop_notify_prefs,
                 shop_notify_catalog,
             )
-            from app.services.resellers import parse_perms, with_shop_settings
 
-            perms = with_shop_settings(
-                list(staff.get("permissions") or [])
-                or parse_perms(profile.web_permissions if profile else None)
+            perms = list(staff.get("permissions") or []) or list(
+                resolve_shop_permissions_from_profile(profile) or []
             )
             ctx["notify_items"] = shop_notify_catalog(perms)
             ctx["notify_prefs"] = await get_shop_notify_prefs(session, rid)
@@ -375,16 +374,15 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if not profile:
             return RedirectResponse("/logout", status_code=303)
 
+        from app.services.authz import resolve_shop_permissions_from_profile
         from app.services.notifications import (
             PLATFORM_ONLY_NOTIFY_KEYS,
             save_shop_notify_prefs,
             shop_notify_allowed_keys,
         )
-        from app.services.resellers import parse_perms, with_shop_settings
 
-        perms = with_shop_settings(
-            list(staff.get("permissions") or [])
-            or parse_perms(profile.web_permissions)
+        perms = list(staff.get("permissions") or []) or list(
+            resolve_shop_permissions_from_profile(profile) or []
         )
         allowed = shop_notify_allowed_keys(perms)
         # Belt-and-suspenders: never accept platform-only keys from the form

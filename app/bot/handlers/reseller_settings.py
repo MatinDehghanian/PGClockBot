@@ -381,11 +381,11 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
 
 
 async def _render_notify(callback: CallbackQuery, session: AsyncSession, reseller_id: int):
+    from app.services.authz import resolve_shop_permissions_from_profile
     from app.services.notifications import get_shop_notify_prefs, shop_notify_catalog
-    from app.services.resellers import parse_perms, with_shop_settings
 
     profile = await get_reseller_profile(session, reseller_id)
-    perms = with_shop_settings(parse_perms(profile.web_permissions if profile else None))
+    perms = list(resolve_shop_permissions_from_profile(profile) or [])
     catalog = shop_notify_catalog(perms)
     prefs = await get_shop_notify_prefs(session, reseller_id)
     rows: list[list[InlineKeyboardButton]] = []
@@ -667,17 +667,17 @@ async def settings_notify_toggle(
         await callback.answer(err, show_alert=True)
         return
     key = callback.data.split(":", 3)[-1]
+    from app.services.authz import resolve_shop_permissions_from_profile
     from app.services.notifications import (
         PLATFORM_ONLY_NOTIFY_KEYS,
         get_shop_notify_prefs,
         shop_notify_allowed_keys,
     )
-    from app.services.resellers import parse_perms, with_shop_settings
 
     if key in PLATFORM_ONLY_NOTIFY_KEYS or not key.startswith("notify_"):
         await callback.answer("این اعلان برای فروشگاه مجاز نیست", show_alert=True)
         return
-    perms = with_shop_settings(parse_perms(profile.web_permissions))
+    perms = list(resolve_shop_permissions_from_profile(profile) or [])
     if key not in shop_notify_allowed_keys(perms):
         await callback.answer("دسترسی این اعلان را ندارید", show_alert=True)
         return

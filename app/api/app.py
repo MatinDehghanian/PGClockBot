@@ -312,12 +312,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                 if not allowed:
                     raise NotAuthenticated(login_error=deny_msg)
             # Always re-read ACL from DB — never trust stale cookie permissions.
-            # Soft-ensure core shop keys even when the stored list is empty.
-            from app.services.resellers import DEFAULT_FEATURE_PERMS, with_shop_settings
+            # Must match Bot has_bot_perm / authz.resolve_shop_permissions_from_profile
+            # (empty string = intentional deny; None = DEFAULT).
+            from app.services.authz import resolve_shop_permissions_from_profile
 
             user = dict(user)
-            parsed = parse_perms(profile.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
-            user["permissions"] = with_shop_settings(parsed)
+            resolved = resolve_shop_permissions_from_profile(profile)
+            user["permissions"] = list(resolved or [])
             user["bot_user_id"] = int(bot_user_id)
             if profile.pg_admin_username:
                 user["pg_admin_username"] = profile.pg_admin_username
@@ -1042,10 +1043,10 @@ def create_api_app(lifespan=None) -> FastAPI:
 
                     role = "reseller"
                     display = profile.web_username or ru.full_name or str(ru.telegram_id)
-                    # Use DB permissions as-is — do not soft-upgrade ACL past admin intent
-                    permissions = parse_perms(profile.web_permissions) or parse_perms(
-                        DEFAULT_FEATURE_PERMS
-                    )
+                    # Same ACL resolution as Bot (empty = deny; None = DEFAULT)
+                    from app.services.authz import resolve_shop_permissions_from_profile
+
+                    permissions = list(resolve_shop_permissions_from_profile(profile) or [])
                     bot_user_id = ru.id
                     pg_admin_username = profile.pg_admin_username
                     pg_permissions, pg_role = await resolve_reseller_pg_features(profile.pg_role_id)

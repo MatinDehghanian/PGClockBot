@@ -119,25 +119,18 @@ def normalize_feature_perms(raw: str | None) -> str:
 
 
 def has_perm(profile: ResellerProfile | None, key: str, *, role: str | None = None) -> bool:
-    """Unified permission check for web + bot (delegates to authz decision layer)."""
-    from app.services.authz import (
-        authz_from_shop_perm_list,
-        can_shop,
-        resolve_shop_permissions_from_profile,
-    )
+    """Unified permission check for web + bot (authz decision layer)."""
+    from app.services.authz import shop_feature_allowed
 
-    if role == Role.ADMIN.value:
-        return can_shop(authz_from_shop_perm_list(None, role="admin"), key)
-    perms = resolve_shop_permissions_from_profile(profile)
-    if perms is None:
-        return False
-    return can_shop(authz_from_shop_perm_list(perms, role=role or Role.RESELLER.value), key)
+    return shop_feature_allowed(key=key, profile=profile, role=role)
 
 
-def has_bot_perm(profile: ResellerProfile | None, key: str) -> bool:
-    if key == "approve_receipts":
-        key = "payments"
-    return has_perm(profile, key)
+def has_bot_perm(profile: ResellerProfile | None, key: str, *, role: str | None = None) -> bool:
+    """Bot menu/action check — identical to web shop ACL (``web_permissions``).
+
+    ``bot_permissions`` is a mirrored DB column only; decisions never read it.
+    """
+    return has_perm(profile, key, role=role)
 
 
 def setup_is_complete(profile: ResellerProfile | None) -> bool:

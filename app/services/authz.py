@@ -180,6 +180,12 @@ def resolve_shop_permissions_from_profile(profile: Any) -> list[str] | None:
     Returns:
       None → profile missing/inactive (deny)
       list (possibly empty) → permission set to check
+
+    Rules (Web + Bot must match):
+      - ``web_permissions is None`` → DEFAULT + core shop keys
+      - ``web_permissions == ""`` / empty parse → intentional deny (``[]``)
+      - non-empty → parsed + core shop keys via ``with_shop_settings``
+    Source of truth is ``web_permissions`` (``bot_permissions`` is a mirrored column).
     """
     if not profile or not getattr(profile, "is_active", False):
         return None
@@ -194,3 +200,59 @@ def resolve_shop_permissions_from_profile(profile: Any) -> list[str] | None:
         return with_shop_settings(parse_perms(DEFAULT_FEATURE_PERMS))
     parsed = parse_perms(raw)
     return with_shop_settings(parsed) if parsed else parsed
+
+
+def authz_from_profile(profile: Any, *, role: str | None = None) -> AuthzContext:
+    """Build AuthzContext from a ResellerProfile (Bot + Web shop path)."""
+    if role == "admin":
+        return authz_from_shop_perm_list(None, role="admin")
+    perms = resolve_shop_permissions_from_profile(profile)
+    if perms is None:
+        return authz_from_shop_perm_list([], role=role or "reseller", active=False)
+    return authz_from_shop_perm_list(perms, role=role or "reseller", active=True)
+
+
+def shop_feature_allowed(
+    *,
+    key: str,
+    profile: Any = None,
+    staff: Mapping[str, Any] | None = None,
+    role: str | None = None,
+) -> bool:
+    """Single shop-feature decision for Web menus/API and Bot menus/actions.
+
+    Prefer ``staff`` (already resolved session) when available; else ``profile``.
+    """
+    if key == "approve_receipts":
+        key = "payments"
+    if staff is not None:
+        return can_shop(authz_from_staff(staff), key)
+    if role == "admin":
+        return can_shop(authz_from_shop_perm_list(None, role="admin"), key)
+    return can_shop(authz_from_profile(profile, role=role), key)
+
+
+def shop_menu_keys(
+    *,
+    profile: Any = None,
+    staff: Mapping[str, Any] | None = None,
+    role: str | None = None,
+) -> frozenset[str]:
+    """Feature keys visible in Web sidebar / Bot reseller hub (same set)."""
+    if staff is not None:
+        ctx = authz_from_staff(staff)
+        if is_platform_admin(ctx):
+            from app.services.resellers import FEATURE_PERMS
+
+            return frozenset(k for k, _ in FEATURE_PERMS)
+        return ctx.shop_permissions
+    if role == "admin":
+        from app.services.resellers import FEATURE_PERMS
+
+        return frozenset(k for k, _ in FEATURE_PERMS)
+    ctx = authz_from_profile(profile, role=role)
+    if is_platform_admin(ctx):
+        from app.services.resellers import FEATURE_PERMS
+
+        return frozenset(k for k, _ in FEATURE_PERMS)
+    return ctx.shop_permissions
