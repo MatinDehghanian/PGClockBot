@@ -19,13 +19,13 @@
       {% else %}
       <label>نام کاربری وب‌پنل
         
-        <input name="username" required minlength="3" maxlength="64" pattern="[A-Za-z0-9_\.\-]+" autocomplete="off" autofocus />
-        <small class="muted">حداقل ۳ کاراکتر انگلیسی</small>
+        <input name="username" required minlength="3" maxlength="128" pattern="[A-Za-z0-9\-_@.]+" autocomplete="off" autofocus />
+        <small class="muted">۳ تا ۱۲۸ کاراکتر؛ فقط a-z 0-9 و - _ @ . — قوانین پاسارگارد</small>
       </label>
       <label>رمز عبور
         
-        <input name="password" type="password" required autocomplete="new-password" />
-        <small class="muted">حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
+        <input name="password" type="password" required autocomplete="new-password" minlength="12" />
+        <small class="muted">طبق پاسارگارد: حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
       </label>
       <label>تکرار رمز
         <input name="password2" type="password" required autocomplete="new-password" />

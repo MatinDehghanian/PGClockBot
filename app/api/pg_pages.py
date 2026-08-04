@@ -1471,12 +1471,12 @@ def register_pg_pages(
         data_limit_gb = str(form.get("data_limit_gb") or "").strip()
         max_users = str(form.get("max_users") or "").strip()
         max_hwid = str(form.get("max_hwid_per_user") or "").strip()
-        from app.services.credential_policy import validate_password_strength
+        from app.services.credential_policy import validate_credentials
 
-        uname = username.strip()
-        ok, perr = validate_password_strength(password, username=uname)
-        if not ok:
-            return RedirectResponse(f"/pg/admins?err={_q(perr)}", status_code=303)
+        # Reject early with clear Persian causes (PasarGuard username+password rules)
+        uname, cerr = validate_credentials(username, password, lowercase_username=False)
+        if cerr:
+            return RedirectResponse(f"/pg/admins?err={_q(cerr)}", status_code=303)
         payload: dict = {
             "username": uname,
             "password": password,
@@ -1512,9 +1512,11 @@ def register_pg_pages(
                 try:
                     await get_pg().create_admin(payload)
                 except Exception as e2:
-                    return RedirectResponse(f"/pg/admins?err={_q(e2)}", status_code=303)
+                    return RedirectResponse(
+                        f"/pg/admins?err={_pg_err(e2)}", status_code=303
+                    )
             else:
-                return RedirectResponse(f"/pg/admins?err={_q(e)}", status_code=303)
+                return RedirectResponse(f"/pg/admins?err={_pg_err(e)}", status_code=303)
 
         msg = f"ادمین «{uname}» در پاسارگارد ساخته شد"
         if grant_web:

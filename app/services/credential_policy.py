@@ -1,9 +1,10 @@
 """Unified credential / password policy (Phase D1).
 
-Source of truth: PasarGuard ``PasswordValidator.validate_password``
+Source of truth: PasarGuard ``PasswordValidator`` / ``UserValidator``
 (``PasarGuard/panel`` ``app/models/validators.py``).
 
 Do not invent stricter rules beyond PasarGuard + our placeholder ban.
+On manual create/edit, reject early with clear Persian causes.
 """
 
 from __future__ import annotations
@@ -14,6 +15,113 @@ import re
 _PG_SPECIAL_RE = re.compile(r"[!@#$%^&*()\-_=+\[\]{}|;:,.<>?/~`]")
 _PG_SPECIAL_CHARS = "!@#$%^&*()-_=+[]{}|;:,.<>?/~`"
 
+# PasarGuard UserValidator.validate_username
+_PG_USERNAME_RE = re.compile(r"^[a-zA-Z0-9-_@.]+$")
+_PG_USERNAME_CONSEC_SPECIAL_RE = re.compile(r"[-_@.]{2,}")
+
+# English fragments from PasarGuard / pydantic validation → Persian cause
+_PG_API_MSG_MAP: list[tuple[re.Pattern[str], str]] = [
+    (
+        re.compile(r"Username only can be 3 to 128 characters\.?", re.I),
+        "طول نام کاربری باید ۳ تا ۱۲۸ کاراکتر باشد",
+    ),
+    (
+        re.compile(
+            r"Username can only contain alphanumeric characters, -, _, @, and \.?",
+            re.I,
+        ),
+        "نام کاربری فقط حروف انگلیسی، عدد و نمادهای - _ @ . را می‌پذیرد",
+    ),
+    (
+        re.compile(r"Username cannot have consecutive special characters\.?", re.I),
+        "نمادهای ویژه (- _ @ .) نباید پشت‌سرهم در نام کاربری بیایند",
+    ),
+    (
+        re.compile(r"Password too long: maximum 72 bytes when UTF-8 encoded\.?", re.I),
+        "رمز عبور حداکثر ۷۲ بایت (UTF-8) باشد",
+    ),
+    (
+        re.compile(r"Password must be at least 12 characters long\.?", re.I),
+        "رمز عبور باید حداقل ۱۲ کاراکتر باشد",
+    ),
+    (
+        re.compile(r"Password must contain at least 2 digits\.?", re.I),
+        "رمز عبور باید حداقل دو رقم داشته باشد",
+    ),
+    (
+        re.compile(r"Password must contain at least 2 uppercase letters\.?", re.I),
+        "رمز عبور باید حداقل دو حرف بزرگ انگلیسی داشته باشد",
+    ),
+    (
+        re.compile(r"Password must contain at least 2 lowercase letters\.?", re.I),
+        "رمز عبور باید حداقل دو حرف کوچک انگلیسی داشته باشد",
+    ),
+    (
+        re.compile(r"Password must contain at least one special character\.?", re.I),
+        "رمز عبور باید حداقل یک کاراکتر خاص مجاز داشته باشد",
+    ),
+    (
+        re.compile(r"Password cannot contain the username\.?", re.I),
+        "رمز عبور نباید شامل نام کاربری باشد",
+    ),
+    (
+        re.compile(
+            r'Password cannot contain the double quote \(?"?\)? character\.?',
+            re.I,
+        ),
+        'رمز عبور نباید شامل کاراکتر " باشد',
+    ),
+]
+
+
+def _format_issues(header: str, errors: list[str]) -> str:
+    if len(errors) == 1:
+        return f"{header} {errors[0]}"
+    numbered = " ".join(f"({i}) {e}" for i, e in enumerate(errors, 1))
+    return f"{header} {numbered}"
+
+
+def validate_pg_username(
+    username: str,
+    *,
+    lowercase: bool = False,
+) -> tuple[str, str | None]:
+    """Return ``(cleaned_username, persian_error_or_None)``.
+
+    Mirrors PasarGuard ``UserValidator.validate_username`` (len 3–128,
+    charset ``[a-zA-Z0-9-_@.]``, no consecutive specials).
+    """
+    u = (username or "").replace("\r", "").strip()
+    if lowercase:
+        u = u.lower()
+
+    errors: list[str] = []
+    if not u:
+        errors.append("نام کاربری الزامی است.")
+    else:
+        n = len(u)
+        if not (3 <= n <= 128):
+            errors.append(
+                f"طول باید بین ۳ تا ۱۲۸ کاراکتر باشد (الان {n} کاراکتر است)."
+            )
+        if not _PG_USERNAME_RE.fullmatch(u):
+            errors.append(
+                "فقط حروف انگلیسی، عدد و نمادهای - _ @ . مجاز است "
+                "(فاصله، فارسی، یا سایر نمادها قبول نیست)."
+            )
+        elif _PG_USERNAME_CONSEC_SPECIAL_RE.search(u):
+            errors.append(
+                "نمادهای ویژه (- _ @ .) نباید پشت‌سرهم بیایند "
+                "(مثلاً «a__b» یا «user..1» غیرمجاز است)."
+            )
+
+    if errors:
+        return u, _format_issues(
+            "نام کاربری با محدودیت‌های پاسارگارد هماهنگ نیست:",
+            errors,
+        )
+    return u, None
+
 
 def validate_password_strength(
     password: str,
@@ -23,7 +131,8 @@ def validate_password_strength(
     """Return ``(ok, persian_error)``. Empty error when ok.
 
     Mirrors PasarGuard admin password rules; optional username ban matches PG
-    ``check_username`` behavior.
+    ``check_username`` behavior. On failure, lists every violated rule so the
+    operator knows exactly what to fix.
     """
     from app.services.security_policy import is_placeholder_password
 
@@ -34,34 +143,95 @@ def validate_password_strength(
     errors: list[str] = []
     encoded_len = len(p.encode("utf-8"))
     if encoded_len > 72:
-        errors.append("رمز عبور حداکثر ۷۲ بایت باشد.")
+        errors.append(
+            f"حداکثر ۷۲ بایت UTF-8 مجاز است (الان {encoded_len} بایت)."
+        )
     if len(p) < 12:
-        errors.append("رمز عبور باید حداقل ۱۲ کاراکتر باشد.")
-    if len(re.findall(r"\d", p)) < 2:
-        errors.append("رمز عبور باید حداقل دو رقم داشته باشد.")
-    if len(re.findall(r"[A-Z]", p)) < 2:
-        errors.append("رمز عبور باید حداقل دو حرف بزرگ انگلیسی داشته باشد.")
-    if len(re.findall(r"[a-z]", p)) < 2:
-        errors.append("رمز عبور باید حداقل دو حرف کوچک انگلیسی داشته باشد.")
+        errors.append(f"حداقل ۱۲ کاراکتر لازم است (الان {len(p)} کاراکتر).")
+    digit_n = len(re.findall(r"\d", p))
+    if digit_n < 2:
+        errors.append(f"حداقل دو رقم لازم است (الان {digit_n} رقم).")
+    upper_n = len(re.findall(r"[A-Z]", p))
+    if upper_n < 2:
+        errors.append(
+            f"حداقل دو حرف بزرگ انگلیسی لازم است (الان {upper_n} حرف)."
+        )
+    lower_n = len(re.findall(r"[a-z]", p))
+    if lower_n < 2:
+        errors.append(
+            f"حداقل دو حرف کوچک انگلیسی لازم است (الان {lower_n} حرف)."
+        )
     if not _PG_SPECIAL_RE.search(p):
-        errors.append("رمز عبور باید حداقل یک کاراکتر خاص مجاز داشته باشد.")
+        errors.append(
+            "حداقل یک کاراکتر خاص از مجموعه "
+            f"{_PG_SPECIAL_CHARS} لازم است."
+        )
     if '"' in p:
-        errors.append('رمز عبور نباید شامل کاراکتر " باشد.')
+        errors.append('کاراکتر " در رمز مجاز نیست.')
     if username and username.strip() and username.strip().lower() in p.lower():
-        errors.append("رمز عبور نباید شامل نام کاربری باشد.")
+        errors.append("رمز نباید خودِ نام کاربری را داخل خود داشته باشد.")
     if is_placeholder_password(p):
-        errors.append("این رمز عبور نمونه/ضعیف است؛ رمز قوی‌تری انتخاب کنید.")
+        errors.append("این رمز نمونه/ضعیف است؛ رمز قوی‌تری انتخاب کنید.")
 
     if errors:
-        return False, errors[0]
+        return False, _format_issues(
+            "رمز عبور با محدودیت‌های پاسارگارد هماهنگ نیست:",
+            errors,
+        )
     return True, ""
+
+
+def validate_credentials(
+    username: str,
+    password: str,
+    *,
+    lowercase_username: bool = False,
+) -> tuple[str, str | None]:
+    """Validate username then password. Return ``(cleaned_username, error_or_None)``."""
+    cleaned, uerr = validate_pg_username(username, lowercase=lowercase_username)
+    if uerr:
+        return cleaned, uerr
+    ok, perr = validate_password_strength(password, username=cleaned)
+    if not ok:
+        return cleaned, perr
+    return cleaned, None
 
 
 def password_policy_hint_fa() -> str:
     """Short Persian hint for forms (matches PasarGuard rules)."""
     return (
         "حداقل ۱۲ کاراکتر، شامل حداقل دو رقم، دو حرف بزرگ، دو حرف کوچک "
-        "و یک کاراکتر خاص"
+        "و یک کاراکتر خاص (طبق قوانین پاسارگارد)"
+    )
+
+
+def username_policy_hint_fa() -> str:
+    """Short Persian hint for username fields (matches PasarGuard rules)."""
+    return (
+        "۳ تا ۱۲۸ کاراکتر؛ فقط حروف انگلیسی، عدد و - _ @ . "
+        "— بدون فاصله و بدون دو نماد پشت‌سرهم (قوانین پاسارگارد)"
+    )
+
+
+def humanize_pg_validation_error(text: str) -> str:
+    """Translate known PasarGuard English validation fragments to Persian causes."""
+    raw = (text or "").strip()
+    if not raw:
+        return raw
+    out = raw
+    changed = False
+    for pat, fa in _PG_API_MSG_MAP:
+        if pat.search(out):
+            out = pat.sub(fa, out)
+            changed = True
+    if not changed:
+        return raw
+    # Drop noisy pydantic prefixes when present
+    out = re.sub(r"(?i)\bvalue error,?\s*", "", out)
+    out = re.sub(r"\s+", " ", out).strip(" ;.")
+    return (
+        "پاسارگارد درخواست را رد کرد چون با محدودیت‌های نام کاربری/رمز "
+        f"هماهنگ نیست. علت: {out}"
     )
 
 

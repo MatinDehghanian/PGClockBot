@@ -171,19 +171,14 @@ def change_web_admin_password(new_password: str) -> None:
 
 
 def validate_web_username(username: str, *, lowercase: bool = False) -> tuple[str, str | None]:
-    """Return (cleaned_username, error_or_None)."""
-    import re
+    """Return (cleaned_username, error_or_None).
 
-    u = _clean_secret(username)
-    if lowercase:
-        u = u.lower()
-    if len(u) < 3:
-        return u, "نام کاربری حداقل ۳ کاراکتر باشد"
-    if len(u) > 64:
-        return u, "نام کاربری حداکثر ۶۴ کاراکتر باشد"
-    if not re.fullmatch(r"[A-Za-z0-9_]+", u):
-        return u, "فقط حروف انگلیسی، عدد و خط زیر (_)"
-    return u, None
+    Aligned with PasarGuard ``UserValidator.validate_username`` so web logins
+    that sync to PG admins never accept a username PG would reject.
+    """
+    from app.services.credential_policy import validate_pg_username
+
+    return validate_pg_username(_clean_secret(username), lowercase=lowercase)
 
 
 def repair_web_admin_from_env() -> dict[str, str]:
