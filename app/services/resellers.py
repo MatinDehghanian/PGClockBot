@@ -318,7 +318,7 @@ async def make_reseller(
     session: AsyncSession,
     user: BotUser,
     *,
-    commission_percent: int = 10,
+    commission_percent: int = 0,
     can_approve_receipts: bool = False,
     pg_admin_username: str | None = None,
     pg_admin_password_enc: str | None = None,
@@ -328,6 +328,7 @@ async def make_reseller(
     web_permissions: str | None = None,
     bot_permissions: str | None = None,
     plan_id: int | None = None,
+    billing_mode: str | None = None,
     issue_setup_token: bool = False,
 ) -> ResellerProfile:
     user.role = Role.RESELLER.value
@@ -340,10 +341,17 @@ async def make_reseller(
     if can_approve_receipts and "payments" not in parse_perms(perms):
         perms = join_perms(parse_perms(perms) + ["payments"])
     approve = "payments" in parse_perms(perms)
+    mode = (billing_mode or "").strip().lower()
+    if mode not in {"fixed", "payg"}:
+        mode = None
+    if mode == "payg":
+        commission_percent = 0
 
     if profile:
         profile.commission_percent = commission_percent
         profile.can_approve_receipts = approve
+        if mode:
+            profile.billing_mode = mode
         if pg_admin_username is not None:
             profile.pg_admin_username = pg_admin_username
         if pg_admin_password_enc is not None:
@@ -363,6 +371,7 @@ async def make_reseller(
             user_id=user.id,
             commission_percent=commission_percent,
             can_approve_receipts=approve,
+            billing_mode=mode or "fixed",
             pg_admin_username=pg_admin_username,
             pg_admin_password_enc=pg_admin_password_enc,
             pg_role_id=pg_role_id,
@@ -522,8 +531,13 @@ async def provision_reseller(
     commission = (
         commission_percent
         if commission_percent is not None
-        else (plan.commission_percent if plan else 10)
+        else (plan.commission_percent if plan else 0)
     )
+    plan_billing = str(getattr(plan, "billing_mode", None) or "fixed").strip().lower()
+    if plan_billing not in {"fixed", "payg"}:
+        plan_billing = "fixed"
+    if plan_billing == "payg":
+        commission = 0
     perms = normalize_feature_perms(
         web_permissions
         or bot_permissions
@@ -612,6 +626,7 @@ async def provision_reseller(
         web_permissions=perms,
         bot_permissions=perms,
         plan_id=plan.id if plan else None,
+        billing_mode=plan_billing,
         issue_setup_token=True,
     )
     profile.share_pg_panel_url = share_pg
@@ -1155,6 +1170,7 @@ async def provision_existing_pg_admin(
         web_permissions=perms,
         bot_permissions=perms,
         plan_id=int(plan.id),
+        billing_mode=str(getattr(plan, "billing_mode", None) or "fixed"),
         issue_setup_token=True,
     )
     if note:

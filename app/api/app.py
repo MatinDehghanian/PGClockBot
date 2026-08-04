@@ -1408,6 +1408,20 @@ def create_api_app(lifespan=None) -> FastAPI:
             for x in (values.get("custom_plan_group_ids") or "").split(",")
             if x.strip()
         }
+        reseller_plans = []
+        feature_perms = []
+        pg_roles = []
+        if is_platform_admin(staff):
+            from app.services.resellers import FEATURE_PERMS, list_reseller_plans
+
+            reseller_plans = await list_reseller_plans(session)
+            feature_perms = FEATURE_PERMS
+            try:
+                from app.services.pasarguard import get_pg
+
+                pg_roles = await get_pg().get_admin_roles()
+            except Exception:
+                pg_roles = []
         return render(
             request,
             "plans.html",
@@ -1423,6 +1437,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "pg_error": pg_error,
                 "can_create_template": staff.get("role") == "admin"
                 or bool((staff.get("pg_writes") or {}).get("templates")),
+                "is_platform_admin": is_platform_admin(staff),
+                "reseller_plans": reseller_plans,
+                "feature_perms": feature_perms,
+                "pg_roles": pg_roles,
                 "flash_err": request.query_params.get("err"),
                 "flash_ok": request.query_params.get("ok"),
             },
