@@ -128,7 +128,8 @@ def has_perm(profile: ResellerProfile | None, key: str, *, role: str | None = No
 def has_bot_perm(profile: ResellerProfile | None, key: str, *, role: str | None = None) -> bool:
     """Bot menu/action check — identical to web shop ACL (``web_permissions``).
 
-    ``bot_permissions`` is a mirrored DB column only; decisions never read it.
+    Phase D4 Q3: ``bot_permissions`` is a mirrored DB column only; decisions
+    never read it (keep writing both columns in sync).
     """
     return has_perm(profile, key, role=role)
 
@@ -929,6 +930,9 @@ def _synthetic_telegram_id(pg_username: str, *, salt: int = 0) -> int:
 
     Uses CRC32 for backward-compatible ids. Optional *salt* disambiguates rare
     collisions without reshuffling existing mappings (salt=0 preserves legacy).
+
+    Phase D4: these ids are internal — ``is_synthetic_telegram_id`` / notify
+    paths must not treat them as real Telegram users.
     """
     import hashlib
     import zlib

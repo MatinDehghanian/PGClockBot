@@ -41,7 +41,10 @@ def shop_owner_id(staff: dict | None) -> int | None:
 
 
 def is_platform_admin(staff: dict | None) -> bool:
-    return bool(staff and staff.get("role") == "admin")
+    """Web session platform admin — independent of Telegram ADMIN_IDS (D4)."""
+    from app.services.platform_identity import is_web_platform_admin
+
+    return is_web_platform_admin(staff)
 
 
 def require_shop_owner_id(staff: dict) -> int:

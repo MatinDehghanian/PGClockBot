@@ -65,6 +65,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    import os
+
     argv = list(sys.argv[1:] if argv is None else argv)
     parser = build_parser()
     try:
@@ -72,6 +74,9 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit as e:
         return int(e.code or 0)
 
+    # build_context chdirs into the install root; always restore caller cwd
+    # (keeps pytest source-guard suites and nested CLI invocations sane).
+    prev_cwd = os.getcwd()
     try:
         from app.cli.context import build_context
 
@@ -145,6 +150,11 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as e:
         err(f"Unexpected error: {e}")
         return 1
+    finally:
+        try:
+            os.chdir(prev_cwd)
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":

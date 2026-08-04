@@ -1,18 +1,21 @@
-"""Shared bot authorization helpers (Phase C4 — aligned with Web authz)."""
+"""Shared bot authorization helpers (Phase C4 / D4 — aligned with Web authz)."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from app.config import get_settings
-from app.db.models import BotUser, Role
+from app.db.models import BotUser
 
 
 def is_platform_admin(user: BotUser | None) -> bool:
-    """True when the Telegram user is a platform admin (role or ADMIN_IDS)."""
-    if user is None:
-        return False
-    return user.role == Role.ADMIN.value or user.telegram_id in get_settings().admin_ids
+    """True when the Telegram user is a platform admin (role or ADMIN_IDS).
+
+    Independent of Web ``web_admin.json`` (Phase D4). See
+    ``app.services.platform_identity`` and ``docs/PHASE_D4_IDENTITY_MATRIX.md``.
+    """
+    from app.services.platform_identity import is_bot_platform_admin
+
+    return is_bot_platform_admin(user)
 
 
 def can_shop_feature(

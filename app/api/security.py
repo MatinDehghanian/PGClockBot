@@ -54,12 +54,15 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
         request: Request,
         staff: dict = Depends(require_staff),
     ):
+        from app.services.platform_identity import identity_help_fa
+
         return render(
             request,
             "security.html",
             {
                 "staff": staff,
                 "current_username": staff.get("username") or "",
+                "identity_help": identity_help_fa(staff.get("role")),
                 "ok": request.query_params.get("ok"),
                 "err": request.query_params.get("err"),
             },

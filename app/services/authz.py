@@ -1,13 +1,18 @@
-"""Unified authorization decision layer (Phase C0).
+"""Unified authorization decision layer (Phase C0 / D4).
 
 Web, Bot, and API must ask the same allow/deny questions here.
-C0 is behavior-preserving: outcomes match the previous inline checks.
+Shop feature keys use ``web_permissions`` (``bot_permissions`` is a mirrored
+column only — never read for decisions).
 
 This module does **not**:
 - select PasarGuard clients
 - enforce quotas / limits
-- change Owner vs platform-admin identity (both remain role==\"admin\")
+- merge Web Owner (``web_admin.json``) with Bot ``ADMIN_IDS`` (D4 Q1 deferred;
+  both remain session/bot ``role==\"admin\"`` / platform-admin bypass)
+- invent Bot PG access for reseller/pg_staff (D4 Q2 — Web remains SoT)
 - perform I/O (role fetch stays in require_staff / pg_access)
+
+See ``docs/PHASE_D4_IDENTITY_MATRIX.md`` and ``app.services.platform_identity``.
 """
 
 from __future__ import annotations
@@ -46,8 +51,9 @@ class AuthzContext:
 def principal_kind_from_role(role: str | None) -> PrincipalKind:
     """Map session/bot role string → PrincipalKind.
 
-    C0: Owner is not distinguishable from platform admin at session level.
-    Both use role ``admin`` and receive full allow (same as before).
+    D4 Q1: Owner is still not distinguishable from platform admin at session
+    level (``PrincipalKind.OWNER`` reserved; unused for ACL). Both use role
+    ``admin`` and receive full allow (same as before).
     """
     r = (role or "").strip()
     if r == "admin":

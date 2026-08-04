@@ -323,26 +323,23 @@ Single module (conceptual name: `credential_policy`):
 
 ### D4 — Web/Bot identity consistency
 
-**Problems:** P5.
+**Status:** Implemented — see **`docs/PHASE_D4_IDENTITY_CONSISTENCY.md`** and **`docs/PHASE_D4_IDENTITY_MATRIX.md`**.  
+**Decisions:** Q1 A · Q2 A · Q3 A · Q4 A · Q5 A/B.
 
-**Design:**
+**Problems:** P5 (cross-channel identity); Owner↔Bot credential independence; pg_staff web-only; synthetic Telegram IDs; menu/ACL documentation.
 
-1. Document principal↔channel matrix in-product (help text).  
-2. Keep pg_staff web-only unless Bot PG feature approved.  
-3. If Bot PG later: reuse `AuthzContext` + `get_pg_for_staff` / `get_pg_for_reseller` — never Owner token.  
-4. Optional: distinguish Owner in session (`is_owner` / env username match) without breaking cookies.  
-5. Avoid treating synthetic negative telegram IDs as real users in UX.  
-6. C4 shop parity must remain green.
+**Design (delivered):**
 
-**Migration risks:** Session Owner/Admin split can lock shared-admin installs; Bot PG expands attack surface.
+1. Document principal↔channel matrix + `/security` help (Q4).  
+2. Keep pg_staff **web-only**; Bot PG remains platform-admin only (Q2).  
+3. Thin `platform_identity` helper + contract tests (Q5); no session `is_owner` (Q1).  
+4. Keep `bot_permissions` mirror; reads stay on `web_permissions` (Q3).  
+5. Synthetic telegram IDs labeled/skipped in notify path.  
+6. C4 shop parity remains green; no Owner fallback.
 
-**Tests required:**
+**Migration risks:** Ops must still configure Web Owner and Bot `ADMIN_IDS` separately.
 
-- C4 Bot/Web shop parity unchanged.  
-- pg_staff never receives shop bot ACL.  
-- Platform bot tools still `ADMIN_IDS` / `Role.ADMIN`.  
-- Restricted principals never use Owner PG client.  
-- Optional Owner flag tests if implemented.
+**Tests:** `tests/test_phase_d4_identity_consistency.py` + C0–C5 / D1–D3 regression.
 
 ---
 
