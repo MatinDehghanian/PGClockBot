@@ -38,13 +38,37 @@ class StaffPgReadClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(client, fake)
         m.assert_awaited_once_with(session, 9)
 
-    async def test_pg_staff_denied_no_owner_token(self):
-        with self.assertRaises(PgReadDenied) as ctx:
-            await staff_pg_read_client(
+    async def test_pg_staff_denied_without_credentials(self):
+        from app.services.pasarguard import PasarGuardError
+
+        with patch(
+            "app.services.pg_read.get_pg_for_staff",
+            new=AsyncMock(side_effect=PasarGuardError("رمز ذخیره نشده")),
+        ):
+            with self.assertRaises(PgReadDenied) as ctx:
+                await staff_pg_read_client(
+                    MagicMock(),
+                    {"role": "pg_staff", "pg_admin_username": "staff1"},
+                )
+        self.assertIn("رمز", ctx.exception.message)
+
+    async def test_pg_staff_with_credentials_uses_staff_client(self):
+        fake = object()
+        with patch(
+            "app.services.pg_read.get_pg_for_staff",
+            new=AsyncMock(return_value=fake),
+        ) as m:
+            client = await staff_pg_read_client(
                 MagicMock(),
-                {"role": "pg_staff", "pg_admin_username": "staff1"},
+                {
+                    "role": "pg_staff",
+                    "pg_admin_username": "staff1",
+                    "pg_staff_id": 4,
+                    "pg_credentials_ready": True,
+                },
             )
-        self.assertIn("خواندن امن", ctx.exception.message)
+        self.assertIs(client, fake)
+        m.assert_awaited_once()
 
     async def test_reseller_without_shop_denied(self):
         with self.assertRaises(PgReadDenied):
@@ -67,13 +91,26 @@ class MenuDataAlignmentTests(unittest.TestCase):
             ["pg_overview", "pg_users", "pg_hosts"],
         )
 
-    def test_pg_staff_menu_overview_only(self):
+    def test_pg_staff_menu_overview_only_without_credentials(self):
         staff = {
             "role": "pg_staff",
+            "pg_credentials_ready": False,
             "pg_permissions": ["pg_overview", "pg_users", "pg_hosts", "pg_nodes"],
         }
         self.assertFalse(staff_has_own_pg_read(staff))
         self.assertEqual(effective_pg_menu_keys(staff), ["pg_overview"])
+
+    def test_pg_staff_menu_full_with_credentials(self):
+        staff = {
+            "role": "pg_staff",
+            "pg_credentials_ready": True,
+            "pg_permissions": ["pg_overview", "pg_users", "pg_hosts", "pg_nodes"],
+        }
+        self.assertTrue(staff_has_own_pg_read(staff))
+        self.assertEqual(
+            effective_pg_menu_keys(staff),
+            ["pg_overview", "pg_users", "pg_hosts", "pg_nodes"],
+        )
 
 
 class FilterFailClosedTests(unittest.TestCase):

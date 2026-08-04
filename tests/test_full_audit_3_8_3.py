@@ -38,12 +38,18 @@ class SafeFormatTests(unittest.TestCase):
 
 class PgStaffClientTests(unittest.IsolatedAsyncioTestCase):
     async def test_staff_pg_denies_pg_staff_owner_fallback(self):
-        """C2: pg_staff must not mutate via owner token until C5 credentials."""
+        """C2/C5: pg_staff must never mutate via owner token."""
         from app.api.pg_pages import _staff_pg
         from app.services.pasarguard import PasarGuardError
 
         staff = {"role": "pg_staff", "pg_admin_username": "staff1"}
-        with patch("app.api.pg_pages.get_pg", return_value=MagicMock(name="owner")) as gp:
+        with (
+            patch("app.api.pg_pages.get_pg", return_value=MagicMock(name="owner")) as gp,
+            patch(
+                "app.services.pasarguard.get_pg_for_staff",
+                new=AsyncMock(side_effect=PasarGuardError("رمز ذخیره نشده")),
+            ),
+        ):
             with self.assertRaises(PasarGuardError):
                 await _staff_pg(AsyncMock(), staff)
         gp.assert_not_called()
@@ -66,8 +72,12 @@ class PgStaffClientTests(unittest.IsolatedAsyncioTestCase):
         from app.api.pg_pages import _staff_pg
         from app.services.pasarguard import PasarGuardError
 
-        with self.assertRaises(PasarGuardError):
-            await _staff_pg(AsyncMock(), {"role": "pg_staff", "pg_admin_username": ""})
+        with patch(
+            "app.services.pasarguard.get_pg_for_staff",
+            new=AsyncMock(side_effect=PasarGuardError("دسترسی ادمین پاسارگارد فعال نیست")),
+        ):
+            with self.assertRaises(PasarGuardError):
+                await _staff_pg(AsyncMock(), {"role": "pg_staff", "pg_admin_username": ""})
 
 
 class AssertOwnedUserCredentialTests(unittest.IsolatedAsyncioTestCase):
@@ -92,15 +102,22 @@ class AssertOwnedUserCredentialTests(unittest.IsolatedAsyncioTestCase):
         owner_pg.get_user_by_id.assert_not_awaited()
 
     async def test_pg_staff_no_owner_token_probe(self):
-        """C2: pg_staff ownership checks must not use owner get_user_by_id."""
+        """C2/C5: pg_staff ownership checks must not use owner get_user_by_id."""
         from app.api.pg_pages import _assert_owned_user
+        from app.services.pasarguard import PasarGuardError
 
         staff = {"role": "pg_staff", "pg_admin_username": "staff1"}
         owner_pg = AsyncMock()
         owner_pg.get_user_by_id = AsyncMock(
             return_value={"id": 5, "admin": {"username": "staff1"}}
         )
-        with patch("app.api.pg_pages.get_pg", return_value=owner_pg):
+        with (
+            patch("app.api.pg_pages.get_pg", return_value=owner_pg),
+            patch(
+                "app.services.pasarguard.get_pg_for_staff",
+                new=AsyncMock(side_effect=PasarGuardError("no creds")),
+            ),
+        ):
             info = await _assert_owned_user(staff, 5, session=AsyncMock())
         self.assertIsNone(info)
         owner_pg.get_user_by_id.assert_not_awaited()

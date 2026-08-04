@@ -474,10 +474,24 @@ async def grant_web_access(
     if taken:
         return None, taken
 
+    from app.services.pasarguard import get_pg, reset_pg
+    from app.services.secret_box import encrypt_secret
+
+    # Store the same password for web hash + PG login (reseller pattern).
+    # Sync to PasarGuard so the staff token works; never use owner client for staff ops.
+    try:
+        await get_pg().modify_admin(pg_u, {"password": password})
+        reset_pg()
+    except Exception as e:
+        return None, f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}"
+
+    role_id = await resolve_pg_role_id_for_admin(pg_u)
     row = PgStaffAccess(
         pg_username=pg_u,
         web_username=cleaned,
         web_password_hash=hash_password(password),
+        pg_admin_password_enc=encrypt_secret(password),
+        pg_role_id=int(role_id) if role_id else None,
         is_active=bool(is_active),
         note=(note or "").strip() or None,
     )
@@ -510,10 +524,8 @@ async def update_web_access(
             "از بخش نمایندگان مدیریت کنید یا اتصال نماینده را بردارید."
         )
 
-    if not (password or "").strip():
-        # Keep existing password on edit
-        pass
-    else:
+    pwd = (password or "").strip()
+    if pwd:
         ok, err = validate_password_strength(password)
         if not ok:
             return None, err
@@ -525,12 +537,25 @@ async def update_web_access(
         return None, taken
 
     existing.web_username = cleaned
-    if (password or "").strip():
-        existing.web_password_hash = hash_password(password)
+    if pwd:
+        from app.services.pasarguard import get_pg, reset_pg
+        from app.services.secret_box import encrypt_secret
+
+        try:
+            await get_pg().modify_admin(pg_u, {"password": pwd})
+            reset_pg()
+        except Exception as e:
+            return None, f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}"
+        existing.web_password_hash = hash_password(pwd)
+        existing.pg_admin_password_enc = encrypt_secret(pwd)
     if is_active is not None:
         existing.is_active = bool(is_active)
     if note is not None:
         existing.note = (note or "").strip() or None
+    # Refresh cached role id when possible
+    role_id = await resolve_pg_role_id_for_admin(pg_u)
+    if role_id:
+        existing.pg_role_id = int(role_id)
     await session.commit()
     await session.refresh(existing)
     return existing, None
@@ -566,12 +591,27 @@ async def upsert_web_access(
     )
 
 
+def staff_has_stored_pg_password(row: PgStaffAccess | None) -> bool:
+    """True when encrypted PasarGuard password decrypts to a non-empty secret."""
+    if row is None:
+        return False
+    from app.services.secret_box import decrypt_secret
+
+    return bool(decrypt_secret(getattr(row, "pg_admin_password_enc", None)))
+
+
 async def revoke_web_access(session: AsyncSession, pg_username: str) -> bool:
     row = await access_by_pg_username(session, pg_username)
     if not row:
         return False
     await session.delete(row)
     await session.commit()
+    try:
+        from app.services.pasarguard import reset_pg
+
+        reset_pg()
+    except Exception:
+        pass
     return True
 
 
@@ -612,6 +652,15 @@ async def change_staff_credentials(
         return None, taken
     row.web_username = cleaned
     row.web_password_hash = hash_password(new_password)
+    from app.services.pasarguard import get_pg, reset_pg
+    from app.services.secret_box import encrypt_secret
+
+    try:
+        await get_pg().modify_admin(row.pg_username, {"password": new_password})
+        reset_pg()
+    except Exception as e:
+        return None, f"همگام‌سازی رمز با پاسارگارد ناموفق بود: {e}"
+    row.pg_admin_password_enc = encrypt_secret(new_password)
     await session.commit()
     await session.refresh(row)
     return row, None

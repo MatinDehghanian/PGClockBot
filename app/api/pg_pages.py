@@ -38,19 +38,25 @@ def _q(msg: str) -> str:
 
 
 async def _staff_pg(session: AsyncSession, staff: dict):
-    """Return (client, as_owner) for mutations (Phase C2).
+    """Return (client, as_owner) for mutations (Phase C2 + C5).
 
     - Platform admin → owner credentials (as_owner=True)
-    - Reseller → shop PG admin credentials (as_owner=False; ownership implicit)
-    - pg_staff / others → **fail closed** (no owner-token mutations until C5 credentials)
-
-    Does not select clients for list/GET — those use ``staff_pg_read_client`` (C1).
+    - Reseller → shop PG admin credentials (as_owner=False)
+    - pg_staff → own PG credentials when stored (as_owner=False); else fail closed
     """
     if is_platform_admin(staff):
         return get_pg(), True
     rid = shop_owner_id(staff)
     if rid:
         return await get_pg_for_reseller(session, int(rid)), False
+    if staff.get("role") == "pg_staff":
+        from app.services.pasarguard import get_pg_for_staff
+
+        return await get_pg_for_staff(
+            session,
+            pg_username=staff.get("pg_admin_username"),
+            staff_id=staff.get("pg_staff_id"),
+        ), False
     raise PasarGuardError(
         "عملیات نوشتن پاسارگارد بدون اعتبارنامه اختصاصی مجاز نیست "
         "(ادمین فرعی تا همگام‌سازی اعتبارنامه نمی‌تواند mutate کند)"
@@ -62,8 +68,7 @@ async def _assert_owned_user(
 ) -> dict | None:
     """Fetch a PG user only when the staff principal is allowed to see/mutate it.
 
-    Resellers authenticate as themselves (no owner-token probe).
-    pg_staff without own credentials: fail closed (C2) — no owner-token read.
+    Resellers and credentialed pg_staff authenticate as themselves (no owner-token probe).
     """
     if _is_admin(staff):
         info = await get_pg().get_user_by_id(user_id)
@@ -78,7 +83,20 @@ async def _assert_owned_user(
             return None
         return info if isinstance(info, dict) else None
 
-    # C2: no owner-token fallback for pg_staff / broken sessions
+    if staff.get("role") == "pg_staff" and session is not None:
+        try:
+            from app.services.pasarguard import get_pg_for_staff
+
+            pg = await get_pg_for_staff(
+                session,
+                pg_username=staff.get("pg_admin_username"),
+                staff_id=staff.get("pg_staff_id"),
+            )
+            info = await pg.get_user_by_id(user_id)
+        except Exception:
+            return None
+        return info if isinstance(info, dict) else None
+
     return None
 
 

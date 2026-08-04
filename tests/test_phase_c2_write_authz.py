@@ -34,26 +34,63 @@ class StaffPgWriteClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(as_owner)
         self.assertIs(client, fake)
 
-    async def test_pg_staff_fail_closed(self):
+    async def test_pg_staff_fail_closed_without_credentials(self):
         from app.api.pg_pages import _staff_pg
 
-        with patch("app.api.pg_pages.get_pg") as gp:
+        with (
+            patch("app.api.pg_pages.get_pg") as gp,
+            patch(
+                "app.services.pasarguard.get_pg_for_staff",
+                new=AsyncMock(
+                    side_effect=PasarGuardError("رمز پاسارگارد برای این حساب ذخیره نشده")
+                ),
+            ),
+        ):
             with self.assertRaises(PasarGuardError) as ctx:
                 await _staff_pg(
                     AsyncMock(),
                     {"role": "pg_staff", "pg_admin_username": "s1"},
                 )
         gp.assert_not_called()
-        self.assertIn("اعتبارنامه", str(ctx.exception))
+        self.assertIn("ذخیره نشده", str(ctx.exception))
+
+    async def test_pg_staff_uses_own_client_when_credentialed(self):
+        from app.api.pg_pages import _staff_pg
+
+        fake = MagicMock()
+        with (
+            patch("app.api.pg_pages.get_pg") as gp,
+            patch(
+                "app.services.pasarguard.get_pg_for_staff",
+                new=AsyncMock(return_value=fake),
+            ),
+        ):
+            client, as_owner = await _staff_pg(
+                AsyncMock(),
+                {
+                    "role": "pg_staff",
+                    "pg_admin_username": "s1",
+                    "pg_staff_id": 2,
+                },
+            )
+        self.assertFalse(as_owner)
+        self.assertIs(client, fake)
+        gp.assert_not_called()
 
 
 class AssertOwnedUserWritePreludeTests(unittest.IsolatedAsyncioTestCase):
-    async def test_pg_staff_returns_none_without_owner_probe(self):
+    async def test_pg_staff_returns_none_without_credentials(self):
         from app.api.pg_pages import _assert_owned_user
 
         owner = AsyncMock()
         owner.get_user_by_id = AsyncMock(return_value={"id": 1, "admin": "s1"})
-        with patch("app.api.pg_pages.get_pg", return_value=owner):
+        with (
+            patch("app.api.pg_pages.get_pg", return_value=owner),
+            patch(
+                "app.services.pasarguard.get_pg_for_staff",
+                new=AsyncMock(side_effect=PasarGuardError("no creds")),
+            ),
+        ):
             out = await _assert_owned_user(
                 {"role": "pg_staff", "pg_admin_username": "s1"},
                 1,
@@ -81,8 +118,8 @@ class ExactActionSourceGuards(unittest.TestCase):
         self.assertIn("بدون اعتبارنامه اختصاصی", fn)
         # Only platform-admin branch may return owner client
         self.assertEqual(fn.count("return get_pg(), True"), 1)
-        self.assertIn("raise PasarGuardError", fn)
-        self.assertNotIn('staff.get("role") == "pg_staff"', fn)
+        self.assertIn("get_pg_for_staff", fn)
+        self.assertIn('staff.get("role") == "pg_staff"', fn)
 
 
 if __name__ == "__main__":

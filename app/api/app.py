@@ -335,6 +335,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 access_by_web_username,
                 enforce_pg_admin_web_gate,
                 resolve_pg_role_id_for_admin,
+                staff_has_stored_pg_password,
             )
 
             web_u = (user.get("username") or "").strip().lower()
@@ -354,6 +355,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             user["permissions"] = []
             user["pg_admin_username"] = row.pg_username
             user["pg_staff_id"] = int(row.id)
+            # Phase C5: advertise stored PG password so menus/reads match client selection
+            user["pg_credentials_ready"] = staff_has_stored_pg_password(row)
+            # Prefer cached role id; refresh live when PasarGuard is reachable
+            if row.pg_role_id:
+                user["pg_role_id"] = int(row.pg_role_id)
             role_id = await resolve_pg_role_id_for_admin(row.pg_username)
             if role_id:
                 user["pg_role_id"] = int(role_id)
@@ -972,6 +978,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         bot_user_id = None
         pg_role_id = None
         reseller_pv = ""
+        pg_credentials_ready = False
+        pg_staff_id = None
 
         if verify_web_admin(u, p):
             role = "admin"
@@ -983,6 +991,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 access_by_web_username,
                 enforce_pg_admin_web_gate,
                 resolve_pg_role_id_for_admin,
+                staff_has_stored_pg_password,
             )
 
             result = await session.execute(
@@ -1104,7 +1113,15 @@ def create_api_app(lifespan=None) -> FastAPI:
                     display = staff_row.web_username
                     permissions = []
                     pg_admin_username = staff_row.pg_username
-                    pg_role_id = await resolve_pg_role_id_for_admin(staff_row.pg_username)
+                    pg_credentials_ready = staff_has_stored_pg_password(staff_row)
+                    pg_staff_id = int(staff_row.id)
+                    # Prefer stored role; refresh live when reachable
+                    pg_role_id = (
+                        int(staff_row.pg_role_id) if staff_row.pg_role_id else None
+                    )
+                    live_role = await resolve_pg_role_id_for_admin(staff_row.pg_username)
+                    if live_role:
+                        pg_role_id = live_role
                     pg_permissions, pg_role = await resolve_reseller_pg_features(pg_role_id)
                     pg_user_actions = role_user_actions(pg_role)
                     pg_access = role_access_limits(pg_role)
@@ -1158,6 +1175,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 payload["pg_role_id"] = int(pg_role_id)
             if reseller_pv:
                 payload["pv"] = reseller_pv
+        if role == "pg_staff":
+            payload["pg_credentials_ready"] = bool(pg_credentials_ready)
+            if pg_staff_id is not None:
+                payload["pg_staff_id"] = int(pg_staff_id)
         home = "/home" if role == "admin" else "/home"
         if role == "pg_staff":
             home = "/pg"

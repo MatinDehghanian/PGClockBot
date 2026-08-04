@@ -172,6 +172,17 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
                 sql_text("ALTER TABLE reseller_plans ADD COLUMN share_pg_panel_url BOOLEAN DEFAULT 0")
             )
 
+    if insp.has_table("pg_staff_access"):
+        scols = {c["name"] for c in insp.get_columns("pg_staff_access")}
+        if "pg_admin_password_enc" not in scols:
+            sync_conn.execute(
+                sql_text("ALTER TABLE pg_staff_access ADD COLUMN pg_admin_password_enc TEXT")
+            )
+        if "pg_role_id" not in scols:
+            sync_conn.execute(
+                sql_text("ALTER TABLE pg_staff_access ADD COLUMN pg_role_id INTEGER")
+            )
+
     if insp.has_table("panel_tickets"):
         tcols = {c["name"] for c in insp.get_columns("panel_tickets")}
         if "owner_unread" not in tcols:

@@ -563,6 +563,7 @@ def as_list(data: Any, *keys: str) -> list[dict]:
 
 _pg: Optional[PasarGuardClient] = None
 _pg_reseller_cache: dict[int, PasarGuardClient] = {}
+_pg_staff_cache: dict[str, PasarGuardClient] = {}
 
 
 def get_pg() -> PasarGuardClient:
@@ -575,9 +576,10 @@ def get_pg() -> PasarGuardClient:
 
 def reset_pg() -> None:
     """Drop cached clients (after PG_BASE_URL / credentials change)."""
-    global _pg, _pg_reseller_cache
+    global _pg, _pg_reseller_cache, _pg_staff_cache
     _pg = None
     _pg_reseller_cache = {}
+    _pg_staff_cache = {}
 
 
 async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClient:
@@ -614,6 +616,46 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
     )
     await client.ensure_token()
     _pg_reseller_cache[rid] = client
+    return client
+
+
+async def get_pg_for_staff(
+    session, *, pg_username: str | None = None, staff_id: int | None = None
+) -> PasarGuardClient:
+    """PasarGuard client for a pg_staff row — never owner token (Phase C5).
+
+    Requires ``PgStaffAccess.pg_admin_password_enc``.
+    """
+    from sqlalchemy import select
+
+    from app.db.models import PgStaffAccess
+    from app.services.secret_box import decrypt_secret
+
+    row: PgStaffAccess | None = None
+    if staff_id is not None:
+        row = await session.get(PgStaffAccess, int(staff_id))
+    elif pg_username:
+        uname = str(pg_username).strip()
+        row = (
+            await session.execute(
+                select(PgStaffAccess).where(PgStaffAccess.pg_username == uname)
+            )
+        ).scalar_one_or_none()
+    if not row or not row.is_active:
+        raise PasarGuardError("دسترسی ادمین پاسارگارد فعال نیست")
+    cache_key = (row.pg_username or "").strip().lower()
+    cached = _pg_staff_cache.get(cache_key)
+    if cached is not None and cached._token:
+        return cached
+    password = decrypt_secret(row.pg_admin_password_enc)
+    if not password:
+        raise PasarGuardError(
+            "رمز پاسارگارد برای این حساب ذخیره نشده — "
+            "مالک باید دسترسی وب را با رمز پاسارگارد دوباره اعطا/ویرایش کند"
+        )
+    client = PasarGuardClient(username=row.pg_username, password=password)
+    await client.ensure_token()
+    _pg_staff_cache[cache_key] = client
     return client
 
 
