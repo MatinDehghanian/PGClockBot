@@ -1,6 +1,6 @@
 #!/bin/bash
-# Privileged control helper for PGClockBot panel.
-# Only fixed, validated operations — never expose raw certbot/systemctl args.
+# Privileged control helper for PGClockBot panel / global CLI.
+# Only fixed, validated operations — never expose raw systemctl args beyond allowlist.
 set -euo pipefail
 SERVICE_NAME="pgclockbot"
 cmd="${1:-}"
@@ -16,14 +16,29 @@ _valid_email() {
 }
 
 case "$cmd" in
+  start)
+    /bin/systemctl start "$SERVICE_NAME"
+    ;;
+  stop)
+    /bin/systemctl stop "$SERVICE_NAME"
+    ;;
   restart)
     /bin/systemctl restart "$SERVICE_NAME"
     ;;
   try-restart)
     /bin/systemctl try-restart "$SERVICE_NAME"
     ;;
+  enable)
+    /bin/systemctl enable "$SERVICE_NAME"
+    ;;
+  disable)
+    /bin/systemctl disable "$SERVICE_NAME"
+    ;;
   is-active)
     /bin/systemctl is-active "$SERVICE_NAME"
+    ;;
+  status)
+    /bin/systemctl status "$SERVICE_NAME" --no-pager
     ;;
   certbot-certonly)
     # Usage: certbot-certonly <domain> <email> <webroot> [--force]
@@ -52,7 +67,7 @@ case "$cmd" in
     esac
     if [[ ! -d "$webroot" ]]; then
       echo "webroot missing" >&2
-      exit 2
+      exit 1
     fi
     certbot_bin=""
     if [[ -x /usr/bin/certbot ]]; then
@@ -79,7 +94,7 @@ case "$cmd" in
     exec "$certbot_bin" "${args[@]}"
     ;;
   *)
-    echo "usage: pgclockbot-ctl restart|try-restart|is-active|certbot-certonly" >&2
+    echo "usage: pgclockbot-ctl start|stop|restart|try-restart|enable|disable|is-active|status|certbot-certonly" >&2
     exit 2
     ;;
 esac

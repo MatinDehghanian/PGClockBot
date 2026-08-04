@@ -180,6 +180,17 @@ Existing SQLite installs: run Phase 0 baseline, then migrate (see `docs/PHASE_A_
 
 Installer hint: export `PGCLOCK_DATABASE_URL` before `bash pgclock.sh install` to write PostgreSQL into `.env`.
 
+### Global CLI
+
+```bash
+sudo bash scripts/install_global_cli.sh
+pgclock status
+pgclock doctor
+pgclock backup
+```
+
+See `docs/PHASE_B_CLI.md` for the full command list.
+
 ---
 
 ## Security

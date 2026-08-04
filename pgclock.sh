@@ -411,9 +411,9 @@ install_restart_helper() {
   cp "$ctl_src" "$tmp_ctl"
   chmod 755 "$tmp_ctl"
   cat > "$tmp_sudoers" <<EOF
-# Managed by PGClockBot — passwordless service control for panel SSL/updates
+# Managed by PGClockBot — passwordless service control for panel SSL/updates/CLI
 ${service_user} ALL=(root) NOPASSWD: ${ctl_dst} *
-${service_user} ALL=(root) NOPASSWD: /bin/systemctl restart ${SERVICE_NAME}, /usr/bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl try-restart ${SERVICE_NAME}, /usr/bin/systemctl try-restart ${SERVICE_NAME}, /bin/systemctl is-active ${SERVICE_NAME}, /usr/bin/systemctl is-active ${SERVICE_NAME}
+${service_user} ALL=(root) NOPASSWD: /bin/systemctl start ${SERVICE_NAME}, /usr/bin/systemctl start ${SERVICE_NAME}, /bin/systemctl stop ${SERVICE_NAME}, /usr/bin/systemctl stop ${SERVICE_NAME}, /bin/systemctl restart ${SERVICE_NAME}, /usr/bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl try-restart ${SERVICE_NAME}, /usr/bin/systemctl try-restart ${SERVICE_NAME}, /bin/systemctl enable ${SERVICE_NAME}, /usr/bin/systemctl enable ${SERVICE_NAME}, /bin/systemctl is-active ${SERVICE_NAME}, /usr/bin/systemctl is-active ${SERVICE_NAME}
 EOF
   chmod 440 "$tmp_sudoers"
   sudo_wrap install -d -m 755 /usr/local/lib/pgclockbot
@@ -426,6 +426,12 @@ EOF
     sudo_wrap rm -f "$sudoers_path" || true
   fi
   rm -f "$tmp_ctl" "$tmp_sudoers"
+  # Global CLI (best-effort)
+  if [[ -f "${SCRIPT_DIR}/scripts/install_global_cli.sh" ]]; then
+    sudo_wrap bash "${SCRIPT_DIR}/scripts/install_global_cli.sh" "${SCRIPT_DIR}" \
+      && ok "Global pgclock CLI installed → /usr/local/bin/pgclock" \
+      || warn "Global CLI install skipped/failed"
+  fi
 }
 
 install_systemd() {
@@ -456,6 +462,10 @@ WantedBy=multi-user.target
   sudo_wrap systemctl daemon-reload
   sudo_wrap systemctl enable --now "$SERVICE_NAME"
   install_restart_helper "$service_user" || true
+  # Ensure global CLI points at this install
+  if [[ -f "${SCRIPT_DIR}/scripts/install_global_cli.sh" ]]; then
+    sudo_wrap bash "${SCRIPT_DIR}/scripts/install_global_cli.sh" "${SCRIPT_DIR}" || true
+  fi
   ok "systemd service enabled: ${SERVICE_NAME}"
 }
 
@@ -819,6 +829,19 @@ cmd_uninstall() {
     info "No systemd unit found."
   fi
 
+  # Remove global CLI marker/binary when it points at this install
+  if [[ -f /usr/local/lib/pgclockbot/install_root ]]; then
+    local marked
+    marked="$(tr -d '\r' </usr/local/lib/pgclockbot/install_root | head -n1 || true)"
+    if [[ "$marked" == "$SCRIPT_DIR" ]]; then
+      info "Removing global pgclock CLI…"
+      sudo_wrap rm -f /usr/local/bin/pgclock /usr/local/lib/pgclockbot/install_root \
+        /usr/local/lib/pgclockbot/pgclock-wrapper /usr/local/lib/pgclockbot/ctl || true
+      sudo_wrap rm -f /etc/sudoers.d/pgclockbot || true
+      ok "Global CLI removed"
+    fi
+  fi
+
   # Kill leftover bot processes from this install
   info "Stopping leftover processes..."
   pkill -f "${SCRIPT_DIR}/.venv/bin/python .*run.py" 2>/dev/null || true
@@ -893,6 +916,11 @@ cmd_help() {
     bash pgclock.sh status          Quick status
     bash pgclock.sh uninstall       Remove service / data
     bash pgclock.sh help            This help
+
+  Global CLI (after install):
+    pgclock status|start|stop|restart|logs|health
+    pgclock backup|restore|migrate|doctor
+    sudo bash scripts/install_global_cli.sh
 
   One-liner (clone OR update existing folder, then menu):
     bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
