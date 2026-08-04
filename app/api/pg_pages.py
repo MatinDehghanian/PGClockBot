@@ -1196,6 +1196,15 @@ def register_pg_pages(
             err = e.message
         except Exception as e:
             err = str(e)
+        node_acts = (staff.get("pg_actions") or {}).get("nodes") or {}
+        if _is_admin(staff):
+            node_acts = {
+                "create": True,
+                "update": True,
+                "delete": True,
+                "reconnect": True,
+                "stats": True,
+            }
         return render(
             request,
             "pg_nodes.html",
@@ -1204,7 +1213,10 @@ def register_pg_pages(
                 nodes=nodes,
                 flash_err=err,
                 flash_ok=ok,
-                can_reconnect=staff_pg_action(staff, "nodes", "reconnect"),
+                can_reconnect=bool(node_acts.get("reconnect") or staff_pg_action(staff, "nodes", "reconnect")),
+                can_create=bool(node_acts.get("create") or staff_pg_action(staff, "nodes", "create")),
+                can_update=bool(node_acts.get("update") or staff_pg_action(staff, "nodes", "update")),
+                can_delete=bool(node_acts.get("delete") or staff_pg_action(staff, "nodes", "delete")),
                 active="pg_nodes",
             ),
         )
@@ -1215,18 +1227,149 @@ def register_pg_pages(
         staff: dict = Depends(require_pg_perm("pg_nodes")),
         session: AsyncSession = Depends(get_db),
     ):
-        if not staff_pg_action(staff, "nodes", "reconnect"):
-            return RedirectResponse(f"/pg/nodes?err={_q('اجازه اتصال مجدد ندارید')}", status_code=303)
-        try:
-            await assert_can_mutate_owned_users(staff)
-        except PgQuotaError as qe:
-            return RedirectResponse(f"/pg/nodes?err={_q(qe.message)}", status_code=303)
+        if not (_is_admin(staff) or staff_pg_action(staff, "nodes", "reconnect")):
+            return RedirectResponse(
+                f"/pg/nodes?err={_q('اجازه اتصال مجدد ندارید. علت: نقش پاسارگارد این عمل را ندارد. راه حل: نقش ادمین را در پاسارگارد بررسی کنید.')}",
+                status_code=303,
+            )
         try:
             pg, _as_owner = await _staff_pg(session, staff)
             await pg.reconnect_node(node_id)
         except Exception as e:
-            return RedirectResponse(f"/pg/nodes?err={_q(e)}", status_code=303)
+            msg = e.user_message(fallback=str(e)) if isinstance(e, PasarGuardError) else str(e)
+            return RedirectResponse(
+                f"/pg/nodes?err={_q(f'اتصال مجدد ناموفق: {msg}. علت محتمل: نود آفلاین یا API نود. راه حل: وضعیت نود را در پاسارگارد بررسی کنید.')}",
+                status_code=303,
+            )
         return RedirectResponse(f"/pg/nodes?ok={_q('درخواست اتصال مجدد ارسال شد')}", status_code=303)
+
+    @app.post("/pg/nodes/reconnect-all")
+    async def pg_nodes_reconnect_all(
+        staff: dict = Depends(require_pg_perm("pg_nodes")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if not (_is_admin(staff) or staff_pg_action(staff, "nodes", "reconnect")):
+            return RedirectResponse(f"/pg/nodes?err={_q('اجازه اتصال مجدد ندارید')}", status_code=303)
+        try:
+            pg, _ = await _staff_pg(session, staff)
+            await pg.reconnect_all_nodes()
+        except Exception as e:
+            msg = e.user_message(fallback=str(e)) if isinstance(e, PasarGuardError) else str(e)
+            return RedirectResponse(f"/pg/nodes?err={_q(msg)}", status_code=303)
+        return RedirectResponse(f"/pg/nodes?ok={_q('اتصال مجدد همه نودها ارسال شد')}", status_code=303)
+
+    @app.post("/pg/nodes/{node_id}/reset")
+    async def pg_node_reset(
+        node_id: int,
+        staff: dict = Depends(require_pg_perm("pg_nodes")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if not (_is_admin(staff) or staff_pg_action(staff, "nodes", "update")):
+            return RedirectResponse(f"/pg/nodes?err={_q('اجازه ریست مصرف نود ندارید')}", status_code=303)
+        try:
+            pg, _ = await _staff_pg(session, staff)
+            await pg.reset_node(node_id)
+        except Exception as e:
+            msg = e.user_message(fallback=str(e)) if isinstance(e, PasarGuardError) else str(e)
+            return RedirectResponse(f"/pg/nodes?err={_q(msg)}", status_code=303)
+        return RedirectResponse(f"/pg/nodes?ok={_q('مصرف نود ریست شد')}", status_code=303)
+
+    @app.post("/pg/nodes/{node_id}/sync")
+    async def pg_node_sync(
+        node_id: int,
+        staff: dict = Depends(require_pg_perm("pg_nodes")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if not (_is_admin(staff) or staff_pg_action(staff, "nodes", "update")):
+            return RedirectResponse(f"/pg/nodes?err={_q('اجازه همگام‌سازی نود ندارید')}", status_code=303)
+        try:
+            pg, _ = await _staff_pg(session, staff)
+            await pg.sync_node(node_id)
+        except Exception as e:
+            msg = e.user_message(fallback=str(e)) if isinstance(e, PasarGuardError) else str(e)
+            return RedirectResponse(f"/pg/nodes?err={_q(msg)}", status_code=303)
+        return RedirectResponse(f"/pg/nodes?ok={_q('همگام‌سازی نود انجام شد')}", status_code=303)
+
+    @app.post("/pg/nodes/{node_id}/toggle")
+    async def pg_node_toggle(
+        node_id: int,
+        staff: dict = Depends(require_pg_perm("pg_nodes")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if not (_is_admin(staff) or staff_pg_action(staff, "nodes", "update")):
+            return RedirectResponse(f"/pg/nodes?err={_q('اجازه تغییر وضعیت نود ندارید')}", status_code=303)
+        try:
+            pg, _ = await _staff_pg(session, staff)
+            node = await pg.get_node(node_id)
+            st = str(node.get("status") or "").lower()
+            # Toggle disabled ↔ connected (PasarGuard uses status enum)
+            new_status = "connected" if st in {"disabled", "error", "limited"} else "disabled"
+            await pg.modify_node(node_id, {"status": new_status})
+        except Exception as e:
+            msg = e.user_message(fallback=str(e)) if isinstance(e, PasarGuardError) else str(e)
+            return RedirectResponse(f"/pg/nodes?err={_q(msg)}", status_code=303)
+        return RedirectResponse(f"/pg/nodes?ok={_q('وضعیت نود تغییر کرد')}", status_code=303)
+
+    @app.post("/pg/nodes/{node_id}/delete")
+    async def pg_node_delete(
+        node_id: int,
+        staff: dict = Depends(require_pg_perm("pg_nodes")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if not (_is_admin(staff) or staff_pg_action(staff, "nodes", "delete")):
+            return RedirectResponse(f"/pg/nodes?err={_q('اجازه حذف نود ندارید')}", status_code=303)
+        try:
+            pg, _ = await _staff_pg(session, staff)
+            await pg.delete_node(node_id)
+        except Exception as e:
+            msg = e.user_message(fallback=str(e)) if isinstance(e, PasarGuardError) else str(e)
+            return RedirectResponse(f"/pg/nodes?err={_q(msg)}", status_code=303)
+        return RedirectResponse(f"/pg/nodes?ok={_q('نود حذف شد')}", status_code=303)
+
+    @app.post("/pg/nodes")
+    async def pg_nodes_create(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_nodes")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if not (_is_admin(staff) or staff_pg_action(staff, "nodes", "create")):
+            return RedirectResponse(f"/pg/nodes?err={_q('اجازه ساخت نود ندارید')}", status_code=303)
+        form = await request.form()
+        name = str(form.get("name") or "").strip()
+        address = str(form.get("address") or "").strip()
+        port_raw = str(form.get("port") or "").strip()
+        api_key = str(form.get("api_key") or "").strip()
+        server_ca = str(form.get("server_ca") or "").strip()
+        conn = str(form.get("connection_type") or "grpc").strip() or "grpc"
+        core_raw = str(form.get("core_config_id") or "").strip()
+        if not name or not address:
+            return RedirectResponse(
+                f"/pg/nodes?err={_q('نام و آدرس نود الزامی است')}",
+                status_code=303,
+            )
+        payload: dict = {
+            "name": name,
+            "address": address,
+            "connection_type": conn,
+        }
+        if port_raw.isdigit():
+            payload["port"] = int(port_raw)
+        if api_key:
+            payload["api_key"] = api_key
+        if server_ca:
+            payload["server_ca"] = server_ca
+        if core_raw.isdigit():
+            payload["core_config_id"] = int(core_raw)
+        try:
+            pg, _ = await _staff_pg(session, staff)
+            await pg.create_node(payload)
+        except Exception as e:
+            msg = e.user_message(fallback=str(e)) if isinstance(e, PasarGuardError) else str(e)
+            return RedirectResponse(
+                f"/pg/nodes?err={_q(f'ساخت نود ناموفق: {msg}. علت محتمل: فیلدهای الزامی ناقص (api_key/گواهی). راه حل: مقادیر را از پنل پاسارگارد کپی کنید.')}",
+                status_code=303,
+            )
+        return RedirectResponse(f"/pg/nodes?ok={_q('نود ساخته شد')}", status_code=303)
 
     @app.get("/pg/inbounds", response_class=HTMLResponse)
     async def pg_inbounds(
@@ -1311,17 +1454,31 @@ def register_pg_pages(
         username: str = Form(...),
         password: str = Form(...),
         staff: dict = Depends(require_admin),
+        session=Depends(get_db),
     ):
         form = await request.form()
         role_raw = str(form.get("role_id") or "").strip()
         note = str(form.get("note") or "").strip()
+        grant_web = str(form.get("grant_web") or "").strip().lower() in {
+            "1",
+            "on",
+            "true",
+            "yes",
+        }
+        # Default ON when checkbox present in form; if missing (old clients) still grant
+        if "grant_web" not in form:
+            grant_web = True
+        data_limit_gb = str(form.get("data_limit_gb") or "").strip()
+        max_users = str(form.get("max_users") or "").strip()
+        max_hwid = str(form.get("max_hwid_per_user") or "").strip()
         from app.services.credential_policy import validate_password_strength
 
-        ok, perr = validate_password_strength(password, username=username.strip())
+        uname = username.strip()
+        ok, perr = validate_password_strength(password, username=uname)
         if not ok:
             return RedirectResponse(f"/pg/admins?err={_q(perr)}", status_code=303)
         payload: dict = {
-            "username": username.strip(),
+            "username": uname,
             "password": password,
             "note": note or "created from PGClockBot",
         }
@@ -1329,6 +1486,23 @@ def register_pg_pages(
             payload["role_id"] = int(role_raw)
         else:
             payload["is_sudo"] = bool(form.get("is_sudo"))
+        if data_limit_gb:
+            try:
+                gb = float(data_limit_gb.replace(",", "."))
+                if gb > 0:
+                    payload["data_limit"] = int(gb * (1024**3))
+            except ValueError:
+                return RedirectResponse(
+                    f"/pg/admins?err={_q('سقف حجم ادمین نامعتبر است')}",
+                    status_code=303,
+                )
+        overrides: dict = {}
+        if max_users.isdigit():
+            overrides["max_users"] = int(max_users)
+        if max_hwid.isdigit():
+            overrides["max_hwid_per_user"] = int(max_hwid)
+        if overrides:
+            payload["permission_overrides"] = overrides
         try:
             await get_pg().create_admin(payload)
         except Exception as e:
@@ -1341,7 +1515,26 @@ def register_pg_pages(
                     return RedirectResponse(f"/pg/admins?err={_q(e2)}", status_code=303)
             else:
                 return RedirectResponse(f"/pg/admins?err={_q(e)}", status_code=303)
-        return RedirectResponse(f"/pg/admins?ok={_q('ادمین پنل ساخته شد')}", status_code=303)
+
+        msg = f"ادمین «{uname}» در پاسارگارد ساخته شد"
+        if grant_web:
+            from app.services.pg_staff_access import grant_web_access
+
+            row, werr = await grant_web_access(
+                session,
+                pg_username=uname,
+                web_username=uname,
+                password=password,
+                note=note or "auto from create admin",
+                is_active=True,
+            )
+            if werr:
+                return RedirectResponse(
+                    f"/pg/admins?err={_q(f'{msg} — ولی دسترسی وب ساخته نشد: {werr}')}",
+                    status_code=303,
+                )
+            msg += " و دسترسی وب‌پنل با همان یوزر/رمز فعال شد"
+        return RedirectResponse(f"/pg/admins?ok={_q(msg)}", status_code=303)
 
     @app.post("/pg/admins/{username}/web-access")
     async def pg_admins_web_access_legacy(

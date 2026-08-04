@@ -239,17 +239,18 @@
       <h2>ساخت ادمین پنل</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <form method="post" action="/pg/admins" class="form-stack">
+    <form method="post" action="/pg/admins" class="form-stack js-busy-form" data-busy-label="در حال ساخت…">
       <div class="form-row">
         <div>
           <label class="form-field">نام کاربری
-            <input name="username" required autocomplete="off" placeholder="admin_name" />
+            <input name="username" required autocomplete="off" placeholder="admin_name" dir="ltr" />
+            <small class="muted">همین نام برای ورود وب‌پنل هم استفاده می‌شود</small>
           </label>
         </div>
         <div>
           <label class="form-field">رمز عبور
             <input name="password" type="password" required autocomplete="new-password" placeholder="رمز قوی" />
-            <small class="muted">حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
+            <small class="muted">حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص — برای پاسارگارد و وب یکی است</small>
           </label>
         </div>
         <div>
@@ -260,19 +261,40 @@
               <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}{% if r.get('is_owner') %} (ادمین اصلی){% endif %}</option>
               {% endfor %}
             </select>
-            <small class="muted">سطح دسترسی — از نقش‌های تعریف‌شده در پاسارگارد</small>
+            <small class="muted">سطح دسترسی منو/عملیات از این نقش می‌آید</small>
+          </label>
+        </div>
+      </div>
+      <div class="form-row">
+        <div>
+          <label class="form-field">سقف حجم ادمین (گیگ)
+            <input name="data_limit_gb" type="number" step="0.1" min="0" dir="ltr" placeholder="خالی = بدون سقف" />
+            <small class="muted">محدودیت ترافیک کل کاربران این ادمین</small>
+          </label>
+        </div>
+        <div>
+          <label class="form-field">سقف تعداد کاربر
+            <input name="max_users" type="number" min="0" dir="ltr" placeholder="خالی = از نقش" />
+            <small class="muted">بازنویسی محدودیت نقش (اختیاری)</small>
+          </label>
+        </div>
+        <div>
+          <label class="form-field">سقف HWID هر کاربر
+            <input name="max_hwid_per_user" type="number" min="0" dir="ltr" placeholder="خالی = از نقش" />
+            <small class="muted">بازنویسی محدودیت نقش (اختیاری)</small>
           </label>
         </div>
       </div>
       <label class="form-field">یادداشت
         <input name="note" placeholder="نماینده فروش" />
-        <small class="muted">اختیاری — فقط در پاسارگارد ذخیره می‌شود</small>
+        <small class="muted">اختیاری — در پاسارگارد ذخیره می‌شود</small>
       </label>
       <div class="ui-switch-list">
+        {{ switch('grant_web', 'ساخت خودکار دسترسی وب‌پنل', checked=true, help='با همان یوزر و رمز — منوی پاسارگارد مطابق نقش') }}
         {{ switch('is_sudo', 'دسترسی کامل (قدیمی)', help='فقط پنل‌های قدیمی؛ در نسخه‌های جدید از نقش استفاده کنید') }}
       </div>
       <div class="actions">
-        <button class="btn" type="submit">ساخت در پاسارگارد</button>
+        <button class="btn" type="submit">ساخت ادمین</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
       </div>
     </form>

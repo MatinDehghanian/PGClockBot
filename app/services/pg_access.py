@@ -135,13 +135,13 @@ def role_user_actions(role: dict | None) -> dict[str, bool]:
 
 
 def map_pg_role_actions(role: dict | None) -> dict[str, dict[str, bool]]:
-    """Exact PasarGuard action matrix per resource (create/update/delete/reconnect)."""
+    """Exact PasarGuard action matrix per resource (create/update/delete/reconnect/…)."""
     resources = {
         "users": ("create", "update", "delete"),
         "templates": ("create", "update", "delete"),
         "groups": ("create", "update", "delete"),
         "hosts": ("create", "update", "delete"),
-        "nodes": ("create", "update", "reconnect"),
+        "nodes": ("create", "update", "delete", "reconnect", "stats"),
     }
     empty = {res: {act: False for act in acts} for res, acts in resources.items()}
     if not role:
