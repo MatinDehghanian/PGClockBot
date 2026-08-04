@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.1.0": [
+        "مودال پلن‌ها: منوی نوع پلن داینامیک بر اساس مخاطب (کاربران vs نمایندگان)",
+        "نمایندگان فقط ثابت / Pay As You Go؛ فیلدها مطابق نوع نمایش داده می‌شوند",
+        "رفع باگ ui-select که گزینه‌های قدیمی را بعد از تعویض مخاطب نگه می‌داشت",
+    ],
     "4.0.9": [
         "درخواست نمایندگی در ربات: اول انتخاب نوع پلن (ثابت / Pay As You Go)، بعد پلن‌های همان دسته",
         "جزئیات پلن بر اساس نوع: کمیسیون برای ثابت؛ نرخ/GB و گروه برای PAYG",

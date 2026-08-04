@@ -404,11 +404,11 @@
         }
       });
       sel.addEventListener('change', syncLabel);
-      /* Keep in sync if options are rewritten (settings / dynamic forms only) */
-      if (sel.closest('.settings-form, form[data-ui-select-watch], [data-ui-select-watch]')) {
-        const mo = new MutationObserver(() => rebuildOptions());
-        mo.observe(sel, { childList: true, subtree: true, characterData: true });
-      }
+      /* Always rebuild custom menu when <option> list is rewritten (e.g. plans modal
+         audience → kind options). Previously only settings forms were watched, so
+         dynamic selects kept showing stale labels/options. */
+      const mo = new MutationObserver(() => rebuildOptions());
+      mo.observe(sel, { childList: true, subtree: true, characterData: true });
     }
     function enhanceAllSelects(){
       document.querySelectorAll('select').forEach(enhanceSelect);
