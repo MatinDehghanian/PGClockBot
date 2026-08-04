@@ -37,15 +37,16 @@ class SafeFormatTests(unittest.TestCase):
 
 
 class PgStaffClientTests(unittest.IsolatedAsyncioTestCase):
-    async def test_staff_pg_allows_pg_staff_as_owner_path(self):
+    async def test_staff_pg_denies_pg_staff_owner_fallback(self):
+        """C2: pg_staff must not mutate via owner token until C5 credentials."""
         from app.api.pg_pages import _staff_pg
         from app.services.pasarguard import PasarGuardError
 
         staff = {"role": "pg_staff", "pg_admin_username": "staff1"}
         with patch("app.api.pg_pages.get_pg", return_value=MagicMock(name="owner")) as gp:
-            client, as_owner = await _staff_pg(AsyncMock(), staff)
-        self.assertTrue(as_owner)
-        self.assertIs(client, gp.return_value)
+            with self.assertRaises(PasarGuardError):
+                await _staff_pg(AsyncMock(), staff)
+        gp.assert_not_called()
 
     async def test_staff_pg_reseller_uses_own_credentials(self):
         from app.api.pg_pages import _staff_pg
@@ -90,17 +91,19 @@ class AssertOwnedUserCredentialTests(unittest.IsolatedAsyncioTestCase):
         reseller_pg.get_user_by_id.assert_awaited_once_with(1)
         owner_pg.get_user_by_id.assert_not_awaited()
 
-    async def test_pg_staff_filters_by_owner(self):
+    async def test_pg_staff_no_owner_token_probe(self):
+        """C2: pg_staff ownership checks must not use owner get_user_by_id."""
         from app.api.pg_pages import _assert_owned_user
 
         staff = {"role": "pg_staff", "pg_admin_username": "staff1"}
         owner_pg = AsyncMock()
         owner_pg.get_user_by_id = AsyncMock(
-            return_value={"id": 5, "admin": {"username": "other"}}
+            return_value={"id": 5, "admin": {"username": "staff1"}}
         )
         with patch("app.api.pg_pages.get_pg", return_value=owner_pg):
             info = await _assert_owned_user(staff, 5, session=AsyncMock())
         self.assertIsNone(info)
+        owner_pg.get_user_by_id.assert_not_awaited()
 
 
 class SsrfProbeTests(unittest.TestCase):
@@ -208,7 +211,14 @@ class OwnerBypassGuardsStillHold(unittest.TestCase):
         src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
         # Resellers must still use their own credentials
         self.assertIn("get_pg_for_reseller", src)
-        self.assertIn('staff.get("role") == "pg_staff"', src)
+        # C2: pg_staff no longer gets owner-token mutations
+        self.assertIn("بدون اعتبارنامه اختصاصی مجاز نیست", src)
+        self.assertNotIn(
+            'if staff.get("role") == "pg_staff":\n        if not _pg_owner(staff):\n'
+            '            raise PasarGuardError("ادمین پاسارگارد برای این حساب تنظیم نشده است")\n'
+            "        return get_pg(), True",
+            src,
+        )
 
 
 class Version383Tests(unittest.TestCase):

@@ -38,26 +38,48 @@ def _q(msg: str) -> str:
 
 
 async def _staff_pg(session: AsyncSession, staff: dict):
-    """Return (client, as_owner).
+    """Return (client, as_owner) for mutations (Phase C2).
 
     - Platform admin → owner credentials (as_owner=True)
     - Reseller → shop PG admin credentials (as_owner=False; ownership implicit)
-    - pg_staff → owner credentials (as_owner=True) then set_owner after create
+    - pg_staff / others → **fail closed** (no owner-token mutations until C5 credentials)
 
-    PgStaffAccess does not store a PasarGuard password, so staff must create via
-    the owner client and transfer ownership (create paths already do this when
-    as_owner=True for non-admin principals).
+    Does not select clients for list/GET — those use ``staff_pg_read_client`` (C1).
     """
     if is_platform_admin(staff):
         return get_pg(), True
     rid = shop_owner_id(staff)
     if rid:
         return await get_pg_for_reseller(session, int(rid)), False
-    if staff.get("role") == "pg_staff":
-        if not _pg_owner(staff):
-            raise PasarGuardError("ادمین پاسارگارد برای این حساب تنظیم نشده است")
-        return get_pg(), True
-    raise PasarGuardError("محدوده فروشگاه مشخص نیست — عملیات پاسارگارد مجاز نیست")
+    raise PasarGuardError(
+        "عملیات نوشتن پاسارگارد بدون اعتبارنامه اختصاصی مجاز نیست "
+        "(ادمین فرعی تا همگام‌سازی اعتبارنامه نمی‌تواند mutate کند)"
+    )
+
+
+async def _assert_owned_user(
+    staff: dict, user_id: int, *, session: AsyncSession | None = None
+) -> dict | None:
+    """Fetch a PG user only when the staff principal is allowed to see/mutate it.
+
+    Resellers authenticate as themselves (no owner-token probe).
+    pg_staff without own credentials: fail closed (C2) — no owner-token read.
+    """
+    if _is_admin(staff):
+        info = await get_pg().get_user_by_id(user_id)
+        return info if isinstance(info, dict) else None
+
+    rid = shop_owner_id(staff)
+    if rid and session is not None:
+        try:
+            pg = await get_pg_for_reseller(session, int(rid))
+            info = await pg.get_user_by_id(user_id)
+        except Exception:
+            return None
+        return info if isinstance(info, dict) else None
+
+    # C2: no owner-token fallback for pg_staff / broken sessions
+    return None
 
 
 def _pg_form_err(msg: str, *, modal: str, uid: str | int | None = None) -> RedirectResponse:
@@ -121,37 +143,6 @@ def _filter_groups(items: list[dict], staff: dict) -> list[dict]:
     from app.services.plans_catalog import filter_groups_for_staff
 
     return filter_groups_for_staff(items, staff)
-
-
-async def _assert_owned_user(
-    staff: dict, user_id: int, *, session: AsyncSession | None = None
-) -> dict | None:
-    """Fetch a PG user only when the staff principal is allowed to see it.
-
-    Resellers authenticate as themselves (no owner-token probe). pg_staff has no
-    stored PG password, so reads use the owner client then filter by ownership.
-    """
-    if _is_admin(staff):
-        info = await get_pg().get_user_by_id(user_id)
-        return info if isinstance(info, dict) else None
-
-    rid = shop_owner_id(staff)
-    if rid and session is not None:
-        try:
-            pg = await get_pg_for_reseller(session, int(rid))
-            info = await pg.get_user_by_id(user_id)
-        except Exception:
-            return None
-        return info if isinstance(info, dict) else None
-
-    # pg_staff (or reseller without session): owner read + ownership filter
-    info = await get_pg().get_user_by_id(user_id)
-    if not isinstance(info, dict):
-        return None
-    mine = _pg_owner(staff).lower()
-    if not mine or _owner_of(info) != mine:
-        return None
-    return info
 
 
 def _pg_ctx(staff: dict, **extra) -> dict:
