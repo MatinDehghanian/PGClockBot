@@ -159,12 +159,12 @@ class BackupManifestPathTests(unittest.TestCase):
 
 
 class SessionCookieHardeningTests(unittest.TestCase):
-    def test_login_cookie_samesite_strict(self):
+    def test_login_cookie_keeps_samesite_lax(self):
+        """lax preserves gateway/top-level return navigations; CSRF is Origin/Referer."""
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn('samesite="strict"', src)
-        # Login path should not keep lax
-        login_chunk = src[src.find("resp.set_cookie") : src.find("@app.get(\"/logout\")")]
-        self.assertIn('samesite="strict"', login_chunk)
+        login_chunk = src[src.find("resp.set_cookie") : src.find('@app.post("/logout")')]
+        self.assertIn('samesite="lax"', login_chunk)
+        self.assertNotIn('samesite="strict"', login_chunk)
 
     def test_logout_post_exists(self):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")

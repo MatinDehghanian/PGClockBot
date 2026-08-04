@@ -49,7 +49,7 @@
 | M-legacy | Medium | Plaintext web passwords survived until next login | Auto-upgrade on `load_web_admin` |
 | L-stars | Medium | Stars delivery failure silent to admins | ERROR log + admin alert |
 | L-delivery | Low | Silent Telegram send failure | ERROR log when notify fails |
-| L-logout | Low | GET CSRF logout; `SameSite=lax` | POST logout in UI; `SameSite=strict` |
+| L-logout | Low | GET CSRF logout | POST logout in UI (GET kept); session cookie stays `SameSite=lax` for gateway returns |
 | M1 | Medium | CRC32 synthetic TG id collision | Salted disambiguation without reshuffling salt=0 |
 
 ### Intentionally unchanged (documented debt)

@@ -1190,7 +1190,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             "session",
             get_signer().dumps(payload),
             httponly=True,
-            samesite="strict",
+            samesite="lax",
             secure=_cookie_secure(request),
             max_age=60 * 60 * 24 * 7,
             path="/",

@@ -26,6 +26,9 @@ class ShopNotifyIsolationTests(unittest.IsolatedAsyncioTestCase):
             "app.services.notifications._shop_recipient_chat_ids",
             new=AsyncMock(return_value=[9001]),
         ), patch(
+            "app.services.resellers.get_reseller_profile",
+            new=AsyncMock(return_value=MagicMock(bot_token="shop:token")),
+        ), patch(
             "app.services.reseller_bots.open_notify_bot_for_reseller",
             new=AsyncMock(
                 return_value=(MagicMock(session=MagicMock(close=AsyncMock())), True)

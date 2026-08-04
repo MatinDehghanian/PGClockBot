@@ -310,25 +310,28 @@ async def send_delivery_to_user(
         detailed = await build_delivery_content(
             session, payment, order, include_details=True
         )
-        try:
-            await bot.send_message(
-                chat_id,
-                detailed["text"],
-                reply_markup=send_markup,
-                parse_mode="HTML",
-            )
-            notify_ok = True
-        except Exception:
+        if detailed["text"] != text:
             try:
-                await bot.send_message(chat_id, detailed["text"], parse_mode="HTML")
-                notify_ok = True
-            except Exception:
-                logger.error(
-                    "delivery detail notify failed order=%s chat_id=%s",
-                    getattr(order, "id", None),
+                await bot.send_message(
                     chat_id,
-                    exc_info=True,
+                    detailed["text"],
+                    reply_markup=send_markup,
+                    parse_mode="HTML",
                 )
+                notify_ok = True
+                text = detailed["text"]
+            except Exception:
+                try:
+                    await bot.send_message(chat_id, detailed["text"], parse_mode="HTML")
+                    notify_ok = True
+                    text = detailed["text"]
+                except Exception:
+                    logger.error(
+                        "delivery detail notify failed order=%s chat_id=%s",
+                        getattr(order, "id", None),
+                        chat_id,
+                        exc_info=True,
+                    )
 
     if not notify_ok and not qr_sent:
         logger.error(
