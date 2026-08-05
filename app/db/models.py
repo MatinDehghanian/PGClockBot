@@ -335,7 +335,7 @@ class ResellerProfile(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # --- Unified Billing (PAYG is one mode; fixed = legacy commission, untouched) ---
     billing_mode: Mapped[str] = mapped_column(String(16), default="fixed")  # fixed | payg
-    billing_balance: Mapped[int] = mapped_column(Integer, default=0)  # prepaid toman (payg)
+    billing_balance: Mapped[int] = mapped_column(Integer, default=0)  # mirror of shop wallet (payg)
     billing_watermark_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     billing_low_warned_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -347,11 +347,13 @@ class ResellerProfile(Base):
     billing_suspended_user_ids: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
     )  # JSON list of PG user ids disabled by suspend
+    # After True: shop wallet is SoT; billing_balance is kept as a mirror
+    payg_wallet_linked: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ResellerBillingTransaction(Base):
-    """Audit ledger for reseller Billing (topup / usage / adjustment). Independent of user wallet."""
+    """Audit ledger for reseller PAYG (topup / usage / adjustment). Money lives on shop wallet."""
 
     __tablename__ = "reseller_billing_transactions"
     __table_args__ = (

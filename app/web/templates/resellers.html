@@ -100,6 +100,13 @@
           {% if (p.billing_mode or 'fixed') == 'payg' %}
           <br><span class="badge pending">PAYG</span>
           {% endif %}
+          {% if p.billing_suspended_at %}
+          <br><span class="badge rejected">مسدود</span>
+          {% elif p.is_active %}
+          <br><span class="badge approved">فعال</span>
+          {% else %}
+          <br><span class="badge warn">غیرفعال</span>
+          {% endif %}
         </td>
         <td class="mono col-hide-sm">{{ u.telegram_id }}</td>
         <td>

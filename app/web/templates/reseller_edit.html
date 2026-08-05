@@ -82,6 +82,11 @@
       {{ switch('is_active', 'نماینده فعال', checked=profile.is_active) }}
       {{ switch('share_pg_panel_url', 'ارسال لینک پنل پاسارگارد', checked=profile.share_pg_panel_url, help='اگر خاموش باشد، فقط وب‌پنل ربات برای مدیریت استفاده می‌شود') }}
     </div>
+    {% if profile.billing_suspended_at %}
+    <div class="flash err" style="margin-top:0.75rem">وضعیت PAYG: <b>مسدود</b> (موجودی کیف پول صفر) — با تگ «فعال» نماینده فرق دارد</div>
+    {% elif is_payg %}
+    <p class="muted" style="margin-top:0.5rem">وضعیت PAYG: <span class="badge approved">فعال</span></p>
+    {% endif %}
 
     <div class="actions">
       <button class="btn" type="submit">ذخیره</button>
@@ -120,16 +125,17 @@
 <div class="card">
   <h2>مدیریت PAYG</h2>
   {% if profile.billing_suspended_at %}
-  <div class="flash err">حساب به‌خاطر موجودی صفر/منفی مسدود است — حداقل شارژ برای رفع مسدودی: <b>{{ format_toman(min_unsuspend or 0) }}</b></div>
+  <div class="flash err">حساب به‌خاطر موجودی صفر مسدود است — حداقل شارژ برای رفع مسدودی: <b>{{ format_toman(min_unsuspend or 0) }}</b></div>
   {% endif %}
-  <p class="muted">موجودی فعلی: <b>{{ format_toman(profile.billing_balance or 0) }}</b>
+  <p class="muted">موجودی کیف پول (منبع PAYG): <b>{{ format_toman(wallet_balance or user.wallet_balance or 0) }}</b>
     · نرخ پلن: <b>{{ format_toman(billing_rate or 0) }}</b> / GB
     · watermark: <span dir="ltr">{{ profile.billing_watermark_bytes or 0 }}</span> بایت</p>
+  <p class="muted">مصرف ترافیک از همان کیف پول فروشگاهی نماینده کسر می‌شود. شارژ دستی زیر نیز به همان کیف پول واریز می‌شود.</p>
   <form method="post" action="/resellers/{{ user.id }}/billing-topup" class="form-stack">
     <input type="hidden" name="nonce" value="{{ topup_nonce }}" />
     <div class="form-row">
       <div>
-        <label class="form-field">شارژ دستی (تومان)
+        <label class="form-field">شارژ کیف پول (تومان)
           <input name="amount" type="number" min="{{ min_unsuspend or 1000 }}" step="1000" value="{{ min_unsuspend or '' }}" placeholder="مثلاً ۵۰۰۰۰" required />
           {% if min_unsuspend %}
           <small class="muted">حداقل برای رفع مسدودی: {{ format_toman(min_unsuspend) }} (۲× آستانه هشدار)</small>
@@ -143,7 +149,7 @@
       </div>
     </div>
     <div class="actions">
-      <button class="btn" type="submit">ثبت شارژ</button>
+      <button class="btn" type="submit">ثبت شارژ کیف پول</button>
     </div>
   </form>
   {% if billing_txs %}

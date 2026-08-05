@@ -35,9 +35,12 @@
 
 {% if billing_card %}
 <div class="card home-conn-card">
-  <h2>کیف پول PAYG</h2>
-  <p class="muted">حالت Pay As You Go — موجودی برای مصرف ترافیک و ساخت/تمدید سرویس</p>
+  <h2>کیف پول (PAYG)</h2>
+  <p class="muted">مصرف ترافیک از همین کیف پول فروشگاهی کسر می‌شود</p>
   <p style="font-size:1.35rem;margin:0.5rem 0 0"><strong>{{ billing_card.balance_fa }}</strong></p>
+  {% if billing_card.suspended %}
+  <p class="flash err" style="margin-top:0.75rem">حساب به‌خاطر موجودی صفر مسدود است</p>
+  {% endif %}
 </div>
 {% endif %}
 

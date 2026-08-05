@@ -108,14 +108,17 @@ async def suspend_payg_reseller(
     *,
     commit: bool = True,
 ) -> dict[str, int]:
-    """Disable PG admin + cut all owned users when billing_balance <= 0.
+    """Disable PG admin + cut all owned users when shop-wallet PAYG balance <= 0.
 
     Idempotent when already suspended. Returns counters.
     """
     stats = {"users_cut": 0, "already": 0, "errors": 0}
     if not is_payg(profile):
         return stats
-    if int(profile.billing_balance or 0) > 0:
+    from app.services.billing import payg_available_balance
+
+    bal = await payg_available_balance(session, profile)
+    if bal > 0:
         return stats
     if profile.billing_suspended_at is not None:
         stats["already"] = 1
@@ -168,7 +171,9 @@ async def restore_payg_reseller(
     if profile.billing_suspended_at is None:
         stats["skipped"] = 1
         return stats
-    if int(profile.billing_balance or 0) <= 0:
+    from app.services.billing import payg_available_balance
+
+    if await payg_available_balance(session, profile) <= 0:
         stats["skipped"] = 1
         return stats
 
@@ -236,10 +241,17 @@ async def _notify_suspended(session: AsyncSession, profile: ResellerProfile) -> 
     need = await min_topup_to_unsuspend(session)
     # Also surface purchase-style minimum for clarity
     _ = payg_purchase_min_wallet(await get_low_balance_threshold(session))
+    from app.services.billing import payg_available_balance
+
+    try:
+        bal_now = await payg_available_balance(session, profile)
+    except Exception:
+        bal_now = int(profile.billing_balance or 0)
     text = (
         "🚫 <b>حساب نمایندگی شما مسدود شد</b>\n\n"
-        "موجودی کیف پول PAYG شما صفر یا منفی شده است.\n"
+        "موجودی کیف پول شما برای PAYG صفر شده است.\n"
         "ادمین پاسارگارد و تمام سرویس‌های شما قطع شدند.\n\n"
+        f"موجودی فعلی کیف پول: <b>{format_toman(bal_now)}</b>\n"
         f"برای رفع مسدودی، حداقل <b>{format_toman(need)}</b> شارژ کنید "
         "(دو برابر آستانه هشدار).\n"
         "پس از تأیید شارژ، حساب و سرویس‌ها بلافاصله فعال می‌شوند."
@@ -258,7 +270,7 @@ async def _notify_restored(session: AsyncSession, profile: ResellerProfile) -> N
     text = (
         "✅ <b>مسدودی برداشته شد</b>\n\n"
         "شارژ تأیید شد — حساب و سرویس‌های شما دوباره فعال شدند.\n"
-        f"موجودی فعلی: <b>{bal}</b>"
+        f"موجودی کیف پول: <b>{bal}</b>"
     )
     await _send_reseller_dm(session, int(profile.user_id), int(user.telegram_id), text)
 

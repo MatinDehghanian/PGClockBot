@@ -169,10 +169,15 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             from app.services.formatting import format_toman
 
             if is_payg(profile) and await is_billing_enabled(session):
+                from app.services.billing import ensure_payg_shop_wallet
+
+                _u, bal = await ensure_payg_shop_wallet(session, profile)
+                await session.commit()
                 billing_card = {
-                    "balance": int(profile.billing_balance or 0),
-                    "balance_fa": format_toman(int(profile.billing_balance or 0)),
+                    "balance": int(bal),
+                    "balance_fa": format_toman(int(bal)),
                     "mode": "payg",
+                    "suspended": profile.billing_suspended_at is not None,
                 }
         return render(
             request,
