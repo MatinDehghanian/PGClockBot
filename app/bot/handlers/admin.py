@@ -138,6 +138,9 @@ def _plan_detail_keyboard(p: Plan) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="✏️ مدت (روز)", callback_data=f"adm:plan:edit:days:{pid}")],
         [InlineKeyboardButton(text="✏️ حجم (گیگ)", callback_data=f"adm:plan:edit:gb:{pid}")],
         [InlineKeyboardButton(text="✏️ توضیح", callback_data=f"adm:plan:edit:desc:{pid}")],
+        [InlineKeyboardButton(text="✏️ ترتیب نمایش", callback_data=f"adm:plan:edit:sort:{pid}")],
+        [InlineKeyboardButton(text="✏️ پیشوند نام", callback_data=f"adm:plan:edit:prefix:{pid}")],
+        [InlineKeyboardButton(text="✏️ پسوند نام", callback_data=f"adm:plan:edit:suffix:{pid}")],
         [
             InlineKeyboardButton(
                 text="⏸ خاموش" if p.is_active else "▶️ روشن",
@@ -172,7 +175,9 @@ def _plan_detail_keyboard(p: Plan) -> InlineKeyboardMarkup:
                 text="🗑 حذف پلن",
                 callback_data=f"adm:plan:delask:{p.id}",
             )
-        ],
+        ]
+    )
+    rows.append(
         [InlineKeyboardButton(text="⬅️ پلن‌های کاربران", callback_data="adm:plans:aud:users")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -578,7 +583,7 @@ async def adm_plan_edit_ask(
         await callback.answer("نامعتبر", show_alert=True)
         return
     field, pid_raw = parts[3], parts[4]
-    if field not in {"name", "price", "days", "gb", "desc"}:
+    if field not in {"name", "price", "days", "gb", "desc", "sort", "prefix", "suffix"}:
         await callback.answer("نامعتبر", show_alert=True)
         return
     prompts = {
@@ -587,6 +592,9 @@ async def adm_plan_edit_ask(
         "days": "مدت (روز):",
         "gb": "حجم گیگ (۰ = نامحدود):",
         "desc": "توضیح (خالی = حذف):",
+        "sort": "ترتیب نمایش (عدد؛ کمتر = بالاتر):",
+        "prefix": "پیشوند نام کاربری پاسارگارد (خالی = پیش‌فرض):",
+        "suffix": "پسوند نام کاربری پاسارگارد (خالی = حذف):",
     }
     await state.set_state(AdminStates.plan_edit_field)
     await state.update_data(
@@ -633,6 +641,12 @@ async def adm_plan_edit_save(
             plan.data_limit_gb = None if gb <= 0 else gb
         elif field == "desc":
             plan.description = text or None
+        elif field == "sort":
+            plan.sort_order = parse_bot_int(text, default=0)
+        elif field == "prefix":
+            plan.pg_username_prefix = text[:64] or None
+        elif field == "suffix":
+            plan.pg_username_suffix = text[:64] or None
     except ValueError:
         await message.answer("عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
         return
@@ -769,11 +783,15 @@ async def _finish_new_plan(
     group_ids: str | None = None,
 ) -> Plan:
     data = await state.get_data()
-    await state.clear()
+    name = str(data.get("name") or "").strip()
+    if not name:
+        raise ValueError("plan name missing from FSM")
+    price = int(data.get("price") or 0)
+    days = int(data.get("days") or 30)
     plan = Plan(
-        name=data["name"],
-        price=data["price"],
-        duration_days=data["days"],
+        name=name[:128],
+        price=max(0, price),
+        duration_days=max(1, days),
         data_limit_gb=data.get("gb"),
         pg_template_id=template_id,
         pg_group_ids=group_ids,
@@ -782,6 +800,17 @@ async def _finish_new_plan(
     session.add(plan)
     await session.commit()
     await session.refresh(plan)
+    await state.set_state(None)
+    await state.update_data(
+        new_plan=0,
+        selected_groups=[],
+        name=None,
+        price=None,
+        days=None,
+        gb=None,
+        _adm_plans_aud="users",
+        _adm_plans_kind="fixed",
+    )
     return plan
 
 
@@ -838,7 +867,11 @@ async def _show_template_picker(callback: CallbackQuery, *, plan_id: int) -> Non
     rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data=back)])
     text = "📋 یک تمپلیت پاسارگارد انتخاب کنید:"
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
 
 
 async def _show_group_picker(callback: CallbackQuery, state: FSMContext, *, plan_id: int) -> None:
@@ -853,7 +886,10 @@ async def _show_group_picker(callback: CallbackQuery, state: FSMContext, *, plan
         gid = g.get("id")
         if gid is None:
             continue
-        gid = int(gid)
+        try:
+            gid = int(gid)
+        except (TypeError, ValueError):
+            continue
         mark = "✅ " if gid in selected else ""
         name = g.get("name") or f"گروه {gid}"
         rows.append(
@@ -884,7 +920,11 @@ async def _show_group_picker(callback: CallbackQuery, state: FSMContext, *, plan
         f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}"
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
 
 
 @router.callback_query(F.data.startswith("adm:plan:picktpl:"))
@@ -929,9 +969,14 @@ async def adm_plan_set_tpl(
     plan_id = int(parts[-2])
     tpl_id = int(parts[-1])
     data = await state.get_data()
-    await callback.answer("ذخیره شد")
-    if data.get("new_plan") or plan_id == 0:
-        plan = await _finish_new_plan(session, state, template_id=tpl_id, group_ids=None)
+    creating = bool(data.get("new_plan") or plan_id == 0)
+    if creating:
+        try:
+            plan = await _finish_new_plan(session, state, template_id=tpl_id, group_ids=None)
+        except Exception:
+            await callback.answer("ساخت پلن ناموفق بود", show_alert=True)
+            return
+        await callback.answer("ذخیره شد")
         if callback.message:
             text = (
                 f"پلن #{plan.id} با تمپلیت #{tpl_id} ساخته شد ✅\n\n"
@@ -945,13 +990,16 @@ async def adm_plan_set_tpl(
         return
     plan = await session.get(Plan, plan_id)
     if not plan:
+        await callback.answer("یافت نشد", show_alert=True)
         return
     plan.pg_template_id = tpl_id
     plan.pg_group_ids = None
     await session.commit()
-    await state.clear()
+    await state.update_data(new_plan=0, selected_groups=[])
+    await callback.answer("ذخیره شد")
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(
+            callback.message,
             await _plan_detail_text(plan),
             reply_markup=_plan_detail_keyboard(plan),
         )
@@ -990,9 +1038,14 @@ async def adm_plan_grp_done(
         await callback.answer("حداقل یک گروه انتخاب کنید", show_alert=True)
         return
     group_csv = ",".join(str(x) for x in selected)
-    await callback.answer("ذخیره شد")
-    if data.get("new_plan") or plan_id == 0:
-        plan = await _finish_new_plan(session, state, template_id=None, group_ids=group_csv)
+    creating = bool(data.get("new_plan") or plan_id == 0)
+    if creating:
+        try:
+            plan = await _finish_new_plan(session, state, template_id=None, group_ids=group_csv)
+        except Exception:
+            await callback.answer("ساخت پلن ناموفق بود", show_alert=True)
+            return
+        await callback.answer("ذخیره شد")
         if callback.message:
             text = (
                 f"پلن #{plan.id} با گروه(ها) {group_csv} ساخته شد ✅\n\n"
@@ -1006,13 +1059,16 @@ async def adm_plan_grp_done(
         return
     plan = await session.get(Plan, plan_id)
     if not plan:
+        await callback.answer("یافت نشد", show_alert=True)
         return
     plan.pg_template_id = None
     plan.pg_group_ids = group_csv
     await session.commit()
-    await state.clear()
+    await state.update_data(selected_groups=[], new_plan=0)
+    await callback.answer("ذخیره شد")
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(
+            callback.message,
             await _plan_detail_text(plan),
             reply_markup=_plan_detail_keyboard(plan),
         )

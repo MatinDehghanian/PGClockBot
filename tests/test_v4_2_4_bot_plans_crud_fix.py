@@ -1,4 +1,4 @@
-"""v4.2.4 — bot plans CRUD: commit, handler routing, PAYG group picker."""
+"""v4.2.5 — bot plans CRUD: commit, handler routing, PAYG group picker."""
 
 from __future__ import annotations
 
@@ -18,9 +18,10 @@ class PlansCrudFixTests(unittest.TestCase):
         self.assertIn("await _persist(session)", save_block[:1500])
 
     def test_reseller_delete_commits_and_cleans_billing(self):
-        block = ADMIN_PLANS[
-            ADMIN_PLANS.find("async def resplan_del") : ADMIN_PLANS.find("@router.callback_query(F.data.regexp")
-        ]
+        self.assertIn("delete_plan_billing_rate", ADMIN_PLANS)
+        idx = ADMIN_PLANS.find("async def resplan_del(")
+        self.assertGreater(idx, 0)
+        block = ADMIN_PLANS[idx : idx + 900]
         self.assertIn("delete_plan_billing_rate", block)
         self.assertIn("await _persist(session)", block)
 
@@ -55,8 +56,8 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.2.4")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.2.4")
+        self.assertEqual(__version__, "4.2.5")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.2.5")
 
 
 if __name__ == "__main__":

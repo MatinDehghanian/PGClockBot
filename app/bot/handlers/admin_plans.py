@@ -467,12 +467,13 @@ async def open_add_kind_action(
 
     await state.update_data(_adm_plans_aud=audience, _adm_plans_kind=kind)
     await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_KIND, push=False)
-    ui = await get_all_settings(session)
-    list_markup = kb.admin_plans_kind_reply_keyboard(audience, ui)
     if audience == "users" and kind == "fixed":
         await state.set_state(AdminStates.add_plan_name)
-        await message.answer("➕ <b>پلن ثابت جدید</b>\nنام پلن را بفرستید:", reply_markup=kb.cancel_reply())
-        await message.answer("⬇️", reply_markup=list_markup)
+        # Keep cancel reply KB for the whole FSM — do NOT restore list KB mid-wizard
+        await message.answer(
+            "➕ <b>پلن ثابت جدید</b>\nنام پلن را بفرستید:",
+            reply_markup=kb.cancel_reply(),
+        )
         return
     if audience == "resellers" and kind in {"fixed", "payg"}:
         label = "Pay As You Go" if kind == "payg" else "ثابت (کمیسیون)"
@@ -482,9 +483,10 @@ async def open_add_kind_action(
             f"➕ <b>پلن {label}</b>\nنام پلن نمایندگی:",
             reply_markup=kb.cancel_reply(),
         )
-        await message.answer("⬇️", reply_markup=list_markup)
         return
     # Settings-based kinds — open configure screen (same as web «تنظیم»)
+    ui = await get_all_settings(session)
+    list_markup = kb.admin_plans_kind_reply_keyboard(audience, ui)
     await message.answer("⬇️", reply_markup=list_markup)
     await open_kind_screen(message, session, audience, kind)
 
@@ -758,7 +760,7 @@ async def wholesale_add_tier_ask(callback: CallbackQuery, state: FSMContext, db_
 
 @router.message(AdminPlansStates.wholesale_tier_min)
 async def wholesale_tier_min_entered(
-    message: Message, state: FSMContext, db_user: BotUser
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
     if not _is_admin(db_user):
         await state.clear()
@@ -768,7 +770,7 @@ async def wholesale_tier_min_entered(
         await _answer_plans_cancel(message, state, session)
         return
     try:
-        mn = int((message.text or "").strip())
+        mn = parse_bot_int(message.text)
     except ValueError:
         await message.answer("عدد معتبر بفرستید.")
         return
@@ -1277,7 +1279,6 @@ def _resplan_detail_text(plan: ResellerPlan) -> str:
 
 def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
     mode = reseller_plan_mode_of(plan)
-    back = f"adm:plans:kind:resellers:{mode}"
     pid = plan.id
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text="✏️ نام", callback_data=f"adm:resplan:edit:name:{pid}")],
@@ -1300,12 +1301,24 @@ def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="🔐 دسترسی‌ها", callback_data=f"adm:resplan:perms:{pid}")],
             [
                 InlineKeyboardButton(
+                    text=("✅ " if plan.create_pg_admin else "⬜️ ") + "ساخت ادمین PG",
+                    callback_data=f"adm:resplan:flag:pgadmin:{pid}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=("✅ " if plan.share_pg_panel_url else "⬜️ ") + "ارسال لینک پنل PG",
+                    callback_data=f"adm:resplan:flag:sharepg:{pid}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="⏸ خاموش" if plan.is_active else "▶️ روشن",
                     callback_data=f"adm:resplan:toggle:{pid}",
                 )
             ],
             [InlineKeyboardButton(text="🗑 حذف", callback_data=f"adm:resplan:delask:{pid}")],
-            _back_row("⬅️ لیست", back),
+            _back_row("⬅️ پلن‌های نمایندگان", "adm:plans:aud:resellers"),
         ]
     )
     return _kb(rows)
@@ -1342,6 +1355,31 @@ async def resplan_toggle(callback: CallbackQuery, session: AsyncSession, db_user
     await callback.answer("بروز شد")
     if callback.message:
         await callback.message.edit_text(
+            _resplan_detail_text(plan),
+            reply_markup=_resplan_detail_keyboard(plan),
+        )
+
+
+@router.callback_query(F.data.regexp(r"^adm:resplan:flag:(pgadmin|sharepg):\d+$"))
+async def resplan_flag_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    flag, pid = parts[3], int(parts[4])
+    plan = await session.get(ResellerPlan, pid)
+    if not plan:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    if flag == "pgadmin":
+        plan.create_pg_admin = not bool(plan.create_pg_admin)
+    else:
+        plan.share_pg_panel_url = not bool(plan.share_pg_panel_url)
+    await _persist(session)
+    await callback.answer("بروز شد")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
             _resplan_detail_text(plan),
             reply_markup=_resplan_detail_keyboard(plan),
         )
@@ -1664,7 +1702,7 @@ async def resplan_edit_save(
     _ = bubble
 
 
-@router.callback_query(F.data.startswith("adm:resplan:add:"))
+@router.callback_query(F.data.in_({"adm:resplan:add:fixed", "adm:resplan:add:payg"}))
 async def resplan_add_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -1812,7 +1850,14 @@ async def resplan_add_tog_grp(callback: CallbackQuery, state: FSMContext, db_use
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
-    gid = int(callback.data.rsplit(":", 1)[-1])
+    if await state.get_state() != AdminPlansStates.res_plan_link.state:
+        await callback.answer("ابتدا ساخت پلن PAYG را شروع کنید", show_alert=True)
+        return
+    try:
+        gid = int(callback.data.rsplit(":", 1)[-1])
+    except ValueError:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
     selected = [int(x) for x in ((await state.get_data()).get("res_plan_groups") or [])]
     if gid in selected:
         selected = [x for x in selected if x != gid]
@@ -1831,6 +1876,9 @@ async def resplan_add_grp_done(
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
+    if await state.get_state() != AdminPlansStates.res_plan_link.state:
+        await callback.answer("ابتدا ساخت پلن PAYG را شروع کنید", show_alert=True)
+        return
     data = await state.get_data()
     if data.get("res_plan_mode") != "payg":
         await callback.answer("نامعتبر", show_alert=True)
@@ -1840,20 +1888,27 @@ async def resplan_add_grp_done(
     ]
     rate = int(data.get("res_plan_rate_gb") or 0)
     group_csv = ",".join(str(x) for x in selected) if selected else None
-    plan = await _save_reseller_plan(
-        session,
-        state,
-        price_per_gb=rate,
-        pg_group_ids=group_csv,
-    )
+    try:
+        plan = await _save_reseller_plan(
+            session,
+            state,
+            price_per_gb=rate,
+            pg_group_ids=group_csv,
+        )
+    except Exception:
+        await callback.answer("ذخیره ناموفق بود", show_alert=True)
+        return
     await state.set_state(None)
     await callback.answer("ذخیره شد")
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_text(
+            callback.message,
             f"پلن PAYG #{plan.id} ذخیره شد ✅\n\n{_resplan_detail_text(plan)}",
             reply_markup=_resplan_detail_keyboard(plan),
         )
-        await sync_plans_reply_keyboard(callback.message, session, db_user, state, audience="resellers")
+        await sync_plans_reply_keyboard(
+            callback.message, session, db_user, state, audience="resellers"
+        )
 
 
 async def _save_reseller_plan(
