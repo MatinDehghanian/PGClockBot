@@ -82,9 +82,9 @@
       <tr>
         <th>کاربر</th>
         <th class="col-hide-sm">تلگرام</th>
-        <th>نقش</th>
-        <th>کاربران</th>
-        <th>حجم</th>
+        <th class="col-hide-sm">نقش</th>
+        <th class="reseller-quota-th">کاربران</th>
+        <th class="reseller-quota-th">حجم</th>
         <th class="col-hide-sm">کمیسیون</th>
         <th class="col-hide-sm">وب</th>
         <th class="col-hide-sm">ربات</th>
@@ -109,17 +109,21 @@
           {% endif %}
         </td>
         <td class="mono col-hide-sm">{{ u.telegram_id }}</td>
-        <td>
+        <td class="col-hide-sm">
           <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
             {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
           </span>
         </td>
-        <td class="mono" dir="ltr" title="مصرف / سقف کاربران">{{ usage.get('users_text') or '—' }}</td>
-        <td class="mono" dir="ltr" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
-          {{ usage.get('traffic_text') or '—' }}
-          {% if usage.get('lifetime_text') %}
-          <br><small class="muted">Σ {{ usage.get('lifetime_text') }}</small>
-          {% endif %}
+        <td class="mono reseller-quota-cell" dir="ltr" title="مصرف / سقف کاربران">
+          <span class="reseller-quota-line">{{ usage.get('users_text') or '—' }}</span>
+        </td>
+        <td class="mono reseller-quota-cell" dir="ltr" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
+          <div class="reseller-quota">
+            <span class="reseller-quota-line">{{ usage.get('traffic_text') or '—' }}</span>
+            {% if usage.get('lifetime_text') %}
+            <small class="muted reseller-quota-life">Σ {{ usage.get('lifetime_text') }}</small>
+            {% endif %}
+          </div>
         </td>
         <td class="mono col-hide-sm">{% if (p.billing_mode or 'fixed') == 'payg' %}—{% else %}{{ p.commission_percent }}%{% endif %}</td>
         <td class="mono col-hide-sm">{{ p.web_username or '—' }}</td>

@@ -153,23 +153,25 @@
 
 {% if wallet_txs %}
 <section class="edit-section">
-  <header class="edit-section-head">
-    <h3>تراکنش‌های کیف پول</h3>
-    <p class="muted">آخرین {{ wallet_txs|length }} مورد</p>
-  </header>
-  <ul class="wallet-tx-list">
-    {% for tx in wallet_txs %}
-    <li class="wallet-tx-item">
-      <div class="wallet-tx-main">
-        <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount }}</span>
-        <span class="muted wallet-tx-reason">{{ tx.reason or '—' }}</span>
-      </div>
-      <div class="wallet-tx-side">
-        <span class="mono muted">#{{ tx.id }}</span>
-        <span>{{ format_toman(tx.balance_after) }}</span>
-      </div>
-    </li>
-    {% endfor %}
-  </ul>
+  <div class="wallet-tx-block">
+    <header class="edit-section-head">
+      <h3>تراکنش‌های کیف پول</h3>
+      <p class="muted">آخرین {{ wallet_txs|length }} مورد</p>
+    </header>
+    <ul class="wallet-tx-list">
+      {% for tx in wallet_txs %}
+      <li class="wallet-tx-item">
+        <div class="wallet-tx-main">
+          <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount }}</span>
+          <span class="muted wallet-tx-reason">{{ tx.reason or '—' }}</span>
+        </div>
+        <div class="wallet-tx-side">
+          <span class="mono muted">#{{ tx.id }}</span>
+          <span>{{ format_toman(tx.balance_after) }}</span>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
 </section>
 {% endif %}

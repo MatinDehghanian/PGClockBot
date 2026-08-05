@@ -147,39 +147,43 @@
     </div>
   </form>
   {% if wallet_txs %}
-  <h4 class="edit-section-sub">تراکنش‌های کیف پول</h4>
-  <ul class="wallet-tx-list">
-    {% for tx in wallet_txs %}
-    <li class="wallet-tx-item">
-      <div class="wallet-tx-main">
-        <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount }}</span>
-        <span class="muted wallet-tx-reason">{{ tx.reason or '—' }}</span>
-      </div>
-      <div class="wallet-tx-side">
-        <span class="mono muted">#{{ tx.id }}</span>
-        <span>{{ format_toman(tx.balance_after) }}</span>
-      </div>
-    </li>
-    {% endfor %}
-  </ul>
+  <div class="wallet-tx-block">
+    <h4 class="edit-section-sub">تراکنش‌های کیف پول</h4>
+    <ul class="wallet-tx-list">
+      {% for tx in wallet_txs %}
+      <li class="wallet-tx-item">
+        <div class="wallet-tx-main">
+          <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount }}</span>
+          <span class="muted wallet-tx-reason">{{ tx.reason or '—' }}</span>
+        </div>
+        <div class="wallet-tx-side">
+          <span class="mono muted">#{{ tx.id }}</span>
+          <span>{{ format_toman(tx.balance_after) }}</span>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
   {% endif %}
   {% if billing_txs %}
-  <h4 class="edit-section-sub">تراکنش‌های مصرف PAYG</h4>
-  <p class="muted" style="margin-top:0">مانده = کیف پول فروشگاهی پس از کسر/شارژ</p>
-  <ul class="wallet-tx-list">
-    {% for tx in billing_txs %}
-    <li class="wallet-tx-item">
-      <div class="wallet-tx-main">
-        <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount }}</span>
-        <span class="muted wallet-tx-reason">{{ tx.kind or '—' }}{% if tx.note %} · {{ tx.note }}{% endif %}</span>
-      </div>
-      <div class="wallet-tx-side">
-        <span class="mono muted">#{{ tx.id }}</span>
-        <span>{{ format_toman(tx.balance_after) }}</span>
-      </div>
-    </li>
-    {% endfor %}
-  </ul>
+  <div class="wallet-tx-block">
+    <h4 class="edit-section-sub">تراکنش‌های مصرف PAYG</h4>
+    <p class="muted wallet-tx-caption">مانده = کیف پول فروشگاهی پس از کسر/شارژ</p>
+    <ul class="wallet-tx-list">
+      {% for tx in billing_txs %}
+      <li class="wallet-tx-item">
+        <div class="wallet-tx-main">
+          <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount }}</span>
+          <span class="muted wallet-tx-reason">{{ tx.kind or '—' }}{% if tx.note %} · {{ tx.note }}{% endif %}</span>
+        </div>
+        <div class="wallet-tx-side">
+          <span class="mono muted">#{{ tx.id }}</span>
+          <span>{{ format_toman(tx.balance_after) }}</span>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
   {% endif %}
 </section>
 {% endif %}

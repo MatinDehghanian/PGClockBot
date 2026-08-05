@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.3.5": [
+        "لیست نمایندگان: ستون حجم بدون شکستن وسط واحد (nowrap) و فضای بیشتر در موبایل",
+        "مودال‌ها: فاصله درست بین تیتر و لیست تراکنش‌های کیف پول / PAYG",
+    ],
     "4.3.4": [
         "منوی بازشو در مودال ویرایش کاربر/نماینده دقیق زیر باکس باز می‌شود (رفع کج‌شدن در RTL)",
         "تراکنش‌های کیف پول و PAYG نماینده با همان طراحی رنگی واریز/برداشت کاربر",
