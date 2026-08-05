@@ -51,7 +51,7 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.3.7")
+        self.assertEqual(__version__, "4.3.8")
 
 
 if __name__ == "__main__":

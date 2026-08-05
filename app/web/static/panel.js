@@ -367,16 +367,21 @@
     }
     function enhanceSelect(sel){
       if (!sel || sel.dataset.uiSelect === '1' || sel.multiple || sel.size > 1) return;
+      if (sel.classList.contains('ui-select-native')) return;
       if (sel.closest('.ui-select')) return;
       sel.dataset.uiSelect = '1';
+
       const wrap = document.createElement('div');
       wrap.className = 'ui-select' + (sel.classList.contains('select-sm') || (sel.closest('.actions') && !sel.classList.contains('select-block')) ? ' ui-select-sm' : '');
       if (sel.disabled) wrap.classList.add('is-disabled');
-      sel.parentNode.insertBefore(wrap, sel);
-      wrap.appendChild(sel);
-      sel.classList.add('ui-select-native');
-      sel.tabIndex = -1;
-      sel.setAttribute('aria-hidden', 'true');
+
+      /* Build custom UI first, then park the native <select> outside any <label>.
+         iOS/Android activate native pickers when a labeled <select> is tapped —
+         even with opacity:0 / pointer-events:none. display:none + out-of-label
+         is required to kill native menus panel-wide. */
+      const hostLabel = sel.closest('label');
+      const insertParent = sel.parentNode;
+      insertParent.insertBefore(wrap, sel);
 
       const toggle = document.createElement('button');
       toggle.type = 'button';
@@ -398,6 +403,26 @@
       menu.hidden = true;
       wrap.appendChild(menu);
 
+      sel.classList.add('ui-select-native');
+      sel.tabIndex = -1;
+      sel.setAttribute('aria-hidden', 'true');
+      sel.setAttribute('data-ui-select-el', '1');
+      /* Keep in form for submit/validation, but never inside <label> */
+      if (hostLabel && hostLabel.contains(sel)) {
+        if (sel.id && hostLabel.getAttribute('for') === sel.id) {
+          hostLabel.removeAttribute('for');
+        }
+        hostLabel.parentNode.insertBefore(sel, hostLabel.nextSibling);
+      } else {
+        wrap.appendChild(sel);
+      }
+      wrap._nativeSelect = sel;
+
+      function syncDisabled(){
+        const off = !!sel.disabled;
+        wrap.classList.toggle('is-disabled', off);
+        toggle.disabled = off;
+      }
       function syncLabel(){
         const opt = sel.options[sel.selectedIndex];
         label.textContent = opt ? opt.textContent : (sel.getAttribute('placeholder') || '—');
@@ -405,6 +430,7 @@
           btn.classList.toggle('active', btn.dataset.value === sel.value);
           btn.setAttribute('aria-selected', btn.dataset.value === sel.value ? 'true' : 'false');
         });
+        syncDisabled();
       }
       function rebuildOptions(){
         menu.innerHTML = '';
@@ -456,15 +482,29 @@
           requestAnimationFrame(() => placeUiSelectMenu(wrap));
         }
       });
+      /* Stop label-associated native activation (desktop + mobile) */
+      if (hostLabel) {
+        hostLabel.addEventListener('mousedown', (ev) => {
+          if (ev.target.closest('.ui-select') || ev.target === sel) {
+            ev.preventDefault();
+          }
+        }, true);
+        hostLabel.addEventListener('click', (ev) => {
+          if (ev.target.closest('.ui-select') || ev.target === sel) {
+            ev.preventDefault();
+          }
+        }, true);
+      }
       sel.addEventListener('change', syncLabel);
       /* Always rebuild custom menu when <option> list is rewritten (e.g. plans modal
          audience → kind options). Previously only settings forms were watched, so
          dynamic selects kept showing stale labels/options. */
       const mo = new MutationObserver(() => rebuildOptions());
-      mo.observe(sel, { childList: true, subtree: true, characterData: true });
+      mo.observe(sel, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['disabled'] });
     }
     function enhanceAllSelects(root){
       const scope = root && root.querySelectorAll ? root : document;
+      if (scope.matches && scope.matches('select')) enhanceSelect(scope);
       scope.querySelectorAll('select').forEach(enhanceSelect);
     }
     enhanceAllSelects();
@@ -473,6 +513,36 @@
       const root = e && e.detail && e.detail.root;
       enhanceAllSelects(root || document);
     });
+    /* New selects injected into the DOM (fragment modals, dynamic forms) */
+    try {
+      const selectMo = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          m.addedNodes && m.addedNodes.forEach((node) => {
+            if (!node || node.nodeType !== 1) return;
+            if (node.matches && node.matches('select')) enhanceSelect(node);
+            if (node.querySelectorAll) node.querySelectorAll('select').forEach(enhanceSelect);
+          });
+        }
+      });
+      selectMo.observe(document.documentElement, { childList: true, subtree: true });
+    } catch (e) {}
+    /* Belt-and-suspenders: never let a labeled enhanced select open natively */
+    document.addEventListener('mousedown', (e) => {
+      const t = e.target;
+      if (!t || !t.closest) return;
+      if (t.matches && t.matches('select.ui-select-native')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+    document.addEventListener('click', (e) => {
+      const t = e.target;
+      if (!t || !t.closest) return;
+      if (t.matches && t.matches('select.ui-select-native')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeUiSelects();
     });
@@ -590,10 +660,13 @@
       el.hidden = false;
       el.classList.add('open');
       document.body.classList.add('modal-open');
-      /* Prefer a non-text control for initial focus to avoid mobile zoom side-effects */
+      /* Ensure every select in this modal is custom (covers late DOM / fragments) */
+      enhanceAllSelects(el);
+      /* Never focus a native <select> — on iOS that opens the system picker */
       const panel = el.querySelector('.ui-modal-panel') || el;
       const focus =
-        panel.querySelector('input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])') ||
+        panel.querySelector('input:not([type="hidden"]):not([disabled]):not(.ui-select-native), textarea:not([disabled])') ||
+        panel.querySelector('.ui-select-toggle:not([disabled])') ||
         panel.querySelector('button:not([disabled]), [href]');
       if (focus) setTimeout(() => focus.focus(), 30);
     }
@@ -603,6 +676,7 @@
       ensureModalPorted(el);
       el.hidden = false;
       document.body.classList.add('modal-open');
+      enhanceAllSelects(el);
       const thread = el.querySelector('.ticket-thread');
       if (thread) thread.scrollTop = thread.scrollHeight;
     });

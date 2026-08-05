@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.3.8": [
+        "حذف کامل منوی native سیستم برای تمام selectها (رفع باز شدن پیکر iOS با لمس لیبل)",
+        "منوی بازشو سفارشی در همه مودال‌ها و فرم‌ها؛ فوکوس مودال دیگر select مخفی را هدف نمی‌گیرد",
+    ],
     "4.3.7": [
         "مودال ویرایش کاربر: کارت سرویس با ردیف‌های راست‌چین و حجم یک‌واحدی (مثلاً ۱۰/۵۰ گیگ)",
         "مودال نماینده: تغییر نقش در ابتدا + منوی بازشو هماهنگ؛ وضعیت PAYG با فاصله درست",

@@ -741,19 +741,21 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
   vertical-align: middle;
 }
 .ui-select-native {
+  /* Hard-hide: opacity/clip alone still lets iOS open native pickers via <label> */
+  display: none !important;
   position: absolute !important;
-  inset-inline-start: 0 !important;
-  inset-block-start: 0 !important;
-  width: 1px !important;
-  height: 1px !important;
-  padding: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
   margin: 0 !important;
-  overflow: hidden !important;
-  clip: rect(0, 0, 0, 0) !important;
-  white-space: nowrap !important;
+  padding: 0 !important;
   border: 0 !important;
   opacity: 0 !important;
   pointer-events: none !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
 }
 .ui-select-toggle {
   display: inline-flex;

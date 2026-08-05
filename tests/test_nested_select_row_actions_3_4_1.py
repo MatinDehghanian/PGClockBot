@@ -45,12 +45,19 @@ class NestedSelectRowActionsTests(unittest.TestCase):
         self.assertIn("z-index: 5", CSS.split(".row-actions-menu .ui-select.open")[1].split("}")[0])
 
     def test_users_and_resellers_role_select_in_row_actions(self):
+        """Role change lives in edit modals now; row-actions keep edit entry points."""
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
         resellers = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
-        self.assertIn("row-actions-stack", users)
-        self.assertIn('name="role"', users)
-        self.assertIn("row-actions-stack", resellers)
-        self.assertIn('name="role"', resellers)
+        user_edit = (ROOT / "app/web/templates/_user_edit_body.html").read_text(encoding="utf-8")
+        reseller_edit = (ROOT / "app/web/templates/_reseller_edit_body.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("row_actions", users)
+        self.assertIn("modal-user-edit", users)
+        self.assertIn('name="role"', user_edit)
+        self.assertIn("row_actions", resellers)
+        self.assertIn("modal-reseller-edit", resellers)
+        self.assertIn('name="role"', reseller_edit)
 
 
 class VersionBumpTests(unittest.TestCase):
