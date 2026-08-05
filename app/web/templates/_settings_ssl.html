@@ -1,23 +1,22 @@
-{# SSL — دریافت گواهی بدون کرش؛ فعال‌سازی HTTPS جدا #}
+{# SSL — دریافت گواهی و فعال‌سازی خودکار HTTPS #}
 {% set st = ssl %}
 
 {% if request.query_params.get('working') == '1' %}
 <div class="flash warn">دریافت گواهی شروع شد — پنل قطع نمی‌شود؛ پیشرفت را پایین ببینید.</div>
 {% endif %}
 {% if request.query_params.get('restarting') == '1' %}
-<div class="flash warn">
+<div class="flash ok">
   HTTPS فعال شد و پنل در حال ری‌استارت است.
   چند ثانیه صبر کنید، بعد با آدرس
   {% if st.public_https %}<a href="{{ st.public_https }}" dir="ltr">{{ st.public_https }}</a>{% else %}HTTPS دامنه{% endif %}
-  وارد شوید (دیگر از IP با http استفاده نکنید).
+  وارد شوید.
 </div>
 {% endif %}
 
 <div class="card settings-card">
   <h2>گواهی SSL (HTTPS)</h2>
   <p class="muted update-card-caption">
-    فقط دامنه پنل و مینی‌اپ را وارد کنید. دریافت گواهی <strong>بدون ری‌استارت</strong> انجام می‌شود؛
-    بعد خودتان «فعال‌سازی HTTPS» را بزنید.
+    فقط دامنه پنل و مینی‌اپ را وارد کنید. پس از دریافت موفق گواهی، HTTPS به‌صورت خودکار فعال می‌شود.
   </p>
 
   <div class="flash {% if st.certbot %}ok{% else %}warn{% endif %}" style="margin-bottom: var(--space-2)">
@@ -70,7 +69,11 @@
         {% if st.ssl_enabled %}اعمال مجدد HTTPS{% else %}فعال‌سازی HTTPS{% endif %}
       </button>
       {% if st.ssl_enabled %}
-      <button type="submit" class="btn btn-ghost" name="action" value="disable" id="ssl-disable-btn" {% if st.running %}disabled{% endif %}>غیرفعال‌سازی HTTPS</button>
+      <button type="submit" class="btn btn-ghost" name="action" value="disable" id="ssl-disable-btn" {% if st.running %}disabled{% endif %}
+        data-confirm="HTTPS غیرفعال شود؟ پنل با HTTP ری‌استارت می‌شود."
+        data-confirm-title="غیرفعال‌سازی HTTPS"
+        data-confirm-warn="1"
+        data-confirm-label="غیرفعال‌سازی">غیرفعال‌سازی HTTPS</button>
       {% endif %}
       {% endif %}
     </div>
@@ -91,7 +94,7 @@
     <code dir="ltr" style="margin-inline-start: var(--space-1)">{{ st.domain }}</code>
   </p>
   {% if st.public_https %}
-  <p class="muted" style="margin: 0 0 var(--space-1)">آدرس HTTPS پس از فعال‌سازی:
+  <p class="muted" style="margin: 0 0 var(--space-1)">آدرس HTTPS:
     <a href="{{ st.public_https }}" dir="ltr" target="_blank" rel="noopener">{{ st.public_https }}</a>
   </p>
   {% endif %}
@@ -116,8 +119,8 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
   {% endif %}
 
   <p class="muted" style="margin: var(--space-2) 0 0">
-    ۱) DNS دامنه → IP سرور · ۲) پورت <code dir="ltr">80</code> آزاد · ۳) دریافت گواهی ·
-    ۴) فعال‌سازی HTTPS · ۵) ورود با <code dir="ltr">https://دامنه:{{ st.web_port }}</code>
+    ۱) DNS دامنه → IP سرور · ۲) پورت <code dir="ltr">80</code> آزاد · ۳) دریافت گواهی (HTTPS خودکار فعال می‌شود) ·
+    ۴) ورود با <code dir="ltr">https://دامنه:{{ st.web_port }}</code>
   </p>
 </div>
 
@@ -177,25 +180,6 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
         if (bar) bar.style.width = '6%';
         if (pctEl) pctEl.textContent = '6%';
         timer = setInterval(function () { if (!document.hidden) poll(); }, 800);
-      }
-      if (action === 'enable') {
-        e.preventDefault();
-        const form = this;
-        const ask = (window.panelConfirm
-          ? window.panelConfirm({
-              title: 'فعال‌سازی HTTPS',
-              message: 'بعد از فعال‌سازی، پنل با HTTPS ری‌استارت می‌شود. از این لحظه با آدرس https://دامنه وارد شوید (نه IP با http).',
-              warn: true,
-              confirmLabel: 'فعال‌سازی',
-            })
-          : Promise.resolve({ ok: window.confirm('بعد از فعال‌سازی، پنل با HTTPS ری‌استارت می‌شود.') }));
-        ask.then(function (result) {
-          if (!result || !result.ok) return;
-          form.dataset.confirmSkip = '1';
-          if (typeof form.requestSubmit === 'function') form.requestSubmit();
-          else form.submit();
-        });
-        return;
       }
     });
   }

@@ -423,6 +423,39 @@ def default_panel_base_url(*, public_base: str | None = None, web_port: int | st
     return f"http://{detect_server_ip()}:{port_s}"
 
 
+def default_http_panel_url(*, web_port: int | str | None = None) -> str:
+    """Panel base URL over HTTP using detected server IP (ignores PUBLIC_BASE_URL)."""
+    from app.config import get_settings
+
+    settings = get_settings()
+    port = web_port if web_port is not None else settings.web_port
+    try:
+        port_s = str(int(port or 9000))
+    except (TypeError, ValueError):
+        port_s = "9000"
+    return f"http://{detect_server_ip()}:{port_s}"
+
+
+def setup_finish_login_url() -> str:
+    """Login URL after wizard — HTTP+IP until HTTPS is actually enabled."""
+    try:
+        from app.services.ssl_certs import cert_files_exist, read_meta
+
+        meta = read_meta()
+        if meta.get("ssl_enabled") and cert_files_exist():
+            base = (meta.get("public_https") or "").strip().rstrip("/")
+            if base:
+                return f"{base}/login"
+    except Exception:
+        pass
+    return default_http_panel_url().rstrip("/") + "/login"
+
+
 def panel_url_hint(public_base: str = "", web_port: str = "9000") -> str:
     base = default_panel_base_url(public_base=public_base, web_port=web_port)
     return base.rstrip("/") + "/"
+
+
+def wizard_panel_url_hint(web_port: str = "9000") -> str:
+    """Panel URL shown during setup — always HTTP+IP (cert/HTTPS not ready yet)."""
+    return default_http_panel_url(web_port=web_port).rstrip("/") + "/"

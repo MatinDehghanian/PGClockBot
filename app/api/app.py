@@ -47,6 +47,8 @@ from app.services.setup_wizard import (
     is_setup_complete,
     mark_setup_complete,
     panel_url_hint,
+    setup_finish_login_url,
+    wizard_panel_url_hint,
     parse_admin_ids,
     persist_setup_entry_url,
     rotate_setup_gate_token,
@@ -792,7 +794,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "show_done": show_done,
                 "flash_err": err or request.query_params.get("err"),
                 "flash_ok": ok or request.query_params.get("ok"),
-                "panel_url": panel_url_hint(values.get("PUBLIC_BASE_URL", ""), values.get("WEB_PORT", "9000")),
+                "panel_url": wizard_panel_url_hint(values.get("WEB_PORT", "9000")),
                 "bot_username": (values.get("BOT_USERNAME") or "").lstrip("@"),
             },
         )
@@ -915,7 +917,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.service_control import schedule_panel_restart
 
         schedule_panel_restart(delay_sec=2.5, reason="setup wizard finished")
-        return RedirectResponse("/login?restarting=1", status_code=303)
+        return RedirectResponse(setup_finish_login_url(), status_code=303)
 
     @app.get("/", response_class=HTMLResponse)
     async def root(request: Request):
