@@ -35,7 +35,7 @@
     <input type="hidden" name="reason" value="" />
     <div class="user-edit-inline-row">
       <label class="form-field user-edit-grow">نقش جدید
-        <select name="role">
+        <select name="role" class="select-block">
           <option value="user" {% if user.role=='user' %}selected{% endif %}>کاربر</option>
           <option value="reseller" {% if user.role=='reseller' %}selected{% endif %}>نماینده</option>
           <option value="admin" {% if user.role=='admin' %}selected{% endif %}>مدیر</option>
