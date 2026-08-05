@@ -42,6 +42,7 @@
         </td>
         <td class="col-actions">
           {% call row_actions() %}
+            <a class="btn btn-ghost btn-sm" href="/users/{{ u.id }}/edit">ویرایش</a>
             <form method="post" action="/users/{{ u.id }}/role" class="row-actions-stack"
                   data-confirm="نقش این کاربر تغییر کند؟ پیام و علت برای کاربر در ربات ارسال می‌شود."
                   data-confirm-title="تأیید تغییر نقش"

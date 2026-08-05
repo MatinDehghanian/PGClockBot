@@ -1,0 +1,97 @@
+"""Bot user admin (web + telegram) — wallet & services (v4.3.0)."""
+
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+
+class BotUserAdminServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_credit_rejects_non_positive(self):
+        from app.services.bot_user_admin import admin_credit_user_wallet
+
+        with self.assertRaises(ValueError):
+            await admin_credit_user_wallet(
+                AsyncMock(), MagicMock(), 0, actor="a"
+            )
+
+    async def test_credit_calls_wallet(self):
+        from app.services.bot_user_admin import admin_credit_user_wallet
+
+        user = MagicMock(id=3, wallet_balance=1000)
+        with patch(
+            "app.services.bot_user_admin.credit_wallet",
+            AsyncMock(return_value=user),
+        ) as credit:
+            out = await admin_credit_user_wallet(
+                AsyncMock(), user, 5000, actor="admin", note="test"
+            )
+        self.assertIs(out, user)
+        credit.assert_awaited()
+        args = credit.await_args
+        self.assertEqual(args.args[2], 5000)
+        self.assertIn("شارژ ادمین", args.args[3])
+
+    async def test_get_owned_service_guards(self):
+        from app.services.bot_user_admin import get_owned_service
+
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=None)
+        with self.assertRaises(ValueError):
+            await get_owned_service(session, bot_user_id=1, service_id=9)
+
+        svc = MagicMock(bot_user_id=2)
+        session.get = AsyncMock(return_value=svc)
+        with self.assertRaises(ValueError):
+            await get_owned_service(session, bot_user_id=1, service_id=9)
+
+
+class UserEditUiTests(unittest.TestCase):
+    def test_template_and_routes(self):
+        edit = Path("app/web/templates/user_edit.html").read_text(encoding="utf-8")
+        self.assertIn("wallet-credit", edit)
+        self.assertIn("تمدید دستی", edit)
+        self.assertIn("افزایش مانده", edit)
+        self.assertIn("کپی لینک", edit)
+        self.assertIn("مانده کیف پول", edit)
+
+        users = Path("app/web/templates/users.html").read_text(encoding="utf-8")
+        self.assertIn("/users/{{ u.id }}/edit", users)
+
+        pages = Path("app/api/user_pages.py").read_text(encoding="utf-8")
+        self.assertIn("register_user_pages", pages)
+        self.assertIn("/users/{user_id}/wallet-credit", pages)
+        self.assertIn("/services/{service_id}/renew", pages)
+
+        app = Path("app/api/app.py").read_text(encoding="utf-8")
+        self.assertIn("register_user_pages", app)
+
+    def test_reseller_edit_wallet_balance_column(self):
+        src = Path("app/web/templates/reseller_edit.html").read_text(encoding="utf-8")
+        self.assertIn("مانده کیف پول", src)
+        self.assertIn("wallet_txs", src)
+        self.assertIn("تراکنش‌های کیف پول", src)
+
+    def test_bot_keyboards_and_handlers(self):
+        kb = Path("app/bot/keyboards.py").read_text(encoding="utf-8")
+        self.assertIn("adm:users:wcredit:", kb)
+        self.assertIn("adm:users:svcs:", kb)
+        self.assertIn("admin_user_service_actions", kb)
+
+        admin = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
+        self.assertIn("adm_users_wallet_credit", admin)
+        self.assertIn("adm_users_services", admin)
+        self.assertIn("admin_renew_service", admin)
+        self.assertIn("admin_extend_service", admin)
+
+    def test_service_module_exists(self):
+        src = Path("app/services/bot_user_admin.py").read_text(encoding="utf-8")
+        self.assertIn("admin_credit_user_wallet", src)
+        self.assertIn("list_service_snapshots", src)
+        self.assertIn("admin_renew_service", src)
+        self.assertIn("MAX_ADMIN_WALLET_CREDIT", src)
+
+
+if __name__ == "__main__":
+    unittest.main()

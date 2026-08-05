@@ -194,6 +194,7 @@ class AdminStates(StatesGroup):
     make_reseller = State()
     ticket_reply = State()
     user_search = State()
+    user_wallet_credit = State()
     revoke_reseller_reason = State()
     block_user_reason = State()
     broadcast_text = State()
@@ -1524,13 +1525,14 @@ async def _render_user_card(
     ) or 0
     blocked = "بله 🚫" if user.is_blocked else "خیر"
     text = (
-        f"👤 <b>{user.full_name or user.username or '—'}</b>\n\n"
+        f"👤 <b>{html.escape(user.full_name or user.username or '—')}</b>\n\n"
         f"آیدی تلگرام: <code>{user.telegram_id}</code>\n"
-        f"یوزرنیم: @{user.username or '—'}\n"
-        f"نقش: {user.role}\n"
+        f"یوزرنیم: @{html.escape(user.username or '—')}\n"
+        f"نقش: {html.escape(user.role)}\n"
         f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
         f"سرویس‌ها: {svc_count}\n"
-        f"مسدود: {blocked}"
+        f"مسدود: {blocked}\n\n"
+        f"<i>ویرایش کامل وب: /users/{user.id}/edit</i>"
     )
     if confirm_delete:
         text += "\n\n⚠️ <b>حذف کامل برگشت‌ناپذیر است</b> (سفارش‌ها، سرویس‌ها، تیکت‌ها)."
@@ -1561,6 +1563,265 @@ async def adm_users_view(callback: CallbackQuery, session: AsyncSession, db_user
     await callback.answer()
     if callback.message:
         await _render_user_card(callback.message, session, user, edit=True)
+
+
+@router.callback_query(F.data.startswith("adm:users:wcredit:"))
+async def adm_users_wallet_credit_ask(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    user_id = int(callback.data.split(":")[-1])
+    user = await session.get(BotUser, user_id)
+    if not user:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await state.set_state(AdminStates.user_wallet_credit)
+    await state.update_data(admin_credit_user_id=user_id)
+    await callback.answer()
+    if callback.message:
+        await callback.message.answer(
+            f"💰 مبلغ شارژ کیف پول برای <b>{html.escape(user.full_name or str(user.telegram_id))}</b>\n"
+            f"موجودی فعلی: {format_toman(user.wallet_balance, get_settings().currency)}\n\n"
+            "مبلغ را به تومان ارسال کنید (حداقل ۱۰۰۰):",
+        )
+
+
+@router.message(AdminStates.user_wallet_credit)
+async def adm_users_wallet_credit_save(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        return
+    data = await state.get_data()
+    user_id = int(data.get("admin_credit_user_id") or 0)
+    user = await session.get(BotUser, user_id) if user_id else None
+    if not user:
+        await state.clear()
+        await message.answer("کاربر یافت نشد")
+        return
+    amount = parse_bot_int(message.text or "")
+    if amount is None or amount < 1000:
+        await message.answer("مبلغ نامعتبر — حداقل ۱۰۰۰ تومان")
+        return
+    from app.services.bot_user_admin import admin_credit_user_wallet
+
+    try:
+        await admin_credit_user_wallet(
+            session,
+            user,
+            int(amount),
+            actor=f"tg:{db_user.telegram_id}",
+            note="شارژ از ربات ادمین",
+        )
+    except ValueError as e:
+        await message.answer(str(e))
+        return
+    await state.clear()
+    await session.refresh(user)
+    await message.answer(
+        f"✅ کیف پول شارژ شد.\n"
+        f"مبلغ: {format_toman(amount, get_settings().currency)}\n"
+        f"مانده: {format_toman(user.wallet_balance, get_settings().currency)}"
+    )
+    await _render_user_card(message, session, user)
+
+
+@router.callback_query(F.data.startswith("adm:users:svcs:"))
+async def adm_users_services(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    user_id = int(callback.data.split(":")[-1])
+    from app.services.bot_user_admin import list_service_snapshots, snapshot_telegram_lines
+
+    snaps = await list_service_snapshots(session, user_id)
+    await callback.answer()
+    if not snaps:
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                "سرویسی برای این کاربر نیست.",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="⬅️ بازگشت",
+                                callback_data=f"adm:users:view:{user_id}",
+                            )
+                        ]
+                    ]
+                ),
+            )
+        return
+    lines = [f"📦 <b>سرویس‌های کاربر #{user_id}</b>", ""]
+    for snap in snaps[:15]:
+        lines.append(snapshot_telegram_lines(snap))
+        lines.append("")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            "\n".join(lines).strip(),
+            reply_markup=kb.admin_user_services_keyboard(
+                user_id, [s.service.id for s in snaps]
+            ),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:users:svc:"))
+async def adm_users_service_one(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    user_id = int(parts[3])
+    service_id = int(parts[4])
+    from app.services.bot_user_admin import get_owned_service, service_snapshot, snapshot_telegram_lines
+
+    try:
+        svc = await get_owned_service(
+            session, bot_user_id=user_id, service_id=service_id
+        )
+        snap = await service_snapshot(session, svc)
+        await session.commit()
+    except ValueError as e:
+        await callback.answer(str(e)[:160], show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            snapshot_telegram_lines(snap),
+            reply_markup=kb.admin_user_service_actions(user_id, service_id),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:users:svclink:"))
+async def adm_users_service_link(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    user_id = int(parts[3])
+    service_id = int(parts[4])
+    from app.services.bot_user_admin import get_owned_service, service_snapshot
+
+    try:
+        svc = await get_owned_service(
+            session, bot_user_id=user_id, service_id=service_id
+        )
+        snap = await service_snapshot(session, svc)
+        await session.commit()
+    except ValueError as e:
+        await callback.answer(str(e)[:160], show_alert=True)
+        return
+    url = snap.subscription_url
+    if not url:
+        await callback.answer("لینک موجود نیست", show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        await callback.message.answer(
+            f"🔗 لینک سرویس #{service_id}:\n<code>{html.escape(url)}</code>"
+        )
+
+
+@router.callback_query(F.data.startswith("adm:users:svcrenew:"))
+async def adm_users_service_renew(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    user_id = int(parts[3])
+    service_id = int(parts[4])
+    from app.services.bot_user_admin import (
+        admin_renew_service,
+        get_owned_service,
+        service_snapshot,
+        snapshot_telegram_lines,
+    )
+
+    try:
+        svc = await get_owned_service(
+            session, bot_user_id=user_id, service_id=service_id
+        )
+        plan = await session.get(Plan, int(svc.plan_id)) if svc.plan_id else None
+        if plan is None:
+            await callback.answer("پلن سرویس مشخص نیست — از وب تمدید کنید", show_alert=True)
+            return
+        await admin_renew_service(session, svc, plan=plan, reset_traffic=True)
+        snap = await service_snapshot(session, svc)
+    except ValueError as e:
+        await callback.answer(str(e)[:160], show_alert=True)
+        return
+    except Exception as e:
+        await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+        return
+    await callback.answer("تمدید شد")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            "✅ تمدید انجام شد\n\n" + snapshot_telegram_lines(snap),
+            reply_markup=kb.admin_user_service_actions(user_id, service_id),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:users:svcext:"))
+async def adm_users_service_extend(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    # adm:users:svcext:{uid}:{sid}:d30|g10
+    user_id = int(parts[3])
+    service_id = int(parts[4])
+    token = parts[5] if len(parts) > 5 else ""
+    extra_days = 0
+    extra_gb = 0.0
+    if token.startswith("d"):
+        extra_days = int(token[1:] or 0)
+    elif token.startswith("g"):
+        extra_gb = float(token[1:] or 0)
+    from app.services.bot_user_admin import (
+        admin_extend_service,
+        get_owned_service,
+        service_snapshot,
+        snapshot_telegram_lines,
+    )
+
+    try:
+        svc = await get_owned_service(
+            session, bot_user_id=user_id, service_id=service_id
+        )
+        await admin_extend_service(
+            session, svc, extra_days=extra_days, extra_gb=extra_gb
+        )
+        snap = await service_snapshot(session, svc)
+    except ValueError as e:
+        await callback.answer(str(e)[:160], show_alert=True)
+        return
+    except Exception as e:
+        await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+        return
+    await callback.answer("افزایش یافت")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            "✅ افزایش اعمال شد\n\n" + snapshot_telegram_lines(snap),
+            reply_markup=kb.admin_user_service_actions(user_id, service_id),
+        )
 
 
 @router.callback_query(F.data.startswith("adm:users:block:"))

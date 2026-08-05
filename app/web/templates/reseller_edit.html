@@ -130,7 +130,7 @@
   <p class="muted">موجودی کیف پول (منبع PAYG): <b>{{ format_toman(wallet_balance or user.wallet_balance or 0) }}</b>
     · نرخ پلن: <b>{{ format_toman(billing_rate or 0) }}</b> / GB
     · watermark: <span dir="ltr">{{ profile.billing_watermark_bytes or 0 }}</span> بایت</p>
-  <p class="muted">مصرف ترافیک از همان کیف پول فروشگاهی نماینده کسر می‌شود. شارژ دستی زیر نیز به همان کیف پول واریز می‌شود.</p>
+  <p class="muted">مصرف ترافیک از همان کیف پول فروشگاهی نماینده کسر می‌شود. شارژ دستی زیر نیز به همان کیف پول واریز می‌شود. ستون «مانده» = مانده کیف پول بعد از هر تراکنش.</p>
   <form method="post" action="/resellers/{{ user.id }}/billing-topup" class="form-stack">
     <input type="hidden" name="nonce" value="{{ topup_nonce }}" />
     <div class="form-row">
@@ -152,8 +152,34 @@
       <button class="btn" type="submit">ثبت شارژ کیف پول</button>
     </div>
   </form>
+  {% if wallet_txs %}
+  <h3 style="margin-top:1.25rem">تراکنش‌های کیف پول</h3>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>مبلغ</th>
+          <th>مانده کیف پول</th>
+          <th>شرح</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in wallet_txs %}
+        <tr>
+          <td>{{ tx.id }}</td>
+          <td dir="ltr">{{ tx.amount }}</td>
+          <td>{{ format_toman(tx.balance_after) }}</td>
+          <td class="muted">{{ tx.reason or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
   {% if billing_txs %}
-  <h3 style="margin-top:1.25rem">تراکنش‌های اخیر</h3>
+  <h3 style="margin-top:1.25rem">تراکنش‌های مصرف PAYG</h3>
+  <p class="muted" style="margin-top:0">مانده = کیف پول فروشگاهی پس از کسر/شارژ</p>
   <div class="table-wrap">
     <table class="table">
       <thead>
@@ -161,7 +187,7 @@
           <th>#</th>
           <th>نوع</th>
           <th>مبلغ</th>
-          <th>مانده</th>
+          <th>مانده کیف پول</th>
           <th>یادداشت</th>
         </tr>
       </thead>

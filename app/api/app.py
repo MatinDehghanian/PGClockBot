@@ -691,8 +691,10 @@ def create_api_app(lifespan=None) -> FastAPI:
     from app.api.reseller_pages import register_reseller_pages
     from app.api.security import register_security_pages
     from app.api.shop_settings import register_shop_settings
+    from app.api.user_pages import register_user_pages
 
     register_reseller_pages(app, render=render, require_admin=require_admin, get_db=get_db)
+    register_user_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     register_shop_settings(
         app,
         render=render,
