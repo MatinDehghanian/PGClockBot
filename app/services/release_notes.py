@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.3.6": [
+        "مودال ویرایش کاربر/نماینده: فاصله تیتر، کپشن و جدول تراکنش با بقیه بخش‌ها یکدست شد",
+        "لیست نمایندگان: مقدار ستون حجم راست‌چین شد",
+    ],
     "4.3.5": [
         "لیست نمایندگان: ستون حجم بدون شکستن وسط واحد (nowrap) و فضای بیشتر در موبایل",
         "مودال‌ها: فاصله درست بین تیتر و لیست تراکنش‌های کیف پول / PAYG",

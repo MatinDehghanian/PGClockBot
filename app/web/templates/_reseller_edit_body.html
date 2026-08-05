@@ -148,7 +148,9 @@
   </form>
   {% if wallet_txs %}
   <div class="wallet-tx-block">
-    <h4 class="edit-section-sub">تراکنش‌های کیف پول</h4>
+    <header class="edit-section-head">
+      <h4 class="edit-section-sub">تراکنش‌های کیف پول</h4>
+    </header>
     <ul class="wallet-tx-list">
       {% for tx in wallet_txs %}
       <li class="wallet-tx-item">
@@ -167,8 +169,10 @@
   {% endif %}
   {% if billing_txs %}
   <div class="wallet-tx-block">
-    <h4 class="edit-section-sub">تراکنش‌های مصرف PAYG</h4>
-    <p class="muted wallet-tx-caption">مانده = کیف پول فروشگاهی پس از کسر/شارژ</p>
+    <header class="edit-section-head">
+      <h4 class="edit-section-sub">تراکنش‌های مصرف PAYG</h4>
+      <p class="muted wallet-tx-caption">مانده = کیف پول فروشگاهی پس از کسر/شارژ</p>
+    </header>
     <ul class="wallet-tx-list">
       {% for tx in billing_txs %}
       <li class="wallet-tx-item">

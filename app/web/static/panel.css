@@ -3408,7 +3408,8 @@ body.modal-open { overflow: hidden; }
 .wallet-tx-block {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  /* Match .edit-section-head → content (space-2), not a looser space-3 */
+  gap: var(--space-2);
   margin-top: var(--space-3);
   min-width: 0;
 }
@@ -3422,11 +3423,19 @@ body.modal-open { overflow: hidden; }
 .wallet-tx-block .edit-section-head {
   margin-bottom: 0;
 }
+.wallet-tx-block .edit-section-head .edit-section-sub {
+  margin: 0;
+}
 .wallet-tx-caption,
 .wallet-tx-block > .muted {
   margin: 0;
   font-size: 12px;
   line-height: 1.45;
+}
+/* Loose sibling caption (legacy): pull toward title like card h2 + caption */
+.wallet-tx-block > .edit-section-sub + .wallet-tx-caption,
+.wallet-tx-block > .edit-section-sub + .muted {
+  margin-top: calc(-1 * var(--space-2) + 0.2rem);
 }
 .edit-section-head .muted,
 .edit-section-head p {
@@ -3592,24 +3601,30 @@ body.modal-open { overflow: hidden; }
 .reseller-quota-cell {
   min-width: 6.5rem;
   vertical-align: middle;
+  text-align: right;
 }
+/* Volume stack is dir=ltr — flex-end keeps values physically right-aligned */
 .reseller-quota {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: flex-end;
   gap: 0.2rem;
   min-width: 6.5rem;
+  width: 100%;
+  text-align: right;
 }
 .reseller-quota-line {
   display: inline-block;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   line-height: 1.35;
+  text-align: right;
 }
 .reseller-quota-life {
   white-space: nowrap;
   font-size: 11px;
   line-height: 1.3;
+  text-align: right;
 }
 .wallet-tx-item {
   display: flex;
