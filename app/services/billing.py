@@ -481,6 +481,13 @@ async def credit_topup(
     if existing:
         return existing
 
+    from app.services.billing_suspend import assert_topup_clears_suspend
+
+    try:
+        await assert_topup_clears_suspend(session, profile, int(amount))
+    except BillingError as e:
+        raise ValueError(e.message) from e
+
     with session.no_autoflush:
         result = await session.execute(
             update(ResellerProfile)
@@ -510,6 +517,7 @@ async def credit_topup(
         if commit:
             await session.commit()
             await session.refresh(tx)
+            await session.refresh(profile)
         else:
             await session.flush()
     except IntegrityError:
@@ -518,6 +526,16 @@ async def credit_topup(
         if existing:
             return existing
         raise
+
+    # Instant restore when balance is positive after approved topup
+    if int(profile.billing_balance or 0) > 0 and profile.billing_suspended_at is not None:
+        try:
+            from app.services.billing_suspend import restore_payg_reseller
+
+            await restore_payg_reseller(session, profile, commit=commit)
+        except Exception:
+            logger.exception("PAYG restore after topup failed reseller=%s", reseller_user_id)
+
     return tx
 
 
@@ -682,9 +700,16 @@ async def assert_billing_allows_provision(
         return
     bal = int(profile.billing_balance or 0)
     if bal <= 0:
+        # Ensure hard suspend (admin + services) even if tick missed it
+        try:
+            from app.services.billing_suspend import suspend_payg_reseller
+
+            await suspend_payg_reseller(session, profile, commit=True)
+        except Exception:
+            logger.debug("suspend from provision gate failed", exc_info=True)
         raise BillingError(
-            "موجودی Billing نماینده تمام شده است — ابتدا شارژ کنید "
-            "یا با ادمین اصلی تماس بگیرید"
+            "موجودی Billing نماینده تمام شده است — حساب مسدود شد. "
+            "برای رفع مسدودی کیف پول را حداقل به اندازه دو برابر آستانه هشدار شارژ کنید"
         )
 
 
@@ -824,7 +849,16 @@ async def run_billing_tick(session: AsyncSession) -> dict[str, int]:
                 stats["charged"] += 1
             else:
                 stats["skipped"] += 1
-            if await maybe_warn_low_balance(session, profile):
+            # Immediate suspend when balance hits zero/negative after tick
+            await session.refresh(profile)
+            if int(profile.billing_balance or 0) <= 0:
+                try:
+                    from app.services.billing_suspend import suspend_payg_reseller
+
+                    await suspend_payg_reseller(session, profile, commit=True)
+                except Exception:
+                    logger.exception("PAYG suspend failed reseller=%s", profile.user_id)
+            elif await maybe_warn_low_balance(session, profile):
                 try:
                     await _notify_low_balance(session, profile)
                 except Exception:

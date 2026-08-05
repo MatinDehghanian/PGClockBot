@@ -53,6 +53,13 @@ def _parse_price_per_gb(form) -> int:
         return 0
 
 
+def _parse_nonneg_int(form, key: str, default: int = 0) -> int:
+    try:
+        return max(0, int(str(form.get(key) or default).replace(",", "").replace("٬", "")))
+    except ValueError:
+        return default
+
+
 def _parse_pg_group_ids(form) -> str | None:
     ids: list[str] = []
     for k, v in form.items():
@@ -275,9 +282,14 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         billing_txs = []
         billing_rate = 0
         pg_limits = None
+        min_unsuspend = 0
         if is_payg(profile):
             billing_txs = await list_billing_transactions(session, int(user_id), limit=15)
             billing_rate = await resolve_price_per_gb(session, rate_context_for_profile(profile))
+            if profile.billing_suspended_at is not None:
+                from app.services.billing_suspend import min_topup_to_unsuspend
+
+                min_unsuspend = await min_topup_to_unsuspend(session)
         if profile.pg_admin_username:
             from app.services.pg_overview import build_reseller_pg_overview
 
@@ -305,6 +317,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 "billing_txs": billing_txs,
                 "billing_rate": billing_rate,
                 "pg_limits": pg_limits,
+                "min_unsuspend": min_unsuspend,
                 "format_toman": format_toman,
                 "topup_nonce": secrets.token_hex(8),
                 "flash_ok": request.query_params.get("ok"),
@@ -701,6 +714,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             billing_mode=billing_mode,
             price_per_gb=price_per_gb,
             pg_group_ids=pg_group_ids,
+            allow_buy_extra=bool(form.get("allow_buy_extra")),
+            extra_gb_price=_parse_nonneg_int(form, "extra_gb_price"),
+            extra_user_price=_parse_nonneg_int(form, "extra_user_price"),
+            renew_price=_parse_nonneg_int(form, "renew_price"),
             can_approve_receipts="payments" in parse_perms(perms),
             web_permissions=perms,
             bot_permissions=perms,
@@ -819,6 +836,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         plan.can_approve_receipts = "payments" in parse_perms(perms)
         plan.create_pg_admin = bool(form.get("create_pg_admin"))
         plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
+        plan.allow_buy_extra = bool(form.get("allow_buy_extra"))
+        plan.extra_gb_price = _parse_nonneg_int(form, "extra_gb_price")
+        plan.extra_user_price = _parse_nonneg_int(form, "extra_user_price")
+        plan.renew_price = _parse_nonneg_int(form, "renew_price")
         plan.is_active = bool(form.get("is_active"))
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         if not pg_role_raw.isdigit():

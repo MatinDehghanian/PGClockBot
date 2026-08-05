@@ -541,7 +541,21 @@
         <div class="ui-switch-list">
           {{ switch('create_pg_admin', 'ساخت ادمین پاسارگارد هنگام تأیید', checked=true, help='با نقش پاسارگارد پلن؛ برای مالکیت کاربران لازم است') }}
           {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=false, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند') }}
+          {{ switch('allow_buy_extra', 'امکان خرید حجم و کاربر اضافه', checked=false, help='اگر روشن باشد در ربات نماینده گزینه خرید حجم/کاربر نمایش داده می‌شود؛ وگرنه فقط تمدید', id='reseller-allow-buy-extra') }}
           {{ switch('is_active', 'پلن فعال', checked=true) }}
+        </div>
+
+        <div class="form-row" id="reseller-extra-prices" hidden>
+          <label class="form-field">قیمت هر گیگ اضافه (تومان)
+            <input name="extra_gb_price" id="reseller-extra-gb-price" type="number" min="0" value="0" />
+          </label>
+          <label class="form-field">قیمت هر کاربر اضافه (تومان)
+            <input name="extra_user_price" id="reseller-extra-user-price" type="number" min="0" value="0" />
+          </label>
+          <label class="form-field">قیمت تمدید (تومان)
+            <input name="renew_price" id="reseller-renew-price" type="number" min="0" value="0" />
+            <small class="muted">۰ = همان قیمت ورود پلن</small>
+          </label>
         </div>
 
         <label class="form-field">نقش پاسارگارد (الزامی)
@@ -646,7 +660,20 @@
         ? 'نوع: Pay As You Go — نرخ هر گیگ، گروه و نقش پاسارگارد الزامی است.'
         : 'نوع: ثابت — کمیسیون، گروه و نقش پاسارگارد الزامی است.';
     }
+    syncResellerExtras();
   }
+
+  function syncResellerExtras(){
+    const prices = document.getElementById('reseller-extra-prices');
+    const sw = document.querySelector('input[name="allow_buy_extra"]');
+    if (!prices) return;
+    const on = sw ? !!sw.checked : false;
+    prices.hidden = !on;
+  }
+
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.name === 'allow_buy_extra') syncResellerExtras();
+  });
 
   function hideAllPanels(){
     Object.keys(panels).forEach((k) => {

@@ -323,6 +323,7 @@ class ResellerProfile(Base):
     web_permissions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV
     bot_permissions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV — mirrored
     plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reseller_plans.id"), nullable=True)
+    plan: Mapped[Optional["ResellerPlan"]] = relationship()
     setup_token: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True, index=True)
     setup_token_expires: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     setup_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -339,6 +340,13 @@ class ResellerProfile(Base):
     billing_low_warned_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # PAYG empty-balance suspension (admin + users cut until topup)
+    billing_suspended_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    billing_suspended_user_ids: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )  # JSON list of PG user ids disabled by suspend
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -424,6 +432,11 @@ class ResellerPlan(Base):
     price_per_gb: Mapped[int] = mapped_column(Integer, default=0)
     # Optional PasarGuard group ids this PAYG price is intended for (comma-separated)
     pg_group_ids: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Reseller capacity add-ons (buy extra volume/users) + renew
+    allow_buy_extra: Mapped[bool] = mapped_column(Boolean, default=False)
+    extra_gb_price: Mapped[int] = mapped_column(Integer, default=0)  # toman per extra GB
+    extra_user_price: Mapped[int] = mapped_column(Integer, default=0)  # toman per extra user slot
+    renew_price: Mapped[int] = mapped_column(Integer, default=0)  # 0 = use plan.price
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

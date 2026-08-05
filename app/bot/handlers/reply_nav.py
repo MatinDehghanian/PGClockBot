@@ -1396,6 +1396,9 @@ async def _soft_reseller(
         "res_orders": ("res:orders", "res_orders"),
         "res_payments": ("res:payments", "res_payments"),
         "res_tickets": ("res:tickets", "res_tickets"),
+        "res_renew": ("res:renew", "res_renew"),
+        "res_buy_gb": ("res:buy_gb", "res_buy_gb"),
+        "res_buy_users": ("res:buy_users", "res_buy_users"),
     }
     pair = mapping.get(action)
     if not pair:
@@ -1482,6 +1485,9 @@ async def reply_main_nav(
         "res_orders",
         "res_payments",
         "res_tickets",
+        "res_renew",
+        "res_buy_gb",
+        "res_buy_users",
         "res_preview",
         "res_st_shop",
         "res_st_menu",

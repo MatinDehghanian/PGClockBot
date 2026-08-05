@@ -268,8 +268,12 @@ async def _unique_web_username(session: AsyncSession, prefix: str = "web") -> st
 
 
 async def get_reseller_profile(session: AsyncSession, user_id: int) -> ResellerProfile | None:
+    from sqlalchemy.orm import selectinload
+
     result = await session.execute(
-        select(ResellerProfile).where(ResellerProfile.user_id == user_id)
+        select(ResellerProfile)
+        .options(selectinload(ResellerProfile.plan))
+        .where(ResellerProfile.user_id == user_id)
     )
     return result.scalar_one_or_none()
 
