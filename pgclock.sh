@@ -197,14 +197,23 @@ setup_wizard_url() {
   if [[ -f data/setup_complete.flag ]]; then
     return 0
   fi
-  if [[ -f "$PY" || -x "$PY" ]]; then
-    "$PY" - <<'PY' 2>/dev/null || true
-from app.services.setup_wizard import read_setup_entry_url
+  if [[ ! -f "$PY" && ! -x "$PY" ]]; then
+    return 0
+  fi
+  local port ip
+  port="$(env_get WEB_PORT "${WEB_PORT:-9000}")"
+  ip="$(detect_server_ip)"
+  "$PY" - <<PY 2>/dev/null || true
+import os
+os.chdir(r"""${SCRIPT_DIR}""")
+from app.services.setup_wizard import read_setup_entry_url, persist_setup_entry_url
+base = f"http://${ip}:${port}".rstrip("/")
 url = read_setup_entry_url()
+if not url:
+    url = persist_setup_entry_url(base)
 if url:
     print(url)
 PY
-  fi
 }
 
 print_success() {
@@ -577,8 +586,11 @@ cmd_install() {
   ip="$(detect_server_ip)"
   setup_url=""
   if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
-  sleep 2
-  setup_url="$(setup_wizard_url)"
+    setup_url="$(setup_wizard_url)"
+    if [[ -z "$setup_url" ]]; then
+      sleep 3
+      setup_url="$(setup_wizard_url)"
+    fi
   fi
 
   if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then

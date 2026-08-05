@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.1.6": [
+        "رفع «Setup URL not ready» در پایان install — لینک یک‌بارمصرف همان لحظه از روی سرور تولید می‌شود",
+        "نیازی به انتظار برای بالا آمدن سرویس نیست؛ پنل همان gate را بعد از استارت استفاده می‌کند",
+    ],
     "4.1.5": [
         "لینک یک‌بارمصرف ویزارد: اعتبار ۱۵ دقیقه؛ پس از اتمام تنظیمات یا ورود به پنل غیرفعال می‌شود",
         "خروجی install فقط لینک یک‌بارمصرف را نشان می‌دهد (بدون آدرس عمومی IP)",
