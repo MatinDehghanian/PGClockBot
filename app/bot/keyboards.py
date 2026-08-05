@@ -419,10 +419,11 @@ def _admin_plans_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]
 
 
 def _admin_plans_audience_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    """Labels MUST NOT collide with btn_adm_users («👥 کاربران») or admin resellers hub."""
     _ = ui
     return [
-        (REPLY_ACTION_ADM_PLANS_AUD_USERS, "👥 کاربران"),
-        (REPLY_ACTION_ADM_PLANS_AUD_RESELLERS, "🤝 نمایندگان"),
+        (REPLY_ACTION_ADM_PLANS_AUD_USERS, "📦 پلن‌های کاربران"),
+        (REPLY_ACTION_ADM_PLANS_AUD_RESELLERS, "🤝 پلن‌های نمایندگان"),
     ]
 
 
@@ -869,6 +870,7 @@ def reply_action_map(
             ui, custom_enabled=True, wholesale_enabled=True
         ):
             mapping.setdefault((text or "").strip(), key)
+        if platform_admin:
             for key, text in _admin_plans_audience_entries(ui):
                 mapping.setdefault((text or "").strip(), key)
             for aud in ("users", "resellers"):
@@ -1422,6 +1424,58 @@ def admin_home(ui: dict | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[back]])
 
 
+def admin_users_plans_overview_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Inline hub under user plans — mirrors web /plans user rows."""
+    wholesale_label = _t(ui, "btn_wholesale") or "📦 فروش عمده"
+    rows = [
+        [InlineKeyboardButton(text="💎 پلن‌های ثابت", callback_data="adm:plans:kind:users:fixed")],
+        [InlineKeyboardButton(text="🎁 پلن تست", callback_data="adm:plans:kind:users:trial")],
+        [InlineKeyboardButton(text="✨ پلن دلخواه", callback_data="adm:plans:kind:users:custom")],
+        [InlineKeyboardButton(text=wholesale_label, callback_data="adm:plans:kind:users:wholesale")],
+        [InlineKeyboardButton(text="➕ افزودن پلن ثابت", callback_data="adm:plan:add")],
+        [InlineKeyboardButton(text="⬅️ مخاطب پلن", callback_data="adm:plans")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_resellers_plans_overview_keyboard(
+    fixed_plans: list,
+    payg_plans: list,
+) -> InlineKeyboardMarkup:
+    """Inline hub for platform reseller subscription plans."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for p in fixed_plans[:6]:
+        flag = "✅" if getattr(p, "is_active", True) else "⏸"
+        name = (getattr(p, "name", "") or "")[:24]
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{flag} ثابت: {name}"[:60],
+                    callback_data=f"adm:resplan:view:{p.id}",
+                )
+            ]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="➕ پلن ثابت (کمیسیون)", callback_data="adm:resplan:add:fixed")]
+    )
+    for p in payg_plans[:6]:
+        flag = "✅" if getattr(p, "is_active", True) else "⏸"
+        name = (getattr(p, "name", "") or "")[:24]
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{flag} PAYG: {name}"[:60],
+                    callback_data=f"adm:resplan:view:{p.id}",
+                )
+            ]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="➕ پلن Pay As You Go", callback_data="adm:resplan:add:payg")]
+    )
+    rows.append([InlineKeyboardButton(text="⬅️ مخاطب پلن", callback_data="adm:plans")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def admin_plans_list_keyboard(
     plans: list,
     *,
@@ -1458,7 +1512,7 @@ def admin_plans_list_keyboard(
     )
     if back_callback:
         rows.append(
-            [InlineKeyboardButton(text="⬅️ انتخاب نوع", callback_data=back_callback)]
+            [InlineKeyboardButton(text="⬅️ پلن‌های کاربران", callback_data=back_callback)]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1504,7 +1558,7 @@ def admin_reseller_plans_list_keyboard(
     )
     if back_callback:
         rows.append(
-            [InlineKeyboardButton(text="⬅️ انتخاب نوع", callback_data=back_callback)]
+            [InlineKeyboardButton(text="⬅️ پلن‌های نمایندگان", callback_data=back_callback)]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
