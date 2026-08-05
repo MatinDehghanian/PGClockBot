@@ -272,10 +272,11 @@ def main() -> None:
     entry = f"{scheme}://{host_hint}:{settings.web_port}/"
     if not creds.get("password") or not is_setup_complete():
         setup_url = persist_setup_entry_url(entry.rstrip("/"))
-        logger.warning(
-            "First-run wizard — open this one-time URL: %s",
-            setup_url,
-        )
+        if setup_url:
+            logger.warning(
+                "First-run wizard — one-time setup URL (15 min): %s",
+                setup_url,
+            )
     else:
         logger.info(
             "Web panel ready · user=%s · %s",

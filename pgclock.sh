@@ -197,22 +197,25 @@ setup_wizard_url() {
   if [[ -f data/setup_complete.flag ]]; then
     return 0
   fi
-  if [[ -f data/setup_entry.url ]]; then
-    tr -d '\r\n' < data/setup_entry.url
-    return 0
-  fi
   if [[ -f "$PY" || -x "$PY" ]]; then
     "$PY" - <<'PY' 2>/dev/null || true
-from app.services.setup_wizard import persist_setup_entry_url
-print(persist_setup_entry_url())
+from app.services.setup_wizard import read_setup_entry_url
+url = read_setup_entry_url()
+if url:
+    print(url)
 PY
   fi
 }
 
 print_success() {
-  # print_success "Title" [extra lines...]
+  # print_success "Title" [--setup-only] [extra lines...]
   local title="$1"
   shift || true
+  local setup_only=0
+  if [[ "${1:-}" == "--setup-only" ]]; then
+    setup_only=1
+    shift || true
+  fi
   local port ip user
   port="$(env_get WEB_PORT "${WEB_PORT:-9000}")"
   ip="$(detect_server_ip)"
@@ -222,15 +225,19 @@ print_success() {
     printf '%s==========================================%s\n' "$G" "$N"
     printf '%s  SUCCESS · %s%s\n' "$G" "$title" "$N"
     printf '%s==========================================%s\n' "$G" "$N"
-    printf '  Web panel:  %shttp://%s:%s/%s\n' "$B" "$ip" "$port" "$N"
-    printf '  Health:     %shttp://127.0.0.1:%s/health%s\n' "$B" "$port" "$N"
-    if [[ -f data/setup_complete.flag ]]; then
-      printf '  Username:   %s%s%s\n' "$B" "$user" "$N"
-    else
-      printf '  Next step:  %sopen the URL above (first time = setup wizard)%s\n' "$B" "$N"
+    if [[ "$setup_only" -eq 0 ]]; then
+      printf '  Web panel:  %shttp://%s:%s/%s\n' "$B" "$ip" "$port" "$N"
+      printf '  Health:     %shttp://127.0.0.1:%s/health%s\n' "$B" "$port" "$N"
+      if [[ -f data/setup_complete.flag ]]; then
+        printf '  Username:   %s%s%s\n' "$B" "$user" "$N"
+      else
+        printf '  Next step:  %sopen the URL above (first time = setup wizard)%s\n' "$B" "$N"
+      fi
     fi
     if [[ $# -gt 0 ]]; then
-      echo ""
+      if [[ "$setup_only" -eq 0 ]]; then
+        echo ""
+      fi
       local line
       for line in "$@"; do
         printf '  %b\n' "$line"
@@ -534,7 +541,7 @@ cmd_install() {
     step "Scaffold configuration"
     write_env_file
     rm -f data/web_admin.json data/setup_complete.flag data/setup_in_progress.flag \
-      data/setup_gate.token data/setup_entry.url 2>/dev/null || true
+      data/setup_gate.token data/setup_gate.json data/setup_entry.url 2>/dev/null || true
     ok ".env scaffold written · finish setup in the browser"
   fi
 
@@ -566,9 +573,8 @@ cmd_install() {
     info "UFW not installed — open port ${WEB_PORT} manually if needed"
   fi
 
-  local ip panel_url setup_url
+  local ip setup_url
   ip="$(detect_server_ip)"
-  panel_url="http://${ip}:${WEB_PORT}/"
   setup_url=""
   if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
   sleep 2
@@ -576,27 +582,21 @@ cmd_install() {
   fi
 
   if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
-    local extra_lines=(
-      "Panel:      ${panel_url}"
-    )
     if [[ -n "$setup_url" ]]; then
-      extra_lines+=(
-        "Setup URL:  ${setup_url}"
-        "            (one-time link — also in data/setup_entry.url)"
-      )
+      print_success "Install complete — open the one-time setup URL" --setup-only \
+        "One-time setup URL (valid 15 min):" \
+        "${setup_url}" \
+        "Manage:     bash pgclock.sh" \
+        "Logs:       journalctl -u ${SERVICE_NAME} -f"
     else
-      extra_lines+=(
-        "First open: setup wizard · see journalctl -u ${SERVICE_NAME} -n 30"
-      )
+      print_success "Install complete" --setup-only \
+        "Setup URL not ready yet — run: bash pgclock.sh status" \
+        "Manage:     bash pgclock.sh" \
+        "Logs:       journalctl -u ${SERVICE_NAME} -f"
     fi
-    extra_lines+=(
-      "Manage:     bash pgclock.sh"
-      "Logs:       journalctl -u ${SERVICE_NAME} -f"
-    )
-    print_success "Install complete — open the setup URL" "${extra_lines[@]}"
   else
     print_success "Install/refresh complete" \
-      "Panel:      ${panel_url}" \
+      "Panel:      http://${ip}:${WEB_PORT}/" \
       "Manage:     bash pgclock.sh" \
       "Logs:       journalctl -u ${SERVICE_NAME} -f"
   fi
@@ -937,7 +937,7 @@ cmd_status() {
     setup_url="$(setup_wizard_url)"
     if [[ -n "$setup_url" ]]; then
       echo -e "  Setup URL:  ${B}${setup_url}${N}"
-      echo -e "  (or: cat data/setup_entry.url)"
+      echo -e "  (valid 15 min — disabled after setup or login)"
     fi
   fi
   print_success "Status check"

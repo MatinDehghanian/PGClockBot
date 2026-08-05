@@ -42,6 +42,7 @@ class SetupGateRotationTests(unittest.TestCase):
             with (
                 patch.object(sw, "DATA_DIR", data),
                 patch.object(sw, "SETUP_GATE_FILE", data / "setup_gate.token"),
+                patch.object(sw, "SETUP_GATE_META_FILE", data / "setup_gate.json"),
                 patch.object(sw, "SETUP_FLAG", data / "setup_complete.flag"),
                 patch.object(sw, "SETUP_IN_PROGRESS", data / "setup_in_progress.flag"),
                 patch.object(sw, "is_setup_complete", return_value=False),
