@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.1.5": [
+        "لینک یک‌بارمصرف ویزارد: اعتبار ۱۵ دقیقه؛ پس از اتمام تنظیمات یا ورود به پنل غیرفعال می‌شود",
+        "خروجی install فقط لینک یک‌بارمصرف را نشان می‌دهد (بدون آدرس عمومی IP)",
+        "SSL: فعال‌سازی خودکار HTTPS بعد از دریافت گواهی؛ رفع دکمه فعال‌سازی",
+        "ورود: حذف هشدار زرد بی‌دلیل؛ پایان ویزارد با http://IP وارد پنل می‌شود",
+    ],
     "4.1.3": [
         "نصب اول: چاپ لینک یک‌بارمصرف ویزارد (?gate=) در خروجی install و data/setup_entry.url",
         "ورود از localhost بدون لینک؛ از اینترنت فقط با لینک امن — جلوگیری از تصاحب پنل",
