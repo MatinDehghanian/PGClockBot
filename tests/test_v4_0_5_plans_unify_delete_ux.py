@@ -18,9 +18,12 @@ class DeleteWalletWarnTests(unittest.TestCase):
     def test_reseller_full_delete_warns_wallet(self):
         html = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
         self.assertIn("wallet_balance", html)
-        self.assertIn("billing_balance", html)
+        self.assertIn("موجودی کیف پول", html)
+        # PAYG money lives on shop wallet — do not double-warn a separate billing pot
+        self.assertNotIn("موجودی PAYG", html)
         edit = (ROOT / "app/web/templates/reseller_edit.html").read_text(encoding="utf-8")
         self.assertIn("موجودی کیف پول", edit)
+        self.assertNotIn("موجودی PAYG:", edit)
 
 
 class PlansUnifyTests(unittest.TestCase):
@@ -73,11 +76,12 @@ class NeutralRowActionsTests(unittest.TestCase):
 
 
 class VersionTests(unittest.TestCase):
-    def test_version(self):
+    def test_version_files_match(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.1.0")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.1.0")
+        file_ver = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertEqual(__version__, file_ver)
+        self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
 
 
 if __name__ == "__main__":

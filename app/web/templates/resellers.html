@@ -155,7 +155,7 @@
               <button class="btn btn-sm btn-danger" type="submit">حذف نمایندگی</button>
             </form>
             <form method="post" action="/resellers/{{ u.id }}/delete-user"
-                  data-confirm="{% if u.wallet_balance and u.wallet_balance > 0 %}هشدار: موجودی کیف پول {{ u.wallet_balance | num }} تومان از بین می‌رود. {% endif %}{% if p and p.billing_balance and p.billing_balance > 0 %}هشدار: موجودی PAYG {{ p.billing_balance | num }} تومان از بین می‌رود. {% endif %}کاربر، نمایندگی، ادمین پاسارگارد، تمام سفارش‌ها، سرویس‌ها و پرداخت‌ها کامل حذف شوند؟ برگشت‌ناپذیر است."
+                  data-confirm="{% if u.wallet_balance and u.wallet_balance > 0 %}هشدار: موجودی کیف پول {{ u.wallet_balance | num }} تومان از بین می‌رود. {% endif %}کاربر، نمایندگی، ادمین پاسارگارد، تمام سفارش‌ها، سرویس‌ها و پرداخت‌ها کامل حذف شوند؟ برگشت‌ناپذیر است."
                   data-confirm-title="حذف کامل (+ ادمین پاسارگارد)"
                   data-confirm-danger="1"
                   data-confirm-reason="1"

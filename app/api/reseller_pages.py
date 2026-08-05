@@ -102,7 +102,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             .order_by(ResellerProfile.id.desc())
         )
         rows = result.all()
-        # Link PAYG → shop wallet and auto-restore wrongful empty-billing suspends
+        # One-time PAYG→wallet link; only auto-restore wrongful legacy suspend on first merge
         try:
             from app.services.billing import ensure_payg_shop_wallet, is_payg
             from app.services.billing_suspend import restore_payg_reseller
@@ -111,9 +111,14 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             for _user, profile in rows:
                 if not is_payg(profile):
                     continue
+                was_linked = bool(getattr(profile, "payg_wallet_linked", False))
                 _u, bal = await ensure_payg_shop_wallet(session, profile)
                 touched = True
-                if bal > 0 and profile.billing_suspended_at is not None:
+                if (
+                    (not was_linked)
+                    and bal > 0
+                    and profile.billing_suspended_at is not None
+                ):
                     try:
                         await restore_payg_reseller(session, profile, commit=False)
                     except Exception:
@@ -312,18 +317,24 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         wallet_balance = int(user.wallet_balance or 0)
         if is_payg(profile):
             from app.services.billing import ensure_payg_shop_wallet, list_billing_transactions
+            from app.services.billing_suspend import restore_payg_reseller
 
+            was_linked = bool(getattr(profile, "payg_wallet_linked", False))
             _u, wallet_balance = await ensure_payg_shop_wallet(session, profile)
             await session.refresh(user)
             wallet_balance = int(user.wallet_balance or 0)
-            # If merge cleared a wrongful suspend, restore immediately on page view
-            if wallet_balance > 0 and profile.billing_suspended_at is not None:
+            # First-link only: lift legacy suspend caused by empty billing pot
+            if (
+                (not was_linked)
+                and wallet_balance > 0
+                and profile.billing_suspended_at is not None
+            ):
                 try:
-                    from app.services.billing_suspend import restore_payg_reseller
-
                     await restore_payg_reseller(session, profile, commit=True)
                 except Exception:
-                    pass
+                    logging.getLogger(__name__).debug(
+                        "edit auto-restore failed", exc_info=True
+                    )
             else:
                 await session.commit()
             billing_txs = await list_billing_transactions(session, int(user_id), limit=15)

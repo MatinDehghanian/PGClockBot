@@ -578,12 +578,14 @@ async def credit_topup(
             return existing
         raise
 
-    # Instant restore when balance is positive after approved topup
-    if int(user.wallet_balance or 0) > 0 and profile.billing_suspended_at is not None:
+    # Instant restore when this credit clears the 2× threshold rule
+    if profile.billing_suspended_at is not None:
         try:
-            from app.services.billing_suspend import restore_payg_reseller
+            from app.services.billing_suspend import maybe_restore_after_wallet_credit
 
-            await restore_payg_reseller(session, profile, commit=commit)
+            await maybe_restore_after_wallet_credit(
+                session, int(reseller_user_id), int(amount), commit=commit
+            )
         except Exception:
             logger.exception("PAYG restore after topup failed reseller=%s", reseller_user_id)
 

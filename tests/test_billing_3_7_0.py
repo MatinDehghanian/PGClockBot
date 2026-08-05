@@ -106,6 +106,11 @@ class AssertBillingGateTests(unittest.IsolatedAsyncioTestCase):
                 "app.services.billing.get_on_empty_policy",
                 AsyncMock(return_value="block_provision"),
             ),
+            patch("app.services.billing.payg_available_balance", AsyncMock(return_value=0)),
+            patch(
+                "app.services.billing_suspend.suspend_payg_reseller",
+                AsyncMock(return_value={}),
+            ),
         ):
             with self.assertRaises(BillingError) as ctx:
                 await assert_billing_allows_provision(session, reseller_user_id=1)
@@ -121,6 +126,7 @@ class AssertBillingGateTests(unittest.IsolatedAsyncioTestCase):
                 "app.services.billing.get_on_empty_policy",
                 AsyncMock(return_value="block_provision"),
             ),
+            patch("app.services.billing.payg_available_balance", AsyncMock(return_value=5000)),
         ):
             await assert_billing_allows_provision(session, reseller_user_id=1)
 

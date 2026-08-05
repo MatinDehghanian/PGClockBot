@@ -235,11 +235,8 @@
   {% if user.wallet_balance and user.wallet_balance > 0 %}
   <div class="flash warn">موجودی کیف پول: {{ user.wallet_balance | num }} تومان — با حذف کامل از بین می‌رود.</div>
   {% endif %}
-  {% if profile and profile.billing_balance and profile.billing_balance > 0 %}
-  <div class="flash warn">موجودی PAYG: {{ profile.billing_balance | num }} تومان — با حذف کامل از بین می‌رود.</div>
-  {% endif %}
   <form method="post" action="/resellers/{{ user.id }}/delete-user" class="form-stack"
-        data-confirm="{% if user.wallet_balance and user.wallet_balance > 0 %}هشدار: موجودی کیف پول {{ user.wallet_balance | num }} تومان از بین می‌رود. {% endif %}{% if profile and profile.billing_balance and profile.billing_balance > 0 %}هشدار: موجودی PAYG {{ profile.billing_balance | num }} تومان از بین می‌رود. {% endif %}کاربر کامل به‌همراه نمایندگی، ادمین پاسارگارد، سفارش‌ها و سرویس‌ها حذف شود؟ برگشت‌ناپذیر است."
+        data-confirm="{% if user.wallet_balance and user.wallet_balance > 0 %}هشدار: موجودی کیف پول {{ user.wallet_balance | num }} تومان از بین می‌رود. {% endif %}کاربر کامل به‌همراه نمایندگی، ادمین پاسارگارد، سفارش‌ها و سرویس‌ها حذف شود؟ برگشت‌ناپذیر است."
         data-confirm-title="حذف کامل (+ ادمین پاسارگارد)"
         data-confirm-danger="1"
         data-confirm-label="حذف کامل">
