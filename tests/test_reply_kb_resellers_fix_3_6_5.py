@@ -82,13 +82,11 @@ class ShopChromeReplyTests(unittest.TestCase):
         self.assertFalse(any("بازگشت" in t for t in texts))
 
         shop = shop_reply_keyboard(
-            {"btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی", "btn_wholesale": "📦 عمده"},
-            custom_enabled=True,
-            wholesale_enabled=True,
+            {"btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"},
         )
         sflat = [b.text for row in shop.keyboard for b in row]
-        self.assertIn("✨ پلن دلخواه", sflat)
-        self.assertIn("📦 عمده", sflat)
+        self.assertNotIn("✨ پلن دلخواه", sflat)
+        self.assertNotIn("عمده", sflat)
         self.assertIn("⬅️ بازگشت", sflat)
 
     def test_legacy_hubs_empty(self):

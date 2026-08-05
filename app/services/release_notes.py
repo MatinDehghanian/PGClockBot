@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.2.0": [
+        "ربات تلگرام: فروشگاه کاربر — انتخاب نوع پلن (ثابت / تست / دلخواه / عمده) مثل مودال وب‌پنل",
+        "ربات: پنل ادمین پلن‌ها — مخاطب (کاربر / نماینده) و نوع پلن مرحله‌ای با اینلاین",
+        "کیبورد reply فروشگاه و پلن ادمین فقط بازگشت/منوی اصلی؛ انتخاب‌ها اینلاین",
+    ],
     "4.1.9": [
         "تا قبل از فعال SSL همه ریدایرکت‌ها و لینک پنل با HTTP (IP:پورت) — نه HTTPS از PUBLIC_BASE_URL",
         "پس از دریافت گواهی: ماندن در تنظیمات SSL + مودال موفقیت با دکمه «ورود به پنل (HTTPS)»",

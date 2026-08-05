@@ -130,14 +130,15 @@ async def _custom_gate(
     return ok
 
 
-@router.callback_query(F.data == "shop:list")
-async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
-    await callback.answer()
-    await state.clear()
+async def _shop_kind_flags(
+    session: AsyncSession,
+    db_user: BotUser,
+) -> tuple[dict, bool, bool, bool, bool, list, list, list]:
+    """UI + enabled kinds + plan lists for the shop kind picker."""
     ui = await get_all_settings(session)
-    trial_on = on(ui.get("trial_enabled"))
+    trial_setting = on(ui.get("trial_enabled"))
     plans = await list_active_plans(session, include_trial=True)
-    if not trial_on:
+    if not trial_setting:
         plans = [p for p in plans if not p.is_trial]
     has_svc = (
         await session.execute(
@@ -146,10 +147,32 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     ).scalar_one_or_none()
     if has_svc:
         plans = [p for p in plans if not p.is_trial]
-    # Custom plan only when catalog plans exist (and setting/link OK)
+    fixed_plans = [p for p in plans if not p.is_trial]
+    trial_plans = [p for p in plans if p.is_trial]
     custom_on = await _custom_available_for_users(session, ui, plans=plans)
-    wholesale_on = on(ui.get("wholesale_enabled")) and any(not p.is_trial for p in plans)
-    if not plans and not custom_on:
+    wholesale_on = on(ui.get("wholesale_enabled")) and bool(fixed_plans)
+    fixed_on = bool(fixed_plans)
+    trial_on = bool(trial_plans) and trial_setting
+    return (
+        ui,
+        fixed_on,
+        trial_on,
+        custom_on,
+        wholesale_on,
+        plans,
+        fixed_plans,
+        trial_plans,
+    )
+
+
+@router.callback_query(F.data == "shop:list")
+async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
+    await callback.answer()
+    await state.clear()
+    ui, fixed_on, trial_on, custom_on, wholesale_on, *_rest = await _shop_kind_flags(
+        session, db_user
+    )
+    if not any((fixed_on, trial_on, custom_on, wholesale_on)):
         text = format_message(
             "🛒 فروشگاه",
             ui.get("shop_empty_text")
@@ -162,18 +185,81 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("🛒 انتخاب پلن", "یکی از پلن‌ها را انتخاب کنید:"),
-            reply_markup=kb.plans_keyboard(
-                plans, ui, custom_enabled=custom_on, wholesale_enabled=wholesale_on
+            format_message(
+                "🛒 فروشگاه",
+                "ابتدا <b>نوع پلن</b> را انتخاب کنید (مثل وب‌پنل):",
+            ),
+            reply_markup=kb.shop_kind_keyboard(
+                ui,
+                fixed_on=fixed_on,
+                trial_on=trial_on,
+                custom_on=custom_on,
+                wholesale_on=wholesale_on,
             ),
         )
         await state.update_data(_shop_custom=custom_on, _shop_wholesale=wholesale_on)
         await callback.message.answer(
             "فروشگاه:",
-            reply_markup=kb.shop_reply_keyboard(
-                ui, custom_enabled=custom_on, wholesale_enabled=wholesale_on
+            reply_markup=kb.shop_reply_keyboard(ui),
+        )
+
+
+@router.callback_query(F.data == "shop:kind:fixed")
+async def shop_kind_fixed(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+):
+    await callback.answer()
+    ui, fixed_on, *_rest, fixed_plans, _trial = await _shop_kind_flags(session, db_user)
+    if not fixed_on:
+        await callback.answer("پلن ثابت فعال نیست.", show_alert=True)
+        return
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message("💎 پلن ثابت", "یکی از پلن‌ها را انتخاب کنید:"),
+            reply_markup=kb.plans_keyboard(
+                fixed_plans,
+                ui,
+                back_callback="shop:list",
             ),
         )
+
+
+@router.callback_query(F.data == "shop:kind:trial")
+async def shop_kind_trial(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+):
+    ui, _fixed, trial_on, *_rest, _fixed_plans, trial_plans = await _shop_kind_flags(
+        session, db_user
+    )
+    if not trial_on or not trial_plans:
+        await callback.answer("پلن تست در دسترس نیست.", show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message("🎁 پلن تست", "پلن تست را انتخاب کنید:"),
+            reply_markup=kb.plans_keyboard(
+                trial_plans,
+                ui,
+                back_callback="shop:list",
+            ),
+        )
+
+
+@router.callback_query(F.data == "shop:kind:custom")
+async def shop_kind_custom(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+):
+    await custom_start(callback, session, state)
+
+
+@router.callback_query(F.data == "shop:kind:wholesale")
+async def shop_kind_wholesale(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext
+):
+    await wholesale_start(callback, session, state)
 
 
 @router.callback_query(F.data == "shop:custom:noop")

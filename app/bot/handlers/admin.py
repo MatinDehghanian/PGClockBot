@@ -47,15 +47,21 @@ def _plan_needs_link(p: Plan) -> bool:
 async def _render_plans_list(callback: CallbackQuery, session: AsyncSession) -> None:
     result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
     plans = list(result.scalars().all())
-    if not plans:
-        text = "📦 <b>پلن‌های فروش</b>\n\nهنوز پلنی ثبت نشده است.\nساخت پلن از کیبورد پایین."
+    fixed = [p for p in plans if not p.is_trial]
+    if not fixed:
+        text = "📦 <b>پلن ثابت</b>\n\nهنوز پلن ثابتی ثبت نشده است."
     else:
-        cards = "\n\n".join(_plan_line(p) for p in plans[:20])
-        text = f"📦 <b>پلن‌های فروش</b>\n\n{cards}"
+        from app.bot.handlers.admin import _plan_line
+
+        cards = "\n\n".join(_plan_line(p) for p in fixed[:20])
+        text = f"📦 <b>پلن‌های ثابت</b>\n\n{cards}"
     if callback.message:
         await callback.message.edit_text(
             text,
-            reply_markup=kb.admin_plans_list_keyboard(plans),
+            reply_markup=kb.admin_plans_list_keyboard(
+                plans,
+                back_callback="adm:plans:kind:users:fixed",
+            ),
         )
 
 
@@ -527,7 +533,123 @@ async def adm_plans(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         return
     await state.clear()
     await callback.answer()
-    await _render_plans_list(callback, session)
+    if callback.message:
+        await callback.message.edit_text(
+            "💎 <b>پلن‌ها</b>\nمخاطب را انتخاب کنید:",
+            reply_markup=kb.admin_plan_audience_keyboard(),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:plans:aud:"))
+async def adm_plans_audience(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    aud = callback.data.rsplit(":", 1)[-1]
+    if aud not in {"users", "resellers"}:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    await callback.answer()
+    title = "کاربران" if aud == "users" else "نمایندگان"
+    if callback.message:
+        await callback.message.edit_text(
+            f"💎 <b>پلن‌های {title}</b>\nنوع پلن را انتخاب کنید:",
+            reply_markup=kb.admin_plan_kind_keyboard(aud),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:plans:kind:"))
+async def adm_plans_kind(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) < 5:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    aud, kind = parts[3], parts[4]
+    await callback.answer()
+    if aud == "users" and kind == "fixed":
+        await _render_plans_list(callback, session)
+        return
+    if aud == "users" and kind == "custom":
+        from app.bot.handlers.admin_settings import _render_sub
+
+        await _render_sub(callback, session, "service", "custom")
+        return
+    if aud == "users" and kind == "trial":
+        from app.bot.handlers.admin_settings import _render_trial
+
+        await _render_trial(callback, session)
+        return
+    if aud == "users" and kind == "wholesale":
+        from app.services.setup_wizard import default_panel_base_url
+
+        base = default_panel_base_url().rstrip("/")
+        text = (
+            "📦 <b>فروش عمده</b>\n"
+            "تنظیم پلکانی و فعال/غیرفعال در وب‌پنل انجام می‌شود.\n"
+            f"مسیر: <code>{base}/plans</code> — بخش فروش عمده یا مودال «افزودن پلن»."
+        )
+        if callback.message:
+            await callback.message.edit_text(
+                text,
+                reply_markup=kb.admin_plan_kind_keyboard("users"),
+            )
+        return
+    if aud == "resellers" and kind in {"fixed", "payg"}:
+        from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
+        from app.services.resellers import list_reseller_plans, reseller_plan_mode_of
+
+        mode = BILLING_MODE_PAYG if kind == "payg" else BILLING_MODE_FIXED
+        all_plans = await list_reseller_plans(session)
+        plans = [p for p in all_plans if reseller_plan_mode_of(p) == kind]
+        label = "Pay As You Go" if kind == "payg" else "ثابت (کمیسیون)"
+        from app.services.setup_wizard import default_panel_base_url
+
+        base = default_panel_base_url().rstrip("/")
+        body = (
+            f"🤝 <b>پلن‌های نماینده — {label}</b>\n"
+            f"افزودن/ویرایش کامل در وب‌پنل: <code>{base}/plans#reseller-plans</code>\n\n"
+        )
+        if not plans:
+            body += "هنوز پلنی در این دسته نیست."
+        else:
+            from app.services.resellers import format_reseller_plan_apply_detail
+
+            cards = []
+            for p in plans[:10]:
+                cards.append(format_reseller_plan_apply_detail(p, currency=get_settings().currency))
+            body += "\n\n".join(cards)
+        if callback.message:
+            await callback.message.edit_text(
+                body,
+                reply_markup=kb.admin_reseller_plans_list_keyboard(
+                    plans,
+                    mode=kind,
+                    back_callback="adm:plans:aud:resellers",
+                ),
+            )
+        return
+    await callback.answer("نامعتبر", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("adm:resplan:hint:"))
+async def adm_resplan_hint(callback: CallbackQuery, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    from app.services.setup_wizard import default_panel_base_url
+
+    base = default_panel_base_url().rstrip("/")
+    await callback.answer(
+        f"ویرایش در وب‌پنل: {base}/plans",
+        show_alert=True,
+    )
 
 
 @router.callback_query(F.data.startswith("adm:plan:view:"))

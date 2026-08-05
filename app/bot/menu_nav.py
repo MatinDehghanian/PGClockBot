@@ -222,12 +222,7 @@ async def show_nav_keyboard(
             await state.update_data(**{PAY_ORDER_ID: int(order_id)})
 
     if level == NAV_SHOP:
-        data = await state.get_data() if state is not None else {}
-        markup = kb.shop_reply_keyboard(
-            ui,
-            custom_enabled=bool(data.get("_shop_custom")),
-            wholesale_enabled=bool(data.get("_shop_wholesale")),
-        )
+        markup = kb.shop_reply_keyboard(ui)
     elif level == NAV_WALLET:
         markup = kb.wallet_reply_keyboard(ui)
     elif level == NAV_SUPPORT:

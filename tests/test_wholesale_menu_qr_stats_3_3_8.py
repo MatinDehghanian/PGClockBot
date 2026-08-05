@@ -117,15 +117,15 @@ class WholesaleLogicTests(unittest.TestCase):
         self.assertTrue(any(str(x).startswith("shop:plan:") for x in flat))
         self.assertNotIn("shop:wholesale", flat)
         shop = shop_reply_keyboard(
-            {"btn_wholesale": "فروش عمده", "btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"},
-            wholesale_enabled=True,
+            {"btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"},
         )
         sflat = [b.text for row in shop.keyboard for b in row]
-        self.assertIn("فروش عمده", sflat)
+        self.assertNotIn("فروش عمده", sflat)
 
     def test_web_modal_and_route_exist(self):
         html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
-        self.assertIn("modal-wholesale", html)
+        self.assertIn("panel-user-wholesale", html)
+        self.assertIn("modal-plan-unified", html)
         self.assertIn("/plans/wholesale", html)
         self.assertIn("wholesale_tiers", html)
         api = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
