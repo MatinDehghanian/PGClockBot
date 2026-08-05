@@ -72,9 +72,11 @@ class UserEditUiTests(unittest.TestCase):
 
     def test_reseller_edit_wallet_balance_column(self):
         src = Path("app/web/templates/_reseller_edit_body.html").read_text(encoding="utf-8")
-        self.assertIn("مانده کیف پول", src)
         self.assertIn("wallet_txs", src)
         self.assertIn("تراکنش‌های کیف پول", src)
+        self.assertIn("wallet-tx-list", src)
+        self.assertIn("is-credit", src)
+        self.assertIn("is-debit", src)
 
     def test_bot_keyboards_and_handlers(self):
         kb = Path("app/bot/keyboards.py").read_text(encoding="utf-8")

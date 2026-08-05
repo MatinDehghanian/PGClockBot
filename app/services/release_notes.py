@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.3.4": [
+        "منوی بازشو در مودال ویرایش کاربر/نماینده دقیق زیر باکس باز می‌شود (رفع کج‌شدن در RTL)",
+        "تراکنش‌های کیف پول و PAYG نماینده با همان طراحی رنگی واریز/برداشت کاربر",
+        "گیج حجم/کاربران نماینده در موبایل دو ستونه با فضای بهتر برای متن مانده",
+    ],
     "4.3.3": [
         "برچسب «حالت Billing» در همه جا به «حالت پرداخت» تغییر کرد",
         "تراز فیلدهای فرم: باکس select دیگر پایین‌تر از inputهای هم‌ردیف نیست",

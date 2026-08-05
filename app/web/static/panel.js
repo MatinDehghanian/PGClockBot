@@ -284,17 +284,37 @@
       const gap = 8;
       const pad = 8;
       const rect = toggle.getBoundingClientRect();
-      /* Measure with temporary visibility; use fixed to escape overflow:hidden ancestors */
+      const vw = window.innerWidth || document.documentElement.clientWidth;
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      /* Fixed + clear inset-inline so RTL absolute CSS cannot shift the menu off the box */
+      menu.classList.add('is-fixed-pos');
       menu.style.position = 'fixed';
-      menu.style.left = Math.max(pad, rect.left) + 'px';
+      menu.style.inset = 'auto';
+      menu.style.insetInline = 'auto';
+      menu.style.insetInlineStart = 'auto';
+      menu.style.insetInlineEnd = 'auto';
+      menu.style.minWidth = '0';
       menu.style.right = 'auto';
-      menu.style.width = Math.max(rect.width, 140) + 'px';
+      menu.style.bottom = 'auto';
       menu.style.zIndex = '5000';
+
+      let width = Math.max(rect.width, 120);
+      let left = rect.left;
+      const maxW = Math.max(120, vw - pad * 2);
+      if (width > maxW) width = maxW;
+      if (left < pad) left = pad;
+      if (left + width > vw - pad) left = Math.max(pad, vw - pad - width);
+      /* Prefer exact toggle alignment when it fits in the viewport */
+      if (rect.width <= maxW && rect.left >= pad - 0.5 && rect.right <= vw - pad + 0.5) {
+        left = rect.left;
+        width = rect.width;
+      }
+      menu.style.left = left + 'px';
+      menu.style.width = width + 'px';
+
       const mh = menu.offsetHeight || 120;
-      const vh = window.innerHeight;
       const spaceBelow = vh - rect.bottom - gap - pad;
       const spaceAbove = rect.top - gap - pad;
-      /* Ticket status only: always open up. Everywhere else: auto by available space. */
       let openUp;
       if (wrap.closest('.ticket-status-form, .ticket-status-actions')) {
         openUp = true;
@@ -309,23 +329,27 @@
       if (openUp) {
         const top = Math.max(pad, rect.top - gap - mh);
         menu.style.top = top + 'px';
-        menu.style.bottom = 'auto';
-        menu.style.maxHeight = Math.min(280, rect.top - gap - pad) + 'px';
+        menu.style.maxHeight = Math.min(280, Math.max(80, rect.top - gap - pad)) + 'px';
       } else {
         menu.style.top = (rect.bottom + gap) + 'px';
-        menu.style.bottom = 'auto';
-        menu.style.maxHeight = Math.min(280, vh - rect.bottom - gap - pad) + 'px';
+        menu.style.maxHeight = Math.min(280, Math.max(80, vh - rect.bottom - gap - pad)) + 'px';
       }
     }
     function clearUiSelectMenuPos(wrap){
       const menu = wrap && wrap.querySelector('.ui-select-menu');
       if (!menu) return;
+      menu.classList.remove('is-fixed-pos');
       menu.style.position = '';
+      menu.style.inset = '';
+      menu.style.insetInline = '';
+      menu.style.insetInlineStart = '';
+      menu.style.insetInlineEnd = '';
       menu.style.left = '';
       menu.style.right = '';
       menu.style.top = '';
       menu.style.bottom = '';
       menu.style.width = '';
+      menu.style.minWidth = '';
       menu.style.maxHeight = '';
       menu.style.zIndex = '';
     }

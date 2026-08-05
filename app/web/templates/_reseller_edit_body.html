@@ -89,8 +89,10 @@
 {% if pg_limits and pg_limits.ready %}
 {% from "_pg_quota_gauges.html" import pg_quota_gauge %}
 <section class="edit-section">
-  <h3>مصرف و محدودیت پاسارگارد</h3>
-  <p class="muted">حجم و تعداد کاربران نماینده به‌همراه سقف‌های نقش/ادمین</p>
+  <header class="edit-section-head">
+    <h3>مصرف و محدودیت پاسارگارد</h3>
+    <p class="muted">حجم و تعداد کاربران نماینده به‌همراه سقف‌های نقش/ادمین</p>
+  </header>
   {% if pg_limits.username %}
   <p class="muted" dir="ltr">ادمین: <code>{{ pg_limits.username }}</code>
     {% if pg_limits.status_label %} · <span class="badge {{ pg_limits.status_badge or 'neutral' }}">{{ pg_limits.status_label }}</span>{% endif %}
@@ -145,57 +147,39 @@
     </div>
   </form>
   {% if wallet_txs %}
-  <h4 style="margin-top:1.25rem">تراکنش‌های کیف پول</h4>
-  <div class="table-wrap">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>مبلغ</th>
-          <th>مانده کیف پول</th>
-          <th>شرح</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for tx in wallet_txs %}
-        <tr>
-          <td>{{ tx.id }}</td>
-          <td dir="ltr">{{ tx.amount }}</td>
-          <td>{{ format_toman(tx.balance_after) }}</td>
-          <td class="muted">{{ tx.reason or '—' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  <h4 class="edit-section-sub">تراکنش‌های کیف پول</h4>
+  <ul class="wallet-tx-list">
+    {% for tx in wallet_txs %}
+    <li class="wallet-tx-item">
+      <div class="wallet-tx-main">
+        <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount }}</span>
+        <span class="muted wallet-tx-reason">{{ tx.reason or '—' }}</span>
+      </div>
+      <div class="wallet-tx-side">
+        <span class="mono muted">#{{ tx.id }}</span>
+        <span>{{ format_toman(tx.balance_after) }}</span>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
   {% endif %}
   {% if billing_txs %}
-  <h4 style="margin-top:1.25rem">تراکنش‌های مصرف PAYG</h4>
+  <h4 class="edit-section-sub">تراکنش‌های مصرف PAYG</h4>
   <p class="muted" style="margin-top:0">مانده = کیف پول فروشگاهی پس از کسر/شارژ</p>
-  <div class="table-wrap">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>نوع</th>
-          <th>مبلغ</th>
-          <th>مانده کیف پول</th>
-          <th>یادداشت</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for tx in billing_txs %}
-        <tr>
-          <td>{{ tx.id }}</td>
-          <td>{{ tx.kind }}</td>
-          <td dir="ltr">{{ tx.amount }}</td>
-          <td>{{ format_toman(tx.balance_after) }}</td>
-          <td class="muted">{{ tx.note or '—' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  <ul class="wallet-tx-list">
+    {% for tx in billing_txs %}
+    <li class="wallet-tx-item">
+      <div class="wallet-tx-main">
+        <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount }}</span>
+        <span class="muted wallet-tx-reason">{{ tx.kind or '—' }}{% if tx.note %} · {{ tx.note }}{% endif %}</span>
+      </div>
+      <div class="wallet-tx-side">
+        <span class="mono muted">#{{ tx.id }}</span>
+        <span>{{ format_toman(tx.balance_after) }}</span>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
   {% endif %}
 </section>
 {% endif %}

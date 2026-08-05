@@ -834,6 +834,12 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
   box-sizing: border-box;
   min-width: 100%;
 }
+/* JS fixed placement under the toggle — must not inherit inset-inline from absolute mode */
+.ui-select-menu.is-fixed-pos {
+  inset: auto !important;
+  inset-inline: auto !important;
+  min-width: 0 !important;
+}
 .ui-select.drop-up .ui-select-menu {
   top: auto;
   bottom: calc(100% + var(--space-0));
@@ -3359,7 +3365,7 @@ body.modal-open { overflow: hidden; }
 }
 .ui-modal-panel-lg { width: min(720px, 100%); }
 .ui-modal-panel-xl {
-  width: min(640px, 100%);
+  width: min(720px, 100%);
   overflow-x: hidden;
 }
 .edit-modal-body {
@@ -3388,11 +3394,16 @@ body.modal-open { overflow: hidden; }
 }
 .edit-section-head h3,
 .edit-section h3,
-.edit-section h4 {
+.edit-section h4,
+.edit-section-sub {
   margin: 0;
   font-size: 0.95rem;
   font-weight: 700;
   line-height: 1.35;
+}
+.edit-section-sub {
+  margin-top: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 .edit-section-head .muted,
 .edit-section-head p {
@@ -5117,38 +5128,62 @@ html[data-theme="light"] .home-gauge.is-exhausted {
   .home-gauge-ring { width: 96px; height: 96px; }
   .home-gauge-center strong { font-size: 20px; }
 
-  /* PG users/traffic: single-column rectangular cards on mobile */
+  /* PG users/traffic: keep side-by-side in modals/lists; room for used/remain text */
   .pg-quota-gauges {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: var(--space-2);
   }
   .pg-quota-gauges .home-gauge {
-    flex-direction: row;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
     justify-content: flex-start;
     text-align: start;
     gap: var(--space-2);
-    padding: var(--card-pad);
+    padding: var(--space-2);
     min-height: 0;
     height: auto;
+    min-width: 0;
   }
   .pg-quota-gauges .home-gauge-ring {
-    width: 72px;
-    height: 72px;
+    width: 64px;
+    height: 64px;
+    align-self: center;
   }
-  .pg-quota-gauges .home-gauge-center strong { font-size: 16px; }
+  .pg-quota-gauges .home-gauge-center strong { font-size: 15px; }
   .pg-quota-gauges .home-gauge-center span { font-size: 10px; }
   .pg-quota-gauges .home-gauge-meta {
-    text-align: start;
-    align-items: flex-start;
+    text-align: center;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    gap: 0.25rem;
   }
   .pg-quota-gauges .home-gauge-meta [dir="ltr"] {
-    text-align: right;
+    text-align: center;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    font-size: 11px;
+    line-height: 1.35;
+    max-width: 100%;
+  }
+  .pg-quota-gauges .home-gauge-meta small {
+    overflow-wrap: anywhere;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  /* Inside edit modals: give gauges full width of the panel */
+  .edit-modal-body .pg-quota-gauges-embed {
+    width: 100%;
   }
 }
 @media (max-width: 560px) {
   .home-conn-row { grid-template-columns: 1fr; }
   .home-panel-grid { grid-template-columns: 1fr 1fr; }
+  /* Very narrow: still 2-col but denser; avoid stacking that wastes vertical space */
+  .edit-modal-body .pg-quota-gauges {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-1);
+  }
 }
 
 /* Changelog sits under the update flash inside the same card */
