@@ -29,6 +29,7 @@ from app.services.resellers import (
     reseller_plan_mode_of,
 )
 from app.bot import menu_nav as nav
+from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.services.users import get_all_settings, get_setting, on, set_setting
 
 router = Router(name="admin_plans")
@@ -46,6 +47,7 @@ class AdminPlansStates(StatesGroup):
     res_plan_price = State()
     res_plan_commission = State()
     res_plan_rate_gb = State()
+    res_plan_link = State()
     res_plan_edit_field = State()
     trial_name = State()
     trial_days = State()
@@ -119,6 +121,10 @@ def _back_row(label: str, cb: str) -> list[InlineKeyboardButton]:
     return [InlineKeyboardButton(text=label, callback_data=cb)]
 
 
+async def _persist(session: AsyncSession) -> None:
+    await session.commit()
+
+
 async def _ensure_trial(session: AsyncSession) -> Plan:
     trial = (
         await session.execute(select(Plan).where(Plan.is_trial.is_(True)))
@@ -136,6 +142,7 @@ async def _ensure_trial(session: AsyncSession) -> Plan:
     session.add(trial)
     await session.flush()
     await session.refresh(trial)
+    await _persist(session)
     return trial
 
 
@@ -652,6 +659,7 @@ async def plans_toggle(
     if key == "trial_enabled":
         trial = await _ensure_trial(session)
         trial.is_active = new_val == "1"
+        await _persist(session)
     await callback.answer("ذخیره شد")
     data = await state.get_data()
     aud = data.get("_adm_plans_aud") or "users"
@@ -840,6 +848,7 @@ async def trial_save_name(message: Message, state: FSMContext, session: AsyncSes
         return
     trial = await _ensure_trial(session)
     trial.name = (message.text or "").strip()[:128]
+    await _persist(session)
     await state.set_state(None)
     await _answer_plans_saved(message, state, session, "ذخیره شد ✅")
     bubble = await message.answer("⏳")
@@ -865,12 +874,13 @@ async def trial_save_days(message: Message, state: FSMContext, session: AsyncSes
         await _answer_plans_cancel(message, state, session)
         return
     try:
-        days = max(1, int((message.text or "").strip()))
+        days = max(1, parse_bot_int(message.text))
     except ValueError:
         await message.answer("عدد معتبر بفرستید.")
         return
     trial = await _ensure_trial(session)
     trial.duration_days = days
+    await _persist(session)
     await state.set_state(None)
     await _answer_plans_saved(message, state, session, "ذخیره شد ✅")
     bubble = await message.answer("⏳")
@@ -896,12 +906,13 @@ async def trial_save_gb(message: Message, state: FSMContext, session: AsyncSessi
         await _answer_plans_cancel(message, state, session)
         return
     try:
-        gb = float((message.text or "").replace(",", ".").strip())
+        gb = parse_bot_float(message.text)
     except ValueError:
         await message.answer("عدد معتبر بفرستید.")
         return
     trial = await _ensure_trial(session)
     trial.data_limit_gb = None if gb <= 0 else gb
+    await _persist(session)
     await state.set_state(None)
     await _answer_plans_saved(message, state, session, "ذخیره شد ✅")
     bubble = await message.answer("⏳")
@@ -949,6 +960,7 @@ async def trial_set_tpl(callback: CallbackQuery, session: AsyncSession, db_user:
     trial = await _ensure_trial(session)
     trial.pg_template_id = tid
     trial.pg_group_ids = None
+    await _persist(session)
     await callback.answer("ذخیره شد")
     bubble = await callback.message.answer("⏳") if callback.message else None
     if bubble:
@@ -1041,6 +1053,7 @@ async def trial_grp_done_plans(
     trial = await _ensure_trial(session)
     trial.pg_group_ids = ",".join(str(x) for x in selected)
     trial.pg_template_id = None
+    await _persist(session)
     await state.update_data(trial_groups=[])
     await callback.answer("ذخیره شد")
     if callback.message:
@@ -1325,6 +1338,7 @@ async def resplan_toggle(callback: CallbackQuery, session: AsyncSession, db_user
         await callback.answer("یافت نشد", show_alert=True)
         return
     plan.is_active = not plan.is_active
+    await _persist(session)
     await callback.answer("بروز شد")
     if callback.message:
         await callback.message.edit_text(
@@ -1373,14 +1387,18 @@ async def resplan_del(callback: CallbackQuery, session: AsyncSession, db_user: B
         await callback.answer("یافت نشد", show_alert=True)
         return
     mode = reseller_plan_mode_of(plan)
+    from app.services.billing import delete_plan_billing_rate
+
+    await delete_plan_billing_rate(session, int(plan.id))
     await session.delete(plan)
+    await _persist(session)
     await callback.answer("حذف شد")
     await state.update_data(_adm_plans_aud="resellers", _adm_plans_kind=mode)
     if callback.message:
         await _rerender_plans_screen(callback, session, "resellers", mode)
 
 
-@router.callback_query(F.data.startswith("adm:resplan:edit:"))
+@router.callback_query(F.data.regexp(r"^adm:resplan:edit:(name|price|comm|rate|desc|grp):\d+$"))
 async def resplan_edit_ask(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
@@ -1509,6 +1527,7 @@ async def resplan_edit_grp_done(
     from app.services.billing import sync_plan_billing_rate
 
     await sync_plan_billing_rate(session, plan)
+    await _persist(session)
     await state.update_data(resplan_edit_groups=[])
     await callback.answer("ذخیره شد")
     if callback.message:
@@ -1572,6 +1591,7 @@ async def resplan_tog_perm(callback: CallbackQuery, session: AsyncSession, db_us
     plan.web_permissions = csv
     plan.bot_permissions = csv
     plan.can_approve_receipts = "payments" in perms
+    await _persist(session)
     await callback.answer("بروز شد")
     active = perms
     rows: list[list[InlineKeyboardButton]] = []
@@ -1620,11 +1640,11 @@ async def resplan_edit_save(
                 return
             plan.name = text[:128]
         elif field == "price":
-            plan.price = max(0, int(text.replace(",", "").replace("٬", "")))
+            plan.price = max(0, parse_bot_int(text))
         elif field == "comm":
-            plan.commission_percent = max(0, min(100, int(text)))
+            plan.commission_percent = max(0, min(100, parse_bot_int(text)))
         elif field == "rate":
-            plan.price_per_gb = max(0, int(text.replace(",", "").replace("٬", "")))
+            plan.price_per_gb = max(0, parse_bot_int(text))
         elif field == "desc":
             plan.description = text or None
         else:
@@ -1634,6 +1654,7 @@ async def resplan_edit_save(
         await message.answer("عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
         return
     await sync_plan_billing_rate(session, plan)
+    await _persist(session)
     await state.set_state(None)
     await _answer_plans_saved(message, state, session, "ذخیره شد ✅")
     bubble = await message.answer(
@@ -1677,11 +1698,11 @@ async def resplan_price(message: Message, state: FSMContext, session: AsyncSessi
         await _answer_plans_cancel(message, state, session)
         return
     try:
-        price = int((message.text or "").replace(",", "").replace("٬", ""))
+        price = max(0, parse_bot_int(message.text))
     except ValueError:
         await message.answer("عدد معتبر بفرستید.")
         return
-    await state.update_data(res_plan_price=max(0, price))
+    await state.update_data(res_plan_price=price)
     data = await state.get_data()
     if data.get("res_plan_mode") == "payg":
         await state.set_state(AdminPlansStates.res_plan_rate_gb)
@@ -1700,16 +1721,18 @@ async def resplan_commission(
         await _answer_plans_cancel(message, state, session)
         return
     try:
-        comm = max(0, min(100, int((message.text or "").strip())))
+        comm = max(0, min(100, parse_bot_int(message.text)))
     except ValueError:
         await message.answer("عدد معتبر بفرستید.")
         return
-    await _save_reseller_plan(session, state, commission_percent=comm)
+    plan = await _save_reseller_plan(session, state, commission_percent=comm)
     await state.set_state(None)
-    await _answer_plans_saved(message, state, session, "پلن نمایندگی ذخیره شد ✅")
-    data = await state.get_data()
-    bubble = await message.answer("⏳")
-    await send_reseller_plans_list(bubble, session, data.get("res_plan_mode") or "fixed")
+    await _answer_plans_saved(message, state, session, f"پلن نمایندگی #{plan.id} ذخیره شد ✅")
+    bubble = await message.answer(
+        _resplan_detail_text(plan),
+        reply_markup=_resplan_detail_keyboard(plan),
+    )
+    _ = bubble
 
 
 @router.message(AdminPlansStates.res_plan_rate_gb)
@@ -1721,16 +1744,116 @@ async def resplan_rate_gb(
         await _answer_plans_cancel(message, state, session)
         return
     try:
-        rate = max(0, int((message.text or "").replace(",", "").replace("٬", "")))
+        rate = max(0, parse_bot_int(message.text))
     except ValueError:
         await message.answer("عدد معتبر بفرستید.")
         return
-    await _save_reseller_plan(session, state, price_per_gb=rate)
-    await state.set_state(None)
-    await _answer_plans_saved(message, state, session, "پلن PAYG ذخیره شد ✅")
-    data = await state.get_data()
+    await state.update_data(res_plan_rate_gb=rate, res_plan_groups=[])
+    await state.set_state(AdminPlansStates.res_plan_link)
+    await message.answer(
+        "📁 گروه پاسارگارد برای PAYG (اختیاری — می‌توانید رد کنید):",
+        reply_markup=kb.cancel_reply(),
+    )
     bubble = await message.answer("⏳")
-    await send_reseller_plans_list(bubble, session, "payg")
+    await _show_resplan_add_groups(bubble, state)
+
+
+@router.message(AdminPlansStates.res_plan_link)
+async def resplan_link_cancel(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
+        await state.set_state(None)
+        await _answer_plans_cancel(message, state, session)
+        return
+    await message.answer("گروه را از دکمه‌های زیر پیام انتخاب کنید یا «بدون گروه» بزنید.")
+
+
+async def _show_resplan_add_groups(message: Message, state: FSMContext) -> None:
+    selected = [int(x) for x in ((await state.get_data()).get("res_plan_groups") or [])]
+    try:
+        groups = await get_pg().get_groups_simple()
+    except Exception:
+        groups = []
+    rows: list[list[InlineKeyboardButton]] = []
+    for g in groups[:25]:
+        gid = g.get("id")
+        if gid is None:
+            continue
+        gid = int(gid)
+        mark = "✅ " if gid in selected else ""
+        name = g.get("name") or f"گروه {gid}"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{mark}#{gid} — {name}"[:60],
+                    callback_data=f"adm:resplan:add:toggrp:{gid}",
+                )
+            ]
+        )
+    if rows:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"✅ تأیید ({len(selected)})",
+                    callback_data="adm:resplan:add:grpdone",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="⏭ بدون گروه", callback_data="adm:resplan:add:grpskip")])
+    rows.append([InlineKeyboardButton(text="❌ انصراف", callback_data="adm:plans:aud:resellers")])
+    text = (
+        "📁 گروه‌های اینباند (PAYG):\n"
+        f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}"
+    )
+    await safe_edit_text(message, text, reply_markup=_kb(rows))
+
+
+@router.callback_query(F.data.startswith("adm:resplan:add:toggrp:"))
+async def resplan_add_tog_grp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    gid = int(callback.data.rsplit(":", 1)[-1])
+    selected = [int(x) for x in ((await state.get_data()).get("res_plan_groups") or [])]
+    if gid in selected:
+        selected = [x for x in selected if x != gid]
+    else:
+        selected.append(gid)
+    await state.update_data(res_plan_groups=selected)
+    await callback.answer()
+    if callback.message:
+        await _show_resplan_add_groups(callback.message, state)
+
+
+@router.callback_query(F.data.in_({"adm:resplan:add:grpdone", "adm:resplan:add:grpskip"}))
+async def resplan_add_grp_done(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    data = await state.get_data()
+    if data.get("res_plan_mode") != "payg":
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    selected = [] if callback.data.endswith(":grpskip") else [
+        int(x) for x in (data.get("res_plan_groups") or [])
+    ]
+    rate = int(data.get("res_plan_rate_gb") or 0)
+    group_csv = ",".join(str(x) for x in selected) if selected else None
+    plan = await _save_reseller_plan(
+        session,
+        state,
+        price_per_gb=rate,
+        pg_group_ids=group_csv,
+    )
+    await state.set_state(None)
+    await callback.answer("ذخیره شد")
+    if callback.message:
+        await callback.message.edit_text(
+            f"پلن PAYG #{plan.id} ذخیره شد ✅\n\n{_resplan_detail_text(plan)}",
+            reply_markup=_resplan_detail_keyboard(plan),
+        )
+        await sync_plans_reply_keyboard(callback.message, session, db_user, state, audience="resellers")
 
 
 async def _save_reseller_plan(
@@ -1739,17 +1862,23 @@ async def _save_reseller_plan(
     *,
     commission_percent: int | None = None,
     price_per_gb: int | None = None,
+    pg_group_ids: str | None = None,
 ) -> ResellerPlan:
     from app.services.billing import sync_plan_billing_rate
 
     data = await state.get_data()
     mode = data.get("res_plan_mode") or "fixed"
+    if pg_group_ids is None and mode == "payg":
+        groups = data.get("res_plan_groups") or []
+        if groups:
+            pg_group_ids = ",".join(str(int(x)) for x in groups)
     plan = ResellerPlan(
         name=data.get("res_plan_name") or "پلن نماینده",
         price=int(data.get("res_plan_price") or 0),
         billing_mode=mode,
         commission_percent=int(commission_percent or 0),
-        price_per_gb=int(price_per_gb or 0) if mode == "payg" else 0,
+        price_per_gb=int(price_per_gb or data.get("res_plan_rate_gb") or 0) if mode == "payg" else 0,
+        pg_group_ids=pg_group_ids,
         web_permissions=DEFAULT_FEATURE_PERMS,
         bot_permissions=DEFAULT_FEATURE_PERMS,
         create_pg_admin=True,
@@ -1759,5 +1888,7 @@ async def _save_reseller_plan(
     session.add(plan)
     await session.flush()
     await sync_plan_billing_rate(session, plan)
+    await _persist(session)
+    await session.refresh(plan)
     return plan
 

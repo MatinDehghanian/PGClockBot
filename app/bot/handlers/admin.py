@@ -23,7 +23,7 @@ from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.pasarguard import get_pg
 from app.services.tickets import get_ticket, list_open_tickets, reply_ticket
 from app.services.users import get_all_settings, get_setting, on, set_setting
-from app.services.updates import local_version
+from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 
 
 def _plan_line(p: Plan) -> str:
@@ -120,7 +120,7 @@ async def _plan_detail_text(p: Plan) -> str:
     else:
         link = "⚠️ هنوز به تمپلیت/گروه وصل نشده — خرید تحویل نمی‌شود"
     return (
-        f"💎 <b>پلن #{p.id}</b> — {p.name}\n\n"
+        f"💎 <b>پلن #{p.id}</b> — {html.escape(p.name)}\n\n"
         f"قیمت: {format_toman(p.price, get_settings().currency)}\n"
         f"مدت: {p.duration_days} روز\n"
         f"حجم: {gb}\n"
@@ -625,11 +625,11 @@ async def adm_plan_edit_save(
                 return
             plan.name = text[:128]
         elif field == "price":
-            plan.price = max(0, int(text.replace(",", "").replace("٬", "")))
+            plan.price = max(0, parse_bot_int(text))
         elif field == "days":
-            plan.duration_days = max(1, int(text))
+            plan.duration_days = max(1, parse_bot_int(text))
         elif field == "gb":
-            gb = float(text.replace(",", "."))
+            gb = parse_bot_float(text)
             plan.data_limit_gb = None if gb <= 0 else gb
         elif field == "desc":
             plan.description = text or None
@@ -683,7 +683,7 @@ async def plan_price(message: Message, state: FSMContext, db_user: BotUser):
         await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
         return
     try:
-        price = int((message.text or "").replace(",", "").replace("٬", ""))
+        price = max(0, parse_bot_int(message.text))
     except ValueError:
         await message.answer("یک عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
         return
@@ -703,7 +703,7 @@ async def plan_days(message: Message, state: FSMContext, db_user: BotUser):
         await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
         return
     try:
-        days = int(message.text or "30")
+        days = max(1, parse_bot_int(message.text, default=30))
     except ValueError:
         await message.answer("یک عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
         return
@@ -726,7 +726,7 @@ async def plan_gb(message: Message, state: FSMContext, db_user: BotUser):
         await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
         return
     try:
-        gb = float(message.text or "0")
+        gb = parse_bot_float(message.text)
     except ValueError:
         await message.answer("یک عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
         return
@@ -933,9 +933,13 @@ async def adm_plan_set_tpl(
     if data.get("new_plan") or plan_id == 0:
         plan = await _finish_new_plan(session, state, template_id=tpl_id, group_ids=None)
         if callback.message:
-            await callback.message.edit_text(
+            text = (
                 f"پلن #{plan.id} با تمپلیت #{tpl_id} ساخته شد ✅\n\n"
-                + await _plan_detail_text(plan),
+                + await _plan_detail_text(plan)
+            )
+            await safe_edit_text(
+                callback.message,
+                text,
                 reply_markup=_plan_detail_keyboard(plan),
             )
         return
@@ -990,9 +994,13 @@ async def adm_plan_grp_done(
     if data.get("new_plan") or plan_id == 0:
         plan = await _finish_new_plan(session, state, template_id=None, group_ids=group_csv)
         if callback.message:
-            await callback.message.edit_text(
+            text = (
                 f"پلن #{plan.id} با گروه(ها) {group_csv} ساخته شد ✅\n\n"
-                + await _plan_detail_text(plan),
+                + await _plan_detail_text(plan)
+            )
+            await safe_edit_text(
+                callback.message,
+                text,
                 reply_markup=_plan_detail_keyboard(plan),
             )
         return
