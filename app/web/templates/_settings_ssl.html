@@ -4,19 +4,12 @@
 {% if request.query_params.get('working') == '1' %}
 <div class="flash warn">دریافت گواهی شروع شد — پنل قطع نمی‌شود؛ پیشرفت را پایین ببینید.</div>
 {% endif %}
-{% if request.query_params.get('restarting') == '1' %}
-<div class="flash ok">
-  HTTPS فعال شد و پنل در حال ری‌استارت است.
-  چند ثانیه صبر کنید، بعد با آدرس
-  {% if st.public_https %}<a href="{{ st.public_https }}" dir="ltr">{{ st.public_https }}</a>{% else %}HTTPS دامنه{% endif %}
-  وارد شوید.
-</div>
-{% endif %}
 
 <div class="card settings-card">
   <h2>گواهی SSL (HTTPS)</h2>
   <p class="muted update-card-caption">
     فقط دامنه پنل و مینی‌اپ را وارد کنید. پس از دریافت موفق گواهی، HTTPS به‌صورت خودکار فعال می‌شود.
+    تا قبل از آن همه آدرس‌ها با <code dir="ltr">http</code> باز می‌شوند.
   </p>
 
   <div class="flash {% if st.certbot %}ok{% else %}warn{% endif %}" style="margin-bottom: var(--space-2)">
@@ -124,6 +117,27 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
   </p>
 </div>
 
+<div class="ui-modal" id="ssl-done-modal" hidden>
+  <div class="ui-modal-backdrop" data-ssl-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="ssl-done-title">
+    <div class="ui-modal-head">
+      <h2 id="ssl-done-title">گواهی SSL فعال شد</h2>
+      <button type="button" class="icon-btn" data-ssl-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="form-stack" style="padding: var(--space-2) var(--space-3) var(--space-3)">
+      <p style="margin:0;line-height:1.7">
+        دریافت گواهی و فعال‌سازی HTTPS با موفقیت انجام شد.
+        از این لحظه پنل روی آدرس امن دامنه در دسترس است.
+      </p>
+      <p class="muted" style="margin: var(--space-2) 0 0" dir="ltr" id="ssl-done-url"></p>
+      <div class="actions" style="margin-top: var(--space-3)">
+        <a class="btn" id="ssl-open-panel" href="#" target="_self" rel="noopener">ورود به پنل (HTTPS)</a>
+        <button type="button" class="btn btn-ghost" data-ssl-modal-close>بمان در تنظیمات</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
   const form = document.getElementById('ssl-form');
@@ -131,12 +145,78 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
   const bar = document.getElementById('ssl-progress-bar');
   const msg = document.getElementById('ssl-progress-msg');
   const pctEl = document.getElementById('ssl-progress-pct');
+  const doneModal = document.getElementById('ssl-done-modal');
+  const doneUrlEl = document.getElementById('ssl-done-url');
+  const openPanelBtn = document.getElementById('ssl-open-panel');
   const btns = ['ssl-issue-btn','ssl-renew-btn','ssl-enable-btn','ssl-disable-btn']
     .map(id => document.getElementById(id)).filter(Boolean);
   let timer = null;
   let finished = false;
+  let restartTimer = null;
 
   function setBusy(v){ btns.forEach(b => b.disabled = v); }
+
+  function openSslModal(httpsBase) {
+    const base = (httpsBase || '').replace(/\/$/, '');
+    if (openPanelBtn) openPanelBtn.href = base ? base + '/home' : '/home';
+    if (doneUrlEl) doneUrlEl.textContent = base || '';
+    if (!doneModal) return;
+    doneModal.hidden = false;
+    doneModal.classList.add('open');
+    document.body.classList.add('modal-open');
+  }
+
+  function closeSslModal() {
+    if (!doneModal) return;
+    doneModal.hidden = true;
+    doneModal.classList.remove('open');
+    if (!document.querySelector('.ui-modal.open')) {
+      document.body.classList.remove('modal-open');
+    }
+  }
+
+  document.querySelectorAll('[data-ssl-modal-close]').forEach((el) => {
+    el.addEventListener('click', closeSslModal);
+  });
+
+  function probeHealth(url) {
+    return fetch(url, { cache: 'no-store', mode: 'cors' }).then((r) => r.ok);
+  }
+
+  function waitForHttpsReady(httpsUrl, onReady) {
+    const base = (httpsUrl || '').replace(/\/$/, '');
+    if (!base) {
+      onReady();
+      return;
+    }
+    let tries = 0;
+    let sawDown = false;
+    if (restartTimer) clearInterval(restartTimer);
+    restartTimer = setInterval(async () => {
+      tries++;
+      try {
+        const localOk = await probeHealth('/health');
+        if (!localOk) sawDown = true;
+      } catch (_) {
+        sawDown = true;
+      }
+      let httpsOk = false;
+      try {
+        httpsOk = await probeHealth(base + '/health');
+      } catch (_) {}
+      if (httpsOk && (sawDown || tries > 5)) {
+        clearInterval(restartTimer);
+        restartTimer = null;
+        onReady(base);
+        return;
+      }
+      if (tries > 90) {
+        clearInterval(restartTimer);
+        restartTimer = null;
+        onReady(base);
+      }
+    }, 800);
+  }
 
   function poll(){
     fetch('/settings/ssl/progress', {credentials:'same-origin', cache:'no-store'})
@@ -150,19 +230,22 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
         if (d.done && !finished) {
           finished = true;
           clearInterval(timer);
-          setBusy(false);
           if (d.restarting) {
-            if (msg) msg.textContent = d.message || 'ری‌استارت…';
-            const url = d.https_url || '';
-            setTimeout(() => {
-              if (url) location.href = url + '/settings?tab=ssl';
-              else location.href = '/settings?tab=ssl&restarting=1';
-            }, 4000);
+            setBusy(true);
+            if (msg) msg.textContent = d.message || 'HTTPS فعال شد — در حال ری‌استارت…';
+            waitForHttpsReady(d.https_url || '', function (base) {
+              setBusy(false);
+              if (msg) msg.textContent = 'HTTPS آماده است';
+              openSslModal(base);
+            });
             return;
           }
+          setBusy(false);
           if (d.ok) {
             if (msg) msg.textContent = d.message || 'موفق';
-            setTimeout(() => location.href = '/settings?tab=ssl&ok=' + encodeURIComponent(d.message || 'گواهی آماده شد'), 700);
+            setTimeout(function () {
+              location.href = '/settings?tab=ssl&ok=' + encodeURIComponent(d.message || 'گواهی آماده شد');
+            }, 700);
           }
         }
       }).catch(() => {});
