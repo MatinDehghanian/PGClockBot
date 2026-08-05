@@ -414,9 +414,41 @@ def _admin_broadcast_submenu_entries(ui: dict | None = None) -> list[tuple[str, 
 
 
 def _admin_plans_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
-    """Plan audience/kind pickers are inline — reply KB is back/home only."""
     _ = ui
     return []
+
+
+def _admin_plans_audience_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    _ = ui
+    return [
+        (REPLY_ACTION_ADM_PLANS_AUD_USERS, "👥 کاربران"),
+        (REPLY_ACTION_ADM_PLANS_AUD_RESELLERS, "🤝 نمایندگان"),
+    ]
+
+
+def _admin_plans_kind_entries(audience: str, ui: dict | None = None) -> list[tuple[str, str]]:
+    _ = ui
+    if audience == "resellers":
+        return [
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED, "📦 ثابت (کمیسیون)"),
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG, "⚡ Pay As You Go"),
+        ]
+    return [
+        (REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED, "💎 ثابت"),
+        (REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM, "✨ دلخواه"),
+        (REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL, "🎁 تست"),
+        (REPLY_ACTION_ADM_PLANS_KIND_USERS_WHOLESALE, "📦 فروش عمده"),
+    ]
+
+
+REPLY_ACTION_ADM_PLANS_AUD_USERS = "adm_plans_aud_users"
+REPLY_ACTION_ADM_PLANS_AUD_RESELLERS = "adm_plans_aud_resellers"
+REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED = "adm_plans_kind_users_fixed"
+REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM = "adm_plans_kind_users_custom"
+REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL = "adm_plans_kind_users_trial"
+REPLY_ACTION_ADM_PLANS_KIND_USERS_WHOLESALE = "adm_plans_kind_users_wholesale"
+REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED = "adm_plans_kind_res_fixed"
+REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG = "adm_plans_kind_res_payg"
 
 
 def _reseller_plans_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
@@ -670,11 +702,36 @@ def admin_broadcast_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarku
     return _reply_markup(rows, placeholder="مخاطب پیام گروهی…")
 
 
-def admin_plans_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+def admin_plans_audience_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
     rows = _pack_reply_rows(
-        _admin_plans_submenu_entries(ui), ui, footer_row=_submenu_footer(ui)
+        _admin_plans_audience_entries(ui),
+        ui,
+        footer_row=_submenu_footer(ui),
     )
-    return _reply_markup(rows, placeholder="پلن‌های فروش…")
+    return _reply_markup(rows, placeholder="مخاطب پلن را انتخاب کنید…")
+
+
+def admin_plans_kind_reply_keyboard(
+    audience: str,
+    ui: dict | None = None,
+) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _admin_plans_kind_entries(audience, ui),
+        ui,
+        footer_row=_submenu_footer(ui),
+    )
+    return _reply_markup(rows, placeholder="نوع پلن را انتخاب کنید…")
+
+
+def admin_plans_reply_keyboard(
+    ui: dict | None = None,
+    *,
+    audience: str | None = None,
+) -> ReplyKeyboardMarkup:
+    """Plans hub: audience or kind step on reply keyboard."""
+    if audience in {"users", "resellers"}:
+        return admin_plans_kind_reply_keyboard(audience, ui)
+    return admin_plans_audience_reply_keyboard(ui)
 
 
 def reseller_settings_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
@@ -812,8 +869,11 @@ def reply_action_map(
             ui, custom_enabled=True, wholesale_enabled=True
         ):
             mapping.setdefault((text or "").strip(), key)
-        for key, text in _admin_plans_legacy_entries(ui):
-            mapping.setdefault((text or "").strip(), key)
+            for key, text in _admin_plans_audience_entries(ui):
+                mapping.setdefault((text or "").strip(), key)
+            for aud in ("users", "resellers"):
+                for key, text in _admin_plans_kind_entries(aud, ui):
+                    mapping.setdefault((text or "").strip(), key)
 
         if reseller_actor:
             from app.services.authz import shop_feature_allowed
@@ -1365,7 +1425,7 @@ def admin_home(ui: dict | None = None) -> InlineKeyboardMarkup:
 def admin_plans_list_keyboard(
     plans: list,
     *,
-    back_callback: str = "adm:plans:kind:users:fixed",
+    back_callback: str = "adm:plans:aud:users",
     add_callback: str = "adm:plan:add",
 ) -> InlineKeyboardMarkup:
     """User fixed-plan rows + inline add/back."""
@@ -1408,6 +1468,7 @@ def admin_reseller_plans_list_keyboard(
     *,
     mode: str,
     back_callback: str = "adm:plans:aud:resellers",
+    add_callback: str = "adm:resplan:add:fixed",
 ) -> InlineKeyboardMarkup:
     """Platform reseller subscription plans (fixed or PAYG)."""
     rows: list[list[InlineKeyboardButton]] = []
@@ -1424,7 +1485,7 @@ def admin_reseller_plans_list_keyboard(
             [
                 InlineKeyboardButton(
                     text=f"{flag} {name}{extra}"[:60],
-                    callback_data=f"adm:resplan:hint:{p.id}",
+                    callback_data=f"adm:resplan:view:{p.id}",
                 )
             ]
         )
@@ -1433,11 +1494,14 @@ def admin_reseller_plans_list_keyboard(
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"پلن {label} نیست — در وب‌پنل بسازید",
-                    callback_data=back_callback,
+                    text=f"پلنی نیست — افزودن {label}",
+                    callback_data=add_callback,
                 )
             ]
         )
+    rows.append(
+        [InlineKeyboardButton(text="➕ پلن جدید", callback_data=add_callback)]
+    )
     if back_callback:
         rows.append(
             [InlineKeyboardButton(text="⬅️ انتخاب نوع", callback_data=back_callback)]
