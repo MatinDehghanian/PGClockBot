@@ -1401,6 +1401,7 @@ def register_pg_pages(
         staff: dict = Depends(require_admin),
         session=Depends(get_db),
     ):
+        from app.services.pg_overview import admin_usage_snapshot
         from app.services.pg_staff_access import (
             purge_orphaned_staff_access,
             web_access_status_map,
@@ -1413,6 +1414,7 @@ def register_pg_pages(
         roles = []
         web_status: dict = {}
         reseller_plans = []
+        admin_usage: dict = {}
         try:
             # Drop web rows for PG admins that no longer exist in PasarGuard
             try:
@@ -1424,6 +1426,11 @@ def register_pg_pages(
             if not admins:
                 admins = await pg.get_admins_simple()
             roles = await pg.get_admin_roles()
+            roles_by_id = {
+                int(r.get("id")): r
+                for r in (roles or [])
+                if isinstance(r, dict) and r.get("id") is not None
+            }
             names = [
                 str(a.get("username") or "").strip()
                 for a in (admins or [])
@@ -1431,6 +1438,41 @@ def register_pg_pages(
             ]
             web_status = await web_access_status_map(session, names)
             reseller_plans = [p for p in await list_reseller_plans(session) if p.is_active]
+            for a in admins or []:
+                if not isinstance(a, dict):
+                    continue
+                uname = str(a.get("username") or "").strip().lower()
+                if not uname:
+                    continue
+                payload = a
+                # Simple list often omits usage — fetch full admin when metrics missing
+                has_usage = any(
+                    payload.get(k) is not None
+                    for k in (
+                        "used_traffic",
+                        "traffic_used",
+                        "lifetime_used_traffic",
+                        "total_users",
+                        "users_count",
+                        "data_limit",
+                        "max_users",
+                    )
+                )
+                if not has_usage:
+                    try:
+                        full = await pg.get_admin(uname)
+                        if isinstance(full, dict):
+                            payload = full
+                    except Exception:
+                        pass
+                role = payload.get("role") if isinstance(payload.get("role"), dict) else None
+                if role is None:
+                    rid = payload.get("role_id") or a.get("role_id")
+                    try:
+                        role = roles_by_id.get(int(rid)) if rid is not None else None
+                    except (TypeError, ValueError):
+                        role = None
+                admin_usage[uname] = admin_usage_snapshot(payload, role)
         except Exception as e:
             err = str(e)
         return render(
@@ -1441,6 +1483,7 @@ def register_pg_pages(
                 admins=admins,
                 pg_roles=roles,
                 web_status=web_status,
+                admin_usage=admin_usage,
                 reseller_plans=reseller_plans,
                 flash_err=err,
                 flash_ok=ok,

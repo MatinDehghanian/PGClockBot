@@ -208,6 +208,8 @@ async def resolve_price_per_gb(session: AsyncSession, ctx: RateContext | None = 
     if hit is not None:
         return hit
 
+    # Global Setting fallback removed from product UI — rate lives on PAYG plans.
+    # Keep a silent Setting read only as last-resort for legacy installs (default 0).
     from app.services.users import get_setting
 
     raw = await get_setting(session, SETTING_PRICE_PER_GB, "0")
@@ -337,6 +339,86 @@ async def get_tick_minutes(session: AsyncSession) -> int:
     return max(1, min(1440, mins))
 
 
+def payg_purchase_min_wallet(threshold: int) -> int:
+    """Minimum shop-wallet balance required to buy a PAYG reseller plan.
+
+    Must be *strictly greater* than ``2 * billing_low_balance``.
+    """
+    thr = max(0, int(threshold or 0))
+    return (2 * thr) + 1
+
+
+@dataclass(frozen=True)
+class PaygWalletGate:
+    """Result of the PAYG purchase wallet check."""
+
+    ok: bool
+    wallet: int
+    required: int
+    shortfall: int
+    threshold: int
+
+    @property
+    def message(self) -> str:
+        if self.ok:
+            return ""
+        from app.services.formatting import format_toman
+
+        need = format_toman(self.required)
+        have = format_toman(self.wallet)
+        more = format_toman(self.shortfall)
+        return (
+            "برای خرید سرویس Pay As You Go، موجودی کیف پول باید بیشتر از "
+            f"دو برابر آستانه هشدار PAYG باشد.\n"
+            f"حداقل لازم: <b>{need}</b>\n"
+            f"موجودی فعلی: <b>{have}</b>\n"
+            f"لطفاً حداقل <b>{more}</b> دیگر شارژ کنید."
+        )
+
+    @property
+    def alert_message(self) -> str:
+        """Short plain text for Telegram alert popups (no HTML)."""
+        if self.ok:
+            return ""
+        from app.services.formatting import format_toman
+
+        return (
+            "موجودی کیف پول برای PAYG کافی نیست.\n"
+            f"حداقل: {format_toman(self.required)}\n"
+            f"موجودی: {format_toman(self.wallet)}\n"
+            f"کمبود: {format_toman(self.shortfall)}"
+        )
+
+
+async def check_payg_purchase_wallet(
+    session: AsyncSession,
+    wallet_balance: int,
+) -> PaygWalletGate:
+    """Require shop wallet > 2× billing warning threshold before PAYG purchase."""
+    threshold = await get_low_balance_threshold(session)
+    required = payg_purchase_min_wallet(threshold)
+    wallet = max(0, int(wallet_balance or 0))
+    shortfall = max(0, required - wallet)
+    return PaygWalletGate(
+        ok=wallet >= required,
+        wallet=wallet,
+        required=required,
+        shortfall=shortfall,
+        threshold=threshold,
+    )
+
+
+async def assert_payg_purchase_wallet(
+    session: AsyncSession,
+    wallet_balance: int,
+) -> PaygWalletGate:
+    """Raise ``BillingError`` when wallet is below the PAYG purchase minimum."""
+    gate = await check_payg_purchase_wallet(session, wallet_balance)
+    if not gate.ok:
+        raise BillingError(gate.alert_message)
+    return gate
+
+
 async def load_payg_profile(
     session: AsyncSession, reseller_user_id: int
 ) -> ResellerProfile | None:
@@ -399,6 +481,13 @@ async def credit_topup(
     if existing:
         return existing
 
+    from app.services.billing_suspend import assert_topup_clears_suspend
+
+    try:
+        await assert_topup_clears_suspend(session, profile, int(amount))
+    except BillingError as e:
+        raise ValueError(e.message) from e
+
     with session.no_autoflush:
         result = await session.execute(
             update(ResellerProfile)
@@ -428,6 +517,7 @@ async def credit_topup(
         if commit:
             await session.commit()
             await session.refresh(tx)
+            await session.refresh(profile)
         else:
             await session.flush()
     except IntegrityError:
@@ -436,6 +526,16 @@ async def credit_topup(
         if existing:
             return existing
         raise
+
+    # Instant restore when balance is positive after approved topup
+    if int(profile.billing_balance or 0) > 0 and profile.billing_suspended_at is not None:
+        try:
+            from app.services.billing_suspend import restore_payg_reseller
+
+            await restore_payg_reseller(session, profile, commit=commit)
+        except Exception:
+            logger.exception("PAYG restore after topup failed reseller=%s", reseller_user_id)
+
     return tx
 
 
@@ -449,10 +549,18 @@ async def debit_usage(
     idempotency_key: str,
     note: str | None = None,
     commit: bool = True,
+    watermark_before: int | None = None,
 ) -> ResellerBillingTransaction | None:
-    """Charge proportional usage and advance watermark. Idempotent by key."""
+    """Charge proportional usage and advance watermark. Idempotent by key.
+
+    Precision rules:
+    - Charge only the *delta* since the last watermark (never re-bill prior usage).
+    - If rate > 0 but the delta floors to 0 toman, do **not** advance the watermark
+      so residual bytes accumulate until they are worth at least 1 toman.
+    - If rate is 0, advance watermark without charging (misconfigured plan).
+    - Optimistic lock on ``billing_watermark_bytes`` prevents concurrent double-charge.
+    """
     if bytes_delta <= 0:
-        # Still advance watermark when traffic moved but cost is 0
         profile.billing_watermark_bytes = int(watermark_after)
         if commit:
             await session.commit()
@@ -464,20 +572,64 @@ async def debit_usage(
 
     amount = bytes_cost_proportional(bytes_delta, rate_per_gb)
     rid = int(profile.user_id)
+    expected_wm = (
+        int(watermark_before)
+        if watermark_before is not None
+        else int(profile.billing_watermark_bytes or 0)
+    )
+
+    # Hold watermark when usage is too small to bill 1 toman at a positive rate.
+    if amount <= 0 and int(rate_per_gb) > 0:
+        logger.debug(
+            "billing hold residual reseller=%s delta=%s rate=%s",
+            rid,
+            bytes_delta,
+            rate_per_gb,
+        )
+        return None
 
     if amount > 0:
         with session.no_autoflush:
-            await session.execute(
+            result = await session.execute(
                 update(ResellerProfile)
-                .where(ResellerProfile.user_id == rid)
+                .where(
+                    ResellerProfile.user_id == rid,
+                    ResellerProfile.billing_watermark_bytes == expected_wm,
+                )
                 .values(
                     billing_balance=ResellerProfile.billing_balance - int(amount),
                     billing_watermark_bytes=int(watermark_after),
                 )
                 .execution_options(synchronize_session=False)
             )
+        if result.rowcount != 1:
+            # Concurrent tick already moved watermark — do not double-charge.
+            existing = await _find_by_idempotency(session, idempotency_key)
+            if existing:
+                return existing
+            logger.warning(
+                "billing optimistic-lock miss reseller=%s expected_wm=%s after=%s",
+                rid,
+                expected_wm,
+                watermark_after,
+            )
+            await session.refresh(profile)
+            return None
     else:
-        profile.billing_watermark_bytes = int(watermark_after)
+        # rate_per_gb == 0 — advance watermark only if still at expected
+        with session.no_autoflush:
+            result = await session.execute(
+                update(ResellerProfile)
+                .where(
+                    ResellerProfile.user_id == rid,
+                    ResellerProfile.billing_watermark_bytes == expected_wm,
+                )
+                .values(billing_watermark_bytes=int(watermark_after))
+                .execution_options(synchronize_session=False)
+            )
+        if result.rowcount != 1:
+            await session.refresh(profile)
+            return None
 
     await session.refresh(profile)
 
@@ -548,9 +700,16 @@ async def assert_billing_allows_provision(
         return
     bal = int(profile.billing_balance or 0)
     if bal <= 0:
+        # Ensure hard suspend (admin + services) even if tick missed it
+        try:
+            from app.services.billing_suspend import suspend_payg_reseller
+
+            await suspend_payg_reseller(session, profile, commit=True)
+        except Exception:
+            logger.debug("suspend from provision gate failed", exc_info=True)
         raise BillingError(
-            "موجودی Billing نماینده تمام شده است — ابتدا شارژ کنید "
-            "یا با ادمین اصلی تماس بگیرید"
+            "موجودی Billing نماینده تمام شده است — حساب مسدود شد. "
+            "برای رفع مسدودی کیف پول را حداقل به اندازه دو برابر آستانه هشدار شارژ کنید"
         )
 
 
@@ -568,12 +727,20 @@ async def tick_reseller_usage(
     rate_ctx: RateContext | None = None,
     commit: bool = True,
 ) -> ResellerBillingTransaction | None:
-    """Bill one PAYG reseller from PG admin traffic since watermark."""
+    """Bill one PAYG reseller from PG admin traffic since watermark.
+
+    Only the delta since the last billed watermark is charged, e.g. 1.0 GB then
+    1.2 GB → second tick bills 0.2 GB at the plan rate.
+    """
     if not is_payg(profile):
         return None
     source = traffic_source or get_traffic_source()
     used = source.extract_bytes(admin_payload)
     if used is None:
+        logger.warning(
+            "billing skip reseller=%s — no traffic field on admin payload",
+            profile.user_id,
+        )
         return None
 
     watermark = int(profile.billing_watermark_bytes or 0)
@@ -594,10 +761,20 @@ async def tick_reseller_usage(
     if delta <= 0:
         return None
 
-    rate = await resolve_price_per_gb(
-        session,
-        rate_ctx or rate_context_for_profile(profile),
-    )
+    ctx = rate_ctx or rate_context_for_profile(profile)
+    rate = await resolve_price_per_gb(session, ctx)
+    if rate <= 0:
+        logger.warning(
+            "billing rate=0 reseller=%s plan_id=%s — usage not charged; fix PAYG plan price",
+            profile.user_id,
+            getattr(profile, "plan_id", None),
+        )
+        # Still advance watermark so a later rate fix does not back-bill huge delta
+        profile.billing_watermark_bytes = int(used)
+        if commit:
+            await session.commit()
+        return None
+
     key = f"usage:{int(profile.user_id)}:{watermark}:{used}"
     return await debit_usage(
         session,
@@ -605,6 +782,7 @@ async def tick_reseller_usage(
         delta,
         rate_per_gb=rate,
         watermark_after=used,
+        watermark_before=watermark,
         idempotency_key=key,
         note="مصرف ترافیک",
         commit=commit,
@@ -671,7 +849,16 @@ async def run_billing_tick(session: AsyncSession) -> dict[str, int]:
                 stats["charged"] += 1
             else:
                 stats["skipped"] += 1
-            if await maybe_warn_low_balance(session, profile):
+            # Immediate suspend when balance hits zero/negative after tick
+            await session.refresh(profile)
+            if int(profile.billing_balance or 0) <= 0:
+                try:
+                    from app.services.billing_suspend import suspend_payg_reseller
+
+                    await suspend_payg_reseller(session, profile, commit=True)
+                except Exception:
+                    logger.exception("PAYG suspend failed reseller=%s", profile.user_id)
+            elif await maybe_warn_low_balance(session, profile):
                 try:
                     await _notify_low_balance(session, profile)
                 except Exception:

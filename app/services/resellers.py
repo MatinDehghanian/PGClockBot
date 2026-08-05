@@ -268,8 +268,12 @@ async def _unique_web_username(session: AsyncSession, prefix: str = "web") -> st
 
 
 async def get_reseller_profile(session: AsyncSession, user_id: int) -> ResellerProfile | None:
+    from sqlalchemy.orm import selectinload
+
     result = await session.execute(
-        select(ResellerProfile).where(ResellerProfile.user_id == user_id)
+        select(ResellerProfile)
+        .options(selectinload(ResellerProfile.plan))
+        .where(ResellerProfile.user_id == user_id)
     )
     return result.scalar_one_or_none()
 
@@ -452,6 +456,14 @@ async def create_application(
         raise ValueError("شما هم‌اکنون نماینده هستید")
     if user.role == Role.ADMIN.value:
         raise ValueError("ادمین نیاز به درخواست نمایندگی ندارد")
+
+    from app.services.billing import BillingError, assert_payg_purchase_wallet
+
+    if reseller_plan_mode_of(plan) == "payg":
+        try:
+            await assert_payg_purchase_wallet(session, int(user.wallet_balance or 0))
+        except BillingError as e:
+            raise ValueError(e.message) from e
 
     existing = await session.execute(
         select(ResellerApplication).where(

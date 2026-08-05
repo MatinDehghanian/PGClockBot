@@ -437,12 +437,13 @@ async def res_billing(
     rate = await resolve_price_per_gb(session, rate_context_for_profile(profile))
     txs = await list_billing_transactions(session, int(owner_id), limit=5)
     lines = [
-        "💰 <b>کیف پول Billing</b>",
+        "💰 <b>کیف پول PAYG</b>",
         "",
         f"موجودی: <b>{format_toman(int(profile.billing_balance or 0), get_settings().currency)}</b>",
-        f"نرخ: {format_toman(rate, get_settings().currency)} / GB",
+        f"نرخ پلن: {format_toman(rate, get_settings().currency)} / GB",
         f"وضعیت سیستم: {'فعال' if enabled else 'غیرفعال'}",
         "",
+        "مصرف ترافیک به‌صورت تفاضلی (دلتا از watermark) در بازه تنظیم‌شده کسر می‌شود.",
         "برای شارژ با ادمین اصلی هماهنگ کنید.",
     ]
     if txs:
@@ -699,13 +700,21 @@ async def resapply_mode(
     plans = await list_active_reseller_plans(session, billing_mode=mode)
     await callback.answer()
     label = reseller_billing_mode_label(mode)
+    wallet_hint = ""
+    if mode == "payg":
+        from app.services.billing import check_payg_purchase_wallet
+
+        gate = await check_payg_purchase_wallet(session, int(db_user.wallet_balance or 0))
+        if not gate.ok:
+            wallet_hint = "\n\n⚠️ " + gate.message
     if not plans:
         if callback.message:
             await safe_edit_text(
                 callback.message,
                 format_message(
                     f"🤝 {label}",
-                    "برای این نوع، پلن فعالی تعریف نشده است.\nنوع دیگری را انتخاب کنید.",
+                    "برای این نوع، پلن فعالی تعریف نشده است.\nنوع دیگری را انتخاب کنید."
+                    + wallet_hint,
                 ),
                 reply_markup=await _resapply_mode_keyboard(session, ui),
             )
@@ -715,7 +724,7 @@ async def resapply_mode(
             callback.message,
             format_message(
                 f"🤝 پلن‌های {label}",
-                "یکی از پلن‌های این دسته را انتخاب کنید.",
+                "یکی از پلن‌های این دسته را انتخاب کنید." + wallet_hint,
             ),
             reply_markup=await _resapply_plan_list_keyboard(plans, mode=mode, ui=ui),
         )
@@ -744,6 +753,12 @@ async def resapply_plan(
         return
     mode = reseller_plan_mode_of(plan)
     body = format_reseller_plan_apply_detail(plan, currency=get_settings().currency)
+    if mode == "payg":
+        from app.services.billing import check_payg_purchase_wallet
+
+        gate = await check_payg_purchase_wallet(session, int(db_user.wallet_balance or 0))
+        if not gate.ok:
+            body = f"{body}\n\n⚠️ {gate.message}"
     rows = [
         [InlineKeyboardButton(text="✅ ثبت درخواست", callback_data=f"resapply:buy:{plan.id}")],
         [InlineKeyboardButton(text="⬅️ بازگشت به لیست", callback_data=f"resapply:mode:{mode}")],
@@ -846,4 +861,302 @@ async def resapply_buy(
             order.id,
             state=state,
             text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+        )
+
+
+async def _capacity_context(
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
+        return None, None, None, None
+    from app.services.reseller_capacity import load_reseller_plan
+
+    plan = await load_reseller_plan(session, profile)
+    owner = await session.get(BotUser, int(owner_id))
+    return owner_id, profile, plan, owner
+
+
+@router.callback_query(F.data == "res:renew")
+async def res_renew(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.reseller_capacity import plan_renew_price, renew_reseller_capacity
+
+    owner_id, profile, plan, owner = await _capacity_context(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not owner_id or not profile or not plan or not owner:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    price = plan_renew_price(plan)
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"✅ تمدید — {format_toman(price, get_settings().currency)}",
+                callback_data="res:renew:go",
+            )
+        ],
+        [InlineKeyboardButton(text="انصراف", callback_data="menu:home")],
+    ]
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(
+                "🔄 تمدید سرویس نماینده",
+                f"پلن: <b>{plan.name}</b>\n"
+                f"مبلغ: <b>{format_toman(price, get_settings().currency)}</b>\n\n"
+                "با تمدید، مصرف ترافیک کاربران زیر ادمین شما ریست می‌شود.\n"
+                "هزینه از کیف پول فروشگاهی کسر می‌شود.",
+            ),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
+@router.callback_query(F.data == "res:renew:go")
+async def res_renew_go(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.reseller_capacity import renew_reseller_capacity
+
+    owner_id, profile, plan, owner = await _capacity_context(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not owner_id or not profile or not plan or not owner:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    try:
+        result = await renew_reseller_capacity(
+            session, user=owner, profile=profile, plan=plan
+        )
+    except ValueError as e:
+        await callback.answer(str(e)[:180], show_alert=True)
+        return
+    await callback.answer("تمدید شد")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(
+                "✅ تمدید انجام شد",
+                f"مبلغ: {format_toman(result['amount'], get_settings().currency)}\n"
+                f"ریست مصرف کاربران: {result['reset_ok']}"
+                + (f" (خطا: {result['reset_err']})" if result.get("reset_err") else ""),
+            ),
+            reply_markup=None,
+        )
+
+
+@router.callback_query(F.data == "res:buy_gb")
+async def res_buy_gb(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.reseller_capacity import plan_allows_buy_extra, plan_extra_gb_price
+
+    owner_id, profile, plan, owner = await _capacity_context(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not owner_id or not profile or not plan:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    if not plan_allows_buy_extra(plan):
+        await callback.answer("این پلن خرید حجم اضافه ندارد", show_alert=True)
+        return
+    price = plan_extra_gb_price(plan)
+    rows = []
+    for gb in (1, 5, 10, 50):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{gb} گیگ — {format_toman(price * gb, get_settings().currency)}",
+                    callback_data=f"res:buy_gb:{gb}",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="انصراف", callback_data="menu:home")])
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(
+                "📦 خرید حجم اضافه",
+                f"نرخ: <b>{format_toman(price, get_settings().currency)}</b> / گیگ\n"
+                "سقف حجم ادمین پاسارگارد شما افزایش می‌یابد.\n"
+                "هزینه از کیف پول فروشگاهی کسر می‌شود.",
+            ),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
+@router.callback_query(F.data.startswith("res:buy_gb:"))
+async def res_buy_gb_go(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.reseller_capacity import buy_extra_gb
+
+    owner_id, profile, plan, owner = await _capacity_context(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not owner_id or not profile or not plan or not owner:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    from app.services.reseller_capacity import ALLOWED_EXTRA_GB
+
+    try:
+        gb = int(callback.data.split(":")[-1])
+    except ValueError:
+        await callback.answer("مقدار نامعتبر", show_alert=True)
+        return
+    if gb not in ALLOWED_EXTRA_GB:
+        await callback.answer("مقدار مجاز نیست", show_alert=True)
+        return
+    try:
+        result = await buy_extra_gb(
+            session, user=owner, profile=profile, plan=plan, gb=gb
+        )
+    except ValueError as e:
+        await callback.answer(str(e)[:180], show_alert=True)
+        return
+    await callback.answer("خرید شد")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(
+                "✅ حجم اضافه خریداری شد",
+                f"مقدار: {result['gb']} گیگ\n"
+                f"مبلغ: {format_toman(result['amount'], get_settings().currency)}",
+            ),
+            reply_markup=None,
+        )
+
+
+@router.callback_query(F.data == "res:buy_users")
+async def res_buy_users(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.reseller_capacity import plan_allows_buy_extra, plan_extra_user_price
+
+    owner_id, profile, plan, owner = await _capacity_context(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not owner_id or not profile or not plan:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    if not plan_allows_buy_extra(plan):
+        await callback.answer("این پلن خرید کاربر اضافه ندارد", show_alert=True)
+        return
+    price = plan_extra_user_price(plan)
+    rows = []
+    for n in (1, 5, 10, 20):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{n} کاربر — {format_toman(price * n, get_settings().currency)}",
+                    callback_data=f"res:buy_users:{n}",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="انصراف", callback_data="menu:home")])
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(
+                "👤 خرید کاربر اضافه",
+                f"نرخ: <b>{format_toman(price, get_settings().currency)}</b> / کاربر\n"
+                "سقف تعداد کاربران ادمین شما افزایش می‌یابد.\n"
+                "هزینه از کیف پول فروشگاهی کسر می‌شود.",
+            ),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
+@router.callback_query(F.data.startswith("res:buy_users:"))
+async def res_buy_users_go(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.reseller_capacity import buy_extra_users
+
+    owner_id, profile, plan, owner = await _capacity_context(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not owner_id or not profile or not plan or not owner:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    from app.services.reseller_capacity import ALLOWED_EXTRA_USERS
+
+    try:
+        n = int(callback.data.split(":")[-1])
+    except ValueError:
+        await callback.answer("مقدار نامعتبر", show_alert=True)
+        return
+    if n not in ALLOWED_EXTRA_USERS:
+        await callback.answer("مقدار مجاز نیست", show_alert=True)
+        return
+    try:
+        result = await buy_extra_users(
+            session, user=owner, profile=profile, plan=plan, count=n
+        )
+    except ValueError as e:
+        await callback.answer(str(e)[:180], show_alert=True)
+        return
+    await callback.answer("خرید شد")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(
+                "✅ کاربر اضافه خریداری شد",
+                f"تعداد: {result['users']}\n"
+                f"سقف جدید: {result['max_users']}\n"
+                f"مبلغ: {format_toman(result['amount'], get_settings().currency)}",
+            ),
+            reply_markup=None,
         )

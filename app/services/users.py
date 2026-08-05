@@ -575,7 +575,7 @@ DEFAULT_SETTINGS = {
     "stars_description": "پرداخت سفارش با استارز تلگرام",
     # Unified Billing (platform; PAYG resellers)
     "billing_enabled": "0",
-    "billing_price_per_gb": "1000",
+    "billing_price_per_gb": "0",
     "billing_low_balance": "10000",
     "billing_on_empty": "block_provision",
     "billing_tick_minutes": "15",
@@ -596,7 +596,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("naming", "نام‌گذاری سرویس"),
     ("forcejoin", "کانال اجباری"),
     ("reseller", "نمایندگی"),
-    ("billing", "صورتحساب"),
+    ("billing", "مدیریت PAYG"),
     ("notifications", "نوتیفیکیشن"),
     ("bot", "ربات و اتصال"),
 ]
@@ -687,24 +687,18 @@ SETTING_GROUPS = {
             "اختیاری. خالی = دقیقاً همان PG_BASE_URL تنظیم‌شده در اتصال بات (با path کامل).",
         ),
     ],
-    "صورتحساب نمایندگان": [
+    "مدیریت PAYG": [
         (
             "billing_enabled",
-            "فعال‌سازی Billing",
+            "فعال‌سازی PAYG",
             "toggle",
             "فقط روی نمایندگان Pay As You Go اثر دارد؛ Fixed دست‌نخورده می‌ماند",
-        ),
-        (
-            "billing_price_per_gb",
-            "قیمت هر گیگابایت (تومان)",
-            "number",
-            "نرخ پیش‌فرض سراسری وقتی پلن PAYG نرخ اختصاصی نداشته باشد؛ هر پلن PAYG می‌تواند نرخ جدا (مثلاً برای گروه پاسارگارد متفاوت) داشته باشد",
         ),
         (
             "billing_low_balance",
             "آستانه هشدار موجودی کم (تومان)",
             "number",
-            "وقتی موجودی Billing به این مقدار یا کمتر برسد یک‌بار هشدار تلگرام می‌رود",
+            "وقتی موجودی Billing به این مقدار یا کمتر برسد یک‌بار هشدار تلگرام می‌رود؛ خرید PAYG نیز نیازمند کیف پول بیشتر از دو برابر این آستانه است",
         ),
         (
             "billing_on_empty",
@@ -717,7 +711,7 @@ SETTING_GROUPS = {
             "billing_tick_minutes",
             "بازه شارژ خودکار (دقیقه)",
             "number",
-            "فاصله اجرای billing tick برای کسر مصرف از watermark",
+            "فاصله اجرای billing tick برای کسر مصرف تفاضلی (دلتا) از watermark نماینده",
         ),
     ],
     "هشدار سرویس کاربر": [
@@ -831,7 +825,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "naming": ["نام‌گذاری سرویس در پاسارگارد"],
     "forcejoin": ["کانال اجباری"],
     "reseller": ["نمایندگی"],
-    "billing": ["صورتحساب نمایندگان"],
+    "billing": ["مدیریت PAYG"],
     "notifications": ["هشدار سرویس کاربر"],
     "backup": [],
     "pwa": [],

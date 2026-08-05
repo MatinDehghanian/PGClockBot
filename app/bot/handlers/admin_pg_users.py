@@ -470,7 +470,7 @@ async def pg_create_menu(callback: CallbackQuery, state: FSMContext, db_user: Bo
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("➕ ساخت کاربر VPN", "نوع ساخت را انتخاب کنید:"),
+            format_message("➕ ساخت کاربر", "نوع ساخت را انتخاب کنید:"),
             reply_markup=markup,
         )
 

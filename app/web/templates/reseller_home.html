@@ -35,7 +35,7 @@
 
 {% if billing_card %}
 <div class="card home-conn-card">
-  <h2>کیف پول Billing</h2>
+  <h2>کیف پول PAYG</h2>
   <p class="muted">حالت Pay As You Go — موجودی برای مصرف ترافیک و ساخت/تمدید سرویس</p>
   <p style="font-size:1.35rem;margin:0.5rem 0 0"><strong>{{ billing_card.balance_fa }}</strong></p>
 </div>
@@ -162,6 +162,9 @@
       {{ pg_quota_gauge(pg_limits.traffic, 'حجم', 'Traffic', 'pg-traffic') }}
       {% endif %}
     </div>
+    {% endif %}
+    {% if pg_limits.lifetime_text %}
+    <p class="muted" style="margin-top:0.75rem">مصرف lifetime (مبنای PAYG): <b dir="ltr">{{ pg_limits.lifetime_text }}</b></p>
     {% endif %}
     {% if pg_limits.constraints %}
     <div class="home-panel-grid" style="margin-top: var(--section-gap)">

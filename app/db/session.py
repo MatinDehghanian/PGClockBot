@@ -163,6 +163,8 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
             "billing_balance": "INTEGER DEFAULT 0",
             "billing_watermark_bytes": "BIGINT DEFAULT 0",
             "billing_low_warned_at": "DATETIME",
+            "billing_suspended_at": "DATETIME",
+            "billing_suspended_user_ids": "TEXT",
         }
         for col, typ in alters.items():
             if col not in rcols:
@@ -189,6 +191,22 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
         if "pg_group_ids" not in pcols:
             sync_conn.execute(
                 sql_text("ALTER TABLE reseller_plans ADD COLUMN pg_group_ids VARCHAR(255)")
+            )
+        if "allow_buy_extra" not in pcols:
+            sync_conn.execute(
+                sql_text("ALTER TABLE reseller_plans ADD COLUMN allow_buy_extra BOOLEAN DEFAULT 0")
+            )
+        if "extra_gb_price" not in pcols:
+            sync_conn.execute(
+                sql_text("ALTER TABLE reseller_plans ADD COLUMN extra_gb_price INTEGER DEFAULT 0")
+            )
+        if "extra_user_price" not in pcols:
+            sync_conn.execute(
+                sql_text("ALTER TABLE reseller_plans ADD COLUMN extra_user_price INTEGER DEFAULT 0")
+            )
+        if "renew_price" not in pcols:
+            sync_conn.execute(
+                sql_text("ALTER TABLE reseller_plans ADD COLUMN renew_price INTEGER DEFAULT 0")
             )
 
     if insp.has_table("pg_staff_access"):

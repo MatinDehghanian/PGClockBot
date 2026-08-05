@@ -53,6 +53,13 @@ def _parse_price_per_gb(form) -> int:
         return 0
 
 
+def _parse_nonneg_int(form, key: str, default: int = 0) -> int:
+    try:
+        return max(0, int(str(form.get(key) or default).replace(",", "").replace("٬", "")))
+    except ValueError:
+        return default
+
+
 def _parse_pg_group_ids(form) -> str | None:
     ids: list[str] = []
     for k, v in form.items():
@@ -84,6 +91,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.services.pg_overview import admin_usage_snapshot
         from app.services.setup_wizard import default_panel_base_url
         from app.services.users import get_setting
 
@@ -94,10 +102,43 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         )
         rows = result.all()
         roles = []
+        reseller_usage: dict = {}
         try:
             roles = await get_pg().get_admin_roles()
         except Exception:
             roles = []
+        try:
+            pg = get_pg()
+            admins = await pg.get_admins()
+            if not admins:
+                admins = await pg.get_admins_simple()
+            roles_by_id = {
+                int(r.get("id")): r
+                for r in (roles or [])
+                if isinstance(r, dict) and r.get("id") is not None
+            }
+            by_name = {
+                str(a.get("username") or "").strip().lower(): a
+                for a in (admins or [])
+                if isinstance(a, dict) and a.get("username")
+            }
+            for _user, profile in rows:
+                uname = str(profile.pg_admin_username or "").strip().lower()
+                if not uname:
+                    continue
+                admin = by_name.get(uname)
+                if not isinstance(admin, dict):
+                    continue
+                role = admin.get("role") if isinstance(admin.get("role"), dict) else None
+                if role is None:
+                    rid = admin.get("role_id") or profile.pg_role_id
+                    try:
+                        role = roles_by_id.get(int(rid)) if rid is not None else None
+                    except (TypeError, ValueError):
+                        role = None
+                reseller_usage[int(profile.user_id)] = admin_usage_snapshot(admin, role)
+        except Exception:
+            reseller_usage = {}
         panel_url = await get_reseller_panel_base_url(session)
         custom_url = (await get_setting(session, "reseller_panel_base_url") or "").strip()
         default_url = default_panel_base_url()
@@ -110,6 +151,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             {
                 "staff": staff,
                 "rows": rows,
+                "reseller_usage": reseller_usage,
                 "tabs": _tabs("list"),
                 "tab": "list",
                 "feature_perms": FEATURE_PERMS,
@@ -239,9 +281,28 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
 
         billing_txs = []
         billing_rate = 0
+        pg_limits = None
+        min_unsuspend = 0
         if is_payg(profile):
             billing_txs = await list_billing_transactions(session, int(user_id), limit=15)
             billing_rate = await resolve_price_per_gb(session, rate_context_for_profile(profile))
+            if profile.billing_suspended_at is not None:
+                from app.services.billing_suspend import min_topup_to_unsuspend
+
+                min_unsuspend = await min_topup_to_unsuspend(session)
+        if profile.pg_admin_username:
+            from app.services.pg_overview import build_reseller_pg_overview
+
+            # Owner session + target reseller PG username — use platform client.
+            staff_view = dict(staff)
+            staff_view["pg_admin_username"] = profile.pg_admin_username
+            staff_view["pg_role_id"] = profile.pg_role_id
+            try:
+                ov = await build_reseller_pg_overview(staff_view, session=session)
+                if ov.get("ready"):
+                    pg_limits = ov
+            except Exception:
+                pg_limits = None
         return render(
             request,
             "reseller_edit.html",
@@ -255,6 +316,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 "is_payg": is_payg(profile),
                 "billing_txs": billing_txs,
                 "billing_rate": billing_rate,
+                "pg_limits": pg_limits,
+                "min_unsuspend": min_unsuspend,
                 "format_toman": format_toman,
                 "topup_nonce": secrets.token_hex(8),
                 "flash_ok": request.query_params.get("ok"),
@@ -651,6 +714,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             billing_mode=billing_mode,
             price_per_gb=price_per_gb,
             pg_group_ids=pg_group_ids,
+            allow_buy_extra=bool(form.get("allow_buy_extra")),
+            extra_gb_price=_parse_nonneg_int(form, "extra_gb_price"),
+            extra_user_price=_parse_nonneg_int(form, "extra_user_price"),
+            renew_price=_parse_nonneg_int(form, "renew_price"),
             can_approve_receipts="payments" in parse_perms(perms),
             web_permissions=perms,
             bot_permissions=perms,
@@ -769,6 +836,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         plan.can_approve_receipts = "payments" in parse_perms(perms)
         plan.create_pg_admin = bool(form.get("create_pg_admin"))
         plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
+        plan.allow_buy_extra = bool(form.get("allow_buy_extra"))
+        plan.extra_gb_price = _parse_nonneg_int(form, "extra_gb_price")
+        plan.extra_user_price = _parse_nonneg_int(form, "extra_user_price")
+        plan.renew_price = _parse_nonneg_int(form, "renew_price")
         plan.is_active = bool(form.get("is_active"))
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         if not pg_role_raw.isdigit():

@@ -53,6 +53,68 @@ def _as_int(value: Any) -> int | None:
         return None
 
 
+def admin_usage_snapshot(admin: dict | None, role: dict | None = None) -> dict[str, Any]:
+    """Compact users/traffic used+limits for owner/admin UI tables.
+
+    Returns plain strings ready for templates (no HTML).
+    """
+    empty = {
+        "users_used": None,
+        "users_limit": None,
+        "users_text": "—",
+        "traffic_used": None,
+        "traffic_limit": None,
+        "traffic_text": "—",
+        "lifetime_used": None,
+        "lifetime_text": None,
+        "ready": False,
+    }
+    if not isinstance(admin, dict):
+        return empty
+
+    limits = _role_limits(admin, role if isinstance(role, dict) else None)
+    total_users = _as_int(admin.get("total_users")) or _as_int(admin.get("users_count")) or 0
+    max_users = (
+        _as_int(limits.get("max_users"))
+        or _as_int(limits.get("users_max"))
+        or _as_int(admin.get("max_users"))
+    )
+    used_traffic = (
+        _as_int(admin.get("used_traffic"))
+        or _as_int(admin.get("traffic_used"))
+        or 0
+    )
+    data_limit = (
+        _as_int(admin.get("data_limit"))
+        or _as_int(limits.get("data_limit"))
+        or _as_int(limits.get("max_traffic"))
+        or _as_int(limits.get("traffic_limit"))
+    )
+    lifetime = _as_int(admin.get("lifetime_used_traffic"))
+
+    if max_users is not None and max_users > 0:
+        users_text = f"{format_number(total_users)} / {format_number(max_users)}"
+    else:
+        users_text = f"{format_number(total_users)} / ∞"
+
+    if data_limit is not None and data_limit > 0:
+        traffic_text = f"{format_bytes(used_traffic)} / {format_bytes(data_limit)}"
+    else:
+        traffic_text = f"{format_bytes(used_traffic)} / ∞"
+
+    return {
+        "users_used": total_users,
+        "users_limit": max_users,
+        "users_text": users_text,
+        "traffic_used": used_traffic,
+        "traffic_limit": data_limit,
+        "traffic_text": traffic_text,
+        "lifetime_used": lifetime,
+        "lifetime_text": format_bytes(lifetime) if lifetime is not None else None,
+        "ready": True,
+    }
+
+
 def _role_limits(admin: dict | None, role: dict | None) -> dict:
     from app.services.pg_quota import merge_role_limits
 
