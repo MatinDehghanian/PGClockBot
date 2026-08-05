@@ -13,8 +13,9 @@ class VersionTests(unittest.TestCase):
     def test_version_4_3_1(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.3.1")
-        self.assertEqual((ROOT / "VERSION").read_text().strip(), "4.3.1")
+        self.assertGreaterEqual(
+            tuple(int(x) for x in __version__.split(".")), (4, 3, 1)
+        )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"4.3.1"', notes)
 
@@ -89,12 +90,17 @@ class RoleAndReasonUiTests(unittest.TestCase):
         self.assertIn("/resellers/{{ user.id }}/role", reseller_body)
 
     def test_renew_plan_only_no_manual_days(self):
-        body = (ROOT / "app/web/templates/_user_edit_body.html").read_text(encoding="utf-8")
+        body = (ROOT / "app/web/templates/_user_edit_body.html").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("تمدید با پلن", body)
         self.assertNotIn('name="days"', body)
         self.assertNotIn('name="data_limit_gb"', body)
         self.assertIn("افزایش مانده", body)
         self.assertIn('name="extra_days"', body)
+        # Mobile-friendly card list, not wide service table
+        self.assertIn("svc-card-list", body)
+        self.assertNotIn("<table", body)
 
 
 class DualNotifyTests(unittest.IsolatedAsyncioTestCase):

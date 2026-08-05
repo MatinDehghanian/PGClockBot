@@ -1,23 +1,31 @@
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
-<section class="edit-section">
-  <h3>{{ user.full_name or user.username or 'کاربر' }}</h3>
-  <p class="muted">
-    تلگرام: <code dir="ltr">{{ user.telegram_id }}</code>
-    {% if user.username %}· @{{ user.username }}{% endif %}
-    ·
-    {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
-  </p>
-  <p style="font-size:1.15rem;margin:0.5rem 0 0">کیف پول: <b>{{ format_toman(user.wallet_balance or 0) }}</b></p>
+<section class="edit-section edit-section--identity">
+  <div class="user-edit-identity">
+    <div class="user-edit-identity-main">
+      <h3 class="user-edit-name">{{ user.full_name or user.username or 'کاربر' }}</h3>
+      <p class="user-edit-meta muted">
+        <span dir="ltr" class="mono">{{ user.telegram_id }}</span>
+        {% if user.username %}<span>@{{ user.username }}</span>{% endif %}
+        {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
+      </p>
+    </div>
+    <div class="user-edit-wallet-pill" dir="ltr">
+      <span class="muted">کیف پول</span>
+      <strong>{{ format_toman(user.wallet_balance or 0) }}</strong>
+    </div>
+  </div>
 </section>
 
 <section class="edit-section">
-  <h3>تغییر نقش</h3>
-  <p class="muted">نقش فعلی:
-    <b>{% if user.role=='admin' %}مدیر{% elif user.role=='reseller' %}نماینده{% else %}کاربر{% endif %}</b>
-  </p>
-  <form method="post" action="/users/{{ user.id }}/role" class="form-stack"
+  <header class="edit-section-head">
+    <h3>تغییر نقش</h3>
+    <p class="muted">نقش فعلی:
+      {% if user.role=='admin' %}مدیر{% elif user.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
+    </p>
+  </header>
+  <form method="post" action="/users/{{ user.id }}/role" class="form-stack user-edit-role-form"
         data-confirm="نقش این کاربر تغییر کند؟"
         data-confirm-title="تأیید تغییر نقش"
         data-confirm-reason-when="user"
@@ -25,156 +33,143 @@
         data-confirm-reason-name="reason"
         data-confirm-label="اعمال نقش">
     <input type="hidden" name="reason" value="" />
-    <label class="form-field">نقش جدید
-      <select name="role">
-        <option value="user" {% if user.role=='user' %}selected{% endif %}>کاربر</option>
-        <option value="reseller" {% if user.role=='reseller' %}selected{% endif %}>نماینده</option>
-        <option value="admin" {% if user.role=='admin' %}selected{% endif %}>مدیر</option>
-      </select>
-    </label>
-    <div class="actions">
+    <div class="user-edit-inline-row">
+      <label class="form-field user-edit-grow">نقش جدید
+        <select name="role">
+          <option value="user" {% if user.role=='user' %}selected{% endif %}>کاربر</option>
+          <option value="reseller" {% if user.role=='reseller' %}selected{% endif %}>نماینده</option>
+          <option value="admin" {% if user.role=='admin' %}selected{% endif %}>مدیر</option>
+        </select>
+      </label>
       <button class="btn" type="submit">اعمال نقش</button>
     </div>
   </form>
 </section>
 
 <section class="edit-section">
-  <h3>افزایش کیف پول</h3>
-  <p class="muted">مبلغ به کیف پول فروشگاهی کاربر اضافه می‌شود و در ربات هم همان موجودی دیده می‌شود.</p>
+  <header class="edit-section-head">
+    <h3>افزایش کیف پول</h3>
+    <p class="muted">به موجودی فروشگاهی اضافه می‌شود و در ربات هم دیده می‌شود.</p>
+  </header>
   <form method="post" action="/users/{{ user.id }}/wallet-credit" class="form-stack"
         data-confirm="مبلغ به کیف پول این کاربر اضافه شود؟"
         data-confirm-title="تأیید شارژ کیف پول"
         data-confirm-label="شارژ">
-    <div class="form-row">
-      <div>
-        <label class="form-field">مبلغ (تومان)
-          <input name="amount" type="number" min="1000" step="1000" required placeholder="مثلاً ۵۰۰۰۰" />
-        </label>
-      </div>
-      <div>
-        <label class="form-field">یادداشت
-          <input name="note" type="text" maxlength="120" placeholder="اختیاری" />
-        </label>
-      </div>
+    <div class="user-edit-fields">
+      <label class="form-field">مبلغ (تومان)
+        <input name="amount" type="number" min="1000" step="1000" required placeholder="مثلاً ۵۰۰۰۰" inputmode="numeric" />
+      </label>
+      <label class="form-field">یادداشت
+        <input name="note" type="text" maxlength="120" placeholder="اختیاری" />
+      </label>
     </div>
-    <div class="actions">
+    <div class="actions user-edit-actions">
       <button class="btn" type="submit">شارژ کیف پول</button>
     </div>
   </form>
 </section>
 
 <section class="edit-section">
-  <h3>سرویس‌ها</h3>
+  <header class="edit-section-head">
+    <h3>سرویس‌ها</h3>
+    {% if services %}<p class="muted">{{ services|length }} سرویس</p>{% endif %}
+  </header>
   {% if not services %}
-  <p class="muted">سرویسی برای این کاربر ثبت نشده است.</p>
+  <p class="muted user-edit-empty">سرویسی برای این کاربر ثبت نشده است.</p>
   {% else %}
-  <div class="table-wrap table-wrap-visible">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>پلن</th>
-          <th>وضعیت</th>
-          <th>حجم</th>
-          <th>مانده حجم</th>
-          <th>زمان / مانده روز</th>
-          <th>لینک</th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for s in services %}
-        <tr>
-          <td class="mono">{{ s.service.id }}</td>
-          <td>{{ s.service.plan.name if s.service.plan else (s.service.pg_username or '—') }}</td>
-          <td>{{ s.status_fa }}{% if s.error %}<br><small class="muted">{{ s.error }}</small>{% endif %}</td>
-          <td class="mono" dir="ltr">{{ s.used_text }} / {{ s.limit_text }}</td>
-          <td class="mono" dir="ltr">{{ s.remain_gb_text }}</td>
-          <td>
+  <div class="svc-card-list">
+    {% for s in services %}
+    <article class="svc-card">
+      <div class="svc-card-top">
+        <div class="svc-card-title">
+          <strong>{{ s.service.plan.name if s.service.plan else (s.service.pg_username or 'سرویس') }}</strong>
+          <span class="mono muted">#{{ s.service.id }}</span>
+        </div>
+        <span class="badge {% if 'فعال' in (s.status_fa or '') %}active{% else %}neutral{% endif %}">{{ s.status_fa }}</span>
+      </div>
+      {% if s.error %}<p class="muted svc-card-err">{{ s.error }}</p>{% endif %}
+      <dl class="svc-card-stats">
+        <div>
+          <dt>حجم</dt>
+          <dd class="mono" dir="ltr">{{ s.used_text }} / {{ s.limit_text }}</dd>
+        </div>
+        <div>
+          <dt>مانده</dt>
+          <dd class="mono" dir="ltr">{{ s.remain_gb_text }}</dd>
+        </div>
+        <div>
+          <dt>انقضا</dt>
+          <dd>
             {{ s.expire_text }}
-            {% if s.days_left is not none %}<br><small class="muted">{{ s.days_left }} روز</small>{% endif %}
-          </td>
-          <td>
-            {% if s.subscription_url %}
-            <button type="button" class="btn btn-sm btn-ghost"
-                    onclick="navigator.clipboard.writeText({{ s.subscription_url|tojson }}); this.textContent='کپی شد';">
-              کپی لینک
-            </button>
-            <a class="btn btn-sm btn-ghost" href="{{ s.subscription_url }}" target="_blank" rel="noopener">باز کردن</a>
-            {% else %}
-            <span class="muted">—</span>
-            {% endif %}
-          </td>
-        </tr>
-        <tr>
-          <td colspan="7">
-            <div class="svc-ops">
-              <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/renew" class="form-stack svc-renew"
-                    data-confirm="سرویس با پلن انتخابی تمدید شود؟ مصرف ریست می‌شود."
-                    data-confirm-title="تمدید با پلن"
-                    data-confirm-label="تمدید">
-                <label class="form-field">تمدید با پلن
-                  <select name="plan_id" required class="select-block">
-                    {% for p in plans %}
-                    <option value="{{ p.id }}" {% if s.service.plan_id == p.id %}selected{% endif %}>
-                      {{ p.name }} · {{ p.duration_days or '∞' }}روز · {{ p.data_limit_gb or '∞' }}GB
-                    </option>
-                    {% endfor %}
-                  </select>
-                </label>
-                <button class="btn btn-sm" type="submit">🔄 تمدید با پلن</button>
-              </form>
-              <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/extend" class="form-stack svc-extend"
-                    data-confirm="روز/حجم به سرویس فعلی اضافه شود؟"
-                    data-confirm-title="افزایش مانده سرویس"
-                    data-confirm-label="افزایش">
-                <div class="form-row">
-                  <div>
-                    <label class="form-field">+ روز
-                      <input name="extra_days" type="number" min="0" max="3650" value="0" />
-                    </label>
-                  </div>
-                  <div>
-                    <label class="form-field">+ گیگ
-                      <input name="extra_gb" type="number" min="0" step="0.1" value="0" />
-                    </label>
-                  </div>
-                </div>
-                <button class="btn btn-sm btn-ghost" type="submit">➕ افزایش مانده</button>
-              </form>
-            </div>
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+            {% if s.days_left is not none %}<span class="muted"> · {{ s.days_left }} روز</span>{% endif %}
+          </dd>
+        </div>
+      </dl>
+      {% if s.subscription_url %}
+      <div class="svc-card-links">
+        <button type="button" class="btn btn-sm btn-ghost"
+                onclick="navigator.clipboard.writeText({{ s.subscription_url|tojson }}); this.textContent='کپی شد';">
+          کپی لینک
+        </button>
+        <a class="btn btn-sm btn-ghost" href="{{ s.subscription_url }}" target="_blank" rel="noopener">باز کردن</a>
+      </div>
+      {% endif %}
+      <div class="svc-card-ops">
+        <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/renew" class="form-stack svc-renew"
+              data-confirm="سرویس با پلن انتخابی تمدید شود؟ مصرف ریست می‌شود."
+              data-confirm-title="تمدید با پلن"
+              data-confirm-label="تمدید">
+          <label class="form-field">تمدید با پلن
+            <select name="plan_id" required class="select-block">
+              {% for p in plans %}
+              <option value="{{ p.id }}" {% if s.service.plan_id == p.id %}selected{% endif %}>
+                {{ p.name }} · {{ p.duration_days or '∞' }}روز · {{ p.data_limit_gb or '∞' }}GB
+              </option>
+              {% endfor %}
+            </select>
+          </label>
+          <button class="btn btn-sm" type="submit">تمدید با پلن</button>
+        </form>
+        <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/extend" class="form-stack svc-extend"
+              data-confirm="روز/حجم به سرویس فعلی اضافه شود؟"
+              data-confirm-title="افزایش مانده سرویس"
+              data-confirm-label="افزایش">
+          <div class="user-edit-fields user-edit-fields--2">
+            <label class="form-field">+ روز
+              <input name="extra_days" type="number" min="0" max="3650" value="0" inputmode="numeric" />
+            </label>
+            <label class="form-field">+ گیگ
+              <input name="extra_gb" type="number" min="0" step="0.1" value="0" inputmode="decimal" />
+            </label>
+          </div>
+          <button class="btn btn-sm btn-ghost" type="submit">افزایش مانده</button>
+        </form>
+      </div>
+    </article>
+    {% endfor %}
   </div>
   {% endif %}
 </section>
 
 {% if wallet_txs %}
 <section class="edit-section">
-  <h3>تراکنش‌های کیف پول</h3>
-  <div class="table-wrap">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>مبلغ</th>
-          <th>مانده کیف پول</th>
-          <th>شرح</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for tx in wallet_txs %}
-        <tr>
-          <td>{{ tx.id }}</td>
-          <td dir="ltr">{{ tx.amount }}</td>
-          <td>{{ format_toman(tx.balance_after) }}</td>
-          <td class="muted">{{ tx.reason or '—' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  <header class="edit-section-head">
+    <h3>تراکنش‌های کیف پول</h3>
+    <p class="muted">آخرین {{ wallet_txs|length }} مورد</p>
+  </header>
+  <ul class="wallet-tx-list">
+    {% for tx in wallet_txs %}
+    <li class="wallet-tx-item">
+      <div class="wallet-tx-main">
+        <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount }}</span>
+        <span class="muted wallet-tx-reason">{{ tx.reason or '—' }}</span>
+      </div>
+      <div class="wallet-tx-side">
+        <span class="mono muted">#{{ tx.id }}</span>
+        <span>{{ format_toman(tx.balance_after) }}</span>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
 </section>
 {% endif %}

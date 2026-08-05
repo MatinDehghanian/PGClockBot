@@ -54,7 +54,8 @@ class UserEditUiTests(unittest.TestCase):
         self.assertIn("تمدید با پلن", edit)
         self.assertIn("افزایش مانده", edit)
         self.assertIn("کپی لینک", edit)
-        self.assertIn("مانده کیف پول", edit)
+        self.assertIn("svc-card-list", edit)
+        self.assertIn("wallet-tx-list", edit)
 
         users = Path("app/web/templates/users.html").read_text(encoding="utf-8")
         self.assertIn("modal-user-edit", users)
