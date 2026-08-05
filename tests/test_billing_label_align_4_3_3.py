@@ -25,10 +25,13 @@ class BillingLabelTests(unittest.TestCase):
 
     def test_form_row_align_start_and_select_margin(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        block = css.split(".form-row {")[1].split("}")[0]
+        block = css.split(".form-row {")[1].split(".form-stack")[0]
         self.assertIn("align-items: start", block)
-        self.assertIn(".form-field > .ui-select", css)
-        self.assertIn("margin-top: 0", css.split(".form-field > .ui-select")[1][:200])
+        self.assertIn("/* form-field already spaces title→control via gap", css)
+        self.assertIn(
+            ".form-row .form-field > .ui-select {\n  margin-top: 0;\n}",
+            css.replace("\r\n", "\n"),
+        )
 
 
 class VersionTests(unittest.TestCase):
