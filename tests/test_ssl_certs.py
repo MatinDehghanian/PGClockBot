@@ -33,7 +33,8 @@ class SslUiWiredTests(unittest.TestCase):
         main = Path("app/main.py").read_text(encoding="utf-8")
         self.assertIn("uvicorn_ssl_kwargs", main)
         ssl_src = Path("app/services/ssl_certs.py").read_text(encoding="utf-8")
-        self.assertIn("never enables HTTPS", ssl_src)
+        self.assertIn("enable_https", ssl_src)
+        self.assertIn("auto_enabled", ssl_src)
         self.assertIn("_start_acme_http", ssl_src)
 
 

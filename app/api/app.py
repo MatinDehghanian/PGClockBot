@@ -47,9 +47,13 @@ from app.services.setup_wizard import (
     is_setup_complete,
     mark_setup_complete,
     panel_url_hint,
+    setup_finish_login_url,
+    wizard_panel_url_hint,
     parse_admin_ids,
     persist_setup_entry_url,
+    revoke_setup_gate,
     rotate_setup_gate_token,
+    setup_gate_cookie_max_age,
     setup_gate_ok,
     update_env_keys,
 )
@@ -491,36 +495,32 @@ def create_api_app(lifespan=None) -> FastAPI:
             local_ok = is_local_setup_client(_client_ip(request))
             if q_ok or c_ok or local_ok:
                 response = await call_next(request)
+                cookie_ttl = setup_gate_cookie_max_age()
                 tok = ensure_setup_gate_token()
-                if local_ok and not c_ok:
+                if local_ok and not c_ok and tok and cookie_ttl > 0:
                     response.set_cookie(
                         "setup_gate",
                         tok,
                         httponly=True,
                         samesite="strict",
                         secure=_cookie_secure(request),
-                        max_age=60 * 60 * 24,
+                        max_age=cookie_ttl,
                         path="/",
                     )
                 elif q_ok and not c_ok:
                     new_tok = rotate_setup_gate_token()
-                    response.set_cookie(
-                        "setup_gate",
-                        new_tok,
-                        httponly=True,
-                        samesite="strict",
-                        secure=_cookie_secure(request),
-                        max_age=60 * 60 * 24,
-                        path="/",
-                    )
+                    cookie_ttl = setup_gate_cookie_max_age()
+                    if new_tok and cookie_ttl > 0:
+                        response.set_cookie(
+                            "setup_gate",
+                            new_tok,
+                            httponly=True,
+                            samesite="strict",
+                            secure=_cookie_secure(request),
+                            max_age=cookie_ttl,
+                            path="/",
+                        )
                 return response
-            token = ensure_setup_gate_token()
-            persist_setup_entry_url(
-                panel_url_hint(
-                    get_settings().public_base_url or "",
-                    str(get_settings().web_port),
-                ).rstrip("/")
-            )
             return HTMLResponse(
                 "<!DOCTYPE html><html lang='fa' dir='rtl'><head><meta charset='utf-8'/>"
                 "<meta name='viewport' content='width=device-width,initial-scale=1'/>"
@@ -528,20 +528,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "max-width:42rem;margin:3rem auto;padding:0 1rem;line-height:1.8;color:#18181b'>"
                 "<h1>ویزارد نصب اولیه</h1>"
                 "<p>برای امنیت، ورود از اینترنت فقط با <b>لینک یک‌بارمصرف</b> ممکن است "
-                "(جلوگیری از تصاحب پنل قبل از تنظیم رمز).</p>"
-                "<p><b>روی سرور</b> یکی از این کارها را بکنید:</p>"
-                "<ol>"
-                "<li>خروجی نصب را ببینید — لینک کامل با <code>?gate=</code> چاپ شده</li>"
-                "<li><code style='background:#f4f4f5;padding:2px 6px;border-radius:4px'>"
-                "cat data/setup_entry.url</code></li>"
-                "<li>لاگ سرویس: <code style='background:#f4f4f5;padding:2px 6px;border-radius:4px'>"
-                "journalctl -u pgclockbot -n 30 | grep -i wizard</code></li>"
-                "</ol>"
-                "<p class='muted' style='font-size:14px;color:#71717a'>"
+                "(اعتبار حداکثر ۱۵ دقیقه؛ پس از اتمام تنظیمات یا ورود به پنل غیرفعال می‌شود).</p>"
+                "<p><b>روی سرور</b> لینک را از خروجی نصب یا این دستور بگیرید:</p>"
+                "<p><code style='background:#f4f4f5;padding:6px 10px;border-radius:4px;display:block'>"
+                "bash pgclock.sh status</code></p>"
+                "<p style='font-size:14px;color:#71717a'>"
                 "اگر از همان سرور با <code>127.0.0.1</code> باز کنید، معمولاً بدون لینک هم باز می‌شود."
-                "</p>"
-                "<p style='font-size:13px;color:#71717a'>پسوند توکن: "
-                f"<code>…{token[-6:]}</code></p></body></html>",
+                "</p></body></html>",
                 status_code=403,
             )
         return await call_next(request)
@@ -792,7 +785,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "show_done": show_done,
                 "flash_err": err or request.query_params.get("err"),
                 "flash_ok": ok or request.query_params.get("ok"),
-                "panel_url": panel_url_hint(values.get("PUBLIC_BASE_URL", ""), values.get("WEB_PORT", "9000")),
+                "panel_url": wizard_panel_url_hint(values.get("WEB_PORT", "9000")),
                 "bot_username": (values.get("BOT_USERNAME") or "").lstrip("@"),
             },
         )
@@ -915,7 +908,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.service_control import schedule_panel_restart
 
         schedule_panel_restart(delay_sec=2.5, reason="setup wizard finished")
-        return RedirectResponse("/login?restarting=1", status_code=303)
+        return RedirectResponse(setup_finish_login_url(), status_code=303)
 
     @app.get("/", response_class=HTMLResponse)
     async def root(request: Request):
@@ -1265,6 +1258,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             max_age=60 * 60 * 24 * 7,
             path="/",
         )
+        revoke_setup_gate()
+        resp.delete_cookie("setup_gate", path="/")
         return resp
 
     @app.post("/logout")

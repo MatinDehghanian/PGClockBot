@@ -506,7 +506,7 @@ def issue_or_renew(
     email: str,
     force: bool = False,
 ) -> dict[str, Any]:
-    """Issue/renew certificate only — never enables HTTPS and never restarts the panel."""
+    """Issue/renew certificate, then enable HTTPS and restart the panel."""
     ensure_dirs()
     domain = normalize_domain(domain)
     email = (email or "").strip()
@@ -576,17 +576,33 @@ def issue_or_renew(
         "public_https": public_https_url(domain),
     }
     write_meta(meta)
-    msg = "گواهی آماده شد. برای HTTPS دکمه «فعال‌سازی HTTPS» را بزنید."
-    if was_enabled:
-        msg = "گواهی به‌روز شد. برای اعمال روی سرویس، دوباره «فعال‌سازی HTTPS» را بزنید."
-    _set_progress(pct=100, stage="done", message=msg, done=True, ok=True)
+    _set_progress(pct=90, stage="enable", message="فعال‌سازی HTTPS…", done=False)
+    en = enable_https(restart=True)
+    if not en.get("ok"):
+        msg = (
+            "گواهی آماده شد ولی فعال‌سازی HTTPS ناموفق بود — "
+            + str(en.get("error") or "خطا")[:400]
+        )
+        meta = read_meta()
+        meta["last_error"] = msg
+        write_meta(meta)
+        _set_progress(pct=100, stage="error", message=msg[:280], done=True, ok=False)
+        return {
+            "ok": False,
+            "error": msg,
+            "domain": domain,
+            "cert_path": str(LIVE_CERT),
+            "key_path": str(LIVE_KEY),
+            "needs_manual_enable": True,
+        }
     return {
         "ok": True,
         "domain": domain,
         "expires_at": expires_at,
         "cert_path": str(LIVE_CERT),
         "key_path": str(LIVE_KEY),
-        "needs_enable": True,
+        "public_https": en.get("public_https"),
+        "auto_enabled": True,
     }
 
 
@@ -669,7 +685,7 @@ def disable_https(*, restart: bool = True) -> dict[str, Any]:
 
 
 def start_issue_job(*, domain: str, email: str, force: bool = False) -> dict[str, Any]:
-    """Background issue/renew — panel stays on HTTP; no auto-restart."""
+    """Background issue/renew — enables HTTPS and restarts when cert succeeds."""
     global _JOB_RUNNING
     with _JOB_LOCK:
         if _JOB_RUNNING:

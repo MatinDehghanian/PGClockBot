@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
 import secrets
+import time
 from pathlib import Path
+from typing import Any
 
 from app.config import DATA_DIR, ROOT_DIR, get_settings
 from app.services.web_auth import load_web_admin
@@ -10,8 +13,11 @@ from app.services.web_auth import load_web_admin
 SETUP_FLAG = DATA_DIR / "setup_complete.flag"
 SETUP_IN_PROGRESS = DATA_DIR / "setup_in_progress.flag"
 SETUP_GATE_FILE = DATA_DIR / "setup_gate.token"
+SETUP_GATE_META_FILE = DATA_DIR / "setup_gate.json"
 SETUP_ENTRY_FILE = DATA_DIR / "setup_entry.url"
 ENV_PATH = ROOT_DIR / ".env"
+
+SETUP_GATE_TTL_SEC = 15 * 60
 
 # Keys the wizard may write; unknown keys in .env are preserved on merge.
 WIZARD_ENV_KEYS = (
@@ -45,50 +51,127 @@ def mark_setup_complete() -> Path:
             SETUP_IN_PROGRESS.unlink()
     except OSError:
         pass
-    try:
-        if SETUP_GATE_FILE.exists():
-            SETUP_GATE_FILE.unlink()
-    except OSError:
-        pass
-    try:
-        if SETUP_ENTRY_FILE.exists():
-            SETUP_ENTRY_FILE.unlink()
-    except OSError:
-        pass
+    revoke_setup_gate()
     return SETUP_FLAG
 
 
-def ensure_setup_gate_token() -> str:
-    """One-time gate for the first-run wizard so the open panel cannot be claimed remotely."""
+def _gate_meta_expired(meta: dict[str, Any]) -> bool:
+    try:
+        return time.time() >= float(meta.get("expires_at") or 0)
+    except (TypeError, ValueError):
+        return True
+
+
+def _write_gate_meta(
+    token: str,
+    *,
+    expires_at: float,
+    created_at: float | None = None,
+) -> dict[str, Any]:
     _ensure_data_dir()
-    if SETUP_GATE_FILE.exists():
-        token = SETUP_GATE_FILE.read_text(encoding="utf-8").strip()
-        if token:
-            return token
-    token = secrets.token_urlsafe(24)
+    created = float(created_at if created_at is not None else time.time())
+    payload: dict[str, Any] = {
+        "token": token,
+        "created_at": created,
+        "expires_at": float(expires_at),
+    }
+    SETUP_GATE_META_FILE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     SETUP_GATE_FILE.write_text(token + "\n", encoding="utf-8")
     try:
+        SETUP_GATE_META_FILE.chmod(0o600)
         SETUP_GATE_FILE.chmod(0o600)
     except OSError:
         pass
+    return payload
+
+
+def _read_gate_meta() -> dict[str, Any] | None:
+    if SETUP_GATE_META_FILE.is_file():
+        try:
+            data = json.loads(SETUP_GATE_META_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and (data.get("token") or "").strip():
+                return data
+        except Exception:
+            pass
+    if SETUP_GATE_FILE.is_file():
+        token = SETUP_GATE_FILE.read_text(encoding="utf-8").strip()
+        if token:
+            return _write_gate_meta(
+                token,
+                expires_at=time.time() + SETUP_GATE_TTL_SEC,
+            )
+    return None
+
+
+def revoke_setup_gate() -> None:
+    """Invalidate one-time setup link, cookie gate, and persisted URL hint."""
+    for path in (SETUP_GATE_META_FILE, SETUP_GATE_FILE, SETUP_ENTRY_FILE):
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError:
+            pass
+
+
+def create_setup_gate_session() -> str:
+    """Fresh gate session — valid for SETUP_GATE_TTL_SEC from now."""
+    token = secrets.token_urlsafe(24)
+    _write_gate_meta(token, expires_at=time.time() + SETUP_GATE_TTL_SEC)
     return token
 
 
-def rotate_setup_gate_token() -> str:
-    """Invalidate the current gate token and issue a new one (URL → cookie exchange)."""
-    _ensure_data_dir()
+def ensure_setup_gate_token() -> str:
+    """Return the active gate token, creating one only when missing or expired."""
+    if is_setup_complete():
+        revoke_setup_gate()
+        return ""
+    meta = _read_gate_meta()
+    if meta and not _gate_meta_expired(meta):
+        return str(meta["token"]).strip()
+    revoke_setup_gate()
+    return create_setup_gate_session()
+
+
+def setup_gate_cookie_max_age() -> int:
+    """Seconds left for setup_gate cookie (0 when expired or missing)."""
+    meta = _read_gate_meta()
+    if not meta or _gate_meta_expired(meta):
+        return 0
     try:
-        if SETUP_GATE_FILE.exists():
-            SETUP_GATE_FILE.unlink()
-    except OSError:
-        pass
-    return ensure_setup_gate_token()
+        rem = int(float(meta["expires_at"]) - time.time())
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(SETUP_GATE_TTL_SEC, rem))
+
+
+def rotate_setup_gate_token() -> str:
+    """Invalidate URL token after first open; cookie keeps same expiry window."""
+    if is_setup_complete():
+        revoke_setup_gate()
+        return ""
+    meta = _read_gate_meta()
+    if not meta or _gate_meta_expired(meta):
+        revoke_setup_gate()
+        return create_setup_gate_session()
+    try:
+        expires_at = float(meta["expires_at"])
+        created_at = float(meta.get("created_at") or time.time())
+    except (TypeError, ValueError):
+        revoke_setup_gate()
+        return create_setup_gate_session()
+    new_token = secrets.token_urlsafe(24)
+    _write_gate_meta(new_token, expires_at=expires_at, created_at=created_at)
+    return new_token
 
 
 def setup_gate_ok(provided: str | None) -> bool:
     if is_setup_complete():
-        return True
-    expected = ensure_setup_gate_token()
+        return False
+    meta = _read_gate_meta()
+    if not meta or _gate_meta_expired(meta):
+        revoke_setup_gate()
+        return False
+    expected = str(meta.get("token") or "").strip()
     got = (provided or "").strip()
     if not got or not expected:
         return False
@@ -121,7 +204,16 @@ def build_setup_entry_url(
 
 def persist_setup_entry_url(base_url: str | None = None) -> str:
     """Write chmod-0600 hint file for install scripts / operators on the server."""
-    url = build_setup_entry_url(base_url)
+    if is_setup_complete():
+        revoke_setup_gate()
+        return ""
+    meta = _read_gate_meta()
+    if meta and not _gate_meta_expired(meta):
+        token = str(meta["token"]).strip()
+    else:
+        revoke_setup_gate()
+        token = create_setup_gate_session()
+    url = build_setup_entry_url(base_url, token=token)
     _ensure_data_dir()
     SETUP_ENTRY_FILE.write_text(url + "\n", encoding="utf-8")
     try:
@@ -132,16 +224,19 @@ def persist_setup_entry_url(base_url: str | None = None) -> str:
 
 
 def read_setup_entry_url() -> str | None:
+    if is_setup_complete():
+        return None
+    meta = _read_gate_meta()
+    if not meta or _gate_meta_expired(meta):
+        return None
     if SETUP_ENTRY_FILE.exists():
         raw = SETUP_ENTRY_FILE.read_text(encoding="utf-8").strip()
         if raw:
             return raw
-    if not is_setup_complete():
-        try:
-            return build_setup_entry_url()
-        except Exception:
-            return None
-    return None
+    try:
+        return build_setup_entry_url(token=str(meta["token"]).strip())
+    except Exception:
+        return None
 
 
 def begin_setup() -> None:
@@ -423,6 +518,39 @@ def default_panel_base_url(*, public_base: str | None = None, web_port: int | st
     return f"http://{detect_server_ip()}:{port_s}"
 
 
+def default_http_panel_url(*, web_port: int | str | None = None) -> str:
+    """Panel base URL over HTTP using detected server IP (ignores PUBLIC_BASE_URL)."""
+    from app.config import get_settings
+
+    settings = get_settings()
+    port = web_port if web_port is not None else settings.web_port
+    try:
+        port_s = str(int(port or 9000))
+    except (TypeError, ValueError):
+        port_s = "9000"
+    return f"http://{detect_server_ip()}:{port_s}"
+
+
+def setup_finish_login_url() -> str:
+    """Login URL after wizard — HTTP+IP until HTTPS is actually enabled."""
+    try:
+        from app.services.ssl_certs import cert_files_exist, read_meta
+
+        meta = read_meta()
+        if meta.get("ssl_enabled") and cert_files_exist():
+            base = (meta.get("public_https") or "").strip().rstrip("/")
+            if base:
+                return f"{base}/login"
+    except Exception:
+        pass
+    return default_http_panel_url().rstrip("/") + "/login"
+
+
 def panel_url_hint(public_base: str = "", web_port: str = "9000") -> str:
     base = default_panel_base_url(public_base=public_base, web_port=web_port)
     return base.rstrip("/") + "/"
+
+
+def wizard_panel_url_hint(web_port: str = "9000") -> str:
+    """Panel URL shown during setup — always HTTP+IP (cert/HTTPS not ready yet)."""
+    return default_http_panel_url(web_port=web_port).rstrip("/") + "/"

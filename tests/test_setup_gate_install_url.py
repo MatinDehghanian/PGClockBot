@@ -19,6 +19,7 @@ class SetupEntryUrlTests(unittest.TestCase):
             with (
                 patch.object(sw, "DATA_DIR", data),
                 patch.object(sw, "SETUP_GATE_FILE", data / "setup_gate.token"),
+                patch.object(sw, "SETUP_GATE_META_FILE", data / "setup_gate.json"),
                 patch.object(sw, "SETUP_FLAG", data / "setup_complete.flag"),
                 patch.object(sw, "is_setup_complete", return_value=False),
                 patch.object(sw, "default_panel_base_url", return_value="http://10.0.0.5:9000"),
@@ -36,6 +37,7 @@ class SetupEntryUrlTests(unittest.TestCase):
             with (
                 patch.object(sw, "DATA_DIR", data),
                 patch.object(sw, "SETUP_GATE_FILE", data / "setup_gate.token"),
+                patch.object(sw, "SETUP_GATE_META_FILE", data / "setup_gate.json"),
                 patch.object(sw, "SETUP_ENTRY_FILE", entry),
                 patch.object(sw, "SETUP_FLAG", data / "setup_complete.flag"),
                 patch.object(sw, "is_setup_complete", return_value=False),
@@ -64,8 +66,55 @@ class PgclockInstallHintTests(unittest.TestCase):
     def test_install_prints_setup_entry_url_helper(self):
         src = Path("pgclock.sh").read_text(encoding="utf-8")
         self.assertIn("setup_wizard_url", src)
-        self.assertIn("setup_entry.url", src)
-        self.assertIn("data/setup_gate.token", src)
+        self.assertIn("read_setup_entry_url", src)
+        self.assertIn("setup_gate.json", src)
+        self.assertIn("--setup-only", src)
+        self.assertIn("15 min", src)
+
+
+class SetupGateTtlTests(unittest.TestCase):
+    def test_gate_expires_after_fifteen_minutes(self):
+        from app.services import setup_wizard as sw
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp)
+            t0 = 1_700_000_000.0
+            with (
+                patch.object(sw, "DATA_DIR", data),
+                patch.object(sw, "SETUP_GATE_FILE", data / "setup_gate.token"),
+                patch.object(sw, "SETUP_GATE_META_FILE", data / "setup_gate.json"),
+                patch.object(sw, "SETUP_ENTRY_FILE", data / "setup_entry.url"),
+                patch.object(sw, "SETUP_FLAG", data / "setup_complete.flag"),
+                patch.object(sw, "is_setup_complete", return_value=False),
+                patch.object(sw, "time") as mock_time,
+            ):
+                mock_time.time.return_value = t0
+                token = sw.create_setup_gate_session()
+                self.assertTrue(sw.setup_gate_ok(token))
+                mock_time.time.return_value = t0 + sw.SETUP_GATE_TTL_SEC + 1
+                self.assertFalse(sw.setup_gate_ok(token))
+
+    def test_mark_setup_complete_revokes_gate(self):
+        from app.services import setup_wizard as sw
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp)
+            flag = data / "setup_complete.flag"
+            with (
+                patch.object(sw, "DATA_DIR", data),
+                patch.object(sw, "SETUP_FLAG", flag),
+                patch.object(sw, "SETUP_IN_PROGRESS", data / "setup_in_progress.flag"),
+                patch.object(sw, "SETUP_GATE_FILE", data / "setup_gate.token"),
+                patch.object(sw, "SETUP_GATE_META_FILE", data / "setup_gate.json"),
+                patch.object(sw, "SETUP_ENTRY_FILE", data / "setup_entry.url"),
+            ):
+                token = sw.create_setup_gate_session()
+                sw.persist_setup_entry_url("http://srv:9000")
+                sw.mark_setup_complete()
+                self.assertTrue(flag.is_file())
+                self.assertFalse(sw.SETUP_GATE_META_FILE.exists())
+                self.assertFalse(sw.setup_gate_ok(token))
+                self.assertIsNone(sw.read_setup_entry_url())
 
 
 if __name__ == "__main__":
