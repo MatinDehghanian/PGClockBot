@@ -10,6 +10,7 @@ from app.services.web_auth import load_web_admin
 SETUP_FLAG = DATA_DIR / "setup_complete.flag"
 SETUP_IN_PROGRESS = DATA_DIR / "setup_in_progress.flag"
 SETUP_GATE_FILE = DATA_DIR / "setup_gate.token"
+SETUP_ENTRY_FILE = DATA_DIR / "setup_entry.url"
 ENV_PATH = ROOT_DIR / ".env"
 
 # Keys the wizard may write; unknown keys in .env are preserved on merge.
@@ -47,6 +48,11 @@ def mark_setup_complete() -> Path:
     try:
         if SETUP_GATE_FILE.exists():
             SETUP_GATE_FILE.unlink()
+    except OSError:
+        pass
+    try:
+        if SETUP_ENTRY_FILE.exists():
+            SETUP_ENTRY_FILE.unlink()
     except OSError:
         pass
     return SETUP_FLAG
@@ -90,6 +96,52 @@ def setup_gate_ok(provided: str | None) -> bool:
         return secrets.compare_digest(got, expected)
     except (TypeError, ValueError):
         return False
+
+
+def is_local_setup_client(host: str | None) -> bool:
+    """True for loopback / private IPs — safe to auto-open wizard without URL token."""
+    from app.services.security_policy import is_public_ip
+
+    ip = (host or "").strip()
+    if not ip or ip == "unknown":
+        return False
+    return not is_public_ip(ip)
+
+
+def build_setup_entry_url(
+    base_url: str | None = None,
+    *,
+    token: str | None = None,
+) -> str:
+    """One-time first-run URL (includes gate query param)."""
+    base = (base_url or default_panel_base_url()).strip().rstrip("/")
+    tok = (token or ensure_setup_gate_token()).strip()
+    return f"{base}/?gate={tok}"
+
+
+def persist_setup_entry_url(base_url: str | None = None) -> str:
+    """Write chmod-0600 hint file for install scripts / operators on the server."""
+    url = build_setup_entry_url(base_url)
+    _ensure_data_dir()
+    SETUP_ENTRY_FILE.write_text(url + "\n", encoding="utf-8")
+    try:
+        SETUP_ENTRY_FILE.chmod(0o600)
+    except OSError:
+        pass
+    return url
+
+
+def read_setup_entry_url() -> str | None:
+    if SETUP_ENTRY_FILE.exists():
+        raw = SETUP_ENTRY_FILE.read_text(encoding="utf-8").strip()
+        if raw:
+            return raw
+    if not is_setup_complete():
+        try:
+            return build_setup_entry_url()
+        except Exception:
+            return None
+    return None
 
 
 def begin_setup() -> None:

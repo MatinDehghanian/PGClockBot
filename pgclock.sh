@@ -193,6 +193,22 @@ PY
   fi
 }
 
+setup_wizard_url() {
+  if [[ -f data/setup_complete.flag ]]; then
+    return 0
+  fi
+  if [[ -f data/setup_entry.url ]]; then
+    tr -d '\r\n' < data/setup_entry.url
+    return 0
+  fi
+  if [[ -f "$PY" || -x "$PY" ]]; then
+    "$PY" - <<'PY' 2>/dev/null || true
+from app.services.setup_wizard import persist_setup_entry_url
+print(persist_setup_entry_url())
+PY
+  fi
+}
+
 print_success() {
   # print_success "Title" [extra lines...]
   local title="$1"
@@ -517,7 +533,8 @@ cmd_install() {
   if [[ "$fresh" -eq 1 ]]; then
     step "Scaffold configuration"
     write_env_file
-    rm -f data/web_admin.json data/setup_complete.flag data/setup_in_progress.flag 2>/dev/null || true
+    rm -f data/web_admin.json data/setup_complete.flag data/setup_in_progress.flag \
+      data/setup_gate.token data/setup_entry.url 2>/dev/null || true
     ok ".env scaffold written · finish setup in the browser"
   fi
 
@@ -549,16 +566,34 @@ cmd_install() {
     info "UFW not installed — open port ${WEB_PORT} manually if needed"
   fi
 
-  local ip panel_url
+  local ip panel_url setup_url
   ip="$(detect_server_ip)"
   panel_url="http://${ip}:${WEB_PORT}/"
+  setup_url=""
+  if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
+  sleep 2
+  setup_url="$(setup_wizard_url)"
+  fi
 
   if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
-    print_success "Install complete — open the web panel" \
-      "Panel:      ${panel_url}" \
-      "First open: setup wizard · later: login" \
-      "Manage:     bash pgclock.sh" \
+    local extra_lines=(
+      "Panel:      ${panel_url}"
+    )
+    if [[ -n "$setup_url" ]]; then
+      extra_lines+=(
+        "Setup URL:  ${setup_url}"
+        "            (one-time link — also in data/setup_entry.url)"
+      )
+    else
+      extra_lines+=(
+        "First open: setup wizard · see journalctl -u ${SERVICE_NAME} -n 30"
+      )
+    fi
+    extra_lines+=(
+      "Manage:     bash pgclock.sh"
       "Logs:       journalctl -u ${SERVICE_NAME} -f"
+    )
+    print_success "Install complete — open the setup URL" "${extra_lines[@]}"
   else
     print_success "Install/refresh complete" \
       "Panel:      ${panel_url}" \
@@ -895,6 +930,14 @@ cmd_status() {
       ok "Web health: ${health}"
     else
       warn "Web health: unreachable on :${port}"
+    fi
+  fi
+  if [[ ! -f data/setup_complete.flag ]]; then
+    local setup_url
+    setup_url="$(setup_wizard_url)"
+    if [[ -n "$setup_url" ]]; then
+      echo -e "  Setup URL:  ${B}${setup_url}${N}"
+      echo -e "  (or: cat data/setup_entry.url)"
     fi
   fi
   print_success "Status check"

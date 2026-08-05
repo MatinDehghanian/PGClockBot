@@ -43,10 +43,12 @@ from app.services.setup_wizard import (
     current_setup_values,
     ensure_setup_gate_token,
     ensure_web_secret,
+    is_local_setup_client,
     is_setup_complete,
     mark_setup_complete,
     panel_url_hint,
     parse_admin_ids,
+    persist_setup_entry_url,
     rotate_setup_gate_token,
     setup_gate_ok,
     update_env_keys,
@@ -486,10 +488,21 @@ def create_api_app(lifespan=None) -> FastAPI:
             gate_c = (request.cookies.get("setup_gate") or "").strip()
             q_ok = bool(gate_q) and setup_gate_ok(gate_q)
             c_ok = bool(gate_c) and setup_gate_ok(gate_c)
-            if q_ok or c_ok:
+            local_ok = is_local_setup_client(_client_ip(request))
+            if q_ok or c_ok or local_ok:
                 response = await call_next(request)
-                # Exchange URL token for cookie and rotate so the URL cannot be reused
-                if q_ok and not c_ok:
+                tok = ensure_setup_gate_token()
+                if local_ok and not c_ok:
+                    response.set_cookie(
+                        "setup_gate",
+                        tok,
+                        httponly=True,
+                        samesite="strict",
+                        secure=_cookie_secure(request),
+                        max_age=60 * 60 * 24,
+                        path="/",
+                    )
+                elif q_ok and not c_ok:
                     new_tok = rotate_setup_gate_token()
                     response.set_cookie(
                         "setup_gate",
@@ -502,17 +515,32 @@ def create_api_app(lifespan=None) -> FastAPI:
                     )
                 return response
             token = ensure_setup_gate_token()
+            persist_setup_entry_url(
+                panel_url_hint(
+                    get_settings().public_base_url or "",
+                    str(get_settings().web_port),
+                ).rstrip("/")
+            )
             return HTMLResponse(
                 "<!DOCTYPE html><html lang='fa' dir='rtl'><head><meta charset='utf-8'/>"
                 "<meta name='viewport' content='width=device-width,initial-scale=1'/>"
-                "<title>Setup gate</title></head><body style='font-family:sans-serif;"
-                "max-width:40rem;margin:3rem auto;padding:0 1rem;line-height:1.7'>"
-                "<h1>دسترسی ویزارد قفل است</h1>"
-                "<p>برای امنیت نصب اول، لینک یک‌بارمصرف را از لاگ سرور بردارید "
-                "یا فایل <code>data/setup_gate.token</code> را روی سرور بخوانید.</p>"
-                "<pre style='background:#111;color:#eee;padding:12px;border-radius:8px;"
-                "direction:ltr;text-align:left;overflow:auto'>journalctl -u pgclockbot -n 50 | grep -i gate</pre>"
-                "<p style='color:#666;font-size:13px'>پسوند توکن: "
+                "<title>لینک ویزارد نصب</title></head><body style='font-family:Vazirmatn,sans-serif;"
+                "max-width:42rem;margin:3rem auto;padding:0 1rem;line-height:1.8;color:#18181b'>"
+                "<h1>ویزارد نصب اولیه</h1>"
+                "<p>برای امنیت، ورود از اینترنت فقط با <b>لینک یک‌بارمصرف</b> ممکن است "
+                "(جلوگیری از تصاحب پنل قبل از تنظیم رمز).</p>"
+                "<p><b>روی سرور</b> یکی از این کارها را بکنید:</p>"
+                "<ol>"
+                "<li>خروجی نصب را ببینید — لینک کامل با <code>?gate=</code> چاپ شده</li>"
+                "<li><code style='background:#f4f4f5;padding:2px 6px;border-radius:4px'>"
+                "cat data/setup_entry.url</code></li>"
+                "<li>لاگ سرویس: <code style='background:#f4f4f5;padding:2px 6px;border-radius:4px'>"
+                "journalctl -u pgclockbot -n 30 | grep -i wizard</code></li>"
+                "</ol>"
+                "<p class='muted' style='font-size:14px;color:#71717a'>"
+                "اگر از همان سرور با <code>127.0.0.1</code> باز کنید، معمولاً بدون لینک هم باز می‌شود."
+                "</p>"
+                "<p style='font-size:13px;color:#71717a'>پسوند توکن: "
                 f"<code>…{token[-6:]}</code></p></body></html>",
                 status_code=403,
             )
