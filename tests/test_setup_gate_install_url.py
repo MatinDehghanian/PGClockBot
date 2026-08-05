@@ -66,6 +66,7 @@ class PgclockInstallHintTests(unittest.TestCase):
     def test_install_prints_setup_entry_url_helper(self):
         src = Path("pgclock.sh").read_text(encoding="utf-8")
         self.assertIn("setup_wizard_url", src)
+        self.assertIn("persist_setup_entry_url", src)
         self.assertIn("read_setup_entry_url", src)
         self.assertIn("setup_gate.json", src)
         self.assertIn("--setup-only", src)
