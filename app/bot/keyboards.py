@@ -352,7 +352,7 @@ def _pg_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     _ = ui
     return [
         (REPLY_ACTION_PG_STATS, "🏠 نمای کلی"),
-        (REPLY_ACTION_PG_USERS, "👥 کاربران VPN"),
+        (REPLY_ACTION_PG_USERS, "👥 کاربران"),
         (REPLY_ACTION_PG_CREATE, "➕ ساخت کاربر"),
         (REPLY_ACTION_PG_SEARCH, "🔎 جستجوی یوزر"),
         (REPLY_ACTION_PG_NODES, "🕸 نودها"),

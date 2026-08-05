@@ -453,6 +453,14 @@ async def create_application(
     if user.role == Role.ADMIN.value:
         raise ValueError("ادمین نیاز به درخواست نمایندگی ندارد")
 
+    from app.services.billing import BillingError, assert_payg_purchase_wallet
+
+    if reseller_plan_mode_of(plan) == "payg":
+        try:
+            await assert_payg_purchase_wallet(session, int(user.wallet_balance or 0))
+        except BillingError as e:
+            raise ValueError(e.message) from e
+
     existing = await session.execute(
         select(ResellerApplication).where(
             ResellerApplication.user_id == user.id,

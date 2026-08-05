@@ -89,11 +89,38 @@
   </form>
 </div>
 
+{% if pg_limits and pg_limits.ready %}
+{% from "_pg_quota_gauges.html" import pg_quota_gauge %}
+<div class="card">
+  <h2>مصرف و محدودیت پاسارگارد</h2>
+  <p class="muted">حجم و تعداد کاربران نماینده به‌همراه سقف‌های نقش/ادمین</p>
+  {% if pg_limits.username %}
+  <p class="muted" dir="ltr">ادمین: <code>{{ pg_limits.username }}</code>
+    {% if pg_limits.status_label %} · <span class="badge {{ pg_limits.status_badge or 'neutral' }}">{{ pg_limits.status_label }}</span>{% endif %}
+    {% if pg_limits.role_name %} · {{ pg_limits.role_name }}{% endif %}
+  </p>
+  {% endif %}
+  {% if pg_limits.users or pg_limits.traffic %}
+  <div class="home-gauges pg-quota-gauges pg-quota-gauges-embed">
+    {% if pg_limits.users %}
+    {{ pg_quota_gauge(pg_limits.users, 'کاربران', 'Users', 'pg-users') }}
+    {% endif %}
+    {% if pg_limits.traffic %}
+    {{ pg_quota_gauge(pg_limits.traffic, 'حجم', 'Traffic', 'pg-traffic') }}
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if pg_limits.lifetime_text %}
+  <p class="muted" style="margin-top:0.75rem">مصرف lifetime (مبنای صورتحساب PAYG): <b dir="ltr">{{ pg_limits.lifetime_text }}</b></p>
+  {% endif %}
+</div>
+{% endif %}
+
 {% if is_payg %}
 <div class="card">
-  <h2>Billing — Pay As You Go</h2>
+  <h2>مدیریت PAYG</h2>
   <p class="muted">موجودی فعلی: <b>{{ format_toman(profile.billing_balance or 0) }}</b>
-    · نرخ مؤثر: <b>{{ format_toman(billing_rate or 0) }}</b> / GB
+    · نرخ پلن: <b>{{ format_toman(billing_rate or 0) }}</b> / GB
     · watermark: <span dir="ltr">{{ profile.billing_watermark_bytes or 0 }}</span> بایت</p>
   <form method="post" action="/resellers/{{ user.id }}/billing-topup" class="form-stack">
     <input type="hidden" name="nonce" value="{{ topup_nonce }}" />
@@ -197,7 +224,7 @@
   <div class="flash warn">موجودی کیف پول: {{ user.wallet_balance | num }} تومان — با حذف کامل از بین می‌رود.</div>
   {% endif %}
   {% if profile and profile.billing_balance and profile.billing_balance > 0 %}
-  <div class="flash warn">موجودی صورتحساب PAYG: {{ profile.billing_balance | num }} تومان — با حذف کامل از بین می‌رود.</div>
+  <div class="flash warn">موجودی PAYG: {{ profile.billing_balance | num }} تومان — با حذف کامل از بین می‌رود.</div>
   {% endif %}
   <form method="post" action="/resellers/{{ user.id }}/delete-user" class="form-stack"
         data-confirm="{% if user.wallet_balance and user.wallet_balance > 0 %}هشدار: موجودی کیف پول {{ user.wallet_balance | num }} تومان از بین می‌رود. {% endif %}{% if profile and profile.billing_balance and profile.billing_balance > 0 %}هشدار: موجودی PAYG {{ profile.billing_balance | num }} تومان از بین می‌رود. {% endif %}کاربر کامل به‌همراه نمایندگی، ادمین پاسارگارد، سفارش‌ها و سرویس‌ها حذف شود؟ برگشت‌ناپذیر است."

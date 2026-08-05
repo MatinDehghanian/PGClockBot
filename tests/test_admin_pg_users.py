@@ -14,7 +14,7 @@ class PgUsersKeyboardTests(unittest.TestCase):
 
         kb = pg_reply_keyboard({"btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"})
         flat = [b.text for row in kb.keyboard for b in row]
-        self.assertIn("👥 کاربران VPN", flat)
+        self.assertIn("👥 کاربران", flat)
         self.assertIn("➕ ساخت کاربر", flat)
         self.assertIn("🔎 جستجوی یوزر", flat)
 

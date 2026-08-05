@@ -239,9 +239,23 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
 
         billing_txs = []
         billing_rate = 0
+        pg_limits = None
         if is_payg(profile):
             billing_txs = await list_billing_transactions(session, int(user_id), limit=15)
             billing_rate = await resolve_price_per_gb(session, rate_context_for_profile(profile))
+        if profile.pg_admin_username:
+            from app.services.pg_overview import build_reseller_pg_overview
+
+            # Owner session + target reseller PG username — use platform client.
+            staff_view = dict(staff)
+            staff_view["pg_admin_username"] = profile.pg_admin_username
+            staff_view["pg_role_id"] = profile.pg_role_id
+            try:
+                ov = await build_reseller_pg_overview(staff_view, session=session)
+                if ov.get("ready"):
+                    pg_limits = ov
+            except Exception:
+                pg_limits = None
         return render(
             request,
             "reseller_edit.html",
@@ -255,6 +269,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 "is_payg": is_payg(profile),
                 "billing_txs": billing_txs,
                 "billing_rate": billing_rate,
+                "pg_limits": pg_limits,
                 "format_toman": format_toman,
                 "topup_nonce": secrets.token_hex(8),
                 "flash_ok": request.query_params.get("ok"),

@@ -437,12 +437,13 @@ async def res_billing(
     rate = await resolve_price_per_gb(session, rate_context_for_profile(profile))
     txs = await list_billing_transactions(session, int(owner_id), limit=5)
     lines = [
-        "💰 <b>کیف پول Billing</b>",
+        "💰 <b>کیف پول PAYG</b>",
         "",
         f"موجودی: <b>{format_toman(int(profile.billing_balance or 0), get_settings().currency)}</b>",
-        f"نرخ: {format_toman(rate, get_settings().currency)} / GB",
+        f"نرخ پلن: {format_toman(rate, get_settings().currency)} / GB",
         f"وضعیت سیستم: {'فعال' if enabled else 'غیرفعال'}",
         "",
+        "مصرف ترافیک به‌صورت تفاضلی (دلتا از watermark) در بازه تنظیم‌شده کسر می‌شود.",
         "برای شارژ با ادمین اصلی هماهنگ کنید.",
     ]
     if txs:
@@ -699,13 +700,21 @@ async def resapply_mode(
     plans = await list_active_reseller_plans(session, billing_mode=mode)
     await callback.answer()
     label = reseller_billing_mode_label(mode)
+    wallet_hint = ""
+    if mode == "payg":
+        from app.services.billing import check_payg_purchase_wallet
+
+        gate = await check_payg_purchase_wallet(session, int(db_user.wallet_balance or 0))
+        if not gate.ok:
+            wallet_hint = "\n\n⚠️ " + gate.message
     if not plans:
         if callback.message:
             await safe_edit_text(
                 callback.message,
                 format_message(
                     f"🤝 {label}",
-                    "برای این نوع، پلن فعالی تعریف نشده است.\nنوع دیگری را انتخاب کنید.",
+                    "برای این نوع، پلن فعالی تعریف نشده است.\nنوع دیگری را انتخاب کنید."
+                    + wallet_hint,
                 ),
                 reply_markup=await _resapply_mode_keyboard(session, ui),
             )
@@ -715,7 +724,7 @@ async def resapply_mode(
             callback.message,
             format_message(
                 f"🤝 پلن‌های {label}",
-                "یکی از پلن‌های این دسته را انتخاب کنید.",
+                "یکی از پلن‌های این دسته را انتخاب کنید." + wallet_hint,
             ),
             reply_markup=await _resapply_plan_list_keyboard(plans, mode=mode, ui=ui),
         )
@@ -744,6 +753,12 @@ async def resapply_plan(
         return
     mode = reseller_plan_mode_of(plan)
     body = format_reseller_plan_apply_detail(plan, currency=get_settings().currency)
+    if mode == "payg":
+        from app.services.billing import check_payg_purchase_wallet
+
+        gate = await check_payg_purchase_wallet(session, int(db_user.wallet_balance or 0))
+        if not gate.ok:
+            body = f"{body}\n\n⚠️ {gate.message}"
     rows = [
         [InlineKeyboardButton(text="✅ ثبت درخواست", callback_data=f"resapply:buy:{plan.id}")],
         [InlineKeyboardButton(text="⬅️ بازگشت به لیست", callback_data=f"resapply:mode:{mode}")],

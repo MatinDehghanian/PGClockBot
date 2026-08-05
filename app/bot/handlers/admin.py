@@ -2306,7 +2306,7 @@ async def adm_pg_group_hint(callback: CallbackQuery, db_user: BotUser):
         "📁 <b>گروه‌های پاسارگارد</b>\n\n"
         "ساخت/ویرایش گروه نیاز به انتخاب اینباند دارد.\n"
         "از وب‌پنل مسیر <code>/pg/groups</code> استفاده کنید.\n\n"
-        "مدیریت کاربران VPN از همین ربات: «کاربران VPN»."
+        "مدیریت کاربران از همین ربات: «کاربران»."
     )
     if callback.message:
         await callback.message.edit_text(text, reply_markup=None)

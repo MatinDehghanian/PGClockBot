@@ -20,6 +20,8 @@
         <th class="col-hide-sm">شناسه</th>
         <th>نام کاربری</th>
         <th class="col-hide-sm">نقش / جزئیات</th>
+        <th>کاربران</th>
+        <th>حجم</th>
         <th>دسترسی وب‌پنل</th>
         <th class="col-actions"></th>
       </tr>
@@ -29,6 +31,7 @@
       {% set uname = (a.get('username') or '')|string %}
       {% set key = uname|lower %}
       {% set st = (web_status or {}).get(key) or {} %}
+      {% set usage = (admin_usage or {}).get(key) or {} %}
       {% set src = st.get('source') or 'none' %}
       <tr>
         <td class="mono col-hide-sm">{{ a.get('id') or '—' }}</td>
@@ -38,6 +41,13 @@
           {% if a.get('is_sudo') %}دسترسی کامل · {% endif %}
           {% if a.get('status') %}{{ a.get('status') }}{% endif %}
           {% if a.get('note') %}<br><small class="muted">{{ a.get('note') }}</small>{% endif %}
+        </td>
+        <td class="mono" dir="ltr" title="مصرف / سقف کاربران">{{ usage.get('users_text') or '—' }}</td>
+        <td class="mono" dir="ltr" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
+          {{ usage.get('traffic_text') or '—' }}
+          {% if usage.get('lifetime_text') %}
+          <br><small class="muted">Σ {{ usage.get('lifetime_text') }}</small>
+          {% endif %}
         </td>
         <td>
           {% if src == 'reseller' %}

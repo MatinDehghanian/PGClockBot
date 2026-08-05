@@ -126,11 +126,19 @@ class ReplyKeyboard360Tests(unittest.TestCase):
             "btn_menu_home": "🏠 منوی اصلی",
         }
         flat = [b.text for row in pg_reply_keyboard(ui).keyboard for b in row]
-        self.assertIn("👥 کاربران VPN", flat)
+        self.assertIn("👥 کاربران", flat)
+        self.assertNotIn("VPN", "".join(flat))
         self.assertIn("🏠 نمای کلی", flat)
         self.assertEqual(pg_reply_keyboard(ui).keyboard[-1][0].text, "⬅️ بازگشت")
         mapping = reply_action_map("admin", ui=ui)
-        self.assertEqual(mapping["👥 کاربران VPN"], REPLY_ACTION_PG_USERS)
+        # Flat map prefers admin hub «کاربران»; PG submenu wins at NAV_ADMIN_PG (reply_nav).
+        self.assertEqual(mapping["👥 کاربران"], "adm_users")
+        from pathlib import Path
+
+        nav_src = Path("app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
+        self.assertIn("NAV_ADMIN_PG", nav_src)
+        self.assertIn("_pg_submenu_entries", nav_src)
+        self.assertEqual(REPLY_ACTION_PG_USERS, "pg_users")
 
 
 if __name__ == "__main__":

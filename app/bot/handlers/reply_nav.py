@@ -144,12 +144,17 @@ class ReplyMenuTextFilter(BaseFilter):
                 ui, custom_enabled=True, wholesale_enabled=True
             ):
                 mapping[(label or "").strip()] = key
+        elif level == nav.NAV_ADMIN_PG:
+            # «👥 کاربران» on PG keyboard must not resolve to admin hub users
+            for key, label in kb._pg_submenu_entries(ui):
+                mapping[(label or "").strip()] = key
         elif role == "admin" and not is_reseller_bot and level not in {
             nav.NAV_ADMIN_PLANS_AUDIENCE,
             nav.NAV_ADMIN_PLANS_KIND,
             nav.NAV_ADMIN_PLANS_ADD_TYPE,
+            nav.NAV_ADMIN_PG,
         }:
-            # Prefer admin hub labels outside broadcast / plans (avoid «نمایندگان» collision)
+            # Prefer admin hub labels outside broadcast / plans / PG (avoid «نمایندگان» / «کاربران» collision)
             for key, label in kb._reply_admin_entries(ui):
                 mapping[(label or "").strip()] = key
         if kb.is_home_text(text, ui):
