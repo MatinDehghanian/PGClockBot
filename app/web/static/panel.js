@@ -180,11 +180,10 @@
       if (!menu) return;
       const home = rowMenuHomes.get(menu);
       menu.classList.remove('is-ported');
-      menu.style.top = '';
-      menu.style.left = '';
-      menu.style.right = '';
-      menu.style.bottom = '';
-      menu.style.maxHeight = '';
+      [
+        'top', 'left', 'right', 'bottom', 'maxHeight', 'height', 'overflow',
+        'visibility', 'position', 'width', 'minWidth', 'zIndex',
+      ].forEach((p) => { menu.style[p] = ''; });
       if (home && home.parent) {
         if (home.next && home.next.parentNode === home.parent) {
           home.parent.insertBefore(menu, home.next);
@@ -223,6 +222,8 @@
         rowMenuHomes.set(menu, { parent: menu.parentNode, next: menu.nextSibling });
       }
       menu.dataset.owner = wrap.dataset.raId;
+      /* Hide until final coords are set — avoids 0,0 flash and in-cell ghost paint */
+      menu.style.visibility = 'hidden';
       document.body.appendChild(menu);
       menu.classList.add('is-ported');
 
@@ -273,6 +274,7 @@
       menu.style.bottom = 'auto';
       menu.style.maxHeight = 'none';
       menu.style.overflow = 'visible';
+      menu.style.visibility = '';
     }
 
     /* Custom selects — replace native OS pickers with panel-styled menus.

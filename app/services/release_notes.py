@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.3.10": [
+        "رفع مربع خالی/خاکستری وسط جدول هنگام باز شدن منوی سه‌نقطه (عملیات)",
+        "منوی عملیات فقط بعد از پورت به body دیده می‌شود؛ دیگر داخل سلول جدول نقاشی نمی‌شود",
+    ],
     "4.3.9": [
         "منوی بازشو: فاصله ۸px از باکس + پورت به body (دیگر به باکس نمی‌چسبد)",
         "باز شدن هوشمند حفظ شد: اگر جا باشد پایین، وگرنه بالا",
