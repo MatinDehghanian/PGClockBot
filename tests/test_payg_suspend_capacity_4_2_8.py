@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.billing import BILLING_MODE_PAYG, payg_purchase_min_wallet
 from app.services.reseller_capacity import (
+    ALLOWED_EXTRA_GB,
+    ALLOWED_EXTRA_USERS,
     plan_allows_buy_extra,
     plan_extra_gb_price,
     plan_renew_price,
@@ -41,8 +43,29 @@ class PaygSuspendHelpersTests(unittest.IsolatedAsyncioTestCase):
     def test_purchase_min_still_strict(self):
         self.assertEqual(payg_purchase_min_wallet(10_000), 20_001)
 
+    async def test_buy_extra_gb_rejects_forged_amount(self):
+        from app.services.reseller_capacity import buy_extra_gb
+
+        plan = MagicMock(allow_buy_extra=True, extra_gb_price=1000)
+        profile = MagicMock(
+            billing_mode=BILLING_MODE_PAYG,
+            billing_balance=100_000,
+            pg_admin_username="r1",
+        )
+        user = MagicMock(id=1, wallet_balance=1_000_000)
+        with self.assertRaises(ValueError):
+            await buy_extra_gb(
+                AsyncMock(), user=user, profile=profile, plan=plan, gb=999_999
+            )
+
 
 class ResellerCapacityPlanTests(unittest.TestCase):
+    def test_allowed_quantities_whitelist(self):
+        self.assertEqual(ALLOWED_EXTRA_GB, frozenset({1, 5, 10, 50}))
+        self.assertEqual(ALLOWED_EXTRA_USERS, frozenset({1, 5, 10, 20}))
+        self.assertNotIn(999_999, ALLOWED_EXTRA_GB)
+        self.assertNotIn(999_999, ALLOWED_EXTRA_USERS)
+
     def test_allow_flag(self):
         plan = MagicMock(allow_buy_extra=True, extra_gb_price=1500, renew_price=0, price=50_000)
         self.assertTrue(plan_allows_buy_extra(plan))

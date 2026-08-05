@@ -1034,10 +1034,15 @@ async def res_buy_gb_go(
     if not owner_id or not profile or not plan or not owner:
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
+    from app.services.reseller_capacity import ALLOWED_EXTRA_GB
+
     try:
         gb = int(callback.data.split(":")[-1])
     except ValueError:
         await callback.answer("مقدار نامعتبر", show_alert=True)
+        return
+    if gb not in ALLOWED_EXTRA_GB:
+        await callback.answer("مقدار مجاز نیست", show_alert=True)
         return
     try:
         result = await buy_extra_gb(
@@ -1126,10 +1131,15 @@ async def res_buy_users_go(
     if not owner_id or not profile or not plan or not owner:
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
+    from app.services.reseller_capacity import ALLOWED_EXTRA_USERS
+
     try:
         n = int(callback.data.split(":")[-1])
     except ValueError:
         await callback.answer("مقدار نامعتبر", show_alert=True)
+        return
+    if n not in ALLOWED_EXTRA_USERS:
+        await callback.answer("مقدار مجاز نیست", show_alert=True)
         return
     try:
         result = await buy_extra_users(
