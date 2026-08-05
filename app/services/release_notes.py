@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.1.3": [
+        "نصب اول: چاپ لینک یک‌بارمصرف ویزارد (?gate=) در خروجی install و data/setup_entry.url",
+        "ورود از localhost بدون لینک؛ از اینترنت فقط با لینک امن — جلوگیری از تصاحب پنل",
+        "pgclock status لینک ویزارد را نشان می‌دهد اگر نصب هنوز کامل نشده",
+    ],
     "4.1.2": [
         "پیام فعال‌سازی نمایندگی کوتاه‌تر و بخش‌بندی‌شده: نام پلن، بدون آدرس /login، بدون لینک rsetup",
         "حذف کامل مسیر یک‌بارمصرف /rsetup و دکمه صدور مجدد لینک — ثبت ربات فقط از داشبورد وب‌پنل",

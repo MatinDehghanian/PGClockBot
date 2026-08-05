@@ -255,7 +255,7 @@ def main() -> None:
             await dp.feed_update(bot, update)
             return {"ok": True}
 
-    from app.services.setup_wizard import ensure_setup_gate_token, is_setup_complete
+    from app.services.setup_wizard import is_setup_complete, persist_setup_entry_url
     from app.services.web_auth import repair_web_admin_from_env
 
     # Migrate from .env only when web_admin.json is missing — never reset panel password
@@ -271,12 +271,10 @@ def main() -> None:
     host_hint = settings.web_host if settings.web_host not in {"0.0.0.0", "::"} else "127.0.0.1"
     entry = f"{scheme}://{host_hint}:{settings.web_port}/"
     if not creds.get("password") or not is_setup_complete():
-        gate = ensure_setup_gate_token()
-        # Log only a short suffix — full token lives in data/setup_gate.token (mode 0600)
+        setup_url = persist_setup_entry_url(entry.rstrip("/"))
         logger.warning(
-            "First-run wizard pending — open %s?gate=<token from data/setup_gate.token> (suffix …%s)",
-            entry.rstrip("/"),
-            gate[-6:],
+            "First-run wizard — open this one-time URL: %s",
+            setup_url,
         )
     else:
         logger.info(
