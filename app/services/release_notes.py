@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.1.8": [
+        "پایان install اولیه: فقط لینک یک‌بارمصرف + ذکر اعتبار ۱۵ دقیقه (بدون Manage/Logs)",
+    ],
     "4.1.7": [
         "منوی pgclock و نصب: به‌جای کپشن English/One command، نسخه ریلیز (Release v…) به‌صورت داینامیک از VERSION",
         "هدر install همان بنر با نسخه فعلی را نشان می‌دهد",
