@@ -329,11 +329,16 @@ def format_reseller_plan_apply_detail(plan: ResellerPlan, *, currency: str) -> s
         lines.append(
             f"نرخ مصرف: <b>{format_toman(rate, currency) if rate else '—'} / GB</b>"
         )
-        groups = (getattr(plan, "pg_group_ids", None) or "").strip()
-        if groups:
-            lines.append(f"گروه‌های پاسارگارد: <code>{html.escape(groups)}</code>")
     else:
         lines.append(f"کمیسیون: <b>{int(plan.commission_percent or 0)}٪</b>")
+    groups = (getattr(plan, "pg_group_ids", None) or "").strip()
+    lines.append(
+        f"گروه‌های پاسارگارد: <code>{html.escape(groups) if groups else '—'}</code>"
+    )
+    role_id = getattr(plan, "pg_role_id", None)
+    lines.append(
+        f"نقش پاسارگارد: <code>{html.escape(str(role_id)) if role_id else '—'}</code>"
+    )
     return "\n".join(lines)
 
 

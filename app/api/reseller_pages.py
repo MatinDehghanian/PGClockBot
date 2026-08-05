@@ -630,9 +630,19 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             commission = 0
         commission = max(0, min(100, commission))
         price_per_gb = _parse_price_per_gb(form) if billing_mode == "payg" else 0
-        pg_group_ids = _parse_pg_group_ids(form) if billing_mode == "payg" else None
+        pg_group_ids = _parse_pg_group_ids(form)
+        if not pg_group_ids:
+            return RedirectResponse(
+                f"/plans?err={_q('حداقل یک گروه پاسارگارد الزامی است')}#reseller-plans",
+                status_code=303,
+            )
         perms = _feature_perms_from_form(form)
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
+        if not pg_role_raw.isdigit():
+            return RedirectResponse(
+                f"/plans?err={_q('نقش پاسارگارد الزامی است')}#reseller-plans",
+                status_code=303,
+            )
         plan = ResellerPlan(
             name=name,
             description=str(form.get("description") or "").strip() or None,
@@ -735,14 +745,20 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         if billing_mode not in {"fixed", "payg"}:
             billing_mode = "fixed"
         plan.billing_mode = billing_mode
+        pg_group_ids = _parse_pg_group_ids(form)
+        if not pg_group_ids:
+            return RedirectResponse(
+                f"/resellers/plans/{plan_id}/edit?err={_q('حداقل یک گروه پاسارگارد الزامی است')}",
+                status_code=303,
+            )
         if billing_mode == "payg":
             plan.commission_percent = 0
             plan.price_per_gb = _parse_price_per_gb(form)
-            plan.pg_group_ids = _parse_pg_group_ids(form)
+            plan.pg_group_ids = pg_group_ids
         else:
             plan.commission_percent = max(0, min(100, int(plan.commission_percent or 0)))
             plan.price_per_gb = 0
-            plan.pg_group_ids = None
+            plan.pg_group_ids = pg_group_ids
         try:
             plan.sort_order = int(str(form.get("sort_order") or "0") or "0")
         except ValueError:
@@ -755,7 +771,12 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
         plan.is_active = bool(form.get("is_active"))
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
-        plan.pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
+        if not pg_role_raw.isdigit():
+            return RedirectResponse(
+                f"/resellers/plans/{plan_id}/edit?err={_q('نقش پاسارگارد الزامی است')}",
+                status_code=303,
+            )
+        plan.pg_role_id = int(pg_role_raw)
         from app.services.billing import sync_plan_billing_rate
 
         await sync_plan_billing_rate(session, plan)

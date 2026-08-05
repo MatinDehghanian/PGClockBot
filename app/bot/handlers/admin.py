@@ -16,7 +16,6 @@ from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, P
 from app.services.formatting import (
     format_system_stats,
     format_toman,
-    node_status_fa,
     order_status_fa,
 )
 from app.services.orders import approve_payment, deliver_order, reject_payment
@@ -2345,53 +2344,4 @@ async def pg_stats(callback: CallbackQuery, db_user: BotUser):
         await callback.message.edit_text(text[:3500], reply_markup=None)
 
 
-@router.callback_query(F.data == "adm:pg:nodes")
-async def pg_nodes(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    await callback.answer()
-    try:
-        nodes = await get_pg().get_nodes()
-    except Exception as e:
-        if callback.message:
-            await callback.message.edit_text(f"خطا: {e}", reply_markup=None)
-        return
-    items = nodes if isinstance(nodes, list) else nodes.get("nodes", nodes.get("items", []))
-    lines = ["🕸 <b>نودها</b>\n"]
-    rows = []
-    for n in items[:20]:
-        if not isinstance(n, dict):
-            continue
-        nid = n.get("id")
-        name = n.get("name") or n.get("address") or nid
-        status = node_status_fa(n.get("status") or n.get("connection_status"))
-        lines.append(f"#{nid} {name} — {status}")
-        if nid is not None:
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"♻️ اتصال مجدد #{nid}",
-                        callback_data=f"adm:pg:recon:{nid}",
-                    )
-                ]
-            )
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:pg")])
-    if callback.message:
-        await callback.message.edit_text(
-            "\n".join(lines),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-        )
-
-
-@router.callback_query(F.data.startswith("adm:pg:recon:"))
-async def pg_recon(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    node_id = int(callback.data.split(":")[-1])
-    try:
-        await get_pg().reconnect_node(node_id)
-        await callback.answer("درخواست اتصال مجدد ارسال شد ✅", show_alert=True)
-    except Exception as e:
-        await callback.answer(str(e), show_alert=True)
+# Node ops: app.bot.handlers.admin_pg_nodes (web /pg/nodes parity)

@@ -15,7 +15,7 @@ class PlansCrudFixTests(unittest.TestCase):
     def test_reseller_plan_save_commits(self):
         self.assertIn("async def _persist", ADMIN_PLANS)
         save_block = ADMIN_PLANS[ADMIN_PLANS.find("async def _save_reseller_plan") :]
-        self.assertIn("await _persist(session)", save_block[:1500])
+        self.assertIn("await _persist(session)", save_block)
 
     def test_reseller_delete_commits_and_cleans_billing(self):
         self.assertIn("delete_plan_billing_rate", ADMIN_PLANS)
@@ -27,7 +27,7 @@ class PlansCrudFixTests(unittest.TestCase):
 
     def test_reseller_edit_routing_excludes_toggrp(self):
         self.assertIn(
-            'F.data.regexp(r"^adm:resplan:edit:(name|price|comm|rate|desc|grp):\\d+$")',
+            'F.data.regexp(r"^adm:resplan:edit:(name|price|comm|rate|desc|grp|role):\\d+$")',
             ADMIN_PLANS,
         )
         self.assertIn("adm:resplan:edit:toggrp:", ADMIN_PLANS)
@@ -37,7 +37,9 @@ class PlansCrudFixTests(unittest.TestCase):
         self.assertIn("res_plan_link", ADMIN_PLANS)
         self.assertIn("adm:resplan:add:toggrp:", ADMIN_PLANS)
         self.assertIn("adm:resplan:add:grpdone", ADMIN_PLANS)
-        self.assertIn("adm:resplan:add:grpskip", ADMIN_PLANS)
+        # Skip removed in 4.2.6 — groups are required
+        self.assertNotIn("adm:resplan:add:grpskip", ADMIN_PLANS)
+        self.assertIn("adm:resplan:add:setrole:", ADMIN_PLANS)
 
     def test_user_plan_detail_escapes_html(self):
         detail = ADMIN[ADMIN.find("async def _plan_detail_text") : ADMIN.find("def _plan_detail_keyboard")]
@@ -56,8 +58,8 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.2.5")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.2.5")
+        self.assertEqual(__version__, "4.2.6")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.2.6")
 
 
 if __name__ == "__main__":

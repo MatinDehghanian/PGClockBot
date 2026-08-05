@@ -55,9 +55,9 @@
       <textarea name="description" rows="2">{{ plan.description or '' }}</textarea>
     </label>
 
-    <div id="edit-payg-groups" class="form-field" hidden>
-      <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد این نرخ (اختیاری)</span>
-      <p class="muted update-card-caption">برچسب‌گذاری برای تمایز پلن‌های PAYG با قیمت متفاوت؛ مصرف از موجودی نماینده با نرخ همین پلن کم می‌شود.</p>
+    <div id="edit-groups" class="form-field">
+      <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد (الزامی)</span>
+      <p class="muted update-card-caption">حداقل یک گروه باید انتخاب شود — برای ثابت و Pay As You Go.</p>
       <div class="ui-switch-grid">
         {% for g in groups or [] %}
         {% set gid = g.get('id')|string %}
@@ -84,9 +84,9 @@
       {{ switch('is_active', 'پلن فعال', checked=plan.is_active) }}
     </div>
 
-    <label class="form-field">نقش پاسارگارد
-      <select name="pg_role_id">
-        <option value="">—</option>
+    <label class="form-field">نقش پاسارگارد (الزامی)
+      <select name="pg_role_id" required>
+        <option value="" disabled {% if not plan.pg_role_id %}selected{% endif %}>— انتخاب کنید —</option>
         {% for r in pg_roles %}
         <option value="{{ r.get('id') }}" {% if plan.pg_role_id == r.get('id') %}selected{% endif %}>{{ r.get('name') or r.get('id') }}</option>
         {% endfor %}
@@ -102,14 +102,14 @@
   const commissionField = document.getElementById('edit-commission-field');
   const commissionInput = document.getElementById('edit-commission-input');
   const rateField = document.getElementById('edit-price-per-gb-field');
-  const groupsField = document.getElementById('edit-payg-groups');
+  const groupsField = document.getElementById('edit-groups');
   if (!mode) return;
   function sync(){
     const payg = mode.value === 'payg';
     if (commissionField) commissionField.style.display = payg ? 'none' : '';
     if (payg && commissionInput) commissionInput.value = '0';
     if (rateField) rateField.hidden = !payg;
-    if (groupsField) groupsField.hidden = !payg;
+    if (groupsField) groupsField.hidden = false;
   }
   mode.addEventListener('change', sync);
   sync();

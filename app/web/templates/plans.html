@@ -516,14 +516,14 @@
           <textarea name="description" rows="2"></textarea>
         </label>
 
-        <div id="reseller-payg-groups" class="form-field" hidden>
-          <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد این نرخ (اختیاری)</span>
-          <p class="muted update-card-caption">اگر چند گروه قیمت متفاوت دارند، برای هر گروه (یا دسته) یک پلن PAYG جدا بسازید.</p>
+        <div id="reseller-groups" class="form-field">
+          <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد (الزامی)</span>
+          <p class="muted update-card-caption">حداقل یک گروه باید انتخاب شود — برای ثابت و Pay As You Go.</p>
           <div class="ui-switch-grid">
             {% for g in groups %}
             {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
             {% else %}
-            <span class="muted">گروهی از پاسارگارد لود نشد — بعداً در ویرایش می‌توانید انتخاب کنید.</span>
+            <span class="muted">گروهی از پاسارگارد لود نشد — اتصال PG را بررسی کنید.</span>
             {% endfor %}
           </div>
         </div>
@@ -544,9 +544,9 @@
           {{ switch('is_active', 'پلن فعال', checked=true) }}
         </div>
 
-        <label class="form-field">نقش پاسارگارد
-          <select name="pg_role_id">
-            <option value="">—</option>
+        <label class="form-field">نقش پاسارگارد (الزامی)
+          <select name="pg_role_id" required>
+            <option value="" disabled selected>— انتخاب کنید —</option>
             {% for r in pg_roles %}
             <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}</option>
             {% endfor %}
@@ -633,18 +633,18 @@
     const commissionField = document.getElementById('reseller-commission-field');
     const commissionInput = document.getElementById('reseller-commission-input');
     const rateField = document.getElementById('reseller-price-per-gb-field');
-    const groupsField = document.getElementById('reseller-payg-groups');
+    const groupsField = document.getElementById('reseller-groups');
     const hint = document.getElementById('reseller-mode-hint');
     const isPayg = kind === 'payg';
     if (billing) billing.value = isPayg ? 'payg' : 'fixed';
     setVisible(commissionField, !isPayg);
     if (isPayg && commissionInput) commissionInput.value = '0';
     setVisible(rateField, isPayg);
-    setVisible(groupsField, isPayg);
+    setVisible(groupsField, true);
     if (hint) {
       hint.textContent = isPayg
-        ? 'نوع: Pay As You Go — نرخ هر گیگ و گروه‌های پاسارگارد را تنظیم کنید.'
-        : 'نوع: ثابت — کمیسیون فروش را تنظیم کنید.';
+        ? 'نوع: Pay As You Go — نرخ هر گیگ، گروه و نقش پاسارگارد الزامی است.'
+        : 'نوع: ثابت — کمیسیون، گروه و نقش پاسارگارد الزامی است.';
     }
   }
 

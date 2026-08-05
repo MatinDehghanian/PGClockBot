@@ -48,6 +48,7 @@ class AdminPlansStates(StatesGroup):
     res_plan_commission = State()
     res_plan_rate_gb = State()
     res_plan_link = State()
+    res_plan_role = State()
     res_plan_edit_field = State()
     trial_name = State()
     trial_days = State()
@@ -1288,13 +1289,16 @@ def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
         rows.append(
             [InlineKeyboardButton(text="✏️ نرخ / گیگ", callback_data=f"adm:resplan:edit:rate:{pid}")]
         )
-        rows.append(
-            [InlineKeyboardButton(text="📁 گروه PG", callback_data=f"adm:resplan:edit:grp:{pid}")]
-        )
     else:
         rows.append(
             [InlineKeyboardButton(text="✏️ کمیسیون", callback_data=f"adm:resplan:edit:comm:{pid}")]
         )
+    rows.append(
+        [InlineKeyboardButton(text="📁 گروه PG", callback_data=f"adm:resplan:edit:grp:{pid}")]
+    )
+    rows.append(
+        [InlineKeyboardButton(text="🎭 نقش پاسارگارد", callback_data=f"adm:resplan:edit:role:{pid}")]
+    )
     rows.extend(
         [
             [InlineKeyboardButton(text="✏️ توضیح", callback_data=f"adm:resplan:edit:desc:{pid}")],
@@ -1436,7 +1440,7 @@ async def resplan_del(callback: CallbackQuery, session: AsyncSession, db_user: B
         await _rerender_plans_screen(callback, session, "resellers", mode)
 
 
-@router.callback_query(F.data.regexp(r"^adm:resplan:edit:(name|price|comm|rate|desc|grp):\d+$"))
+@router.callback_query(F.data.regexp(r"^adm:resplan:edit:(name|price|comm|rate|desc|grp|role):\d+$"))
 async def resplan_edit_ask(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
@@ -1468,6 +1472,13 @@ async def resplan_edit_ask(
         await state.update_data(resplan_edit_groups=selected)
         await callback.answer()
         await _show_resplan_groups(callback, state, plan.id)
+        return
+    if field == "role":
+        await callback.answer()
+        await state.set_state(AdminPlansStates.res_plan_role)
+        await state.update_data(res_plan_edit_role_id=plan.id)
+        if callback.message:
+            await _show_resplan_role_picker(callback.message, state, edit_plan_id=plan.id)
         return
     prompts = {
         "name": "نام جدید:",
@@ -1520,14 +1531,17 @@ async def _show_resplan_groups(callback: CallbackQuery, state: FSMContext, plan_
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="گروهی نیست",
+                    text="گروهی از پاسارگارد لود نشد",
                     callback_data=f"adm:resplan:view:{plan_id}",
                 )
             ]
         )
     rows.append(_back_row("⬅️ پلن", f"adm:resplan:view:{plan_id}"))
     if callback.message:
-        await callback.message.edit_text("گروه(ها) را انتخاب کنید:", reply_markup=_kb(rows))
+        await callback.message.edit_text(
+            "گروه(ها) را انتخاب کنید (حداقل یک گروه الزامی):",
+            reply_markup=_kb(rows),
+        )
 
 
 @router.callback_query(F.data.startswith("adm:resplan:edit:toggrp:"))
@@ -1561,7 +1575,10 @@ async def resplan_edit_grp_done(
         await callback.answer("یافت نشد", show_alert=True)
         return
     selected = [int(x) for x in ((await state.get_data()).get("resplan_edit_groups") or [])]
-    plan.pg_group_ids = ",".join(str(x) for x in selected) if selected else None
+    if not selected:
+        await callback.answer("حداقل یک گروه الزامی است", show_alert=True)
+        return
+    plan.pg_group_ids = ",".join(str(x) for x in selected)
     from app.services.billing import sync_plan_billing_rate
 
     await sync_plan_billing_rate(session, plan)
@@ -1763,14 +1780,14 @@ async def resplan_commission(
     except ValueError:
         await message.answer("عدد معتبر بفرستید.")
         return
-    plan = await _save_reseller_plan(session, state, commission_percent=comm)
-    await state.set_state(None)
-    await _answer_plans_saved(message, state, session, f"پلن نمایندگی #{plan.id} ذخیره شد ✅")
-    bubble = await message.answer(
-        _resplan_detail_text(plan),
-        reply_markup=_resplan_detail_keyboard(plan),
+    await state.update_data(res_plan_commission=comm, res_plan_groups=[])
+    await state.set_state(AdminPlansStates.res_plan_link)
+    await message.answer(
+        "📁 گروه پاسارگارد را انتخاب کنید (حداقل یک گروه الزامی):",
+        reply_markup=kb.cancel_reply(),
     )
-    _ = bubble
+    bubble = await message.answer("⏳")
+    await _show_resplan_add_groups(bubble, state)
 
 
 @router.message(AdminPlansStates.res_plan_rate_gb)
@@ -1789,7 +1806,7 @@ async def resplan_rate_gb(
     await state.update_data(res_plan_rate_gb=rate, res_plan_groups=[])
     await state.set_state(AdminPlansStates.res_plan_link)
     await message.answer(
-        "📁 گروه پاسارگارد برای PAYG (اختیاری — می‌توانید رد کنید):",
+        "📁 گروه پاسارگارد را انتخاب کنید (حداقل یک گروه الزامی):",
         reply_markup=kb.cancel_reply(),
     )
     bubble = await message.answer("⏳")
@@ -1802,11 +1819,23 @@ async def resplan_link_cancel(message: Message, state: FSMContext, session: Asyn
         await state.set_state(None)
         await _answer_plans_cancel(message, state, session)
         return
-    await message.answer("گروه را از دکمه‌های زیر پیام انتخاب کنید یا «بدون گروه» بزنید.")
+    await message.answer("گروه را از دکمه‌های زیر پیام انتخاب کنید (حداقل یک گروه).")
+
+
+@router.message(AdminPlansStates.res_plan_role)
+async def resplan_role_cancel(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
+        await state.set_state(None)
+        await _answer_plans_cancel(message, state, session)
+        return
+    await message.answer("نقش پاسارگارد را از دکمه‌های زیر پیام انتخاب کنید.")
 
 
 async def _show_resplan_add_groups(message: Message, state: FSMContext) -> None:
-    selected = [int(x) for x in ((await state.get_data()).get("res_plan_groups") or [])]
+    data = await state.get_data()
+    selected = [int(x) for x in (data.get("res_plan_groups") or [])]
+    mode = data.get("res_plan_mode") or "fixed"
+    label = "Pay As You Go" if mode == "payg" else "ثابت (کمیسیون)"
     try:
         groups = await get_pg().get_groups_simple()
     except Exception:
@@ -1816,7 +1845,10 @@ async def _show_resplan_add_groups(message: Message, state: FSMContext) -> None:
         gid = g.get("id")
         if gid is None:
             continue
-        gid = int(gid)
+        try:
+            gid = int(gid)
+        except (TypeError, ValueError):
+            continue
         mark = "✅ " if gid in selected else ""
         name = g.get("name") or f"گروه {gid}"
         rows.append(
@@ -1831,18 +1863,65 @@ async def _show_resplan_add_groups(message: Message, state: FSMContext) -> None:
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"✅ تأیید ({len(selected)})",
+                    text=f"✅ تأیید گروه ({len(selected)})",
                     callback_data="adm:resplan:add:grpdone",
                 )
             ]
         )
-    rows.append([InlineKeyboardButton(text="⏭ بدون گروه", callback_data="adm:resplan:add:grpskip")])
+    else:
+        rows.append(
+            [InlineKeyboardButton(text="گروهی از پاسارگارد لود نشد", callback_data="adm:plans:aud:resellers")]
+        )
     rows.append([InlineKeyboardButton(text="❌ انصراف", callback_data="adm:plans:aud:resellers")])
     text = (
-        "📁 گروه‌های اینباند (PAYG):\n"
+        f"📁 گروه‌های اینباند — پلن {label}\n"
+        "<b>حداقل یک گروه الزامی است.</b>\n"
         f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}"
     )
     await safe_edit_text(message, text, reply_markup=_kb(rows))
+
+
+async def _show_resplan_role_picker(
+    message: Message,
+    state: FSMContext,
+    *,
+    edit_plan_id: int | None = None,
+) -> None:
+    try:
+        roles = await get_pg().get_admin_roles()
+    except Exception:
+        roles = []
+    rows: list[list[InlineKeyboardButton]] = []
+    prefix = f"adm:resplan:edit:setrole:{edit_plan_id}" if edit_plan_id else "adm:resplan:add:setrole"
+    for r in roles[:25]:
+        rid = r.get("id")
+        if rid is None:
+            continue
+        name = r.get("name") or f"نقش {rid}"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"#{rid} — {name}"[:60],
+                    callback_data=f"{prefix}:{rid}",
+                )
+            ]
+        )
+    if not rows:
+        rows.append(
+            [InlineKeyboardButton(text="نقشی لود نشد — از پاسارگارد نقش بسازید", callback_data="adm:plans:aud:resellers")]
+        )
+    back = (
+        f"adm:resplan:view:{edit_plan_id}"
+        if edit_plan_id
+        else "adm:plans:aud:resellers"
+    )
+    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data=back)])
+    await safe_edit_text(
+        message,
+        "🎭 <b>نقش پاسارگارد الزامی است</b>\n"
+        "نقشی که هنگام تأیید نماینده به ادمین PG او داده می‌شود:",
+        reply_markup=_kb(rows),
+    )
 
 
 @router.callback_query(F.data.startswith("adm:resplan:add:toggrp:"))
@@ -1851,7 +1930,7 @@ async def resplan_add_tog_grp(callback: CallbackQuery, state: FSMContext, db_use
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     if await state.get_state() != AdminPlansStates.res_plan_link.state:
-        await callback.answer("ابتدا ساخت پلن PAYG را شروع کنید", show_alert=True)
+        await callback.answer("ابتدا ساخت پلن را شروع کنید", show_alert=True)
         return
     try:
         gid = int(callback.data.rsplit(":", 1)[-1])
@@ -1869,45 +1948,99 @@ async def resplan_add_tog_grp(callback: CallbackQuery, state: FSMContext, db_use
         await _show_resplan_add_groups(callback.message, state)
 
 
-@router.callback_query(F.data.in_({"adm:resplan:add:grpdone", "adm:resplan:add:grpskip"}))
-async def resplan_add_grp_done(
+@router.callback_query(F.data == "adm:resplan:add:grpdone")
+async def resplan_add_grp_done(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    if await state.get_state() != AdminPlansStates.res_plan_link.state:
+        await callback.answer("ابتدا ساخت پلن را شروع کنید", show_alert=True)
+        return
+    selected = [int(x) for x in ((await state.get_data()).get("res_plan_groups") or [])]
+    if not selected:
+        await callback.answer("حداقل یک گروه الزامی است", show_alert=True)
+        return
+    await state.set_state(AdminPlansStates.res_plan_role)
+    await callback.answer()
+    if callback.message:
+        await _show_resplan_role_picker(callback.message, state)
+
+
+@router.callback_query(F.data.startswith("adm:resplan:add:setrole:"))
+async def resplan_add_set_role(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
-    if await state.get_state() != AdminPlansStates.res_plan_link.state:
-        await callback.answer("ابتدا ساخت پلن PAYG را شروع کنید", show_alert=True)
+    if await state.get_state() != AdminPlansStates.res_plan_role.state:
+        await callback.answer("ابتدا نقش را از ویزارد انتخاب کنید", show_alert=True)
         return
-    data = await state.get_data()
-    if data.get("res_plan_mode") != "payg":
+    try:
+        role_id = int(callback.data.rsplit(":", 1)[-1])
+    except ValueError:
         await callback.answer("نامعتبر", show_alert=True)
         return
-    selected = [] if callback.data.endswith(":grpskip") else [
-        int(x) for x in (data.get("res_plan_groups") or [])
-    ]
-    rate = int(data.get("res_plan_rate_gb") or 0)
-    group_csv = ",".join(str(x) for x in selected) if selected else None
+    data = await state.get_data()
+    groups = [int(x) for x in (data.get("res_plan_groups") or [])]
+    if not groups:
+        await callback.answer("گروه انتخاب نشده", show_alert=True)
+        return
+    group_csv = ",".join(str(x) for x in groups)
+    mode = data.get("res_plan_mode") or "fixed"
     try:
         plan = await _save_reseller_plan(
             session,
             state,
-            price_per_gb=rate,
+            commission_percent=int(data.get("res_plan_commission") or 0) if mode == "fixed" else 0,
+            price_per_gb=int(data.get("res_plan_rate_gb") or 0) if mode == "payg" else 0,
             pg_group_ids=group_csv,
+            pg_role_id=role_id,
         )
     except Exception:
         await callback.answer("ذخیره ناموفق بود", show_alert=True)
         return
     await state.set_state(None)
     await callback.answer("ذخیره شد")
+    label = "PAYG" if mode == "payg" else "ثابت"
     if callback.message:
         await safe_edit_text(
             callback.message,
-            f"پلن PAYG #{plan.id} ذخیره شد ✅\n\n{_resplan_detail_text(plan)}",
+            f"پلن {label} #{plan.id} ذخیره شد ✅\n\n{_resplan_detail_text(plan)}",
             reply_markup=_resplan_detail_keyboard(plan),
         )
         await sync_plans_reply_keyboard(
             callback.message, session, db_user, state, audience="resellers"
+        )
+
+
+@router.callback_query(F.data.startswith("adm:resplan:edit:setrole:"))
+async def resplan_edit_set_role(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    # adm:resplan:edit:setrole:{plan_id}:{role_id}
+    if len(parts) < 6:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    plan_id = int(parts[4])
+    role_id = int(parts[5])
+    plan = await session.get(ResellerPlan, plan_id)
+    if not plan:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    plan.pg_role_id = role_id
+    await _persist(session)
+    await state.set_state(None)
+    await callback.answer("نقش ذخیره شد")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            _resplan_detail_text(plan),
+            reply_markup=_resplan_detail_keyboard(plan),
         )
 
 
@@ -1918,22 +2051,29 @@ async def _save_reseller_plan(
     commission_percent: int | None = None,
     price_per_gb: int | None = None,
     pg_group_ids: str | None = None,
+    pg_role_id: int | None = None,
 ) -> ResellerPlan:
     from app.services.billing import sync_plan_billing_rate
 
     data = await state.get_data()
     mode = data.get("res_plan_mode") or "fixed"
-    if pg_group_ids is None and mode == "payg":
+    if not pg_group_ids:
         groups = data.get("res_plan_groups") or []
         if groups:
             pg_group_ids = ",".join(str(int(x)) for x in groups)
+    if not pg_group_ids:
+        raise ValueError("pg_group_ids required")
+    role_id = pg_role_id if pg_role_id is not None else data.get("res_plan_role_id")
+    if not role_id:
+        raise ValueError("pg_role_id required")
     plan = ResellerPlan(
         name=data.get("res_plan_name") or "پلن نماینده",
         price=int(data.get("res_plan_price") or 0),
         billing_mode=mode,
-        commission_percent=int(commission_percent or 0),
+        commission_percent=int(commission_percent or data.get("res_plan_commission") or 0),
         price_per_gb=int(price_per_gb or data.get("res_plan_rate_gb") or 0) if mode == "payg" else 0,
         pg_group_ids=pg_group_ids,
+        pg_role_id=int(role_id),
         web_permissions=DEFAULT_FEATURE_PERMS,
         bot_permissions=DEFAULT_FEATURE_PERMS,
         create_pg_admin=True,

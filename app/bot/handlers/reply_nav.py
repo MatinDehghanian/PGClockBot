@@ -968,7 +968,9 @@ async def _soft_admin(
         elif data == "adm:pg:stats":
             await admin_h.pg_stats(cb, db_user)
         elif data == "adm:pg:nodes":
-            await admin_h.pg_nodes(cb, db_user)
+            from app.bot.handlers import admin_pg_nodes as pg_nodes_h
+
+            await pg_nodes_h.pg_nodes(cb, db_user)
         elif data == "adm:pg:group":
             await admin_h.adm_pg_group_hint(cb, db_user)
         elif data == "adm:pg:template":
