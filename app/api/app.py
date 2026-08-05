@@ -201,6 +201,13 @@ def _login_success(ip: str) -> None:
 
 def _cookie_secure(request: Request) -> bool:
     try:
+        from app.services.ssl_certs import https_is_active
+
+        if not https_is_active():
+            return False
+    except Exception:
+        return False
+    try:
         if get_settings().trust_proxy:
             fwd = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
             if fwd == "https":
@@ -208,6 +215,22 @@ def _cookie_secure(request: Request) -> bool:
     except Exception:
         pass
     return request.url.scheme == "https"
+
+
+def _panel_redirect(request: Request, path: str, *, status_code: int = 303) -> RedirectResponse:
+    """Redirect using HTTP until HTTPS is live; then use the public HTTPS base."""
+    from app.services.ssl_certs import https_is_active, public_panel_base_url
+
+    if not path.startswith("/"):
+        path = "/" + path
+    if https_is_active():
+        base = public_panel_base_url().rstrip("/")
+        if base:
+            return RedirectResponse(f"{base}{path}", status_code=status_code)
+    host = (request.headers.get("host") or request.url.netloc or "").strip()
+    if host:
+        return RedirectResponse(f"http://{host}{path}", status_code=status_code)
+    return RedirectResponse(path, status_code=status_code)
 
 
 def create_api_app(lifespan=None) -> FastAPI:
@@ -707,8 +730,13 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.get("/health")
     async def health():
-        # Public probe only — no operational metadata
-        return {"ok": True}
+        from fastapi.responses import JSONResponse
+
+        # Public probe — CORS allows HTTPS health check from HTTP settings during SSL restart
+        return JSONResponse(
+            {"ok": True},
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
 
     @app.get("/health/detail")
     async def health_detail(staff: dict = Depends(require_admin)):
@@ -889,13 +917,16 @@ def create_api_app(lifespan=None) -> FastAPI:
         except ValueError:
             return _setup_page(request, step=3, err="پورت وب نامعتبر است.")
         ensure_web_secret()
+        pub = (public_base_url or "").strip().rstrip("/")
+        if pub.startswith("https://"):
+            pub = "http://" + pub[len("https://") :]
         update_env_keys(
             {
                 "PG_BASE_URL": base,
                 "PG_USERNAME": (pg_username or "").strip(),
                 "PG_PASSWORD": (pg_password or "").strip(),
                 "WEB_PORT": str(port_n),
-                "PUBLIC_BASE_URL": (public_base_url or "").strip().rstrip("/"),
+                "PUBLIC_BASE_URL": pub,
                 "CURRENCY": (currency or "").strip() or "تومان",
             }
         )
@@ -942,11 +973,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             sess = get_session_user(request)
             if sess:
                 if sess.get("role") == "admin":
-                    return RedirectResponse("/home", status_code=303)
+                    return _panel_redirect(request, "/home")
                 if sess.get("role") == "pg_staff":
-                    return RedirectResponse("/pg", status_code=303)
+                    return _panel_redirect(request, "/pg")
                 # Reseller / sub-admin: web dashboard
-                return RedirectResponse("/home", status_code=303)
+                return _panel_redirect(request, "/home")
         page = render(
             request,
             "login.html",
@@ -1248,7 +1279,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     home = "/pg"
                 else:
                     home = "/logout"
-        resp = RedirectResponse(home, status_code=303)
+        resp = _panel_redirect(request, home)
         resp.set_cookie(
             "session",
             get_signer().dumps(payload),
@@ -3032,7 +3063,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                         "/settings?tab=ssl&err=" + quote(str(result.get("error") or "خطا")[:400]),
                         status_code=303,
                     )
-                return RedirectResponse("/settings?tab=ssl&restarting=1", status_code=303)
+                return RedirectResponse("/settings?tab=ssl", status_code=303)
 
             if action == "disable":
                 result = disable_https(restart=True)
@@ -3081,6 +3112,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             pg_pass = str(form.get("PG_PASSWORD") or "").strip()
             web_port = str(form.get("WEB_PORT") or "9000").strip()
             public_base = str(form.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+            try:
+                from app.services.ssl_certs import https_is_active
+
+                if public_base.startswith("https://") and not https_is_active():
+                    public_base = "http://" + public_base[len("https://") :]
+            except Exception:
+                pass
             currency = str(form.get("CURRENCY") or "").strip() or "تومان"
             current = current_setup_values()
             if not token:

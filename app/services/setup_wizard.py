@@ -503,19 +503,17 @@ def detect_server_ip() -> str:
 
 
 def default_panel_base_url(*, public_base: str | None = None, web_port: int | str | None = None) -> str:
-    """PUBLIC_BASE_URL if set, else http://{server_ip}:{WEB_PORT} (default 9000)."""
-    from app.config import get_settings
-
-    settings = get_settings()
-    base = (public_base if public_base is not None else settings.public_base_url or "").strip().rstrip("/")
-    if base:
-        return base
-    port = web_port if web_port is not None else settings.web_port
+    """Panel base for links — HTTPS only when SSL is active; otherwise HTTP+IP."""
     try:
-        port_s = str(int(port or 9000))
-    except (TypeError, ValueError):
-        port_s = "9000"
-    return f"http://{detect_server_ip()}:{port_s}"
+        from app.services.ssl_certs import https_is_active, public_panel_base_url
+
+        if https_is_active():
+            if public_base is not None and str(public_base).strip():
+                return str(public_base).strip().rstrip("/")
+            return public_panel_base_url()
+    except Exception:
+        pass
+    return default_http_panel_url(web_port=web_port)
 
 
 def default_http_panel_url(*, web_port: int | str | None = None) -> str:
@@ -532,17 +530,7 @@ def default_http_panel_url(*, web_port: int | str | None = None) -> str:
 
 
 def setup_finish_login_url() -> str:
-    """Login URL after wizard — HTTP+IP until HTTPS is actually enabled."""
-    try:
-        from app.services.ssl_certs import cert_files_exist, read_meta
-
-        meta = read_meta()
-        if meta.get("ssl_enabled") and cert_files_exist():
-            base = (meta.get("public_https") or "").strip().rstrip("/")
-            if base:
-                return f"{base}/login"
-    except Exception:
-        pass
+    """Login URL after wizard — always HTTP+IP until HTTPS is live."""
     return default_http_panel_url().rstrip("/") + "/login"
 
 

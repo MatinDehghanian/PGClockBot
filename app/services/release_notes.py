@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.1.9": [
+        "تا قبل از فعال SSL همه ریدایرکت‌ها و لینک پنل با HTTP (IP:پورت) — نه HTTPS از PUBLIC_BASE_URL",
+        "پس از دریافت گواهی: ماندن در تنظیمات SSL + مودال موفقیت با دکمه «ورود به پنل (HTTPS)»",
+        "بدون ریدایرکت خودکار به HTTPS قبل از آماده شدن سرویس",
+    ],
     "4.1.8": [
         "پایان install اولیه: فقط لینک یک‌بارمصرف + ذکر اعتبار ۱۵ دقیقه (بدون Manage/Logs)",
     ],

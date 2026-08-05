@@ -144,6 +144,27 @@ def job_running() -> bool:
     return _JOB_RUNNING
 
 
+def https_is_active() -> bool:
+    """True only when TLS is enabled and cert files are present on disk."""
+    meta = read_meta()
+    return bool(meta.get("ssl_enabled")) and cert_files_exist()
+
+
+def public_panel_base_url() -> str:
+    """Canonical panel base URL — HTTPS when active, else HTTP+IP."""
+    if https_is_active():
+        meta = read_meta()
+        base = (meta.get("public_https") or "").strip().rstrip("/")
+        if base:
+            return base
+        domain = normalize_domain(meta.get("domain") or "")
+        if domain:
+            return public_https_url(domain).rstrip("/")
+    from app.services.setup_wizard import default_http_panel_url
+
+    return default_http_panel_url().rstrip("/")
+
+
 def public_https_url(domain: str | None = None) -> str:
     settings = get_settings()
     port = int(settings.web_port or 9000)
@@ -665,6 +686,13 @@ def disable_https(*, restart: bool = True) -> dict[str, Any]:
     meta = read_meta()
     meta["ssl_enabled"] = False
     write_meta(meta)
+    try:
+        from app.services.setup_wizard import default_http_panel_url, update_env_keys
+
+        update_env_keys({"PUBLIC_BASE_URL": default_http_panel_url().rstrip("/")})
+        get_settings.cache_clear()
+    except Exception as exc:
+        logger.warning("PUBLIC_BASE_URL http revert failed: %s", exc)
     if restart:
         try:
             from app.services.service_control import schedule_panel_restart

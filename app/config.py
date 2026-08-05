@@ -164,7 +164,12 @@ class Settings(BaseSettings):
 
     @property
     def miniapp_enabled(self) -> bool:
-        return bool(self.public_base_url.strip())
+        try:
+            from app.services.ssl_certs import https_is_active
+
+            return https_is_active() and bool(self.public_base_url.strip())
+        except Exception:
+            return bool(self.public_base_url.strip())
 
     @property
     def miniapp_url(self) -> str:
