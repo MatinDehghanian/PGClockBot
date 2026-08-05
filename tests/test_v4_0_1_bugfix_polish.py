@@ -69,10 +69,9 @@ class UxCopyConsistency(unittest.TestCase):
         self.assertNotIn("فاز D3", tpl)
         self.assertIn("یتیم", tpl)
 
-    def test_reseller_setup_password_hint_12(self):
-        tpl = (ROOT / "app/web/templates/reseller_setup.html").read_text(encoding="utf-8")
-        self.assertIn("حداقل ۱۲ کاراکتر", tpl)
-        self.assertNotIn("۸+", tpl)
+    def test_reseller_setup_page_removed(self):
+        self.assertFalse((ROOT / "app/web/templates/reseller_setup.html").exists())
+        self.assertFalse((ROOT / "app/api/reseller_setup.py").exists())
 
     def test_no_mutate_jargon_in_staff_pg_error(self):
         src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")

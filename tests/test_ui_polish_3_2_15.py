@@ -34,13 +34,11 @@ class NodeErrorBadgeTests(unittest.TestCase):
 
 
 class BotTokenAutofocusTests(unittest.TestCase):
-    def test_reseller_bot_token_has_no_autofocus(self):
-        src = (TEMPLATES / "reseller_setup.html").read_text(encoding="utf-8")
-        self.assertIn('name="bot_token"', src)
-        # Token field must never autofocus (opens mobile keyboard)
-        token_line = [ln for ln in src.splitlines() if 'name="bot_token"' in ln][0]
-        self.assertNotIn("autofocus", token_line)
-        self.assertNotIn("bot_only %}autofocus", src)
+    def test_shop_settings_bot_token_has_no_autofocus(self):
+        # Bot token is configured in shop settings / dashboard — not via /rsetup
+        src = (TEMPLATES / "shop_settings.html").read_text(encoding="utf-8")
+        self.assertIn("ربات اختصاصی", src)
+        self.assertFalse((TEMPLATES / "reseller_setup.html").exists())
 
 
 class FlashSeverityTests(unittest.TestCase):

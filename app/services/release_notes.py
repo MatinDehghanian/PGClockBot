@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.1.2": [
+        "پیام فعال‌سازی نمایندگی کوتاه‌تر و بخش‌بندی‌شده: نام پلن، بدون آدرس /login، بدون لینک rsetup",
+        "حذف کامل مسیر یک‌بارمصرف /rsetup و دکمه صدور مجدد لینک — ثبت ربات فقط از داشبورد وب‌پنل",
+    ],
     "4.1.1": [
         "نقش‌های محدود پاسارگارد: نمای کلی و ACL از متادیتای خود ادمین (بدون نیاز به لیست ادمین‌ها)",
         "ویرایش نقش نماینده واقعاً در پاسارگارد همگام می‌شود (modify_admin)",

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import secrets
 import string
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Iterable
 
 from sqlalchemy import select
@@ -50,7 +50,6 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("notifications", "نوتیفیکیشن"),
     ("bot", "ربات اختصاصی"),
 ]
-SETUP_TOKEN_HOURS = 48
 
 
 async def get_reseller_panel_base_url(session: AsyncSession) -> str:
@@ -268,34 +267,11 @@ async def _unique_web_username(session: AsyncSession, prefix: str = "web") -> st
     return f"{prefix}_{secrets.token_hex(6)}"
 
 
-def new_setup_token() -> tuple[str, datetime]:
-    token = secrets.token_urlsafe(32)
-    expires = datetime.now(timezone.utc) + timedelta(hours=SETUP_TOKEN_HOURS)
-    return token, expires
-
-
 async def get_reseller_profile(session: AsyncSession, user_id: int) -> ResellerProfile | None:
     result = await session.execute(
         select(ResellerProfile).where(ResellerProfile.user_id == user_id)
     )
     return result.scalar_one_or_none()
-
-
-async def get_profile_by_setup_token(session: AsyncSession, token: str) -> ResellerProfile | None:
-    if not token or len(token) < 16:
-        return None
-    result = await session.execute(
-        select(ResellerProfile).where(ResellerProfile.setup_token == token)
-    )
-    profile = result.scalar_one_or_none()
-    if not profile or not profile.setup_token_expires:
-        return None
-    exp = profile.setup_token_expires
-    if exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)
-    if exp < datetime.now(timezone.utc):
-        return None
-    return profile
 
 
 async def list_active_reseller_plans(
@@ -438,18 +414,22 @@ async def make_reseller(
         session.add(profile)
 
     if issue_setup_token:
-        token, expires = new_setup_token()
-        profile.setup_token = token
-        profile.setup_token_expires = expires
-        # Web creds already provisioned → keep login unlocked; token is for bot only
+        # Legacy flag: web credentials unlock the panel; bot token is set in web dashboard.
+        # Do not mint one-time /rsetup links anymore.
         has_web = bool(
             (web_username or profile.web_username)
             and (web_password_hash or profile.web_password_hash)
         )
         if has_web:
             profile.setup_completed_at = datetime.now(timezone.utc)
+            profile.setup_token = None
+            profile.setup_token_expires = None
         else:
             profile.setup_completed_at = None
+    elif profile.web_username and profile.web_password_hash and not profile.setup_completed_at:
+        profile.setup_completed_at = datetime.now(timezone.utc)
+        profile.setup_token = None
+        profile.setup_token_expires = None
 
     await session.commit()
     await session.refresh(profile)
@@ -717,7 +697,6 @@ async def provision_reseller(
     base = (panel_base_url or "").rstrip("/")
     if not base:
         base = await get_reseller_panel_base_url(session)
-    setup_url = f"{base}/rsetup/{profile.setup_token}" if base and profile.setup_token else ""
     pg_panel = await get_reseller_pg_panel_base_url(session) if share_pg else ""
     unified = bool(do_pg and do_web and shared_username and shared_password)
 
@@ -732,23 +711,36 @@ async def provision_reseller(
         "panel_username": shared_username if unified else (web_username or pg_username),
         "panel_password": shared_password if unified else (web_password or pg_password),
         "unified_credentials": unified,
-        "setup_url": setup_url,
-        "setup_token": profile.setup_token,
         "panel_url": base,
         "commission_percent": commission,
         "permissions": perms,
+        "plan_name": (plan.name if plan else None) or None,
+        "billing_mode": plan_billing,
     }
 
 
 def format_credentials_message(creds: dict) -> str:
-    """Deliver PG + web panel URLs/credentials (and optional bot setup link)."""
+    """Short, sectioned delivery of panel credentials (no one-time bot setup link)."""
+    import html
+
     from app.services.formatting import copyable
 
-    lines = [
+    plan_name = html.escape(str(creds.get("plan_name") or "").strip())
+    billing = str(creds.get("billing_mode") or "").strip().lower()
+    commission = int(creds.get("commission_percent") or 0)
+
+    lines: list[str] = [
         "✅ <b>نمایندگی فعال شد</b>",
         "",
-        f"کمیسیون شما: <b>{creds.get('commission_percent', 0)}٪</b>",
     ]
+    if plan_name:
+        lines.append(f"📦 <b>پلن</b>\n{plan_name}")
+        lines.append("")
+    if billing == "payg":
+        lines.append("💳 <b>نوع</b>\nPay As You Go")
+    else:
+        lines.append(f"💰 <b>کمیسیون</b>\n{commission}٪")
+    lines.append("")
 
     panel = (creds.get("panel_url") or "").strip().rstrip("/")
     pg_panel = (creds.get("pg_panel_url") or "").strip().rstrip("/")
@@ -759,75 +751,52 @@ def format_credentials_message(creds: dict) -> str:
 
     if unified and panel_user and panel_pass:
         lines += [
+            "🔐 <b>ورود یکپارچه</b>",
+            "<i>همان یوزر و رمز برای وب‌پنل و پاسارگارد</i>",
             "",
-            "🔐 <b>ورود یکپارچه (وب‌پنل ربات + پاسارگارد)</b>",
-            "همان یوزر و رمز برای هر دو پنل استفاده می‌شود.",
         ]
         if panel:
-            lines += [
-                f"آدرس وب‌پنل: {copyable(panel)}",
-                f"ورود وب‌پنل: {copyable(f'{panel}/login')}",
-            ]
+            lines += [f"🌐 <b>آدرس وب‌پنل</b>\n{copyable(panel)}", ""]
         else:
-            lines.append("آدرس وب‌پنل هنوز تنظیم نشده — از ادمین بپرسید.")
+            lines += ["🌐 <b>آدرس وب‌پنل</b>\nهنوز تنظیم نشده — از ادمین بپرسید.", ""]
         if share_pg and pg_panel:
-            lines.append(f"آدرس پاسارگارد: {copyable(pg_panel)}")
-        elif not share_pg:
-            lines.append(
-                "لینک مستقیم پاسارگارد ارسال نشده؛ مدیریت VPN از وب‌پنل ربات هم ممکن است."
-            )
+            lines += [f"🛡 <b>آدرس پاسارگارد</b>\n{copyable(pg_panel)}", ""]
         lines += [
-            f"نام کاربری: {copyable(panel_user)}",
-            f"رمز: {copyable(panel_pass)}",
-            "رمز را عوض کنید و در جای امن نگه دارید (تغییر رمز در وب‌پنل هر دو جا را یکی نگه می‌دارد).",
+            f"👤 <b>نام کاربری</b>\n{copyable(panel_user)}",
+            "",
+            f"🔑 <b>رمز عبور</b>\n{copyable(panel_pass)}",
+            "",
+            "💡 رمز را عوض کنید و در جای امن نگه دارید.",
         ]
     else:
         if share_pg or creds.get("pg_username"):
-            lines += ["", "🛡 <b>پنل پاسارگارد</b>"]
+            lines += ["🛡 <b>پنل پاسارگارد</b>", ""]
             if pg_panel:
-                lines.append(f"آدرس پنل: {copyable(pg_panel)}")
+                lines += [f"آدرس:\n{copyable(pg_panel)}", ""]
             if creds.get("pg_username") and creds.get("pg_password"):
                 lines += [
-                    f"نام کاربری: {copyable(creds['pg_username'])}",
-                    f"رمز: {copyable(creds['pg_password'])}",
-                    "رمز را عوض کنید و در جای امن نگه دارید.",
+                    f"👤 نام کاربری:\n{copyable(creds['pg_username'])}",
+                    "",
+                    f"🔑 رمز:\n{copyable(creds['pg_password'])}",
+                    "",
                 ]
             elif not pg_panel:
-                lines.append("ادمین پاسارگارد برای این پلن ساخته نشد.")
-        else:
-            lines += [
-                "",
-                "🛡 مدیریت VPN از طریق همین وب‌پنل ربات انجام می‌شود (لینک پنل پاسارگارد ارسال نشده).",
-            ]
+                lines += ["ادمین پاسارگارد برای این پلن ساخته نشد.", ""]
 
-        lines += ["", "🌐 <b>وب‌پنل ربات (نماینده)</b>"]
+        lines += ["🌐 <b>وب‌پنل ربات</b>", ""]
         if panel:
-            lines += [
-                f"آدرس پنل: {copyable(panel)}",
-                f"آدرس ورود: {copyable(f'{panel}/login')}",
-            ]
+            lines += [f"آدرس:\n{copyable(panel)}", ""]
         else:
-            lines.append("آدرس پنل هنوز تنظیم نشده — از ادمین بپرسید.")
+            lines += ["آدرس هنوز تنظیم نشده — از ادمین بپرسید.", ""]
         if creds.get("web_username") and creds.get("web_password"):
             lines += [
-                f"نام کاربری: {copyable(creds['web_username'])}",
-                f"رمز: {copyable(creds['web_password'])}",
+                f"👤 نام کاربری:\n{copyable(creds['web_username'])}",
+                "",
+                f"🔑 رمز:\n{copyable(creds['web_password'])}",
+                "",
             ]
 
-    if creds.get("setup_url"):
-        lines += [
-            "",
-            "🤖 <b>ربات اختصاصی (اختیاری)</b>",
-            "برای ثبت توکن ربات خودتان از @BotFather:",
-            copyable(creds["setup_url"]),
-            "لینک یک‌بارمصرف است — با کسی به اشتراک نگذارید.",
-        ]
-
-    lines += [
-        "",
-        "مدیریت فروشگاه فقط از <b>ربات اختصاصی</b> و <b>وب‌پنل</b> شماست — "
-        "در ربات اصلی ادمین، پنل نماینده نمایش داده نمی‌شود.",
-    ]
+    lines.append("از داشبورد وب‌پنل می‌توانید ربات اختصاصی فروشگاه را تنظیم کنید.")
     return "\n".join(lines)
 
 
