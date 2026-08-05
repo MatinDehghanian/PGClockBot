@@ -35,7 +35,7 @@ router = Router(name="admin_plans")
 
 # Kind hub (reply keyboard step) — not the same-kind screen
 BACK_USERS_KIND = "adm:plans:aud:users"
-BACK_RESELLERS_KIND_KIND = "adm:plans:aud:resellers"
+BACK_RESELLERS_KIND = "adm:plans:aud:resellers"
 # Re-open a specific kind list/detail screen
 BACK_USERS_FIXED_LIST = "adm:plans:kind:users:fixed"
 
@@ -105,7 +105,6 @@ async def _answer_plans_saved(message: Message, state: FSMContext, session: Asyn
 
 def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
-    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _back_row(label: str, cb: str) -> list[InlineKeyboardButton]:
@@ -166,6 +165,76 @@ async def send_kind_hub(
     await message.answer(text)
 
 
+async def send_users_plans_overview(message: Message, session: AsyncSession) -> None:
+    """User plans hub — mirrors web /plans user table (fixed + trial + custom + wholesale)."""
+    from app.bot.handlers.admin import _plan_line
+
+    ui = await get_all_settings(session)
+    result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
+    plans = list(result.scalars().all())
+    fixed = [p for p in plans if not p.is_trial]
+    trial = next((p for p in plans if p.is_trial), None)
+    trial_on = on(ui.get("trial_enabled"))
+    custom_on = on(ui.get("custom_plan_enabled"))
+    wholesale_on = on(ui.get("wholesale_enabled"))
+
+    fixed_lines = (
+        "\n".join(_plan_line(p) for p in fixed[:8])
+        if fixed
+        else "هنوز پلن ثابتی نیست — «ثابت» یا «افزودن» را بزنید."
+    )
+    trial_gb = (
+        f"{trial.data_limit_gb:g} گیگ"
+        if trial and trial.data_limit_gb is not None
+        else "نامحدود"
+        if trial
+        else "—"
+    )
+    text = (
+        "👥 <b>پلن‌های کاربران</b>\n"
+        "━━━━━━━━━━━━\n"
+        f"<b>ثابت ({len(fixed)})</b>\n{fixed_lines}\n\n"
+        f"<b>تست:</b> {'فعال' if trial_on else 'خاموش'}"
+        f"{f' · {html.escape(trial.name)} · {trial.duration_days}روز · {trial_gb}' if trial else ''}\n"
+        f"<b>دلخواه:</b> {'فعال' if custom_on else 'خاموش'} · "
+        f"{ui.get('custom_plan_min_gb', '1')}–{ui.get('custom_plan_max_gb', '500')} گیگ\n"
+        f"<b>عمده:</b> {'فعال' if wholesale_on else 'خاموش'} · "
+        f"{ui.get('wholesale_min_qty', '5')}–{ui.get('wholesale_max_qty', '20')} عدد"
+    )
+    await message.answer(text, reply_markup=kb.admin_users_plans_overview_keyboard(ui))
+
+
+async def send_resellers_plans_overview(message: Message, session: AsyncSession) -> None:
+    """Reseller subscription plans — both fixed (commission) and PAYG like web /plans."""
+    all_plans = await list_reseller_plans(session)
+    fixed = [p for p in all_plans if reseller_plan_mode_of(p) == "fixed"]
+    payg = [p for p in all_plans if reseller_plan_mode_of(p) == "payg"]
+    cur = get_settings().currency
+
+    def _card(p: ResellerPlan) -> str:
+        flag = "✅" if p.is_active else "⏸"
+        mode = reseller_plan_mode_of(p)
+        if mode == "payg":
+            rate = int(p.price_per_gb or 0)
+            extra = f" · {rate:,} ت/GB".replace(",", "٬") if rate else ""
+        else:
+            extra = f" · {int(p.commission_percent or 0)}٪"
+        return f"{flag} <b>{html.escape(p.name)}</b> · {format_toman(p.price, cur)}{extra}"
+
+    fixed_body = "\n".join(_card(p) for p in fixed[:6]) if fixed else "پلن ثابت نیست."
+    payg_body = "\n".join(_card(p) for p in payg[:6]) if payg else "پلن PAYG نیست."
+    text = (
+        "🤝 <b>پلن‌های نمایندگان</b>\n"
+        "━━━━━━━━━━━━\n"
+        f"<b>📦 ثابت (کمیسیون) — {len(fixed)}</b>\n{fixed_body}\n\n"
+        f"<b>⚡ Pay As You Go — {len(payg)}</b>\n{payg_body}"
+    )
+    await message.answer(
+        text,
+        reply_markup=kb.admin_resellers_plans_overview_keyboard(fixed, payg),
+    )
+
+
 async def send_users_fixed_list(message: Message, session: AsyncSession) -> None:
     from app.bot.handlers.admin import _plan_line
 
@@ -213,7 +282,7 @@ async def _build_custom_screen(session: AsyncSession) -> tuple[str, InlineKeyboa
     rows.append(
         [InlineKeyboardButton(text="🔗 اتصال پاسارگارد", callback_data="adm:plans:custom:pg")]
     )
-    rows.append(_back_row("⬅️ انتخاب نوع", BACK_USERS_KIND))
+    rows.append(_back_row("⬅️ پلن‌های کاربران", BACK_USERS_KIND))
     tpl = (ui.get("custom_plan_template_id") or "").strip()
     groups = (ui.get("custom_plan_group_ids") or "").strip()
     link = f"تمپلیت #{tpl}" if tpl else (f"گروه {groups}" if groups else "بدون اتصال")
@@ -266,7 +335,7 @@ async def _build_trial_screen(session: AsyncSession) -> tuple[str, InlineKeyboar
         [InlineKeyboardButton(text="حجم (گیگ)", callback_data="adm:plans:trial:gb")],
         [InlineKeyboardButton(text="تمپلیت پاسارگارد", callback_data="adm:plans:trial:tpl")],
         [InlineKeyboardButton(text="گروه پاسارگارد", callback_data="adm:plans:trial:grp")],
-        _back_row("⬅️ انتخاب نوع", BACK_USERS_KIND),
+        _back_row("⬅️ پلن‌های کاربران", BACK_USERS_KIND),
     ]
     return f"🧪 <b>پلن تست</b>\n\n{body}", _kb(rows)
 
@@ -320,7 +389,7 @@ async def _build_wholesale_screen(session: AsyncSession) -> tuple[str, InlineKey
                 )
             ]
         )
-    rows.append(_back_row("⬅️ انتخاب نوع", BACK_USERS_KIND))
+    rows.append(_back_row("⬅️ پلن‌های کاربران", BACK_USERS_KIND))
     text = (
         "📦 <b>فروش عمده</b>\n"
         f"{wholesale_description(ui)}\n\n"
@@ -433,7 +502,14 @@ async def plans_hub(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     await state.clear()
     await callback.answer()
     if callback.message:
-        await send_audience_hub(callback.message, session, edit=True)
+        try:
+            await callback.message.edit_text(
+                "💎 <b>پلن‌ها</b>\n"
+                "«پلن‌های کاربران» یا «پلن‌های نمایندگان» را از کیبورد پایین بزنید.",
+                reply_markup=None,
+            )
+        except Exception:
+            pass
         await sync_plans_reply_keyboard(callback.message, session, db_user, state)
 
 
@@ -455,10 +531,15 @@ async def plans_aud_inline_back(
     await callback.answer()
     title = "کاربران" if aud == "users" else "نمایندگان"
     if callback.message:
-        await callback.message.edit_text(
-            f"💎 <b>پلن‌های {title}</b>\nنوع پلن را از کیبورد پایین انتخاب کنید."
-        )
+        try:
+            await callback.message.edit_text(f"💎 <b>پلن‌های {title}</b>", reply_markup=None)
+        except Exception:
+            pass
         await sync_plans_reply_keyboard(callback.message, session, db_user, state, audience=aud)
+        if aud == "users":
+            await send_users_plans_overview(callback.message, session)
+        else:
+            await send_resellers_plans_overview(callback.message, session)
 
 
 @router.callback_query(F.data.startswith("adm:plans:kind:"))

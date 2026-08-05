@@ -130,8 +130,14 @@ async def _plan_detail_text(p: Plan) -> str:
 
 
 def _plan_detail_keyboard(p: Plan) -> InlineKeyboardMarkup:
-    """Plan link/toggle actions only — list nav via reply Back."""
+    """Plan link/toggle/edit actions — list nav via inline back."""
+    pid = p.id
     rows = [
+        [InlineKeyboardButton(text="✏️ نام", callback_data=f"adm:plan:edit:name:{pid}")],
+        [InlineKeyboardButton(text="✏️ قیمت", callback_data=f"adm:plan:edit:price:{pid}")],
+        [InlineKeyboardButton(text="✏️ مدت (روز)", callback_data=f"adm:plan:edit:days:{pid}")],
+        [InlineKeyboardButton(text="✏️ حجم (گیگ)", callback_data=f"adm:plan:edit:gb:{pid}")],
+        [InlineKeyboardButton(text="✏️ توضیح", callback_data=f"adm:plan:edit:desc:{pid}")],
         [
             InlineKeyboardButton(
                 text="⏸ خاموش" if p.is_active else "▶️ روشن",
@@ -180,6 +186,7 @@ class AdminStates(StatesGroup):
     add_plan_days = State()
     add_plan_gb = State()
     add_plan_link = State()  # waiting for mode after basics
+    plan_edit_field = State()
     make_reseller = State()
     ticket_reply = State()
     user_search = State()
@@ -557,6 +564,85 @@ async def adm_plan_view(callback: CallbackQuery, session: AsyncSession, db_user:
             await _plan_detail_text(plan),
             reply_markup=_plan_detail_keyboard(plan),
         )
+
+
+@router.callback_query(F.data.startswith("adm:plan:edit:"))
+async def adm_plan_edit_ask(
+    callback: CallbackQuery, state: FSMContext, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) < 5:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    field, pid_raw = parts[3], parts[4]
+    if field not in {"name", "price", "days", "gb", "desc"}:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    prompts = {
+        "name": "نام جدید پلن:",
+        "price": "قیمت (تومان):",
+        "days": "مدت (روز):",
+        "gb": "حجم گیگ (۰ = نامحدود):",
+        "desc": "توضیح (خالی = حذف):",
+    }
+    await state.set_state(AdminStates.plan_edit_field)
+    await state.update_data(
+        user_plan_edit_id=int(pid_raw),
+        user_plan_edit_field=field,
+        _adm_plans_aud="users",
+        _adm_plans_kind="fixed",
+    )
+    await callback.answer()
+    if callback.message:
+        await callback.message.answer(prompts[field], reply_markup=kb.cancel_reply())
+
+
+@router.message(AdminStates.plan_edit_field)
+async def adm_plan_edit_save(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        return
+    if kb.is_cancel_text(message.text):
+        await state.clear()
+        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
+        return
+    data = await state.get_data()
+    plan = await session.get(Plan, int(data.get("user_plan_edit_id") or 0))
+    field = data.get("user_plan_edit_field")
+    if not plan or not field:
+        await state.clear()
+        return
+    text = (message.text or "").strip()
+    try:
+        if field == "name":
+            if not text:
+                await message.answer("نام خالی نیست.")
+                return
+            plan.name = text[:128]
+        elif field == "price":
+            plan.price = max(0, int(text.replace(",", "").replace("٬", "")))
+        elif field == "days":
+            plan.duration_days = max(1, int(text))
+        elif field == "gb":
+            gb = float(text.replace(",", "."))
+            plan.data_limit_gb = None if gb <= 0 else gb
+        elif field == "desc":
+            plan.description = text or None
+    except ValueError:
+        await message.answer("عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
+        return
+    await session.commit()
+    await state.set_state(None)
+    await message.answer("ذخیره شد ✅", reply_markup=await _plans_flow_reply_kb(state))
+    await message.answer(
+        await _plan_detail_text(plan),
+        reply_markup=_plan_detail_keyboard(plan),
+    )
 
 
 @router.callback_query(F.data == "adm:plan:add")

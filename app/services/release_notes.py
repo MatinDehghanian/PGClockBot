@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.2.2": [
+        "رفع بحرانی پلن‌های ربات: دکمه‌های «پلن کاربران/نمایندگان» به لیست کاربران نمی‌رفت",
+        "رفع پیام تکراری هنگام ورود به پلن‌ها",
+        "نمای کلی پلن‌ها مثل وب‌پنل /plans + ویرایش فیلدهای پلن ثابت در ربات",
+    ],
     "4.2.1": [
         "ربات پلن‌ها: مخاطب و نوع پلن روی کیبورد reply (نه فقط اینلاین)",
         "پلن نماینده: ساخت/لیست/روشن/خاموش/حذف در ربات",

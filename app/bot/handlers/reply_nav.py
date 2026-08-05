@@ -128,13 +128,23 @@ class ReplyMenuTextFilter(BaseFilter):
         elif level == nav.NAV_ADMIN_BROADCAST:
             for key, label in kb._admin_broadcast_submenu_entries(ui):
                 mapping[(label or "").strip()] = key
+        elif level == nav.NAV_ADMIN_PLANS_AUDIENCE:
+            for key, label in kb._admin_plans_audience_entries(ui):
+                mapping[(label or "").strip()] = key
+        elif level == nav.NAV_ADMIN_PLANS_KIND:
+            aud = str((await state.get_data()).get("_adm_plans_aud") or "users")
+            for key, label in kb._admin_plans_kind_entries(aud, ui):
+                mapping[(label or "").strip()] = key
         elif level == nav.NAV_SHOP:
             for key, label in kb._shop_submenu_entries(
                 ui, custom_enabled=True, wholesale_enabled=True
             ):
                 mapping[(label or "").strip()] = key
-        elif role == "admin" and not is_reseller_bot:
-            # Prefer admin hub labels outside broadcast (e.g. «نمایندگان»)
+        elif role == "admin" and not is_reseller_bot and level not in {
+            nav.NAV_ADMIN_PLANS_AUDIENCE,
+            nav.NAV_ADMIN_PLANS_KIND,
+        }:
+            # Prefer admin hub labels outside broadcast / plans (avoid «نمایندگان» collision)
             for key, label in kb._reply_admin_entries(ui):
                 mapping[(label or "").strip()] = key
         if kb.is_home_text(text, ui):
@@ -734,8 +744,6 @@ async def open_admin_plans_hub(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
-    from app.bot.handlers.admin_plans import send_audience_hub
-
     if is_reseller_bot or db_user.role != Role.ADMIN.value:
         await _refuse_admin(message)
         return
@@ -746,11 +754,13 @@ async def open_admin_plans_hub(
         session,
         db_user,
         nav.NAV_ADMIN_PLANS_AUDIENCE,
-        text="💎 <b>پلن‌ها</b>\nمخاطب را از کیبورد پایین انتخاب کنید.",
+        text=(
+            "💎 <b>پلن‌ها</b> (مثل وب‌پنل /plans)\n"
+            "«پلن‌های کاربران» یا «پلن‌های نمایندگان» را از کیبورد پایین بزنید."
+        ),
         state=state,
         push=push,
     )
-    await send_audience_hub(message, session)
 
 
 async def open_reseller_settings_hub(
@@ -1072,13 +1082,13 @@ async def handle_back(
             session,
             db_user,
             nav.NAV_ADMIN_PLANS_AUDIENCE,
-            text="💎 مخاطب پلن را از کیبورد انتخاب کنید.",
+            text=(
+                "💎 <b>پلن‌ها</b>\n"
+                "«پلن‌های کاربران» یا «پلن‌های نمایندگان» را از کیبورد پایین بزنید."
+            ),
             state=state,
             push=False,
         )
-        from app.bot.handlers.admin_plans import send_audience_hub
-
-        await send_audience_hub(message, session)
         return
     if level == nav.NAV_ADMIN_PLANS_AUDIENCE:
         await open_admin_home(message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot)
@@ -1569,13 +1579,13 @@ async def reply_main_nav(
             session,
             db_user,
             nav.NAV_ADMIN_PLANS_KIND,
-            text="💎 نوع پلن کاربران را از کیبورد انتخاب کنید.",
+            text="💎 <b>پلن‌های کاربران</b>\nنوع را از کیبورد پایین یا دکمه‌های زیر پیام انتخاب کنید.",
             state=state,
             push=True,
         )
-        from app.bot.handlers.admin_plans import send_kind_hub
+        from app.bot.handlers.admin_plans import send_users_plans_overview
 
-        await send_kind_hub(message, session, "users")
+        await send_users_plans_overview(message, session)
     elif action == kb.REPLY_ACTION_ADM_PLANS_AUD_RESELLERS:
         await state.update_data(_adm_plans_aud="resellers", _adm_plans_kind=None)
         await nav.show_nav_keyboard(
@@ -1583,13 +1593,13 @@ async def reply_main_nav(
             session,
             db_user,
             nav.NAV_ADMIN_PLANS_KIND,
-            text="💎 نوع پلن نمایندگان را از کیبورد انتخاب کنید.",
+            text="💎 <b>پلن‌های نمایندگان</b>\nلیست و دکمه‌های زیر پیام — مثل وب‌پنل.",
             state=state,
             push=True,
         )
-        from app.bot.handlers.admin_plans import send_kind_hub
+        from app.bot.handlers.admin_plans import send_resellers_plans_overview
 
-        await send_kind_hub(message, session, "resellers")
+        await send_resellers_plans_overview(message, session)
     elif action in {
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM,
