@@ -5,7 +5,7 @@ import html
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, ReplyKeyboardMarkup
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,6 +44,12 @@ def _plan_needs_link(p: Plan) -> bool:
     return not p.pg_template_id and not (p.pg_group_ids or "").strip()
 
 
+async def _plans_flow_reply_kb(state: FSMContext) -> ReplyKeyboardMarkup:
+    data = await state.get_data()
+    aud = data.get("_adm_plans_aud")
+    return kb.admin_plans_reply_keyboard(audience=aud if aud in {"users", "resellers"} else None)
+
+
 async def _render_plans_list(callback: CallbackQuery, session: AsyncSession) -> None:
     result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
     plans = list(result.scalars().all())
@@ -60,7 +66,7 @@ async def _render_plans_list(callback: CallbackQuery, session: AsyncSession) -> 
             text,
             reply_markup=kb.admin_plans_list_keyboard(
                 plans,
-                back_callback="adm:plans:kind:users:fixed",
+                back_callback="adm:plans:aud:users",
             ),
         )
 
@@ -98,7 +104,7 @@ async def _custom_link_summary(session: AsyncSession) -> tuple[str, InlineKeyboa
         )
     rows.append(
         [
-            InlineKeyboardButton(text="⬅️ پلن دلخواه", callback_data="adm:st:sub:service:custom"),
+            InlineKeyboardButton(text="⬅️ پلن دلخواه", callback_data="adm:plans:aud:users"),
             InlineKeyboardButton(text="پلن‌ها", callback_data="adm:plans"),
         ]
     )
@@ -154,6 +160,15 @@ def _plan_detail_keyboard(p: Plan) -> InlineKeyboardMarkup:
                 )
             ]
         )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="🗑 حذف پلن",
+                callback_data=f"adm:plan:delask:{p.id}",
+            )
+        ],
+        [InlineKeyboardButton(text="⬅️ لیست پلن‌ها", callback_data="adm:plans:kind:users:fixed")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 router = Router(name="admin")
@@ -526,131 +541,6 @@ async def adm_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
         await callback.message.edit_text("رسیدها ارسال شد.", reply_markup=None)
 
 
-@router.callback_query(F.data == "adm:plans")
-async def adm_plans(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    await state.clear()
-    await callback.answer()
-    if callback.message:
-        await callback.message.edit_text(
-            "💎 <b>پلن‌ها</b>\nمخاطب را انتخاب کنید:",
-            reply_markup=kb.admin_plan_audience_keyboard(),
-        )
-
-
-@router.callback_query(F.data.startswith("adm:plans:aud:"))
-async def adm_plans_audience(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
-):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    aud = callback.data.rsplit(":", 1)[-1]
-    if aud not in {"users", "resellers"}:
-        await callback.answer("نامعتبر", show_alert=True)
-        return
-    await callback.answer()
-    title = "کاربران" if aud == "users" else "نمایندگان"
-    if callback.message:
-        await callback.message.edit_text(
-            f"💎 <b>پلن‌های {title}</b>\nنوع پلن را انتخاب کنید:",
-            reply_markup=kb.admin_plan_kind_keyboard(aud),
-        )
-
-
-@router.callback_query(F.data.startswith("adm:plans:kind:"))
-async def adm_plans_kind(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
-):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    parts = callback.data.split(":")
-    if len(parts) < 5:
-        await callback.answer("نامعتبر", show_alert=True)
-        return
-    aud, kind = parts[3], parts[4]
-    await callback.answer()
-    if aud == "users" and kind == "fixed":
-        await _render_plans_list(callback, session)
-        return
-    if aud == "users" and kind == "custom":
-        from app.bot.handlers.admin_settings import _render_sub
-
-        await _render_sub(callback, session, "service", "custom")
-        return
-    if aud == "users" and kind == "trial":
-        from app.bot.handlers.admin_settings import _render_trial
-
-        await _render_trial(callback, session)
-        return
-    if aud == "users" and kind == "wholesale":
-        from app.services.setup_wizard import default_panel_base_url
-
-        base = default_panel_base_url().rstrip("/")
-        text = (
-            "📦 <b>فروش عمده</b>\n"
-            "تنظیم پلکانی و فعال/غیرفعال در وب‌پنل انجام می‌شود.\n"
-            f"مسیر: <code>{base}/plans</code> — بخش فروش عمده یا مودال «افزودن پلن»."
-        )
-        if callback.message:
-            await callback.message.edit_text(
-                text,
-                reply_markup=kb.admin_plan_kind_keyboard("users"),
-            )
-        return
-    if aud == "resellers" and kind in {"fixed", "payg"}:
-        from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
-        from app.services.resellers import list_reseller_plans, reseller_plan_mode_of
-
-        mode = BILLING_MODE_PAYG if kind == "payg" else BILLING_MODE_FIXED
-        all_plans = await list_reseller_plans(session)
-        plans = [p for p in all_plans if reseller_plan_mode_of(p) == kind]
-        label = "Pay As You Go" if kind == "payg" else "ثابت (کمیسیون)"
-        from app.services.setup_wizard import default_panel_base_url
-
-        base = default_panel_base_url().rstrip("/")
-        body = (
-            f"🤝 <b>پلن‌های نماینده — {label}</b>\n"
-            f"افزودن/ویرایش کامل در وب‌پنل: <code>{base}/plans#reseller-plans</code>\n\n"
-        )
-        if not plans:
-            body += "هنوز پلنی در این دسته نیست."
-        else:
-            from app.services.resellers import format_reseller_plan_apply_detail
-
-            cards = []
-            for p in plans[:10]:
-                cards.append(format_reseller_plan_apply_detail(p, currency=get_settings().currency))
-            body += "\n\n".join(cards)
-        if callback.message:
-            await callback.message.edit_text(
-                body,
-                reply_markup=kb.admin_reseller_plans_list_keyboard(
-                    plans,
-                    mode=kind,
-                    back_callback="adm:plans:aud:resellers",
-                ),
-            )
-        return
-    await callback.answer("نامعتبر", show_alert=True)
-
-
-@router.callback_query(F.data.startswith("adm:resplan:hint:"))
-async def adm_resplan_hint(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    from app.services.setup_wizard import default_panel_base_url
-
-    base = default_panel_base_url().rstrip("/")
-    await callback.answer(
-        f"ویرایش در وب‌پنل: {base}/plans",
-        show_alert=True,
-    )
-
 
 @router.callback_query(F.data.startswith("adm:plan:view:"))
 async def adm_plan_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -676,6 +566,7 @@ async def adm_plan_add(callback: CallbackQuery, state: FSMContext, db_user: BotU
         return
     await callback.answer()
     await state.set_state(AdminStates.add_plan_name)
+    await state.update_data(_adm_plans_aud="users", _adm_plans_kind="fixed")
     if callback.message:
         await callback.message.answer("نام پلن را بفرستید:", reply_markup=kb.cancel_reply())
 
@@ -688,7 +579,7 @@ async def plan_name(message: Message, state: FSMContext, db_user: BotUser):
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_plans_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
         return
     await state.update_data(name=(message.text or "").strip())
     await state.set_state(AdminStates.add_plan_price)
@@ -703,7 +594,7 @@ async def plan_price(message: Message, state: FSMContext, db_user: BotUser):
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_plans_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
         return
     try:
         price = int((message.text or "").replace(",", "").replace("٬", ""))
@@ -723,7 +614,7 @@ async def plan_days(message: Message, state: FSMContext, db_user: BotUser):
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_plans_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
         return
     try:
         days = int(message.text or "30")
@@ -746,7 +637,7 @@ async def plan_gb(message: Message, state: FSMContext, db_user: BotUser):
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_plans_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
         return
     try:
         gb = float(message.text or "0")
@@ -757,10 +648,6 @@ async def plan_gb(message: Message, state: FSMContext, db_user: BotUser):
     await state.set_state(AdminStates.add_plan_link)
     await message.answer(
         "اتصال پاسارگارد را انتخاب کنید:",
-        reply_markup=kb.admin_plans_reply_keyboard(),
-    )
-    await message.answer(
-        "یکی از گزینه‌های زیر را انتخاب کنید:",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="📋 از تمپلیت", callback_data="adm:plan:new:mode:tpl")],
@@ -780,11 +667,11 @@ async def plan_link_cancel(message: Message, state: FSMContext, db_user: BotUser
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_plans_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _plans_flow_reply_kb(state))
         return
     await message.answer(
         "اتصال را از دکمه‌های زیر پیام انتخاب کنید، یا انصراف بزنید.",
-        reply_markup=kb.admin_plans_reply_keyboard(),
+        reply_markup=await _plans_flow_reply_kb(state),
     )
 
 
@@ -1080,6 +967,51 @@ async def plan_toggle(callback: CallbackQuery, session: AsyncSession, db_user: B
             return
         except Exception:
             pass
+    await _render_plans_list(callback, session)
+
+
+@router.callback_query(F.data.startswith("adm:plan:delask:"))
+async def adm_plan_del_ask(callback: CallbackQuery, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    pid = int(callback.data.rsplit(":", 1)[-1])
+    await callback.answer()
+    if callback.message:
+        await callback.message.edit_text(
+            "⚠️ این پلن از فروشگاه حذف شود؟",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="🗑 تأیید حذف",
+                            callback_data=f"adm:plan:del:{pid}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="انصراف",
+                            callback_data=f"adm:plan:view:{pid}",
+                        )
+                    ],
+                ]
+            ),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:plan:del:"))
+async def adm_plan_del(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    pid = int(callback.data.rsplit(":", 1)[-1])
+    plan = await session.get(Plan, pid)
+    if not plan or plan.is_trial:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await session.delete(plan)
+    await session.commit()
+    await callback.answer("حذف شد")
     await _render_plans_list(callback, session)
 
 

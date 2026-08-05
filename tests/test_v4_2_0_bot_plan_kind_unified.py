@@ -40,11 +40,13 @@ class ShopKindFlowTests(unittest.TestCase):
 
 class AdminPlanKindFlowTests(unittest.TestCase):
     def test_admin_audience_and_kind_callbacks(self):
-        src = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        self.assertIn("adm:plans:aud:", src)
-        self.assertIn("adm:plans:kind:", src)
-        self.assertIn("admin_plan_audience_keyboard", src)
-        self.assertIn("admin_plan_kind_keyboard", src)
+        admin_plans = (ROOT / "app/bot/handlers/admin_plans.py").read_text(encoding="utf-8")
+        reply_nav = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
+        self.assertIn("adm:plans:aud:", admin_plans)
+        self.assertIn("adm:plans:kind:", admin_plans)
+        self.assertIn("admin_plans_audience_reply_keyboard", KEYBOARDS_SRC)
+        self.assertIn("admin_plans_kind_reply_keyboard", KEYBOARDS_SRC)
+        self.assertIn("REPLY_ACTION_ADM_PLANS_AUD_USERS", reply_nav)
 
     def test_admin_kind_keyboard_user_kinds(self):
         block = KEYBOARDS_SRC[
@@ -70,8 +72,8 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.2.0")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.2.0")
+        self.assertEqual(__version__, "4.2.1")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.2.1")
 
 
 if __name__ == "__main__":
