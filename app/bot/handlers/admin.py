@@ -2115,7 +2115,7 @@ async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_
             [
                 InlineKeyboardButton(
                     text=f"🤝 {name}",
-                    callback_data=f"adm:users:view:{u.id}",
+                    callback_data=f"adm:resellers:view:{u.id}",
                 )
             ]
         )
@@ -2133,6 +2133,179 @@ async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_
             text,
             reply_markup=kb.admin_resellers_list_keyboard(
                 page=page, has_prev=has_prev, has_next=has_next, rows=rows
+            ),
+        )
+
+
+RESELLER_SVCS_PAGE_SIZE = 10
+
+
+async def _render_reseller_card(
+    message: Message,
+    session: AsyncSession,
+    user: BotUser,
+    *,
+    edit: bool = False,
+) -> None:
+    from app.services.resellers import get_reseller_profile
+
+    profile = await get_reseller_profile(session, int(user.id))
+    shop_svc_count = await session.scalar(
+        select(func.count()).select_from(UserService).where(UserService.bot_user_id == user.id)
+    ) or 0
+    pg_uname = (profile.pg_admin_username if profile else None) or "—"
+    mode = (profile.billing_mode if profile else None) or "fixed"
+    active = "فعال" if (profile and profile.is_active) else "غیرفعال"
+    suspended = ""
+    if profile and profile.billing_suspended_at:
+        suspended = "\nوضعیت PAYG: <b>مسدود</b>"
+    bot_uname = f"@{profile.bot_username}" if profile and profile.bot_username else "—"
+    text = (
+        f"🤝 <b>{html.escape(user.full_name or user.username or '—')}</b>\n\n"
+        f"آیدی تلگرام: <code>{user.telegram_id}</code>\n"
+        f"یوزرنیم: @{html.escape(user.username or '—')}\n"
+        f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
+        f"ادمین پاسارگارد: <code>{html.escape(str(pg_uname))}</code>\n"
+        f"حالت صورتحساب: {html.escape(mode)}\n"
+        f"نمایندگی: {active}{suspended}\n"
+        f"ربات اختصاصی: {html.escape(bot_uname)}\n"
+        f"سرویس‌های فروشگاه: {shop_svc_count}\n\n"
+        f"<i>سرویس‌های پاسارگارد = کاربران VPN زیر ادمین نماینده</i>"
+    )
+    markup = kb.admin_reseller_actions(
+        user.id, has_shop_services=int(shop_svc_count) > 0
+    )
+    if edit:
+        try:
+            await message.edit_text(text, reply_markup=markup)
+            return
+        except Exception:
+            pass
+    await message.answer(text, reply_markup=markup)
+
+
+@router.callback_query(F.data.startswith("adm:resellers:view:"))
+async def adm_resellers_view(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    user_id = int(callback.data.split(":")[-1])
+    user = await session.get(BotUser, user_id)
+    if not user or user.role != Role.RESELLER.value:
+        await callback.answer("نماینده یافت نشد", show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        await _render_reseller_card(callback.message, session, user, edit=True)
+
+
+@router.callback_query(F.data.startswith("adm:resellers:svcs:"))
+async def adm_resellers_services(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    # adm:resellers:svcs:{id} or adm:resellers:svcs:{id}:{page}
+    try:
+        user_id = int(parts[3])
+    except (IndexError, ValueError):
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    page = 0
+    if len(parts) >= 5:
+        try:
+            page = max(0, int(parts[4]))
+        except ValueError:
+            page = 0
+
+    from app.services.pasarguard import as_list
+    from app.services.resellers import get_reseller_profile
+
+    user = await session.get(BotUser, user_id)
+    profile = await get_reseller_profile(session, user_id)
+    if not user or not profile:
+        await callback.answer("نماینده یافت نشد", show_alert=True)
+        return
+    uname = (profile.pg_admin_username or "").strip()
+    await callback.answer()
+    back_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ بازگشت",
+                    callback_data=f"adm:resellers:view:{user_id}",
+                )
+            ]
+        ]
+    )
+    if not uname:
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                "ادمین پاسارگارد برای این نماینده تنظیم نشده.",
+                reply_markup=back_kb,
+            )
+        return
+    try:
+        data = await get_pg().get_users(
+            admin=uname,
+            limit=RESELLER_SVCS_PAGE_SIZE,
+            offset=page * RESELLER_SVCS_PAGE_SIZE,
+        )
+    except Exception as e:
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                f"❌ خطا در دریافت سرویس‌ها:\n{html.escape(str(e)[:200])}",
+                reply_markup=back_kb,
+            )
+        return
+    if isinstance(data, list):
+        users = [u for u in data if isinstance(u, dict)]
+        total = None
+    else:
+        users = as_list(data, "users")
+        total = None
+        if isinstance(data, dict):
+            for key in ("total", "count", "total_count"):
+                if data.get(key) is not None:
+                    try:
+                        total = int(data[key])
+                        break
+                    except (TypeError, ValueError):
+                        pass
+    has_prev = page > 0
+    if total is not None:
+        has_next = (page + 1) * RESELLER_SVCS_PAGE_SIZE < total
+        page_label = f"{page + 1}/{(max(total - 1, 0) // RESELLER_SVCS_PAGE_SIZE) + 1}"
+        total_bit = f" · جمع: {total}"
+    else:
+        has_next = len(users) >= RESELLER_SVCS_PAGE_SIZE
+        page_label = f"{page + 1}"
+        total_bit = ""
+    text = (
+        f"📦 <b>سرویس‌های پاسارگارد نماینده</b>\n"
+        f"ادمین: <code>{html.escape(uname)}</code>\n"
+        f"صفحه {page_label}{total_bit}"
+    )
+    if not users:
+        text += "\n\nسرویسی زیر این ادمین نیست."
+    else:
+        text += f"\n\n{len(users)} کاربر در این صفحه — برای جزئیات انتخاب کنید."
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=kb.admin_reseller_services_keyboard(
+                user_id,
+                page=page,
+                has_prev=has_prev,
+                has_next=has_next,
+                pg_users=users,
             ),
         )
 

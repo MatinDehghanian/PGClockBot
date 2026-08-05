@@ -358,6 +358,34 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         await set_settings_bulk(session, payload, reseller_id=rid)
         return RedirectResponse(f"/shop-settings?tab={tab}&saved=1", status_code=303)
 
+    @app.post("/shop-settings/cancel-pending-orders")
+    async def shop_cancel_pending_orders(
+        request: Request,
+        staff: dict = Depends(shop_dep),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if staff.get("role") != "reseller":
+            return RedirectResponse("/settings?tab=payment", status_code=303)
+        rid = _rid(staff)
+        if not rid:
+            return _deny_scope()
+        from app.services.orders import cancel_stale_pending_for_settings
+
+        try:
+            n = await cancel_stale_pending_for_settings(
+                session, reseller_id=int(rid), force=True
+            )
+        except Exception as e:
+            return RedirectResponse(
+                f"/shop-settings?tab=payment&err={quote(str(e)[:200])}",
+                status_code=303,
+            )
+        msg = f"{n} سفارش معلق/تأییدنشده لغو شد" if n else "سفارش معلقی برای لغو نبود"
+        return RedirectResponse(
+            f"/shop-settings?tab=payment&saved=1&msg={quote(msg)}",
+            status_code=303,
+        )
+
     @app.post("/shop-notifications")
     async def shop_notifications_save(
         request: Request,

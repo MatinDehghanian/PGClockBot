@@ -932,6 +932,124 @@ def stars_amount_for_toman(amount_toman: int, toman_per_star: int) -> int:
     rate = max(1, int(toman_per_star or 1))
     return max(1, (int(amount_toman) + rate - 1) // rate)
 
+
+_STALE_PENDING_BASE = frozenset(
+    {
+        OrderStatus.PENDING.value,
+        OrderStatus.AWAITING_RECEIPT.value,
+        OrderStatus.REJECTED.value,
+    }
+)
+
+
+async def cancel_stale_pending_orders(
+    session: AsyncSession,
+    *,
+    older_than_hours: int,
+    reseller_id: int | None = None,
+    include_awaiting_approval: bool = False,
+    limit: int = 500,
+) -> int:
+    """Cancel unpaid/abandoned orders older than TTL. Returns count cancelled.
+
+    Uses CANCELLED (not REJECTED) so orders leave the payable set and cannot be
+    completed later. Concurrent approve/pay wins via conditional UPDATE.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    hours = max(1, min(720, int(older_than_hours or 1)))
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    statuses = set(_STALE_PENDING_BASE)
+    if include_awaiting_approval:
+        statuses.add(OrderStatus.AWAITING_APPROVAL.value)
+
+    q = (
+        select(Order)
+        .where(
+            Order.status.in_(tuple(statuses)),
+            Order.created_at < cutoff,
+        )
+        .order_by(Order.id.asc())
+        .limit(max(1, min(2000, int(limit or 500))))
+    )
+    if reseller_id is None:
+        q = q.where(Order.reseller_id.is_(None))
+    else:
+        q = q.where(Order.reseller_id == int(reseller_id))
+
+    orders = list((await session.execute(q)).scalars().all())
+    cancelled = 0
+    for order in orders:
+        order_id = int(order.id)
+        with session.no_autoflush:
+            claim = await session.execute(
+                update(Order)
+                .where(
+                    Order.id == order_id,
+                    Order.status.in_(tuple(statuses)),
+                )
+                .values(status=OrderStatus.CANCELLED.value)
+                .execution_options(synchronize_session=False)
+            )
+        if claim.rowcount != 1:
+            continue
+        # Reject sibling pending payments
+        pend = await session.execute(
+            select(Payment).where(
+                Payment.order_id == order_id,
+                Payment.status == PaymentStatus.PENDING.value,
+            )
+        )
+        for pay in pend.scalars().all():
+            pay.status = PaymentStatus.REJECTED.value
+            pay.review_note = pay.review_note or "auto-cancelled stale pending order"
+        if order.discount_code:
+            await _release_discount_code(session, order.discount_code)
+        # Drop unpaid trial claim so user can retry
+        note = (order.note or "").strip()
+        if note.startswith("trial:"):
+            shop_key = int(order.reseller_id) if order.reseller_id else 0
+            claim_row = (
+                await session.execute(
+                    select(TrialClaim).where(
+                        TrialClaim.user_id == order.user_id,
+                        TrialClaim.shop_key == shop_key,
+                    )
+                )
+            ).scalar_one_or_none()
+            if claim_row:
+                await session.delete(claim_row)
+        cancelled += 1
+
+    if cancelled:
+        await session.commit()
+    return cancelled
+
+
+async def cancel_stale_pending_for_settings(
+    session: AsyncSession,
+    *,
+    reseller_id: int | None = None,
+    force: bool = False,
+) -> int:
+    """Read shop/platform settings and cancel stale pending orders."""
+    from app.services.users import get_all_settings, on
+
+    ui = await get_all_settings(session, reseller_id=reseller_id)
+    if not force and not on(ui.get("pending_order_cleanup_enabled", "0")):
+        return 0
+    try:
+        hours = int(float(ui.get("pending_order_ttl_hours") or "48"))
+    except (TypeError, ValueError):
+        hours = 48
+    include_aa = on(ui.get("pending_order_cleanup_awaiting_approval", "0"))
+    return await cancel_stale_pending_orders(
+        session,
+        older_than_hours=hours,
+        reseller_id=reseller_id,
+        include_awaiting_approval=include_aa,
+    )
+
 async def attach_receipt(session: AsyncSession, payment: Payment, file_id: str) -> Payment:
     """Attach receipt only while payment is still pending (never overwrite approved/rejected)."""
     payment_id = int(payment.id)

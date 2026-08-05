@@ -1,0 +1,17 @@
+{# Manual cancel button for pending orders — rendered on payment tab #}
+<div class="card settings-card">
+  <h2>حذف دستی سفارش‌های معلق</h2>
+  <p class="muted update-card-caption">
+    سفارش‌های پرداخت‌نشده یا ردشدهٔ قدیمی‌تر از «سن لغو» را همین حالا لغو می‌کند
+    (وضعیت <code>cancelled</code>). تأیید خودکار روشن نباشد هم اجرا می‌شود.
+  </p>
+  <form method="post" action="{{ pending_orders_action }}"
+        data-confirm="سفارش‌های معلق/تأییدنشده قدیمی‌تر از TTL لغو شوند؟ این عمل برگشت‌ناپذیر است."
+        data-confirm-title="لغو سفارش‌های معلق"
+        data-confirm-warn="1"
+        data-confirm-label="لغو کن">
+    <div class="actions">
+      <button class="btn btn-warn" type="submit">لغو سفارش‌های معلق الان</button>
+    </div>
+  </form>
+</div>

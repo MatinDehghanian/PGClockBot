@@ -1771,6 +1771,93 @@ def admin_resellers_list_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=kb_rows)
 
 
+def admin_reseller_actions(user_id: int, *, has_shop_services: bool = False) -> InlineKeyboardMarkup:
+    """Reseller card actions — PG-owned services are primary; optional shop UserServices link."""
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text="📦 سرویس‌های پاسارگارد",
+                callback_data=f"adm:resellers:svcs:{user_id}",
+            )
+        ],
+    ]
+    if has_shop_services:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🛒 سرویس‌های فروشگاه",
+                    callback_data=f"adm:users:svcs:{user_id}",
+                )
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="🤝 حذف نمایندگی",
+                callback_data=f"adm:users:unres:{user_id}",
+            )
+        ]
+    )
+    rows.append(
+        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:resellers:list:0")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_reseller_services_keyboard(
+    reseller_id: int,
+    *,
+    page: int,
+    has_prev: bool,
+    has_next: bool,
+    pg_users: list[dict],
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    buttons: list[InlineKeyboardButton] = []
+    for u in pg_users:
+        uid = u.get("id")
+        if uid is None:
+            continue
+        uname = str(u.get("username") or f"#{uid}")[:28]
+        status = str(u.get("status") or "")
+        mark = "⛔ " if status in {"disabled", "limited", "expired"} else (
+            "⏸ " if status == "on_hold" else ""
+        )
+        buttons.append(
+            InlineKeyboardButton(
+                text=f"{mark}{uname}"[:48],
+                callback_data=f"adm:pg:u:{int(uid)}",
+            )
+        )
+    rows = chunk_buttons(buttons, cols=2)
+    nav: list[InlineKeyboardButton] = []
+    if has_prev:
+        nav.append(
+            InlineKeyboardButton(
+                text="◀️ قبل",
+                callback_data=f"adm:resellers:svcs:{reseller_id}:{page - 1}",
+            )
+        )
+    if has_next:
+        nav.append(
+            InlineKeyboardButton(
+                text="بعد ▶️",
+                callback_data=f"adm:resellers:svcs:{reseller_id}:{page + 1}",
+            )
+        )
+    if nav:
+        rows.append(nav)
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ بازگشت",
+                callback_data=f"adm:resellers:view:{reseller_id}",
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def admin_user_actions(
     user_id: int,
     *,

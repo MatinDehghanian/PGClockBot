@@ -91,6 +91,9 @@ class UiWiringTests(unittest.TestCase):
         self.assertIn('data-confirm-reason="1"', users)
         self.assertIn('name="reason"', users)
         self.assertIn("/users/{{ u.id }}/block", users)
+        self.assertIn("/users/{{ u.id }}/delete", users)
+        # Role is edited in modal body, not list
+        self.assertNotIn("/users/{{ u.id }}/role", users)
 
     def test_handlers_call_notify(self):
         api = (ROOT / "app/api/app.py").read_text(encoding="utf-8")

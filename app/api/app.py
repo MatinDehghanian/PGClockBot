@@ -2442,7 +2442,23 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        result = await session.execute(select(BotUser).order_by(BotUser.id.desc()).limit(200))
+        from sqlalchemy import and_, exists, not_
+
+        # Pure resellers (role=reseller, no shop UserService) stay on /resellers only.
+        # Dual users (reseller + shop services) appear in both lists.
+        has_shop_service = exists(
+            select(UserService.id).where(UserService.bot_user_id == BotUser.id)
+        )
+        pure_reseller = and_(
+            BotUser.role == Role.RESELLER.value,
+            not_(has_shop_service),
+        )
+        result = await session.execute(
+            select(BotUser)
+            .where(not_(pure_reseller))
+            .order_by(BotUser.id.desc())
+            .limit(200)
+        )
         users = list(result.scalars().all())
         return render(
             request,
@@ -2452,6 +2468,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "users": users,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
+                "open_edit": request.query_params.get("edit"),
             },
         )
 
@@ -2470,8 +2487,15 @@ def create_api_app(lifespan=None) -> FastAPI:
             return _redirect_msg("/users", err="کاربر یافت نشد")
         if role not in {Role.USER.value, Role.RESELLER.value, Role.ADMIN.value}:
             return _redirect_msg("/users", err="نقش نامعتبر")
-        if len(reason) < 3:
-            return _redirect_msg("/users", err="علت تغییر نقش الزامی است (حداقل ۳ کاراکتر)")
+        # Reason only required when revoking reseller (sent to user); other role changes optional
+        demoting_reseller = (
+            user.role == Role.RESELLER.value and role != Role.RESELLER.value
+        )
+        if demoting_reseller and len(reason) < 3:
+            return _redirect_msg(
+                "/users",
+                err="علت حذف نمایندگی الزامی است (حداقل ۳ کاراکتر)",
+            )
 
         from app.services.notifications import actor_label_from_staff, notify_account_edit
 
@@ -3005,6 +3029,29 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["support_contacts"] = await get_support_contacts(session)
 
         return render(request, "settings.html", ctx)
+
+    @app.post("/settings/cancel-pending-orders")
+    async def settings_cancel_pending_orders(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Manual cancel of stale pending/unapproved orders (platform shop)."""
+        from app.services.orders import cancel_stale_pending_for_settings
+
+        try:
+            n = await cancel_stale_pending_for_settings(
+                session, reseller_id=None, force=True
+            )
+        except Exception as e:
+            return _redirect_msg(
+                "/settings?tab=payment",
+                err=f"لغو سفارش‌ها ناموفق: {e}",
+            )
+        return _redirect_msg(
+            "/settings?tab=payment",
+            ok=f"{n} سفارش معلق/تأییدنشده لغو شد" if n else "سفارش معلقی برای لغو نبود",
+        )
 
     async def _bot_token_status(token: str) -> dict:
         token = (token or "").strip()

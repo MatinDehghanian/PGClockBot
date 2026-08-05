@@ -39,6 +39,18 @@ def _q(msg: str) -> str:
     return quote(str(msg), safe="")
 
 
+def _redirect_reseller_edit(user_id: int, *, ok: str | None = None, err: str | None = None):
+    """Return to list and reopen edit modal."""
+    qs = [f"edit={int(user_id)}"]
+    if err:
+        qs.append(f"err={_q(err)}")
+    elif ok:
+        qs.append(f"ok={_q(ok)}")
+    return RedirectResponse(f"/resellers?{'&'.join(qs)}", status_code=303)
+
+
+
+
 def _feature_perms_from_form(form) -> str:
     selected = []
     for key, _ in FEATURE_PERMS:
@@ -197,6 +209,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 "using_custom_pg_panel_url": bool(custom_pg_url),
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
+                "open_edit": request.query_params.get("edit"),
             },
         )
 
@@ -359,29 +372,28 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                     pg_limits = ov
             except Exception:
                 pg_limits = None
-        return render(
-            request,
-            "reseller_edit.html",
-            {
-                "staff": staff,
-                "user": user,
-                "profile": profile,
-                "feature_perms": FEATURE_PERMS,
-                "selected_perms": perms,
-                "pg_roles": roles,
-                "is_payg": is_payg(profile),
-                "billing_txs": billing_txs,
-                "billing_rate": billing_rate,
-                "wallet_balance": wallet_balance,
-                "wallet_txs": wallet_txs,
-                "pg_limits": pg_limits,
-                "min_unsuspend": min_unsuspend,
-                "format_toman": format_toman,
-                "topup_nonce": secrets.token_hex(8),
-                "flash_ok": request.query_params.get("ok"),
-                "flash_err": request.query_params.get("err"),
-            },
-        )
+        ctx = {
+            "staff": staff,
+            "user": user,
+            "profile": profile,
+            "feature_perms": FEATURE_PERMS,
+            "selected_perms": perms,
+            "pg_roles": roles,
+            "is_payg": is_payg(profile),
+            "billing_txs": billing_txs,
+            "billing_rate": billing_rate,
+            "wallet_balance": wallet_balance,
+            "wallet_txs": wallet_txs,
+            "pg_limits": pg_limits,
+            "min_unsuspend": min_unsuspend,
+            "format_toman": format_toman,
+            "topup_nonce": secrets.token_hex(8),
+            "flash_ok": request.query_params.get("ok"),
+            "flash_err": request.query_params.get("err"),
+        }
+        if request.query_params.get("fragment") == "1":
+            return render(request, "_reseller_edit_body.html", ctx)
+        return render(request, "reseller_edit.html", ctx)
 
     @app.post("/resellers/{user_id}/edit")
     async def reseller_edit_save(
@@ -421,10 +433,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 session, pg_user, exclude_profile_id=int(profile.id)
             )
             if link_err:
-                return RedirectResponse(
-                    f"/resellers/{user_id}/edit?err={_q(link_err)}",
-                    status_code=303,
-                )
+                return _redirect_reseller_edit(user_id, err=link_err)
         profile.pg_admin_username = pg_user or None
         # Push role to PasarGuard so edit is not local-only (limited roles depend on live role).
         if profile.pg_admin_username and new_pg_role_id is not None:
@@ -436,15 +445,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                     {"role_id": int(new_pg_role_id)},
                 )
             except PasarGuardError as e:
-                return RedirectResponse(
-                    f"/resellers/{user_id}/edit?err={_q(e.user_message(fallback=str(e)))}",
-                    status_code=303,
-                )
+                return _redirect_reseller_edit(user_id, err=e.user_message(fallback=str(e)))
             except Exception as e:
-                return RedirectResponse(
-                    f"/resellers/{user_id}/edit?err={_q(f'همگام‌سازی نقش پاسارگارد ناموفق: {e}')}",
-                    status_code=303,
-                )
+                return _redirect_reseller_edit(user_id, err=f'همگام‌سازی نقش پاسارگارد ناموفق: {e}')
         from app.services.reseller_access import normalize_telegram_ids_csv
 
         profile.bot_admin_ids = normalize_telegram_ids_csv(
@@ -457,22 +460,16 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
 
             ok, perr = validate_password_strength(new_pass)
             if not ok:
-                return RedirectResponse(
-                    f"/resellers/{user_id}/edit?err={_q(perr)}",
-                    status_code=303,
-                )
+                return _redirect_reseller_edit(user_id, err=perr)
             try:
                 await apply_reseller_panel_password(session, profile, new_pass, sync_pg=True)
             except ValueError as e:
-                return RedirectResponse(
-                    f"/resellers/{user_id}/edit?err={_q(str(e))}",
-                    status_code=303,
-                )
+                return _redirect_reseller_edit(user_id, err=str(e))
             if profile.web_username and not profile.setup_completed_at:
                 profile.setup_completed_at = datetime.now(timezone.utc)
         user.role = Role.RESELLER.value if profile.is_active else Role.USER.value
         await session.commit()
-        return RedirectResponse(f"/resellers/{user_id}/edit?ok={_q('ذخیره شد')}", status_code=303)
+        return _redirect_reseller_edit(user_id, ok='ذخیره شد')
 
     @app.post("/resellers/{user_id}/billing-topup")
     async def reseller_billing_topup(
@@ -488,24 +485,15 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         try:
             amount = int(float(raw))
         except (TypeError, ValueError):
-            return RedirectResponse(
-                f"/resellers/{user_id}/edit?err={_q('مبلغ نامعتبر است')}",
-                status_code=303,
-            )
+            return _redirect_reseller_edit(user_id, err='مبلغ نامعتبر است')
         if amount < 1000:
-            return RedirectResponse(
-                f"/resellers/{user_id}/edit?err={_q('حداقل شارژ ۱۰۰۰ تومان است')}",
-                status_code=303,
-            )
+            return _redirect_reseller_edit(user_id, err='حداقل شارژ ۱۰۰۰ تومان است')
         from app.services.billing import credit_topup
 
         actor = str(staff.get("username") or staff.get("role") or "admin")
         nonce = str(form.get("nonce") or "").strip()
         if len(nonce) < 8:
-            return RedirectResponse(
-                f"/resellers/{user_id}/edit?err={_q('فرم شارژ منقضی شده — صفحه را تازه کنید')}",
-                status_code=303,
-            )
+            return _redirect_reseller_edit(user_id, err='فرم شارژ منقضی شده — صفحه را تازه کنید')
         try:
             await credit_topup(
                 session,
@@ -516,14 +504,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 idempotency_key=f"manual:{user_id}:{amount}:{note}:{actor}:{nonce}",
             )
         except ValueError as e:
-            return RedirectResponse(
-                f"/resellers/{user_id}/edit?err={_q(str(e))}",
-                status_code=303,
-            )
-        return RedirectResponse(
-            f"/resellers/{user_id}/edit?ok={_q(f'شارژ کیف پول به مبلغ {amount:,} تومان ثبت شد')}",
-            status_code=303,
-        )
+            return _redirect_reseller_edit(user_id, err=str(e))
+        return _redirect_reseller_edit(user_id, ok=f'شارژ کیف پول به مبلغ {amount:,} تومان ثبت شد')
 
     @app.post("/resellers/{user_id}/delete")
     async def reseller_delete(
@@ -600,9 +582,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             return RedirectResponse(f"/resellers?err={_q('نقش نامعتبر')}", status_code=303)
 
         reason = str(form.get("reason") or "").strip()
-        if len(reason) < 3:
+        # Reason only when demoting to user (revokes reseller — reason goes to Telegram)
+        if role == Role.USER.value and len(reason) < 3:
             return RedirectResponse(
-                f"/resellers?err={_q('علت تغییر نقش الزامی است (حداقل ۳ کاراکتر)')}",
+                f"/resellers?edit={user_id}&err={_q('علت حذف نمایندگی الزامی است (حداقل ۳ کاراکتر)')}",
                 status_code=303,
             )
 

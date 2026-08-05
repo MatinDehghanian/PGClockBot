@@ -49,26 +49,28 @@ class BotUserAdminServiceTests(unittest.IsolatedAsyncioTestCase):
 
 class UserEditUiTests(unittest.TestCase):
     def test_template_and_routes(self):
-        edit = Path("app/web/templates/user_edit.html").read_text(encoding="utf-8")
+        edit = Path("app/web/templates/_user_edit_body.html").read_text(encoding="utf-8")
         self.assertIn("wallet-credit", edit)
-        self.assertIn("تمدید دستی", edit)
+        self.assertIn("تمدید با پلن", edit)
         self.assertIn("افزایش مانده", edit)
         self.assertIn("کپی لینک", edit)
         self.assertIn("مانده کیف پول", edit)
 
         users = Path("app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn("/users/{{ u.id }}/edit", users)
+        self.assertIn("modal-user-edit", users)
+        self.assertIn("/users/{{ u.id }}/edit?fragment=1", users)
 
         pages = Path("app/api/user_pages.py").read_text(encoding="utf-8")
         self.assertIn("register_user_pages", pages)
         self.assertIn("/users/{user_id}/wallet-credit", pages)
         self.assertIn("/services/{service_id}/renew", pages)
+        self.assertIn("fragment", pages)
 
         app = Path("app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("register_user_pages", app)
 
     def test_reseller_edit_wallet_balance_column(self):
-        src = Path("app/web/templates/reseller_edit.html").read_text(encoding="utf-8")
+        src = Path("app/web/templates/_reseller_edit_body.html").read_text(encoding="utf-8")
         self.assertIn("مانده کیف پول", src)
         self.assertIn("wallet_txs", src)
         self.assertIn("تراکنش‌های کیف پول", src)

@@ -1141,20 +1141,66 @@ async def _send_to_user_chat(
     user: BotUser,
     text: str,
 ) -> bool:
+    """Notify the user via main bot and, when available, their shop/reseller bot.
+
+    Block / unblock / delete / role messages must reach Telegram even if the person
+    primarily uses a dedicated shop bot — and vice versa.
+    """
     if not user.telegram_id:
         return False
-    try:
-        from app.services.reseller_bots import open_notify_bot_for_user
+    from app.bot import create_bot
+    from app.services.reseller_bots import open_notify_bot_for_reseller
 
-        bot, should_close = await open_notify_bot_for_user(session, user)
+    chat_id = int(user.telegram_id)
+    sent = False
+    tokens_used: set[str] = set()
+
+    # 1) Always try the main platform bot
+    try:
+        bot = create_bot()
         try:
-            await bot.send_message(int(user.telegram_id), text, parse_mode="HTML")
-            return True
+            await bot.send_message(chat_id, text, parse_mode="HTML")
+            sent = True
+            tok = getattr(bot, "token", None)
+            if tok:
+                tokens_used.add(str(tok))
         finally:
-            if should_close:
-                await bot.session.close()
+            await bot.session.close()
     except Exception:
-        return False
+        pass
+
+    # 2) Also shop bot: customer of a shop, or own reseller dedicated bot
+    shop_targets: list[int] = []
+    reseller_id = getattr(user, "reseller_id", None)
+    if reseller_id:
+        shop_targets.append(int(reseller_id))
+    if getattr(user, "role", None) == "reseller" and int(user.id) not in shop_targets:
+        shop_targets.append(int(user.id))
+
+    for rid in shop_targets:
+        shop_bot = None
+        should_close = False
+        try:
+            shop_bot, should_close = await open_notify_bot_for_reseller(session, rid)
+            if shop_bot is None:
+                continue
+            tok = str(getattr(shop_bot, "token", "") or "")
+            if tok and tok in tokens_used:
+                continue
+            await shop_bot.send_message(chat_id, text, parse_mode="HTML")
+            sent = True
+            if tok:
+                tokens_used.add(tok)
+        except Exception:
+            pass
+        finally:
+            if should_close and shop_bot is not None:
+                try:
+                    await shop_bot.session.close()
+                except Exception:
+                    pass
+
+    return sent
 
 
 async def notify_account_edit(

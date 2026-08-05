@@ -106,6 +106,10 @@
         <button class="btn" type="submit">ذخیره تنظیمات</button>
       </div>
     </form>
+    {% if tab == 'payment' %}
+      {% set pending_orders_action = '/settings/cancel-pending-orders' %}
+      {% include "_settings_pending_orders.html" %}
+    {% endif %}
   {% endif %}
 
   </div>

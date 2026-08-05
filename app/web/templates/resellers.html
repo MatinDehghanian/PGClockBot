@@ -127,22 +127,10 @@
         <td>{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.web_username %}<span class="badge pending">بدون ربات</span>{% else %}—{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
-            <form method="post" action="/resellers/{{ u.id }}/role" class="row-actions-stack"
-                  data-confirm="نقش این نماینده/کاربر تغییر کند؟ پیام و علت برای او در ربات ارسال می‌شود."
-                  data-confirm-title="تأیید تغییر نقش"
-                  data-confirm-reason="1"
-                  data-confirm-reason-label="علت تغییر نقش"
-                  data-confirm-reason-name="reason"
-                  data-confirm-label="اعمال نقش">
-              <input type="hidden" name="reason" value="" />
-              <select name="role" class="select-sm">
-                <option value="user" {% if u.role=='user' %}selected{% endif %}>کاربر</option>
-                <option value="reseller" {% if u.role=='reseller' %}selected{% endif %}>نماینده</option>
-                <option value="admin" {% if u.role=='admin' %}selected{% endif %}>مدیر</option>
-              </select>
-              <button class="btn btn-sm" type="submit">اعمال نقش</button>
-            </form>
-            <a class="btn btn-ghost btn-sm" href="/resellers/{{ u.id }}/edit">ویرایش</a>
+            <button type="button" class="btn btn-ghost btn-sm"
+                    data-modal-open="modal-reseller-edit"
+                    data-edit-url="/resellers/{{ u.id }}/edit?fragment=1"
+                    data-edit-title="ویرایش نماینده #{{ u.id }}">ویرایش</button>
             <form method="post" action="/resellers/{{ u.id }}/delete"
                   data-confirm="نمایندگی حذف شود؟ ادمین پاسارگارد متصل هم حذف می‌شود و علت برای کاربر ارسال می‌گردد. حساب بات، سفارش‌ها و کیف پول کاربر باقی می‌ماند مگر «حذف کاربر» را بزنید."
                   data-confirm-title="حذف نمایندگی (+ ادمین پاسارگارد)"
@@ -234,4 +222,58 @@
     </form>
   </div>
 </div>
+
+<div class="ui-modal" id="modal-reseller-edit" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel ui-modal-panel-xl" role="dialog" aria-modal="true" aria-labelledby="reseller-edit-title">
+    <div class="ui-modal-head">
+      <h2 id="reseller-edit-title">ویرایش نماینده</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div id="reseller-edit-body" class="edit-modal-body">
+      <p class="muted">در حال بارگذاری…</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+(function(){
+  const body = document.getElementById('reseller-edit-body');
+  const titleEl = document.getElementById('reseller-edit-title');
+  if (!body) return;
+
+  async function loadEdit(url, title){
+    body.innerHTML = '<p class="muted">در حال بارگذاری…</p>';
+    if (titleEl && title) titleEl.textContent = title;
+    try {
+      const resp = await fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'text/html' } });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      body.innerHTML = await resp.text();
+      if (typeof window.enhanceAllSelects === 'function') window.enhanceAllSelects(body);
+      document.dispatchEvent(new CustomEvent('panel:dom-ready', { detail: { root: body } }));
+    } catch (e) {
+      body.innerHTML = '<div class="flash err">بارگذاری ویرایش ناموفق بود.</div>';
+    }
+  }
+
+  document.addEventListener('click', function(e){
+    const btn = e.target.closest('[data-modal-open="modal-reseller-edit"][data-edit-url]');
+    if (!btn) return;
+    loadEdit(btn.getAttribute('data-edit-url'), btn.getAttribute('data-edit-title') || 'ویرایش نماینده');
+  });
+
+  const openId = {{ (open_edit or '')|tojson }};
+  if (openId) {
+    const url = '/resellers/' + openId + '/edit?fragment=1';
+    const open = function(){
+      if (window.openModal) window.openModal('modal-reseller-edit');
+      loadEdit(url, 'ویرایش نماینده #' + openId);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', open);
+    else setTimeout(open, 0);
+  }
+})();
+</script>
 {% endblock %}

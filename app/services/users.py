@@ -444,6 +444,9 @@ DEFAULT_SETTINGS = {
     "wallet_success_text": "مبلغ {amount} به کیف پول شما اضافه شد.",
     "payment_ok_title": "✅ پرداخت تأیید شد",
     "payment_reject_text": "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید.",
+    "pending_order_cleanup_enabled": "0",
+    "pending_order_ttl_hours": "48",
+    "pending_order_cleanup_awaiting_approval": "0",
     "card_pay_text": (
         "مبلغ قابل پرداخت: <b>{amount}</b>\n"
         "شماره کارت: <code>{card}</code>\n"
@@ -751,6 +754,26 @@ SETTING_GROUPS = {
         ("referral_bonus", "پاداش دعوت (تومان)", "number", "هدیه به معرف بعد از خرید موفق دعوت‌شده"),
         ("payment_reject_text", "متن رد پرداخت", "textarea", "وقتی ادمین رسید را رد می‌کند"),
     ],
+    "پاکسازی سفارش‌های معلق": [
+        (
+            "pending_order_cleanup_enabled",
+            "حذف خودکار سفارش‌های معلق",
+            "toggle",
+            "سفارش‌های پرداخت‌نشده قدیمی به‌صورت خودکار لغو شوند",
+        ),
+        (
+            "pending_order_ttl_hours",
+            "سن لغو (ساعت)",
+            "number",
+            "سفارش‌های قدیمی‌تر از این مقدار لغو می‌شوند (۱ تا ۷۲۰)",
+        ),
+        (
+            "pending_order_cleanup_awaiting_approval",
+            "شامل منتظر تأیید رسید",
+            "toggle",
+            "اگر روشن باشد، سفارش‌های awaiting_approval هم بعد از TTL لغو می‌شوند",
+        ),
+    ],
     "کارت به کارت": [
         ("card_number", "شماره کارت", "text", "۱۶ رقم"),
         ("card_holder", "نام صاحب کارت", "text", ""),
@@ -815,6 +838,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "qr": ["QR اشتراک"],
     "payment": [
         "روش‌های پرداخت",
+        "پاکسازی سفارش‌های معلق",
         "کارت به کارت",
         "درگاه پرداخت",
         "رمزارز",

@@ -301,6 +301,7 @@
     </div>
   </div>
   <script src="/static/panel.js?v={{ app_version }}" defer></script>
+  {% block page_scripts %}{% endblock %}
   {% else %}
     {% block auth %}{% endblock %}
   {% endif %}

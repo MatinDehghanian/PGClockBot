@@ -17,13 +17,13 @@ def _q(msg: str) -> str:
 
 
 def _redirect_user(user_id: int, *, ok: str | None = None, err: str | None = None):
+    """After modal edits, return to users list and reopen the edit modal."""
+    qs = [f"edit={int(user_id)}"]
     if err:
-        return RedirectResponse(
-            f"/users/{user_id}/edit?err={_q(err)}", status_code=303
-        )
-    return RedirectResponse(
-        f"/users/{user_id}/edit?ok={_q(ok or 'ذخیره شد')}", status_code=303
-    )
+        qs.append(f"err={_q(err)}")
+    elif ok:
+        qs.append(f"ok={_q(ok)}")
+    return RedirectResponse(f"/users?{'&'.join(qs)}", status_code=303)
 
 
 def register_user_pages(app, *, render, require_admin, get_db) -> None:
@@ -53,20 +53,19 @@ def register_user_pages(app, *, render, require_admin, get_db) -> None:
                 )
             ).scalars().all()
         )
-        return render(
-            request,
-            "user_edit.html",
-            {
-                "staff": staff,
-                "user": user,
-                "services": snaps,
-                "wallet_txs": wallet_txs,
-                "plans": plans,
-                "format_toman": format_toman,
-                "flash_ok": request.query_params.get("ok"),
-                "flash_err": request.query_params.get("err"),
-            },
-        )
+        ctx = {
+            "staff": staff,
+            "user": user,
+            "services": snaps,
+            "wallet_txs": wallet_txs,
+            "plans": plans,
+            "format_toman": format_toman,
+            "flash_ok": request.query_params.get("ok"),
+            "flash_err": request.query_params.get("err"),
+        }
+        if request.query_params.get("fragment") == "1":
+            return render(request, "_user_edit_body.html", ctx)
+        return render(request, "user_edit.html", ctx)
 
     @app.post("/users/{user_id}/wallet-credit")
     async def user_wallet_credit(
@@ -124,40 +123,19 @@ def register_user_pages(app, *, render, require_admin, get_db) -> None:
             plan = await session.get(Plan, int(plan_raw))
             if plan is None or not plan.is_active:
                 return _redirect_user(user_id, err="پلن یافت نشد")
-
-        days = None
-        gb = None
-        days_raw = str(form.get("days") or "").strip()
-        gb_raw = str(form.get("data_limit_gb") or "").strip().replace(",", ".")
-        if days_raw:
-            try:
-                days = int(days_raw)
-            except ValueError:
-                return _redirect_user(user_id, err="روز نامعتبر است")
-        if gb_raw:
-            try:
-                gb = float(gb_raw)
-            except ValueError:
-                return _redirect_user(user_id, err="حجم نامعتبر است")
-        reset = bool(form.get("reset_traffic"))
-
-        if plan is None and days is None and gb is None:
-            # Default: renew from attached plan if any
-            if svc.plan_id:
-                plan = await session.get(Plan, int(svc.plan_id))
-            if plan is None:
-                return _redirect_user(
-                    user_id, err="پلن یا مقادیر روز/حجم را مشخص کنید"
-                )
+        if plan is None and svc.plan_id:
+            plan = await session.get(Plan, int(svc.plan_id))
+        if plan is None:
+            return _redirect_user(user_id, err="پلن تمدید را انتخاب کنید")
 
         try:
             await admin_renew_service(
                 session,
                 svc,
-                days=days,
-                data_limit_gb=gb,
+                days=None,
+                data_limit_gb=None,
                 plan=plan,
-                reset_traffic=reset if plan is None else True,
+                reset_traffic=True,
             )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))

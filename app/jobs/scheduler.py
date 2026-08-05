@@ -248,6 +248,36 @@ async def run_reseller_billing_tick() -> None:
             logger.exception("billing tick failed")
 
 
+async def cleanup_stale_pending_orders() -> None:
+    """Hourly: cancel unpaid pending orders past TTL (platform + shops)."""
+    async with SessionLocal() as session:
+        try:
+            from app.services.orders import cancel_stale_pending_for_settings
+
+            total = await cancel_stale_pending_for_settings(session, reseller_id=None)
+            shop_ids = list(
+                (
+                    await session.execute(
+                        select(ResellerProfile.user_id).where(
+                            ResellerProfile.is_active.is_(True)
+                        )
+                    )
+                ).scalars().all()
+            )
+            for rid in shop_ids:
+                try:
+                    n = await cancel_stale_pending_for_settings(
+                        session, reseller_id=int(rid)
+                    )
+                    total += n
+                except Exception:
+                    logger.exception("pending order cleanup failed for shop %s", rid)
+            if total:
+                logger.info("pending order cleanup cancelled=%s", total)
+        except Exception:
+            logger.exception("pending order cleanup failed")
+
+
 def start_scheduler(bot: Bot) -> None:
     if scheduler.running:
         return
@@ -270,6 +300,15 @@ def start_scheduler(bot: Bot) -> None:
         max_instances=1,
         coalesce=True,
         misfire_grace_time=120,
+    )
+    scheduler.add_job(
+        cleanup_stale_pending_orders,
+        "interval",
+        hours=1,
+        id="pending_order_cleanup",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
     )
     scheduler.start()
     logger.info("Scheduler started")

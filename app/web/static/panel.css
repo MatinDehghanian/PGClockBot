@@ -3346,6 +3346,42 @@ body.modal-open { overflow: hidden; }
   text-size-adjust: 100%;
 }
 .ui-modal-panel-lg { width: min(720px, 100%); }
+.ui-modal-panel-xl { width: min(960px, 100%); }
+.edit-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.edit-section {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+.edit-section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.edit-section h3,
+.edit-section h4 {
+  margin: 0 0 var(--space-1);
+  font-size: 1rem;
+}
+.svc-ops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: flex-end;
+}
+.svc-ops .svc-renew {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.svc-ops .svc-extend {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.table-wrap-visible {
+  overflow: visible;
+}
 .ui-modal-head {
   display: flex;
   align-items: center;

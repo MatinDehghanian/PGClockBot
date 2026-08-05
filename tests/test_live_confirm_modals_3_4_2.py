@@ -35,9 +35,11 @@ class ConfirmModalTests(unittest.TestCase):
     def test_users_block_role_delete_use_data_confirm(self):
         self.assertIn("data-confirm=", USERS)
         self.assertIn("/users/{{ u.id }}/block", USERS)
-        self.assertIn("/users/{{ u.id }}/role", USERS)
+        self.assertIn("/users/{{ u.id }}/delete", USERS)
         self.assertIn("data-confirm-danger", USERS)
         self.assertNotIn("confirm(", USERS)
+        # Role change moved into edit modal — not on list row
+        self.assertNotIn("/users/{{ u.id }}/role", USERS)
 
     def test_resellers_no_native_prompt(self):
         self.assertNotIn("prompt(", RESELLERS)
