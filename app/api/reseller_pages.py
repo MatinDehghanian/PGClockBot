@@ -349,54 +349,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 )
             if profile.web_username and not profile.setup_completed_at:
                 profile.setup_completed_at = datetime.now(timezone.utc)
-        if bool(form.get("reissue_setup")):
-            from app.services.resellers import new_setup_token
-
-            token, expires = new_setup_token()
-            profile.setup_token = token
-            profile.setup_token_expires = expires
-            # Keep web login if creds already exist — link is for bot-token only
-            if profile.web_username and profile.web_password_hash:
-                if not profile.setup_completed_at:
-                    profile.setup_completed_at = datetime.now(timezone.utc)
-            else:
-                profile.setup_completed_at = None
-            base = await get_reseller_panel_base_url(session)
-            pg_panel = await get_reseller_pg_panel_base_url(session) if profile.share_pg_panel_url else ""
-            if base:
-                try:
-                    from app.bot import create_bot
-
-                    bot = create_bot()
-                    try:
-                        from app.services.formatting import copyable
-
-                        parts = [
-                            "🔗 لینک جدید راه‌اندازی نماینده:",
-                            copyable(f"{base}/rsetup/{token}"),
-                            "",
-                            f"آدرس وب‌پنل ربات: {copyable(base)}",
-                            f"ورود: {copyable(f'{base}/login')}",
-                        ]
-                        if pg_panel:
-                            parts += ["", f"آدرس پنل پاسارگارد: {copyable(pg_panel)}"]
-                        if profile.web_username:
-                            parts += [
-                                "",
-                                f"یوزر وب فعلی: {copyable(profile.web_username)}",
-                                "در لینک فقط توکن ربات اختصاصی را ثبت کنید.",
-                            ]
-                        else:
-                            parts += ["", "۴۸ ساعت اعتبار — یوزر/رمز وب را در همان صفحه بسازید."]
-                        await bot.send_message(
-                            user.telegram_id,
-                            "\n".join(parts),
-                            parse_mode="HTML",
-                        )
-                    finally:
-                        await bot.session.close()
-                except Exception:
-                    pass
         user.role = Role.RESELLER.value if profile.is_active else Role.USER.value
         await session.commit()
         return RedirectResponse(f"/resellers/{user_id}/edit?ok={_q('ذخیره شد')}", status_code=303)

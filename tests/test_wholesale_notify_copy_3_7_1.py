@@ -57,9 +57,11 @@ class CredentialsCopyableTests(unittest.TestCase):
             }
         )
         self.assertIn("<code>https://panel.example</code>", text)
-        self.assertIn("<code>https://panel.example/login</code>", text)
+        self.assertNotIn("/login", text)
         self.assertIn("<code>shop_abc</code>", text)
         self.assertIn("<code>Secret1!</code>", text)
+        self.assertNotIn("ربات اختصاصی (اختیاری)", text)
+        self.assertNotIn("rsetup", text)
 
 
 class WholesaleNoQrTests(unittest.IsolatedAsyncioTestCase):

@@ -99,6 +99,8 @@ class UnifiedCredentialsMessageTests(unittest.TestCase):
         text = format_credentials_message(
             {
                 "commission_percent": 15,
+                "plan_name": "نقره‌ای",
+                "billing_mode": "fixed",
                 "unified_credentials": True,
                 "panel_username": "shop_abc",
                 "panel_password": "Secret1!",
@@ -112,9 +114,13 @@ class UnifiedCredentialsMessageTests(unittest.TestCase):
             }
         )
         self.assertIn("ورود یکپارچه", text)
+        self.assertIn("نقره‌ای", text)
         self.assertIn("shop_abc", text)
         self.assertIn("Secret1!", text)
-        self.assertIn("https://panel.example/login", text)
+        self.assertIn("https://panel.example", text)
+        self.assertNotIn("/login", text)
+        self.assertNotIn("rsetup", text)
+        self.assertNotIn("ربات اختصاصی (اختیاری)", text)
         # Should not duplicate separate web/pg credential sections
         self.assertNotIn("وب‌پنل ربات (نماینده)", text)
 
@@ -133,9 +139,10 @@ class UnifiedCredentialsMessageTests(unittest.TestCase):
             }
         )
         self.assertIn("پنل پاسارگارد", text)
-        self.assertIn("وب‌پنل ربات (نماینده)", text)
+        self.assertIn("وب‌پنل ربات", text)
         self.assertIn("web_x", text)
         self.assertIn("pg_y", text)
+        self.assertNotIn("/login", text)
 
 
 class ApplyResellerPasswordTests(unittest.IsolatedAsyncioTestCase):

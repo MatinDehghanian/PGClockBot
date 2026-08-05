@@ -96,7 +96,7 @@
         <td class="mono col-hide-sm">{{ p.commission_percent }}%</td>
         <td class="mono col-hide-sm">{{ p.web_username or '—' }}</td>
         <td class="mono col-hide-sm">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
-        <td>{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.setup_token %}<span class="badge pending">منتظر</span>{% else %}—{% endif %}</td>
+        <td>{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.web_username %}<span class="badge pending">بدون ربات</span>{% else %}—{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
             <form method="post" action="/resellers/{{ u.id }}/role" class="row-actions-stack"

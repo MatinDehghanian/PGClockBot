@@ -146,10 +146,13 @@ class GroupEditAllowlistTests(unittest.TestCase):
         self.assertIn("groups_allowed_for_staff(staff, [eid])", src)
 
 
-class RsetupUsernameValidationTests(unittest.TestCase):
-    def test_rsetup_validates_web_username(self):
-        src = Path("app/api/reseller_setup.py").read_text(encoding="utf-8")
-        self.assertIn("validate_web_username", src)
+class RsetupRemovedTests(unittest.TestCase):
+    def test_rsetup_module_removed(self):
+        self.assertFalse(Path("app/api/reseller_setup.py").exists())
+        self.assertFalse(Path("app/web/templates/reseller_setup.html").exists())
+        app_src = Path("app/api/app.py").read_text(encoding="utf-8")
+        self.assertNotIn("register_reseller_setup", app_src)
+        self.assertNotIn("/rsetup/", app_src)
 
 
 class VersionBumpTests(unittest.TestCase):

@@ -464,12 +464,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                 return RedirectResponse("/", status_code=303)
             return await call_next(request)
 
-        # First-run: only wizard + static/health + reseller setup. Everything else → /
+        # First-run: only wizard + static/health. Everything else → /
         allowed = (
             path == "/"
             or path == "/setup"
             or path.startswith("/setup/")
-            or path.startswith("/rsetup/")
             or path.startswith("/static")
             or path.startswith("/.well-known/")
             or path.startswith("/pwa/")
@@ -570,7 +569,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         if "text/html" in ct:
             response.headers["Cache-Control"] = "no-store, private"
             response.headers["Pragma"] = "no-cache"
-        elif path in {"/login", "/setup", "/security"} or path.startswith("/setup/") or path.startswith("/rsetup/"):
+        elif path in {"/login", "/setup", "/security"} or path.startswith("/setup/"):
             response.headers["Cache-Control"] = "no-store, private"
             response.headers["Pragma"] = "no-cache"
         if _cookie_secure(request):
@@ -646,12 +645,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         get_db=get_db,
     )
     from app.api.reseller_pages import register_reseller_pages
-    from app.api.reseller_setup import register_reseller_setup
     from app.api.security import register_security_pages
     from app.api.shop_settings import register_shop_settings
 
     register_reseller_pages(app, render=render, require_admin=require_admin, get_db=get_db)
-    register_reseller_setup(app, render=render, get_db=get_db)
     register_shop_settings(
         app,
         render=render,
