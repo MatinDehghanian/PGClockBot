@@ -12,15 +12,19 @@ class SelectFixedPosTests(unittest.TestCase):
     def test_js_clears_inset_inline(self):
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
         self.assertIn("is-fixed-pos", js)
-        self.assertIn("insetInline", js)
+        self.assertIn("inset-inline", js)
         block = js.split("function placeUiSelectMenu")[1].split("function clearUiSelectMenuPos")[0]
         self.assertIn("rect.left", block)
         self.assertIn("rect.width", block)
+        self.assertIn("setProperty", block)
 
     def test_css_fixed_override(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".ui-select-menu.is-fixed-pos", css)
         self.assertIn("inset-inline: auto !important", css)
+        # Must NOT use inset:auto !important — that kills JS top/left
+        block = css.split(".ui-select-menu.is-fixed-pos")[1].split(".ui-select.drop-up")[0]
+        self.assertNotIn("inset: auto !important", block)
 
 
 class ResellerTxListTests(unittest.TestCase):

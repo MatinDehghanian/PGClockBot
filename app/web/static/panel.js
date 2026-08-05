@@ -275,28 +275,65 @@
       menu.style.overflow = 'visible';
     }
 
-    /* Custom selects — replace native Windows/macOS popups with panel-styled menus */
+    /* Custom selects — replace native OS pickers with panel-styled menus.
+       Menu is ported to document.body (like kebab) so modal overflow/transform
+       cannot pin it flush to the toggle. Gap + smart up/down stay in JS. */
+    const uiSelectMenuHomes = new WeakMap();
+    const UI_SELECT_GAP = 8; /* --space-1 — small air between toggle and menu */
+    const UI_SELECT_PAD = 8;
+
+    function restoreUiSelectMenu(menu){
+      if (!menu) return;
+      const home = uiSelectMenuHomes.get(menu);
+      menu.classList.remove('is-fixed-pos', 'is-ported');
+      [
+        'position', 'inset', 'inset-inline', 'inset-inline-start', 'inset-inline-end',
+        'top', 'left', 'right', 'bottom', 'width', 'min-width', 'max-height', 'z-index',
+      ].forEach((p) => menu.style.removeProperty(p));
+      if (home && home.parent) {
+        if (home.next && home.next.parentNode === home.parent) {
+          home.parent.insertBefore(menu, home.next);
+        } else {
+          home.parent.appendChild(menu);
+        }
+      }
+    }
+
     function placeUiSelectMenu(wrap){
       if (!wrap) return;
       const toggle = wrap.querySelector('.ui-select-toggle');
-      const menu = wrap.querySelector('.ui-select-menu');
+      let menu = wrap.querySelector('.ui-select-menu') || wrap._portedMenu;
       if (!toggle || !menu || menu.hidden) return;
-      const gap = 8;
-      const pad = 8;
+
+      const gap = UI_SELECT_GAP;
+      const pad = UI_SELECT_PAD;
       const rect = toggle.getBoundingClientRect();
       const vw = window.innerWidth || document.documentElement.clientWidth;
       const vh = window.innerHeight || document.documentElement.clientHeight;
-      /* Fixed + clear inset-inline so RTL absolute CSS cannot shift the menu off the box */
-      menu.classList.add('is-fixed-pos');
-      menu.style.position = 'fixed';
-      menu.style.inset = 'auto';
-      menu.style.insetInline = 'auto';
-      menu.style.insetInlineStart = 'auto';
-      menu.style.insetInlineEnd = 'auto';
-      menu.style.minWidth = '0';
-      menu.style.right = 'auto';
-      menu.style.bottom = 'auto';
-      menu.style.zIndex = '5000';
+
+      if (!wrap.dataset.uiSelectId) {
+        wrap.dataset.uiSelectId = 'us-' + Math.random().toString(36).slice(2, 9);
+      }
+      if (!uiSelectMenuHomes.has(menu)) {
+        uiSelectMenuHomes.set(menu, { parent: menu.parentNode, next: menu.nextSibling });
+      }
+      wrap._portedMenu = menu;
+      menu.dataset.uiSelectOwner = wrap.dataset.uiSelectId;
+      /* Escape modal overflow — fixed coords are viewport-relative on body */
+      if (menu.parentNode !== document.body) {
+        document.body.appendChild(menu);
+      }
+      menu.classList.add('is-fixed-pos', 'is-ported');
+
+      const set = (prop, val) => menu.style.setProperty(prop, val, 'important');
+      set('position', 'fixed');
+      set('right', 'auto');
+      set('bottom', 'auto');
+      set('inset-inline', 'auto');
+      set('inset-inline-start', 'auto');
+      set('inset-inline-end', 'auto');
+      set('min-width', '0');
+      set('z-index', '5000');
 
       let width = Math.max(rect.width, 120);
       let left = rect.left;
@@ -309,49 +346,51 @@
         left = rect.left;
         width = rect.width;
       }
-      menu.style.left = left + 'px';
-      menu.style.width = width + 'px';
+      set('left', Math.round(left) + 'px');
+      set('width', Math.round(width) + 'px');
 
-      const mh = menu.offsetHeight || 120;
-      const spaceBelow = vh - rect.bottom - gap - pad;
-      const spaceAbove = rect.top - gap - pad;
+      /* Tentative max-height so offsetHeight reflects a realistic clamped size */
+      const roomBelow = Math.max(0, vh - rect.bottom - gap - pad);
+      const roomAbove = Math.max(0, rect.top - gap - pad);
+      set('max-height', Math.min(280, Math.max(80, Math.max(roomBelow, roomAbove, 80))) + 'px');
+      let mh = menu.offsetHeight || 120;
+
       let openUp;
       if (wrap.closest('.ticket-status-form, .ticket-status-actions')) {
         openUp = true;
-      } else if (spaceBelow >= mh) {
+      } else if (roomBelow >= mh) {
         openUp = false;
-      } else if (spaceAbove >= mh) {
+      } else if (roomAbove >= mh) {
         openUp = true;
       } else {
-        openUp = spaceAbove > spaceBelow;
+        openUp = roomAbove > roomBelow;
       }
       wrap.classList.toggle('drop-up', openUp);
+      if (openUp) menu.setAttribute('data-drop-up', '1');
+      else menu.removeAttribute('data-drop-up');
+
       if (openUp) {
-        const top = Math.max(pad, rect.top - gap - mh);
-        menu.style.top = top + 'px';
-        menu.style.maxHeight = Math.min(280, Math.max(80, rect.top - gap - pad)) + 'px';
+        const maxH = Math.min(280, Math.max(80, roomAbove));
+        set('max-height', maxH + 'px');
+        mh = menu.offsetHeight || Math.min(mh, maxH);
+        let top = rect.top - gap - mh;
+        if (top < pad) top = pad;
+        set('top', Math.round(top) + 'px');
+        set('bottom', 'auto');
       } else {
-        menu.style.top = (rect.bottom + gap) + 'px';
-        menu.style.maxHeight = Math.min(280, Math.max(80, vh - rect.bottom - gap - pad)) + 'px';
+        /* Open down: always leave UI_SELECT_GAP under the toggle; clamp height to fit */
+        const maxH = Math.min(280, Math.max(80, roomBelow));
+        set('max-height', maxH + 'px');
+        set('top', Math.round(rect.bottom + gap) + 'px');
+        set('bottom', 'auto');
       }
     }
+
     function clearUiSelectMenuPos(wrap){
-      const menu = wrap && wrap.querySelector('.ui-select-menu');
+      if (!wrap) return;
+      const menu = wrap.querySelector('.ui-select-menu') || wrap._portedMenu;
       if (!menu) return;
-      menu.classList.remove('is-fixed-pos');
-      menu.style.position = '';
-      menu.style.inset = '';
-      menu.style.insetInline = '';
-      menu.style.insetInlineStart = '';
-      menu.style.insetInlineEnd = '';
-      menu.style.left = '';
-      menu.style.right = '';
-      menu.style.top = '';
-      menu.style.bottom = '';
-      menu.style.width = '';
-      menu.style.minWidth = '';
-      menu.style.maxHeight = '';
-      menu.style.zIndex = '';
+      restoreUiSelectMenu(menu);
     }
     function closeUiSelects(except){
       document.querySelectorAll('.ui-select.open').forEach(wrap => {
@@ -360,9 +399,18 @@
         wrap.classList.remove('drop-up');
         const btn = wrap.querySelector('.ui-select-toggle');
         if (btn) btn.setAttribute('aria-expanded', 'false');
-        const menu = wrap.querySelector('.ui-select-menu');
+        const menu = wrap.querySelector('.ui-select-menu') || wrap._portedMenu;
         if (menu) menu.hidden = true;
         clearUiSelectMenuPos(wrap);
+      });
+      /* Orphan ported menus (owner wrap already closed / detached) */
+      document.querySelectorAll('.ui-select-menu.is-ported').forEach((menu) => {
+        const id = menu.dataset.uiSelectOwner;
+        const wrap = id && document.querySelector('.ui-select[data-ui-select-id="' + id + '"]');
+        if (!wrap || !wrap.classList.contains('open')) {
+          menu.hidden = true;
+          restoreUiSelectMenu(menu);
+        }
       });
     }
     function enhanceSelect(sel){

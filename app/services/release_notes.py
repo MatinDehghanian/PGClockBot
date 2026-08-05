@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.3.9": [
+        "منوی بازشو: فاصله ۸px از باکس + پورت به body (دیگر به باکس نمی‌چسبد)",
+        "باز شدن هوشمند حفظ شد: اگر جا باشد پایین، وگرنه بالا",
+    ],
     "4.3.8": [
         "حذف کامل منوی native سیستم برای تمام selectها (رفع باز شدن پیکر iOS با لمس لیبل)",
         "منوی بازشو سفارشی در همه مودال‌ها و فرم‌ها؛ فوکوس مودال دیگر select مخفی را هدف نمی‌گیرد",

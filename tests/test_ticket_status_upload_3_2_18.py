@@ -27,13 +27,13 @@ class UiSelectDropUpTests(unittest.TestCase):
         self.assertIn("ticket-status-form, .ticket-status-actions", place)
         self.assertNotIn(".ui-modal", place)
         # Auto: prefer down when space allows
-        self.assertIn("spaceBelow >= mh", place)
-        self.assertLess(place.find("ticket-status-form"), place.find("spaceBelow >= mh"))
+        self.assertIn("roomBelow >= mh", place)
+        self.assertLess(place.find("ticket-status-form"), place.find("roomBelow >= mh"))
 
     def test_css_drop_up(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn(".ui-select.drop-up .ui-select-menu", css)
-        self.assertIn("bottom: calc(100%", css)
+        self.assertIn(".ui-select.drop-up .ui-select-menu:not(.is-fixed-pos):not(.is-ported)", css)
+        self.assertIn("bottom: calc(100% + 8px)", css)
 
 
 class UploadBoxTests(unittest.TestCase):
