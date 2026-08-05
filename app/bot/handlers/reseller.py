@@ -435,17 +435,23 @@ async def res_billing(
     await callback.answer()
     enabled = await is_billing_enabled(session)
     rate = await resolve_price_per_gb(session, rate_context_for_profile(profile))
+    from app.services.billing import ensure_payg_shop_wallet
+
+    owner_user, bal = await ensure_payg_shop_wallet(session, profile)
+    await session.commit()
     txs = await list_billing_transactions(session, int(owner_id), limit=5)
     lines = [
-        "💰 <b>کیف پول PAYG</b>",
+        "💰 <b>کیف پول (PAYG)</b>",
         "",
-        f"موجودی: <b>{format_toman(int(profile.billing_balance or 0), get_settings().currency)}</b>",
+        f"موجودی: <b>{format_toman(int(bal), get_settings().currency)}</b>",
         f"نرخ پلن: {format_toman(rate, get_settings().currency)} / GB",
         f"وضعیت سیستم: {'فعال' if enabled else 'غیرفعال'}",
         "",
-        "مصرف ترافیک به‌صورت تفاضلی (دلتا از watermark) در بازه تنظیم‌شده کسر می‌شود.",
-        "برای شارژ با ادمین اصلی هماهنگ کنید.",
+        "مصرف ترافیک از همین کیف پول (همان موجودی منوی کیف پول) کسر می‌شود.",
+        "برای شارژ از منوی کیف پول یا با ادمین اصلی هماهنگ کنید.",
     ]
+    if profile.billing_suspended_at is not None:
+        lines.insert(3, "⚠️ <b>حساب به‌خاطر موجودی صفر مسدود است</b>")
     if txs:
         lines.append("")
         lines.append("آخرین تراکنش‌ها:")

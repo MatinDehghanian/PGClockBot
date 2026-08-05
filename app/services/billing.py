@@ -432,6 +432,50 @@ async def load_payg_profile(
     return profile
 
 
+async def ensure_payg_shop_wallet(
+    session: AsyncSession,
+    profile: ResellerProfile,
+) -> tuple["BotUser", int]:
+    """One-time merge of legacy billing_balance into shop wallet; then wallet is SoT.
+
+    Returns ``(BotUser, available_balance)``. ``billing_balance`` is kept as a mirror.
+    """
+    from app.db.models import BotUser
+
+    user = await session.get(BotUser, int(profile.user_id))
+    if user is None:
+        raise ValueError("کاربر نماینده یافت نشد")
+
+    linked = bool(getattr(profile, "payg_wallet_linked", False))
+    wallet = int(user.wallet_balance or 0)
+    billing = int(profile.billing_balance or 0)
+
+    if not linked:
+        combined = wallet + billing
+        user.wallet_balance = int(combined)
+        profile.billing_balance = int(combined)
+        profile.payg_wallet_linked = True
+        logger.info(
+            "PAYG linked to shop wallet reseller=%s wallet=%s billing=%s combined=%s",
+            profile.user_id,
+            wallet,
+            billing,
+            combined,
+        )
+        return user, int(combined)
+
+    # Already linked — mirror only (wallet is source of truth)
+    if billing != wallet:
+        profile.billing_balance = wallet
+    return user, wallet
+
+
+async def payg_available_balance(session: AsyncSession, profile: ResellerProfile) -> int:
+    """Shop-wallet balance used for PAYG (after ensuring link)."""
+    _, bal = await ensure_payg_shop_wallet(session, profile)
+    return int(bal)
+
+
 # ---------------------------------------------------------------------------
 # Ledger mutations
 # ---------------------------------------------------------------------------
@@ -459,7 +503,9 @@ async def credit_topup(
     idempotency_key: str | None = None,
     commit: bool = True,
 ) -> ResellerBillingTransaction:
-    """Manual (or future online) credit — Super Admin MVP path."""
+    """Credit shop wallet for PAYG (admin path). ``billing_balance`` mirrors wallet."""
+    from app.db.models import BotUser
+
     if amount <= 0:
         raise ValueError("مبلغ شارژ باید مثبت باشد")
     key = idempotency_key
@@ -488,16 +534,20 @@ async def credit_topup(
     except BillingError as e:
         raise ValueError(e.message) from e
 
+    user, _bal = await ensure_payg_shop_wallet(session, profile)
+    uid = int(user.id)
+
     with session.no_autoflush:
         result = await session.execute(
-            update(ResellerProfile)
-            .where(ResellerProfile.user_id == int(reseller_user_id))
-            .values(billing_balance=ResellerProfile.billing_balance + int(amount))
+            update(BotUser)
+            .where(BotUser.id == uid)
+            .values(wallet_balance=BotUser.wallet_balance + int(amount))
             .execution_options(synchronize_session=False)
         )
     if result.rowcount != 1:
         raise ValueError("نماینده یافت نشد")
-    await session.refresh(profile)
+    await session.refresh(user)
+    profile.billing_balance = int(user.wallet_balance or 0)
 
     # Clear low-balance warn so next dip can notify again
     if profile.billing_low_warned_at is not None:
@@ -507,7 +557,7 @@ async def credit_topup(
         reseller_user_id=int(reseller_user_id),
         kind=KIND_TOPUP,
         amount=int(amount),
-        balance_after=int(profile.billing_balance),
+        balance_after=int(user.wallet_balance or 0),
         idempotency_key=key,
         note=(note or "")[:255] or None,
         created_by=(created_by or "")[:128] or None,
@@ -518,6 +568,7 @@ async def credit_topup(
             await session.commit()
             await session.refresh(tx)
             await session.refresh(profile)
+            await session.refresh(user)
         else:
             await session.flush()
     except IntegrityError:
@@ -527,12 +578,14 @@ async def credit_topup(
             return existing
         raise
 
-    # Instant restore when balance is positive after approved topup
-    if int(profile.billing_balance or 0) > 0 and profile.billing_suspended_at is not None:
+    # Instant restore when this credit clears the 2× threshold rule
+    if profile.billing_suspended_at is not None:
         try:
-            from app.services.billing_suspend import restore_payg_reseller
+            from app.services.billing_suspend import maybe_restore_after_wallet_credit
 
-            await restore_payg_reseller(session, profile, commit=commit)
+            await maybe_restore_after_wallet_credit(
+                session, int(reseller_user_id), int(amount), commit=commit
+            )
         except Exception:
             logger.exception("PAYG restore after topup failed reseller=%s", reseller_user_id)
 
@@ -551,7 +604,7 @@ async def debit_usage(
     commit: bool = True,
     watermark_before: int | None = None,
 ) -> ResellerBillingTransaction | None:
-    """Charge proportional usage and advance watermark. Idempotent by key.
+    """Charge proportional usage from shop wallet and advance watermark. Idempotent by key.
 
     Precision rules:
     - Charge only the *delta* since the last watermark (never re-bill prior usage).
@@ -559,7 +612,10 @@ async def debit_usage(
       so residual bytes accumulate until they are worth at least 1 toman.
     - If rate is 0, advance watermark without charging (misconfigured plan).
     - Optimistic lock on ``billing_watermark_bytes`` prevents concurrent double-charge.
+    - Money is taken from shop ``wallet_balance`` (never drives balance below 0).
     """
+    from app.db.models import BotUser
+
     if bytes_delta <= 0:
         profile.billing_watermark_bytes = int(watermark_after)
         if commit:
@@ -588,22 +644,24 @@ async def debit_usage(
         )
         return None
 
+    user, wallet_before = await ensure_payg_shop_wallet(session, profile)
+    uid = int(user.id)
+    # Never go negative — charge only what the shop wallet holds.
+    charge = min(int(amount), max(0, int(wallet_before))) if amount > 0 else 0
+
     if amount > 0:
         with session.no_autoflush:
-            result = await session.execute(
+            # Lock watermark first (anti double-charge)
+            wm_result = await session.execute(
                 update(ResellerProfile)
                 .where(
                     ResellerProfile.user_id == rid,
                     ResellerProfile.billing_watermark_bytes == expected_wm,
                 )
-                .values(
-                    billing_balance=ResellerProfile.billing_balance - int(amount),
-                    billing_watermark_bytes=int(watermark_after),
-                )
+                .values(billing_watermark_bytes=int(watermark_after))
                 .execution_options(synchronize_session=False)
             )
-        if result.rowcount != 1:
-            # Concurrent tick already moved watermark — do not double-charge.
+        if wm_result.rowcount != 1:
             existing = await _find_by_idempotency(session, idempotency_key)
             if existing:
                 return existing
@@ -615,6 +673,29 @@ async def debit_usage(
             )
             await session.refresh(profile)
             return None
+
+        if charge > 0:
+            with session.no_autoflush:
+                w_result = await session.execute(
+                    update(BotUser)
+                    .where(BotUser.id == uid, BotUser.wallet_balance >= charge)
+                    .values(wallet_balance=BotUser.wallet_balance - int(charge))
+                    .execution_options(synchronize_session=False)
+                )
+            if w_result.rowcount != 1:
+                # Race: charge whatever remains (floor at 0)
+                await session.refresh(user)
+                remain = max(0, int(user.wallet_balance or 0))
+                charge = min(charge, remain)
+                if charge > 0:
+                    await session.execute(
+                        update(BotUser)
+                        .where(BotUser.id == uid)
+                        .values(wallet_balance=BotUser.wallet_balance - int(charge))
+                        .execution_options(synchronize_session=False)
+                    )
+        await session.refresh(user)
+        profile.billing_balance = int(user.wallet_balance or 0)
     else:
         # rate_per_gb == 0 — advance watermark only if still at expected
         with session.no_autoflush:
@@ -630,14 +711,16 @@ async def debit_usage(
         if result.rowcount != 1:
             await session.refresh(profile)
             return None
+        await session.refresh(user)
+        profile.billing_balance = int(user.wallet_balance or 0)
 
     await session.refresh(profile)
 
     tx = ResellerBillingTransaction(
         reseller_user_id=rid,
         kind=KIND_USAGE,
-        amount=-int(amount),
-        balance_after=int(profile.billing_balance),
+        amount=-int(charge),
+        balance_after=int(user.wallet_balance or 0),
         bytes_delta=int(bytes_delta),
         rate_per_gb=int(rate_per_gb),
         watermark_after=int(watermark_after),
@@ -698,7 +781,7 @@ async def assert_billing_allows_provision(
     if policy != ON_EMPTY_BLOCK_PROVISION:
         # Future policies (e.g. block_new) hook here; default remains block_provision
         return
-    bal = int(profile.billing_balance or 0)
+    bal = await payg_available_balance(session, profile)
     if bal <= 0:
         # Ensure hard suspend (admin + services) even if tick missed it
         try:
@@ -708,7 +791,7 @@ async def assert_billing_allows_provision(
         except Exception:
             logger.debug("suspend from provision gate failed", exc_info=True)
         raise BillingError(
-            "موجودی Billing نماینده تمام شده است — حساب مسدود شد. "
+            "موجودی کیف پول نماینده تمام شده است — حساب مسدود شد. "
             "برای رفع مسدودی کیف پول را حداقل به اندازه دو برابر آستانه هشدار شارژ کنید"
         )
 
@@ -799,7 +882,7 @@ async def maybe_warn_low_balance(
     threshold = await get_low_balance_threshold(session)
     if threshold <= 0:
         return False
-    bal = int(profile.billing_balance or 0)
+    bal = await payg_available_balance(session, profile)
     if bal > threshold:
         if profile.billing_low_warned_at is not None:
             profile.billing_low_warned_at = None
@@ -814,7 +897,7 @@ async def maybe_warn_low_balance(
 
 async def run_billing_tick(session: AsyncSession) -> dict[str, int]:
     """Charge all active PAYG resellers. Returns simple counters."""
-    stats = {"checked": 0, "charged": 0, "skipped": 0, "errors": 0}
+    stats = {"checked": 0, "charged": 0, "skipped": 0, "errors": 0, "linked": 0, "restored": 0}
     if not await is_billing_enabled(session):
         return stats
 
@@ -840,6 +923,25 @@ async def run_billing_tick(session: AsyncSession) -> dict[str, int]:
             stats["skipped"] += 1
             continue
         try:
+            # Link legacy billing pot → shop wallet before charging / suspend checks
+            was_linked = bool(getattr(profile, "payg_wallet_linked", False))
+            _user, bal = await ensure_payg_shop_wallet(session, profile)
+            if not was_linked:
+                stats["linked"] += 1
+                await session.commit()
+                # If merge left positive balance, lift a wrongful empty-billing suspend
+                if bal > 0 and profile.billing_suspended_at is not None:
+                    try:
+                        from app.services.billing_suspend import restore_payg_reseller
+
+                        await restore_payg_reseller(session, profile, commit=True)
+                        stats["restored"] += 1
+                    except Exception:
+                        logger.exception(
+                            "PAYG auto-restore after wallet link failed reseller=%s",
+                            profile.user_id,
+                        )
+
             admin = await pg.get_admin(uname)
             if not isinstance(admin, dict):
                 stats["skipped"] += 1
@@ -849,9 +951,10 @@ async def run_billing_tick(session: AsyncSession) -> dict[str, int]:
                 stats["charged"] += 1
             else:
                 stats["skipped"] += 1
-            # Immediate suspend when balance hits zero/negative after tick
+            # Immediate suspend when wallet hits zero after tick
             await session.refresh(profile)
-            if int(profile.billing_balance or 0) <= 0:
+            bal_after = await payg_available_balance(session, profile)
+            if bal_after <= 0:
                 try:
                     from app.services.billing_suspend import suspend_payg_reseller
 
@@ -876,11 +979,11 @@ async def _notify_low_balance(session: AsyncSession, profile: ResellerProfile) -
     user = await session.get(BotUser, int(profile.user_id))
     if not user or not user.telegram_id:
         return
-    bal = format_toman(int(profile.billing_balance or 0))
+    bal = format_toman(int(user.wallet_balance or 0))
     text = (
-        "⚠️ موجودی Billing شما رو به اتمام است.\n"
+        "⚠️ موجودی کیف پول شما رو به اتمام است.\n"
         f"مانده: <b>{bal}</b>\n"
-        "برای ادامه ساخت/تمدید سرویس، با ادمین اصلی برای شارژ هماهنگ کنید."
+        "مصرف PAYG از همین کیف پول کسر می‌شود. لطفاً شارژ کنید."
     )
     try:
         from app.bot import create_bot

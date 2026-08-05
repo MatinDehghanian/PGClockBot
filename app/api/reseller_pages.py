@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Reseller plans, applications, and staff management pages."""
 
+import logging
 from datetime import datetime, timezone
 from urllib.parse import quote
 
@@ -101,6 +102,36 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             .order_by(ResellerProfile.id.desc())
         )
         rows = result.all()
+        # One-time PAYG→wallet link; only auto-restore wrongful legacy suspend on first merge
+        try:
+            from app.services.billing import ensure_payg_shop_wallet, is_payg
+            from app.services.billing_suspend import restore_payg_reseller
+
+            touched = False
+            for _user, profile in rows:
+                if not is_payg(profile):
+                    continue
+                was_linked = bool(getattr(profile, "payg_wallet_linked", False))
+                _u, bal = await ensure_payg_shop_wallet(session, profile)
+                touched = True
+                if (
+                    (not was_linked)
+                    and bal > 0
+                    and profile.billing_suspended_at is not None
+                ):
+                    try:
+                        await restore_payg_reseller(session, profile, commit=False)
+                    except Exception:
+                        logging.getLogger(__name__).debug(
+                            "list auto-restore failed", exc_info=True
+                        )
+            if touched:
+                await session.commit()
+        except Exception:
+            try:
+                await session.rollback()
+            except Exception:
+                pass
         roles = []
         reseller_usage: dict = {}
         try:
@@ -283,7 +314,29 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         billing_rate = 0
         pg_limits = None
         min_unsuspend = 0
+        wallet_balance = int(user.wallet_balance or 0)
         if is_payg(profile):
+            from app.services.billing import ensure_payg_shop_wallet, list_billing_transactions
+            from app.services.billing_suspend import restore_payg_reseller
+
+            was_linked = bool(getattr(profile, "payg_wallet_linked", False))
+            _u, wallet_balance = await ensure_payg_shop_wallet(session, profile)
+            await session.refresh(user)
+            wallet_balance = int(user.wallet_balance or 0)
+            # First-link only: lift legacy suspend caused by empty billing pot
+            if (
+                (not was_linked)
+                and wallet_balance > 0
+                and profile.billing_suspended_at is not None
+            ):
+                try:
+                    await restore_payg_reseller(session, profile, commit=True)
+                except Exception:
+                    logging.getLogger(__name__).debug(
+                        "edit auto-restore failed", exc_info=True
+                    )
+            else:
+                await session.commit()
             billing_txs = await list_billing_transactions(session, int(user_id), limit=15)
             billing_rate = await resolve_price_per_gb(session, rate_context_for_profile(profile))
             if profile.billing_suspended_at is not None:
@@ -316,6 +369,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 "is_payg": is_payg(profile),
                 "billing_txs": billing_txs,
                 "billing_rate": billing_rate,
+                "wallet_balance": wallet_balance,
                 "pg_limits": pg_limits,
                 "min_unsuspend": min_unsuspend,
                 "format_toman": format_toman,
@@ -463,7 +517,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 status_code=303,
             )
         return RedirectResponse(
-            f"/resellers/{user_id}/edit?ok={_q(f'شارژ Billing به مبلغ {amount:,} تومان ثبت شد')}",
+            f"/resellers/{user_id}/edit?ok={_q(f'شارژ کیف پول به مبلغ {amount:,} تومان ثبت شد')}",
             status_code=303,
         )
 

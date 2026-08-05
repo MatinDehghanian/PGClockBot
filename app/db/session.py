@@ -165,6 +165,7 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
             "billing_low_warned_at": "DATETIME",
             "billing_suspended_at": "DATETIME",
             "billing_suspended_user_ids": "TEXT",
+            "payg_wallet_linked": "BOOLEAN DEFAULT 0",
         }
         for col, typ in alters.items():
             if col not in rcols:

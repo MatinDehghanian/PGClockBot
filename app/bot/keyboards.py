@@ -517,7 +517,7 @@ def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
         from app.services.billing import is_payg
 
         if is_payg(profile):
-            entries.append(("res_billing", "💰 کیف پول"))
+            entries.append(("res_billing", "💰 کیف پول PAYG"))
     except Exception:
         pass
     # Capacity: buy extra volume/users when plan allows; otherwise renew only

@@ -151,8 +151,11 @@ async def buy_extra_gb(
     price = plan_extra_gb_price(plan)
     if price <= 0:
         raise ValueError("قیمت حجم اضافه برای این پلن تعریف نشده است")
-    if is_payg(profile) and int(profile.billing_balance or 0) <= 0:
-        raise ValueError("موجودی PAYG تمام شده — ابتدا شارژ و رفع مسدودی کنید")
+    if is_payg(profile):
+        from app.services.billing import payg_available_balance
+
+        if await payg_available_balance(session, profile) <= 0:
+            raise ValueError("موجودی کیف پول تمام شده — ابتدا شارژ و رفع مسدودی کنید")
 
     uname = (profile.pg_admin_username or "").strip()
     if not uname:
@@ -205,8 +208,11 @@ async def buy_extra_users(
     price = plan_extra_user_price(plan)
     if price <= 0:
         raise ValueError("قیمت کاربر اضافه برای این پلن تعریف نشده است")
-    if is_payg(profile) and int(profile.billing_balance or 0) <= 0:
-        raise ValueError("موجودی PAYG تمام شده — ابتدا شارژ و رفع مسدودی کنید")
+    if is_payg(profile):
+        from app.services.billing import payg_available_balance
+
+        if await payg_available_balance(session, profile) <= 0:
+            raise ValueError("موجودی کیف پول تمام شده — ابتدا شارژ و رفع مسدودی کنید")
 
     uname = (profile.pg_admin_username or "").strip()
     if not uname:
@@ -258,8 +264,11 @@ async def renew_reseller_capacity(
     amount = plan_renew_price(plan)
     if amount < 0:
         raise ValueError("قیمت تمدید نامعتبر است")
-    if is_payg(profile) and int(profile.billing_balance or 0) <= 0:
-        raise ValueError("موجودی PAYG تمام شده — ابتدا شارژ و رفع مسدودی کنید")
+    if is_payg(profile):
+        from app.services.billing import payg_available_balance
+
+        if await payg_available_balance(session, profile) <= 0:
+            raise ValueError("موجودی کیف پول تمام شده — ابتدا شارژ و رفع مسدودی کنید")
 
     uname = (profile.pg_admin_username or "").strip()
     if not uname:

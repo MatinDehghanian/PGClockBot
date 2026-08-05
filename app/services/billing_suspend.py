@@ -13,7 +13,6 @@ from app.db.models import ResellerProfile
 from app.services.billing import (
     get_low_balance_threshold,
     is_payg,
-    payg_purchase_min_wallet,
 )
 
 logger = logging.getLogger(__name__)
@@ -108,14 +107,17 @@ async def suspend_payg_reseller(
     *,
     commit: bool = True,
 ) -> dict[str, int]:
-    """Disable PG admin + cut all owned users when billing_balance <= 0.
+    """Disable PG admin + cut all owned users when shop-wallet PAYG balance <= 0.
 
     Idempotent when already suspended. Returns counters.
     """
     stats = {"users_cut": 0, "already": 0, "errors": 0}
     if not is_payg(profile):
         return stats
-    if int(profile.billing_balance or 0) > 0:
+    from app.services.billing import payg_available_balance
+
+    bal = await payg_available_balance(session, profile)
+    if bal > 0:
         return stats
     if profile.billing_suspended_at is not None:
         stats["already"] = 1
@@ -168,7 +170,9 @@ async def restore_payg_reseller(
     if profile.billing_suspended_at is None:
         stats["skipped"] = 1
         return stats
-    if int(profile.billing_balance or 0) <= 0:
+    from app.services.billing import payg_available_balance
+
+    if await payg_available_balance(session, profile) <= 0:
         stats["skipped"] = 1
         return stats
 
@@ -201,7 +205,7 @@ async def restore_payg_reseller(
 
 
 async def min_topup_to_unsuspend(session: AsyncSession) -> int:
-    """Minimum billing topup required to clear PAYG suspension (= 2× warn threshold)."""
+    """Minimum wallet credit required to clear PAYG suspension (= 2× warn threshold)."""
     thr = await get_low_balance_threshold(session)
     # Exactly 2× threshold (user asked); still ensure at least 1 toman when thr=0
     return max(1, 2 * max(0, int(thr)))
@@ -226,6 +230,70 @@ async def assert_topup_clears_suspend(
         )
 
 
+async def maybe_restore_after_wallet_credit(
+    session: AsyncSession,
+    user_id: int,
+    credit_amount: int,
+    *,
+    commit: bool = True,
+) -> dict[str, int]:
+    """Auto-unsuspend PAYG after a wallet credit iff amount ≥ 2× warn threshold.
+
+    No-op when not PAYG, not suspended, or credit is below the minimum.
+    """
+    stats = {"restored": 0, "skipped": 0, "need": 0, "got": int(credit_amount or 0)}
+    if int(credit_amount or 0) <= 0:
+        stats["skipped"] = 1
+        return stats
+
+    from sqlalchemy import select
+
+    from app.services.billing import ensure_payg_shop_wallet
+
+    profile = (
+        await session.execute(
+            select(ResellerProfile).where(ResellerProfile.user_id == int(user_id))
+        )
+    ).scalar_one_or_none()
+    if profile is None or not is_payg(profile):
+        stats["skipped"] = 1
+        return stats
+
+    # Keep billing_balance mirrored to shop wallet after any credit
+    try:
+        _user, bal = await ensure_payg_shop_wallet(session, profile)
+        profile.billing_balance = int(bal)
+    except Exception:
+        logger.debug("mirror billing after credit failed", exc_info=True)
+
+    if profile.billing_suspended_at is None:
+        if commit:
+            await session.commit()
+        stats["skipped"] = 1
+        return stats
+
+    need = await min_topup_to_unsuspend(session)
+    stats["need"] = int(need)
+    if int(credit_amount) < need:
+        if commit:
+            await session.commit()
+        logger.info(
+            "PAYG stay suspended reseller=%s credit=%s need=%s",
+            user_id,
+            credit_amount,
+            need,
+        )
+        stats["skipped"] = 1
+        return stats
+
+    result = await restore_payg_reseller(session, profile, commit=commit)
+    if result.get("skipped"):
+        stats["skipped"] = 1
+    else:
+        stats["restored"] = 1
+    return stats
+
+
 async def _notify_suspended(session: AsyncSession, profile: ResellerProfile) -> None:
     from app.db.models import BotUser
     from app.services.formatting import format_toman
@@ -234,12 +302,17 @@ async def _notify_suspended(session: AsyncSession, profile: ResellerProfile) -> 
     if not user or not user.telegram_id:
         return
     need = await min_topup_to_unsuspend(session)
-    # Also surface purchase-style minimum for clarity
-    _ = payg_purchase_min_wallet(await get_low_balance_threshold(session))
+    from app.services.billing import payg_available_balance
+
+    try:
+        bal_now = await payg_available_balance(session, profile)
+    except Exception:
+        bal_now = int(user.wallet_balance or 0)
     text = (
         "🚫 <b>حساب نمایندگی شما مسدود شد</b>\n\n"
-        "موجودی کیف پول PAYG شما صفر یا منفی شده است.\n"
+        "موجودی کیف پول شما برای PAYG صفر شده است.\n"
         "ادمین پاسارگارد و تمام سرویس‌های شما قطع شدند.\n\n"
+        f"موجودی فعلی کیف پول: <b>{format_toman(bal_now)}</b>\n"
         f"برای رفع مسدودی، حداقل <b>{format_toman(need)}</b> شارژ کنید "
         "(دو برابر آستانه هشدار).\n"
         "پس از تأیید شارژ، حساب و سرویس‌ها بلافاصله فعال می‌شوند."
@@ -254,11 +327,11 @@ async def _notify_restored(session: AsyncSession, profile: ResellerProfile) -> N
     user = await session.get(BotUser, int(profile.user_id))
     if not user or not user.telegram_id:
         return
-    bal = format_toman(int(profile.billing_balance or 0))
+    bal = format_toman(int(user.wallet_balance or 0))
     text = (
         "✅ <b>مسدودی برداشته شد</b>\n\n"
         "شارژ تأیید شد — حساب و سرویس‌های شما دوباره فعال شدند.\n"
-        f"موجودی فعلی: <b>{bal}</b>"
+        f"موجودی کیف پول: <b>{bal}</b>"
     )
     await _send_reseller_dm(session, int(profile.user_id), int(user.telegram_id), text)
 

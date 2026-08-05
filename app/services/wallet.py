@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -8,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus, WalletTransaction
+
+logger = logging.getLogger(__name__)
 
 _METHOD_FA = {
     PaymentMethod.CARD.value: "کارت",
@@ -81,6 +84,15 @@ async def credit_wallet(
             reason=reason,
         )
     )
+    # PAYG: auto-unsuspend only when this credit ≥ 2× warning threshold
+    try:
+        from app.services.billing_suspend import maybe_restore_after_wallet_credit
+
+        await maybe_restore_after_wallet_credit(
+            session, int(user.id), int(amount), commit=False
+        )
+    except Exception:
+        logger.exception("PAYG restore-after-wallet-credit failed user=%s", user.id)
     await session.commit()
     await session.refresh(user)
     return user
