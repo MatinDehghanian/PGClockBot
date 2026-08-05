@@ -173,7 +173,7 @@ def _plan_detail_keyboard(p: Plan) -> InlineKeyboardMarkup:
                 callback_data=f"adm:plan:delask:{p.id}",
             )
         ],
-        [InlineKeyboardButton(text="⬅️ لیست پلن‌ها", callback_data="adm:plans:kind:users:fixed")]
+        [InlineKeyboardButton(text="⬅️ پلن‌های کاربران", callback_data="adm:plans:aud:users")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

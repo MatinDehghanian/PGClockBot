@@ -427,7 +427,16 @@ def _admin_plans_audience_entries(ui: dict | None = None) -> list[tuple[str, str
     ]
 
 
-def _admin_plans_kind_entries(audience: str, ui: dict | None = None) -> list[tuple[str, str]]:
+def _admin_plans_list_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    """Reply keyboard on audience list screen — add plan only (types via inline picker)."""
+    _ = ui
+    return [
+        (REPLY_ACTION_ADM_PLANS_ADD, "➕ افزودن پلن"),
+    ]
+
+
+def _admin_plans_add_type_entries(audience: str, ui: dict | None = None) -> list[tuple[str, str]]:
+    """Plan type picker shown after «افزودن پلن» — mirrors web modal kind step."""
     _ = ui
     if audience == "resellers":
         return [
@@ -442,8 +451,14 @@ def _admin_plans_kind_entries(audience: str, ui: dict | None = None) -> list[tup
     ]
 
 
+def _admin_plans_kind_entries(audience: str, ui: dict | None = None) -> list[tuple[str, str]]:
+    """Alias kept for nav restore — list screen uses add-only reply keyboard."""
+    return _admin_plans_list_entries(ui)
+
+
 REPLY_ACTION_ADM_PLANS_AUD_USERS = "adm_plans_aud_users"
 REPLY_ACTION_ADM_PLANS_AUD_RESELLERS = "adm_plans_aud_resellers"
+REPLY_ACTION_ADM_PLANS_ADD = "adm_plans_add"
 REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED = "adm_plans_kind_users_fixed"
 REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM = "adm_plans_kind_users_custom"
 REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL = "adm_plans_kind_users_trial"
@@ -716,8 +731,23 @@ def admin_plans_kind_reply_keyboard(
     audience: str,
     ui: dict | None = None,
 ) -> ReplyKeyboardMarkup:
+    """List screen reply keyboard — «افزودن پلن» + back/home (audience kept for API compat)."""
+    _ = audience
     rows = _pack_reply_rows(
-        _admin_plans_kind_entries(audience, ui),
+        _admin_plans_list_entries(ui),
+        ui,
+        footer_row=_submenu_footer(ui),
+    )
+    return _reply_markup(rows, placeholder="پلن را از پیام انتخاب کنید یا افزودن…")
+
+
+def admin_plans_add_type_reply_keyboard(
+    audience: str,
+    ui: dict | None = None,
+) -> ReplyKeyboardMarkup:
+    """Type picker on reply keyboard after «افزودن پلن»."""
+    rows = _pack_reply_rows(
+        _admin_plans_add_type_entries(audience, ui),
         ui,
         footer_row=_submenu_footer(ui),
     )
@@ -874,7 +904,9 @@ def reply_action_map(
             for key, text in _admin_plans_audience_entries(ui):
                 mapping.setdefault((text or "").strip(), key)
             for aud in ("users", "resellers"):
-                for key, text in _admin_plans_kind_entries(aud, ui):
+                for key, text in _admin_plans_list_entries(ui):
+                    mapping.setdefault((text or "").strip(), key)
+                for key, text in _admin_plans_add_type_entries(aud, ui):
                     mapping.setdefault((text or "").strip(), key)
 
         if reseller_actor:
@@ -1424,17 +1456,68 @@ def admin_home(ui: dict | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[back]])
 
 
-def admin_users_plans_overview_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Inline hub under user plans — mirrors web /plans user rows."""
+def admin_users_plans_overview_keyboard(
+    plans: list,
+    ui: dict | None = None,
+) -> InlineKeyboardMarkup:
+    """All user plan rows inline — mirrors web /plans user table (add via reply keyboard)."""
     wholesale_label = _t(ui, "btn_wholesale") or "📦 فروش عمده"
-    rows = [
-        [InlineKeyboardButton(text="💎 پلن‌های ثابت", callback_data="adm:plans:kind:users:fixed")],
-        [InlineKeyboardButton(text="🎁 پلن تست", callback_data="adm:plans:kind:users:trial")],
-        [InlineKeyboardButton(text="✨ پلن دلخواه", callback_data="adm:plans:kind:users:custom")],
-        [InlineKeyboardButton(text=wholesale_label, callback_data="adm:plans:kind:users:wholesale")],
-        [InlineKeyboardButton(text="➕ افزودن پلن ثابت", callback_data="adm:plan:add")],
-        [InlineKeyboardButton(text="⬅️ مخاطب پلن", callback_data="adm:plans")],
-    ]
+    trial_on = on((ui or {}).get("trial_enabled"))
+    custom_on = on((ui or {}).get("custom_plan_enabled"))
+    wholesale_on = on((ui or {}).get("wholesale_enabled"))
+    rows: list[list[InlineKeyboardButton]] = []
+    fixed = [p for p in plans if not getattr(p, "is_trial", False)]
+    for p in fixed[:12]:
+        warn = ""
+        if not getattr(p, "pg_template_id", None) and not (getattr(p, "pg_group_ids", None) or "").strip():
+            warn = " ⚠️"
+        flag = "✅" if getattr(p, "is_active", True) else "⏸"
+        name = (getattr(p, "name", "") or "")[:22]
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{flag} 💎 {name}{warn}"[:60],
+                    callback_data=f"adm:plan:view:{p.id}",
+                )
+            ]
+        )
+    if not fixed:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="پلن ثابتی نیست — «افزودن پلن» از کیبورد",
+                    callback_data="adm:plans:noop",
+                )
+            ]
+        )
+    trial = next((p for p in plans if getattr(p, "is_trial", False)), None)
+    trial_flag = "✅" if trial_on else "⏸"
+    trial_hint = f" · {trial.name}" if trial else ""
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=f"{trial_flag} 🎁 تست{trial_hint}"[:60],
+                callback_data="adm:plans:kind:users:trial",
+            )
+        ]
+    )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if custom_on else '⏸'} ✨ دلخواه",
+                callback_data="adm:plans:kind:users:custom",
+            )
+        ]
+    )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if wholesale_on else '⏸'} {wholesale_label}"[:60],
+                callback_data="adm:plans:kind:users:wholesale",
+            )
+        ]
+    )
+    rows.append([InlineKeyboardButton(text="⬅️ مخاطب پلن", callback_data="adm:plans")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -1442,37 +1525,85 @@ def admin_resellers_plans_overview_keyboard(
     fixed_plans: list,
     payg_plans: list,
 ) -> InlineKeyboardMarkup:
-    """Inline hub for platform reseller subscription plans."""
+    """All reseller subscription plans inline — add via reply keyboard «افزودن پلن»."""
     rows: list[list[InlineKeyboardButton]] = []
-    for p in fixed_plans[:6]:
+    for p in fixed_plans[:10]:
         flag = "✅" if getattr(p, "is_active", True) else "⏸"
-        name = (getattr(p, "name", "") or "")[:24]
+        name = (getattr(p, "name", "") or "")[:22]
+        pct = int(getattr(p, "commission_percent", 0) or 0)
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"{flag} ثابت: {name}"[:60],
+                    text=f"{flag} 📦 {name} · {pct}٪"[:60],
                     callback_data=f"adm:resplan:view:{p.id}",
                 )
             ]
         )
-    rows.append(
-        [InlineKeyboardButton(text="➕ پلن ثابت (کمیسیون)", callback_data="adm:resplan:add:fixed")]
-    )
-    for p in payg_plans[:6]:
+    for p in payg_plans[:10]:
         flag = "✅" if getattr(p, "is_active", True) else "⏸"
-        name = (getattr(p, "name", "") or "")[:24]
+        name = (getattr(p, "name", "") or "")[:22]
+        rate = int(getattr(p, "price_per_gb", 0) or 0)
+        extra = f" · {rate:,} ت/GB".replace(",", "٬") if rate else ""
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"{flag} PAYG: {name}"[:60],
+                    text=f"{flag} ⚡ {name}{extra}"[:60],
                     callback_data=f"adm:resplan:view:{p.id}",
                 )
             ]
         )
-    rows.append(
-        [InlineKeyboardButton(text="➕ پلن Pay As You Go", callback_data="adm:resplan:add:payg")]
-    )
+    if not fixed_plans and not payg_plans:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="پلنی نیست — «افزودن پلن» از کیبورد",
+                    callback_data="adm:plans:noop",
+                )
+            ]
+        )
     rows.append([InlineKeyboardButton(text="⬅️ مخاطب پلن", callback_data="adm:plans")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_plans_add_type_keyboard(audience: str, ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Inline type picker after «افزودن پلن» — mirrors web modal audience→kind."""
+    wholesale_label = _t(ui, "btn_wholesale") or "📦 فروش عمده"
+    back_aud = "users" if audience == "users" else "resellers"
+    rows: list[list[InlineKeyboardButton]] = []
+    if audience == "resellers":
+        rows.extend(
+            [
+                [
+                    InlineKeyboardButton(
+                        text="📦 ثابت (کمیسیون)",
+                        callback_data="adm:plans:add:resellers:fixed",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="⚡ Pay As You Go",
+                        callback_data="adm:plans:add:resellers:payg",
+                    )
+                ],
+            ]
+        )
+    else:
+        rows.extend(
+            [
+                [InlineKeyboardButton(text="💎 ثابت", callback_data="adm:plans:add:users:fixed")],
+                [InlineKeyboardButton(text="✨ دلخواه", callback_data="adm:plans:add:users:custom")],
+                [InlineKeyboardButton(text="🎁 تست", callback_data="adm:plans:add:users:trial")],
+                [
+                    InlineKeyboardButton(
+                        text=wholesale_label,
+                        callback_data="adm:plans:add:users:wholesale",
+                    )
+                ],
+            ]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data=f"adm:plans:aud:{back_aud}")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -1502,14 +1633,11 @@ def admin_plans_list_keyboard(
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="پلنی نیست — افزودن پلن ثابت",
-                    callback_data=add_callback,
+                    text="پلنی نیست — «افزودن پلن» از کیبورد",
+                    callback_data="adm:plans:noop",
                 )
             ]
         )
-    rows.append(
-        [InlineKeyboardButton(text="➕ پلن ثابت جدید", callback_data=add_callback)]
-    )
     if back_callback:
         rows.append(
             [InlineKeyboardButton(text="⬅️ پلن‌های کاربران", callback_data=back_callback)]
@@ -1548,14 +1676,11 @@ def admin_reseller_plans_list_keyboard(
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"پلنی نیست — افزودن {label}",
-                    callback_data=add_callback,
+                    text=f"پلنی نیست — «افزودن پلن» از کیبورد",
+                    callback_data="adm:plans:noop",
                 )
             ]
         )
-    rows.append(
-        [InlineKeyboardButton(text="➕ پلن جدید", callback_data=add_callback)]
-    )
     if back_callback:
         rows.append(
             [InlineKeyboardButton(text="⬅️ پلن‌های نمایندگان", callback_data=back_callback)]

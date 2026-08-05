@@ -30,6 +30,7 @@ NAV_ADMIN_BROADCAST = "admin_broadcast"
 NAV_ADMIN_PLANS = "admin_plans"
 NAV_ADMIN_PLANS_AUDIENCE = "admin_plans_audience"
 NAV_ADMIN_PLANS_KIND = "admin_plans_kind"
+NAV_ADMIN_PLANS_ADD_TYPE = "admin_plans_add_type"
 NAV_RESELLER = "reseller"
 NAV_RESELLER_SETTINGS = "reseller_settings"
 NAV_RESELLER_PLANS = "reseller_plans"
@@ -249,6 +250,10 @@ async def show_nav_keyboard(
         data = await state.get_data() if state is not None else {}
         aud = str(data.get("_adm_plans_aud") or "users")
         markup = kb.admin_plans_kind_reply_keyboard(aud, ui)
+    elif level == NAV_ADMIN_PLANS_ADD_TYPE:
+        data = await state.get_data() if state is not None else {}
+        aud = str(data.get("_adm_plans_aud") or "users")
+        markup = kb.admin_plans_add_type_reply_keyboard(aud, ui)
     elif level == NAV_ADMIN_PLANS:
         markup = kb.admin_plans_audience_reply_keyboard(ui)
     elif level == NAV_RESELLER:

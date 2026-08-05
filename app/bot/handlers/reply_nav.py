@@ -133,7 +133,11 @@ class ReplyMenuTextFilter(BaseFilter):
                 mapping[(label or "").strip()] = key
         elif level == nav.NAV_ADMIN_PLANS_KIND:
             aud = str((await state.get_data()).get("_adm_plans_aud") or "users")
-            for key, label in kb._admin_plans_kind_entries(aud, ui):
+            for key, label in kb._admin_plans_list_entries(ui):
+                mapping[(label or "").strip()] = key
+        elif level == nav.NAV_ADMIN_PLANS_ADD_TYPE:
+            aud = str((await state.get_data()).get("_adm_plans_aud") or "users")
+            for key, label in kb._admin_plans_add_type_entries(aud, ui):
                 mapping[(label or "").strip()] = key
         elif level == nav.NAV_SHOP:
             for key, label in kb._shop_submenu_entries(
@@ -143,6 +147,7 @@ class ReplyMenuTextFilter(BaseFilter):
         elif role == "admin" and not is_reseller_bot and level not in {
             nav.NAV_ADMIN_PLANS_AUDIENCE,
             nav.NAV_ADMIN_PLANS_KIND,
+            nav.NAV_ADMIN_PLANS_ADD_TYPE,
         }:
             # Prefer admin hub labels outside broadcast / plans (avoid «نمایندگان» collision)
             for key, label in kb._reply_admin_entries(ui):
@@ -756,7 +761,8 @@ async def open_admin_plans_hub(
         nav.NAV_ADMIN_PLANS_AUDIENCE,
         text=(
             "💎 <b>پلن‌ها</b> (مثل وب‌پنل /plans)\n"
-            "«پلن‌های کاربران» یا «پلن‌های نمایندگان» را از کیبورد پایین بزنید."
+            "«پلن‌های کاربران» یا «پلن‌های نمایندگان» را از کیبورد پایین بزنید.\n"
+            "پلن‌ها اینلاین زیر پیام — افزودن از کیبورد."
         ),
         state=state,
         push=push,
@@ -1073,6 +1079,28 @@ async def handle_back(
         await open_admin_broadcast_hub(
             message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
         )
+        return
+    if level == nav.NAV_ADMIN_PLANS_ADD_TYPE:
+        aud = (await state.get_data()).get("_adm_plans_aud") or "users"
+        await state.update_data(_adm_plans_kind=None)
+        await nav.show_nav_keyboard(
+            message,
+            session,
+            db_user,
+            nav.NAV_ADMIN_PLANS_KIND,
+            text="⬇️",
+            state=state,
+            push=False,
+        )
+        from app.bot.handlers.admin_plans import (
+            send_resellers_plans_overview,
+            send_users_plans_overview,
+        )
+
+        if aud == "resellers":
+            await send_resellers_plans_overview(message, session)
+        else:
+            await send_users_plans_overview(message, session)
         return
     if level == nav.NAV_ADMIN_PLANS_KIND:
         aud = (await state.get_data()).get("_adm_plans_aud") or "users"
@@ -1427,6 +1455,7 @@ async def reply_main_nav(
         "bc_aud_admins",
         kb.REPLY_ACTION_ADM_PLANS_AUD_USERS,
         kb.REPLY_ACTION_ADM_PLANS_AUD_RESELLERS,
+        kb.REPLY_ACTION_ADM_PLANS_ADD,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL,
@@ -1579,7 +1608,10 @@ async def reply_main_nav(
             session,
             db_user,
             nav.NAV_ADMIN_PLANS_KIND,
-            text="💎 <b>پلن‌های کاربران</b>\nنوع را از کیبورد پایین یا دکمه‌های زیر پیام انتخاب کنید.",
+            text=(
+                "👥 <b>پلن‌های کاربران</b>\n"
+                "پلن‌ها زیر پیام اینلاین — «افزودن پلن» از کیبورد پایین."
+            ),
             state=state,
             push=True,
         )
@@ -1593,39 +1625,58 @@ async def reply_main_nav(
             session,
             db_user,
             nav.NAV_ADMIN_PLANS_KIND,
-            text="💎 <b>پلن‌های نمایندگان</b>\nلیست و دکمه‌های زیر پیام — مثل وب‌پنل.",
+            text=(
+                "🤝 <b>پلن‌های نمایندگان</b>\n"
+                "پلن‌ها زیر پیام اینلاین — «افزودن پلن» از کیبورد پایین."
+            ),
             state=state,
             push=True,
         )
         from app.bot.handlers.admin_plans import send_resellers_plans_overview
 
         await send_resellers_plans_overview(message, session)
+    elif action == kb.REPLY_ACTION_ADM_PLANS_ADD:
+        data = await state.get_data()
+        aud = data.get("_adm_plans_aud") or "users"
+        if aud not in {"users", "resellers"}:
+            await open_admin_plans_hub(
+                message, session, db_user, state, is_reseller_bot=is_reseller_bot
+            )
+            return
+        from app.bot.handlers.admin_plans import send_add_plan_type_picker
+
+        await send_add_plan_type_picker(message, session, db_user, state, aud)
     elif action in {
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_WHOLESALE,
+        kb.REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED,
+        kb.REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG,
     }:
         kind_map = {
             kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED: "fixed",
             kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM: "custom",
             kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL: "trial",
             kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_WHOLESALE: "wholesale",
+            kb.REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED: "fixed",
+            kb.REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG: "payg",
         }
         kind = kind_map[action]
-        await state.update_data(_adm_plans_aud="users", _adm_plans_kind=kind)
-        from app.bot.handlers.admin_plans import open_kind_screen
+        data = await state.get_data()
+        aud = data.get("_adm_plans_aud") or (
+            "resellers" if action in {kb.REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED, kb.REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG} else "users"
+        )
+        level = await nav.get_nav_level(state)
+        if level == nav.NAV_ADMIN_PLANS_ADD_TYPE:
+            from app.bot.handlers.admin_plans import open_add_kind_action
 
-        await open_kind_screen(message, session, "users", kind)
-    elif action in {
-        kb.REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED,
-        kb.REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG,
-    }:
-        kind = "payg" if action == kb.REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG else "fixed"
-        await state.update_data(_adm_plans_aud="resellers", _adm_plans_kind=kind)
-        from app.bot.handlers.admin_plans import open_kind_screen
+            await open_add_kind_action(message, session, db_user, state, aud, kind)
+        else:
+            await state.update_data(_adm_plans_aud=aud, _adm_plans_kind=kind)
+            from app.bot.handlers.admin_plans import open_kind_screen
 
-        await open_kind_screen(message, session, "resellers", kind)
+            await open_kind_screen(message, session, aud, kind)
     elif action == kb.REPLY_ACTION_ADMIN_PG:
         await open_pg_home(
             message, session, db_user, state, is_reseller_bot=is_reseller_bot

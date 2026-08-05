@@ -87,15 +87,15 @@ class InlineBackSanityTests(unittest.TestCase):
 
     def test_user_plan_detail_has_list_back(self):
         detail = ADMIN[ADMIN.find("def _plan_detail_keyboard") : ADMIN.find("router = Router")]
-        self.assertIn("adm:plans:kind:users:fixed", detail)
+        self.assertIn("adm:plans:aud:users", detail)
 
 
 class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.2.2")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.2.2")
+        self.assertEqual(__version__, "4.2.3")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.2.3")
 
 
 if __name__ == "__main__":

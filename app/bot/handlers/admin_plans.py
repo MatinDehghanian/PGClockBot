@@ -73,9 +73,14 @@ async def sync_plans_reply_keyboard(
     state: FSMContext,
     *,
     audience: str | None = None,
+    add_type: bool = False,
 ) -> None:
     """Keep reply keyboard aligned after inline «back» on plans screens."""
-    if audience in {"users", "resellers"}:
+    if add_type and audience in {"users", "resellers"}:
+        await state.update_data(_adm_plans_aud=audience, _adm_plans_kind=None)
+        await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_ADD_TYPE, push=False)
+        level = nav.NAV_ADMIN_PLANS_ADD_TYPE
+    elif audience in {"users", "resellers"}:
         await state.update_data(_adm_plans_aud=audience, _adm_plans_kind=None)
         await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_KIND, push=False)
         level = nav.NAV_ADMIN_PLANS_KIND
@@ -84,7 +89,10 @@ async def sync_plans_reply_keyboard(
         await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_AUDIENCE, push=False)
         level = nav.NAV_ADMIN_PLANS_AUDIENCE
     ui = await get_all_settings(session)
-    if level == nav.NAV_ADMIN_PLANS_KIND:
+    if level == nav.NAV_ADMIN_PLANS_ADD_TYPE:
+        aud = str((await state.get_data()).get("_adm_plans_aud") or "users")
+        markup = kb.admin_plans_add_type_reply_keyboard(aud, ui)
+    elif level == nav.NAV_ADMIN_PLANS_KIND:
         aud = str((await state.get_data()).get("_adm_plans_aud") or "users")
         markup = kb.admin_plans_kind_reply_keyboard(aud, ui)
     else:
@@ -166,72 +174,61 @@ async def send_kind_hub(
 
 
 async def send_users_plans_overview(message: Message, session: AsyncSession) -> None:
-    """User plans hub — mirrors web /plans user table (fixed + trial + custom + wholesale)."""
-    from app.bot.handlers.admin import _plan_line
-
+    """User plans list — mirrors web /plans user table; plans inline, add on reply keyboard."""
     ui = await get_all_settings(session)
     result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
     plans = list(result.scalars().all())
     fixed = [p for p in plans if not p.is_trial]
-    trial = next((p for p in plans if p.is_trial), None)
-    trial_on = on(ui.get("trial_enabled"))
-    custom_on = on(ui.get("custom_plan_enabled"))
-    wholesale_on = on(ui.get("wholesale_enabled"))
-
-    fixed_lines = (
-        "\n".join(_plan_line(p) for p in fixed[:8])
-        if fixed
-        else "هنوز پلن ثابتی نیست — «ثابت» یا «افزودن» را بزنید."
-    )
-    trial_gb = (
-        f"{trial.data_limit_gb:g} گیگ"
-        if trial and trial.data_limit_gb is not None
-        else "نامحدود"
-        if trial
-        else "—"
-    )
     text = (
         "👥 <b>پلن‌های کاربران</b>\n"
         "━━━━━━━━━━━━\n"
-        f"<b>ثابت ({len(fixed)})</b>\n{fixed_lines}\n\n"
-        f"<b>تست:</b> {'فعال' if trial_on else 'خاموش'}"
-        f"{f' · {html.escape(trial.name)} · {trial.duration_days}روز · {trial_gb}' if trial else ''}\n"
-        f"<b>دلخواه:</b> {'فعال' if custom_on else 'خاموش'} · "
-        f"{ui.get('custom_plan_min_gb', '1')}–{ui.get('custom_plan_max_gb', '500')} گیگ\n"
-        f"<b>عمده:</b> {'فعال' if wholesale_on else 'خاموش'} · "
-        f"{ui.get('wholesale_min_qty', '5')}–{ui.get('wholesale_max_qty', '20')} عدد"
+        f"پلن‌های ثابت: <b>{len(fixed)}</b>\n"
+        "روی هر پلن بزنید تا ویرایش/حذف — «افزودن پلن» از کیبورد پایین."
     )
-    await message.answer(text, reply_markup=kb.admin_users_plans_overview_keyboard(ui))
+    await message.answer(
+        text,
+        reply_markup=kb.admin_users_plans_overview_keyboard(plans, ui),
+    )
 
 
 async def send_resellers_plans_overview(message: Message, session: AsyncSession) -> None:
-    """Reseller subscription plans — both fixed (commission) and PAYG like web /plans."""
+    """Reseller subscription plans — all rows inline like web /plans."""
     all_plans = await list_reseller_plans(session)
     fixed = [p for p in all_plans if reseller_plan_mode_of(p) == "fixed"]
     payg = [p for p in all_plans if reseller_plan_mode_of(p) == "payg"]
-    cur = get_settings().currency
-
-    def _card(p: ResellerPlan) -> str:
-        flag = "✅" if p.is_active else "⏸"
-        mode = reseller_plan_mode_of(p)
-        if mode == "payg":
-            rate = int(p.price_per_gb or 0)
-            extra = f" · {rate:,} ت/GB".replace(",", "٬") if rate else ""
-        else:
-            extra = f" · {int(p.commission_percent or 0)}٪"
-        return f"{flag} <b>{html.escape(p.name)}</b> · {format_toman(p.price, cur)}{extra}"
-
-    fixed_body = "\n".join(_card(p) for p in fixed[:6]) if fixed else "پلن ثابت نیست."
-    payg_body = "\n".join(_card(p) for p in payg[:6]) if payg else "پلن PAYG نیست."
     text = (
         "🤝 <b>پلن‌های نمایندگان</b>\n"
         "━━━━━━━━━━━━\n"
-        f"<b>📦 ثابت (کمیسیون) — {len(fixed)}</b>\n{fixed_body}\n\n"
-        f"<b>⚡ Pay As You Go — {len(payg)}</b>\n{payg_body}"
+        f"ثابت (کمیسیون): <b>{len(fixed)}</b> · PAYG: <b>{len(payg)}</b>\n"
+        "روی هر پلن بزنید — «افزودن پلن» از کیبورد پایین."
     )
     await message.answer(
         text,
         reply_markup=kb.admin_resellers_plans_overview_keyboard(fixed, payg),
+    )
+
+
+async def send_add_plan_type_picker(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    audience: str,
+) -> None:
+    """Step after «افزودن پلن» — type picker like web modal kind step."""
+    title = "کاربران" if audience == "users" else "نمایندگان"
+    ui = await get_all_settings(session)
+    await state.update_data(_adm_plans_aud=audience, _adm_plans_kind=None)
+    await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_ADD_TYPE, push=True)
+    markup = kb.admin_plans_add_type_reply_keyboard(audience, ui)
+    await message.answer(
+        f"➕ <b>افزودن پلن — {title}</b>\n"
+        "نوع پلن را از کیبورد پایین یا دکمه‌های زیر انتخاب کنید:",
+        reply_markup=markup,
+    )
+    await message.answer(
+        "نوع پلن:",
+        reply_markup=kb.admin_plans_add_type_keyboard(audience, ui),
     )
 
 
@@ -450,6 +447,41 @@ async def open_kind_screen(
         await message.answer("نوع پلن نامعتبر است.")
 
 
+async def open_add_kind_action(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    audience: str,
+    kind: str,
+) -> None:
+    """Route add-type selection — mirrors web modal submit for each kind."""
+    from app.bot.handlers.admin import AdminStates
+
+    await state.update_data(_adm_plans_aud=audience, _adm_plans_kind=kind)
+    await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_KIND, push=False)
+    ui = await get_all_settings(session)
+    list_markup = kb.admin_plans_kind_reply_keyboard(audience, ui)
+    if audience == "users" and kind == "fixed":
+        await state.set_state(AdminStates.add_plan_name)
+        await message.answer("➕ <b>پلن ثابت جدید</b>\nنام پلن را بفرستید:", reply_markup=kb.cancel_reply())
+        await message.answer("⬇️", reply_markup=list_markup)
+        return
+    if audience == "resellers" and kind in {"fixed", "payg"}:
+        label = "Pay As You Go" if kind == "payg" else "ثابت (کمیسیون)"
+        await state.set_state(AdminPlansStates.res_plan_name)
+        await state.update_data(res_plan_mode=kind)
+        await message.answer(
+            f"➕ <b>پلن {label}</b>\nنام پلن نمایندگی:",
+            reply_markup=kb.cancel_reply(),
+        )
+        await message.answer("⬇️", reply_markup=list_markup)
+        return
+    # Settings-based kinds — open configure screen (same as web «تنظیم»)
+    await message.answer("⬇️", reply_markup=list_markup)
+    await open_kind_screen(message, session, audience, kind)
+
+
 async def _rerender_plans_screen(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -492,6 +524,41 @@ async def _rerender_plans_screen(
                 add_callback=f"adm:resplan:add:{kind}",
             ),
         )
+
+
+@router.callback_query(F.data == "adm:plans:noop")
+async def plans_noop(callback: CallbackQuery, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await callback.answer("از کیبورد «افزودن پلن» استفاده کنید", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("adm:plans:add:"))
+async def plans_add_kind_cb(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) < 5:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    aud, kind = parts[3], parts[4]
+    if aud not in {"users", "resellers"}:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await open_add_kind_action(callback.message, session, db_user, state, aud, kind)
 
 
 @router.callback_query(F.data == "adm:plans")

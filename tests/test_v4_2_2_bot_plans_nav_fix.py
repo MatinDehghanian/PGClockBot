@@ -16,7 +16,7 @@ class PlansLabelCollisionTests(unittest.TestCase):
     def test_audience_labels_distinct_from_admin_users_resellers(self):
         aud_block = KEYBOARDS[
             KEYBOARDS.find("def _admin_plans_audience_entries")
-            : KEYBOARDS.find("def _admin_plans_kind_entries")
+            : KEYBOARDS.find("def _admin_plans_list_entries")
         ]
         self.assertIn("📦 پلن‌های کاربران", aud_block)
         self.assertIn("🤝 پلن‌های نمایندگان", aud_block)
@@ -27,7 +27,8 @@ class PlansLabelCollisionTests(unittest.TestCase):
         self.assertIn("NAV_ADMIN_PLANS_AUDIENCE", REPLY_NAV)
         self.assertIn("_admin_plans_audience_entries(ui)", REPLY_NAV)
         self.assertIn("NAV_ADMIN_PLANS_KIND", REPLY_NAV)
-        self.assertIn("_admin_plans_kind_entries", REPLY_NAV)
+        self.assertIn("_admin_plans_list_entries", REPLY_NAV)
+        self.assertIn("_admin_plans_add_type_entries", REPLY_NAV)
         self.assertIn("NAV_ADMIN_PLANS_AUDIENCE", REPLY_NAV.split("Prefer admin hub")[0])
 
     def test_no_duplicate_audience_hub_on_open(self):
@@ -48,8 +49,8 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.2.2")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.2.2")
+        self.assertEqual(__version__, "4.2.3")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.2.3")
 
 
 if __name__ == "__main__":
