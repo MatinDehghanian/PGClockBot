@@ -2166,7 +2166,7 @@ async def _render_reseller_card(
         f"یوزرنیم: @{html.escape(user.username or '—')}\n"
         f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
         f"ادمین پاسارگارد: <code>{html.escape(str(pg_uname))}</code>\n"
-        f"حالت صورتحساب: {html.escape(mode)}\n"
+        f"حالت پرداخت: {html.escape(mode)}\n"
         f"نمایندگی: {active}{suspended}\n"
         f"ربات اختصاصی: {html.escape(bot_uname)}\n"
         f"سرویس‌های فروشگاه: {shop_svc_count}\n\n"

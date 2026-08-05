@@ -26,7 +26,7 @@
         </label>
       </div>
       <div>
-        <label class="form-field">حالت Billing
+        <label class="form-field">حالت پرداخت
           <select name="billing_mode" id="edit-billing-mode">
             <option value="fixed" {% if (plan.billing_mode or 'fixed') == 'fixed' %}selected{% endif %}>ثابت (کمیسیون)</option>
             <option value="payg" {% if plan.billing_mode == 'payg' %}selected{% endif %}>Pay As You Go</option>
@@ -36,14 +36,14 @@
       <div id="edit-commission-field">
         <label class="form-field">کمیسیون ٪
           <input name="commission_percent" id="edit-commission-input" type="number" min="0" max="100" value="{{ plan.commission_percent if plan.commission_percent is not none else 0 }}" />
+          <small class="muted">اختیاری — پیش‌فرض ۰؛ فقط در حالت ثابت</small>
         </label>
-        <small class="muted">اختیاری — پیش‌فرض ۰؛ فقط در حالت ثابت</small>
       </div>
       <div id="edit-price-per-gb-field" hidden>
         <label class="form-field">نرخ هر گیگ (تومان)
           <input name="price_per_gb" id="edit-price-per-gb-input" type="number" min="0" value="{{ plan.price_per_gb or 0 }}" />
+          <small class="muted">نرخ مصرف این پلن PAYG — برای گروه‌های با قیمت متفاوت، پلن جدا بسازید</small>
         </label>
-        <small class="muted">نرخ مصرف این پلن PAYG — برای گروه‌های با قیمت متفاوت، پلن جدا بسازید</small>
       </div>
       <div>
         <label class="form-field">ترتیب
