@@ -178,6 +178,22 @@ class AdminUsageSnapshotTests(unittest.TestCase):
         self.assertIn("50", snap["users_text"])
         self.assertIsNotNone(snap["lifetime_text"])
 
+    def test_resellers_and_admins_templates_show_usage(self):
+        from pathlib import Path
+
+        resellers = Path("app/web/templates/resellers.html").read_text(encoding="utf-8")
+        admins = Path("app/web/templates/pg_admins.html").read_text(encoding="utf-8")
+        self.assertIn("reseller_usage", resellers)
+        self.assertIn("users_text", resellers)
+        self.assertIn("traffic_text", resellers)
+        self.assertIn("<th>کاربران</th>", resellers)
+        self.assertIn("<th>حجم</th>", resellers)
+        self.assertIn("admin_usage", admins)
+        self.assertIn("users_text", admins)
+        self.assertIn("traffic_text", admins)
+        self.assertIn("<th>کاربران</th>", admins)
+        self.assertIn("<th>حجم</th>", admins)
+
 
 if __name__ == "__main__":
     unittest.main()

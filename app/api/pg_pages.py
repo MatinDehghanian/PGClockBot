@@ -1444,14 +1444,35 @@ def register_pg_pages(
                 uname = str(a.get("username") or "").strip().lower()
                 if not uname:
                     continue
-                role = a.get("role") if isinstance(a.get("role"), dict) else None
+                payload = a
+                # Simple list often omits usage — fetch full admin when metrics missing
+                has_usage = any(
+                    payload.get(k) is not None
+                    for k in (
+                        "used_traffic",
+                        "traffic_used",
+                        "lifetime_used_traffic",
+                        "total_users",
+                        "users_count",
+                        "data_limit",
+                        "max_users",
+                    )
+                )
+                if not has_usage:
+                    try:
+                        full = await pg.get_admin(uname)
+                        if isinstance(full, dict):
+                            payload = full
+                    except Exception:
+                        pass
+                role = payload.get("role") if isinstance(payload.get("role"), dict) else None
                 if role is None:
-                    rid = a.get("role_id")
+                    rid = payload.get("role_id") or a.get("role_id")
                     try:
                         role = roles_by_id.get(int(rid)) if rid is not None else None
                     except (TypeError, ValueError):
                         role = None
-                admin_usage[uname] = admin_usage_snapshot(a, role)
+                admin_usage[uname] = admin_usage_snapshot(payload, role)
         except Exception as e:
             err = str(e)
         return render(

@@ -80,20 +80,41 @@
   <table>
     <thead>
       <tr>
-        <th>کاربر</th><th class="col-hide-sm">تلگرام</th><th>نقش</th><th class="col-hide-sm">کمیسیون</th><th class="col-hide-sm">وب</th><th class="col-hide-sm">ربات</th><th>راه‌اندازی</th><th class="col-actions"></th>
+        <th>کاربر</th>
+        <th class="col-hide-sm">تلگرام</th>
+        <th>نقش</th>
+        <th>کاربران</th>
+        <th>حجم</th>
+        <th class="col-hide-sm">کمیسیون</th>
+        <th class="col-hide-sm">وب</th>
+        <th class="col-hide-sm">ربات</th>
+        <th>راه‌اندازی</th>
+        <th class="col-actions"></th>
       </tr>
     </thead>
     <tbody>
     {% for u, p in rows %}
+      {% set usage = (reseller_usage or {}).get(u.id) or {} %}
       <tr>
-        <td>{{ u.full_name or u.username or '—' }}</td>
+        <td>{{ u.full_name or u.username or '—' }}
+          {% if (p.billing_mode or 'fixed') == 'payg' %}
+          <br><span class="badge pending">PAYG</span>
+          {% endif %}
+        </td>
         <td class="mono col-hide-sm">{{ u.telegram_id }}</td>
         <td>
           <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
             {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
           </span>
         </td>
-        <td class="mono col-hide-sm">{{ p.commission_percent }}%</td>
+        <td class="mono" dir="ltr" title="مصرف / سقف کاربران">{{ usage.get('users_text') or '—' }}</td>
+        <td class="mono" dir="ltr" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
+          {{ usage.get('traffic_text') or '—' }}
+          {% if usage.get('lifetime_text') %}
+          <br><small class="muted">Σ {{ usage.get('lifetime_text') }}</small>
+          {% endif %}
+        </td>
+        <td class="mono col-hide-sm">{% if (p.billing_mode or 'fixed') == 'payg' %}—{% else %}{{ p.commission_percent }}%{% endif %}</td>
         <td class="mono col-hide-sm">{{ p.web_username or '—' }}</td>
         <td class="mono col-hide-sm">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
         <td>{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.web_username %}<span class="badge pending">بدون ربات</span>{% else %}—{% endif %}</td>
@@ -141,7 +162,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="muted">نماینده‌ای نیست</td></tr>
+      <tr><td colspan="10" class="muted">نماینده‌ای نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>

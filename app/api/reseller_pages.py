@@ -84,6 +84,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.services.pg_overview import admin_usage_snapshot
         from app.services.setup_wizard import default_panel_base_url
         from app.services.users import get_setting
 
@@ -94,10 +95,43 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         )
         rows = result.all()
         roles = []
+        reseller_usage: dict = {}
         try:
             roles = await get_pg().get_admin_roles()
         except Exception:
             roles = []
+        try:
+            pg = get_pg()
+            admins = await pg.get_admins()
+            if not admins:
+                admins = await pg.get_admins_simple()
+            roles_by_id = {
+                int(r.get("id")): r
+                for r in (roles or [])
+                if isinstance(r, dict) and r.get("id") is not None
+            }
+            by_name = {
+                str(a.get("username") or "").strip().lower(): a
+                for a in (admins or [])
+                if isinstance(a, dict) and a.get("username")
+            }
+            for _user, profile in rows:
+                uname = str(profile.pg_admin_username or "").strip().lower()
+                if not uname:
+                    continue
+                admin = by_name.get(uname)
+                if not isinstance(admin, dict):
+                    continue
+                role = admin.get("role") if isinstance(admin.get("role"), dict) else None
+                if role is None:
+                    rid = admin.get("role_id") or profile.pg_role_id
+                    try:
+                        role = roles_by_id.get(int(rid)) if rid is not None else None
+                    except (TypeError, ValueError):
+                        role = None
+                reseller_usage[int(profile.user_id)] = admin_usage_snapshot(admin, role)
+        except Exception:
+            reseller_usage = {}
         panel_url = await get_reseller_panel_base_url(session)
         custom_url = (await get_setting(session, "reseller_panel_base_url") or "").strip()
         default_url = default_panel_base_url()
@@ -110,6 +144,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             {
                 "staff": staff,
                 "rows": rows,
+                "reseller_usage": reseller_usage,
                 "tabs": _tabs("list"),
                 "tab": "list",
                 "feature_perms": FEATURE_PERMS,

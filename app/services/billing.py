@@ -531,6 +531,7 @@ async def debit_usage(
     idempotency_key: str,
     note: str | None = None,
     commit: bool = True,
+    watermark_before: int | None = None,
 ) -> ResellerBillingTransaction | None:
     """Charge proportional usage and advance watermark. Idempotent by key.
 
@@ -539,6 +540,7 @@ async def debit_usage(
     - If rate > 0 but the delta floors to 0 toman, do **not** advance the watermark
       so residual bytes accumulate until they are worth at least 1 toman.
     - If rate is 0, advance watermark without charging (misconfigured plan).
+    - Optimistic lock on ``billing_watermark_bytes`` prevents concurrent double-charge.
     """
     if bytes_delta <= 0:
         profile.billing_watermark_bytes = int(watermark_after)
@@ -552,6 +554,11 @@ async def debit_usage(
 
     amount = bytes_cost_proportional(bytes_delta, rate_per_gb)
     rid = int(profile.user_id)
+    expected_wm = (
+        int(watermark_before)
+        if watermark_before is not None
+        else int(profile.billing_watermark_bytes or 0)
+    )
 
     # Hold watermark when usage is too small to bill 1 toman at a positive rate.
     if amount <= 0 and int(rate_per_gb) > 0:
@@ -567,7 +574,10 @@ async def debit_usage(
         with session.no_autoflush:
             result = await session.execute(
                 update(ResellerProfile)
-                .where(ResellerProfile.user_id == rid)
+                .where(
+                    ResellerProfile.user_id == rid,
+                    ResellerProfile.billing_watermark_bytes == expected_wm,
+                )
                 .values(
                     billing_balance=ResellerProfile.billing_balance - int(amount),
                     billing_watermark_bytes=int(watermark_after),
@@ -575,10 +585,33 @@ async def debit_usage(
                 .execution_options(synchronize_session=False)
             )
         if result.rowcount != 1:
-            raise ValueError("نماینده یافت نشد")
+            # Concurrent tick already moved watermark — do not double-charge.
+            existing = await _find_by_idempotency(session, idempotency_key)
+            if existing:
+                return existing
+            logger.warning(
+                "billing optimistic-lock miss reseller=%s expected_wm=%s after=%s",
+                rid,
+                expected_wm,
+                watermark_after,
+            )
+            await session.refresh(profile)
+            return None
     else:
-        # rate_per_gb == 0 — advance watermark, no money movement
-        profile.billing_watermark_bytes = int(watermark_after)
+        # rate_per_gb == 0 — advance watermark only if still at expected
+        with session.no_autoflush:
+            result = await session.execute(
+                update(ResellerProfile)
+                .where(
+                    ResellerProfile.user_id == rid,
+                    ResellerProfile.billing_watermark_bytes == expected_wm,
+                )
+                .values(billing_watermark_bytes=int(watermark_after))
+                .execution_options(synchronize_session=False)
+            )
+        if result.rowcount != 1:
+            await session.refresh(profile)
+            return None
 
     await session.refresh(profile)
 
@@ -724,6 +757,7 @@ async def tick_reseller_usage(
         delta,
         rate_per_gb=rate,
         watermark_after=used,
+        watermark_before=watermark,
         idempotency_key=key,
         note="مصرف ترافیک",
         commit=commit,
