@@ -182,6 +182,25 @@ detect_server_ip() {
   printf '%s\n' "$ip"
 }
 
+read_app_version() {
+  # Prefer VERSION file (works before venv); fallback to app.version after deps exist.
+  local v=""
+  if [[ -f "${SCRIPT_DIR}/VERSION" ]]; then
+    v="$(tr -d '\r\n[:space:]' < "${SCRIPT_DIR}/VERSION")"
+  fi
+  if [[ -z "$v" && -n "${PY:-}" && -x "${PY}" ]]; then
+    v="$("${PY}" -c 'from app.version import __version__; print(__version__)' 2>/dev/null || true)"
+  fi
+  if [[ -z "$v" ]]; then
+    v="unknown"
+  fi
+  # Belt-and-suspenders: only print semver-like tokens to the terminal.
+  if [[ ! "$v" =~ ^[0-9]+(\.[0-9]+)*([a-zA-Z0-9.-]*)?$ ]]; then
+    v="unknown"
+  fi
+  printf '%s' "$v"
+}
+
 web_username() {
   if [[ -f data/web_admin.json ]] && [[ -f "$PY" || -x "$PY" ]]; then
     "$PY" - <<'PY' 2>/dev/null || echo admin
@@ -514,7 +533,7 @@ restart_service_if_any() {
 
 # ── actions ─────────────────────────────────────────────
 cmd_install() {
-  banner_small "Install"
+  banner
   require_ubuntu_22_plus || return 1
   ensure_apt_packages || return 1
   ensure_python || return 1
@@ -998,7 +1017,7 @@ banner() {
    ==========================================
 ART
     printf '%s\n' "$N"
-    printf '  %sUbuntu 22.04+  ·  English  ·  One command for everything%s\n' "$D" "$N"
+    printf '  %sRelease v%s%s\n' "$D" "$(read_app_version)" "$N"
     echo ""
   } > /dev/tty
 }
@@ -1007,7 +1026,11 @@ banner_small() {
   {
     echo ""
     printf '%s==========================================%s\n' "$C" "$N"
-    printf '%s  PGClockBot · %s%s\n' "$B" "$*" "$N"
+    if [[ -n "${1:-}" ]]; then
+      printf '%s  PGClockBot · %s · v%s%s\n' "$B" "$1" "$(read_app_version)" "$N"
+    else
+      printf '%s  PGClockBot · v%s%s\n' "$B" "$(read_app_version)" "$N"
+    fi
     printf '%s==========================================%s\n' "$C" "$N"
     echo ""
   } > /dev/tty
