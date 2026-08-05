@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.1.7": [
+        "منوی pgclock و نصب: به‌جای کپشن English/One command، نسخه ریلیز (Release v…) به‌صورت داینامیک از VERSION",
+        "هدر install همان بنر با نسخه فعلی را نشان می‌دهد",
+    ],
     "4.1.6": [
         "رفع «Setup URL not ready» در پایان install — لینک یک‌بارمصرف همان لحظه از روی سرور تولید می‌شود",
         "نیازی به انتظار برای بالا آمدن سرویس نیست؛ پنل همان gate را بعد از استارت استفاده می‌کند",
