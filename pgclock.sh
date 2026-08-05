@@ -614,16 +614,12 @@ cmd_install() {
 
   if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
     if [[ -n "$setup_url" ]]; then
-      print_success "Install complete — open the one-time setup URL" --setup-only \
-        "One-time setup URL (valid 15 min):" \
-        "${setup_url}" \
-        "Manage:     bash pgclock.sh" \
-        "Logs:       journalctl -u ${SERVICE_NAME} -f"
+      print_success "Install complete" --setup-only \
+        "لینک یک‌بارمصرف (اعتبار ۱۵ دقیقه):" \
+        "${setup_url}"
     else
       print_success "Install complete" --setup-only \
-        "Setup URL not ready yet — run: bash pgclock.sh status" \
-        "Manage:     bash pgclock.sh" \
-        "Logs:       journalctl -u ${SERVICE_NAME} -f"
+        "لینک یک‌بارمصرف آماده نیست — bash pgclock.sh status"
     fi
   else
     print_success "Install/refresh complete" \

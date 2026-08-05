@@ -70,7 +70,8 @@ class PgclockInstallHintTests(unittest.TestCase):
         self.assertIn("read_setup_entry_url", src)
         self.assertIn("setup_gate.json", src)
         self.assertIn("--setup-only", src)
-        self.assertIn("15 min", src)
+        self.assertIn("لینک یک‌بارمصرف (اعتبار ۱۵ دقیقه):", src)
+        self.assertIn('print_success "Install complete" --setup-only', src)
 
     def test_banner_shows_dynamic_release_version(self):
         src = Path("pgclock.sh").read_text(encoding="utf-8")
