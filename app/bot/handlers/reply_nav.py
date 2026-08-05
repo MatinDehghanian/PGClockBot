@@ -181,21 +181,12 @@ async def open_shop_list(
     *,
     push: bool = True,
 ) -> None:
-    from app.bot.handlers.shop import _custom_available_for_users
-    from app.services.orders import list_active_plans
-    from app.services.users import on
+    from app.bot.handlers.shop import _shop_kind_flags
 
-    ui = await get_all_settings(session)
-    trial_on = on(ui.get("trial_enabled"))
-    plans = await list_active_plans(session, include_trial=True)
-    if not trial_on:
-        plans = [p for p in plans if not p.is_trial]
-    has_svc = await user_has_services(session, db_user.id)
-    if has_svc:
-        plans = [p for p in plans if not p.is_trial]
-    custom_on = await _custom_available_for_users(session, ui, plans=plans)
-    wholesale_on = on(ui.get("wholesale_enabled")) and any(not p.is_trial for p in plans)
-    if not plans and not custom_on:
+    ui, fixed_on, trial_on, custom_on, wholesale_on, *_rest = await _shop_kind_flags(
+        session, db_user
+    )
+    if not any((fixed_on, trial_on, custom_on, wholesale_on)):
         from app.bot.menu_nav import build_main_reply_keyboard
 
         text = format_message(
@@ -213,17 +204,20 @@ async def open_shop_list(
         db_user,
         nav.NAV_SHOP,
         text=format_message(
-            "🛒 انتخاب پلن",
-            "پلن را از دکمه‌های زیر پیام انتخاب کنید."
-            + ("\nپلن دلخواه / عمده از کیبورد پایین." if (custom_on or wholesale_on) else ""),
+            "🛒 فروشگاه",
+            "ابتدا <b>نوع پلن</b> را از دکمه‌های زیر پیام انتخاب کنید.",
         ),
         state=state,
         push=push,
     )
     await message.answer(
-        "📦 پلن‌ها:",
-        reply_markup=kb.plans_keyboard(
-            plans, ui, custom_enabled=custom_on, wholesale_enabled=wholesale_on
+        "📦 نوع پلن:",
+        reply_markup=kb.shop_kind_keyboard(
+            ui,
+            fixed_on=fixed_on,
+            trial_on=trial_on,
+            custom_on=custom_on,
+            wholesale_on=wholesale_on,
         ),
     )
 
@@ -740,8 +734,6 @@ async def open_admin_plans_hub(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
-    from app.db.models import Plan
-
     if is_reseller_bot or db_user.role != Role.ADMIN.value:
         await _refuse_admin(message)
         return
@@ -750,21 +742,16 @@ async def open_admin_plans_hub(
         session,
         db_user,
         nav.NAV_ADMIN_PLANS,
-        text="💎 <b>پلن‌های فروش</b>\nساخت/دلخواه/تست از کیبورد؛ انتخاب پلن زیر پیام اینلاین است.",
+        text=(
+            "💎 <b>پلن‌ها</b>\n"
+            "مثل وب‌پنل: ابتدا مخاطب (کاربر / نماینده) را از دکمه‌های زیر پیام انتخاب کنید."
+        ),
         state=state,
         push=push,
     )
-    result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
-    plans = list(result.scalars().all())
-    if not plans:
-        body = "هنوز پلنی ثبت نشده است."
-    else:
-        from app.bot.handlers.admin import _plan_line
-
-        body = "\n\n".join(_plan_line(p) for p in plans[:20])
     await message.answer(
-        f"📦 <b>لیست پلن‌ها</b>\n\n{body}",
-        reply_markup=kb.admin_plans_list_keyboard(plans),
+        "مخاطب پلن:",
+        reply_markup=kb.admin_plan_audience_keyboard(),
     )
 
 
@@ -950,7 +937,11 @@ async def _soft_admin(
         elif data == "adm:tickets":
             await admin_h.adm_tickets(cb, session, db_user)
         elif data == "adm:plans":
-            await admin_h.adm_plans(cb, session, db_user)
+            await admin_h.adm_plans(cb, session, db_user, state)
+        elif data.startswith("adm:plans:aud:"):
+            await admin_h.adm_plans_audience(cb, session, db_user)
+        elif data.startswith("adm:plans:kind:"):
+            await admin_h.adm_plans_kind(cb, session, db_user, state)
         elif data == "adm:plan:add":
             await admin_h.adm_plan_add(cb, state, db_user)
         elif data == "adm:st:sub:service:custom":
@@ -1477,14 +1468,14 @@ async def reply_main_nav(
         bubble = await message.answer("⏳")
         from app.bot.handlers import shop as shop_h
 
-        cb = _SoftCallback(bubble, "shop:custom")
-        await shop_h.custom_start(cb, session, state)
+        cb = _SoftCallback(bubble, "shop:kind:custom")
+        await shop_h.shop_kind_custom(cb, session, state)
     elif action == kb.REPLY_ACTION_SHOP_WHOLESALE:
         bubble = await message.answer("⏳")
         from app.bot.handlers import shop as shop_h
 
-        cb = _SoftCallback(bubble, "shop:wholesale")
-        await shop_h.wholesale_start(cb, session, state)
+        cb = _SoftCallback(bubble, "shop:kind:wholesale")
+        await shop_h.shop_kind_wholesale(cb, session, state)
     elif action == kb.REPLY_ACTION_SERVICES:
         await open_services_list(message, session, db_user)
     elif action == kb.REPLY_ACTION_WALLET:
@@ -1569,25 +1560,25 @@ async def reply_main_nav(
         await open_admin_backup_hub(
             message, session, db_user, state, is_reseller_bot=is_reseller_bot
         )
-    elif action == "adm_plan_add":
+    elif action in {"adm_plan_add", kb.REPLY_ACTION_ADM_PLAN_ADD}:
         await _soft_admin(
             message, session, db_user, "adm:plan:add", state, is_reseller_bot=is_reseller_bot
         )
-    elif action == "adm_plan_custom":
+    elif action in {"adm_plan_custom", kb.REPLY_ACTION_ADM_PLAN_CUSTOM}:
         await _soft_admin(
             message,
             session,
             db_user,
-            "adm:st:sub:service:custom",
+            "adm:plans:kind:users:custom",
             state,
             is_reseller_bot=is_reseller_bot,
         )
-    elif action == "adm_plan_trial":
+    elif action in {"adm_plan_trial", kb.REPLY_ACTION_ADM_PLAN_TRIAL}:
         await _soft_admin(
             message,
             session,
             db_user,
-            "adm:st:sub:service:trial",
+            "adm:plans:kind:users:trial",
             state,
             is_reseller_bot=is_reseller_bot,
         )

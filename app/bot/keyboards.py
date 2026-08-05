@@ -414,12 +414,9 @@ def _admin_broadcast_submenu_entries(ui: dict | None = None) -> list[tuple[str, 
 
 
 def _admin_plans_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    """Plan audience/kind pickers are inline — reply KB is back/home only."""
     _ = ui
-    return [
-        ("adm_plan_add", "➕ پلن جدید"),
-        ("adm_plan_custom", "پلن دلخواه"),
-        ("adm_plan_trial", "پلن تست"),
-    ]
+    return []
 
 
 def _reseller_plans_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
@@ -810,11 +807,12 @@ def reply_action_map(
             for key, text in _reply_admin_entries(ui):
                 mapping[(text or "").strip()] = key
 
-        # Shop chrome labels (custom/wholesale) — always registered; keyboard
-        # only shows them when enabled.
+        # Legacy shop custom/wholesale labels (old reply keyboards) — route to kind flow
         for key, text in _shop_submenu_entries(
             ui, custom_enabled=True, wholesale_enabled=True
         ):
+            mapping.setdefault((text or "").strip(), key)
+        for key, text in _admin_plans_legacy_entries(ui):
             mapping.setdefault((text or "").strip(), key)
 
         if reseller_actor:
@@ -867,6 +865,11 @@ def admin_main_menu(ui: dict | None = None) -> InlineKeyboardMarkup:
 REPLY_ACTION_SHOP_CUSTOM = "shop_custom"
 REPLY_ACTION_SHOP_WHOLESALE = "shop_wholesale"
 
+# Legacy admin plan reply labels (pre unified kind picker)
+REPLY_ACTION_ADM_PLAN_ADD = "adm_plan_add"
+REPLY_ACTION_ADM_PLAN_CUSTOM = "adm_plan_custom"
+REPLY_ACTION_ADM_PLAN_TRIAL = "adm_plan_trial"
+
 
 def _shop_submenu_entries(
     ui: dict | None = None,
@@ -874,7 +877,7 @@ def _shop_submenu_entries(
     custom_enabled: bool = False,
     wholesale_enabled: bool = False,
 ) -> list[tuple[str, str]]:
-    """Static shop chrome (custom/wholesale). Plan names stay inline."""
+    """Legacy labels for stale reply keyboards — not shown on new shop KB."""
     entries: list[tuple[str, str]] = []
     if custom_enabled:
         entries.append((REPLY_ACTION_SHOP_CUSTOM, "✨ پلن دلخواه"))
@@ -885,18 +888,136 @@ def _shop_submenu_entries(
     return entries
 
 
-def shop_reply_keyboard(
+def _admin_plans_legacy_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    _ = ui
+    return [
+        (REPLY_ACTION_ADM_PLAN_ADD, "➕ پلن جدید"),
+        (REPLY_ACTION_ADM_PLAN_CUSTOM, "پلن دلخواه"),
+        (REPLY_ACTION_ADM_PLAN_TRIAL, "پلن تست"),
+    ]
+
+
+def shop_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    """Shop nav chrome — plan kind + lists are inline under the message."""
+    rows = _pack_reply_rows([], ui, footer_row=_submenu_footer(ui))
+    return _reply_markup(rows, placeholder="فروشگاه — نوع پلن را از زیر پیام انتخاب کنید…")
+
+
+def shop_kind_keyboard(
     ui: dict | None = None,
     *,
-    custom_enabled: bool = False,
-    wholesale_enabled: bool = False,
-) -> ReplyKeyboardMarkup:
-    """Shop chrome on reply KB; plan picks are inline under the message."""
-    entries = _shop_submenu_entries(
-        ui, custom_enabled=custom_enabled, wholesale_enabled=wholesale_enabled
+    fixed_on: bool = False,
+    trial_on: bool = False,
+    custom_on: bool = False,
+    wholesale_on: bool = False,
+) -> InlineKeyboardMarkup:
+    """Step 1 of user shop — mirrors web modal user kinds."""
+    rows: list[list[InlineKeyboardButton]] = []
+    if fixed_on:
+        rows.append(
+            [InlineKeyboardButton(text="💎 ثابت", callback_data="shop:kind:fixed")]
+        )
+    if trial_on:
+        rows.append(
+            [InlineKeyboardButton(text="🎁 تست", callback_data="shop:kind:trial")]
+        )
+    if custom_on:
+        rows.append(
+            [InlineKeyboardButton(text="✨ دلخواه", callback_data="shop:kind:custom")]
+        )
+    if wholesale_on:
+        label = _t(ui, "btn_wholesale") or "📦 فروش عمده"
+        rows.append(
+            [InlineKeyboardButton(text=label, callback_data="shop:kind:wholesale")]
+        )
+    if not rows:
+        rows = [[InlineKeyboardButton(text="پلنی نیست", callback_data="menu:home")]]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_plan_audience_keyboard() -> InlineKeyboardMarkup:
+    """Admin plans — audience step (users vs resellers)."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="👥 کاربران",
+                    callback_data="adm:plans:aud:users",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🤝 نمایندگان",
+                    callback_data="adm:plans:aud:resellers",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ بازگشت",
+                    callback_data="adm:home",
+                )
+            ],
+        ]
     )
-    rows = _pack_reply_rows(entries, ui, footer_row=_submenu_footer(ui))
-    return _reply_markup(rows, placeholder="فروشگاه — پلن را از زیر پیام انتخاب کنید…")
+
+
+def admin_plan_kind_keyboard(
+    audience: str,
+    ui: dict | None = None,
+) -> InlineKeyboardMarkup:
+    """Admin plans — kind step for the chosen audience."""
+    aud = (audience or "users").strip()
+    back = (
+        InlineKeyboardButton(
+            text="⬅️ مخاطب",
+            callback_data="adm:plans",
+        )
+    )
+    if aud == "resellers":
+        rows = [
+            [
+                InlineKeyboardButton(
+                    text="📦 ثابت (کمیسیون)",
+                    callback_data="adm:plans:kind:resellers:fixed",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⚡ Pay As You Go",
+                    callback_data="adm:plans:kind:resellers:payg",
+                )
+            ],
+            [back],
+        ]
+        return InlineKeyboardMarkup(inline_keyboard=rows)
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="💎 ثابت",
+                callback_data="adm:plans:kind:users:fixed",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="✨ دلخواه",
+                callback_data="adm:plans:kind:users:custom",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🎁 تست",
+                callback_data="adm:plans:kind:users:trial",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=_t(ui, "btn_wholesale") or "📦 فروش عمده",
+                callback_data="adm:plans:kind:users:wholesale",
+            )
+        ],
+        [back],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def plans_keyboard(
@@ -905,9 +1026,10 @@ def plans_keyboard(
     *,
     custom_enabled: bool = False,
     wholesale_enabled: bool = False,
+    back_callback: str = "shop:list",
 ) -> InlineKeyboardMarkup:
-    """Plan name rows only — custom/wholesale/back live on shop_reply_keyboard."""
-    _ = custom_enabled, wholesale_enabled, ui  # kept for call-site compat
+    """Plan name rows; optional inline back to kind picker."""
+    _ = custom_enabled, wholesale_enabled  # call-site compat
     rows = [
         [
             InlineKeyboardButton(
@@ -918,15 +1040,26 @@ def plans_keyboard(
         for p in plans
     ]
     if not rows:
-        rows = [[InlineKeyboardButton(text="پلنی نیست", callback_data="shop:list")]]
+        rows = [[InlineKeyboardButton(text="پلنی نیست", callback_data=back_callback)]]
+    if back_callback:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_t(ui, "btn_back"),
+                    callback_data=back_callback,
+                )
+            ]
+        )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def wholesale_plans_keyboard(
     plans: list[Plan],
     ui: dict | None = None,
+    *,
+    back_callback: str = "shop:kind:wholesale",
 ) -> InlineKeyboardMarkup:
-    """Wholesale plan names only (back/chrome on reply KB)."""
+    """Wholesale plan names + inline back to kind picker."""
     _ = ui
     rows = [
         [
@@ -938,7 +1071,16 @@ def wholesale_plans_keyboard(
         for p in plans
     ]
     if not rows:
-        rows = [[InlineKeyboardButton(text="پلنی نیست", callback_data="shop:wholesale")]]
+        rows = [[InlineKeyboardButton(text="پلنی نیست", callback_data=back_callback)]]
+    if back_callback:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_t(ui, "btn_back"),
+                    callback_data=back_callback,
+                )
+            ]
+        )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -956,7 +1098,7 @@ def wholesale_qty_keyboard(
         ],
         [InlineKeyboardButton(text="✏️ ورود دستی تعداد", callback_data="shop:wholesale:qty:input")],
         [InlineKeyboardButton(text="ادامه ← تأیید", callback_data="shop:wholesale:confirm")],
-        [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:wholesale")],
+        [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:kind:wholesale")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1220,10 +1362,17 @@ def admin_home(ui: dict | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[back]])
 
 
-def admin_plans_list_keyboard(plans: list) -> InlineKeyboardMarkup:
-    """Dynamic plan rows only (static chrome lives on admin_plans_reply_keyboard)."""
+def admin_plans_list_keyboard(
+    plans: list,
+    *,
+    back_callback: str = "adm:plans:kind:users:fixed",
+    add_callback: str = "adm:plan:add",
+) -> InlineKeyboardMarkup:
+    """User fixed-plan rows + inline add/back."""
     rows: list[list[InlineKeyboardButton]] = []
     for p in plans[:12]:
+        if getattr(p, "is_trial", False):
+            continue
         warn = ""
         if not getattr(p, "pg_template_id", None) and not (getattr(p, "pg_group_ids", None) or "").strip():
             warn = " ⚠️"
@@ -1237,7 +1386,61 @@ def admin_plans_list_keyboard(plans: list) -> InlineKeyboardMarkup:
         )
     if not rows:
         rows.append(
-            [InlineKeyboardButton(text="پلنی نیست — از کیبورد «پلن جدید»", callback_data="adm:plans")]
+            [
+                InlineKeyboardButton(
+                    text="پلنی نیست — افزودن پلن ثابت",
+                    callback_data=add_callback,
+                )
+            ]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="➕ پلن ثابت جدید", callback_data=add_callback)]
+    )
+    if back_callback:
+        rows.append(
+            [InlineKeyboardButton(text="⬅️ انتخاب نوع", callback_data=back_callback)]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_reseller_plans_list_keyboard(
+    plans: list,
+    *,
+    mode: str,
+    back_callback: str = "adm:plans:aud:resellers",
+) -> InlineKeyboardMarkup:
+    """Platform reseller subscription plans (fixed or PAYG)."""
+    rows: list[list[InlineKeyboardButton]] = []
+    mode_key = (mode or "fixed").strip().lower()
+    for p in plans[:12]:
+        flag = "✅" if getattr(p, "is_active", True) else "⏸"
+        name = (getattr(p, "name", "") or "")[:22]
+        if mode_key == "payg":
+            rate = int(getattr(p, "price_per_gb", 0) or 0)
+            extra = f" · {rate:,} ت/GB".replace(",", "٬") if rate else ""
+        else:
+            extra = f" · {int(getattr(p, 'commission_percent', 0) or 0)}٪"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{flag} {name}{extra}"[:60],
+                    callback_data=f"adm:resplan:hint:{p.id}",
+                )
+            ]
+        )
+    if not rows:
+        label = "PAYG" if mode_key == "payg" else "ثابت"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"پلن {label} نیست — در وب‌پنل بسازید",
+                    callback_data=back_callback,
+                )
+            ]
+        )
+    if back_callback:
+        rows.append(
+            [InlineKeyboardButton(text="⬅️ انتخاب نوع", callback_data=back_callback)]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
