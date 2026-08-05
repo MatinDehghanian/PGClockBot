@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title %}
+{% block title %}ویرایش کاربر{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    {{ page_title('user-edit', 'ویرایش کاربر بات') }}
+  </div>
+  <a class="btn btn-ghost" href="/users">بازگشت به لیست</a>
+</div>
+
+{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+
+<div class="card">
+  <h2>{{ user.full_name or user.username or 'کاربر' }}</h2>
+  <p class="muted">
+    تلگرام: <code dir="ltr">{{ user.telegram_id }}</code>
+    {% if user.username %}· @{{ user.username }}{% endif %}
+    · نقش:
+    {% if user.role=='admin' %}مدیر{% elif user.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
+    ·
+    {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
+  </p>
+  <p style="font-size:1.25rem;margin:0.5rem 0 0">کیف پول: <b>{{ format_toman(user.wallet_balance or 0) }}</b></p>
+</div>
+
+<div class="card">
+  <h2>افزایش کیف پول</h2>
+  <p class="muted">مبلغ به کیف پول فروشگاهی کاربر اضافه می‌شود و در ربات هم همان موجودی دیده می‌شود.</p>
+  <form method="post" action="/users/{{ user.id }}/wallet-credit" class="form-stack"
+        data-confirm="مبلغ به کیف پول این کاربر اضافه شود؟"
+        data-confirm-title="تأیید شارژ کیف پول"
+        data-confirm-label="شارژ">
+    <div class="form-row">
+      <div>
+        <label class="form-field">مبلغ (تومان)
+          <input name="amount" type="number" min="1000" step="1000" required placeholder="مثلاً ۵۰۰۰۰" />
+        </label>
+      </div>
+      <div>
+        <label class="form-field">یادداشت
+          <input name="note" type="text" maxlength="120" placeholder="اختیاری" />
+        </label>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit">شارژ کیف پول</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>سرویس‌ها</h2>
+  {% if not services %}
+  <p class="muted">سرویسی برای این کاربر ثبت نشده است.</p>
+  {% else %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>پلن</th>
+          <th>وضعیت</th>
+          <th>حجم</th>
+          <th>مانده حجم</th>
+          <th>زمان / مانده روز</th>
+          <th>لینک</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for s in services %}
+        <tr>
+          <td class="mono">{{ s.service.id }}</td>
+          <td>{{ s.service.plan.name if s.service.plan else (s.service.pg_username or '—') }}</td>
+          <td>{{ s.status_fa }}{% if s.error %}<br><small class="muted">{{ s.error }}</small>{% endif %}</td>
+          <td class="mono" dir="ltr">{{ s.used_text }} / {{ s.limit_text }}</td>
+          <td class="mono" dir="ltr">{{ s.remain_gb_text }}</td>
+          <td>
+            {{ s.expire_text }}
+            {% if s.days_left is not none %}<br><small class="muted">{{ s.days_left }} روز</small>{% endif %}
+          </td>
+          <td>
+            {% if s.subscription_url %}
+            <button type="button" class="btn btn-sm btn-ghost"
+                    onclick="navigator.clipboard.writeText({{ s.subscription_url|tojson }}); this.textContent='کپی شد';">
+              کپی لینک
+            </button>
+            <a class="btn btn-sm btn-ghost" href="{{ s.subscription_url }}" target="_blank" rel="noopener">باز کردن</a>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td colspan="7">
+            <div class="form-row" style="align-items:end;gap:0.75rem;flex-wrap:wrap">
+              <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/renew" class="form-stack"
+                    style="flex:1;min-width:16rem"
+                    data-confirm="سرویس با پلن/مقادیر انتخابی تمدید شود؟ مصرف ریست می‌شود."
+                    data-confirm-title="تمدید دستی سرویس"
+                    data-confirm-label="تمدید">
+                <div class="form-row">
+                  <div>
+                    <label class="form-field">تمدید با پلن
+                      <select name="plan_id">
+                        <option value="">— پلن فعلی / دستی —</option>
+                        {% for p in plans %}
+                        <option value="{{ p.id }}" {% if s.service.plan_id == p.id %}selected{% endif %}>
+                          {{ p.name }} · {{ p.duration_days or '∞' }}روز · {{ p.data_limit_gb or '∞' }}GB
+                        </option>
+                        {% endfor %}
+                      </select>
+                    </label>
+                  </div>
+                  <div>
+                    <label class="form-field">روز (دستی)
+                      <input name="days" type="number" min="0" max="3650" placeholder="اختیاری" />
+                    </label>
+                  </div>
+                  <div>
+                    <label class="form-field">حجم GB (دستی)
+                      <input name="data_limit_gb" type="number" min="0" step="0.1" placeholder="اختیاری" />
+                    </label>
+                  </div>
+                </div>
+                <button class="btn btn-sm" type="submit">🔄 تمدید دستی</button>
+              </form>
+              <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/extend" class="form-stack"
+                    style="flex:1;min-width:14rem"
+                    data-confirm="روز/حجم به سرویس فعلی اضافه شود؟"
+                    data-confirm-title="افزایش مانده سرویس"
+                    data-confirm-label="افزایش">
+                <div class="form-row">
+                  <div>
+                    <label class="form-field">+ روز
+                      <input name="extra_days" type="number" min="0" max="3650" value="0" />
+                    </label>
+                  </div>
+                  <div>
+                    <label class="form-field">+ گیگ
+                      <input name="extra_gb" type="number" min="0" step="0.1" value="0" />
+                    </label>
+                  </div>
+                </div>
+                <button class="btn btn-sm btn-ghost" type="submit">➕ افزایش مانده</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% if wallet_txs %}
+<div class="card">
+  <h2>تراکنش‌های کیف پول</h2>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>مبلغ</th>
+          <th>مانده کیف پول</th>
+          <th>شرح</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in wallet_txs %}
+        <tr>
+          <td>{{ tx.id }}</td>
+          <td dir="ltr">{{ tx.amount }}</td>
+          <td>{{ format_toman(tx.balance_after) }}</td>
+          <td class="muted">{{ tx.reason or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1780,6 +1780,14 @@ def admin_user_actions(
 ) -> InlineKeyboardMarkup:
     block_label = "🔓 رفع مسدودی" if is_blocked else "🚫 مسدود کردن"
     rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text="💰 شارژ کیف پول", callback_data=f"adm:users:wcredit:{user_id}"
+            ),
+            InlineKeyboardButton(
+                text="📦 سرویس‌ها", callback_data=f"adm:users:svcs:{user_id}"
+            ),
+        ],
         [InlineKeyboardButton(text=block_label, callback_data=f"adm:users:block:{user_id}")],
     ]
     if role == "reseller":
@@ -1813,6 +1821,60 @@ def admin_user_actions(
             ]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_user_services_keyboard(
+    user_id: int, service_ids: list[int]
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for sid in service_ids[:20]:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"سرویس #{sid}",
+                    callback_data=f"adm:users:svc:{user_id}:{sid}",
+                )
+            ]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data=f"adm:users:view:{user_id}")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_user_service_actions(user_id: int, service_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔗 لینک سرویس",
+                    callback_data=f"adm:users:svclink:{user_id}:{service_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔄 تمدید با پلن فعلی",
+                    callback_data=f"adm:users:svcrenew:{user_id}:{service_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="➕ ۳۰ روز",
+                    callback_data=f"adm:users:svcext:{user_id}:{service_id}:d30",
+                ),
+                InlineKeyboardButton(
+                    text="➕ ۱۰ گیگ",
+                    callback_data=f"adm:users:svcext:{user_id}:{service_id}:g10",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ سرویس‌ها",
+                    callback_data=f"adm:users:svcs:{user_id}",
+                )
+            ],
+        ]
+    )
 
 
 # Review action labels (order / payment / reseller-app) — reply keyboard

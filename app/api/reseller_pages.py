@@ -315,9 +315,11 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         pg_limits = None
         min_unsuspend = 0
         wallet_balance = int(user.wallet_balance or 0)
+        wallet_txs = []
         if is_payg(profile):
             from app.services.billing import ensure_payg_shop_wallet, list_billing_transactions
             from app.services.billing_suspend import restore_payg_reseller
+            from app.services.bot_user_admin import list_wallet_txs
 
             was_linked = bool(getattr(profile, "payg_wallet_linked", False))
             _u, wallet_balance = await ensure_payg_shop_wallet(session, profile)
@@ -338,6 +340,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             else:
                 await session.commit()
             billing_txs = await list_billing_transactions(session, int(user_id), limit=15)
+            wallet_txs = await list_wallet_txs(session, int(user_id), limit=15)
             billing_rate = await resolve_price_per_gb(session, rate_context_for_profile(profile))
             if profile.billing_suspended_at is not None:
                 from app.services.billing_suspend import min_topup_to_unsuspend
@@ -370,6 +373,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 "billing_txs": billing_txs,
                 "billing_rate": billing_rate,
                 "wallet_balance": wallet_balance,
+                "wallet_txs": wallet_txs,
                 "pg_limits": pg_limits,
                 "min_unsuspend": min_unsuspend,
                 "format_toman": format_toman,
