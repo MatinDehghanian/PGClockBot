@@ -20,6 +20,7 @@ from app.db.models import BotUser, Plan, UserService, WalletTransaction
 from app.services.formatting import (
     expire_remaining_days,
     format_bytes,
+    format_bytes_ratio,
     format_expire_short,
     status_label,
 )
@@ -45,6 +46,7 @@ class ServiceSnapshot:
     status_fa: str
     used_text: str
     limit_text: str
+    volume_text: str
     remain_gb_text: str
     days_left: int | None
     expire_text: str
@@ -85,6 +87,7 @@ async def service_snapshot(session: AsyncSession, service: UserService) -> Servi
             status_fa="بدون پنل",
             used_text="—",
             limit_text="—",
+            volume_text="—",
             remain_gb_text="—",
             days_left=None,
             expire_text="—",
@@ -115,12 +118,14 @@ async def service_snapshot(session: AsyncSession, service: UserService) -> Servi
             tok = extract_sub_token(live_url)
             if tok:
                 service.subscription_token = tok
+        lim_for_ratio = limit_n if limit_n > 0 else None
         return ServiceSnapshot(
             service=service,
             pg=info,
             status_fa=status_label(info.get("status")),
             used_text=format_bytes(used),
             limit_text=format_bytes(limit_n) if limit_n > 0 else "نامحدود",
+            volume_text=format_bytes_ratio(used, lim_for_ratio),
             remain_gb_text=remain_gb,
             days_left=expire_remaining_days(info.get("expire") or info.get("expire_date")),
             expire_text=format_expire_short(info.get("expire") or info.get("expire_date")),
@@ -135,6 +140,7 @@ async def service_snapshot(session: AsyncSession, service: UserService) -> Servi
             status_fa="خطا",
             used_text="—",
             limit_text="—",
+            volume_text="—",
             remain_gb_text="—",
             days_left=None,
             expire_text="—",
@@ -340,7 +346,7 @@ def snapshot_telegram_lines(snap: ServiceSnapshot) -> str:
     lines = [
         f"📦 سرویس #{svc.id} · {plan_name}",
         f"وضعیت: {snap.status_fa}",
-        f"حجم: {snap.used_text} / {snap.limit_text} (مانده {snap.remain_gb_text})",
+        f"حجم: {snap.volume_text} (مانده {snap.remain_gb_text})",
         f"زمان: {snap.expire_text} · مانده {days}",
     ]
     if snap.subscription_url:

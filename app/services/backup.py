@@ -790,12 +790,6 @@ def save_uploaded_backup(content: bytes, *, filename: str = "") -> dict[str, Any
 
 
 def _human_size(n: int) -> str:
-    units = ["B", "KB", "MB", "GB"]
-    size = float(n)
-    for u in units:
-        if size < 1024 or u == units[-1]:
-            if u == "B":
-                return f"{int(size)} {u}"
-            return f"{size:.1f} {u}"
-        size /= 1024
-    return f"{n} B"
+    from app.services.formatting import format_bytes
+
+    return format_bytes(n, precision=1)

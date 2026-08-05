@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services.formatting import format_bytes, format_number
+from app.services.formatting import (
+    format_bytes,
+    format_bytes_ratio,
+    format_count_ratio,
+    format_number,
+)
 from app.services.pasarguard import get_pg
 
 
@@ -93,14 +98,14 @@ def admin_usage_snapshot(admin: dict | None, role: dict | None = None) -> dict[s
     lifetime = _as_int(admin.get("lifetime_used_traffic"))
 
     if max_users is not None and max_users > 0:
-        users_text = f"{format_number(total_users)} / {format_number(max_users)}"
+        users_text = format_count_ratio(total_users, max_users)
     else:
-        users_text = f"{format_number(total_users)} / ∞"
+        users_text = f"{format_number(total_users)}/∞"
 
     if data_limit is not None and data_limit > 0:
-        traffic_text = f"{format_bytes(used_traffic)} / {format_bytes(data_limit)}"
+        traffic_text = format_bytes_ratio(used_traffic, data_limit)
     else:
-        traffic_text = f"{format_bytes(used_traffic)} / ∞"
+        traffic_text = format_bytes_ratio(used_traffic, 0)
 
     return {
         "users_used": total_users,

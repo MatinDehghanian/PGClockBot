@@ -14,6 +14,7 @@ from app.db.models import BotUser, Order, Payment
 from app.services.safe_format import safe_format
 from app.services.formatting import (
     format_bytes,
+    format_bytes_ratio,
     format_expire,
     format_message,
     format_toman,
@@ -1006,7 +1007,11 @@ def build_qr_caption(
 
         lines.append(f"👤 {copyable(uname)}")
     if used is not None or limit is not None:
-        vol = f"{format_bytes(used)} از {format_bytes(limit)}" if used is not None else format_bytes(limit)
+        vol = (
+            format_bytes_ratio(used, limit, joiner=" از ")
+            if used is not None
+            else format_bytes(limit)
+        )
         lines.append(f"📦 حجم: <b>{vol}</b>")
     if exp is not None or info is not None:
         lines.append(f"⏱ زمان: <b>{format_expire(exp)}</b>")

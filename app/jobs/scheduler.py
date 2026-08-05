@@ -10,7 +10,7 @@ from sqlalchemy import or_, select
 
 from app.db.models import BotUser, ResellerProfile, UserService
 from app.db.session import SessionLocal
-from app.services.formatting import format_bytes, parse_expire
+from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
 
 logger = logging.getLogger(__name__)
@@ -209,7 +209,7 @@ async def check_expiring_services(bot: Bot) -> None:
                                     user.telegram_id,
                                     f"📉 حجم باقی‌مانده سرویس <b>{svc.pg_username}</b> کمتر از "
                                     f"<b>{traffic_pct}٪</b> است "
-                                    f"({format_bytes(used)} از {format_bytes(limit_f)}).",
+                                    f"({format_bytes_ratio(used, limit_f, joiner=' از ')}).",
                                     parse_mode="HTML",
                                 )
                                 svc.notified_traffic = True

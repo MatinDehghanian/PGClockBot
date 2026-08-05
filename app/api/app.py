@@ -87,9 +87,10 @@ from app.api.pg_pages import register_pg_pages
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
-from app.services.formatting import format_bytes, format_gb, format_number, format_expire_short, order_status_fa, ticket_status_fa
+from app.services.formatting import format_bytes, format_bytes_ratio, format_gb, format_number, format_expire_short, order_status_fa, ticket_status_fa
 
 templates.env.filters["bytes"] = format_bytes
+templates.env.filters["bytes_ratio"] = format_bytes_ratio
 templates.env.filters["gb"] = format_gb
 templates.env.filters["num"] = format_number
 templates.env.filters["expire"] = format_expire_short
@@ -98,6 +99,8 @@ templates.env.filters["ticket_status"] = ticket_status_fa
 templates.env.globals["app_version"] = local_version()
 templates.env.globals["order_status_fa"] = order_status_fa
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
+templates.env.globals["format_bytes"] = format_bytes
+templates.env.globals["format_bytes_ratio"] = format_bytes_ratio
 
 # Login brute-force tracking: ip -> list of failure timestamps
 _LOGIN_FAILURES: dict[str, list[float]] = defaultdict(list)

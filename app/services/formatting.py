@@ -87,8 +87,12 @@ def format_bytes_ratio(
     limit: int | float | None,
     *,
     precision: int | None = None,
+    joiner: str = "/",
 ) -> str:
-    """Shared-unit used/limit string, e.g. «۱۰/۱۰۰ گیگ» or «۵۱۲/۱۰۲۴ مگ»."""
+    """Shared-unit used/limit string, e.g. «۱۰/۱۰۰ گیگ» or «۱۰ از ۱۰۰ گیگ».
+
+    Unit is written once at the end — never on the first number.
+    """
     if limit is None:
         return format_bytes(used, precision=precision)
     try:
@@ -97,15 +101,22 @@ def format_bytes_ratio(
     except (TypeError, ValueError):
         return "—"
     if lim <= 0:
-        return format_bytes(u, precision=precision)
+        # Unlimited ceiling — unit once at the end: «۵/∞ گیگ»
+        if u <= 0:
+            return f"0{joiner}∞ بایت"
+        div, label = _pick_byte_unit(u)
+        if div == 1.0:
+            return f"{int(round(u))}{joiner}∞ {label}"
+        left = _fmt_unit_amount(u / div, precision=precision)
+        return f"{left}{joiner}∞ {label}"
     if u < 0:
         u = abs(u)
     div, label = _pick_byte_unit(max(u, lim))
     if div == 1.0:
-        return f"{int(round(u))}/{int(round(lim))} {label}"
+        return f"{int(round(u))}{joiner}{int(round(lim))} {label}"
     left = _fmt_unit_amount(u / div, precision=precision)
     right = _fmt_unit_amount(lim / div, precision=precision)
-    return f"{left}/{right} {label}"
+    return f"{left}{joiner}{right} {label}"
 
 
 def format_count_ratio(used: int | float | None, limit: int | float | None) -> str:
@@ -481,7 +492,7 @@ def service_card(info: dict, currency_note: str = "") -> str:
         f"👤 {copyable(username)}",
         "",
         kv_line("📶", "وضعیت", status),
-        kv_line("📦", "حجم", f"{format_bytes(used)} از {format_bytes(limit)}"),
+        kv_line("📦", "حجم", format_bytes_ratio(used, limit, joiner=" از ")),
         f"<code>{bar}</code>",
         kv_line("📅", "انقضا", f"<b>{expire}</b>"),
     ]

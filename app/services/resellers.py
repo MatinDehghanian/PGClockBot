@@ -331,7 +331,7 @@ def format_reseller_plan_apply_detail(plan: ResellerPlan, *, currency: str) -> s
     if mode == BILLING_MODE_PAYG:
         rate = int(getattr(plan, "price_per_gb", 0) or 0)
         lines.append(
-            f"نرخ مصرف: <b>{format_toman(rate, currency) if rate else '—'} / GB</b>"
+            f"نرخ مصرف: <b>{format_toman(rate, currency) if rate else '—'} / گیگ</b>"
         )
     else:
         lines.append(f"کمیسیون: <b>{int(plan.commission_percent or 0)}٪</b>")

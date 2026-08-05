@@ -111,13 +111,12 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     elif not url:
         parts.append("لینک موجود نیست.")
     if isinstance(sub_info, dict):
-        from app.services.formatting import copyable, format_bytes, format_expire
+        from app.services.formatting import copyable, format_bytes_ratio, format_expire
 
         if svc.pg_username:
             parts.append(f"👤 {copyable(svc.pg_username)}")
         parts.append(
-            f"📦 حجم: <b>{format_bytes(sub_info.get('used_traffic'))} از "
-            f"{format_bytes(sub_info.get('data_limit'))}</b>"
+            f"📦 حجم: <b>{format_bytes_ratio(sub_info.get('used_traffic'), sub_info.get('data_limit'), joiner=' از ')}</b>"
         )
         parts.append(f"⏱ زمان: <b>{format_expire(sub_info.get('expire'))}</b>")
     text = format_message("📱 اشتراک", "\n\n".join(parts))

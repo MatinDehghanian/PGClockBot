@@ -207,6 +207,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "memory_percent": mem_pct,
                 "memory_used_text": metrics.get("memory_used_text"),
                 "memory_total_text": metrics.get("memory_total_text"),
+                "memory_ratio_text": metrics.get("memory_ratio_text"),
                 "cpu_tone": _tone_class(cpu if isinstance(cpu, (int, float)) else None),
                 "mem_tone": _tone_class(mem_pct if isinstance(mem_pct, (int, float)) else None),
             }

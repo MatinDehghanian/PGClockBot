@@ -2,6 +2,33 @@
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
+<section class="edit-section edit-section--identity">
+  <header class="edit-section-head">
+    <h3>تغییر نقش کاربر</h3>
+    <p class="muted">نقش فعلی:
+      {% if user.role=='admin' %}مدیر{% elif user.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
+    </p>
+  </header>
+  <form method="post" action="/resellers/{{ user.id }}/role" class="form-stack user-edit-role-form"
+        data-confirm="نقش این کاربر تغییر کند؟"
+        data-confirm-title="تأیید تغییر نقش"
+        data-confirm-reason-when="user"
+        data-confirm-reason-label="علت تغییر نقش به کاربر عادی"
+        data-confirm-reason-name="reason"
+        data-confirm-label="اعمال نقش">
+    <div class="user-edit-inline-row">
+      <label class="form-field user-edit-grow">نقش جدید
+        <select name="role" class="select-block">
+          <option value="user" {% if user.role=='user' %}selected{% endif %}>کاربر</option>
+          <option value="reseller" {% if user.role=='reseller' %}selected{% endif %}>نماینده</option>
+          <option value="admin" {% if user.role=='admin' %}selected{% endif %}>مدیر</option>
+        </select>
+      </label>
+      <button class="btn" type="submit">اعمال نقش</button>
+    </div>
+  </form>
+</section>
+
 <section class="edit-section">
   <form method="post" action="/resellers/{{ user.id }}/edit" class="form-stack">
     <div class="form-row">
@@ -13,7 +40,7 @@
       </div>
       <div>
         <label class="form-field">حالت پرداخت
-          <select name="billing_mode">
+          <select name="billing_mode" class="select-block">
             <option value="fixed" {% if (profile.billing_mode or 'fixed') == 'fixed' %}selected{% endif %}>ثابت (کمیسیون)</option>
             <option value="payg" {% if profile.billing_mode == 'payg' %}selected{% endif %}>Pay As You Go</option>
           </select>
@@ -26,7 +53,7 @@
       </div>
       <div>
         <label class="form-field">نقش پاسارگارد
-          <select name="pg_role_id">
+          <select name="pg_role_id" class="select-block">
             <option value="">—</option>
             {% for r in pg_roles %}
             <option value="{{ r.get('id') }}" {% if profile.pg_role_id == r.get('id') %}selected{% endif %}>
@@ -74,11 +101,6 @@
       {{ switch('is_active', 'نماینده فعال', checked=profile.is_active) }}
       {{ switch('share_pg_panel_url', 'ارسال لینک پنل پاسارگارد', checked=profile.share_pg_panel_url, help='اگر خاموش باشد، فقط وب‌پنل ربات برای مدیریت استفاده می‌شود') }}
     </div>
-    {% if profile.billing_suspended_at %}
-    <div class="flash err" style="margin-top:0.75rem">وضعیت PAYG: <b>مسدود</b> (موجودی کیف پول صفر) — با تگ «فعال» نماینده فرق دارد</div>
-    {% elif is_payg %}
-    <p class="muted" style="margin-top:0.5rem">وضعیت PAYG: <span class="badge approved">فعال</span></p>
-    {% endif %}
 
     <div class="actions">
       <button class="btn" type="submit">ذخیره</button>
@@ -94,7 +116,7 @@
     <p class="muted">حجم و تعداد کاربران نماینده به‌همراه سقف‌های نقش/ادمین</p>
   </header>
   {% if pg_limits.username %}
-  <p class="muted" dir="ltr">ادمین: <code>{{ pg_limits.username }}</code>
+  <p class="muted reseller-pg-admin-line">ادمین: <code dir="ltr">{{ pg_limits.username }}</code>
     {% if pg_limits.status_label %} · <span class="badge {{ pg_limits.status_badge or 'neutral' }}">{{ pg_limits.status_label }}</span>{% endif %}
     {% if pg_limits.role_name %} · {{ pg_limits.role_name }}{% endif %}
   </p>
@@ -110,21 +132,39 @@
   </div>
   {% endif %}
   {% if pg_limits.lifetime_text %}
-  <p class="muted" style="margin-top:0.75rem">مصرف lifetime (مبنای صورتحساب PAYG): <b dir="ltr">{{ pg_limits.lifetime_text }}</b></p>
+  <p class="muted payg-lifetime-note">مصرف lifetime (مبنای صورتحساب PAYG): <b class="num-ratio">{{ pg_limits.lifetime_text }}</b></p>
   {% endif %}
 </section>
 {% endif %}
 
 {% if is_payg %}
 <section class="edit-section">
-  <h3>مدیریت PAYG</h3>
+  <header class="edit-section-head">
+    <h3>مدیریت PAYG</h3>
+    {% if profile.billing_suspended_at %}
+    <p class="muted">وضعیت: <span class="badge rejected">مسدود</span> — موجودی کیف پول صفر (با تگ «فعال» نماینده فرق دارد)</p>
+    {% else %}
+    <p class="muted">وضعیت: <span class="badge approved">فعال</span></p>
+    {% endif %}
+  </header>
   {% if profile.billing_suspended_at %}
   <div class="flash err">حساب به‌خاطر موجودی صفر مسدود است — حداقل شارژ برای رفع مسدودی: <b>{{ format_toman(min_unsuspend or 0) }}</b></div>
   {% endif %}
-  <p class="muted">موجودی کیف پول (منبع PAYG): <b>{{ format_toman(wallet_balance or user.wallet_balance or 0) }}</b>
-    · نرخ پلن: <b>{{ format_toman(billing_rate or 0) }}</b> / GB
-    · watermark: <span dir="ltr">{{ profile.billing_watermark_bytes or 0 }}</span> بایت</p>
-  <p class="muted">مصرف ترافیک از همان کیف پول فروشگاهی نماینده کسر می‌شود. شارژ دستی زیر نیز به همان کیف پول واریز می‌شود. ستون «مانده» = مانده کیف پول بعد از هر تراکنش.</p>
+  <ul class="payg-meta">
+    <li>
+      <span class="payg-meta-label">موجودی کیف پول</span>
+      <span class="payg-meta-value">{{ format_toman(wallet_balance or user.wallet_balance or 0) }}</span>
+    </li>
+    <li>
+      <span class="payg-meta-label">نرخ پلن</span>
+      <span class="payg-meta-value">{{ format_toman(billing_rate or 0) }} / گیگ</span>
+    </li>
+    <li>
+      <span class="payg-meta-label">آخرین مصرف صورتحساب‌شده</span>
+      <span class="payg-meta-value num-ratio">{{ (profile.billing_watermark_bytes or 0) | bytes }}</span>
+    </li>
+  </ul>
+  <p class="muted payg-help">مصرف ترافیک از همان کیف پول فروشگاهی نماینده کسر می‌شود. شارژ دستی زیر نیز به همان کیف پول واریز می‌شود. ستون «مانده» = مانده کیف پول بعد از هر تراکنش.</p>
   <form method="post" action="/resellers/{{ user.id }}/billing-topup" class="form-stack">
     <input type="hidden" name="nonce" value="{{ topup_nonce }}" />
     <div class="form-row">
@@ -193,33 +233,10 @@
 {% endif %}
 
 <section class="edit-section">
-  <h3>تغییر نقش کاربر</h3>
-  <p class="muted">نقش فعلی: <b>{% if user.role=='admin' %}مدیر{% elif user.role=='reseller' %}نماینده{% else %}کاربر{% endif %}</b></p>
-  <form method="post" action="/resellers/{{ user.id }}/role" class="form-stack"
-        data-confirm="نقش این کاربر تغییر کند؟"
-        data-confirm-title="تأیید تغییر نقش"
-        data-confirm-reason-when="user"
-        data-confirm-reason-label="علت تغییر نقش به کاربر عادی"
-        data-confirm-reason-name="reason"
-        data-confirm-label="اعمال نقش">
-    <div class="form-row">
-      <div>
-        <label class="form-field">نقش جدید
-          <select name="role">
-            <option value="user" {% if user.role=='user' %}selected{% endif %}>کاربر</option>
-            <option value="reseller" {% if user.role=='reseller' %}selected{% endif %}>نماینده</option>
-            <option value="admin" {% if user.role=='admin' %}selected{% endif %}>مدیر</option>
-          </select>
-        </label>
-      </div>
-    </div>
-    <button class="btn" type="submit">اعمال نقش</button>
-  </form>
-</section>
-
-<section class="edit-section">
-  <h3>حذف نمایندگی</h3>
-  <p class="muted">پروفایل نماینده و ادمین پاسارگارد متصل حذف می‌شود. علت برای کاربر در ربات/تلگرام ارسال می‌شود و نقشش به «کاربر» برمی‌گردد.</p>
+  <header class="edit-section-head">
+    <h3>حذف نمایندگی</h3>
+    <p class="muted">پروفایل نماینده و ادمین پاسارگارد متصل حذف می‌شود. علت برای کاربر در ربات/تلگرام ارسال می‌شود و نقشش به «کاربر» برمی‌گردد.</p>
+  </header>
   <form method="post" action="/resellers/{{ user.id }}/delete" class="form-stack"
         data-confirm="نمایندگی و ادمین پاسارگارد متصل حذف شوند؟ علت برای کاربر ارسال می‌شود."
         data-confirm-title="حذف نمایندگی (+ ادمین پاسارگارد)"
@@ -234,8 +251,10 @@
 </section>
 
 <section class="edit-section">
-  <h3>حذف کامل کاربر</h3>
-  <p class="muted">کاربر بات، نمایندگی، ادمین پاسارگارد متصل و تمام سفارش‌ها/سرویس‌ها/پرداخت‌ها/تیکت‌ها حذف می‌شوند. برگشت‌ناپذیر است.</p>
+  <header class="edit-section-head">
+    <h3>حذف کامل کاربر</h3>
+    <p class="muted">کاربر بات، نمایندگی، ادمین پاسارگارد متصل و تمام سفارش‌ها/سرویس‌ها/پرداخت‌ها/تیکت‌ها حذف می‌شوند. برگشت‌ناپذیر است.</p>
+  </header>
   {% if user.wallet_balance and user.wallet_balance > 0 %}
   <div class="flash warn">موجودی کیف پول: {{ user.wallet_balance | num }} تومان — با حذف کامل از بین می‌رود.</div>
   {% endif %}

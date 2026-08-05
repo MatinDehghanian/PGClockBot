@@ -94,7 +94,7 @@ async def _resapply_plan_list_keyboard(
         price = format_toman(p.price, get_settings().currency) if p.price else "رایگان"
         if reseller_plan_mode_of(p) == "payg":
             rate = int(getattr(p, "price_per_gb", 0) or 0)
-            extra = f" · {format_toman(rate, get_settings().currency)}/GB" if rate else ""
+            extra = f" · {format_toman(rate, get_settings().currency)}/گیگ" if rate else ""
         else:
             extra = f" · {int(p.commission_percent or 0)}٪"
         rows.append(
@@ -444,7 +444,7 @@ async def res_billing(
         "💰 <b>کیف پول (PAYG)</b>",
         "",
         f"موجودی: <b>{format_toman(int(bal), get_settings().currency)}</b>",
-        f"نرخ پلن: {format_toman(rate, get_settings().currency)} / GB",
+        f"نرخ پلن: {format_toman(rate, get_settings().currency)} / گیگ",
         f"وضعیت سیستم: {'فعال' if enabled else 'غیرفعال'}",
         "",
         "مصرف ترافیک از همین کیف پول (همان موجودی منوی کیف پول) کسر می‌شود.",

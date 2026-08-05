@@ -1554,7 +1554,7 @@ def admin_resellers_plans_overview_keyboard(
         flag = "✅" if getattr(p, "is_active", True) else "⏸"
         name = (getattr(p, "name", "") or "")[:22]
         rate = int(getattr(p, "price_per_gb", 0) or 0)
-        extra = f" · {rate:,} ت/GB".replace(",", "٬") if rate else ""
+        extra = f" · {rate:,} ت/گیگ".replace(",", "٬") if rate else ""
         rows.append(
             [
                 InlineKeyboardButton(
@@ -1671,7 +1671,7 @@ def admin_reseller_plans_list_keyboard(
         name = (getattr(p, "name", "") or "")[:22]
         if mode_key == "payg":
             rate = int(getattr(p, "price_per_gb", 0) or 0)
-            extra = f" · {rate:,} ت/GB".replace(",", "٬") if rate else ""
+            extra = f" · {rate:,} ت/گیگ".replace(",", "٬") if rate else ""
         else:
             extra = f" · {int(getattr(p, 'commission_percent', 0) or 0)}٪"
         rows.append(

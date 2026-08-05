@@ -70,7 +70,7 @@
         </div>
         <div class="home-gauge-meta">
           <span class="home-gauge-label">حافظه</span>
-          <span class="muted" id="home-mem-hint" dir="ltr">{{ host.memory_used_text }} / {{ host.memory_total_text }}</span>
+          <span class="muted num-ratio" id="home-mem-hint">{{ host.memory_ratio_text or (host.memory_used_text ~ ' / ' ~ host.memory_total_text) }}</span>
         </div>
       </article>
     </div>
@@ -297,8 +297,8 @@
       var d = await r.json();
       if (cpuEl) cpuEl.textContent = fmtPct(d.cpu_percent);
       if (memEl) memEl.textContent = fmtPct(d.memory_percent);
-      if (memHint && d.memory_used_text && d.memory_total_text) {
-        memHint.textContent = d.memory_used_text + ' / ' + d.memory_total_text;
+      if (memHint && (d.memory_ratio_text || (d.memory_used_text && d.memory_total_text))) {
+        memHint.textContent = d.memory_ratio_text || (d.memory_used_text + ' / ' + d.memory_total_text);
       }
       setGauge(cpuGauge, d.cpu_percent, d.cpu_tone);
       setGauge(memGauge, d.memory_percent, d.mem_tone);

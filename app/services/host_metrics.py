@@ -100,17 +100,16 @@ def memory_stats() -> dict[str, Any] | None:
 
 
 def format_bytes_short(n: int | float | None) -> str:
-    if n is None:
-        return "—"
-    n = float(n)
-    units = ("B", "KB", "MB", "GB", "TB")
-    i = 0
-    while n >= 1024 and i < len(units) - 1:
-        n /= 1024
-        i += 1
-    if i == 0:
-        return f"{int(n)} {units[i]}"
-    return f"{n:.1f} {units[i]}".replace(".", "٫")
+    """Host metrics short size — Persian labels (گیگ/مگ), same IEC base as format_bytes."""
+    from app.services.formatting import format_bytes
+
+    return format_bytes(n, precision=1)
+
+
+def format_memory_ratio(used: int | float | None, total: int | float | None) -> str:
+    from app.services.formatting import format_bytes_ratio
+
+    return format_bytes_ratio(used, total, precision=1)
 
 
 def cpu_core_count() -> int | None:
@@ -142,6 +141,9 @@ def host_metrics(*, wait_cpu: float = 0.12) -> dict[str, Any]:
         "memory": mem,
         "memory_used_text": format_bytes_short(mem["used"]) if mem else "—",
         "memory_total_text": format_bytes_short(mem["total"]) if mem else "—",
+        "memory_ratio_text": (
+            format_memory_ratio(mem["used"], mem["total"]) if mem else "—"
+        ),
         "memory_percent": mem["percent"] if mem else None,
         "ok": cpu is not None or mem is not None,
     }

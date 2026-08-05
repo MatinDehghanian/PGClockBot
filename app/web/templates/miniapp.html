@@ -117,7 +117,7 @@
         }
         html += '</div><div class="card"><h3>خرید پلن</h3><div class="grid">';
         for (const p of data.plans) {
-          html += `<div class="row"><div><strong>${esc(p.name)}</strong><div class="muted">${esc(p.days)} روز · ${esc(p.gb ?? '∞')} GB</div></div>
+          html += `<div class="row"><div><strong>${esc(p.name)}</strong><div class="muted">${esc(p.days)} روز · ${esc(p.gb ?? '∞')} گیگ</div></div>
             <div class="price">${esc(money(p.price))}</div></div>`;
         }
         html += '</div><p class="muted" style="margin-top: var(--space-2)">برای خرید از دکمه‌های ربات استفاده کنید؛ مینی‌اپ وضعیت و لینک را سریع نشان می‌دهد.</p></div>';

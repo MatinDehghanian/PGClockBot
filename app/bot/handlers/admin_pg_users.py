@@ -81,7 +81,7 @@ def _edit_menu_kb(uid: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="👤 تغییر نام کاربری", callback_data=f"adm:pg:u:{uid}:ed:name")],
-            [InlineKeyboardButton(text="📦 تغییر حجم (GB)", callback_data=f"adm:pg:u:{uid}:ed:gb")],
+            [InlineKeyboardButton(text="📦 تغییر حجم (گیگ)", callback_data=f"adm:pg:u:{uid}:ed:gb")],
             [InlineKeyboardButton(text="📅 تغییر مدت (روز)", callback_data=f"adm:pg:u:{uid}:ed:days")],
             [InlineKeyboardButton(text="📁 تغییر گروه‌ها", callback_data=f"adm:pg:u:{uid}:ed:grps")],
             [InlineKeyboardButton(text="⬅️ کارت کاربر", callback_data=f"adm:pg:u:{uid}")],

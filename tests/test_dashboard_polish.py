@@ -78,12 +78,10 @@ class DashboardPolishSourceTests(unittest.TestCase):
         self.assertNotIn("home-panel-pg", dash)
 
     def test_templates_use_ratio_text(self):
-        reseller_home = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
-        pg = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
-        self.assertIn("ratio_text", reseller_home)
-        self.assertIn("ratio_text", pg)
-        self.assertNotIn("used_text }} / {{", reseller_home)
-        self.assertNotIn("used_text }} / {{", pg)
+        gauges = Path("app/web/templates/_pg_quota_gauges.html").read_text(encoding="utf-8")
+        self.assertIn("ratio_text", gauges)
+        self.assertNotIn("used_text }} / {{", gauges)
+        self.assertIn("num-ratio", gauges)
 
     def test_web_panel_has_no_vpn_label(self):
         for path in Path("app/web/templates").rglob("*.html"):

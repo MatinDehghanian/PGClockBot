@@ -36,7 +36,7 @@ class PaygPlanUiTests(unittest.TestCase):
         self.assertIn("reseller-price-per-gb-field", html)
         self.assertIn('name="price_per_gb"', html)
         self.assertIn("reseller-payg-groups", html)
-        self.assertIn("نرخ / GB", html)
+        self.assertIn("نرخ / گیگ", html)
 
     def test_edit_has_payg_rate(self):
         html = (ROOT / "app/web/templates/reseller_plan_edit.html").read_text(encoding="utf-8")

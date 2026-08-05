@@ -40,10 +40,10 @@
   <div class="home-gauge-meta">
     <span class="home-gauge-label">{{ label }}</span>
     {% if meter.has_limit %}
-    <span class="muted" dir="ltr">{{ meter.used_text }} / {{ meter.limit_text }}</span>
+    <span class="muted num-ratio">{{ meter.ratio_text or (meter.used_text ~ '/' ~ meter.limit_text) }}</span>
     <small class="muted">باقی‌مانده {{ meter.remain_text }}</small>
     {% else %}
-    <span class="muted" dir="ltr">{{ meter.used_text }}</span>
+    <span class="muted num-ratio">{{ meter.used_text }}</span>
     <small class="muted">بدون سقف</small>
     {% endif %}
   </div>

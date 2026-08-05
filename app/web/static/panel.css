@@ -3541,26 +3541,87 @@ body.modal-open { overflow: hidden; }
   margin: 0;
   font-size: 12px;
 }
-.svc-card-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.55rem 0.75rem;
+/* Service meta: stacked RTL rows — label + value, no crowded 3-col grid */
+.svc-card-meta {
+  list-style: none;
   margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  text-align: right;
 }
-.svc-card-stats > div:last-child {
-  grid-column: 1 / -1;
+.svc-card-meta li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+  text-align: right;
 }
-.svc-card-stats dt {
-  margin: 0 0 0.15rem;
+.svc-meta-label {
   font-size: 11px;
-  color: var(--muted-fg);
   font-weight: 500;
+  color: var(--muted-fg);
+  line-height: 1.3;
 }
-.svc-card-stats dd {
+.svc-meta-value {
   margin: 0;
   font-size: 13px;
-  line-height: 1.35;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--foreground);
   overflow-wrap: anywhere;
+}
+.num-ratio {
+  display: inline-block;
+  max-width: 100%;
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.svc-meta-value.num-ratio,
+.payg-meta-value.num-ratio {
+  width: 100%;
+}
+.payg-meta {
+  list-style: none;
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  text-align: right;
+}
+.payg-meta li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  text-align: right;
+}
+.payg-meta-label {
+  font-size: 12px;
+  color: var(--muted-fg);
+}
+.payg-meta-value {
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+}
+.payg-help {
+  margin: 0 0 var(--space-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.payg-lifetime-note,
+.reseller-pg-admin-line {
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: right;
 }
 .svc-card-links {
   display: flex;
@@ -3667,11 +3728,10 @@ body.modal-open { overflow: hidden; }
   .user-edit-fields:not(.user-edit-fields--2) {
     grid-template-columns: 1fr 1fr;
   }
-  .svc-card-stats {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  .svc-card-stats > div:last-child {
-    grid-column: auto;
+  .svc-card-meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-2);
   }
   .svc-card-ops {
     display: grid;
@@ -4811,7 +4871,8 @@ html[data-theme="light"] .setup-progress span.done {
   line-height: 1.25;
 }
 /* LTR used/total: pin to physical right even when the line wraps */
-.home-gauge-meta [dir="ltr"] {
+.home-gauge-meta [dir="ltr"],
+.home-gauge-meta .num-ratio {
   display: block;
   width: 100%;
   max-width: 100%;
@@ -5194,7 +5255,8 @@ html[data-theme="light"] .home-gauge.is-exhausted {
     text-align: center;
     align-items: center;
   }
-  .home-gauge-meta [dir="ltr"] {
+  .home-gauge-meta [dir="ltr"],
+  .home-gauge-meta .num-ratio {
     text-align: center;
   }
   .home-gauge-ring { width: 96px; height: 96px; }
@@ -5230,7 +5292,8 @@ html[data-theme="light"] .home-gauge.is-exhausted {
     min-width: 0;
     gap: 0.25rem;
   }
-  .pg-quota-gauges .home-gauge-meta [dir="ltr"] {
+  .pg-quota-gauges .home-gauge-meta [dir="ltr"],
+  .pg-quota-gauges .home-gauge-meta .num-ratio {
     text-align: center;
     overflow-wrap: anywhere;
     word-break: break-word;

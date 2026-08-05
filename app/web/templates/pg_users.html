@@ -53,10 +53,12 @@
           <span class="badge active">{{ u.get('status') or 'فعال' }}</span>
           {% endif %}
         </td>
-        <td class="mono cell-tight">
-          {% if u.get('used_traffic') is not none %}{{ u.get('used_traffic') | bytes }}{% else %}—{% endif %}
-          <span class="muted">/</span>
-          {% if u.get('data_limit') %}{{ u.get('data_limit') | bytes }}{% else %}∞{% endif %}
+        <td class="mono cell-tight num-ratio">
+          {% if u.get('data_limit') %}
+            {{ (u.get('used_traffic') or 0) | bytes_ratio(u.get('data_limit')) }}
+          {% elif u.get('used_traffic') is not none %}
+            {{ u.get('used_traffic') | bytes }}
+          {% else %}—{% endif %}
         </td>
         <td class="mono muted col-hide-sm">
           {% if u.get('expire') %}{{ u.get('expire') | expire }}{% elif u.get('expire_date') %}{{ u.get('expire_date') | expire }}{% else %}—{% endif %}

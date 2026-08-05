@@ -88,23 +88,22 @@
         <span class="badge {% if 'فعال' in (s.status_fa or '') %}active{% else %}neutral{% endif %}">{{ s.status_fa }}</span>
       </div>
       {% if s.error %}<p class="muted svc-card-err">{{ s.error }}</p>{% endif %}
-      <dl class="svc-card-stats">
-        <div>
-          <dt>حجم</dt>
-          <dd class="mono" dir="ltr">{{ s.used_text }} / {{ s.limit_text }}</dd>
-        </div>
-        <div>
-          <dt>مانده</dt>
-          <dd class="mono" dir="ltr">{{ s.remain_gb_text }}</dd>
-        </div>
-        <div>
-          <dt>انقضا</dt>
-          <dd>
-            {{ s.expire_text }}
-            {% if s.days_left is not none %}<span class="muted"> · {{ s.days_left }} روز</span>{% endif %}
-          </dd>
-        </div>
-      </dl>
+      <ul class="svc-card-meta">
+        <li>
+          <span class="svc-meta-label">حجم</span>
+          <span class="svc-meta-value num-ratio">{{ s.volume_text }}</span>
+        </li>
+        <li>
+          <span class="svc-meta-label">مانده</span>
+          <span class="svc-meta-value num-ratio">{{ s.remain_gb_text }}</span>
+        </li>
+        <li>
+          <span class="svc-meta-label">انقضا</span>
+          <span class="svc-meta-value">
+            {{ s.expire_text }}{% if s.days_left is not none %}<span class="muted"> · {{ s.days_left }} روز</span>{% endif %}
+          </span>
+        </li>
+      </ul>
       {% if s.subscription_url %}
       <div class="svc-card-links">
         <button type="button" class="btn btn-sm btn-ghost"
@@ -123,7 +122,7 @@
             <select name="plan_id" required class="select-block">
               {% for p in plans %}
               <option value="{{ p.id }}" {% if s.service.plan_id == p.id %}selected{% endif %}>
-                {{ p.name }} · {{ p.duration_days or '∞' }}روز · {{ p.data_limit_gb or '∞' }}GB
+                {{ p.name }} · {{ p.duration_days or '∞' }}روز · {% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}
               </option>
               {% endfor %}
             </select>
