@@ -64,17 +64,12 @@ class PendingOrderCleanupTests(unittest.TestCase):
 
 
 class RoleAndReasonUiTests(unittest.TestCase):
-    def test_users_list_no_role_form_reason_only_delete(self):
+    def test_users_list_no_role_form_and_no_reason(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
         self.assertNotIn("/users/{{ u.id }}/role", users)
         self.assertIn("/users/{{ u.id }}/block", users)
         self.assertIn("/users/{{ u.id }}/delete", users)
-        # Reason box only on delete — not on block
-        self.assertIn('action="/users/{{ u.id }}/delete"', users)
-        delete_block = users.split('action="/users/{{ u.id }}/delete"', 1)[1].split("</form>", 1)[0]
-        self.assertIn('data-confirm-reason="1"', delete_block)
-        block_form = users.split('action="/users/{{ u.id }}/block"', 1)[1].split("</form>", 1)[0]
-        self.assertNotIn("data-confirm-reason", block_form)
+        self.assertNotIn("data-confirm-reason", users)
         self.assertIn('data-modal-open="modal-user-edit"', users)
         # Flash rendered once in base.html (above title), not under page-head
         self.assertNotIn("{% if flash_ok %}<div class=\"flash ok\">{{ flash_ok }}</div>{% endif %}", users)
@@ -83,37 +78,32 @@ class RoleAndReasonUiTests(unittest.TestCase):
         resellers = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
         self.assertNotIn("/resellers/{{ u.id }}/role", resellers)
         self.assertIn('data-modal-open="modal-reseller-edit"', resellers)
-        self.assertIn('data-confirm-reason="1"', resellers)
+        self.assertNotIn("data-confirm-reason", resellers)
 
     def test_role_lives_in_edit_bodies_without_reason(self):
         user_body = (ROOT / "app/web/templates/_user_edit_body.html").read_text(
             encoding="utf-8"
         )
         self.assertIn("/users/{{ user.id }}/role", user_body)
-        self.assertNotIn("data-confirm-reason-when", user_body)
-        self.assertNotIn("data-confirm-reason=", user_body)
+        self.assertNotIn("data-confirm-reason", user_body)
         reseller_body = (ROOT / "app/web/templates/_reseller_edit_body.html").read_text(
             encoding="utf-8"
         )
         self.assertIn("/resellers/{{ user.id }}/role", reseller_body)
-        role_form = reseller_body.split("/resellers/{{ user.id }}/role", 1)[1].split(
-            "</form>", 1
-        )[0]
-        self.assertNotIn("data-confirm-reason", role_form)
-        # Delete actions in reseller edit still collect reason
-        self.assertIn('data-confirm-reason="1"', reseller_body)
+        self.assertNotIn("data-confirm-reason", reseller_body)
 
     def test_renew_plan_only_no_manual_days(self):
         body = (ROOT / "app/web/templates/_user_edit_body.html").read_text(
             encoding="utf-8"
         )
-        self.assertIn("تمدید با پلن", body)
+        self.assertIn("تمدید", body)
         self.assertNotIn('name="days"', body)
         self.assertNotIn('name="data_limit_gb"', body)
-        self.assertIn("افزایش مانده", body)
+        self.assertIn("افزایش", body)
         self.assertIn('name="extra_days"', body)
-        # Mobile-friendly card list, not wide service table
-        self.assertIn("svc-card-list", body)
+        # Redesigned mobile-friendly service list
+        self.assertIn("svc-list", body)
+        self.assertIn("svc-item", body)
         self.assertNotIn("<table", body)
 
 

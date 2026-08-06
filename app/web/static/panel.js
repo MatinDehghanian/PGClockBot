@@ -1028,9 +1028,6 @@
       if (!modal) return;
       const titleEl = document.getElementById('confirm-title');
       const msgEl = document.getElementById('confirm-message');
-      const reasonWrap = document.getElementById('confirm-reason-wrap');
-      const reasonInput = document.getElementById('confirm-reason');
-      const reasonLabel = document.getElementById('confirm-reason-label');
       const submitBtn = document.getElementById('confirm-submit');
       const formEl = document.getElementById('confirm-form');
       let resolver = null;
@@ -1055,16 +1052,7 @@
             submitBtn.textContent = opts.confirmLabel || 'تأیید';
             submitBtn.className = 'btn' + (opts.danger ? ' btn-danger' : (opts.warn ? ' btn-warn' : ''));
           }
-          const needReason = !!opts.reason;
-          if (reasonWrap) reasonWrap.hidden = !needReason;
-          if (reasonInput) {
-            reasonInput.required = needReason;
-            reasonInput.value = '';
-            reasonInput.minLength = opts.reasonMin || 3;
-          }
-          if (reasonLabel) reasonLabel.textContent = opts.reasonLabel || 'علت';
           openModal('modal-confirm');
-          if (needReason && reasonInput) setTimeout(() => reasonInput.focus(), 40);
         });
       };
 
@@ -1072,16 +1060,6 @@
         formEl.addEventListener('submit', (e) => {
           e.preventDefault();
           if (!resolver) return;
-          if (reasonWrap && !reasonWrap.hidden) {
-            const v = (reasonInput && reasonInput.value || '').trim();
-            const min = (reasonInput && reasonInput.minLength) || 3;
-            if (v.length < min) {
-              if (reasonInput) reasonInput.focus();
-              return;
-            }
-            finish({ ok: true, reason: v });
-            return;
-          }
           finish({ ok: true });
         });
       }
@@ -1104,46 +1082,13 @@
 
       function readOpts(el, form){
         const src = el.hasAttribute('data-confirm') ? el : form;
-        let needReason = src.hasAttribute('data-confirm-reason');
-        const when = src.getAttribute('data-confirm-reason-when');
-        const reasonName = src.getAttribute('data-confirm-reason-name') || 'reason';
-        const reasonMin = parseInt(src.getAttribute('data-confirm-reason-min') || '3', 10) || 3;
-        if (when && form) {
-          const sel = form.querySelector('select[name="role"]');
-          needReason = !!(sel && sel.value === when);
-        }
-        if (needReason && form) {
-          const existing = form.querySelector(
-            'textarea[name="' + reasonName + '"], input[name="' + reasonName + '"]'
-          );
-          const val = existing ? String(existing.value || '').trim() : '';
-          if (val.length >= reasonMin) needReason = false;
-        }
         return {
           title: src.getAttribute('data-confirm-title') || 'تأیید',
           message: src.getAttribute('data-confirm') || 'ادامه می‌دهید؟',
           danger: src.hasAttribute('data-confirm-danger'),
           warn: src.hasAttribute('data-confirm-warn'),
-          reason: needReason,
-          reasonMin: reasonMin,
-          reasonLabel: src.getAttribute('data-confirm-reason-label') || 'علت',
-          reasonName: reasonName,
           confirmLabel: src.getAttribute('data-confirm-label') || 'تأیید',
         };
-      }
-
-      function applyReason(form, opts, reason){
-        if (!opts.reason || !reason) return;
-        let hidden = form.querySelector(
-          'input[name="' + opts.reasonName + '"], textarea[name="' + opts.reasonName + '"]'
-        );
-        if (!hidden) {
-          hidden = document.createElement('input');
-          hidden.type = 'hidden';
-          hidden.name = opts.reasonName;
-          form.appendChild(hidden);
-        }
-        hidden.value = reason;
       }
 
       document.addEventListener('submit', (e) => {
@@ -1160,7 +1105,6 @@
         const opts = readOpts(form, form);
         window.panelConfirm(opts).then((result) => {
           if (!result || !result.ok) return;
-          applyReason(form, opts, result.reason);
           form.dataset.confirmSkip = '1';
           if (typeof form.requestSubmit === 'function') form.requestSubmit();
           else form.submit();
@@ -1183,7 +1127,6 @@
         window.panelConfirm(opts).then((result) => {
           if (!result || !result.ok) return;
           if (!form) return;
-          applyReason(form, opts, result.reason);
           form.dataset.confirmSkip = '1';
           btn.dataset.confirmSkip = '1';
           if (typeof form.requestSubmit === 'function') form.requestSubmit(btn);

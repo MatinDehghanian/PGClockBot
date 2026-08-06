@@ -232,17 +232,13 @@
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>حذف نمایندگی</h3>
-    <p class="muted">پروفایل نماینده و ادمین پاسارگارد متصل حذف می‌شود. علت برای کاربر در ربات/تلگرام ارسال می‌شود و نقشش به «کاربر» برمی‌گردد.</p>
+    <p class="muted">پروفایل نماینده و ادمین پاسارگارد متصل حذف می‌شود و نقشش به «کاربر» برمی‌گردد.</p>
   </header>
   <form method="post" action="/resellers/{{ user.id }}/delete" class="form-stack"
-        data-confirm="نمایندگی و ادمین پاسارگارد متصل حذف شوند؟ علت برای کاربر ارسال می‌شود."
+        data-confirm="نمایندگی و ادمین پاسارگارد متصل حذف شوند؟"
         data-confirm-title="حذف نمایندگی (+ ادمین پاسارگارد)"
         data-confirm-danger="1"
-        data-confirm-reason="1"
-        data-confirm-reason-label="علت حذف نمایندگی"
-        data-confirm-reason-name="reason"
         data-confirm-label="حذف نمایندگی و ادمین">
-    <input type="hidden" name="reason" value="" />
     <button class="btn btn-danger" type="submit">حذف نمایندگی</button>
   </form>
 </section>
@@ -259,11 +255,7 @@
         data-confirm="{% if user.wallet_balance and user.wallet_balance > 0 %}هشدار: موجودی کیف پول {{ user.wallet_balance | num }} تومان از بین می‌رود. {% endif %}کاربر کامل به‌همراه نمایندگی، ادمین پاسارگارد، سفارش‌ها و سرویس‌ها حذف شود؟ برگشت‌ناپذیر است."
         data-confirm-title="حذف کامل (+ ادمین پاسارگارد)"
         data-confirm-danger="1"
-        data-confirm-reason="1"
-        data-confirm-reason-label="علت حذف کامل کاربر"
-        data-confirm-reason-name="reason"
         data-confirm-label="حذف کامل">
-    <input type="hidden" name="reason" value="" />
     <button class="btn btn-danger" type="submit">حذف کامل کاربر</button>
   </form>
 </section>

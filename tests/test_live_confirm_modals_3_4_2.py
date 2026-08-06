@@ -28,9 +28,11 @@ class PanelHtmlNoStoreTests(unittest.TestCase):
 class ConfirmModalTests(unittest.TestCase):
     def test_shared_modal_in_base(self):
         self.assertIn('id="modal-confirm"', BASE)
-        self.assertIn('id="confirm-reason"', BASE)
+        self.assertNotIn('id="confirm-reason"', BASE)
+        self.assertNotIn("confirm-reason-wrap", BASE)
         self.assertIn("panelConfirm", JS)
         self.assertIn("data-confirm", JS)
+        self.assertNotIn("data-confirm-reason", JS)
 
     def test_users_block_role_delete_use_data_confirm(self):
         self.assertIn("data-confirm=", USERS)
@@ -38,14 +40,15 @@ class ConfirmModalTests(unittest.TestCase):
         self.assertIn("/users/{{ u.id }}/delete", USERS)
         self.assertIn("data-confirm-danger", USERS)
         self.assertNotIn("confirm(", USERS)
+        self.assertNotIn("data-confirm-reason", USERS)
         # Role change moved into edit modal — not on list row
         self.assertNotIn("/users/{{ u.id }}/role", USERS)
 
     def test_resellers_no_native_prompt(self):
         self.assertNotIn("prompt(", RESELLERS)
         self.assertNotIn("confirm(", RESELLERS)
-        self.assertIn("data-confirm-reason", RESELLERS)
-        self.assertIn('data-confirm-reason="1"', RESELLERS)
+        self.assertIn("data-confirm=", RESELLERS)
+        self.assertNotIn("data-confirm-reason", RESELLERS)
 
     def test_templates_drop_native_confirm_for_table_deletes(self):
         for rel in (

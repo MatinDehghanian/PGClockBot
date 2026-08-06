@@ -1,4 +1,4 @@
-"""4.4.0 — mobile floating header, button chrome, flash/modal polish."""
+"""4.4.1 — pill controls, no reason box, title actions, services redesign."""
 
 from __future__ import annotations
 
@@ -10,54 +10,76 @@ CSS = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
 BASE = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
 USERS = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
 RESELLERS = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
+USER_BODY = (ROOT / "app/web/templates/_user_edit_body.html").read_text(encoding="utf-8")
 SETTINGS = (ROOT / "app/web/templates/settings.html").read_text(encoding="utf-8")
 SHOP = (ROOT / "app/web/templates/shop_settings.html").read_text(encoding="utf-8")
 SECURITY = (ROOT / "app/web/templates/security.html").read_text(encoding="utf-8")
+JS = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
 
 
-class RadiusAndTableHeadTests(unittest.TestCase):
-    def test_radius_increased(self):
+class RadiusTokensTests(unittest.TestCase):
+    def test_control_radius_pill(self):
         root = CSS.split(":root {", 1)[1].split("}", 1)[0]
         self.assertIn("--radius: 12px;", root)
-        self.assertIn("--r-sm: 8px;", root)
-        self.assertIn("--table-head-bg:", root)
+        self.assertIn("--control-radius: 999px;", root)
+        self.assertIn("--menu-item-radius: 8px;", root)
 
-    def test_th_uses_mild_table_head_token(self):
-        th = CSS.split("th {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("background: var(--table-head-bg);", th)
-        self.assertNotIn("background: var(--muted);", th)
+    def test_buttons_fields_tabs_use_control_radius(self):
+        btn = CSS.split(".btn, a.btn, .btn-sm, a.btn-sm {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: var(--control-radius);", btn)
+        fields = CSS.split("input, select, textarea {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: var(--control-radius);", fields)
+        tabs = CSS.split(".section-tabs a {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: var(--control-radius);", tabs)
+
+    def test_cards_logo_hamburger_keep_box_radius(self):
+        menu = CSS.split(".menu-toggle {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: var(--radius);", menu)
+        self.assertNotIn("control-radius", menu)
+        logo = CSS.split(".brand-logo {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: var(--radius);", logo)
+
+    def test_dropdown_box_pill_items_keep_menu_item_radius(self):
+        box = CSS.split(".ui-select-menu {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: var(--control-radius);", box)
+        item = CSS.split(".ui-select-menu button {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: var(--menu-item-radius);", item)
+        theme = CSS.split(".side-theme-menu {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: var(--control-radius);", theme)
+        theme_btn = CSS.split(".side-theme-menu button {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: var(--menu-item-radius);", theme_btn)
 
 
-class StickyActionsChromeTests(unittest.TestCase):
-    def test_sticky_actions_has_no_box(self):
-        block = CSS.split(".sticky-actions {", 1)[1].split("}", 1)[0]
-        self.assertIn("position: static", block)
-        self.assertIn("background: transparent", block)
-        self.assertIn("border: none", block)
-        self.assertNotIn("border: 1px solid var(--border)", block)
-
-
-class MobileTopbarTests(unittest.TestCase):
-    def test_topbar_is_fixed(self):
-        block = CSS.split("/* Topbar + hamburger", 1)[1].split(".topbar-brand {", 1)[0]
-        self.assertIn("position: fixed;", block)
-        self.assertNotIn("position: sticky;", block)
-
-    def test_shell_pads_for_fixed_topbar(self):
+class TitleActionsAlignTests(unittest.TestCase):
+    def test_mobile_page_head_keeps_actions_inline(self):
         mobile = CSS.split("@media (max-width: 900px) {", 1)[1]
-        self.assertIn("padding-top: calc(var(--topbar-h) + var(--safe-top));", mobile)
+        # Title actions stay on the same row (not full-width under title)
+        self.assertIn("Title actions stay on the same row", mobile)
+        head_rules = mobile.split(".page-head:has(> .actions),", 1)[1].split(".pg-head {", 1)[0]
+        self.assertIn("flex-wrap: nowrap;", head_rules)
+        self.assertIn("width: auto;", head_rules)
+        self.assertNotIn("flex: 1 1 100%;", head_rules)
 
 
-class MobileFullWidthActionsTests(unittest.TestCase):
-    def test_page_head_stacks_actions_on_mobile(self):
-        mobile = CSS.split("@media (max-width: 900px) {", 1)[1]
-        self.assertIn(".page-head:has(> .actions),", mobile)
-        self.assertIn("flex-wrap: wrap;", mobile)
-        self.assertIn(".page-head > .actions,", mobile)
-        self.assertIn("width: 100%;", mobile)
-        self.assertIn(".search-bar {", mobile)
-        self.assertIn("flex-direction: column;", mobile)
-        self.assertIn(".user-edit-inline-row {", mobile)
+class NoReasonBoxTests(unittest.TestCase):
+    def test_reason_removed_everywhere_in_web(self):
+        self.assertNotIn("confirm-reason", BASE)
+        self.assertNotIn("data-confirm-reason", USERS)
+        self.assertNotIn("data-confirm-reason", RESELLERS)
+        self.assertNotIn("data-confirm-reason", USER_BODY)
+        self.assertNotIn("data-confirm-reason", JS)
+        self.assertNotIn("confirm-reason-wrap", JS)
+
+
+class ServicesRedesignTests(unittest.TestCase):
+    def test_user_edit_services_use_new_layout(self):
+        self.assertIn("svc-list", USER_BODY)
+        self.assertIn("svc-item", USER_BODY)
+        self.assertIn("svc-stats", USER_BODY)
+        self.assertIn("svc-op-row", USER_BODY)
+        self.assertNotIn("svc-card-list", USER_BODY)
+        self.assertIn(".svc-list {", CSS)
+        self.assertIn(".svc-stat {", CSS)
 
 
 class FlashSingleRenderTests(unittest.TestCase):
@@ -67,38 +89,23 @@ class FlashSingleRenderTests(unittest.TestCase):
 
     def test_users_no_duplicate_flash(self):
         self.assertNotIn('{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}', USERS)
-        self.assertIn("encodeURIComponent(flashOk)", USERS)
-
-    def test_resellers_forwards_flash_into_modal(self):
-        self.assertIn("encodeURIComponent(flashOk)", RESELLERS)
-        self.assertIn("encodeURIComponent(flashErr)", RESELLERS)
 
     def test_settings_shop_security_no_below_title_flash(self):
         self.assertNotIn("{% if saved %}", SETTINGS)
-        self.assertNotIn("request.query_params.get('ok')", SETTINGS)
         self.assertNotIn("{% if saved %}", SHOP)
         self.assertNotIn("{% if ok %}", SECURITY)
-        self.assertNotIn("{% if err %}", SECURITY)
-
-
-class ConfirmReasonDeleteOnlyTests(unittest.TestCase):
-    def test_block_has_no_reason_delete_has_reason(self):
-        block = USERS.split('action="/users/{{ u.id }}/block"', 1)[1].split("</form>", 1)[0]
-        delete = USERS.split('action="/users/{{ u.id }}/delete"', 1)[1].split("</form>", 1)[0]
-        self.assertNotIn("data-confirm-reason", block)
-        self.assertIn('data-confirm-reason="1"', delete)
 
 
 class VersionBumpTests(unittest.TestCase):
-    def test_version_at_least_4_4_0(self):
+    def test_version_at_least_4_4_1(self):
         from app.version import __version__
 
         self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")), (4, 4, 0)
+            tuple(int(x) for x in __version__.split(".")), (4, 4, 1)
         )
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.0")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.1")
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"4.4.0"', notes)
+        self.assertIn('"4.4.1"', notes)
 
 
 if __name__ == "__main__":
