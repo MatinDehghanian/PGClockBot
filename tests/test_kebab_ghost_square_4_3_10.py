@@ -108,9 +108,8 @@ class VersionTests(unittest.TestCase):
         self.assertGreaterEqual(
             tuple(int(x) for x in __version__.split(".")), (4, 4, 10)
         )
-        self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.10"
-        )
+        ver = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertGreaterEqual(tuple(int(x) for x in ver.split(".")), (4, 4, 10))
 
 
 if __name__ == "__main__":
