@@ -58,11 +58,17 @@ class RadiusTokensTests(unittest.TestCase):
         self.assertIn("min-height: 96px;", ta)
 
     def test_cards_logo_hamburger_keep_box_radius(self):
+        # Logo + hamburger keep the soft 8px square from v4.3.10 (--r-sm),
+        # not the larger card --radius and not pill --control-radius.
         menu = CSS.split(".menu-toggle {", 1)[1].split("}", 1)[0]
-        self.assertIn("border-radius: var(--radius);", menu)
+        self.assertIn("border-radius: var(--r-sm);", menu)
         self.assertNotIn("control-radius", menu)
+        self.assertNotIn("border-radius: var(--radius);", menu)
         logo = CSS.split(".brand-logo {", 1)[1].split("}", 1)[0]
-        self.assertIn("border-radius: var(--radius);", logo)
+        self.assertIn("border-radius: var(--r-sm);", logo)
+        self.assertNotIn("border-radius: var(--radius);", logo)
+        top_logo = CSS.split(".topbar-brand .brand-logo {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: var(--r-sm);", top_logo)
 
     def test_dropdown_panels_use_menu_radius_not_pill(self):
         box = CSS.split(".ui-select-menu {", 1)[1].split("}", 1)[0]
@@ -236,17 +242,17 @@ class CardInsetAndServicePillTests(unittest.TestCase):
 
 
 class VersionBumpTests(unittest.TestCase):
-    def test_version_at_least_4_4_6(self):
+    def test_version_at_least_4_4_7(self):
         from app.version import __version__
 
         self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")), (4, 4, 6)
+            tuple(int(x) for x in __version__.split(".")), (4, 4, 7)
         )
         self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.6"
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.7"
         )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"4.4.6"', notes)
+        self.assertIn('"4.4.7"', notes)
 
 
 if __name__ == "__main__":

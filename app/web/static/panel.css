@@ -186,7 +186,8 @@ a:hover { opacity: 0.8; }
   flex: 0 0 auto;
   width: 36px;
   height: 36px;
-  border-radius: var(--radius);
+  /* Match v4.3.10 header chrome (8px) — not the larger card --radius */
+  border-radius: var(--r-sm);
   overflow: hidden;
   background: #f97316;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
@@ -2726,7 +2727,7 @@ form.settings-form > .actions.sticky-actions {
 .topbar-brand .brand-logo {
   width: var(--btn-h);
   height: var(--btn-h);
-  border-radius: var(--radius);
+  border-radius: var(--r-sm);
 }
 .topbar-brand-text {
   display: flex;
@@ -2753,7 +2754,8 @@ form.settings-form > .actions.sticky-actions {
 .menu-toggle {
   width: var(--btn-h);
   height: var(--btn-h);
-  border-radius: var(--radius);
+  /* Same soft square as v4.3.10 — not pill / not card radius */
+  border-radius: var(--r-sm);
   border: 1px solid rgba(249, 115, 22, 0.4);
   background: rgba(249, 115, 22, 0.12);
   color: var(--brand-fg);

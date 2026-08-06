@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.4.7": [
+        "گردی لوگوی هدر و دکمه همبرگر مثل نسخه ۴.۳.۱۰ شد (۸px)",
+    ],
     "4.4.6": [
         "مودال کاربر: باکس‌های حجم و مانده زمان سرویس راست‌چین شدند",
         "فاصله محتوا از لبه باکس‌ها (بالا/پایین/چپ/راست) یکدست و استاندارد شد",
