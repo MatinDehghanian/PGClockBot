@@ -22,7 +22,7 @@ from app.services.formatting import (
     format_bytes,
     format_bytes_ratio,
     format_expire_short,
-    status_label,
+    status_label_plain,
 )
 from app.services.pasarguard import (
     build_user_modify_payload,
@@ -122,7 +122,7 @@ async def service_snapshot(session: AsyncSession, service: UserService) -> Servi
         return ServiceSnapshot(
             service=service,
             pg=info,
-            status_fa=status_label(info.get("status")),
+            status_fa=status_label_plain(info.get("status")),
             used_text=format_bytes(used),
             limit_text=format_bytes(limit_n) if limit_n > 0 else "نامحدود",
             volume_text=format_bytes_ratio(used, lim_for_ratio),

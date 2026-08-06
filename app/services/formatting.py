@@ -463,11 +463,26 @@ STATUS_FA = {
     "on_hold": "🟡 در انتظار",
 }
 
+# Web panel badges — no Telegram emoji dots
+STATUS_FA_PLAIN = {
+    "active": "فعال",
+    "disabled": "غیرفعال",
+    "limited": "اتمام حجم",
+    "expired": "منقضی",
+    "on_hold": "در انتظار",
+}
+
 
 def status_label(status: str | None) -> str:
     if not status:
         return "نامشخص"
     return STATUS_FA.get(status.lower(), status)
+
+
+def status_label_plain(status: str | None) -> str:
+    if not status:
+        return "نامشخص"
+    return STATUS_FA_PLAIN.get(status.lower(), status)
 
 
 def kv_line(emoji: str, label: str, value: str) -> str:

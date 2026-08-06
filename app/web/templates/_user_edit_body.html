@@ -85,13 +85,16 @@
           #{{ s.service.id }}{% if s.service.pg_username %} · {{ s.service.pg_username }}{% endif %}
         </p>
         {% if s.error %}<p class="muted svc-item-err">{{ s.error }}</p>{% endif %}
-        <p class="svc-item-meta muted">
-          <span>حجم <b class="num-ratio" dir="ltr">{{ s.volume_text }}</b></span>
-          <span class="svc-meta-sep">·</span>
-          <span>مانده <b class="num-ratio" dir="ltr">{{ s.remain_gb_text }}</b></span>
-          <span class="svc-meta-sep">·</span>
-          <span>انقضا <b>{{ s.expire_text }}{% if s.days_left is not none %} ({{ s.days_left }} روز){% endif %}</b></span>
-        </p>
+        <div class="svc-stat-row">
+          <div class="user-edit-wallet-pill svc-stat-pill" dir="ltr">
+            <span class="muted">حجم / مانده</span>
+            <strong class="num-ratio">{{ s.volume_text }} · {{ s.remain_gb_text }}</strong>
+          </div>
+          <div class="user-edit-wallet-pill svc-stat-pill">
+            <span class="muted">مانده زمان</span>
+            <strong>{% if s.days_left is none %}نامحدود{% else %}{{ s.days_left }} روز{% endif %}</strong>
+          </div>
+        </div>
         {% if s.subscription_url %}
         <div class="svc-item-links">
           <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ s.subscription_url }}">کپی لینک</button>
@@ -130,7 +133,7 @@
             </label>
           </div>
           <div class="actions user-edit-actions">
-            <button class="btn btn-sm btn-ghost" type="submit">افزایش مانده</button>
+            <button class="btn btn-sm" type="submit">افزایش مانده</button>
           </div>
         </form>
       </div>

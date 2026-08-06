@@ -2851,6 +2851,12 @@ a.btn.btn-star:hover {
   .page-head h1,
   .page-title h1 { font-size: 18px; }
   .page-head p { font-size: 12px; margin-top: var(--space-0); }
+  .ui-modal-head h1,
+  .ui-modal-head h2,
+  .ui-modal-head h3,
+  .ui-modal-panel > h1,
+  .ui-modal-panel > h2,
+  .ui-modal-panel > h3 { font-size: 18px; }
 
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2988,17 +2994,22 @@ a.btn.btn-star:hover {
     justify-content: center;
   }
 
-  /* Button beside input/select/box → stack; both full width */
+  /* Search stays input + button on one row (previous size) */
   .search-bar {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: flex-end;
   }
-  .search-bar-field,
+  .search-bar-field {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+  }
   .search-bar .btn,
   .search-bar button {
-    width: 100%;
-    flex: 1 1 auto;
-    align-self: stretch;
+    width: auto;
+    flex: 0 0 auto;
+    align-self: flex-end;
   }
   .user-edit-inline-row {
     flex-direction: column;
@@ -3686,7 +3697,7 @@ body.modal-open { overflow: hidden; }
 .user-edit-empty {
   margin: 0;
 }
-/* Services — same rhythm as wallet-tx list: one bordered stack, light rows */
+/* Services — wallet-pill stats + form rhythm matching other edit sections */
 .svc-list {
   list-style: none;
   margin: 0;
@@ -3704,7 +3715,7 @@ body.modal-open { overflow: hidden; }
   flex-direction: column;
   gap: var(--space-2);
   min-width: 0;
-  padding: 0.65rem 0.75rem;
+  padding: var(--space-2);
   border-bottom: 1px solid var(--border);
   background: transparent;
 }
@@ -3712,7 +3723,7 @@ body.modal-open { overflow: hidden; }
 .svc-item-main {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--space-2);
   min-width: 0;
 }
 .svc-item-title {
@@ -3737,38 +3748,39 @@ body.modal-open { overflow: hidden; }
   margin: 0;
   font-size: 12px;
 }
-.svc-item-meta {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.55;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.15rem 0.35rem;
+.svc-stat-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  min-width: 0;
 }
-.svc-item-meta b {
-  font-weight: 600;
-  color: var(--foreground);
+.svc-stat-pill {
+  align-items: flex-start;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
-.svc-meta-sep {
-  opacity: 0.55;
+.svc-stat-pill strong {
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 .svc-item-links {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
-  margin-top: 0.15rem;
 }
 .svc-item-ops {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding-top: var(--space-1);
+  padding-top: var(--space-2);
   border-top: 1px solid var(--border);
   min-width: 0;
 }
 .svc-item-ops .form-stack {
-  gap: var(--space-1);
+  gap: var(--space-2);
   margin: 0;
 }
 .svc-item-ops .user-edit-actions {
@@ -3930,15 +3942,24 @@ body.modal-open { overflow: hidden; }
   gap: var(--space-2);
   margin-bottom: var(--space-2);
 }
+/* Modal chrome title matches page titles (not the tiny section --title-size) */
 .ui-modal-head h1,
 .ui-modal-head h2,
-.ui-modal-head h3,
-.ui-modal-panel h1,
-.ui-modal-panel h2,
-.ui-modal-panel h3 {
+.ui-modal-head h3 {
   margin: 0;
-  font-size: var(--title-size);
+  font-size: 22px;
   font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--foreground);
+}
+.ui-modal-panel > h1,
+.ui-modal-panel > h2,
+.ui-modal-panel > h3 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   line-height: 1.25;
   color: var(--foreground);
 }

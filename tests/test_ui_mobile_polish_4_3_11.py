@@ -1,4 +1,4 @@
-"""4.4.3 — pill controls for shortcuts; multi-line boxes keep card radius."""
+"""4.4.4 — search row on mobile, modal title size, service pills."""
 
 from __future__ import annotations
 
@@ -91,6 +91,23 @@ class TitleActionsAlignTests(unittest.TestCase):
         self.assertIn("width: auto;", head_rules)
         self.assertNotIn("flex: 1 1 100%;", head_rules)
 
+    def test_mobile_search_keeps_button_beside_field(self):
+        mobile = CSS.split("@media (max-width: 900px) {", 1)[1]
+        block = mobile.split(".search-bar {", 1)[1].split(".user-edit-inline-row {", 1)[0]
+        self.assertIn("flex-direction: row;", block)
+        self.assertNotIn("flex-direction: column;", block)
+        self.assertIn("width: auto;", block)
+
+    def test_modal_head_title_matches_page_title(self):
+        head = CSS.split(
+            "/* Modal chrome title matches page titles (not the tiny section --title-size) */",
+            1,
+        )[1].split(".ui-modal-panel p,", 1)[0]
+        self.assertIn("font-size: 22px;", head)
+        self.assertNotIn("var(--title-size)", head)
+        page = CSS.split(".page-title h1 {", 1)[1].split("}", 1)[0]
+        self.assertIn("font-size: 22px;", page)
+
 
 class DeleteReasonBoxTests(unittest.TestCase):
     def test_confirm_reason_ui_present(self):
@@ -117,16 +134,33 @@ class DeleteReasonBoxTests(unittest.TestCase):
 
 
 class ServicesRedesignTests(unittest.TestCase):
-    def test_user_edit_services_minimal_list(self):
+    def test_user_edit_services_wallet_style_pills(self):
         self.assertIn("svc-list", USER_BODY)
         self.assertIn("svc-item", USER_BODY)
-        self.assertIn("svc-item-meta", USER_BODY)
+        self.assertIn("svc-stat-row", USER_BODY)
+        self.assertIn("svc-stat-pill", USER_BODY)
+        self.assertIn("حجم / مانده", USER_BODY)
+        self.assertIn("مانده زمان", USER_BODY)
         self.assertIn("user-edit-inline-row", USER_BODY)
         self.assertNotIn("svc-card-list", USER_BODY)
-        self.assertNotIn("svc-stats", USER_BODY)
-        self.assertNotIn("svc-op-row", USER_BODY)
-        self.assertIn(".svc-list {", CSS)
-        self.assertIn(".svc-item-meta {", CSS)
+        self.assertNotIn("svc-item-meta", USER_BODY)
+        self.assertNotIn("expire_text", USER_BODY)
+        # Increase button uses primary (no ghost)
+        extend = USER_BODY.split("/extend", 1)[1].split("</form>", 1)[0]
+        self.assertIn("افزایش مانده", extend)
+        self.assertNotIn("btn-ghost", extend)
+        self.assertIn(".svc-stat-row {", CSS)
+        self.assertIn("gap: var(--space-2);", CSS.split(".svc-item-ops .form-stack {", 1)[1].split("}", 1)[0])
+
+    def test_panel_status_plain_no_emoji_dot(self):
+        from app.services.formatting import status_label, status_label_plain
+
+        self.assertIn("🟢", status_label("active"))
+        self.assertEqual(status_label_plain("active"), "فعال")
+        self.assertNotIn("🟢", status_label_plain("active"))
+        admin = (ROOT / "app/services/bot_user_admin.py").read_text(encoding="utf-8")
+        self.assertIn("status_label_plain", admin)
+        self.assertIn("status_fa=status_label_plain(", admin)
 
 
 class ResellersPlanColumnTests(unittest.TestCase):
@@ -162,17 +196,17 @@ class FlashSingleRenderTests(unittest.TestCase):
 
 
 class VersionBumpTests(unittest.TestCase):
-    def test_version_at_least_4_4_3(self):
+    def test_version_at_least_4_4_4(self):
         from app.version import __version__
 
         self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")), (4, 4, 3)
+            tuple(int(x) for x in __version__.split(".")), (4, 4, 4)
         )
         self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.3"
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.4"
         )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"4.4.3"', notes)
+        self.assertIn('"4.4.4"', notes)
 
 
 if __name__ == "__main__":
