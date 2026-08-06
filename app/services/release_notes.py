@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
-    "4.3.11": [
+    "4.4.0": [
         "موبایل: هدر شناور و همیشه بالای صفحه",
         "گردی گوشه‌ها کمی بیشتر شد؛ تیتر جداول در تم تیره ملایم‌تر",
         "حذف باکس دور دکمه‌های اصلی؛ در موبایل دکمه‌ها تمام‌عرض و دسترس‌پذیرتر",
