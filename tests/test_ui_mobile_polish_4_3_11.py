@@ -214,18 +214,39 @@ class MenuLayoutAndActionsTests(unittest.TestCase):
         # actions sibling after card close inside form
         self.assertIn('</div>\n\n  <div class="actions sticky-actions">', pwa.replace('\r',''))
 
+
+class CardInsetAndServicePillTests(unittest.TestCase):
+    def test_card_last_child_margin_zeroed(self):
+        self.assertIn(".card > :last-child,", CSS)
+        self.assertIn(".setting-item > label,", CSS)
+        self.assertIn("margin-bottom: 0;", CSS.split(".card > :last-child,", 1)[1][:800])
+
+    def test_upload_box_equal_padding(self):
+        block = CSS.split("\n.upload-box {", 1)[1].split("}", 1)[0]
+        self.assertIn("padding: var(--card-pad);", block)
+        self.assertNotIn("padding: var(--space-3) var(--card-pad);", block)
+
+    def test_service_pills_right_aligned(self):
+        pill = CSS.split(".user-edit-wallet-pill {", 1)[1].split("}", 1)[0]
+        self.assertIn("align-items: stretch;", pill)
+        self.assertIn("text-align: right;", pill)
+        self.assertNotIn("align-items: flex-end;", pill)
+        svc = CSS.split(".svc-stat-pill {", 1)[1].split("}", 1)[0]
+        self.assertIn("text-align: right;", svc)
+
+
 class VersionBumpTests(unittest.TestCase):
-    def test_version_at_least_4_4_5(self):
+    def test_version_at_least_4_4_6(self):
         from app.version import __version__
 
         self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")), (4, 4, 5)
+            tuple(int(x) for x in __version__.split(".")), (4, 4, 6)
         )
         self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.5"
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.6"
         )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"4.4.5"', notes)
+        self.assertIn('"4.4.6"', notes)
 
 
 if __name__ == "__main__":
