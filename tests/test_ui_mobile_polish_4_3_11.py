@@ -1,4 +1,4 @@
-"""4.4.2 — pill controls, delete reason box, moderate menu radius, services list."""
+"""4.4.3 — pill controls for shortcuts; multi-line boxes keep card radius."""
 
 from __future__ import annotations
 
@@ -37,6 +37,25 @@ class RadiusTokensTests(unittest.TestCase):
         self.assertIn("border-radius: var(--control-radius);", fields)
         tabs = CSS.split(".section-tabs a {", 1)[1].split("}", 1)[0]
         self.assertIn("border-radius: var(--control-radius);", tabs)
+        shortcuts = CSS.split(".quick-links a {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: var(--control-radius);", shortcuts)
+
+    def test_multiline_editors_use_box_radius_not_pill(self):
+        # Global override after the shared input/select/textarea rule
+        block = CSS.split(
+            "/* Wide / multi-line editors — same corner language as cards, never full pill */",
+            1,
+        )[1].split("textarea {", 1)[0]
+        self.assertIn("border-radius: var(--radius);", block)
+        self.assertIn("textarea,", block)
+        self.assertIn("select[multiple],", block)
+        self.assertNotIn("control-radius", block)
+        ta = CSS.split(
+            "/* Wide / multi-line editors — same corner language as cards, never full pill */",
+            1,
+        )[1]
+        # textarea sizing block still present and inherits radius from override above
+        self.assertIn("min-height: 96px;", ta)
 
     def test_cards_logo_hamburger_keep_box_radius(self):
         menu = CSS.split(".menu-toggle {", 1)[1].split("}", 1)[0]
@@ -143,17 +162,17 @@ class FlashSingleRenderTests(unittest.TestCase):
 
 
 class VersionBumpTests(unittest.TestCase):
-    def test_version_at_least_4_4_2(self):
+    def test_version_at_least_4_4_3(self):
         from app.version import __version__
 
         self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")), (4, 4, 2)
+            tuple(int(x) for x in __version__.split(".")), (4, 4, 3)
         )
         self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.2"
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.3"
         )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"4.4.2"', notes)
+        self.assertIn('"4.4.3"', notes)
 
 
 if __name__ == "__main__":

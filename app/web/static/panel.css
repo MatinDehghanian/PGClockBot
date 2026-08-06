@@ -27,6 +27,11 @@
   --info-fg: #60a5fa;
   --brand: #f97316;
   --brand-fg: #fb923c;
+  /* Radius policy:
+     --radius          → cards, panels, textareas, upload tiles, wide multi-line boxes
+     --control-radius  → buttons, single-line fields, tabs, shortcuts, nav chips (pill)
+     --menu-radius     → opened dropdown panels (not pill)
+     --menu-item-radius→ items inside those menus */
   --radius: 12px;
   --control-radius: 999px;
   --menu-radius: 10px;
@@ -670,6 +675,7 @@ input, select, textarea {
   background-color: var(--control-bg);
   color: var(--foreground);
   border: 1px solid var(--input);
+  /* Single-line controls are pill; multi-line / wide editors override below */
   border-radius: var(--control-radius);
   font-family: inherit;
   font-size: var(--control-fs);
@@ -682,6 +688,13 @@ input, select, textarea {
 /* Symmetric padding for text fields only — select keeps asymmetric room for chevron */
 input {
   padding: 0 var(--space-2);
+}
+/* Wide / multi-line editors — same corner language as cards, never full pill */
+textarea,
+select[multiple],
+select[size]:not([size="1"]),
+[contenteditable="true"] {
+  border-radius: var(--radius);
 }
 textarea {
   height: auto;
@@ -1314,7 +1327,7 @@ label.form-field > .ui-select,
   height: var(--btn-h);
   min-height: var(--btn-h);
   padding: 0 var(--space-2);
-  border-radius: var(--radius);
+  border-radius: var(--control-radius);
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.04);
   color: var(--foreground);
