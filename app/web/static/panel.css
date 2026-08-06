@@ -112,13 +112,13 @@ a:hover { opacity: 0.8; }
 .home-conn-cap,
 .progress-meta > span,
 .progress-meta > strong,
-th, td {
+th, td:not(.col-actions) {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
   min-width: 0;
 }
-th, td,
+th, td:not(.col-actions),
 .page-title > span,
 .page-title > strong,
 .brand strong,
@@ -130,6 +130,10 @@ th, td,
 .progress-meta > span,
 .progress-meta > strong {
   white-space: nowrap;
+}
+td.col-actions {
+  overflow: visible;
+  max-width: none;
 }
 /* Multi-line copy stays inside the box via wrapping, not overflow */
 p, li, .hint, .flash, .flash-copy, label, small.muted,
@@ -588,8 +592,8 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   padding: var(--card-pad);
   margin-bottom: var(--section-gap);
   width: 100%;
-  overflow-x: clip;
-  overflow-y: visible;
+  /* visible — overflow clip/hidden traps position:fixed kebab and paints a ghost square */
+  overflow: visible;
   box-sizing: border-box;
 }
 /* Equal edge inset: flex gap instead of trailing child margins (hidden last
@@ -4460,41 +4464,24 @@ body.modal-open { overflow: hidden; }
 
   .row-actions-toggle--icon { display: inline-flex; }
   .row-actions-toggle--label { display: none !important; }
-  .row-actions-menu {
-    /* Stay invisible while still inside the <td> — showing a fixed+bg panel
-       in-cell paints a ghost square over the table (Safari/Chrome table layout).
-       Only .is-ported (body overlay) may become visible. */
+  /* In-cell menu must be fully inert — NO bg/border/padding/fixed box.
+     Any chrome here paints a ghost square over adjacent cells (volume, …).
+     Only body-ported .is-ported receives visual styles. */
+  .row-actions-menu:not(.is-ported) {
     display: none !important;
-    position: fixed;
-    z-index: 3200;
-    min-width: 168px;
-    max-width: min(260px, calc(100vw - 16px));
-    max-height: none;
-    overflow: visible;
-    flex-direction: column;
-    flex-wrap: nowrap;
-    align-items: stretch;
-    gap: var(--space-1);
-    padding: var(--space-1);
-    border-radius: var(--menu-radius);
-    border: 1px solid var(--border);
-    background: var(--bg-elevated, var(--bg-card));
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
-  }
-  .row-actions-menu .btn,
-  .row-actions-menu button,
-  .row-actions-menu select,
-  .row-actions-menu a.btn,
-  .row-actions-menu form {
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-    justify-content: center;
-  }
-  .row-actions-menu .row-actions-stack {
-    flex-direction: column;
-    width: 100%;
-    align-items: stretch;
+    position: static !important;
+    inset: auto !important;
+    width: 0 !important;
+    height: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    pointer-events: none !important;
   }
   td .actions {
     max-width: none;
@@ -4505,39 +4492,22 @@ body.modal-open { overflow: hidden; }
 /* Any viewport: collapse row actions when the table would scroll horizontally */
 .table-wrap.force-kebab .row-actions-toggle--icon { display: none; }
 .table-wrap.force-kebab .row-actions-toggle--label { display: inline-flex; }
-.table-wrap.force-kebab .row-actions-menu {
-  /* Same rule as mobile: never paint the overlay while still in the cell */
+.table-wrap.force-kebab .row-actions-menu:not(.is-ported) {
+  /* Same as mobile: inert in-cell — chrome only on body overlay */
   display: none !important;
-  position: fixed;
-  z-index: 3200;
-  min-width: 168px;
-  max-width: min(260px, calc(100vw - 16px));
-  max-height: none;
-  overflow: visible;
-  flex-direction: column;
-  flex-wrap: nowrap;
-  align-items: stretch;
-  gap: var(--space-1);
-  padding: var(--space-1);
-  border-radius: var(--menu-radius);
-  border: 1px solid var(--border);
-  background: var(--bg-elevated, var(--bg-card));
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
-}
-.table-wrap.force-kebab .row-actions-menu .btn,
-.table-wrap.force-kebab .row-actions-menu button,
-.table-wrap.force-kebab .row-actions-menu select,
-.table-wrap.force-kebab .row-actions-menu a.btn,
-.table-wrap.force-kebab .row-actions-menu form {
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  justify-content: center;
-}
-.table-wrap.force-kebab .row-actions-menu .row-actions-stack {
-  flex-direction: column;
-  width: 100%;
-  align-items: stretch;
+  position: static !important;
+  inset: auto !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
 }
 .table-wrap.force-kebab td .actions {
   max-width: none;
@@ -4838,8 +4808,7 @@ html[data-theme="light"] .update-meta {
   border-color: var(--border);
 }
 /* Overlay kebab only — never paint a card box behind inline desktop actions */
-html[data-theme="light"] .row-actions-menu.is-ported,
-html[data-theme="light"] .table-wrap.force-kebab .row-actions-menu {
+html[data-theme="light"] .row-actions-menu.is-ported {
   background: var(--bg-card);
   border-color: var(--border);
 }

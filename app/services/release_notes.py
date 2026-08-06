@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.4.10": [
+        "رفع اساسی مربع شبح منوی عملیات روی جدول (دیگر روی ستون حجم نمی‌افتد)",
+        "استایل منوی سه‌نقطه فقط روی لایهٔ ported روی body — داخل سلول کاملاً خنثی",
+    ],
     "4.4.9": [
         "فاصله دکمه زیر کارت‌ها یکدست شد (مثل ذخیره وب‌اپ) — بدون فاصله اضافه در آپدیت و بقیه",
         "دکمه «بازگشت به این نسخه» از داخل کارت بیرون آمد",

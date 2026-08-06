@@ -180,6 +180,9 @@
       if (!menu) return;
       const home = rowMenuHomes.get(menu);
       menu.classList.remove('is-ported');
+      /* Clear hidden — desktop inline menus must stay visible; kebab CSS hides in-cell */
+      menu.hidden = false;
+      menu.removeAttribute('aria-hidden');
       [
         'top', 'left', 'right', 'bottom', 'maxHeight', 'height', 'overflow',
         'visibility', 'position', 'width', 'minWidth', 'zIndex',
@@ -222,10 +225,14 @@
         rowMenuHomes.set(menu, { parent: menu.parentNode, next: menu.nextSibling });
       }
       menu.dataset.owner = wrap.dataset.raId;
-      /* Hide until final coords are set — avoids 0,0 flash and in-cell ghost paint */
+      /* Hide until final coords are set — avoids 0,0 flash and in-cell ghost paint.
+         Keep `hidden` until after body-port + is-ported so in-cell never paints chrome. */
       menu.style.visibility = 'hidden';
+      menu.hidden = true;
       document.body.appendChild(menu);
       menu.classList.add('is-ported');
+      menu.hidden = false;
+      menu.setAttribute('aria-hidden', 'false');
 
       const gap = 8; /* --space-1 */
       const pad = 8;
