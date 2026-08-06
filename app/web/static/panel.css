@@ -1806,9 +1806,11 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 .auth-panel > .flash {
   margin: 0;
 }
-.form-stack > p.muted,
-.ui-modal-panel > p.muted {
+.form-stack > p.muted {
   margin: 0;
+}
+.ui-modal-panel > p.muted {
+  margin: 0 0 var(--space-2);
 }
 .flash-copy strong {
   font-size: 13px;
