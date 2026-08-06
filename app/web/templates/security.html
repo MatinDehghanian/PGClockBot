@@ -25,16 +25,16 @@
 </div>
 {% endif %}
 
-<div class="card settings-card">
-  <h2>تغییر نام کاربری و رمز</h2>
-  <p class="muted update-card-caption">
-    یوزر فعلی:
-    <strong dir="ltr">{{ current_username }}</strong>.
-    برای تغییر، یوزر و رمز قدیم را خودتان وارد کنید؛ سپس مقادیر جدید را بنویسید.
-    {% if staff.role == 'reseller' %}نام کاربری نماینده باید با قوانین پاسارگارد سازگار باشد (۳ تا ۱۲۸ کاراکتر؛ حروف انگلیسی، عدد و - _ @ .؛ بدون دو نماد پشت‌سرهم) و معمولاً حروف کوچک است. اگر ادمین پاسارگارد دارید، یوزر باید همان یوزر پاسارگارد بماند و تغییر رمز هر دو پنل را یکی می‌کند.{% else %}نام کاربری باید با قوانین پاسارگارد سازگار باشد: ۳ تا ۱۲۸ کاراکتر؛ فقط حروف انگلیسی، عدد و - _ @ .؛ بدون دو نماد پشت‌سرهم.{% endif %}
-    رمز جدید طبق پاسارگارد: حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ، دو حرف کوچک و یک کاراکتر خاص.
-  </p>
-  <form method="post" action="/security/credentials" class="settings-form" autocomplete="off" id="security-credentials-form">
+<form method="post" action="/security/credentials" class="settings-form" autocomplete="off" id="security-credentials-form">
+  <div class="card settings-card">
+    <h2>تغییر نام کاربری و رمز</h2>
+    <p class="muted update-card-caption">
+      یوزر فعلی:
+      <strong dir="ltr">{{ current_username }}</strong>.
+      برای تغییر، یوزر و رمز قدیم را خودتان وارد کنید؛ سپس مقادیر جدید را بنویسید.
+      {% if staff.role == 'reseller' %}نام کاربری نماینده باید با قوانین پاسارگارد سازگار باشد (۳ تا ۱۲۸ کاراکتر؛ حروف انگلیسی، عدد و - _ @ .؛ بدون دو نماد پشت‌سرهم) و معمولاً حروف کوچک است. اگر ادمین پاسارگارد دارید، یوزر باید همان یوزر پاسارگارد بماند و تغییر رمز هر دو پنل را یکی می‌کند.{% else %}نام کاربری باید با قوانین پاسارگارد سازگار باشد: ۳ تا ۱۲۸ کاراکتر؛ فقط حروف انگلیسی، عدد و - _ @ .؛ بدون دو نماد پشت‌سرهم.{% endif %}
+      رمز جدید طبق پاسارگارد: حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ، دو حرف کوچک و یک کاراکتر خاص.
+    </p>
     <div class="settings-grid">
       <div class="setting-item">
         <label>یوزر قدیم
@@ -76,11 +76,11 @@
         </label>
       </div>
     </div>
-    <div class="actions sticky-actions">
-      <button class="btn" type="submit">ذخیره تغییرات</button>
-    </div>
-  </form>
-</div>
+  </div>
+  <div class="actions sticky-actions">
+    <button class="btn" type="submit">ذخیره تغییرات</button>
+  </div>
+</form>
 <script>
 (function(){
   document.querySelectorAll('.pw-toggle[data-pw-for]').forEach((btn) => {

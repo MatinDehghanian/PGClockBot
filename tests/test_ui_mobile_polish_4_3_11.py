@@ -1,4 +1,4 @@
-"""4.4.4 — search row on mobile, modal title size, service pills."""
+"""4.4.5 — search row on mobile, modal title size, service pills."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ RESELLER_API = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
 class RadiusTokensTests(unittest.TestCase):
     def test_control_radius_pill_menus_moderate(self):
         root = CSS.split(":root {", 1)[1].split("}", 1)[0]
-        self.assertIn("--radius: 12px;", root)
+        self.assertIn("--radius: 14px;", root)
         self.assertIn("--control-radius: 999px;", root)
         self.assertIn("--menu-radius: 10px;", root)
         self.assertIn("--menu-item-radius: 7px;", root)
@@ -195,18 +195,37 @@ class FlashSingleRenderTests(unittest.TestCase):
         self.assertNotIn("{% if ok %}", SECURITY)
 
 
+
+class MenuLayoutAndActionsTests(unittest.TestCase):
+    def test_fixed_menu_item_uses_minus_circle(self):
+        menu = (ROOT / "app/web/templates/_settings_menu.html").read_text(encoding="utf-8")
+        self.assertIn("icon-fixed", menu)
+        self.assertIn("M3.5 8h9", menu)
+        self.assertNotIn("badge fixed", menu)
+        self.assertIn("icon-fixed", CSS)
+        self.assertIn("min-height: 0;", CSS.split(".dnd-list {", 1)[1].split("}", 1)[0])
+
+    def test_upload_plus_is_pill(self):
+        plus = CSS.split(".upload-box-plus {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: var(--control-radius);", plus)
+
+    def test_sticky_actions_preferred_outside_cards(self):
+        pwa = (ROOT / "app/web/templates/_settings_pwa.html").read_text(encoding="utf-8")
+        # actions sibling after card close inside form
+        self.assertIn('</div>\n\n  <div class="actions sticky-actions">', pwa.replace('\r',''))
+
 class VersionBumpTests(unittest.TestCase):
-    def test_version_at_least_4_4_4(self):
+    def test_version_at_least_4_4_5(self):
         from app.version import __version__
 
         self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")), (4, 4, 4)
+            tuple(int(x) for x in __version__.split(".")), (4, 4, 5)
         )
         self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.4"
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.5"
         )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"4.4.4"', notes)
+        self.assertIn('"4.4.5"', notes)
 
 
 if __name__ == "__main__":

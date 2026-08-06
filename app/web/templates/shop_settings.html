@@ -55,9 +55,9 @@
       </div>
       {% endif %}
     </div>
-    <div class="card settings-card">
-      <h2>افزودن پشتیبان</h2>
-      <form method="post" action="/shop-supports/save" class="settings-form">
+    <form method="post" action="/shop-supports/save" class="settings-form">
+      <div class="card settings-card">
+        <h2>افزودن پشتیبان</h2>
         <div class="settings-grid">
           <div class="setting-item">
             <label>عنوان
@@ -84,11 +84,11 @@
             </label>
           </div>
         </div>
-        <div class="actions sticky-actions">
-          <button class="btn" type="submit">افزودن پشتیبان</button>
-        </div>
-      </form>
-    </div>
+      </div>
+      <div class="actions sticky-actions">
+        <button class="btn" type="submit">افزودن پشتیبان</button>
+      </div>
+    </form>
 
   {% elif tab == 'notifications' %}
     {% include "_shop_settings_notifications.html" %}
@@ -165,7 +165,7 @@
                 {% if not item.required %}
                 <button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
                 {% else %}
-                <span class="badge fixed">ثابت</span>
+                <span class="icon-btn icon-move icon-fixed" title="ثابت — قابل حذف نیست" aria-label="ثابت" role="img"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9"/></svg></span>
                 {% endif %}
               </div>
             </li>

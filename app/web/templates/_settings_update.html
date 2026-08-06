@@ -78,17 +78,17 @@
     <span id="upd-from" hidden dir="ltr">{{ status.from_version or local_version }}</span>
     <span id="upd-to" hidden dir="ltr">{{ status.to_version or update_info.remote_version or '—' }}</span>
   </div>
+</div>
 
-  <div class="actions sticky-actions update-actions">
-    <button type="button" class="btn btn-ok" id="upd-start"
-      {% if not available and not has_error and not running and not awaiting %}disabled{% endif %}>
-      {% if running or awaiting %}در حال اجرا…
-      {% elif has_error %}تلاش دوباره
-      {% elif available %}شروع آپدیت
-      {% else %}آپدیتی نیست{% endif %}
-    </button>
-    <button type="button" class="btn btn-ghost" id="upd-refresh">بررسی دوباره</button>
-  </div>
+<div class="actions sticky-actions update-actions">
+  <button type="button" class="btn btn-ok" id="upd-start"
+    {% if not available and not has_error and not running and not awaiting %}disabled{% endif %}>
+    {% if running or awaiting %}در حال اجرا…
+    {% elif has_error %}تلاش دوباره
+    {% elif available %}شروع آپدیت
+    {% else %}آپدیتی نیست{% endif %}
+  </button>
+  <button type="button" class="btn btn-ghost" id="upd-refresh">بررسی دوباره</button>
 </div>
 
 

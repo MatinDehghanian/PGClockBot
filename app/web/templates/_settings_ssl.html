@@ -5,36 +5,36 @@
 <div class="flash warn">دریافت گواهی شروع شد — پنل قطع نمی‌شود؛ پیشرفت را پایین ببینید.</div>
 {% endif %}
 
-<div class="card settings-card">
-  <h2>گواهی SSL (HTTPS)</h2>
-  <p class="muted update-card-caption">
-    فقط دامنه پنل و مینی‌اپ را وارد کنید. پس از دریافت موفق گواهی، HTTPS به‌صورت خودکار فعال می‌شود.
-    تا قبل از آن همه آدرس‌ها با <code dir="ltr">http</code> باز می‌شوند.
-  </p>
+<form method="post" action="/settings?tab=ssl" class="form-stack settings-form" id="ssl-form">
+  <div class="card settings-card">
+    <h2>گواهی SSL (HTTPS)</h2>
+    <p class="muted update-card-caption">
+      فقط دامنه پنل و مینی‌اپ را وارد کنید. پس از دریافت موفق گواهی، HTTPS به‌صورت خودکار فعال می‌شود.
+      تا قبل از آن همه آدرس‌ها با <code dir="ltr">http</code> باز می‌شوند.
+    </p>
 
-  <div class="flash {% if st.certbot %}ok{% else %}warn{% endif %}" style="margin-bottom: var(--space-2)">
-    {% if st.certbot %}
-      certbot آماده است{% if st.certbot_path %}: <code dir="ltr">{{ st.certbot_path }}</code>{% endif %}
-    {% else %}
-      certbot نصب نیست — با «دریافت گواهی» خودکار نصب می‌شود.
-    {% endif %}
-    {% if st.port80_busy %}
-      <br/><strong>هشدار:</strong> پورت ۸۰ الان اشغال است — قبل از دریافت، آن را آزاد کنید.
-    {% endif %}
-  </div>
-
-  <div class="ssl-progress" id="ssl-progress" {% if not st.running and (not st.progress or st.progress.done) %}hidden{% endif %}>
-    <div class="ssl-progress-label">
-      پیشرفت:
-      <span id="ssl-progress-msg">{{ st.progress.message if st.progress else 'در حال آماده‌سازی…' }}</span>
-      <span class="muted" id="ssl-progress-pct" dir="ltr">{{ st.progress.pct if st.progress else 0 }}%</span>
+    <div class="flash {% if st.certbot %}ok{% else %}warn{% endif %}" style="margin-bottom: var(--space-2)">
+      {% if st.certbot %}
+        certbot آماده است{% if st.certbot_path %}: <code dir="ltr">{{ st.certbot_path }}</code>{% endif %}
+      {% else %}
+        certbot نصب نیست — با «دریافت گواهی» خودکار نصب می‌شود.
+      {% endif %}
+      {% if st.port80_busy %}
+        <br/><strong>هشدار:</strong> پورت ۸۰ الان اشغال است — قبل از دریافت، آن را آزاد کنید.
+      {% endif %}
     </div>
-    <div class="ssl-progress-track" aria-hidden="true">
-      <i id="ssl-progress-bar" style="width:{{ st.progress.pct if st.progress else 0 }}%"></i>
-    </div>
-  </div>
 
-  <form method="post" action="/settings?tab=ssl" class="form-stack" id="ssl-form">
+    <div class="ssl-progress" id="ssl-progress" {% if not st.running and (not st.progress or st.progress.done) %}hidden{% endif %}>
+      <div class="ssl-progress-label">
+        پیشرفت:
+        <span id="ssl-progress-msg">{{ st.progress.message if st.progress else 'در حال آماده‌سازی…' }}</span>
+        <span class="muted" id="ssl-progress-pct" dir="ltr">{{ st.progress.pct if st.progress else 0 }}%</span>
+      </div>
+      <div class="ssl-progress-track" aria-hidden="true">
+        <i id="ssl-progress-bar" style="width:{{ st.progress.pct if st.progress else 0 }}%"></i>
+      </div>
+    </div>
+
     <div class="settings-grid">
       <div class="setting-item full">
         <label>دامنه پنل و مینی‌اپ
@@ -51,27 +51,27 @@
         </label>
       </div>
     </div>
+  </div>
 
-    <div class="actions" style="margin-top: var(--space-2);gap: var(--space-1);flex-wrap:wrap">
-      <button type="submit" class="btn" name="action" value="issue" id="ssl-issue-btn" {% if st.running %}disabled{% endif %}>
-        {% if st.has_cert %}صدور مجدد گواهی{% else %}دریافت گواهی{% endif %}
-      </button>
-      {% if st.has_cert %}
-      <button type="submit" class="btn btn-ghost" name="action" value="renew" id="ssl-renew-btn" {% if st.running %}disabled{% endif %}>تمدید</button>
-      <button type="submit" class="btn" name="action" value="enable" id="ssl-enable-btn" {% if st.running %}disabled{% endif %}>
-        {% if st.ssl_enabled %}اعمال مجدد HTTPS{% else %}فعال‌سازی HTTPS{% endif %}
-      </button>
-      {% if st.ssl_enabled %}
-      <button type="submit" class="btn btn-ghost" name="action" value="disable" id="ssl-disable-btn" {% if st.running %}disabled{% endif %}
-        data-confirm="HTTPS غیرفعال شود؟ پنل با HTTP ری‌استارت می‌شود."
-        data-confirm-title="غیرفعال‌سازی HTTPS"
-        data-confirm-warn="1"
-        data-confirm-label="غیرفعال‌سازی">غیرفعال‌سازی HTTPS</button>
-      {% endif %}
-      {% endif %}
-    </div>
-  </form>
-</div>
+  <div class="actions sticky-actions">
+    <button type="submit" class="btn" name="action" value="issue" id="ssl-issue-btn" {% if st.running %}disabled{% endif %}>
+      {% if st.has_cert %}صدور مجدد گواهی{% else %}دریافت گواهی{% endif %}
+    </button>
+    {% if st.has_cert %}
+    <button type="submit" class="btn btn-ghost" name="action" value="renew" id="ssl-renew-btn" {% if st.running %}disabled{% endif %}>تمدید</button>
+    <button type="submit" class="btn" name="action" value="enable" id="ssl-enable-btn" {% if st.running %}disabled{% endif %}>
+      {% if st.ssl_enabled %}اعمال مجدد HTTPS{% else %}فعال‌سازی HTTPS{% endif %}
+    </button>
+    {% if st.ssl_enabled %}
+    <button type="submit" class="btn btn-ghost" name="action" value="disable" id="ssl-disable-btn" {% if st.running %}disabled{% endif %}
+      data-confirm="HTTPS غیرفعال شود؟ پنل با HTTP ری‌استارت می‌شود."
+      data-confirm-title="غیرفعال‌سازی HTTPS"
+      data-confirm-warn="1"
+      data-confirm-label="غیرفعال‌سازی">غیرفعال‌سازی HTTPS</button>
+    {% endif %}
+    {% endif %}
+  </div>
+</form>
 
 <div class="card settings-card">
   <h2>وضعیت گواهی</h2>

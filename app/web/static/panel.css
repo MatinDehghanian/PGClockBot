@@ -32,7 +32,7 @@
      --control-radius  → buttons, single-line fields, tabs, shortcuts, nav chips (pill)
      --menu-radius     → opened dropdown panels (not pill)
      --menu-item-radius→ items inside those menus */
-  --radius: 12px;
+  --radius: 14px;
   --control-radius: 999px;
   --menu-radius: 10px;
   --menu-item-radius: 7px;
@@ -1277,6 +1277,16 @@ label.form-field > .ui-select,
   border-color: var(--border);
   background: rgba(255, 255, 255, 0.04);
 }
+.icon-btn.icon-fixed {
+  /* Same footprint/colors as up/down; non-interactive lock stand-in */
+  color: var(--foreground);
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  pointer-events: none;
+  cursor: default;
+  opacity: 0.85;
+}
+.icon-btn.icon-fixed:hover { filter: none; }
 .icon-btn.icon-add {
   color: var(--ok-fg);
   border-color: rgba(34, 197, 94, 0.35);
@@ -1933,7 +1943,7 @@ a.btn.btn-star:hover {
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: var(--radius);
+  border-radius: var(--control-radius);
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--muted) 55%, var(--background));
   color: var(--brand-fg);
@@ -2192,7 +2202,7 @@ a.btn.btn-star:hover {
   text-overflow: ellipsis;
 }
 
-.notify-form { padding: var(--space-1); }
+.notify-form { margin: 0; }
 .notify-list { display: flex; flex-direction: column; gap: var(--space-1); }
 
 .support-list { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
@@ -2284,15 +2294,30 @@ a.btn.btn-star:hover {
 .plan-naming-preview { margin-top: var(--space-1); }
 
 .sticky-actions {
-  /* Stay in document flow at end of content — never float over the form.
-     No chrome box around primary action buttons. */
+  /* Stay in document flow under cards — never float / never inside card chrome */
   position: static;
   background: transparent;
   padding: 0;
   border-radius: 0;
   border: none;
-  margin: var(--space-3) 0 var(--space-2);
+  margin: var(--space-2) 0 var(--section-gap);
   z-index: auto;
+}
+/* Legacy: if a save row is still nested in a card, pull it out of the card pad */
+.card > .actions.sticky-actions,
+.card > form > .actions.sticky-actions:last-child {
+  margin-top: var(--space-2);
+  margin-inline: calc(-1 * var(--card-pad));
+  margin-bottom: calc(-1 * var(--card-pad));
+  padding: var(--space-2) var(--card-pad) var(--card-pad);
+  border-top: 1px solid var(--border);
+  background: var(--bg-card);
+}
+.settings-form > .actions.sticky-actions,
+.menu-layout-form > .actions.sticky-actions,
+form.settings-form > .actions.sticky-actions {
+  margin-top: var(--space-2);
+  margin-bottom: var(--section-gap);
 }
 /* Inside cards keep the same non-floating layout */
 .card .sticky-actions,
@@ -2310,7 +2335,7 @@ a.btn.btn-star:hover {
   list-style: none;
   margin: 0;
   padding: var(--space-1);
-  min-height: 120px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -2354,7 +2379,7 @@ a.btn.btn-star:hover {
   padding-inline-start: var(--space-1);
 }
 .pool-empty {
-  padding: var(--card-pad) var(--space-1);
+  padding: var(--space-2) var(--space-1);
   text-align: center;
   color: var(--muted-fg);
   font-size: 12px;
@@ -3755,7 +3780,7 @@ body.modal-open { overflow: hidden; }
   min-width: 0;
 }
 .svc-stat-pill {
-  align-items: flex-start;
+  align-items: flex-end;
   min-width: 0;
   width: 100%;
   box-sizing: border-box;
@@ -4691,7 +4716,8 @@ html[data-theme="light"] .btn-warn {
 html[data-theme="light"] .btn-warn:hover { background: rgba(234, 179, 8, 0.2); }
 
 html[data-theme="light"] .icon-btn,
-html[data-theme="light"] .icon-btn.icon-move {
+html[data-theme="light"] .icon-btn.icon-move,
+html[data-theme="light"] .icon-btn.icon-fixed {
   background: rgba(24, 24, 27, 0.03);
   border-color: var(--border);
   color: var(--foreground);
