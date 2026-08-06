@@ -13,7 +13,7 @@
       تا قبل از آن همه آدرس‌ها با <code dir="ltr">http</code> باز می‌شوند.
     </p>
 
-    <div class="flash {% if st.certbot %}ok{% else %}warn{% endif %}" style="margin-bottom: var(--space-2)">
+    <div class="flash {% if st.certbot %}ok{% else %}warn{% endif %}">
       {% if st.certbot %}
         certbot آماده است{% if st.certbot_path %}: <code dir="ltr">{{ st.certbot_path }}</code>{% endif %}
       {% else %}
