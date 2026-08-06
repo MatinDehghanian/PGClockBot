@@ -121,11 +121,11 @@
 {% if can_payments or can_orders %}
 <div class="dash-cols">
   {% if can_payments %}
-  <div class="card">
+  <div class="card card-flush">
     <h2>آخرین پرداخت‌ها</h2>
     {% if recent_payments %}
     <div class="table-wrap">
-      <table>
+      <table class="table-compact">
         <thead><tr><th>#</th><th>مبلغ</th><th>وضعیت</th><th>نوع</th></tr></thead>
         <tbody>
         {% for p in recent_payments %}
@@ -150,11 +150,11 @@
   {% endif %}
 
   {% if can_orders %}
-  <div class="card">
+  <div class="card card-flush">
     <h2>آخرین سفارش‌ها</h2>
     {% if recent_orders %}
     <div class="table-wrap">
-      <table>
+      <table class="table-compact">
         <thead><tr><th>#</th><th>مبلغ</th><th>وضعیت</th></tr></thead>
         <tbody>
         {% for o in recent_orders %}

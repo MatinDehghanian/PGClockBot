@@ -127,7 +127,7 @@
   <div class="flash warn">{{ reseller_plans_err }}</div>
   {% endif %}
 
-  <h3 id="reseller-plans-fixed" style="margin-top: var(--space-3)">📦 ثابت (کمیسیون)</h3>
+  <h3 id="reseller-plans-fixed" class="card-subhead">📦 ثابت (کمیسیون)</h3>
   <div class="table-wrap">
   <table class="table-compact">
     <thead>
@@ -169,7 +169,7 @@
   </table>
   </div>
 
-  <h3 id="reseller-plans-payg" style="margin-top: var(--space-4)">⚡ Pay As You Go</h3>
+  <h3 id="reseller-plans-payg" class="card-subhead">⚡ Pay As You Go</h3>
   <div class="table-wrap">
   <table class="table-compact">
     <thead>
@@ -270,7 +270,7 @@
         </label>
         <div id="mode-custom" class="form-stack">
           <div class="form-field">
-            <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد (حداقل یکی)</span>
+            <span class="form-field-label">گروه‌های پاسارگارد (حداقل یکی)</span>
             <div class="ui-switch-grid">
               {% for g in groups %}
               {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
@@ -340,7 +340,7 @@
         </label>
         <div id="trial-mode-custom" class="form-stack">
           <div class="form-field">
-            <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد</span>
+            <span class="form-field-label">گروه‌های پاسارگارد</span>
             <div class="ui-switch-grid">
               {% for g in groups %}
               {% set gid = g.get('id')|string %}
@@ -414,7 +414,7 @@
         </label>
         <div id="custom-mode-groups" class="form-stack">
           <div class="form-field">
-            <span class="muted" style="font-size:12px;font-weight:500">گروه‌ها</span>
+            <span class="form-field-label">گروه‌ها</span>
             <div class="ui-switch-grid">
               {% for g in groups %}
               {% set gid = g.get('id')|string %}
@@ -474,7 +474,7 @@
         <div class="form-field">
           <strong>پله‌های تخفیف</strong>
           <small class="muted">مثلاً از ۵ عدد ۱۰٪ و از ۲۰ عدد ۲۰٪ — تعداد و درصد را تنظیم کنید.</small>
-          <div id="wholesale-tiers" class="form-stack" style="margin-top:8px"></div>
+          <div id="wholesale-tiers" class="form-stack stack-mt"></div>
           <button type="button" class="btn btn-ghost btn-sm" id="wholesale-add-tier">+ پله تخفیف</button>
           <input type="hidden" name="wholesale_tiers" id="wholesale_tiers_json" value="{{ values.get('wholesale_tiers','[]') }}" />
         </div>
@@ -517,7 +517,7 @@
         </label>
 
         <div id="reseller-groups" class="form-field">
-          <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد (الزامی)</span>
+          <span class="form-field-label">گروه‌های پاسارگارد (الزامی)</span>
           <p class="muted update-card-caption">حداقل یک گروه باید انتخاب شود — برای ثابت و Pay As You Go.</p>
           <div class="ui-switch-grid">
             {% for g in groups %}

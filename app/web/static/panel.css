@@ -39,18 +39,23 @@
   --side-w: 248px;
   --topbar-h: 52px;
   --btn-h: 36px;
-  /* Spacing scale — strict 8-point grid (4 / 8 / 16 / 24 / 32 / 48 / 64) */
+  /* Spacing scale — 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 */
   --space-0: 4px;
   --space-1: 8px;
+  --space-1_5: 12px;
   --space-2: 16px;
+  --space-2_5: 20px;
   --space-3: 24px;
   --space-4: 32px;
+  --space-4_5: 40px;
   --space-5: 48px;
   --space-6: 64px;
-  --card-pad: 16px;
-  --section-gap: 24px;
+  --card-pad: var(--space-2);
+  --section-gap: var(--space-3);
   /* Equal space above & below page title+icon (bot and PasarGuard identical) */
-  --page-title-gap: 24px;
+  --page-title-gap: var(--space-3);
+  --control-gap: var(--space-1);
+  --stack-gap: var(--space-2);
   --title-size: 14px;
   /* Form controls MUST stay ≥16px forever — iOS Safari zooms any focused field under 16px.
      Do not set input/select/textarea font-size to --title-size or any value < 16px. */
@@ -438,8 +443,8 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: var(--space-4_5);
+  height: var(--space-4_5);
   flex: 0 0 auto;
   border: none;
   outline: none;
@@ -613,6 +618,43 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   /* Clip table thead/body to the card’s rounded frame */
   overflow: hidden;
 }
+/* Flush card title row with optional trailing action (e.g. clear history) */
+.card.card-flush > .card-flush-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--card-pad) var(--card-pad) var(--space-1);
+  margin: 0;
+}
+.card.card-flush > .card-flush-head > h2 {
+  padding: 0;
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.card.card-flush > .card-flush-head > .actions,
+.card.card-flush > .card-flush-head > form {
+  margin: 0;
+  flex: 0 0 auto;
+}
+/* Subsection titles inside flush cards (e.g. reseller plan groups) */
+.card.card-flush > h3,
+.card > h3.card-subhead {
+  margin: var(--space-3) 0 var(--space-1);
+  padding: 0 var(--card-pad);
+  font-size: var(--title-size);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.card.card-flush > h3:first-child,
+.card > h3.card-subhead:first-child {
+  margin-top: var(--space-2);
+}
+.card:not(.card-flush) > h3.card-subhead {
+  padding: 0;
+}
 .card h2 {
   margin: 0;
   font-size: var(--title-size);
@@ -749,23 +791,27 @@ label:has(> .pw-field) > .pw-field,
 .form-field > .pw-field {
   order: 5;
 }
-/* Image / upload settings: hint below the upload box */
+/* Image / upload settings: hint below the upload box (layout + chrome merged) */
 .image-setting {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: var(--space-1);
+  padding: var(--card-pad);
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-sizing: border-box;
 }
-.image-setting > strong { order: 1; margin-bottom: var(--space-1); }
+.image-setting > strong { order: 1; margin: 0; }
 .image-setting > small.muted {
   order: 10;
-  margin-top: var(--space-1);
-  margin-bottom: 0;
+  margin: 0;
 }
-.image-setting > .image-preview { order: 4; margin-bottom: var(--space-1); }
+.image-setting > .image-preview { order: 4; margin: 0; }
 .image-setting > .file-label,
 .image-setting > label.file-label,
 .image-setting > label.upload-box { order: 5; }
-.image-setting > .ap-photo-row { order: 12; margin-top: var(--space-1); }
+.image-setting > .ap-photo-row { order: 12; margin: 0; }
 
 input::placeholder,
 textarea::placeholder {
@@ -954,7 +1000,7 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
   position: absolute;
   z-index: 3400;
   /* Fallback gap before JS places (must match UI_SELECT_GAP = 8) */
-  top: calc(100% + 8px);
+  top: calc(100% + var(--space-1));
   bottom: auto;
   inset-inline: 0;
   display: flex;
@@ -984,7 +1030,7 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
 /* Absolute drop-up only when NOT JS-ported */
 .ui-select.drop-up .ui-select-menu:not(.is-fixed-pos):not(.is-ported) {
   top: auto;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + var(--space-1));
   box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.45);
 }
 body > .ui-select-menu.is-ported[data-drop-up="1"] {
@@ -1085,6 +1131,11 @@ label.form-field > .ui-select,
   flex-direction: column;
   gap: var(--space-1);
   margin: 0;
+}
+.form-field-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-fg);
 }
 .form-field > label,
 .form-row label {
@@ -1237,6 +1288,16 @@ label.form-field > .ui-select,
 }
 .ui-switch-list + .ui-switch-list {
   margin-top: var(--space-1);
+}
+/* Parent gap owns vertical rhythm — don't stack list margins inside stacks/cards */
+.form-stack > .ui-switch-list,
+.card > .ui-switch-list,
+.settings-card > .ui-switch-list,
+.form-field > .ui-switch-list {
+  margin: 0;
+}
+.form-field > .ui-switch-grid {
+  margin-top: 0;
 }
 .ui-switch-section {
   margin: var(--space-3) 0 var(--space-1);
@@ -1501,7 +1562,6 @@ label.form-field > .ui-select,
   border-end-start-radius: var(--radius);
   border-end-end-radius: var(--radius);
 }
-.card.card-flush { padding: 0; overflow: hidden; }
 .card.card-flush > h2 { padding: var(--card-pad) var(--card-pad) var(--space-1); margin: 0; }
 /* Flush search: top pad = --space-1 (same cell pad as mobile th), not an
    extra --card-pad that made title→first-content look ~2× bot thead gap. */
@@ -1514,6 +1574,16 @@ label.form-field > .ui-select,
   padding: var(--space-2) var(--card-pad) var(--card-pad);
   margin: 0;
   font-size: 12px;
+}
+/* Caption under flush title: tight to h2, light bottom before next block */
+.card.card-flush > h2 + p.muted,
+.card.card-flush > h2 + .update-card-caption,
+.card.card-flush > .card-flush-head + p.muted {
+  padding: 0 var(--card-pad) var(--space-2);
+  margin-top: calc(-1 * var(--space-1));
+}
+.card.card-flush > .flash {
+  margin: 0 var(--card-pad) var(--space-2);
 }
 .card.card-flush > .checks {
   padding: var(--space-1) var(--card-pad) var(--space-2);
@@ -1705,8 +1775,42 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 .flash-copy {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0);
   min-width: 0;
+}
+.confirm-message {
+  margin: 0;
+  line-height: 1.6;
+}
+.muted-list {
+  margin: 0;
+  padding-inline-start: var(--space-2);
+}
+.home-balance {
+  margin: var(--space-1) 0 0;
+  font-size: 1.35rem;
+}
+.home-balance + .flash {
+  margin-top: var(--space-2);
+}
+.stack-mt {
+  margin-top: var(--space-2);
+}
+.stack-mt-section {
+  margin-top: var(--section-gap);
+}
+/* Auth / modal stacks already own gap — zero child chrome margins */
+.auth-form > .flash,
+.auth-form > .error,
+.auth-form > .auth-restart-hint,
+.auth-panel > .flash {
+  margin: 0;
+}
+.form-stack > p.muted {
+  margin: 0;
+}
+.ui-modal-panel > p.muted {
+  margin: 0 0 var(--space-2);
 }
 .flash-copy strong {
   font-size: 13px;
@@ -2022,14 +2126,6 @@ form.settings-form > .sticky-actions,
 .menu-layout-intro { margin-bottom: 0; }
 .dnd-card { margin: 0; }
 
-.image-setting {
-  display: flex; flex-direction: column; gap: var(--space-1);
-  padding: var(--card-pad);
-  background: var(--background);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-sizing: border-box;
-}
 .image-preview {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
 }
@@ -3465,8 +3561,8 @@ form.settings-form > .actions.sticky-actions,
 .tg-reply-kb {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px 6px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-1_5) var(--space-1);
   background: rgba(23, 33, 43, 0.96);
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   flex: 0 0 auto;
@@ -3474,7 +3570,7 @@ form.settings-form > .actions.sticky-actions,
 }
 .tg-key-row {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
 }
 .tg-key-home .tg-key {
   background: linear-gradient(180deg, #3d6f9a, #2a4f72);
@@ -3488,7 +3584,7 @@ form.settings-form > .actions.sticky-actions,
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
-  padding: 8px 6px;
+  padding: var(--space-1) var(--space-0);
   min-height: 34px;
   cursor: default;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
@@ -3496,7 +3592,7 @@ form.settings-form > .actions.sticky-actions,
 .tg-composer {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-1);
   padding: var(--space-1) var(--space-2);
   background: rgba(23, 33, 43, 0.98);
   border-top: 1px solid rgba(255, 255, 255, 0.05);
@@ -3523,7 +3619,7 @@ form.settings-form > .actions.sticky-actions,
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   grid-template-rows: repeat(2, 1fr);
-  gap: 2px;
+  gap: var(--space-0);
 }
 .tg-kb-grid::before,
 .tg-kb-grid::after {
@@ -3838,7 +3934,7 @@ body.modal-open { overflow: hidden; }
 .edit-section-head {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: var(--space-0);
   margin-bottom: var(--space-2);
 }
 .edit-section-head h3,
@@ -3884,7 +3980,7 @@ body.modal-open { overflow: hidden; }
 /* Loose sibling caption (legacy): pull toward title like card h2 + caption */
 .wallet-tx-block > .edit-section-sub + .wallet-tx-caption,
 .wallet-tx-block > .edit-section-sub + .muted {
-  margin-top: calc(-1 * var(--space-2) + 0.2rem);
+  margin-top: calc(-1 * var(--space-1));
 }
 .edit-section-head .muted,
 .edit-section-head p {
@@ -3900,14 +3996,14 @@ body.modal-open { overflow: hidden; }
   gap: var(--space-2);
 }
 .user-edit-name {
-  margin: 0 0 0.25rem;
+  margin: 0 0 var(--space-0);
   font-size: 1.05rem;
 }
 .user-edit-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem 0.55rem;
+  gap: var(--space-0) var(--space-1);
   margin: 0;
   font-size: 12px;
 }
@@ -4073,7 +4169,7 @@ body.modal-open { overflow: hidden; }
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: var(--space-1);
   text-align: right;
 }
 .payg-meta li {
@@ -4081,7 +4177,7 @@ body.modal-open { overflow: hidden; }
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 0.35rem 0.75rem;
+  gap: var(--space-0) var(--space-1_5);
   text-align: right;
 }
 .payg-meta-label {
@@ -4130,7 +4226,7 @@ body.modal-open { overflow: hidden; }
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.2rem;
+  gap: var(--space-0);
   min-width: 6.5rem;
   width: 100%;
   text-align: right;
@@ -4153,7 +4249,7 @@ body.modal-open { overflow: hidden; }
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: 0.65rem 0.75rem;
+  padding: var(--space-1) var(--space-1_5);
   border-bottom: 1px solid var(--border);
   min-width: 0;
 }
@@ -4163,7 +4259,7 @@ body.modal-open { overflow: hidden; }
 .wallet-tx-main {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: var(--space-0);
   min-width: 0;
 }
 .wallet-tx-amount {
@@ -4180,7 +4276,7 @@ body.modal-open { overflow: hidden; }
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.2rem;
+  gap: var(--space-0);
   flex: 0 0 auto;
   font-size: 12px;
   text-align: end;
@@ -5326,7 +5422,7 @@ html[data-theme="light"] .setup-progress span.done {
   padding: var(--card-pad);
 }
 .dash-bot-setup::before {
-  margin-top: 2px;
+  margin-top: var(--space-0);
 }
 .dash-bot-setup-inner {
   display: flex;
@@ -5721,7 +5817,7 @@ html[data-theme="light"] .home-gauge.is-exhausted {
     align-items: center;
     width: 100%;
     min-width: 0;
-    gap: 0.25rem;
+    gap: var(--space-0);
   }
   .pg-quota-gauges .home-gauge-meta [dir="ltr"],
   .pg-quota-gauges .home-gauge-meta .num-ratio {
@@ -5810,12 +5906,13 @@ html[data-theme="light"] .home-gauge.is-exhausted {
 .ticket-tg-section { margin-top: var(--section-gap); }
 .ticket-tg-section .page-sub { margin-bottom: var(--space-2); }
 tr.is-unread td { background: rgba(234, 179, 8, 0.06); }
+/* Alias — same rhythm as .actions (modals must not invent a second footer scale) */
 .ui-modal-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--space-1);
   align-items: center;
-  margin-top: var(--space-1);
+  margin-top: var(--space-2);
 }
 .ticket-view-sub {
   margin: var(--space-1) 0 0;

@@ -6,11 +6,9 @@
   <div>
     {{ page_title('user', 'کاربران پنل', 'pg') }}
   </div>
-  <div class="actions">
-    {% if can_create %}
-    <button type="button" class="btn" data-modal-open="modal-pg-user-create">ساخت کاربر</button>
-    {% endif %}
-  </div>
+  {% if can_create %}
+  <button type="button" class="btn" data-modal-open="modal-pg-user-create">ساخت کاربر</button>
+  {% endif %}
 </div>
 <div class="card card-flush">
   <form method="get" action="/pg/users" class="search-bar">
@@ -171,7 +169,7 @@
           <small class="muted">خالی = طبق سقف نقش (در صورت وجود) یا نامحدود</small>
         </label>
         <div class="form-field">
-          <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد (حداقل یکی)</span>
+          <span class="form-field-label">گروه‌های پاسارگارد (حداقل یکی)</span>
           <div class="ui-switch-grid">
             {% for g in groups %}
             {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
@@ -239,7 +237,7 @@
         <small class="muted">۰ یا خالی = نامحدود</small>
       </label>
       <div class="form-field">
-        <span class="muted" style="font-size:12px;font-weight:500">گروه‌ها (حداقل یکی)</span>
+        <span class="form-field-label">گروه‌ها (حداقل یکی)</span>
         <div class="ui-switch-grid" id="pg-edit-groups">
           {% for g in groups %}
           {{ switch_chip('edit_group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
@@ -265,8 +263,8 @@
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div class="form-stack">
-      <p id="pg-user-link-user" class="muted" style="margin: 0"></p>
-      <p id="pg-user-link-status" class="muted" style="margin: 0">در حال دریافت لینک…</p>
+      <p id="pg-user-link-user" class="muted"></p>
+      <p id="pg-user-link-status" class="muted">در حال دریافت لینک…</p>
       <label class="form-field" id="pg-user-link-field" hidden>
         آدرس اشتراک
         <input type="text" id="pg-user-link-url" class="mono" readonly dir="ltr" />

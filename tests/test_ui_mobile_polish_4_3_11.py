@@ -286,17 +286,17 @@ class CardActionsGapTests(unittest.TestCase):
 
 
 class VersionBumpTests(unittest.TestCase):
-    def test_version_at_least_4_4_10(self):
+    def test_version_at_least_4_4_11(self):
         from app.version import __version__
 
         self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")), (4, 4, 10)
+            tuple(int(x) for x in __version__.split(".")), (4, 4, 11)
         )
         self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.10"
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.11"
         )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"4.4.10"', notes)
+        self.assertIn('"4.4.11"', notes)
 
 
 if __name__ == "__main__":

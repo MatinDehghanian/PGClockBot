@@ -63,27 +63,27 @@
     <form method="post" action="/pg/hosts" class="form-stack">
       <div class="form-row">
         <div>
-          <label>عنوان (remark)
+          <label class="form-field">عنوان (remark)
             <input name="remark" required placeholder="IR-1" />
           </label>
         </div>
         <div>
-          <label>آدرس (چندتایی با ویرگول)
+          <label class="form-field">آدرس (چندتایی با ویرگول)
             <input name="address" required placeholder="1.2.3.4 یا domain.com" />
           </label>
         </div>
         <div>
-          <label>پورت (اختیاری)
+          <label class="form-field">پورت (اختیاری)
             <input name="port" type="number" placeholder="443" />
           </label>
         </div>
         <div>
-          <label>اولویت
+          <label class="form-field">اولویت
             <input name="priority" type="number" value="0" />
           </label>
         </div>
       </div>
-      <label>اینباند
+      <label class="form-field">اینباند
         <select name="inbound_tag" required>
           <option value="">— انتخاب —</option>
           {% for tag in inbound_tags %}

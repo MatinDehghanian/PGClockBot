@@ -31,7 +31,9 @@ class UiSelectGapPlacementTests(unittest.TestCase):
 
     def test_css_fallback_gap_8px(self):
         menu = CSS.split(".ui-select-menu {")[1].split("}")[0]
-        self.assertIn("top: calc(100% + 8px)", menu)
+        # Must stay in sync with JS UI_SELECT_GAP = 8 (--space-1)
+        self.assertIn("top: calc(100% + var(--space-1))", menu)
+        self.assertIn("UI_SELECT_GAP = 8", JS)
 
     def test_smart_up_down_preserved(self):
         place = JS.split("function placeUiSelectMenu")[1].split("function clearUiSelectMenuPos")[0]
