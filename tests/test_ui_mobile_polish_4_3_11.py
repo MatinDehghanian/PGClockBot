@@ -241,18 +241,40 @@ class CardInsetAndServicePillTests(unittest.TestCase):
         self.assertIn("text-align: right;", svc)
 
 
+class MobileActionGridTests(unittest.TestCase):
+    def test_mobile_actions_max_two_per_row(self):
+        mobile = CSS.split("@media (max-width: 900px) {", 1)[1]
+        block = mobile.split("Primary action rows:", 1)[1].split("Search stays", 1)[0]
+        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", block)
+        self.assertNotIn("flex-wrap: nowrap;", block)
+        self.assertIn("grid-column: 1 / -1;", block)
+
+    def test_buttons_ellipsis(self):
+        btn = CSS.split(".btn, a.btn, .btn-sm, a.btn-sm {", 1)[1].split("}", 1)[0]
+        self.assertIn("text-overflow: ellipsis;", btn)
+        self.assertIn("overflow: hidden;", btn)
+
+    def test_card_uses_flex_gap_rhythm(self):
+        self.assertIn(".card:not(.card-flush) {", CSS)
+        block = CSS.split(".card:not(.card-flush) {", 1)[1].split("}", 1)[0]
+        self.assertIn("display: flex;", block)
+        self.assertIn("gap: var(--space-2);", block)
+        meta = CSS.split(".update-meta {", 1)[1].split("}", 1)[0]
+        self.assertIn("margin: 0;", meta)
+
+
 class VersionBumpTests(unittest.TestCase):
-    def test_version_at_least_4_4_7(self):
+    def test_version_at_least_4_4_8(self):
         from app.version import __version__
 
         self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")), (4, 4, 7)
+            tuple(int(x) for x in __version__.split(".")), (4, 4, 8)
         )
         self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.7"
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.8"
         )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"4.4.7"', notes)
+        self.assertIn('"4.4.8"', notes)
 
 
 if __name__ == "__main__":

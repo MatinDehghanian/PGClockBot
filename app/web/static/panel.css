@@ -98,6 +98,47 @@ a { color: var(--foreground); text-decoration: none; }
 a:hover { opacity: 0.8; }
 .muted { color: var(--muted-fg); }
 
+/* Global: text must never paint outside its chrome — truncate with … */
+.page-title > span,
+.page-title > strong,
+.brand strong,
+.topbar-brand strong,
+.nav a,
+.dnd-item > span:not(.dnd-actions),
+.svc-item-title strong,
+.ui-switch-copy strong,
+.notify-meta strong,
+.home-conn-k,
+.home-conn-cap,
+.progress-meta > span,
+.progress-meta > strong,
+th, td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  min-width: 0;
+}
+th, td,
+.page-title > span,
+.page-title > strong,
+.brand strong,
+.topbar-brand strong,
+.nav a,
+.dnd-item > span:not(.dnd-actions),
+.home-conn-k,
+.home-conn-cap,
+.progress-meta > span,
+.progress-meta > strong {
+  white-space: nowrap;
+}
+/* Multi-line copy stays inside the box via wrapping, not overflow */
+p, li, .hint, .flash, .flash-copy, label, small.muted,
+.ui-switch-copy small, .notify-meta small {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+}
+
 * { scrollbar-width: thin; scrollbar-color: #3f3f46 transparent; }
 *::-webkit-scrollbar { width: 6px; height: 6px; }
 *::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 999px; }
@@ -547,8 +588,21 @@ a:hover { opacity: 0.8; }
   padding: var(--card-pad);
   margin-bottom: var(--section-gap);
   width: 100%;
-  overflow: visible;
+  overflow-x: clip;
+  overflow-y: visible;
   box-sizing: border-box;
+}
+/* Equal edge inset: flex gap instead of trailing child margins (hidden last
+   siblings like #upd-ops used to leave a fat bottom gap). */
+.card:not(.card-flush) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+.card:not(.card-flush) > * {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 .card.card-flush {
   padding: 0;
@@ -556,17 +610,25 @@ a:hover { opacity: 0.8; }
   overflow: hidden;
 }
 .card h2 {
-  margin: 0 0 var(--space-2);
+  margin: 0;
   font-size: var(--title-size);
   font-weight: 600;
   line-height: 1.5;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .card > p.muted, .card > .hint, .update-card-caption {
-  margin: 0 0 var(--space-2);
+  margin: 0;
   line-height: 1.5;
   font-size: 12px;
   color: #71717a;
   font-weight: 400;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 /* Title + caption are one unit — pull caption toward title */
 .card h2 + p.muted,
@@ -581,7 +643,7 @@ a:hover { opacity: 0.8; }
 .card + .card > h2 {
   margin-top: 0;
 }
-/* Equal inset on all padded boxes: trailing child margins were doubling the bottom gap */
+/* Safety net for non-flex / nested padded boxes */
 .card > :last-child,
 .stat > :last-child,
 .settings-card > :last-child,
@@ -1241,6 +1303,10 @@ label.form-field > .ui-select,
   font-weight: 550;
   cursor: pointer;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  min-width: 0;
   text-decoration: none !important;
   color: var(--info-fg) !important;
   border: 1px solid rgba(59, 130, 246, 0.42);
@@ -1526,6 +1592,9 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   line-height: 1.25;
   letter-spacing: 0.01em;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
   vertical-align: middle;
 }
 .badge {
@@ -2487,14 +2556,20 @@ form.settings-form > .actions.sticky-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-2);
-  margin-bottom: var(--section-gap);
+  margin: 0;
+  min-width: 0;
+  width: 100%;
 }
 .update-meta > div,
 .update-meta-box {
-  padding: var(--space-2);
+  padding: var(--card-pad);
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.02);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .update-meta-box.update-meta-ok {
   background: rgba(34, 197, 94, 0.1);
@@ -2515,13 +2590,21 @@ form.settings-form > .actions.sticky-actions {
   font-size: 11px;
   margin-bottom: var(--space-1);
   line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 .update-meta strong {
   display: block;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.5;
-  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
 }
 .progress-wrap { margin: var(--space-1) 0 var(--space-2); }
 .progress-bar {
@@ -2593,6 +2676,37 @@ form.settings-form > .actions.sticky-actions {
   border: 1px solid var(--border);
   background: var(--muted);
   margin: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.ssl-status-line {
+  margin: 0;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.ssl-status-line code,
+.ssl-status-code,
+.ssl-status-link {
+  display: inline-block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.ssl-status-code { margin-inline-start: var(--space-1); }
+.ssl-subhead {
+  margin: 0;
+  font-size: var(--title-size);
+  font-weight: 600;
+  line-height: 1.5;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .update-steps {
   list-style: none;
@@ -2886,11 +3000,12 @@ form.settings-form > .actions.sticky-actions {
   }
   .page-head > .actions,
   .page-head > .page-head-actions {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-1);
     align-items: center;
-    justify-content: flex-end;
+    justify-content: stretch;
+    max-width: min(100%, 280px);
   }
   .page-head > .actions > .btn,
   .page-head > .actions > a.btn,
@@ -2898,19 +3013,32 @@ form.settings-form > .actions.sticky-actions {
   .page-head > .page-head-actions > .btn,
   .page-head > .page-head-actions > a.btn,
   .page-head > .page-head-actions > form {
-    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
     min-width: 0;
-    width: auto;
+  }
+  .page-head > .actions > :last-child:nth-child(odd),
+  .page-head > .page-head-actions > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
   .page-head > .actions > form,
   .page-head > .page-head-actions > form {
-    display: inline-flex;
+    display: flex;
   }
   .page-head > .actions > form > .btn,
-  .page-head > .page-head-actions > form > .btn,
+  .page-head > .page-head-actions > form > .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .page-head > .page-head-actions > form {
+    display: flex;
+    min-width: 0;
+    max-width: 100%;
+  }
   .page-head > .btn,
   .page-head > a.btn {
     width: auto;
+    max-width: 100%;
     justify-content: center;
   }
   .pg-head {
@@ -3012,8 +3140,8 @@ form.settings-form > .actions.sticky-actions {
     flex: 0 0 auto;
   }
 
-  /* Primary action rows: full-width, easier tap targets.
-     Keep side-by-side buttons sharing the row; stack when next to a field/box. */
+  /* Primary action rows: max 2 buttons per row on mobile (e.g. SSL 2×2).
+     Lone odd last button spans full width. */
   .sticky-actions,
   .form-stack > .actions,
   .settings-form > .actions,
@@ -3025,8 +3153,8 @@ form.settings-form > .actions.sticky-actions {
   .ui-modal-panel .form-stack > .actions,
   .update-actions {
     width: 100%;
-    display: flex;
-    flex-wrap: nowrap;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-1);
   }
   .sticky-actions > .btn,
@@ -3053,15 +3181,29 @@ form.settings-form > .actions.sticky-actions {
   .update-actions > .btn,
   .update-actions > a.btn,
   .update-actions > button {
-    flex: 1 1 0;
+    width: 100%;
+    max-width: 100%;
     min-width: 0;
-    width: auto;
     justify-content: center;
+  }
+  .sticky-actions > :last-child:nth-child(odd),
+  .form-stack > .actions > :last-child:nth-child(odd),
+  .settings-form > .actions > :last-child:nth-child(odd),
+  .settings-form .sticky-actions > :last-child:nth-child(odd),
+  .card > .actions > :last-child:nth-child(odd),
+  .settings-card > .actions > :last-child:nth-child(odd),
+  .edit-section > .actions > :last-child:nth-child(odd),
+  .ui-modal-panel > .actions > :last-child:nth-child(odd),
+  .ui-modal-panel .form-stack > .actions > :last-child:nth-child(odd),
+  .update-actions > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
   .sticky-actions > form,
   .form-stack > .actions > form,
   .settings-form > .actions > form {
     display: flex;
+    min-width: 0;
+    max-width: 100%;
   }
   .sticky-actions > form > .btn,
   .form-stack > .actions > form > .btn,
@@ -5254,7 +5396,7 @@ html[data-theme="light"] .setup-progress span.done {
 }
 .home-dash > .card > h2,
 .home-conn-card > h2 {
-  margin: 0 0 var(--space-2);
+  margin: 0;
   font-size: var(--title-size);
   font-weight: 600;
 }
@@ -5609,11 +5751,15 @@ html[data-theme="light"] .home-gauge.is-exhausted {
 
 /* Changelog sits under the update flash inside the same card */
 .update-changelog {
-  margin: 0 0 var(--section-gap);
-  padding: var(--space-2);
+  margin: 0;
+  padding: var(--card-pad);
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.02);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .update-changelog-title {
   margin: 0 0 var(--space-2);
@@ -5642,6 +5788,9 @@ html[data-theme="light"] .home-gauge.is-exhausted {
   font-size: 13px;
   line-height: 1.5;
   color: var(--foreground);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
 }
 .update-changelog-list li:last-child { margin-bottom: 0; }
 
