@@ -451,10 +451,39 @@ async def ensure_payg_shop_wallet(
     billing = int(profile.billing_balance or 0)
 
     if not linked:
-        combined = wallet + billing
-        user.wallet_balance = int(combined)
-        profile.billing_balance = int(combined)
+        # Claim one-time link so concurrent first-link callers cannot re-merge
+        # a stale wallet+billing snapshot and overwrite live spends/credits.
+        with session.no_autoflush:
+            claim = await session.execute(
+                update(ResellerProfile)
+                .where(
+                    ResellerProfile.user_id == int(profile.user_id),
+                    ResellerProfile.payg_wallet_linked.is_(False),
+                )
+                .values(payg_wallet_linked=True)
+                .execution_options(synchronize_session=False)
+            )
+        if claim.rowcount != 1:
+            await session.refresh(profile)
+            await session.refresh(user)
+            wallet = int(user.wallet_balance or 0)
+            if int(profile.billing_balance or 0) != wallet:
+                profile.billing_balance = wallet
+            return user, wallet
+
+        # Winner: add legacy billing into the current wallet (handles races on wallet).
+        if billing != 0:
+            with session.no_autoflush:
+                await session.execute(
+                    update(BotUser)
+                    .where(BotUser.id == int(user.id))
+                    .values(wallet_balance=BotUser.wallet_balance + int(billing))
+                    .execution_options(synchronize_session=False)
+                )
+        await session.refresh(user)
+        combined = int(user.wallet_balance or 0)
         profile.payg_wallet_linked = True
+        profile.billing_balance = int(combined)
         logger.info(
             "PAYG linked to shop wallet reseller=%s wallet=%s billing=%s combined=%s",
             profile.user_id,
@@ -683,17 +712,27 @@ async def debit_usage(
                     .execution_options(synchronize_session=False)
                 )
             if w_result.rowcount != 1:
-                # Race: charge whatever remains (floor at 0)
+                # Race: charge whatever remains, still guarded (never go negative).
                 await session.refresh(user)
                 remain = max(0, int(user.wallet_balance or 0))
                 charge = min(charge, remain)
                 if charge > 0:
-                    await session.execute(
-                        update(BotUser)
-                        .where(BotUser.id == uid)
-                        .values(wallet_balance=BotUser.wallet_balance - int(charge))
-                        .execution_options(synchronize_session=False)
-                    )
+                    with session.no_autoflush:
+                        retry = await session.execute(
+                            update(BotUser)
+                            .where(
+                                BotUser.id == uid,
+                                BotUser.wallet_balance >= int(charge),
+                            )
+                            .values(
+                                wallet_balance=BotUser.wallet_balance - int(charge)
+                            )
+                            .execution_options(synchronize_session=False)
+                        )
+                    if retry.rowcount != 1:
+                        # Concurrent spender won again — floor at 0 (watermark already claimed).
+                        charge = 0
+                        await session.refresh(user)
         await session.refresh(user)
         profile.billing_balance = int(user.wallet_balance or 0)
     else:

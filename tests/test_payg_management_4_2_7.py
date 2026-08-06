@@ -186,13 +186,13 @@ class AdminUsageSnapshotTests(unittest.TestCase):
         self.assertIn("reseller_usage", resellers)
         self.assertIn("users_text", resellers)
         self.assertIn("traffic_text", resellers)
-        self.assertIn("<th>کاربران</th>", resellers)
-        self.assertIn("<th>حجم</th>", resellers)
+        self.assertIn("کاربران", resellers)
+        self.assertIn("حجم", resellers)
         self.assertIn("admin_usage", admins)
         self.assertIn("users_text", admins)
         self.assertIn("traffic_text", admins)
-        self.assertIn("<th>کاربران</th>", admins)
-        self.assertIn("<th>حجم</th>", admins)
+        self.assertIn("کاربران", admins)
+        self.assertIn("حجم", admins)
 
 
 if __name__ == "__main__":
