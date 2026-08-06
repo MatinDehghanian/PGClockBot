@@ -124,13 +124,13 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
       <h2 id="ssl-done-title">گواهی SSL فعال شد</h2>
       <button type="button" class="icon-btn" data-ssl-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <div class="form-stack" style="padding: var(--space-2) var(--space-3) var(--space-3)">
-      <p style="margin:0;line-height:1.7">
+    <div class="form-stack">
+      <p class="confirm-message">
         دریافت گواهی و فعال‌سازی HTTPS با موفقیت انجام شد.
         از این لحظه پنل روی آدرس امن دامنه در دسترس است.
       </p>
-      <p class="muted" style="margin: var(--space-2) 0 0" dir="ltr" id="ssl-done-url"></p>
-      <div class="actions" style="margin-top: var(--space-3)">
+      <p class="muted" dir="ltr" id="ssl-done-url"></p>
+      <div class="actions">
         <a class="btn" id="ssl-open-panel" href="#" target="_self" rel="noopener">ورود به پنل (HTTPS)</a>
         <button type="button" class="btn btn-ghost" data-ssl-modal-close>بمان در تنظیمات</button>
       </div>

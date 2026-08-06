@@ -71,28 +71,30 @@
     <form method="post" action="/pg/templates" class="form-stack">
       <div class="form-row">
         <div>
-          <label>نام تمپلیت
+          <label class="form-field">نام تمپلیت
             <input name="name" required placeholder="مثلاً ماهانه ۳۰ گیگ" />
           </label>
         </div>
         <div>
-          <label>حجم (گیگابایت) — خالی = نامحدود
+          <label class="form-field">حجم (گیگابایت) — خالی = نامحدود
             <input name="data_limit_gb" type="number" step="0.1" min="0" placeholder="30" />
           </label>
         </div>
         <div>
-          <label>مدت (روز)
+          <label class="form-field">مدت (روز)
             <input name="expire_days" type="number" min="1" value="30" required />
           </label>
         </div>
       </div>
-      <label>گروه‌های پاسارگارد</label>
-      <div class="ui-switch-grid">
-        {% for g in groups %}
-        {{ switch_chip('g_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
-        {% else %}
-        <span class="muted">گروهی یافت نشد — ابتدا در بخش گروه‌ها بسازید.</span>
-        {% endfor %}
+      <div class="form-field">
+        <span class="form-field-label">گروه‌های پاسارگارد</span>
+        <div class="ui-switch-grid">
+          {% for g in groups %}
+          {{ switch_chip('g_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
+          {% else %}
+          <span class="muted">گروهی یافت نشد — ابتدا در بخش گروه‌ها بسازید.</span>
+          {% endfor %}
+        </div>
       </div>
       <div class="actions">
         <button class="btn" type="submit">ساخت در پاسارگارد</button>

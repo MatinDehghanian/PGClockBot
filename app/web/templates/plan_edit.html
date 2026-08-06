@@ -48,7 +48,7 @@
     {% set selected_groups = (plan.pg_group_ids or '').split(',') %}
     <div id="mode-custom" class="form-stack">
       <div class="form-field">
-        <span class="muted" style="font-size:12px;font-weight:500">گروه‌های پاسارگارد (حداقل یکی)</span>
+        <span class="form-field-label">گروه‌های پاسارگارد (حداقل یکی)</span>
         <div class="ui-switch-grid">
           {% for g in groups %}
           {% set gid = g.get('id')|string %}

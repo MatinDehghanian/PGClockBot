@@ -13,18 +13,20 @@
 {% if edit_group and can_write %}
 <div class="card">
   <h2>ویرایش گروه #{{ edit_group.get('id') }}</h2>
-  <form method="post" action="/pg/groups/{{ edit_group.get('id') }}/edit">
-    <label>نام گروه
+  <form method="post" action="/pg/groups/{{ edit_group.get('id') }}/edit" class="form-stack">
+    <label class="form-field">نام گروه
       <input name="name" required value="{{ edit_group.get('name') or '' }}" />
     </label>
-    <label>اینباندها</label>
-    <div class="ui-switch-grid">
-      {% set selected = edit_group.get('inbound_tags') or [] %}
-      {% for tag in inbound_tags %}
-      {{ switch_chip('tag_' ~ loop.index, tag, checked=(tag in selected), value=tag) }}
-      {% endfor %}
+    <div class="form-field">
+      <span class="form-field-label">اینباندها</span>
+      <div class="ui-switch-grid">
+        {% set selected = edit_group.get('inbound_tags') or [] %}
+        {% for tag in inbound_tags %}
+        {{ switch_chip('tag_' ~ loop.index, tag, checked=(tag in selected), value=tag) }}
+        {% endfor %}
+      </div>
     </div>
-    <div class="ui-switch-list" style="margin-top: var(--space-2)">
+    <div class="ui-switch-list">
       {{ switch('is_disabled', 'غیرفعال', checked=edit_group.get('is_disabled')) }}
     </div>
     <div class="actions">
@@ -78,16 +80,18 @@
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/pg/groups" class="form-stack">
-      <label>نام گروه
+      <label class="form-field">نام گروه
         <input name="name" required placeholder="مثلاً default" />
       </label>
-      <label>اینباندها</label>
-      <div class="ui-switch-grid">
-        {% for tag in inbound_tags %}
-        {{ switch_chip('tag_' ~ loop.index, tag, value=tag) }}
-        {% else %}
-        <span class="muted">اینباندی یافت نشد.</span>
-        {% endfor %}
+      <div class="form-field">
+        <span class="form-field-label">اینباندها</span>
+        <div class="ui-switch-grid">
+          {% for tag in inbound_tags %}
+          {{ switch_chip('tag_' ~ loop.index, tag, value=tag) }}
+          {% else %}
+          <span class="muted">اینباندی یافت نشد.</span>
+          {% endfor %}
+        </div>
       </div>
       <div class="actions">
         <button class="btn" type="submit">ساخت در پاسارگارد</button>
