@@ -1979,15 +1979,41 @@ a.btn.btn-star:hover {
   flex-direction: column;
   gap: var(--section-gap);
 }
+/* Parent gap owns vertical rhythm — zero child margins to avoid gap+margin stacking */
 .settings-main > .card,
+.settings-main > .settings-card,
 .settings-main > form,
-.settings-main > .flash {
+.settings-main > .flash,
+.settings-main > .actions,
+.settings-main > .sticky-actions {
+  margin-top: 0;
   margin-bottom: 0;
 }
+.settings-form,
+form.settings-form,
 .menu-layout-form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--section-gap);
+  margin: 0;
+}
+.settings-form > .card,
+.settings-form > .settings-card,
+.settings-form > .flash,
+.settings-form > .actions,
+.settings-form > .sticky-actions,
+form.settings-form > .card,
+form.settings-form > .settings-card,
+form.settings-form > .flash,
+form.settings-form > .actions,
+form.settings-form > .sticky-actions,
+.menu-layout-form > .card,
+.menu-layout-form > .dnd-card,
+.menu-layout-form > .actions,
+.menu-layout-form > .sticky-actions,
+.menu-layout-form > .flash {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 .menu-layout-intro { margin-bottom: 0; }
 .dnd-card { margin: 0; }
@@ -2413,13 +2439,14 @@ a.btn.btn-star:hover {
 .plan-naming-preview { margin-top: var(--space-1); }
 
 .sticky-actions {
-  /* Stay in document flow under cards — never float / never inside card chrome */
+  /* Under-card primary actions: spacing comes from parent flex gap
+     (--section-gap) or the preceding card's margin-bottom — never both. */
   position: static;
   background: transparent;
   padding: 0;
   border-radius: 0;
   border: none;
-  margin: var(--space-2) 0 var(--section-gap);
+  margin: 0;
   z-index: auto;
 }
 /* Legacy: if a save row is still nested in a card, pull it out of the card pad */
@@ -2434,15 +2461,20 @@ a.btn.btn-star:hover {
 }
 .settings-form > .actions.sticky-actions,
 .menu-layout-form > .actions.sticky-actions,
-form.settings-form > .actions.sticky-actions {
-  margin-top: var(--space-2);
-  margin-bottom: var(--section-gap);
+form.settings-form > .actions.sticky-actions,
+.settings-main > .actions.sticky-actions,
+.settings-main > .update-actions,
+.settings-main > .actions {
+  margin: 0;
 }
 /* Inside cards keep the same non-floating layout */
 .card .sticky-actions,
 .settings-card .sticky-actions {
   position: static;
   z-index: auto;
+}
+.menu-layout-form > .dnd-cols {
+  margin: 0;
 }
 .dnd-cols {
   display: grid;
@@ -2755,7 +2787,7 @@ form.settings-form > .actions.sticky-actions {
   direction: ltr;
   text-align: left;
 }
-.update-actions { margin-top: var(--space-1); }
+.update-actions { margin: 0; }
 .update-ops[hidden] { display: none !important; }
 .update-ops .progress-wrap { margin-top: var(--space-1); margin-bottom: var(--space-2); }
 .update-stay-warn {
@@ -2769,14 +2801,16 @@ form.settings-form > .actions.sticky-actions {
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: flex-end;
-  margin-top: var(--space-1);
+  margin: 0;
+  min-width: 0;
+  width: 100%;
 }
 .rollback-field {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  flex: 1 1 200px;
-  min-width: 180px;
+  flex: 1 1 12rem;
+  min-width: 0;
   margin: 0;
   font-size: 13px;
   color: var(--muted-fg);
@@ -3114,7 +3148,7 @@ form.settings-form > .actions.sticky-actions {
     min-height: var(--btn-h);
   }
 
-  .sticky-actions { margin: var(--space-2) 0 var(--space-1); width: 100%; }
+  .sticky-actions { margin: 0; width: 100%; }
   body.nav-open { overflow: hidden; }
 
   .notify-row { flex-direction: row; }

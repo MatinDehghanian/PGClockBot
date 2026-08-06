@@ -263,18 +263,40 @@ class MobileActionGridTests(unittest.TestCase):
         self.assertIn("margin: 0;", meta)
 
 
+class CardActionsGapTests(unittest.TestCase):
+    def test_sticky_actions_margin_zero_parent_gap_owns_rhythm(self):
+        block = CSS.split("\n.sticky-actions {", 1)[1].split("}", 1)[0]
+        self.assertIn("margin: 0;", block)
+        self.assertNotIn("margin: var(--space-2) 0 var(--section-gap);", block)
+        main = CSS.split("\n.settings-main {", 1)[1].split("}", 1)[0]
+        self.assertIn("gap: var(--section-gap);", main)
+        self.assertIn(
+            "gap: var(--section-gap);",
+            CSS.split("\n.settings-form,", 1)[1][:500],
+        )
+
+    def test_rollback_button_outside_card(self):
+        src = (ROOT / "app/web/templates/_settings_update.html").read_text(encoding="utf-8")
+        # button after card close, in sticky-actions
+        self.assertIn('id="rollback-start"', src)
+        self.assertIn('class="actions sticky-actions update-actions"', src)
+        # not nested inside rollback-row with the select
+        row = src.split('id="rollback-root"', 1)[1].split('</div>', 1)[0]
+        self.assertNotIn('rollback-start', row)
+
+
 class VersionBumpTests(unittest.TestCase):
-    def test_version_at_least_4_4_8(self):
+    def test_version_at_least_4_4_9(self):
         from app.version import __version__
 
         self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")), (4, 4, 8)
+            tuple(int(x) for x in __version__.split(".")), (4, 4, 9)
         )
         self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.8"
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.9"
         )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"4.4.8"', notes)
+        self.assertIn('"4.4.9"', notes)
 
 
 if __name__ == "__main__":

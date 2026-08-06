@@ -115,15 +115,19 @@
         {% endfor %}
       </select>
     </label>
-    <button type="button" class="btn btn-danger" id="rollback-start"
-      {% if rollback_versions|length == 1 and rollback_versions[0].version == local_version %}disabled{% endif %}>
-      بازگشت به این نسخه
-    </button>
   </div>
   {% else %}
   <p class="muted">لیست نسخه‌های گیت‌هاب در دسترس نیست. بعداً دوباره بررسی کنید.</p>
   {% endif %}
 </div>
+{% if rollback_versions %}
+<div class="actions sticky-actions update-actions">
+  <button type="button" class="btn btn-danger" id="rollback-start"
+    {% if rollback_versions|length == 1 and rollback_versions[0].version == local_version %}disabled{% endif %}>
+    بازگشت به این نسخه
+  </button>
+</div>
+{% endif %}
 
 <script>
 (function(){
