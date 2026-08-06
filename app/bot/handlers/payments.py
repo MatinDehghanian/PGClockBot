@@ -4,7 +4,6 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, Message, PreCheckoutQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot import keyboards as kb
 from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message

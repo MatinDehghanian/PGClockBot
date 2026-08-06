@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from aiogram import Bot
-from aiogram.types import BotCommand, BufferedInputFile, InputProfilePhotoStatic
+from aiogram.types import BufferedInputFile, InputProfilePhotoStatic
 
 log = logging.getLogger(__name__)
 
