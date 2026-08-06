@@ -130,6 +130,7 @@ def render(request: Request, name: str, context: dict | None = None, status_code
     ctx = dict(context or {})
     ctx.setdefault("flash_ok", None)
     ctx.setdefault("flash_err", None)
+    ctx.setdefault("open_edit", None)
     ctx.setdefault("app_version", local_version())
     if "pwa_name" not in ctx:
         try:
@@ -2490,15 +2491,6 @@ def create_api_app(lifespan=None) -> FastAPI:
             return _redirect_msg("/users", err="کاربر یافت نشد")
         if role not in {Role.USER.value, Role.RESELLER.value, Role.ADMIN.value}:
             return _redirect_msg("/users", err="نقش نامعتبر")
-        # Reason only required when revoking reseller (sent to user); other role changes optional
-        demoting_reseller = (
-            user.role == Role.RESELLER.value and role != Role.RESELLER.value
-        )
-        if demoting_reseller and len(reason) < 3:
-            return _redirect_msg(
-                "/users",
-                err="علت حذف نمایندگی الزامی است (حداقل ۳ کاراکتر)",
-            )
 
         from app.services.notifications import actor_label_from_staff, notify_account_edit
 
@@ -2601,7 +2593,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     new_role=role,
                     actor=actor,
                 )
-        return _redirect_msg("/users", ok="نقش به‌روز شد")
+        return RedirectResponse(
+            f"/users?edit={int(user_id)}&ok={quote('نقش به‌روز شد')}&_={int(time.time())}",
+            status_code=303,
+        )
 
     @app.post("/users/{user_id}/block")
     async def users_toggle_block(
@@ -2621,8 +2616,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         if is_protected_admin(user):
             return _redirect_msg("/users", err="مسدود کردن ادمین مجاز نیست")
         will_block = not user.is_blocked
-        if will_block and len(reason) < 3:
-            return _redirect_msg("/users", err="علت مسدودسازی الزامی است (حداقل ۳ کاراکتر)")
         user.is_blocked = will_block
         await session.commit()
         await notify_account_edit(
@@ -2962,6 +2955,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             "saved": request.query_params.get("saved") == "1",
             "saved_msg": request.query_params.get("msg") or "",
         }
+        # Single flash above page title (base.html) — avoid below-title duplicates
+        if request.query_params.get("saved") == "1":
+            ctx["flash_ok"] = request.query_params.get("msg") or "ذخیره شد."
+        elif request.query_params.get("ok"):
+            ctx["flash_ok"] = request.query_params.get("ok")
+        if request.query_params.get("err"):
+            ctx["flash_err"] = request.query_params.get("err")
 
         if tab == "menu":
             ctx.update(_menu_tab_context(values))

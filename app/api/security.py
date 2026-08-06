@@ -63,8 +63,8 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
                 "staff": staff,
                 "current_username": staff.get("username") or "",
                 "identity_help": identity_help_fa(staff.get("role")),
-                "ok": request.query_params.get("ok"),
-                "err": request.query_params.get("err"),
+                "flash_ok": request.query_params.get("ok"),
+                "flash_err": request.query_params.get("err"),
             },
         )
 

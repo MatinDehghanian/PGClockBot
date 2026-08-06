@@ -269,8 +269,12 @@
   });
 
   const openId = {{ (open_edit or '')|tojson }};
+  const flashOk = {{ (flash_ok or '')|tojson }};
+  const flashErr = {{ (flash_err or '')|tojson }};
   if (openId) {
-    const url = '/resellers/' + openId + '/edit?fragment=1';
+    let url = '/resellers/' + openId + '/edit?fragment=1';
+    if (flashOk) url += '&ok=' + encodeURIComponent(flashOk);
+    if (flashErr) url += '&err=' + encodeURIComponent(flashErr);
     const open = function(){
       if (window.openModal) window.openModal('modal-reseller-edit');
       loadEdit(url, 'ویرایش نماینده #' + openId);

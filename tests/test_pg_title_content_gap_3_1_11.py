@@ -18,7 +18,7 @@ class PgTitleContentGapRootTests(unittest.TestCase):
     def test_page_head_actions_do_not_wrap_under_title(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(
-            ".page-head:has(> .actions),\n.page-head:has(> .btn) {\n  flex-wrap: nowrap;\n}",
+            ".page-head:has(> .actions),\n.page-head:has(> .page-head-actions),\n.page-head:has(> .btn) {\n  flex-wrap: nowrap;\n}",
             css,
         )
         title_wrap = css.split(".page-head > div:has(> .page-title) {\n", 1)[1].split("}", 1)[0]

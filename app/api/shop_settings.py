@@ -168,6 +168,11 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             "settings_base": "/shop-settings",
             "profile": profile,
         }
+        # Single flash above page title (base.html)
+        if request.query_params.get("saved") == "1":
+            ctx["flash_ok"] = request.query_params.get("msg") or "ذخیره شد."
+        if request.query_params.get("err"):
+            ctx["flash_err"] = request.query_params.get("err")
 
         if tab == "menu":
             ctx.update(_menu_tab_context(values))

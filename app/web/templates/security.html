@@ -34,8 +34,6 @@
     {% if staff.role == 'reseller' %}نام کاربری نماینده باید با قوانین پاسارگارد سازگار باشد (۳ تا ۱۲۸ کاراکتر؛ حروف انگلیسی، عدد و - _ @ .؛ بدون دو نماد پشت‌سرهم) و معمولاً حروف کوچک است. اگر ادمین پاسارگارد دارید، یوزر باید همان یوزر پاسارگارد بماند و تغییر رمز هر دو پنل را یکی می‌کند.{% else %}نام کاربری باید با قوانین پاسارگارد سازگار باشد: ۳ تا ۱۲۸ کاراکتر؛ فقط حروف انگلیسی، عدد و - _ @ .؛ بدون دو نماد پشت‌سرهم.{% endif %}
     رمز جدید طبق پاسارگارد: حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ، دو حرف کوچک و یک کاراکتر خاص.
   </p>
-  {% if ok %}<div class="flash ok">{{ ok }}</div>{% endif %}
-  {% if err %}<div class="flash err">{{ err }}</div>{% endif %}
   <form method="post" action="/security/credentials" class="settings-form" autocomplete="off" id="security-credentials-form">
     <div class="settings-grid">
       <div class="setting-item">

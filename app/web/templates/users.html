@@ -7,8 +7,7 @@
     {{ page_title('users', 'کاربران بات') }}
   </div>
 </div>
-{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
-{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+{# flash_ok / flash_err rendered once in base.html (above title) #}
 <div class="card card-flush">
   <div class="table-wrap">
   <table class="table-compact">
@@ -49,11 +48,10 @@
                     data-edit-url="/users/{{ u.id }}/edit?fragment=1"
                     data-edit-title="ویرایش کاربر #{{ u.id }}">ویرایش</button>
             <form method="post" action="/users/{{ u.id }}/block"
-                  data-confirm="{% if u.is_blocked %}مسدودیت این کاربر برداشته شود؟ پیام برای کاربر ارسال می‌شود.{% else %}این کاربر مسدود شود؟ پیام و علت برای کاربر ارسال می‌شود.{% endif %}"
+                  data-confirm="{% if u.is_blocked %}مسدودیت این کاربر برداشته شود؟ پیام برای کاربر ارسال می‌شود.{% else %}این کاربر مسدود شود؟ پیام برای کاربر ارسال می‌شود.{% endif %}"
                   data-confirm-title="{% if u.is_blocked %}رفع مسدودی{% else %}تأیید مسدودسازی{% endif %}"
-                  {% if not u.is_blocked %}data-confirm-warn="1" data-confirm-reason="1" data-confirm-reason-label="علت مسدودسازی" data-confirm-reason-name="reason"{% endif %}
+                  {% if not u.is_blocked %}data-confirm-warn="1"{% endif %}
                   data-confirm-label="{% if u.is_blocked %}رفع مسدودی{% else %}مسدود کردن{% endif %}">
-              <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm {% if not u.is_blocked %}btn-warn{% endif %}" type="submit">
                 {% if u.is_blocked %}رفع مسدودی{% else %}مسدود{% endif %}
               </button>
@@ -124,8 +122,12 @@
   });
 
   const openId = {{ (open_edit or '')|tojson }};
+  const flashOk = {{ (flash_ok or '')|tojson }};
+  const flashErr = {{ (flash_err or '')|tojson }};
   if (openId) {
-    const url = '/users/' + openId + '/edit?fragment=1';
+    let url = '/users/' + openId + '/edit?fragment=1';
+    if (flashOk) url += '&ok=' + encodeURIComponent(flashOk);
+    if (flashErr) url += '&err=' + encodeURIComponent(flashErr);
     const open = function(){
       if (window.openModal) window.openModal('modal-user-edit');
       loadEdit(url, 'ویرایش کاربر #' + openId);

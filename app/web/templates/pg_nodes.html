@@ -6,7 +6,7 @@
   <div>
     {{ page_title('nodes', 'نودها', 'pg') }}
   </div>
-  <div class="page-head-actions" style="display:flex;flex-wrap:wrap;gap:var(--space-1)">
+  <div class="page-head-actions">
     {% if can_reconnect %}
     <form method="post" action="/pg/nodes/reconnect-all" class="js-busy-form" data-busy-label="در حال اتصال…">
       <button class="btn btn-ghost" type="submit">اتصال مجدد همه</button>

@@ -27,7 +27,7 @@
   --info-fg: #60a5fa;
   --brand: #f97316;
   --brand-fg: #fb923c;
-  --radius: 8px;
+  --radius: 12px;
   --side-w: 248px;
   --topbar-h: 52px;
   --btn-h: 36px;
@@ -65,7 +65,9 @@
   --accent-soft: rgba(249, 115, 22, 0.12);
   --danger: var(--destructive);
   --r: var(--radius);
-  --r-sm: 6px;
+  --r-sm: 8px;
+  /* Table header — milder than --muted so dark theme is less bright */
+  --table-head-bg: color-mix(in srgb, var(--muted) 42%, var(--bg-card));
 }
 
 * { box-sizing: border-box; }
@@ -337,6 +339,7 @@ a:hover { opacity: 0.8; }
    row — that alone added ~button height + gap under the title and made
    PasarGuard look much looser than bot list pages. */
 .page-head:has(> .actions),
+.page-head:has(> .page-head-actions),
 .page-head:has(> .btn) {
   flex-wrap: nowrap;
 }
@@ -386,7 +389,7 @@ a:hover { opacity: 0.8; }
   border: none;
   outline: none;
   box-shadow: none;
-  border-radius: 11px;
+  border-radius: 13px;
   background: color-mix(in srgb, var(--brand) 16%, var(--muted));
   color: var(--brand-fg);
   animation: page-title-ico-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -1279,10 +1282,17 @@ label.form-field > .ui-select,
 }
 /* Keep header actions on the title row (don't inherit .actions margin-top) */
 .page-head > .actions,
+.page-head > .page-head-actions,
 .page-head > .btn {
   margin-top: 0;
   flex: 0 0 auto;
   align-self: center;
+}
+.page-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
 }
 .page-head > div:has(> .page-title) {
   flex: 1 1 0%;
@@ -1388,7 +1398,7 @@ th {
   font-size: var(--title-size);
   font-weight: 600;
   line-height: 1.5;
-  background: var(--muted);
+  background: var(--table-head-bg);
   white-space: nowrap;
 }
 thead th {
@@ -2257,12 +2267,13 @@ a.btn.btn-star:hover {
 .plan-naming-preview { margin-top: var(--space-1); }
 
 .sticky-actions {
-  /* Stay in document flow at end of content — never float over the form */
+  /* Stay in document flow at end of content — never float over the form.
+     No chrome box around primary action buttons. */
   position: static;
-  background: var(--bg-card);
-  padding: var(--space-2);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  border: none;
   margin: var(--space-3) 0 var(--space-2);
   z-index: auto;
 }
@@ -2597,7 +2608,7 @@ a.btn.btn-star:hover {
 .snap-row strong { display: block; font-size: 13px; }
 .snap-row small { color: var(--muted-fg); font-size: 12px; }
 
-/* Topbar + hamburger (mobile) */
+/* Topbar + hamburger (mobile) — fixed so it always stays on screen while scrolling */
 .topbar {
   display: none;
   align-items: center;
@@ -2607,8 +2618,10 @@ a.btn.btn-star:hover {
   padding: var(--safe-top) var(--space-2) 0;
   border-bottom: 1px solid var(--border);
   background: var(--bg-card);
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 55;
   width: 100%;
 }
@@ -2704,6 +2717,8 @@ a.btn.btn-star:hover {
     min-height: 100vh;
     min-height: 100dvh;
     overflow: visible;
+    /* Reserve space for fixed mobile topbar */
+    padding-top: calc(var(--topbar-h) + var(--safe-top));
   }
 
   .topbar { display: flex; }
@@ -2760,8 +2775,49 @@ a.btn.btn-star:hover {
   .page-head { margin-bottom: var(--page-title-gap); gap: var(--space-2); align-items: center; }
   /* Keep stacked heads full-width — do not inherit align-items:center above */
   .page-head.page-head--stack { align-items: stretch; }
+  /* Mobile: title + primary action → stack; action full-width under title */
   .page-head:has(> .actions),
-  .page-head:has(> .btn) { flex-wrap: nowrap; }
+  .page-head:has(> .btn),
+  .page-head:has(> .page-head-actions),
+  .page-head:has(> a.btn) {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+  .page-head > .actions,
+  .page-head > .page-head-actions,
+  .page-head > .btn,
+  .page-head > a.btn {
+    width: 100%;
+    flex: 1 1 100%;
+    margin-top: 0;
+  }
+  .page-head > .actions,
+  .page-head > .page-head-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: var(--space-1);
+    align-items: stretch;
+  }
+  .page-head > .actions > .btn,
+  .page-head > .actions > a.btn,
+  .page-head > .actions > form,
+  .page-head > .page-head-actions > .btn,
+  .page-head > .page-head-actions > a.btn,
+  .page-head > .page-head-actions > form {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .page-head > .actions > form,
+  .page-head > .page-head-actions > form {
+    display: flex;
+  }
+  .page-head > .actions > form > .btn,
+  .page-head > .page-head-actions > form > .btn,
+  .page-head > .btn,
+  .page-head > a.btn {
+    width: 100%;
+    justify-content: center;
+  }
   .pg-head {
     margin-top: 0;
     margin-bottom: 0;
@@ -2771,7 +2827,7 @@ a.btn.btn-star:hover {
   .pg-head > .section-tabs { margin-bottom: 0; padding-bottom: 0; }
   .pg-head > .page-head { margin-bottom: var(--page-title-gap); }
   .page-title { gap: var(--space-1); }
-  .page-title-ico { width: 34px; height: 34px; border-radius: 9px; }
+  .page-title-ico { width: 34px; height: 34px; border-radius: 10px; }
   .page-title-ico svg { width: 17px; height: 17px; }
   .page-head h1,
   .page-title h1 { font-size: 18px; }
@@ -2829,7 +2885,7 @@ a.btn.btn-star:hover {
     min-height: var(--btn-h);
   }
 
-  .sticky-actions { margin: var(--space-2) 0 var(--space-1); }
+  .sticky-actions { margin: var(--space-2) 0 var(--space-1); width: 100%; }
   body.nav-open { overflow: hidden; }
 
   .notify-row { flex-direction: row; }
@@ -2853,6 +2909,102 @@ a.btn.btn-star:hover {
     height: var(--btn-h);
     min-height: var(--btn-h);
     flex: 0 0 auto;
+  }
+
+  /* Primary action rows: full-width, easier tap targets.
+     Keep side-by-side buttons sharing the row; stack when next to a field/box. */
+  .sticky-actions,
+  .form-stack > .actions,
+  .settings-form > .actions,
+  .settings-form .sticky-actions,
+  .card > .actions,
+  .settings-card > .actions,
+  .edit-section > .actions,
+  .ui-modal-panel > .actions,
+  .ui-modal-panel .form-stack > .actions,
+  .update-actions {
+    width: 100%;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: var(--space-1);
+  }
+  .sticky-actions > .btn,
+  .sticky-actions > a.btn,
+  .sticky-actions > button,
+  .sticky-actions > form,
+  .form-stack > .actions > .btn,
+  .form-stack > .actions > a.btn,
+  .form-stack > .actions > button,
+  .form-stack > .actions > form,
+  .settings-form > .actions > .btn,
+  .settings-form > .actions > a.btn,
+  .settings-form > .actions > button,
+  .settings-form .sticky-actions > .btn,
+  .settings-form .sticky-actions > a.btn,
+  .settings-form .sticky-actions > button,
+  .card > .actions > .btn,
+  .card > .actions > a.btn,
+  .settings-card > .actions > .btn,
+  .edit-section > .actions > .btn,
+  .ui-modal-panel .form-stack > .actions > .btn,
+  .ui-modal-panel .form-stack > .actions > button,
+  .ui-modal-panel .form-stack > .actions > a.btn,
+  .update-actions > .btn,
+  .update-actions > a.btn,
+  .update-actions > button {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    justify-content: center;
+  }
+  .sticky-actions > form,
+  .form-stack > .actions > form,
+  .settings-form > .actions > form {
+    display: flex;
+  }
+  .sticky-actions > form > .btn,
+  .form-stack > .actions > form > .btn,
+  .settings-form > .actions > form > .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Button beside input/select/box → stack; both full width */
+  .search-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .search-bar-field,
+  .search-bar .btn,
+  .search-bar button {
+    width: 100%;
+    flex: 1 1 auto;
+    align-self: stretch;
+  }
+  .user-edit-inline-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .user-edit-inline-row > .btn,
+  .user-edit-inline-row > button,
+  .user-edit-inline-row > a.btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .user-edit-inline-row > .user-edit-grow,
+  .user-edit-inline-row > .form-field {
+    width: 100%;
+    flex: 1 1 auto;
+  }
+  .ticket-status-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ticket-status-form > .btn,
+  .ticket-status-form > button,
+  .ticket-status-form select,
+  .ticket-status-form .ui-select {
+    width: 100%;
   }
 }
 
@@ -4376,6 +4528,7 @@ html[data-theme="light"] {
   --accent-fg: var(--brand-fg);
   --accent-soft: rgba(234, 88, 12, 0.10);
   --danger: var(--destructive);
+  --table-head-bg: color-mix(in srgb, var(--muted) 72%, var(--bg-card));
 }
 html[data-theme="light"] * { scrollbar-color: #d4d4d8 transparent; }
 html[data-theme="light"] *::-webkit-scrollbar-thumb { background: #d4d4d8; }

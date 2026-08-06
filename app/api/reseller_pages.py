@@ -582,12 +582,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             return RedirectResponse(f"/resellers?err={_q('نقش نامعتبر')}", status_code=303)
 
         reason = str(form.get("reason") or "").strip()
-        # Reason only when demoting to user (revokes reseller — reason goes to Telegram)
-        if role == Role.USER.value and len(reason) < 3:
-            return RedirectResponse(
-                f"/resellers?edit={user_id}&err={_q('علت حذف نمایندگی الزامی است (حداقل ۳ کاراکتر)')}",
-                status_code=303,
-            )
+        # Reason is optional for role demotion; required only on explicit delete endpoints.
 
         if role == Role.USER.value:
             try:
@@ -651,7 +646,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             new_role=Role.RESELLER.value,
             actor=actor_label_from_staff(staff),
         )
-        return RedirectResponse(f"/resellers?ok={_q('نقش نماینده فعال شد')}", status_code=303)
+        return RedirectResponse(
+            f"/resellers?edit={int(user_id)}&ok={_q('نقش نماینده فعال شد')}",
+            status_code=303,
+        )
 
     @app.post("/resellers/{user_id}/delete-user")
     async def reseller_delete_user(

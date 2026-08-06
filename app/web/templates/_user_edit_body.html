@@ -28,11 +28,7 @@
   <form method="post" action="/users/{{ user.id }}/role" class="form-stack user-edit-role-form"
         data-confirm="نقش این کاربر تغییر کند؟"
         data-confirm-title="تأیید تغییر نقش"
-        data-confirm-reason-when="user"
-        data-confirm-reason-label="علت حذف نمایندگی (برای کاربر ارسال می‌شود)"
-        data-confirm-reason-name="reason"
         data-confirm-label="اعمال نقش">
-    <input type="hidden" name="reason" value="" />
     <div class="user-edit-inline-row">
       <label class="form-field user-edit-grow">نقش جدید
         <select name="role" class="select-block">

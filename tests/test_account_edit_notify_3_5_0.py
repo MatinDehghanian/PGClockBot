@@ -86,12 +86,15 @@ class NotifyDispatchTests(unittest.IsolatedAsyncioTestCase):
 
 
 class UiWiringTests(unittest.TestCase):
-    def test_users_forms_collect_reason(self):
+    def test_users_forms_collect_reason_on_delete_only(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn('data-confirm-reason="1"', users)
-        self.assertIn('name="reason"', users)
         self.assertIn("/users/{{ u.id }}/block", users)
         self.assertIn("/users/{{ u.id }}/delete", users)
+        delete_block = users.split('action="/users/{{ u.id }}/delete"', 1)[1].split("</form>", 1)[0]
+        self.assertIn('data-confirm-reason="1"', delete_block)
+        self.assertIn('name="reason"', delete_block)
+        block_form = users.split('action="/users/{{ u.id }}/block"', 1)[1].split("</form>", 1)[0]
+        self.assertNotIn("data-confirm-reason", block_form)
         # Role is edited in modal body, not list
         self.assertNotIn("/users/{{ u.id }}/role", users)
 

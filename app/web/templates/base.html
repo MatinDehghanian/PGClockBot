@@ -262,8 +262,10 @@
 
     <main class="main">
       <div class="main-body">
-        {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
-        {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+        {# Page flashes stay above the title. When an edit modal is reopening,
+           the same message is shown inside the modal instead. #}
+        {% if flash_ok and not open_edit %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+        {% if flash_err and not open_edit %}<div class="flash err">{{ flash_err }}</div>{% endif %}
         {% block content %}{% endblock %}
       </div>
       <footer class="site-footer">
