@@ -64,12 +64,15 @@ class PendingOrderCleanupTests(unittest.TestCase):
 
 
 class RoleAndReasonUiTests(unittest.TestCase):
-    def test_users_list_no_role_form_and_no_reason(self):
+    def test_users_list_no_role_form_delete_has_reason(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
         self.assertNotIn("/users/{{ u.id }}/role", users)
         self.assertIn("/users/{{ u.id }}/block", users)
         self.assertIn("/users/{{ u.id }}/delete", users)
-        self.assertNotIn("data-confirm-reason", users)
+        delete = users.split("/users/{{ u.id }}/delete", 1)[1].split("</form>", 1)[0]
+        self.assertIn("data-confirm-reason", delete)
+        block = users.split("/users/{{ u.id }}/block", 1)[1].split("</form>", 1)[0]
+        self.assertNotIn("data-confirm-reason", block)
         self.assertIn('data-modal-open="modal-user-edit"', users)
         # Flash rendered once in base.html (above title), not under page-head
         self.assertNotIn("{% if flash_ok %}<div class=\"flash ok\">{{ flash_ok }}</div>{% endif %}", users)
@@ -78,7 +81,8 @@ class RoleAndReasonUiTests(unittest.TestCase):
         resellers = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
         self.assertNotIn("/resellers/{{ u.id }}/role", resellers)
         self.assertIn('data-modal-open="modal-reseller-edit"', resellers)
-        self.assertNotIn("data-confirm-reason", resellers)
+        # Delete actions keep reason; role is only in edit modal
+        self.assertIn("data-confirm-reason", resellers)
 
     def test_role_lives_in_edit_bodies_without_reason(self):
         user_body = (ROOT / "app/web/templates/_user_edit_body.html").read_text(
@@ -90,7 +94,11 @@ class RoleAndReasonUiTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("/resellers/{{ user.id }}/role", reseller_body)
-        self.assertNotIn("data-confirm-reason", reseller_body)
+        role = reseller_body.split("/resellers/{{ user.id }}/role", 1)[1].split(
+            "</form>", 1
+        )[0]
+        self.assertNotIn("data-confirm-reason", role)
+        self.assertIn("data-confirm-reason", reseller_body)
 
     def test_renew_plan_only_no_manual_days(self):
         body = (ROOT / "app/web/templates/_user_edit_body.html").read_text(
@@ -138,7 +146,9 @@ class DualNotifyTests(unittest.IsolatedAsyncioTestCase):
 class UiSelectFixedMenuTests(unittest.TestCase):
     def test_fixed_position_escape_overflow(self):
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
-        self.assertIn("menu.style.position = 'fixed'", js)
+        # Menu is ported to body with fixed viewport coords (setProperty / set helper)
+        self.assertIn("set('position', 'fixed')", js)
+        self.assertIn("is-fixed-pos", js)
         self.assertIn("window.enhanceAllSelects", js)
         self.assertIn("window.openModal", js)
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")

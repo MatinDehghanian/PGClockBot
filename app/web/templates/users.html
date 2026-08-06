@@ -61,7 +61,11 @@
                   data-confirm="{% if u.wallet_balance and u.wallet_balance > 0 %}هشدار: موجودی کیف پول این کاربر {{ u.wallet_balance | num }} تومان است و با حذف از بین می‌رود. {% endif %}کاربر و تمام سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است."
                   data-confirm-title="تأیید حذف کاربر"
                   data-confirm-danger="1"
+                  data-confirm-reason="1"
+                  data-confirm-reason-label="علت حذف"
+                  data-confirm-reason-name="reason"
                   data-confirm-label="حذف کاربر">
+              <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف</button>
             </form>
             {% endif %}

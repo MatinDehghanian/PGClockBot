@@ -291,6 +291,10 @@
       </div>
       <form id="confirm-form" class="form-stack" action="#" method="post">
         <p id="confirm-message" class="confirm-message" style="margin:0;line-height:1.6"></p>
+        <label class="form-field" id="confirm-reason-wrap" hidden>
+          <span id="confirm-reason-label">علت</span>
+          <textarea id="confirm-reason" name="confirm_reason" rows="3" minlength="3" placeholder="حداقل ۳ کاراکتر"></textarea>
+        </label>
         <div class="actions">
           <button type="submit" class="btn btn-danger" id="confirm-submit">تأیید</button>
           <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>

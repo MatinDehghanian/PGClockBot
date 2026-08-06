@@ -1,4 +1,4 @@
-"""4.4.1 — pill controls, no reason box, title actions, services redesign."""
+"""4.4.2 — pill controls, delete reason box, moderate menu radius, services list."""
 
 from __future__ import annotations
 
@@ -11,18 +11,24 @@ BASE = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
 USERS = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
 RESELLERS = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
 USER_BODY = (ROOT / "app/web/templates/_user_edit_body.html").read_text(encoding="utf-8")
+RESELLER_BODY = (ROOT / "app/web/templates/_reseller_edit_body.html").read_text(
+    encoding="utf-8"
+)
 SETTINGS = (ROOT / "app/web/templates/settings.html").read_text(encoding="utf-8")
 SHOP = (ROOT / "app/web/templates/shop_settings.html").read_text(encoding="utf-8")
 SECURITY = (ROOT / "app/web/templates/security.html").read_text(encoding="utf-8")
 JS = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
+API = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+RESELLER_API = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
 
 
 class RadiusTokensTests(unittest.TestCase):
-    def test_control_radius_pill(self):
+    def test_control_radius_pill_menus_moderate(self):
         root = CSS.split(":root {", 1)[1].split("}", 1)[0]
         self.assertIn("--radius: 12px;", root)
         self.assertIn("--control-radius: 999px;", root)
-        self.assertIn("--menu-item-radius: 8px;", root)
+        self.assertIn("--menu-radius: 10px;", root)
+        self.assertIn("--menu-item-radius: 7px;", root)
 
     def test_buttons_fields_tabs_use_control_radius(self):
         btn = CSS.split(".btn, a.btn, .btn-sm, a.btn-sm {", 1)[1].split("}", 1)[0]
@@ -39,47 +45,84 @@ class RadiusTokensTests(unittest.TestCase):
         logo = CSS.split(".brand-logo {", 1)[1].split("}", 1)[0]
         self.assertIn("border-radius: var(--radius);", logo)
 
-    def test_dropdown_box_pill_items_keep_menu_item_radius(self):
+    def test_dropdown_panels_use_menu_radius_not_pill(self):
         box = CSS.split(".ui-select-menu {", 1)[1].split("}", 1)[0]
-        self.assertIn("border-radius: var(--control-radius);", box)
+        self.assertIn("border-radius: var(--menu-radius);", box)
+        self.assertNotIn("control-radius", box)
         item = CSS.split(".ui-select-menu button {", 1)[1].split("}", 1)[0]
         self.assertIn("border-radius: var(--menu-item-radius);", item)
         theme = CSS.split(".side-theme-menu {", 1)[1].split("}", 1)[0]
-        self.assertIn("border-radius: var(--control-radius);", theme)
+        self.assertIn("border-radius: var(--menu-radius);", theme)
+        self.assertNotIn("control-radius", theme)
         theme_btn = CSS.split(".side-theme-menu button {", 1)[1].split("}", 1)[0]
         self.assertIn("border-radius: var(--menu-item-radius);", theme_btn)
+        ported = CSS.split(".row-actions-menu.is-ported {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: var(--menu-radius);", ported)
+        self.assertNotIn("control-radius", ported)
 
 
 class TitleActionsAlignTests(unittest.TestCase):
     def test_mobile_page_head_keeps_actions_inline(self):
         mobile = CSS.split("@media (max-width: 900px) {", 1)[1]
-        # Title actions stay on the same row (not full-width under title)
         self.assertIn("Title actions stay on the same row", mobile)
-        head_rules = mobile.split(".page-head:has(> .actions),", 1)[1].split(".pg-head {", 1)[0]
+        head_rules = mobile.split(".page-head:has(> .actions),", 1)[1].split(
+            ".pg-head {", 1
+        )[0]
         self.assertIn("flex-wrap: nowrap;", head_rules)
         self.assertIn("width: auto;", head_rules)
         self.assertNotIn("flex: 1 1 100%;", head_rules)
 
 
-class NoReasonBoxTests(unittest.TestCase):
-    def test_reason_removed_everywhere_in_web(self):
-        self.assertNotIn("confirm-reason", BASE)
-        self.assertNotIn("data-confirm-reason", USERS)
-        self.assertNotIn("data-confirm-reason", RESELLERS)
+class DeleteReasonBoxTests(unittest.TestCase):
+    def test_confirm_reason_ui_present(self):
+        self.assertIn('id="confirm-reason-wrap"', BASE)
+        self.assertIn('id="confirm-reason"', BASE)
+        self.assertIn("confirm-reason-wrap", JS)
+        self.assertIn("data-confirm-reason", JS)
+
+    def test_delete_forms_require_reason(self):
+        self.assertIn("data-confirm-reason", USERS)
+        self.assertIn("/users/{{ u.id }}/delete", USERS)
+        self.assertIn("data-confirm-reason", RESELLERS)
+        self.assertIn("/resellers/{{ u.id }}/delete", RESELLERS)
+        self.assertIn("data-confirm-reason", RESELLER_BODY)
+        # Role / block forms must not force reason box
         self.assertNotIn("data-confirm-reason", USER_BODY)
-        self.assertNotIn("data-confirm-reason", JS)
-        self.assertNotIn("confirm-reason-wrap", JS)
+        block = USERS.split("/users/{{ u.id }}/block", 1)[1].split("</form>", 1)[0]
+        self.assertNotIn("data-confirm-reason", block)
+
+    def test_backend_enforces_delete_reason_min_length(self):
+        self.assertIn("علت حذف کاربر الزامی است (حداقل ۳ کاراکتر)", API)
+        self.assertIn("علت حذف نمایندگی الزامی است (حداقل ۳ کاراکتر)", RESELLER_API)
+        self.assertIn("علت حذف کاربر الزامی است", RESELLER_API)
 
 
 class ServicesRedesignTests(unittest.TestCase):
-    def test_user_edit_services_use_new_layout(self):
+    def test_user_edit_services_minimal_list(self):
         self.assertIn("svc-list", USER_BODY)
         self.assertIn("svc-item", USER_BODY)
-        self.assertIn("svc-stats", USER_BODY)
-        self.assertIn("svc-op-row", USER_BODY)
+        self.assertIn("svc-item-meta", USER_BODY)
+        self.assertIn("user-edit-inline-row", USER_BODY)
         self.assertNotIn("svc-card-list", USER_BODY)
+        self.assertNotIn("svc-stats", USER_BODY)
+        self.assertNotIn("svc-op-row", USER_BODY)
         self.assertIn(".svc-list {", CSS)
-        self.assertIn(".svc-stat {", CSS)
+        self.assertIn(".svc-item-meta {", CSS)
+
+
+class ResellersPlanColumnTests(unittest.TestCase):
+    def test_plan_type_and_status_columns(self):
+        self.assertIn("<th>نوع پلن</th>", RESELLERS)
+        self.assertIn("<th>وضعیت</th>", RESELLERS)
+        self.assertIn("badge info", RESELLERS)
+        self.assertIn("PAYG", RESELLERS)
+        self.assertIn("badge fixed", RESELLERS)
+        # Name cell should not stack plan/status badges anymore
+        name_cell = RESELLERS.split("{% for u, p in rows %}", 1)[1].split(
+            "<td class=\"mono col-hide-sm\">{{ u.telegram_id }}</td>", 1
+        )[0]
+        self.assertNotIn("badge info", name_cell)
+        self.assertNotIn("badge approved", name_cell)
 
 
 class FlashSingleRenderTests(unittest.TestCase):
@@ -88,7 +131,10 @@ class FlashSingleRenderTests(unittest.TestCase):
         self.assertIn("flash_err and not open_edit", BASE)
 
     def test_users_no_duplicate_flash(self):
-        self.assertNotIn('{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}', USERS)
+        self.assertNotIn(
+            '{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}',
+            USERS,
+        )
 
     def test_settings_shop_security_no_below_title_flash(self):
         self.assertNotIn("{% if saved %}", SETTINGS)
@@ -97,15 +143,17 @@ class FlashSingleRenderTests(unittest.TestCase):
 
 
 class VersionBumpTests(unittest.TestCase):
-    def test_version_at_least_4_4_1(self):
+    def test_version_at_least_4_4_2(self):
         from app.version import __version__
 
         self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")), (4, 4, 1)
+            tuple(int(x) for x in __version__.split(".")), (4, 4, 2)
         )
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.1")
+        self.assertEqual(
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.4.2"
+        )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"4.4.1"', notes)
+        self.assertIn('"4.4.2"', notes)
 
 
 if __name__ == "__main__":

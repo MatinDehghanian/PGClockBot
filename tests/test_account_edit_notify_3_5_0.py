@@ -86,11 +86,14 @@ class NotifyDispatchTests(unittest.IsolatedAsyncioTestCase):
 
 
 class UiWiringTests(unittest.TestCase):
-    def test_users_forms_have_no_reason_box(self):
+    def test_users_delete_has_reason_block_does_not(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
         self.assertIn("/users/{{ u.id }}/block", users)
         self.assertIn("/users/{{ u.id }}/delete", users)
-        self.assertNotIn("data-confirm-reason", users)
+        delete = users.split("/users/{{ u.id }}/delete", 1)[1].split("</form>", 1)[0]
+        self.assertIn("data-confirm-reason", delete)
+        block = users.split("/users/{{ u.id }}/block", 1)[1].split("</form>", 1)[0]
+        self.assertNotIn("data-confirm-reason", block)
         # Role is edited in modal body, not list
         self.assertNotIn("/users/{{ u.id }}/role", users)
 

@@ -83,12 +83,14 @@
         <th>کاربر</th>
         <th class="col-hide-sm">تلگرام</th>
         <th class="col-hide-sm">نقش</th>
+        <th>نوع پلن</th>
+        <th>وضعیت</th>
         <th class="reseller-quota-th">کاربران</th>
         <th class="reseller-quota-th">حجم</th>
         <th class="col-hide-sm">کمیسیون</th>
         <th class="col-hide-sm">وب</th>
         <th class="col-hide-sm">ربات</th>
-        <th>راه‌اندازی</th>
+        <th class="col-hide-sm">راه‌اندازی</th>
         <th class="col-actions"></th>
       </tr>
     </thead>
@@ -96,23 +98,28 @@
     {% for u, p in rows %}
       {% set usage = (reseller_usage or {}).get(u.id) or {} %}
       <tr>
-        <td>{{ u.full_name or u.username or '—' }}
-          {% if (p.billing_mode or 'fixed') == 'payg' %}
-          <br><span class="badge pending">PAYG</span>
-          {% endif %}
-          {% if p.billing_suspended_at %}
-          <br><span class="badge rejected">مسدود</span>
-          {% elif p.is_active %}
-          <br><span class="badge approved">فعال</span>
-          {% else %}
-          <br><span class="badge warn">غیرفعال</span>
-          {% endif %}
-        </td>
+        <td>{{ u.full_name or u.username or '—' }}</td>
         <td class="mono col-hide-sm">{{ u.telegram_id }}</td>
         <td class="col-hide-sm">
           <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
             {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
           </span>
+        </td>
+        <td>
+          {% if (p.billing_mode or 'fixed') == 'payg' %}
+          <span class="badge info">PAYG</span>
+          {% else %}
+          <span class="badge fixed">ثابت</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if p.billing_suspended_at %}
+          <span class="badge rejected">مسدود</span>
+          {% elif p.is_active %}
+          <span class="badge approved">فعال</span>
+          {% else %}
+          <span class="badge warn">غیرفعال</span>
+          {% endif %}
         </td>
         <td class="mono reseller-quota-cell" dir="ltr" title="مصرف / سقف کاربران">
           <span class="reseller-quota-line">{{ usage.get('users_text') or '—' }}</span>
@@ -128,7 +135,7 @@
         <td class="mono col-hide-sm">{% if (p.billing_mode or 'fixed') == 'payg' %}—{% else %}{{ p.commission_percent }}%{% endif %}</td>
         <td class="mono col-hide-sm">{{ p.web_username or '—' }}</td>
         <td class="mono col-hide-sm">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
-        <td>{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.web_username %}<span class="badge pending">بدون ربات</span>{% else %}—{% endif %}</td>
+        <td class="col-hide-sm">{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.web_username %}<span class="badge pending">بدون ربات</span>{% else %}—{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
             <button type="button" class="btn btn-ghost btn-sm"
@@ -136,24 +143,32 @@
                     data-edit-url="/resellers/{{ u.id }}/edit?fragment=1"
                     data-edit-title="ویرایش نماینده #{{ u.id }}">ویرایش</button>
             <form method="post" action="/resellers/{{ u.id }}/delete"
-                  data-confirm="نمایندگی حذف شود؟ ادمین پاسارگارد متصل هم حذف می‌شود. حساب بات، سفارش‌ها و کیف پول کاربر باقی می‌ماند مگر «حذف کاربر» را بزنید."
+                  data-confirm="نمایندگی حذف شود؟ ادمین پاسارگارد متصل هم حذف می‌شود و علت برای کاربر ارسال می‌گردد. حساب بات، سفارش‌ها و کیف پول کاربر باقی می‌ماند مگر «حذف کاربر» را بزنید."
                   data-confirm-title="حذف نمایندگی (+ ادمین پاسارگارد)"
                   data-confirm-danger="1"
+                  data-confirm-reason="1"
+                  data-confirm-reason-label="علت حذف نمایندگی"
+                  data-confirm-reason-name="reason"
                   data-confirm-label="حذف نمایندگی و ادمین">
+              <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف نمایندگی</button>
             </form>
             <form method="post" action="/resellers/{{ u.id }}/delete-user"
                   data-confirm="{% if u.wallet_balance and u.wallet_balance > 0 %}هشدار: موجودی کیف پول {{ u.wallet_balance | num }} تومان از بین می‌رود. {% endif %}کاربر، نمایندگی، ادمین پاسارگارد، تمام سفارش‌ها، سرویس‌ها و پرداخت‌ها کامل حذف شوند؟ برگشت‌ناپذیر است."
                   data-confirm-title="حذف کامل (+ ادمین پاسارگارد)"
                   data-confirm-danger="1"
+                  data-confirm-reason="1"
+                  data-confirm-reason-label="علت حذف کامل کاربر"
+                  data-confirm-reason-name="reason"
                   data-confirm-label="حذف کامل">
+              <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف کاربر</button>
             </form>
           {% endcall %}
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="10" class="muted">نماینده‌ای نیست</td></tr>
+      <tr><td colspan="12" class="muted">نماینده‌ای نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>

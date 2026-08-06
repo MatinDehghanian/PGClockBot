@@ -29,7 +29,8 @@
   --brand-fg: #fb923c;
   --radius: 12px;
   --control-radius: 999px;
-  --menu-item-radius: 8px;
+  --menu-radius: 10px;
+  --menu-item-radius: 7px;
   --side-w: 248px;
   --topbar-h: 52px;
   --btn-h: 36px;
@@ -836,7 +837,7 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
   overflow-x: hidden;
   overflow-y: auto;
   padding: var(--space-1);
-  border-radius: var(--control-radius);
+  border-radius: var(--menu-radius);
   border: 1px solid var(--border);
   background: var(--bg-elevated, var(--bg-card));
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
@@ -3672,10 +3673,17 @@ body.modal-open { overflow: hidden; }
 .user-edit-empty {
   margin: 0;
 }
+/* Services — same rhythm as wallet-tx list: one bordered stack, light rows */
 .svc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
   min-width: 0;
 }
 .svc-item {
@@ -3683,97 +3691,75 @@ body.modal-open { overflow: hidden; }
   flex-direction: column;
   gap: var(--space-2);
   min-width: 0;
-  padding: var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--control-bg) 70%, transparent);
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
 }
-.svc-item-head {
+.svc-item:last-child { border-bottom: 0; }
+.svc-item-main {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-1);
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
 }
 .svc-item-title {
   display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
   min-width: 0;
 }
 .svc-item-title strong {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 0.95rem;
+  font-weight: 650;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
-.svc-item-title .mono {
+.svc-item-id {
+  margin: 0;
   font-size: 12px;
+  line-height: 1.4;
 }
 .svc-item-err {
   margin: 0;
   font-size: 12px;
 }
-.svc-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-1);
-}
-.svc-stat {
+.svc-item-meta {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
   display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  min-width: 0;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--control-radius);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  text-align: right;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.35rem;
 }
-.svc-stat span {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--muted-fg);
-  line-height: 1.3;
-}
-.svc-stat strong {
-  font-size: 13px;
+.svc-item-meta b {
   font-weight: 600;
-  line-height: 1.35;
   color: var(--foreground);
-  overflow-wrap: anywhere;
+}
+.svc-meta-sep {
+  opacity: 0.55;
 }
 .svc-item-links {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
+  margin-top: 0.15rem;
 }
 .svc-item-ops {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
   padding-top: var(--space-1);
   border-top: 1px solid var(--border);
   min-width: 0;
 }
-.svc-op-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+.svc-item-ops .form-stack {
   gap: var(--space-1);
   margin: 0;
-  min-width: 0;
 }
-.svc-op-grow {
-  flex: 1 1 12rem;
-  min-width: 0;
-}
-.svc-op-row > .btn {
-  flex: 0 0 auto;
-  align-self: flex-end;
-}
-.svc-op-extend > .form-field {
-  flex: 1 1 5.5rem;
-  min-width: 0;
+.svc-item-ops .user-edit-actions {
+  margin-top: 0;
 }
 .num-ratio {
   display: inline-block;
@@ -3783,12 +3769,6 @@ body.modal-open { overflow: hidden; }
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.svc-stat strong.num-ratio {
-  width: 100%;
-}
-/* Legacy aliases kept harmless if any remnant markup appears */
-.svc-card-list { display: flex; flex-direction: column; gap: var(--space-2); }
-.svc-card { display: none; }
 .payg-meta {
   list-style: none;
   margin: 0 0 var(--space-2);
@@ -3826,19 +3806,6 @@ body.modal-open { overflow: hidden; }
   font-size: 12px;
   line-height: 1.45;
   text-align: right;
-}
-@media (max-width: 560px) {
-  .svc-stats {
-    grid-template-columns: 1fr;
-  }
-  .svc-op-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .svc-op-row > .btn {
-    width: 100%;
-    justify-content: center;
-  }
 }
 .wallet-tx-list {
   list-style: none;
@@ -4206,7 +4173,7 @@ body.modal-open { overflow: hidden; }
     align-items: stretch;
     gap: var(--space-1);
     padding: var(--space-1);
-    border-radius: var(--control-radius);
+    border-radius: var(--menu-radius);
     border: 1px solid var(--border);
     background: var(--bg-elevated, var(--bg-card));
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
@@ -4249,7 +4216,7 @@ body.modal-open { overflow: hidden; }
   align-items: stretch;
   gap: var(--space-1);
   padding: var(--space-1);
-  border-radius: var(--control-radius);
+  border-radius: var(--menu-radius);
   border: 1px solid var(--border);
   background: var(--bg-elevated, var(--bg-card));
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
@@ -4296,7 +4263,7 @@ body.modal-open { overflow: hidden; }
   max-height: none !important;
   height: auto !important;
   overflow: visible !important;
-  border-radius: var(--control-radius);
+  border-radius: var(--menu-radius);
   border: 1px solid var(--border);
   background: var(--bg-elevated, var(--bg-card));
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
@@ -4475,7 +4442,7 @@ body.modal-open { overflow: hidden; }
   flex-direction: column;
   gap: 0;
   padding: var(--space-1);
-  border-radius: var(--control-radius);
+  border-radius: var(--menu-radius);
   border: 1px solid var(--border);
   background: var(--bg-card);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);

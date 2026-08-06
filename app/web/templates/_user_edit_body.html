@@ -73,76 +73,70 @@
   {% if not services %}
   <p class="muted user-edit-empty">سرویسی برای این کاربر ثبت نشده است.</p>
   {% else %}
-  <div class="svc-list">
+  <ul class="svc-list">
     {% for s in services %}
-    <article class="svc-item">
-      <div class="svc-item-head">
+    <li class="svc-item">
+      <div class="svc-item-main">
         <div class="svc-item-title">
           <strong>{{ s.service.plan.name if s.service.plan else (s.service.pg_username or 'سرویس') }}</strong>
-          <span class="muted mono">
-            #{{ s.service.id }}{% if s.service.pg_username %} · {{ s.service.pg_username }}{% endif %}
-          </span>
+          <span class="badge {% if 'فعال' in (s.status_fa or '') %}active{% else %}neutral{% endif %}">{{ s.status_fa }}</span>
         </div>
-        <span class="badge {% if 'فعال' in (s.status_fa or '') %}active{% else %}neutral{% endif %}">{{ s.status_fa }}</span>
+        <p class="muted mono svc-item-id">
+          #{{ s.service.id }}{% if s.service.pg_username %} · {{ s.service.pg_username }}{% endif %}
+        </p>
+        {% if s.error %}<p class="muted svc-item-err">{{ s.error }}</p>{% endif %}
+        <p class="svc-item-meta muted">
+          <span>حجم <b class="num-ratio" dir="ltr">{{ s.volume_text }}</b></span>
+          <span class="svc-meta-sep">·</span>
+          <span>مانده <b class="num-ratio" dir="ltr">{{ s.remain_gb_text }}</b></span>
+          <span class="svc-meta-sep">·</span>
+          <span>انقضا <b>{{ s.expire_text }}{% if s.days_left is not none %} ({{ s.days_left }} روز){% endif %}</b></span>
+        </p>
+        {% if s.subscription_url %}
+        <div class="svc-item-links">
+          <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ s.subscription_url }}">کپی لینک</button>
+          <a class="btn btn-sm btn-ghost" href="{{ s.subscription_url }}" target="_blank" rel="noopener">باز کردن</a>
+        </div>
+        {% endif %}
       </div>
-      {% if s.error %}<p class="muted svc-item-err">{{ s.error }}</p>{% endif %}
-      <div class="svc-stats" role="list">
-        <div class="svc-stat" role="listitem">
-          <span>حجم</span>
-          <strong class="num-ratio">{{ s.volume_text }}</strong>
-        </div>
-        <div class="svc-stat" role="listitem">
-          <span>مانده</span>
-          <strong class="num-ratio">{{ s.remain_gb_text }}</strong>
-        </div>
-        <div class="svc-stat" role="listitem">
-          <span>انقضا</span>
-          <strong>
-            {{ s.expire_text }}{% if s.days_left is not none %}<span class="muted"> · {{ s.days_left }}ر</span>{% endif %}
-          </strong>
-        </div>
-      </div>
-      {% if s.subscription_url %}
-      <div class="svc-item-links">
-        <button type="button" class="btn btn-sm btn-ghost"
-                data-copy="{{ s.subscription_url }}">کپی لینک</button>
-        <a class="btn btn-sm btn-ghost" href="{{ s.subscription_url }}" target="_blank" rel="noopener">باز کردن</a>
-      </div>
-      {% endif %}
       <div class="svc-item-ops">
-        <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/renew"
-              class="svc-op-row"
+        <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/renew" class="form-stack"
               data-confirm="سرویس با پلن انتخابی تمدید شود؟ مصرف ریست می‌شود."
               data-confirm-title="تمدید با پلن"
               data-confirm-label="تمدید">
-          <label class="form-field svc-op-grow">پلن تمدید
-            <select name="plan_id" required class="select-block">
-              {% for p in plans %}
-              <option value="{{ p.id }}" {% if s.service.plan_id == p.id %}selected{% endif %}>
-                {{ p.name }} · {{ p.duration_days or '∞' }}روز · {% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}
-              </option>
-              {% endfor %}
-            </select>
-          </label>
-          <button class="btn btn-sm" type="submit">تمدید</button>
+          <div class="user-edit-inline-row">
+            <label class="form-field user-edit-grow">تمدید با پلن
+              <select name="plan_id" required class="select-block">
+                {% for p in plans %}
+                <option value="{{ p.id }}" {% if s.service.plan_id == p.id %}selected{% endif %}>
+                  {{ p.name }} · {{ p.duration_days or '∞' }}روز · {% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}
+                </option>
+                {% endfor %}
+              </select>
+            </label>
+            <button class="btn btn-sm" type="submit">تمدید</button>
+          </div>
         </form>
-        <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/extend"
-              class="svc-op-row svc-op-extend"
+        <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/extend" class="form-stack"
               data-confirm="روز/حجم به سرویس فعلی اضافه شود؟"
               data-confirm-title="افزایش مانده سرویس"
               data-confirm-label="افزایش">
-          <label class="form-field">+ روز
-            <input name="extra_days" type="number" min="0" max="3650" value="0" inputmode="numeric" />
-          </label>
-          <label class="form-field">+ گیگ
-            <input name="extra_gb" type="number" min="0" step="0.1" value="0" inputmode="decimal" />
-          </label>
-          <button class="btn btn-sm btn-ghost" type="submit">افزایش</button>
+          <div class="user-edit-fields user-edit-fields--2">
+            <label class="form-field">+ روز
+              <input name="extra_days" type="number" min="0" max="3650" value="0" inputmode="numeric" />
+            </label>
+            <label class="form-field">+ گیگ
+              <input name="extra_gb" type="number" min="0" step="0.1" value="0" inputmode="decimal" />
+            </label>
+          </div>
+          <div class="actions user-edit-actions">
+            <button class="btn btn-sm btn-ghost" type="submit">افزایش مانده</button>
+          </div>
         </form>
       </div>
-    </article>
+    </li>
     {% endfor %}
-  </div>
+  </ul>
   {% endif %}
 </section>
 

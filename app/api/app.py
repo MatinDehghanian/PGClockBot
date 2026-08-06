@@ -2639,6 +2639,8 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         form = await request.form()
         reason = str(form.get("reason") or "").strip()
+        if len(reason) < 3:
+            return _redirect_msg("/users", err="علت حذف کاربر الزامی است (حداقل ۳ کاراکتر)")
 
         actor_id = None
         try:
