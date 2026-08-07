@@ -114,27 +114,37 @@
     }
     function refreshForceKebab(){
       /* Prefer «عملیات» whenever multiple action controls share a cell —
-         prevents buttons stacking/overlapping (e.g. نقش + ویرایش + حذف). */
+         prevents buttons stacking/overlapping (e.g. نقش + ویرایش + حذف).
+         Default CSS is kebab-stable; only opt into .allow-inline-actions when
+         a single short action fits — avoids FOUC / row-height jumps. */
       document.querySelectorAll('.table-wrap').forEach(el => {
-        el.classList.remove('force-kebab');
-        let need = el.scrollWidth > el.clientWidth + 2;
+        let need = false;
+        el.querySelectorAll('.row-actions-menu').forEach(menu => {
+          if (need) return;
+          const items = [...menu.children].filter((n) => n.nodeType === 1);
+          if (items.length > 1) {
+            need = true;
+            return;
+          }
+          if (menu.querySelector('select, .ui-select')) {
+            need = true;
+          }
+        });
         if (!need) {
-          el.querySelectorAll('.row-actions-menu').forEach(menu => {
-            if (need) return;
-            const items = [...menu.children].filter((n) => n.nodeType === 1);
-            if (items.length > 1) {
-              need = true;
-              return;
-            }
-            if (menu.querySelector('select, .ui-select')) {
-              need = true;
-              return;
-            }
-            if (menu.scrollWidth > menu.clientWidth + 2) need = true;
-            else if (menu.offsetHeight > 44) need = true;
-          });
+          /* Probe inline without leaving a permanent layout thrash when kebab is required */
+          el.classList.add('allow-inline-actions');
+          el.classList.remove('force-kebab');
+          need = el.scrollWidth > el.clientWidth + 2;
+          if (!need) {
+            el.querySelectorAll('.row-actions-menu').forEach(menu => {
+              if (need) return;
+              if (menu.scrollWidth > menu.clientWidth + 2) need = true;
+              else if (menu.offsetHeight > 44) need = true;
+            });
+          }
         }
         el.classList.toggle('force-kebab', need);
+        el.classList.toggle('allow-inline-actions', !need);
       });
     }
     function refreshHScrollMarks(){
@@ -1192,6 +1202,69 @@
             form.submit();
           }
         });
+      }, true);
+    })();
+
+    /* Normalize Persian/Arabic digits in numeric fields before submit / blur */
+    (function(){
+      const FA = {'۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9'};
+      const AR = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'};
+      function normalizeNumberText(raw){
+        let s = String(raw == null ? '' : raw);
+        s = s.replace(/[۰-۹]/g, (ch) => FA[ch] || ch)
+             .replace(/[٠-٩]/g, (ch) => AR[ch] || ch)
+             .replace(/[٬,\u00a0\s]/g, '')
+             .replace(/[٫،]/g, '.');
+        if ((s.match(/\./g) || []).length > 1) {
+          const parts = s.split('.');
+          s = parts.slice(0, -1).join('') + '.' + parts[parts.length - 1];
+        }
+        return s;
+      }
+      function isNumericField(el){
+        if (!(el instanceof HTMLInputElement)) return false;
+        if (el.disabled || el.readOnly) return false;
+        if (el.dataset.normalizeDigits === '0') return false;
+        const type = (el.getAttribute('type') || 'text').toLowerCase();
+        if (type === 'number' || type === 'tel' || el.dataset.wasNumber === '1') return true;
+        const mode = (el.getAttribute('inputmode') || '').toLowerCase();
+        if (mode === 'numeric' || mode === 'decimal') return true;
+        if (el.dataset.normalizeDigits === '1') return true;
+        return false;
+      }
+      function unlockNumberInputs(root){
+        (root || document).querySelectorAll('input[type="number"]').forEach((el) => {
+          /* Browsers reject Persian/Arabic digits in type=number — use text + inputmode */
+          const step = el.getAttribute('step') || '';
+          const mode = (step && step !== '1' && step !== 'any') ? 'decimal' : 'numeric';
+          if (!el.getAttribute('inputmode')) el.setAttribute('inputmode', mode);
+          el.dataset.wasNumber = '1';
+          el.dataset.normalizeDigits = '1';
+          el.type = 'text';
+          el.setAttribute('dir', el.getAttribute('dir') || 'ltr');
+          el.setAttribute('autocomplete', el.getAttribute('autocomplete') || 'off');
+        });
+      }
+      function applyNormalize(el){
+        if (!isNumericField(el)) return;
+        const next = normalizeNumberText(el.value);
+        if (next !== el.value) el.value = next;
+      }
+      window.normalizePanelNumberText = normalizeNumberText;
+      unlockNumberInputs(document);
+      document.addEventListener('panel:dom-ready', (e) => {
+        unlockNumberInputs((e.detail && e.detail.root) || document);
+      });
+      document.addEventListener('blur', (e) => {
+        applyNormalize(e.target);
+      }, true);
+      document.addEventListener('change', (e) => {
+        applyNormalize(e.target);
+      }, true);
+      document.addEventListener('submit', (e) => {
+        const form = e.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        form.querySelectorAll('input').forEach(applyNormalize);
       }, true);
     })();
   })();

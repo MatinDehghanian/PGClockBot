@@ -31,14 +31,14 @@ class FormatGigLabelTests(unittest.TestCase):
 
     def test_bytes_ratio_single_unit(self):
         text = format_bytes_ratio(10 * GB, 100 * GB)
-        self.assertEqual(text, "10/100 گیگ")
+        self.assertEqual(text, "10 / 100 گیگ")
         self.assertNotIn("گیگ /", text)
         self.assertEqual(text.count("گیگ"), 1)
 
     def test_bytes_ratio_meg(self):
         text = format_bytes_ratio(256 * MB, 512 * MB)
         self.assertIn("مگ", text)
-        self.assertRegex(text, r"256/512 مگ")
+        self.assertRegex(text, r"256 / 512 مگ")
 
     def test_count_ratio(self):
         self.assertEqual(format_count_ratio(10, 100), "10/100")

@@ -1180,6 +1180,12 @@ label.form-field > .ui-select,
   opacity: 0;
   cursor: pointer;
   min-height: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none;
 }
 .ui-switch-track {
   position: absolute;
@@ -1248,9 +1254,18 @@ label.form-field > .ui-select,
 }
 .ui-switch-row:hover,
 .toggle-row:hover,
-.notify-row:hover {
-  background: #101014;
-  border-color: #3f3f46;
+.notify-row:hover,
+.ui-switch-row:focus-within,
+.toggle-row:focus-within,
+.notify-row:focus-within {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  border-color: var(--border);
+}
+.ui-switch-row:active,
+.toggle-row:active,
+.notify-row:active {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  border-color: var(--border);
 }
 .ui-switch-copy,
 .notify-meta {
@@ -1336,9 +1351,14 @@ label.form-field > .ui-select,
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
-.ui-switch-chip:hover {
-  background: #101014;
-  border-color: #3f3f46;
+.ui-switch-chip:hover,
+.ui-switch-chip:focus-within {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  border-color: var(--border);
+}
+.ui-switch-chip:active {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  border-color: var(--border);
 }
 .ui-switch-chip .ui-switch-copy strong {
   font-size: 12.5px;
@@ -1387,13 +1407,15 @@ label.form-field > .ui-select,
   cursor: not-allowed;
 }
 /* Secondary / shortcuts — سفید خنثی */
-.btn-ghost {
+.btn-ghost,
+a.btn.btn-ghost {
   color: var(--foreground) !important;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.04);
   font-weight: 500;
 }
-.btn-ghost:hover {
+.btn-ghost:hover,
+a.btn.btn-ghost:hover {
   background: rgba(255, 255, 255, 0.09);
   color: var(--foreground) !important;
   opacity: 1;
@@ -4410,6 +4432,16 @@ body.modal-open { overflow: hidden; }
 .table-compact td {
   padding: var(--space-2);
 }
+/* Stable actions column — opening kebab must never stretch the row */
+.table-compact tbody td {
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+.table-compact tbody td.col-actions {
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
+}
 .cell-tight { white-space: nowrap; }
 .col-actions { width: 1%; white-space: nowrap; text-align: end; vertical-align: middle; }
 .row-actions {
@@ -4420,6 +4452,10 @@ body.modal-open { overflow: hidden; }
   gap: var(--space-1);
   max-width: 100%;
   z-index: 0;
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+  max-height: var(--btn-h);
+  overflow: visible;
 }
 .row-actions-toggle {
   display: none;
@@ -4529,6 +4565,26 @@ body.modal-open { overflow: hidden; }
   z-index: 5;
 }
 
+/* Default: kebab-stable (no FOUC). Inline only when JS adds .allow-inline-actions */
+.row-actions-toggle--icon { display: inline-flex; }
+.row-actions-toggle--label { display: none; }
+.row-actions-menu:not(.is-ported) {
+  display: none !important;
+  position: static !important;
+  inset: auto !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
+}
+
 /* Kebab: mobile/small-tablet media + overflow-driven .force-kebab */
 @media (max-width: 1100px) {
   .col-hide-sm { display: none !important; }
@@ -4611,10 +4667,37 @@ body.modal-open { overflow: hidden; }
 }
 .table-wrap.force-kebab.is-scrollable::after { display: none; }
 
+/* Desktop wide + single short action: restore inline buttons (no kebab) */
+@media (min-width: 1101px) {
+  .table-wrap.allow-inline-actions:not(.force-kebab) .row-actions-toggle {
+    display: none !important;
+  }
+  .table-wrap.allow-inline-actions:not(.force-kebab) .row-actions-menu:not(.is-ported) {
+    display: inline-flex !important;
+    position: relative !important;
+    width: auto !important;
+    height: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    pointer-events: auto !important;
+  }
+}
+
 /* On narrow viewports prefer icon kebab even when force-kebab is on */
 @media (max-width: 1100px) {
   .table-wrap.force-kebab .row-actions-toggle--icon { display: inline-flex; }
   .table-wrap.force-kebab .row-actions-toggle--label { display: none !important; }
+  .table-wrap.allow-inline-actions .row-actions-toggle--icon { display: inline-flex !important; }
+  .table-wrap.allow-inline-actions .row-actions-toggle--label { display: none !important; }
+  .table-wrap.allow-inline-actions .row-actions-menu:not(.is-ported) {
+    display: none !important;
+  }
 }
 
 /* Body-ported kebab: keep full single-column layout (ancestor .force-kebab is lost) */
@@ -4903,6 +4986,28 @@ html[data-theme="light"] .update-meta {
   background: var(--bg-card);
   border-color: var(--border);
 }
+html[data-theme="light"] .ui-switch-chip {
+  background: var(--bg-card);
+  border-color: var(--border);
+}
+html[data-theme="light"] .ui-switch-row:hover,
+html[data-theme="light"] .toggle-row:hover,
+html[data-theme="light"] .notify-row:hover,
+html[data-theme="light"] .ui-switch-row:focus-within,
+html[data-theme="light"] .toggle-row:focus-within,
+html[data-theme="light"] .notify-row:focus-within,
+html[data-theme="light"] .ui-switch-chip:hover,
+html[data-theme="light"] .ui-switch-chip:focus-within {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+html[data-theme="light"] .ui-switch-row:active,
+html[data-theme="light"] .toggle-row:active,
+html[data-theme="light"] .notify-row:active,
+html[data-theme="light"] .ui-switch-chip:active {
+  background: var(--muted);
+  border-color: var(--border);
+}
 /* Overlay kebab only — never paint a card box behind inline desktop actions */
 html[data-theme="light"] .row-actions-menu.is-ported {
   background: var(--bg-card);
@@ -4996,12 +5101,14 @@ html[data-theme="light"] a.btn:hover {
   background: rgba(37, 99, 235, 0.16);
 }
 /* Ghost: subtle dark-on-light (not white) */
-html[data-theme="light"] .btn-ghost {
+html[data-theme="light"] .btn-ghost,
+html[data-theme="light"] a.btn.btn-ghost {
   color: var(--foreground) !important;
   border-color: var(--border);
   background: rgba(24, 24, 27, 0.03);
 }
-html[data-theme="light"] .btn-ghost:hover {
+html[data-theme="light"] .btn-ghost:hover,
+html[data-theme="light"] a.btn.btn-ghost:hover {
   background: rgba(24, 24, 27, 0.06);
   color: var(--foreground) !important;
 }

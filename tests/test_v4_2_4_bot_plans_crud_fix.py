@@ -47,11 +47,13 @@ class PlansCrudFixTests(unittest.TestCase):
 
     def test_persian_digit_parser(self):
         self.assertIn("def parse_bot_int", TG_UTILS)
-        ns: dict = {}
-        chunk = TG_UTILS[TG_UTILS.find("_FA_DIGITS") : TG_UTILS.find("def _is_not_modified")]
-        exec(chunk, ns)
-        self.assertEqual(ns["parse_bot_int"]("۱۲۰۰۰"), 12000)
-        self.assertEqual(ns["parse_bot_int"]("۳۰"), 30)
+        self.assertIn("from app.services.numbers import", TG_UTILS)
+        from app.bot.tg_utils import parse_bot_float, parse_bot_int
+
+        self.assertEqual(parse_bot_int("۱۲۰۰۰"), 12000)
+        self.assertEqual(parse_bot_int("۳۰"), 30)
+        self.assertEqual(parse_bot_int("١٢٣"), 123)
+        self.assertAlmostEqual(parse_bot_float("۱٫۵"), 1.5)
 
 
 class VersionTests(unittest.TestCase):

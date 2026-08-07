@@ -81,10 +81,12 @@ def register_user_pages(app, *, render, require_admin, get_db) -> None:
         if not user:
             return RedirectResponse(f"/users?err={_q('کاربر یافت نشد')}", status_code=303)
         form = await request.form()
-        raw = str(form.get("amount") or "").strip().replace(",", "")
+        from app.services.numbers import parse_int
+
+        raw = str(form.get("amount") or "").strip()
         note = str(form.get("note") or "").strip()
         try:
-            amount = int(float(raw))
+            amount = parse_int(raw)
         except (TypeError, ValueError):
             return _redirect_user(user_id, err="مبلغ نامعتبر است")
         try:
@@ -161,10 +163,12 @@ def register_user_pages(app, *, render, require_admin, get_db) -> None:
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
         days_raw = str(form.get("extra_days") or "0").strip() or "0"
-        gb_raw = str(form.get("extra_gb") or "0").strip().replace(",", ".") or "0"
+        gb_raw = str(form.get("extra_gb") or "0").strip() or "0"
         try:
-            extra_days = int(days_raw)
-            extra_gb = float(gb_raw)
+            from app.services.numbers import parse_float, parse_int
+
+            extra_days = parse_int(days_raw)
+            extra_gb = parse_float(gb_raw)
         except ValueError:
             return _redirect_user(user_id, err="مقادیر افزایش نامعتبر است")
         try:

@@ -43,7 +43,7 @@
           {% if a.get('note') %}<br><small class="muted">{{ a.get('note') }}</small>{% endif %}
         </td>
         <td class="mono" dir="ltr" title="مصرف / سقف کاربران">{{ usage.get('users_text') or '—' }}</td>
-        <td class="mono" dir="ltr" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
+        <td class="mono cell-tight num-ratio" dir="ltr" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
           {{ usage.get('traffic_text') or '—' }}
           {% if usage.get('lifetime_text') %}
           <br><small class="muted">Σ {{ usage.get('lifetime_text') }}</small>
@@ -92,6 +92,7 @@
           {% endif %}
         </td>
         <td class="col-actions">
+          {% if src != 'owner' %}
           {% call row_actions() %}
             {% if src == 'reseller' and st.get('reseller_user_id') %}
             <a class="btn btn-sm btn-ghost" href="/resellers/{{ st.get('reseller_user_id') }}/edit">مدیریت نماینده</a>
@@ -124,7 +125,7 @@
             <button type="button" class="btn btn-sm btn-ghost"
               data-modal-open="modal-reseller-{{ loop.index }}">اعطای نماینده</button>
             {% endif %}
-            {% if uname and src != 'owner' %}
+            {% if uname %}
             <form method="post" action="/pg/admins/{{ uname }}/delete"
               {% if src == 'reseller' %}
               data-confirm="ادمین پاسارگارد «{{ uname }}» و نمایندگی/ربات فروشگاه متصل هم حذف شوند؟ این عمل برگشت‌ناپذیر است."
@@ -141,6 +142,7 @@
             </form>
             {% endif %}
           {% endcall %}
+          {% endif %}
         </td>
       </tr>
     {% endfor %}

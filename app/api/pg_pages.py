@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.formatting import data_limit_to_gb, expire_remaining_days, format_stat_row
+from app.services.numbers import normalize_number_text, parse_float, parse_int, parse_optional_float, parse_optional_int
 from app.services.pasarguard import (
     PasarGuardError,
     as_list,
@@ -521,7 +522,7 @@ def register_pg_pages(
                 hwid_limit = None
                 if gb_raw:
                     try:
-                        gb = float(gb_raw.replace(",", "."))
+                        gb = parse_float(gb_raw)
                         if gb < 0:
                             raise ValueError
                         if gb > 0:
@@ -530,7 +531,7 @@ def register_pg_pages(
                         return _pg_form_err("حجم نامعتبر است", modal="create")
                 if days_raw:
                     try:
-                        days = int(float(days_raw))
+                        days = parse_int(days_raw)
                         if days < 0:
                             raise ValueError
                         if days > 0:
@@ -539,7 +540,7 @@ def register_pg_pages(
                         return _pg_form_err("مدت نامعتبر است", modal="create")
                 if hwid_raw:
                     try:
-                        hwid_limit = int(float(hwid_raw))
+                        hwid_limit = parse_int(hwid_raw)
                         if hwid_limit < 0:
                             raise ValueError
                     except ValueError:
@@ -665,7 +666,7 @@ def register_pg_pages(
         hwid_changed = False
         if gb_raw:
             try:
-                gb = float(gb_raw.replace(",", "."))
+                gb = parse_float(gb_raw)
                 if gb < 0:
                     raise ValueError
                 data_limit = int(gb * (1024**3)) if gb > 0 else 0
@@ -673,7 +674,7 @@ def register_pg_pages(
                 return _pg_form_err("حجم نامعتبر است", modal="edit", uid=user_id)
         if days_raw:
             try:
-                days = int(float(days_raw))
+                days = parse_int(days_raw)
                 if days < 0:
                     raise ValueError
                 expire_ts = int(time.time()) + days * 86400 if days > 0 else 0
@@ -683,7 +684,7 @@ def register_pg_pages(
             hwid_changed = True
             if hwid_raw:
                 try:
-                    hwid_limit = int(float(hwid_raw))
+                    hwid_limit = parse_int(hwid_raw)
                     if hwid_limit < 0:
                         raise ValueError
                 except ValueError:
@@ -870,6 +871,9 @@ def register_pg_pages(
                 flash_err=err,
                 flash_ok=ok,
                 can_write=staff_pg_writes(staff)["templates"],
+                can_create=staff_pg_action(staff, "templates", "create"),
+                can_update=staff_pg_action(staff, "templates", "update"),
+                can_delete=staff_pg_action(staff, "templates", "delete"),
                 active="pg_templates",
             ),
         )
@@ -890,7 +894,11 @@ def register_pg_pages(
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/templates?err={_q(qe.message)}", status_code=303)
         form = await request.form()
-        group_ids = [int(v) for k, v in form.items() if str(k).startswith("g_") and str(v).isdigit()]
+        group_ids = [
+            parse_int(str(v))
+            for k, v in form.items()
+            if str(k).startswith("g_") and normalize_number_text(str(v)).isdigit()
+        ]
         if not group_ids:
             return RedirectResponse(f"/pg/templates?err={_q('حداقل یک گروه انتخاب کنید')}", status_code=303)
         from app.services.plans_catalog import groups_allowed_for_staff
@@ -898,8 +906,8 @@ def register_pg_pages(
         if not groups_allowed_for_staff(staff, group_ids):
             return RedirectResponse(f"/pg/templates?err={_q('گروه خارج از دسترسی شماست')}", status_code=303)
         try:
-            days = int(expire_days or "30")
-            gb = float(data_limit_gb) if str(data_limit_gb).strip() else None
+            days = parse_int(expire_days or "30", default=30)
+            gb = parse_optional_float(data_limit_gb)
             pg, _as_owner = await _staff_pg(session, staff)
             await pg.create_user_template(
                 {
@@ -913,6 +921,53 @@ def register_pg_pages(
         except Exception as e:
             return RedirectResponse(f"/pg/templates?err={_q(e)}", status_code=303)
         return RedirectResponse(f"/pg/templates?ok={_q('تمپلیت ساخته شد')}", status_code=303)
+
+    @app.post("/pg/templates/{template_id}/edit")
+    async def pg_templates_edit(
+        template_id: int,
+        request: Request,
+        name: str = Form(...),
+        data_limit_gb: str = Form(""),
+        expire_days: str = Form("30"),
+        staff: dict = Depends(require_pg_perm("pg_templates")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if not staff_pg_action(staff, "templates", "update"):
+            return RedirectResponse(f"/pg/templates?err={_q('اجازه ویرایش ندارید')}", status_code=303)
+        from app.services.plans_catalog import groups_allowed_for_staff, template_allowed_for_staff
+
+        if not template_allowed_for_staff(staff, template_id):
+            return RedirectResponse(f"/pg/templates?err={_q('تمپلیت خارج از دسترسی شماست')}", status_code=303)
+        try:
+            await assert_can_mutate_owned_users(staff)
+        except PgQuotaError as qe:
+            return RedirectResponse(f"/pg/templates?err={_q(qe.message)}", status_code=303)
+        form = await request.form()
+        group_ids = [
+            parse_int(str(v))
+            for k, v in form.items()
+            if str(k).startswith("g_") and normalize_number_text(str(v)).isdigit()
+        ]
+        if not group_ids:
+            return RedirectResponse(f"/pg/templates?err={_q('حداقل یک گروه انتخاب کنید')}", status_code=303)
+        if not groups_allowed_for_staff(staff, group_ids):
+            return RedirectResponse(f"/pg/templates?err={_q('گروه خارج از دسترسی شماست')}", status_code=303)
+        try:
+            days = parse_int(expire_days or "30", default=30)
+            gb = parse_optional_float(data_limit_gb)
+            pg, _as_owner = await _staff_pg(session, staff)
+            await pg.modify_user_template(
+                template_id,
+                {
+                    "name": name.strip(),
+                    "group_ids": group_ids,
+                    "expire_duration": days * 86400 if days else None,
+                    "data_limit": int(gb * (1024**3)) if gb is not None else None,
+                },
+            )
+        except Exception as e:
+            return RedirectResponse(f"/pg/templates?err={_q(e)}", status_code=303)
+        return RedirectResponse(f"/pg/templates?ok={_q('تمپلیت به‌روز شد')}", status_code=303)
 
     @app.post("/pg/templates/{template_id}/delete")
     async def pg_templates_delete(
@@ -959,8 +1014,8 @@ def register_pg_pages(
                 groups = await pg.get_groups_simple()
             groups = _filter_groups([g for g in groups if isinstance(g, dict)], staff)
             inbound_tags = _inbound_tags(await pg.get_inbounds())
-            if edit_id and str(edit_id).isdigit():
-                eid = int(edit_id)
+            if edit_id and normalize_number_text(str(edit_id)).isdigit():
+                eid = parse_int(edit_id)
                 from app.services.plans_catalog import groups_allowed_for_staff
 
                 if groups_allowed_for_staff(staff, [eid]):
@@ -982,6 +1037,9 @@ def register_pg_pages(
                 flash_err=err,
                 flash_ok=ok,
                 can_write=staff_pg_writes(staff)["groups"],
+                can_create=staff_pg_action(staff, "groups", "create"),
+                can_update=staff_pg_action(staff, "groups", "update"),
+                can_delete=staff_pg_action(staff, "groups", "delete"),
                 active="pg_groups",
             ),
         )
@@ -1094,6 +1152,12 @@ def register_pg_pages(
                 flash_err=err,
                 flash_ok=ok,
                 can_write=staff_pg_writes(staff)["hosts"],
+                can_create=staff_pg_action(staff, "hosts", "create"),
+                can_update=staff_pg_action(staff, "hosts", "update"),
+                can_delete=(
+                    staff_pg_action(staff, "hosts", "delete")
+                    or staff_pg_action(staff, "hosts", "update")
+                ),
                 active="pg_hosts",
             ),
         )
@@ -1104,7 +1168,7 @@ def register_pg_pages(
         address: str = Form(...),
         port: str = Form(""),
         inbound_tag: str = Form(...),
-        priority: int = Form(0),
+        priority: str = Form("0"),
         staff: dict = Depends(require_pg_perm("pg_hosts")),
         session: AsyncSession = Depends(get_db),
     ):
@@ -1117,21 +1181,66 @@ def register_pg_pages(
         addrs = _addr_set(address)
         if not addrs:
             return RedirectResponse(f"/pg/hosts?err={_q('آدرس هاست الزامی است')}", status_code=303)
+        try:
+            prio = parse_int(priority or "0", default=0)
+        except ValueError:
+            return RedirectResponse(f"/pg/hosts?err={_q('اولویت نامعتبر است')}", status_code=303)
         payload = {
             "remark": remark.strip(),
             "address": addrs,
             "inbound_tag": inbound_tag.strip(),
-            "priority": priority,
+            "priority": prio,
             "is_disabled": False,
         }
-        if str(port).strip().isdigit():
-            payload["port"] = int(port)
+        port_n = parse_optional_int(port)
+        if port_n is not None:
+            payload["port"] = port_n
         try:
             pg, _as_owner = await _staff_pg(session, staff)
             await pg.create_host(payload)
         except Exception as e:
             return RedirectResponse(f"/pg/hosts?err={_q(e)}", status_code=303)
         return RedirectResponse(f"/pg/hosts?ok={_q('هاست ساخته شد')}", status_code=303)
+
+    @app.post("/pg/hosts/{host_id}/edit")
+    async def pg_hosts_edit(
+        host_id: int,
+        remark: str = Form(...),
+        address: str = Form(...),
+        port: str = Form(""),
+        inbound_tag: str = Form(...),
+        priority: str = Form("0"),
+        staff: dict = Depends(require_pg_perm("pg_hosts")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        if not staff_pg_action(staff, "hosts", "update"):
+            return RedirectResponse(f"/pg/hosts?err={_q('اجازه ویرایش ندارید')}", status_code=303)
+        try:
+            await assert_can_mutate_owned_users(staff)
+        except PgQuotaError as qe:
+            return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
+        addrs = _addr_set(address)
+        if not addrs:
+            return RedirectResponse(f"/pg/hosts?err={_q('آدرس هاست الزامی است')}", status_code=303)
+        try:
+            prio = parse_int(priority or "0", default=0)
+        except ValueError:
+            return RedirectResponse(f"/pg/hosts?err={_q('اولویت نامعتبر است')}", status_code=303)
+        payload = {
+            "remark": remark.strip(),
+            "address": addrs,
+            "inbound_tag": inbound_tag.strip(),
+            "priority": prio,
+        }
+        port_n = parse_optional_int(port)
+        if port_n is not None:
+            payload["port"] = port_n
+        try:
+            pg, _as_owner = await _staff_pg(session, staff)
+            await pg.modify_host(host_id, payload)
+        except Exception as e:
+            return RedirectResponse(f"/pg/hosts?err={_q(e)}", status_code=303)
+        return RedirectResponse(f"/pg/hosts?ok={_q('هاست به‌روز شد')}", status_code=303)
 
     @app.post("/pg/hosts/{host_id}/toggle")
     async def pg_hosts_toggle(
@@ -1541,7 +1650,7 @@ def register_pg_pages(
             payload["is_sudo"] = bool(form.get("is_sudo"))
         if data_limit_gb:
             try:
-                gb = float(data_limit_gb.replace(",", "."))
+                gb = parse_float(data_limit_gb)
                 if gb > 0:
                     payload["data_limit"] = int(gb * (1024**3))
             except ValueError:
@@ -1550,10 +1659,12 @@ def register_pg_pages(
                     status_code=303,
                 )
         overrides: dict = {}
-        if max_users.isdigit():
-            overrides["max_users"] = int(max_users)
-        if max_hwid.isdigit():
-            overrides["max_hwid_per_user"] = int(max_hwid)
+        max_users_n = parse_optional_int(max_users)
+        max_hwid_n = parse_optional_int(max_hwid)
+        if max_users_n is not None:
+            overrides["max_users"] = max_users_n
+        if max_hwid_n is not None:
+            overrides["max_hwid_per_user"] = max_hwid_n
         if overrides:
             payload["permission_overrides"] = overrides
         try:

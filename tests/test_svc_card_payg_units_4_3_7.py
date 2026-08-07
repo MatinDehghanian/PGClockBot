@@ -61,7 +61,7 @@ class ResellerModalLayoutTests(unittest.TestCase):
 class VolumeUnitFaTests(unittest.TestCase):
     def test_ratio_unit_once(self):
         text = format_bytes_ratio(10 * GB, 100 * GB)
-        self.assertEqual(text, "10/100 گیگ")
+        self.assertEqual(text, "10 / 100 گیگ")
         self.assertEqual(text.count("گیگ"), 1)
 
     def test_ratio_az_joiner(self):

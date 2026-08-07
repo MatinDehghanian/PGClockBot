@@ -59,15 +59,19 @@ def _feature_perms_from_form(form) -> str:
 
 
 def _parse_price_per_gb(form) -> int:
+    from app.services.numbers import parse_int
+
     try:
-        return max(0, int(str(form.get("price_per_gb") or "0").replace(",", "").replace("٬", "")))
+        return max(0, parse_int(str(form.get("price_per_gb") or "0"), default=0))
     except ValueError:
         return 0
 
 
 def _parse_nonneg_int(form, key: str, default: int = 0) -> int:
+    from app.services.numbers import parse_int
+
     try:
-        return max(0, int(str(form.get(key) or default).replace(",", "").replace("٬", "")))
+        return max(0, parse_int(str(form.get(key) or default), default=default))
     except ValueError:
         return default
 

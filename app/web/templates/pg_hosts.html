@@ -6,7 +6,7 @@
   <div>
     {{ page_title('hosts', 'هاست‌ها', 'pg') }}
   </div>
-  {% if can_write %}
+  {% if can_create or can_write %}
   <button type="button" class="btn" data-modal-open="modal-pg-host-create">ساخت هاست</button>
   {% endif %}
 </div>
@@ -20,27 +20,36 @@
     <thead><tr><th>شناسه</th><th>عنوان</th><th class="col-hide-sm">آدرس</th><th class="col-hide-sm">پورت</th><th class="col-hide-sm">اینباند</th><th>وضعیت</th><th class="col-actions"></th></tr></thead>
     <tbody>
     {% for h in hosts %}
+      {% set addr = h.get('address') %}
+      {% set addr_text = addr if addr is string else (addr | join(', ') if addr is iterable and addr is not string else '') %}
       <tr>
         <td class="mono">{{ h.get('id') or '—' }}</td>
         <td>{{ h.get('remark') or h.get('name') or '—' }}</td>
-        <td class="mono col-hide-sm">
-          {% set addr = h.get('address') %}
-          {% if addr is string %}{{ addr }}
-          {% elif addr is iterable %}{{ addr | join(', ') }}
-          {% else %}—{% endif %}
-        </td>
+        <td class="mono col-hide-sm">{{ addr_text or '—' }}</td>
         <td class="mono col-hide-sm">{{ h.get('port') or '—' }}</td>
         <td class="mono col-hide-sm">{{ h.get('inbound_tag') or '—' }}</td>
         <td>{% if h.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
         <td class="col-actions">
-          {% if can_write and h.get('id') %}
+          {% if (can_update or can_delete or can_write) and h.get('id') %}
           {% call row_actions() %}
+            {% if can_update or can_write %}
+            <button type="button" class="btn btn-ghost btn-sm"
+              data-modal-open="modal-pg-host-edit"
+              data-hid="{{ h.get('id') }}"
+              data-remark="{{ h.get('remark') or h.get('name') or '' }}"
+              data-address="{{ addr_text }}"
+              data-port="{{ h.get('port') if h.get('port') is not none else '' }}"
+              data-priority="{{ h.get('priority') if h.get('priority') is not none else 0 }}"
+              data-inbound="{{ h.get('inbound_tag') or '' }}">ویرایش</button>
             <form method="post" action="/pg/hosts/{{ h.get('id') }}/toggle">
               <button class="btn btn-ghost btn-sm" type="submit">{% if h.get('is_disabled') %}فعال{% else %}خاموش{% endif %}</button>
             </form>
+            {% endif %}
+            {% if can_delete or can_write %}
             <form method="post" action="/pg/hosts/{{ h.get('id') }}/delete" data-confirm="این هاست حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
               <button class="btn btn-sm btn-danger" type="submit">حذف</button>
             </form>
+            {% endif %}
           {% endcall %}
           {% endif %}
         </td>
@@ -52,7 +61,7 @@
   {% endif %}
 </div>
 
-{% if can_write %}
+{% if can_create or can_write %}
 <div class="ui-modal" id="modal-pg-host-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
@@ -74,12 +83,12 @@
         </div>
         <div>
           <label class="form-field">پورت (اختیاری)
-            <input name="port" type="number" placeholder="443" />
+            <input name="port" type="number" placeholder="443" inputmode="numeric" />
           </label>
         </div>
         <div>
           <label class="form-field">اولویت
-            <input name="priority" type="number" value="0" />
+            <input name="priority" type="number" value="0" inputmode="numeric" />
           </label>
         </div>
       </div>
@@ -98,5 +107,77 @@
     </form>
   </div>
 </div>
+{% endif %}
+
+{% if can_update or can_write %}
+<div class="ui-modal" id="modal-pg-host-edit" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-host-edit-title">
+    <div class="ui-modal-head">
+      <h2 id="pg-host-edit-title">ویرایش هاست</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form method="post" action="/pg/hosts/0/edit" class="form-stack" id="pg-host-edit-form">
+      <div class="form-row">
+        <div>
+          <label class="form-field">عنوان (remark)
+            <input name="remark" id="pg-host-edit-remark" required />
+          </label>
+        </div>
+        <div>
+          <label class="form-field">آدرس (چندتایی با ویرگول)
+            <input name="address" id="pg-host-edit-address" required />
+          </label>
+        </div>
+        <div>
+          <label class="form-field">پورت (اختیاری)
+            <input name="port" id="pg-host-edit-port" type="number" placeholder="443" inputmode="numeric" />
+          </label>
+        </div>
+        <div>
+          <label class="form-field">اولویت
+            <input name="priority" id="pg-host-edit-priority" type="number" value="0" inputmode="numeric" />
+          </label>
+        </div>
+      </div>
+      <label class="form-field">اینباند
+        <select name="inbound_tag" id="pg-host-edit-inbound" required>
+          <option value="">— انتخاب —</option>
+          {% for tag in inbound_tags %}
+          <option value="{{ tag }}">{{ tag }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="actions">
+        <button class="btn" type="submit">ذخیره تغییرات</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function(){
+  const form = document.getElementById('pg-host-edit-form');
+  if (!form) return;
+  document.addEventListener('click', function(e){
+    const btn = e.target.closest('[data-modal-open="modal-pg-host-edit"]');
+    if (!btn) return;
+    const hid = btn.getAttribute('data-hid') || '';
+    form.action = '/pg/hosts/' + hid + '/edit';
+    const title = document.getElementById('pg-host-edit-title');
+    if (title) title.textContent = 'ویرایش هاست #' + hid;
+    const remark = document.getElementById('pg-host-edit-remark');
+    const address = document.getElementById('pg-host-edit-address');
+    const port = document.getElementById('pg-host-edit-port');
+    const priority = document.getElementById('pg-host-edit-priority');
+    const inbound = document.getElementById('pg-host-edit-inbound');
+    if (remark) remark.value = btn.getAttribute('data-remark') || '';
+    if (address) address.value = btn.getAttribute('data-address') || '';
+    if (port) port.value = btn.getAttribute('data-port') || '';
+    if (priority) priority.value = btn.getAttribute('data-priority') || '0';
+    if (inbound) inbound.value = btn.getAttribute('data-inbound') || '';
+  });
+})();
+</script>
 {% endif %}
 {% endblock %}
