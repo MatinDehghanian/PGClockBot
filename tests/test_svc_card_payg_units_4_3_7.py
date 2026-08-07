@@ -28,8 +28,9 @@ class SvcCardMetaTests(unittest.TestCase):
         pill = css.split(".svc-stat-pill {")[1].split("}")[0]
         self.assertIn("text-align: right", pill)
         self.assertIn(".num-ratio", css)
-        ratio = css.split("\n.num-ratio {")[1].split("}")[0]
+        ratio = css.split(".num-ratio,\n.byte-size {")[1].split("}")[0]
         self.assertIn("text-align: right", ratio)
+        self.assertIn("direction: rtl", ratio)
 
 
 class ResellerModalLayoutTests(unittest.TestCase):
@@ -102,7 +103,7 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.5.1")
+        self.assertEqual(__version__, "4.5.2")
 
 
 if __name__ == "__main__":

@@ -43,11 +43,13 @@
           {% if a.get('note') %}<br><small class="muted">{{ a.get('note') }}</small>{% endif %}
         </td>
         <td class="mono" dir="ltr" title="مصرف / سقف کاربران">{{ usage.get('users_text') or '—' }}</td>
-        <td class="mono cell-tight num-ratio" dir="ltr" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
-          {{ usage.get('traffic_text') or '—' }}
-          {% if usage.get('lifetime_text') %}
-          <br><small class="muted">Σ {{ usage.get('lifetime_text') }}</small>
-          {% endif %}
+        <td class="mono reseller-quota-cell" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
+          <div class="reseller-quota byte-stack">
+            <span class="reseller-quota-line byte-size">{{ usage.get('traffic_text') or '—' }}</span>
+            {% if usage.get('lifetime_text') %}
+            <small class="muted reseller-quota-life byte-size">Σ {{ usage.get('lifetime_text') }}</small>
+            {% endif %}
+          </div>
         </td>
         <td>
           {% if src == 'reseller' %}

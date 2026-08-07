@@ -35,10 +35,12 @@
       <tr>
         <td class="mono col-hide-sm">{{ t.get('id') }}</td>
         <td>{{ t.get('name') or '—' }}</td>
-        <td class="mono cell-tight num-ratio">
+        <td class="mono reseller-quota-cell">
+          <span class="byte-size reseller-quota-line">
           {% if t.get('data_limit') %}
             {{ t.get('data_limit') | bytes }}
           {% else %}نامحدود{% endif %}
+          </span>
         </td>
         <td class="col-hide-sm">
           {% if t.get('expire_duration') %}

@@ -4066,12 +4066,13 @@ body.modal-open { overflow: hidden; }
 .user-edit-wallet-pill strong {
   font-size: 0.95rem;
 }
-/* LTR numeric pills stay flush to the right edge of the box */
+/* Numeric pills: isolate digits; Persian unit stays on the visual left via RTL */
 .user-edit-wallet-pill[dir="ltr"] strong,
 .user-edit-wallet-pill .num-ratio {
-  direction: ltr;
+  direction: rtl;
   unicode-bidi: isolate;
   text-align: right;
+  line-height: 1.35;
 }
 .user-edit-fields {
   display: grid;
@@ -4189,13 +4190,56 @@ body.modal-open { overflow: hidden; }
 .svc-item-ops .user-edit-actions {
   margin-top: 0;
 }
-.num-ratio {
-  display: inline-block;
-  max-width: 100%;
-  direction: ltr;
+/* Byte / ratio amounts (حجم، رم، …):
+   Logical string stays «1.12 / 10 گیگ» (unit once, after numbers).
+   Presentation is RTL so the Persian unit sits on the visual LEFT of the
+   LTR number run — never force dir=ltr on the whole cell (that put گیگ on
+   the right and, with display:inline-block on <td>, broke row separators). */
+.num-ratio,
+.byte-size {
+  direction: rtl;
   unicode-bidi: isolate;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+span.num-ratio,
+span.byte-size,
+b.num-ratio,
+strong.num-ratio,
+small.num-ratio {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: middle;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+/* Table cells must remain table-cell — inline-block on <td> clips through borders */
+td.num-ratio,
+td.byte-size {
+  display: table-cell;
+  vertical-align: middle;
+  direction: rtl;
+  text-align: right;
+  line-height: 1.35;
+}
+.byte-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: var(--space-0);
+  min-width: 0;
+  width: 100%;
+  line-height: 1.35;
+}
+.byte-stack > .byte-size,
+.byte-stack > .num-ratio,
+.byte-stack > .reseller-quota-line,
+.byte-stack > .reseller-quota-life {
+  display: block;
+  max-width: 100%;
+  line-height: 1.35;
+  white-space: nowrap;
 }
 .payg-meta {
   list-style: none;
@@ -4254,29 +4298,39 @@ body.modal-open { overflow: hidden; }
   min-width: 6.5rem;
   vertical-align: middle;
   text-align: right;
+  direction: rtl;
+  line-height: 1.35;
 }
-/* Volume stack is dir=ltr — flex-end keeps values physically right-aligned */
+/* Volume stack — RTL so «گیگ» sits left of LTR numbers; right-aligned column */
 .reseller-quota {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  justify-content: center;
   gap: var(--space-0);
   min-width: 6.5rem;
   width: 100%;
   text-align: right;
+  direction: rtl;
+  line-height: 1.35;
 }
 .reseller-quota-line {
-  display: inline-block;
+  display: block;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   line-height: 1.35;
   text-align: right;
+  direction: rtl;
+  unicode-bidi: isolate;
 }
 .reseller-quota-life {
+  display: block;
   white-space: nowrap;
   font-size: 11px;
   line-height: 1.3;
   text-align: right;
+  direction: rtl;
+  unicode-bidi: isolate;
 }
 .wallet-tx-item {
   display: flex;
@@ -4448,6 +4502,11 @@ body.modal-open { overflow: hidden; }
 .table-compact tbody td {
   vertical-align: middle;
   box-sizing: border-box;
+}
+.table-compact tbody td.reseller-quota-cell {
+  /* Keep multi-line volume (traffic + Σ) inside the row — never clip separators */
+  overflow: visible;
+  padding-block: var(--space-2);
 }
 .table-compact tbody td.col-actions {
   height: 48px;
@@ -5524,10 +5583,13 @@ html[data-theme="light"] .setup-progress span.done {
   max-width: 100%;
   box-sizing: border-box;
   text-align: right;
+  direction: rtl;
+  unicode-bidi: isolate;
   font-variant-numeric: tabular-nums;
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
+  line-height: 1.35;
 }
 .home-gauge-meta .mono,
 .home-gauge-meta .muted { font-size: 12px; }
