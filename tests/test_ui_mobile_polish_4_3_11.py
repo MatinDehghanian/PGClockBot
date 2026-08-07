@@ -25,10 +25,11 @@ RESELLER_API = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
 class RadiusTokensTests(unittest.TestCase):
     def test_control_radius_pill_menus_moderate(self):
         root = CSS.split(":root {", 1)[1].split("}", 1)[0]
-        self.assertIn("--radius: 16px;", root)
+        self.assertIn("--radius: 20px;", root)
         self.assertIn("--control-radius: 999px;", root)
-        self.assertIn("--menu-radius: 12px;", root)
-        self.assertIn("--menu-item-radius: 8px;", root)
+        self.assertIn("--menu-radius: 16px;", root)
+        self.assertIn("--menu-item-radius: 10px;", root)
+        self.assertIn("--r-sm: 10px;", root)
 
     def test_buttons_fields_tabs_use_control_radius(self):
         btn = CSS.split(".btn, a.btn, .btn-sm, a.btn-sm {", 1)[1].split("}", 1)[0]
@@ -58,7 +59,7 @@ class RadiusTokensTests(unittest.TestCase):
         self.assertIn("min-height: 96px;", ta)
 
     def test_cards_logo_hamburger_keep_box_radius(self):
-        # Logo + hamburger keep the soft 8px square from v4.3.10 (--r-sm),
+        # Logo + hamburger keep the soft square (--r-sm),
         # not the larger card --radius and not pill --control-radius.
         menu = CSS.split(".menu-toggle {", 1)[1].split("}", 1)[0]
         self.assertIn("border-radius: var(--r-sm);", menu)
@@ -296,7 +297,7 @@ class VersionBumpTests(unittest.TestCase):
             tuple(int(x) for x in __version__.split(".")), (4, 5, 0)
         )
         self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.5.5"
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.5.6"
         )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"4.5.0"', notes)
