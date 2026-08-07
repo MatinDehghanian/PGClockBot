@@ -101,7 +101,10 @@ class PlansUiNamingTests(unittest.TestCase):
 
     def test_deliver_passes_plan(self):
         src = Path("app/services/orders.py").read_text(encoding="utf-8")
-        self.assertIn("generate_pg_username(session, user_id=order.user_id, plan=plan)", src)
+        self.assertIn("generate_pg_username(", src)
+        self.assertIn("user_id=order.user_id", src)
+        self.assertIn("plan=plan", src)
+        self.assertIn("reseller_id=order.reseller_id", src)
         self.assertIn("custom_plan_username_prefix", src)
 
 

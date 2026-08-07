@@ -13,8 +13,8 @@ class Version363Tests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.6.8")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.6.8")
+        self.assertEqual(__version__, "4.5.1")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.5.1")
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.6.8"', notes)
 
@@ -48,8 +48,11 @@ class WebShopOrderIsolationTests(unittest.TestCase):
         self.assertIn('Depends(require_perm("dashboard"))', src)
 
     def test_require_staff_applies_with_shop_settings(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn("with_shop_settings(parsed) if parsed else parsed", src)
+        # Stronger fail-closed: empty parse stays empty; non-empty gets core keys
+        authz = (ROOT / "app/services/authz.py").read_text(encoding="utf-8")
+        self.assertIn("with_shop_settings(parsed) if parsed else parsed", authz)
+        app_src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        self.assertIn("resolve_shop_permissions_from_profile", app_src)
 
 
 class BotShopIsolationTests(unittest.TestCase):

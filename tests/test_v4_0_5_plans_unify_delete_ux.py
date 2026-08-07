@@ -21,9 +21,10 @@ class DeleteWalletWarnTests(unittest.TestCase):
         self.assertIn("موجودی کیف پول", html)
         # PAYG money lives on shop wallet — do not double-warn a separate billing pot
         self.assertNotIn("موجودی PAYG", html)
-        edit = (ROOT / "app/web/templates/reseller_edit.html").read_text(encoding="utf-8")
-        self.assertIn("موجودی کیف پول", edit)
-        self.assertNotIn("موجودی PAYG:", edit)
+        # Wallet label lives on the shared edit body (page is a thin include wrapper)
+        body = (ROOT / "app/web/templates/_reseller_edit_body.html").read_text(encoding="utf-8")
+        self.assertIn("موجودی کیف پول", body)
+        self.assertNotIn("موجودی PAYG:", body)
 
 
 class PlansUnifyTests(unittest.TestCase):

@@ -32,9 +32,9 @@ class HostMetricsTests(unittest.TestCase):
         self.assertIn("cpu_percent", snap)
 
     def test_format_bytes_short(self):
-        self.assertEqual(format_bytes_short(512), "512 B")
-        self.assertIn("KB", format_bytes_short(2048))
-        self.assertEqual(format_bytes_short(None), "—")
+        self.assertEqual(format_bytes_short(512), "512 بایت")
+        self.assertIn("کیلوبایت", format_bytes_short(2048))
+        self.assertEqual(format_bytes_short(None), "نامحدود")
 
 
 class HomeOverviewHelpersTests(unittest.IsolatedAsyncioTestCase):

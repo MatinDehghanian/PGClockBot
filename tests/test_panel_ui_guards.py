@@ -73,8 +73,10 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
         block = re.search(r"(?ms)input::placeholder,\s*textarea::placeholder\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
         body = block.group(1)
-        self.assertIn("text-align: right", body)
-        self.assertIn("direction: rtl", body)
+        # Inherit field direction so LTR inputs keep LTR placeholders
+        self.assertIn("text-align: start", body)
+        self.assertIn("direction: inherit", body)
+        self.assertIn('input[dir="ltr"]::placeholder', css)
 
     def test_field_help_ordered_below_control(self):
         css = CSS.read_text(encoding="utf-8")
@@ -200,7 +202,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertIn("background-position: left var(--space-2) center", body)
         self.assertIn("padding-inline-end: calc(var(--space-2) + 14px)", body)
         self.assertNotIn("background-position: right", body)
-        self.assertIn("background-color: #09090b", body)
+        self.assertIn("background-color: var(--control-bg)", body)
         # light theme must not wipe the chevron via background shorthand
         light = re.search(r'(?ms)html\[data-theme="light"\]\s+select\s*\{([^}]+)\}', css)
         self.assertIsNotNone(light)
@@ -330,7 +332,13 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         ):
             src = (ROOT / rel).read_text(encoding="utf-8")
             self.assertIn("btn-danger", src)
-            self.assertNotRegex(src, r'btn-ghost[^>]*>\s*حذف\s*<')
+            # Ignore wholesale/PAYG tier-remove ghost buttons (not destructive deletes)
+            cleaned = re.sub(
+                r'btn-ghost[^>]*data-tier-remove[^>]*>\s*حذف\s*<',
+                "",
+                src,
+            )
+            self.assertNotRegex(cleaned, r'btn-ghost[^>]*>\s*حذف\s*<')
 
 
 if __name__ == "__main__":

@@ -178,7 +178,7 @@ class ResellersPlanColumnTests(unittest.TestCase):
         self.assertIn("badge fixed", RESELLERS)
         # Name cell should not stack plan/status badges anymore
         name_cell = RESELLERS.split("{% for u, p in rows %}", 1)[1].split(
-            "<td class=\"mono col-hide-sm\">{{ u.telegram_id }}</td>", 1
+            '<td class="mono col-hide-sm" dir="ltr">{{ u.telegram_id }}</td>', 1
         )[0]
         self.assertNotIn("badge info", name_cell)
         self.assertNotIn("badge approved", name_cell)
@@ -293,7 +293,7 @@ class VersionBumpTests(unittest.TestCase):
             tuple(int(x) for x in __version__.split(".")), (4, 5, 0)
         )
         self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.5.0"
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.5.1"
         )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"4.5.0"', notes)

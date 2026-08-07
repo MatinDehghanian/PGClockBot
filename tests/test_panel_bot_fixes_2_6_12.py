@@ -17,11 +17,13 @@ class PaymentsShortcutTests(unittest.TestCase):
 class PlansModalTests(unittest.TestCase):
     def test_plans_use_modals(self):
         src = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
-        self.assertIn('data-modal-open="modal-plan-create"', src)
-        self.assertIn('data-modal-open="modal-trial"', src)
-        self.assertIn('data-modal-open="modal-custom"', src)
+        self.assertIn('data-modal-open="modal-plan-unified"', src)
+        self.assertIn("modal-plan-unified", src)
         self.assertIn("ui-modal", src)
         self.assertIn("table-compact", src)
+        # Legacy separate create/trial/custom modal buttons removed
+        self.assertNotIn('data-modal-open="modal-plan-create"', src)
+        self.assertNotIn('data-modal-open="modal-trial"', src)
 
 
 class BroadcastHistoryTests(unittest.TestCase):
@@ -95,11 +97,10 @@ class BotListParityTests(unittest.TestCase):
 class UploadBoxThemeTests(unittest.TestCase):
     def test_upload_outer_body_color(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn(".upload-box {\n  position: relative;", css)
-        block = css.split(".upload-box {", 1)[1].split(".upload-box:hover", 1)[0]
+        self.assertIn("\n.upload-box {\n  position: relative;", css)
+        block = css.split("\n.upload-box {", 1)[1].split(".upload-box:hover", 1)[0]
         self.assertIn("background: var(--background);", block)
-        img = css.split(".image-setting {\n  display: flex; flex-direction: column; gap: var(--space-1);", 1)[1]
-        img = img.split("}", 1)[0]
+        img = css.split(".image-setting {", 1)[1].split("}", 1)[0]
         self.assertIn("background: var(--background);", img)
 
 

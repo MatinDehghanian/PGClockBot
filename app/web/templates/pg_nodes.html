@@ -27,9 +27,9 @@
     <tbody>
     {% for n in nodes %}
       <tr>
-        <td class="mono">{{ n.get('id') }}</td>
+        <td class="mono" dir="ltr">{{ n.get('id') }}</td>
         <td>{{ n.get('name') or '—' }}</td>
-        <td class="mono">{{ n.get('address') or n.get('host') or '—' }}{% if n.get('port') %}:{{ n.get('port') }}{% endif %}</td>
+        <td class="mono" dir="ltr">{{ n.get('address') or n.get('host') or '—' }}{% if n.get('port') %}:{{ n.get('port') }}{% endif %}</td>
         <td>
           {% set st = (n.get('status') or n.get('connection_status') or '')|string|lower %}
           <span class="badge {% if st in ['connected','online','healthy'] %}connected{% elif 'connect' in st %}connecting{% elif st in ['error','offline','unhealthy','disabled','disconnected'] %}danger{% else %}neutral{% endif %}">

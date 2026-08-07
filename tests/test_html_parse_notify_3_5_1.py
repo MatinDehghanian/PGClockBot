@@ -39,10 +39,14 @@ class NotifyBotDefaultsTests(unittest.IsolatedAsyncioTestCase):
         bot.send_message = AsyncMock()
         bot.session = MagicMock()
         bot.session.close = AsyncMock()
+        bot.token = "main-token"
 
         with patch(
-            "app.services.reseller_bots.open_notify_bot_for_user",
-            new=AsyncMock(return_value=(bot, True)),
+            "app.bot.create_bot",
+            return_value=bot,
+        ), patch(
+            "app.services.reseller_bots.open_notify_bot_for_reseller",
+            new=AsyncMock(return_value=(None, False)),
         ):
             ok = await _send_to_user_chat(AsyncMock(), user, "<b>hi</b>")
 

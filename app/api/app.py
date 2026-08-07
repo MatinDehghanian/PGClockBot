@@ -1459,7 +1459,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.plans_catalog import catalog_owner_id, list_catalog_plans, load_pg_plan_options
+        from app.services.plans_catalog import catalog_owner_id, list_catalog_plans, load_pg_plan_options, staff_can_create_pg_template
         from app.services.shop_scope import is_platform_admin
 
         plans = await list_catalog_plans(session, staff, include_trial=True)
@@ -1519,8 +1519,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "templates": templates,
                 "groups": groups,
                 "pg_error": pg_error,
-                "can_create_template": staff.get("role") == "admin"
-                or bool((staff.get("pg_writes") or {}).get("templates")),
+                "can_create_template": staff_can_create_pg_template(staff),
                 "is_platform_admin": is_platform_admin(staff),
                 "reseller_plans": reseller_plans,
                 "reseller_plans_err": reseller_plans_err,
@@ -1597,7 +1596,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                         status_code=303,
                     )
                 try:
-                    created = await get_pg().create_user_template(
+                    # Must use staff PG credentials — never owner token for non-admin
+                    from app.api.pg_pages import _staff_pg
+
+                    pg_client, _as_owner = await _staff_pg(session, staff)
+                    created = await pg_client.create_user_template(
                         {
                             "name": name.strip(),
                             "group_ids": ids,

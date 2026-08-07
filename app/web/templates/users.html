@@ -25,15 +25,15 @@
     <tbody>
     {% for u in users %}
       <tr>
-        <td class="mono col-hide-sm">{{ u.id }}</td>
-        <td class="mono">{{ u.telegram_id }}</td>
+        <td class="mono col-hide-sm" dir="ltr">{{ u.id }}</td>
+        <td class="mono" dir="ltr">{{ u.telegram_id }}</td>
         <td>{{ u.full_name or u.username or "—" }}</td>
         <td>
           <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
             {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
           </span>
         </td>
-        <td class="mono col-hide-sm">{{ u.wallet_balance | num }}</td>
+        <td class="mono col-hide-sm" dir="ltr">{{ u.wallet_balance | num }}</td>
         <td>
           {% if u.is_blocked %}
           <span class="badge blocked">مسدود</span>

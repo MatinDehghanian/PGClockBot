@@ -8,33 +8,28 @@ from pathlib import Path
 
 class PlansTitleActionsTests(unittest.TestCase):
     def test_buttons_under_title_stacked(self):
-        """Plans actions sit under the title (3.2.4 layout) with 3.2.3 spacing tokens."""
+        """Plans actions: single unified add button beside the title."""
         html = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        head = html.split("{% block content %}", 1)[1].split("{% if flash_ok %}", 1)[0]
-        self.assertIn("page-head--stack", head)
-        self.assertIn("page-title-actions", head)
-        self.assertIn('data-modal-open="modal-trial"', head)
-        # stacked actions are inside the title column, not a sibling .actions row
-        self.assertNotIn(
-            '</div>\n  <div class="actions">\n    <button type="button" class="btn" data-modal-open="modal-trial"',
-            head,
-        )
-        actions = css.split(".page-title-actions {", 1)[1].split("}", 1)[0]
-        self.assertIn("var(--space-1)", actions)
-        self.assertIn("margin-top: var(--space-1)", actions)
+        head = html.split("{% block content %}", 1)[1].split("{% if pg_error %}", 1)[0]
+        self.assertIn('class="page-head"', head)
+        self.assertIn('data-modal-open="modal-plan-unified"', head)
+        self.assertIn("افزودن پلن", head)
+        self.assertNotIn("page-head--stack", head)
+        self.assertNotIn('data-modal-open="modal-trial"', head)
+        # page-head keeps actions on the title row
+        self.assertIn(".page-head {", css)
 
 
 class UploadBoxContrastTests(unittest.TestCase):
     def test_image_setting_matches_body(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        block = css.split(".image-setting {\n  display: flex; flex-direction: column; gap: var(--space-1);", 1)[1]
-        block = block.split("}", 1)[0]
+        block = css.split(".image-setting {", 1)[1].split("}", 1)[0]
         self.assertIn("background: var(--background);", block)
 
     def test_upload_outer_body_color(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        block = css.split(".upload-box {", 1)[1].split(".upload-box:hover", 1)[0]
+        block = css.split("\n.upload-box {", 1)[1].split(".upload-box:hover", 1)[0]
         self.assertIn("background: var(--background);", block)
 
 

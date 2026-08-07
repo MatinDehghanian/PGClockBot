@@ -18,7 +18,7 @@ BASE = Path("app/web/templates/base.html")
 class PageTitleGapParityTests(unittest.TestCase):
     def test_page_title_gap_token(self):
         css = CSS.read_text(encoding="utf-8")
-        self.assertIn("--page-title-gap: 24px;", css)
+        self.assertIn("--page-title-gap: var(--space-3);", css)
 
     def test_main_top_matches_page_head_bottom(self):
         css = CSS.read_text(encoding="utf-8")

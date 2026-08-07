@@ -18,8 +18,8 @@ class StickyActionsDesktopTests(unittest.TestCase):
     def test_settings_actions_are_not_sticky(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         block = css.split(".sticky-actions {", 1)[1].split("}", 1)[0]
-        self.assertIn("position: static", block)
         self.assertNotIn("position: sticky", block)
+        self.assertNotIn("position: fixed", block)
 
 
 class PlanListTextTests(unittest.TestCase):

@@ -33,7 +33,7 @@ class UiSelectDropUpTests(unittest.TestCase):
     def test_css_drop_up(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".ui-select.drop-up .ui-select-menu:not(.is-fixed-pos):not(.is-ported)", css)
-        self.assertIn("bottom: calc(100% + 8px)", css)
+        self.assertIn("bottom: calc(100% + var(--space-1))", css)
 
 
 class UploadBoxTests(unittest.TestCase):

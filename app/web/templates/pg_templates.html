@@ -6,7 +6,7 @@
   <div>
     {{ page_title('templates', 'تمپلیت‌های کاربر', 'pg') }}
   </div>
-  {% if can_write %}
+  {% if can_create %}
   <button type="button" class="btn" data-modal-open="modal-pg-template-create">ساخت تمپلیت</button>
   {% endif %}
 </div>
@@ -29,10 +29,13 @@
     </thead>
     <tbody>
     {% for t in templates %}
+      {% set gids = t.get('group_ids') or [] %}
+      {% set days = (t.get('expire_duration') / 86400) | round(0) if t.get('expire_duration') else '' %}
+      {% set gb = (t.get('data_limit') / (1024**3)) if t.get('data_limit') else '' %}
       <tr>
         <td class="mono col-hide-sm">{{ t.get('id') }}</td>
         <td>{{ t.get('name') or '—' }}</td>
-        <td>
+        <td class="mono cell-tight num-ratio">
           {% if t.get('data_limit') %}
             {{ t.get('data_limit') | bytes }}
           {% else %}نامحدود{% endif %}
@@ -42,13 +45,24 @@
             {{ (t.get('expire_duration') / 86400) | round(0) }} روز
           {% else %}—{% endif %}
         </td>
-        <td class="mono col-hide-sm">{{ t.get('group_ids') or '—' }}</td>
+        <td class="mono col-hide-sm">{{ gids or '—' }}</td>
         <td class="col-actions">
-          {% if can_write %}
+          {% if (can_update or can_delete) and t.get('id') %}
           {% call row_actions() %}
-          <form method="post" action="/pg/templates/{{ t.get('id') }}/delete" data-confirm="این تمپلیت حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
-            <button class="btn btn-sm btn-danger" type="submit">حذف</button>
-          </form>
+            {% if can_update %}
+            <button type="button" class="btn btn-ghost btn-sm"
+              data-modal-open="modal-pg-template-edit"
+              data-tid="{{ t.get('id') }}"
+              data-name="{{ t.get('name') or '' }}"
+              data-gb="{{ gb }}"
+              data-days="{{ days }}"
+              data-groups="{{ gids|join(',') }}">ویرایش</button>
+            {% endif %}
+            {% if can_delete %}
+            <form method="post" action="/pg/templates/{{ t.get('id') }}/delete" data-confirm="این تمپلیت حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
+              <button class="btn btn-sm btn-danger" type="submit">حذف</button>
+            </form>
+            {% endif %}
           {% endcall %}
           {% endif %}
         </td>
@@ -60,7 +74,7 @@
   {% endif %}
 </div>
 
-{% if can_write %}
+{% if can_create %}
 <div class="ui-modal" id="modal-pg-template-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
@@ -77,12 +91,12 @@
         </div>
         <div>
           <label class="form-field">حجم (گیگابایت) — خالی = نامحدود
-            <input name="data_limit_gb" type="number" step="0.1" min="0" placeholder="30" />
+            <input name="data_limit_gb" type="number" step="0.1" min="0" placeholder="30" inputmode="decimal" />
           </label>
         </div>
         <div>
           <label class="form-field">مدت (روز)
-            <input name="expire_days" type="number" min="1" value="30" required />
+            <input name="expire_days" type="number" min="1" value="30" required inputmode="numeric" />
           </label>
         </div>
       </div>
@@ -103,5 +117,74 @@
     </form>
   </div>
 </div>
+{% endif %}
+
+{% if can_update %}
+<div class="ui-modal" id="modal-pg-template-edit" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-template-edit-title">
+    <div class="ui-modal-head">
+      <h2 id="pg-template-edit-title">ویرایش تمپلیت</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form method="post" action="/pg/templates/0/edit" class="form-stack" id="pg-template-edit-form">
+      <div class="form-row">
+        <div>
+          <label class="form-field">نام تمپلیت
+            <input name="name" id="pg-template-edit-name" required />
+          </label>
+        </div>
+        <div>
+          <label class="form-field">حجم (گیگابایت) — خالی = نامحدود
+            <input name="data_limit_gb" id="pg-template-edit-gb" type="number" step="0.1" min="0" placeholder="30" inputmode="decimal" />
+          </label>
+        </div>
+        <div>
+          <label class="form-field">مدت (روز)
+            <input name="expire_days" id="pg-template-edit-days" type="number" min="1" required inputmode="numeric" />
+          </label>
+        </div>
+      </div>
+      <div class="form-field">
+        <span class="form-field-label">گروه‌های پاسارگارد</span>
+        <div class="ui-switch-grid" id="pg-template-edit-groups">
+          {% for g in groups %}
+          {{ switch_chip('g_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
+          {% else %}
+          <span class="muted">گروهی یافت نشد — ابتدا در بخش گروه‌ها بسازید.</span>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit">ذخیره تغییرات</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function(){
+  const form = document.getElementById('pg-template-edit-form');
+  if (!form) return;
+  document.addEventListener('click', function(e){
+    const btn = e.target.closest('[data-modal-open="modal-pg-template-edit"]');
+    if (!btn) return;
+    const tid = btn.getAttribute('data-tid') || '';
+    form.action = '/pg/templates/' + tid + '/edit';
+    const title = document.getElementById('pg-template-edit-title');
+    if (title) title.textContent = 'ویرایش تمپلیت #' + tid;
+    const name = document.getElementById('pg-template-edit-name');
+    const gb = document.getElementById('pg-template-edit-gb');
+    const days = document.getElementById('pg-template-edit-days');
+    if (name) name.value = btn.getAttribute('data-name') || '';
+    if (gb) gb.value = btn.getAttribute('data-gb') || '';
+    if (days) days.value = btn.getAttribute('data-days') || '30';
+    const gset = new Set((btn.getAttribute('data-groups') || '').split(',').filter(Boolean));
+    form.querySelectorAll('input[name^="g_"]').forEach(function(inp){
+      inp.checked = gset.has(String(inp.value));
+    });
+  });
+})();
+</script>
 {% endif %}
 {% endblock %}

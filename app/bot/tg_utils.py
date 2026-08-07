@@ -10,32 +10,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("pgclock.bot")
 
-_FA_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")
-_AR_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+from app.services.numbers import normalize_number_text, parse_float, parse_int
 
 
 def normalize_bot_number_text(text: str | None) -> str:
     """Normalize Persian/Arabic digits and separators for int/float parsing."""
-    raw = (text or "").strip().translate(_FA_DIGITS).translate(_AR_DIGITS)
-    return raw.replace(",", "").replace("٬", "").replace(" ", "")
+    return normalize_number_text(text)
 
 
 def parse_bot_int(text: str | None, *, default: int | None = None) -> int:
-    raw = normalize_bot_number_text(text)
-    if not raw:
-        if default is not None:
-            return default
-        raise ValueError("empty")
-    return int(raw)
+    return parse_int(text, default=default)
 
 
 def parse_bot_float(text: str | None, *, default: float | None = None) -> float:
-    raw = normalize_bot_number_text(text).replace("٫", ".").replace("،", ".")
-    if not raw:
-        if default is not None:
-            return default
-        raise ValueError("empty")
-    return float(raw)
+    return parse_float(text, default=default)
 
 
 def _is_not_modified(exc: BaseException) -> bool:

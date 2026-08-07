@@ -31,7 +31,7 @@ class PgBotIdenticalTitleChromeTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         head = css.split(".page-head {\n", 1)[1].split("}", 1)[0]
         self.assertIn("margin-bottom: var(--page-title-gap);", head)
-        self.assertIn("--page-title-gap: 24px;", css)
+        self.assertIn("--page-title-gap: var(--space-3);", css)
         self.assertNotIn(
             "margin-top: calc(-1 * (var(--btn-h) + var(--space-1)));",
             css,

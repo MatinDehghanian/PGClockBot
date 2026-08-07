@@ -87,11 +87,11 @@ def format_bytes_ratio(
     limit: int | float | None,
     *,
     precision: int | None = None,
-    joiner: str = "/",
+    joiner: str = " / ",
 ) -> str:
-    """Shared-unit used/limit string, e.g. «۱۰/۱۰۰ گیگ» or «۱۰ از ۱۰۰ گیگ».
+    """Shared-unit used/limit string, e.g. «10 / 100 گیگ» or «10 از 100 گیگ».
 
-    Unit is written once at the end — never on the first number.
+    Number first, unit once at the end — never unit-before-number.
     """
     if limit is None:
         return format_bytes(used, precision=precision)
@@ -101,7 +101,7 @@ def format_bytes_ratio(
     except (TypeError, ValueError):
         return "—"
     if lim <= 0:
-        # Unlimited ceiling — unit once at the end: «۵/∞ گیگ»
+        # Unlimited ceiling — unit once at the end: «5 / ∞ گیگ»
         if u <= 0:
             return f"0{joiner}∞ بایت"
         div, label = _pick_byte_unit(u)

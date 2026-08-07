@@ -56,8 +56,9 @@ def _seed_sqlite(db_path: Path) -> str:
             text(
                 "INSERT INTO reseller_plans (id, name, price, commission_percent, "
                 "can_approve_receipts, create_pg_admin, create_web_access, share_pg_panel_url, "
-                "is_active, sort_order) "
-                "VALUES (1, 'Starter', 0, 10, 0, 1, 1, 0, 1, 0)"
+                "is_active, sort_order, billing_mode, price_per_gb, allow_buy_extra, "
+                "extra_gb_price, extra_user_price, renew_price) "
+                "VALUES (1, 'Starter', 0, 10, 0, 1, 1, 0, 1, 0, 'fixed', 0, 0, 0, 0, 0)"
             )
         )
         conn.execute(
@@ -70,8 +71,9 @@ def _seed_sqlite(db_path: Path) -> str:
             text(
                 "INSERT INTO reseller_profiles "
                 "(id, user_id, commission_percent, balance, can_approve_receipts, is_active, "
-                "share_pg_panel_url, billing_mode, billing_balance, billing_watermark_bytes) "
-                "VALUES (1, 2, 10, 0, 0, 1, 0, 'fixed', 777, 0)"
+                "share_pg_panel_url, billing_mode, billing_balance, billing_watermark_bytes, "
+                "payg_wallet_linked) "
+                "VALUES (1, 2, 10, 0, 0, 1, 0, 'fixed', 777, 0, 0)"
             )
         )
         conn.execute(text("INSERT INTO settings (key, value) VALUES ('currency', 'Toman')"))

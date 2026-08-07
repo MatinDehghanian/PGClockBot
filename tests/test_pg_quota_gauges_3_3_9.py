@@ -88,7 +88,7 @@ class PgQuotaGaugeUiTests(unittest.TestCase):
         block = css.split(".pg-quota-gauges {")[1].split("}")[0]
         self.assertIn("grid-template-columns: 1fr", block)
         gauge = css.split(".pg-quota-gauges .home-gauge {")[1].split("}")[0]
-        self.assertIn("flex-direction: row", gauge)
+        self.assertIn("flex-direction: column", gauge)
         self.assertIn("height: auto", gauge)
 
     def test_pg_home_banners_and_order(self):

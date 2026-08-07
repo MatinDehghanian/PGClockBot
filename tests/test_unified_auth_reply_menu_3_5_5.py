@@ -151,6 +151,7 @@ class ApplyResellerPasswordTests(unittest.IsolatedAsyncioTestCase):
 
         profile = MagicMock()
         profile.pg_admin_username = "shop_abc"
+        profile.web_username = "shop_abc"
         profile.web_password_hash = None
         profile.pg_admin_password_enc = None
 
@@ -161,6 +162,10 @@ class ApplyResellerPasswordTests(unittest.IsolatedAsyncioTestCase):
             patch("app.services.pasarguard.reset_pg"),
             patch("app.services.secret_box.encrypt_secret", return_value="enc"),
             patch("app.services.web_auth.hash_password", return_value="hashed"),
+            patch(
+                "app.services.credential_policy.validate_password_strength",
+                return_value=(True, None),
+            ),
         ):
             await apply_reseller_panel_password(session, profile, "NewPass1!", sync_pg=True)
 

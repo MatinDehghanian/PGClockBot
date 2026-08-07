@@ -134,10 +134,17 @@ class SchedulerPanelOnlyTests(unittest.TestCase):
 
 
 class OwnerSetFailureTests(unittest.TestCase):
-    def test_create_deletes_user_when_owner_fails(self):
+    def test_create_does_not_use_owner_token_transfer(self):
+        """Staff/reseller create must rely on `_staff_pg` credentials, not get_pg()+set_owner."""
         src = Path("app/api/pg_pages.py").read_text(encoding="utf-8")
-        self.assertIn("delete_user_by_id", src)
-        self.assertIn("مالکیت ست نشد", src)
+        create_fn = src.split('async def pg_users_create', 1)[1].split(
+            "async def pg_users_link", 1
+        )[0]
+        self.assertIn("await _staff_pg(", create_fn)
+        self.assertNotIn("get_pg().set_owner_by_id", create_fn)
+        self.assertNotIn("await get_pg().set_owner_by_id", create_fn)
+        self.assertNotIn("await get_pg().delete_user_by_id", create_fn)
+        self.assertNotIn("مالکیت ست نشد", create_fn)
 
 
 class GroupEditAllowlistTests(unittest.TestCase):
@@ -159,8 +166,8 @@ class VersionBumpTests(unittest.TestCase):
     def test_version_is_current(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.3.2")
-        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "3.3.2")
+        self.assertEqual(__version__, "4.5.1")
+        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "4.5.1")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.3.2"', notes)
         self.assertIn('"3.3.1"', notes)

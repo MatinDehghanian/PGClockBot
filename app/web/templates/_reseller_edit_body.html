@@ -45,7 +45,7 @@
       </div>
       <div>
         <label class="form-field">یوزرنیم پاسارگارد
-          <input name="pg_admin_username" value="{{ profile.pg_admin_username or '' }}" />
+          <input name="pg_admin_username" value="{{ profile.pg_admin_username or '' }}" dir="ltr" />
         </label>
       </div>
       <div>
@@ -74,17 +74,17 @@
 
     <p class="muted">
       {% if profile.web_username and profile.pg_admin_username and profile.web_username == profile.pg_admin_username %}
-      یوزر یکپارچه (وب‌پنل + پاسارگارد): <code>{{ profile.web_username }}</code>
+      یوزر یکپارچه (وب‌پنل + پاسارگارد): <code dir="ltr">{{ profile.web_username }}</code>
       {% else %}
-      وب: <code>{{ profile.web_username or 'هنوز ساخته نشده' }}</code>
-      {% if profile.pg_admin_username %} · پاسارگارد: <code>{{ profile.pg_admin_username }}</code>{% endif %}
+      وب: <code dir="ltr">{{ profile.web_username or 'هنوز ساخته نشده' }}</code>
+      {% if profile.pg_admin_username %} · پاسارگارد: <code dir="ltr">{{ profile.pg_admin_username }}</code>{% endif %}
       {% endif %}
-      · ربات: <code>{% if profile.bot_username %}@{{ profile.bot_username }}{% else %}—{% endif %}</code>
+      · ربات: <code dir="ltr">{% if profile.bot_username %}@{{ profile.bot_username }}{% else %}—{% endif %}</code>
     </p>
 
     {% if profile.web_username %}
     <label class="form-field">رمز عبور (وب‌پنل{% if profile.pg_admin_username %} + پاسارگارد{% endif %})
-      <input name="web_password" type="password" autocomplete="new-password" placeholder="خالی = حفظ رمز فعلی" />
+      <input name="web_password" type="password" autocomplete="new-password" dir="ltr" placeholder="خالی = حفظ رمز فعلی" />
       <small class="muted">اختیاری — با وارد کردن رمز جدید،{% if profile.pg_admin_username %} رمز پاسارگارد هم{% endif %} هم‌زمان عوض می‌شود</small>
     </label>
     {% endif %}
@@ -154,7 +154,7 @@
     </li>
     <li>
       <span class="payg-meta-label">نرخ پلن</span>
-      <span class="payg-meta-value">{{ format_toman(billing_rate or 0) }} / گیگ</span>
+      <span class="payg-meta-value"><span dir="ltr" class="num-ratio">{{ format_toman(billing_rate or 0) }}</span> / گیگ</span>
     </li>
     <li>
       <span class="payg-meta-label">آخرین مصرف صورتحساب‌شده</span>

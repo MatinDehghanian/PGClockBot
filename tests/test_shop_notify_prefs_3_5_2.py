@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,12 +26,13 @@ class CatalogAclTests(unittest.TestCase):
             self.assertNotIn(key, full)
         titles = [t for _, t, *_ in shop_notify_catalog(["orders", "shop_settings", "plans"])]
         self.assertTrue(any("سفارش" in t or "اشتراک" in t for t in titles))
-        # tickets-only must not see payment pending
+        # Core shop keys are soft-injected via with_shop_settings — ticket ACL still
+        # receives payment/order notify keys when any shop perms are present.
         ticket_only = shop_notify_allowed_keys(["tickets", "shop_settings", "plans"])
         self.assertIn("notify_new_ticket", ticket_only)
-        self.assertNotIn("notify_pending_approval", ticket_only)
         self.assertNotIn("notify_account_edits", ticket_only)
         self.assertNotIn("notify_wallet_topup", ticket_only)
+        self.assertEqual(PLATFORM_ONLY_NOTIFY_KEYS, frozenset({"notify_account_edits", "notify_wallet_topup"}))
 
 
 class IsolationLogicTests(unittest.IsolatedAsyncioTestCase):
@@ -78,7 +80,6 @@ class IsolationLogicTests(unittest.IsolatedAsyncioTestCase):
         from app.services.notifications import _dispatch_dual_notify
 
         session = AsyncMock()
-        bot = MagicMock()
         order = MagicMock()
         order.reseller_id = 99
 
@@ -98,9 +99,14 @@ class IsolationLogicTests(unittest.IsolatedAsyncioTestCase):
             "app.services.notifications._shop_recipient_chat_ids",
             new=AsyncMock(return_value=[555]),
         ), patch(
+            "app.services.resellers.get_reseller_profile",
+            new=AsyncMock(return_value=SimpleNamespace(bot_token="shop-token")),
+        ), patch(
             "app.services.reseller_bots.open_notify_bot_for_reseller",
-            new=AsyncMock(return_value=(MagicMock(session=MagicMock(close=AsyncMock())), True)),
+            new=AsyncMock(return_value=(MagicMock(token="shop-token", session=MagicMock(close=AsyncMock())), True)),
         ):
+            bot = MagicMock()
+            bot.token = "main-token"
             await _dispatch_dual_notify(
                 bot, session, "notify_new_order", "hello", order=order
             )

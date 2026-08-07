@@ -13,7 +13,10 @@ MACRO = Path("app/web/templates/macros.html")
 class PgHeadSpacingTests(unittest.TestCase):
     def test_page_head_actions_do_not_drop_below_title(self):
         css = CSS.read_text(encoding="utf-8")
-        self.assertIn(".page-head > .actions,\n.page-head > .btn {\n  margin-top: 0;", css)
+        self.assertIn(
+            ".page-head > .actions,\n.page-head > .page-head-actions,\n.page-head > .btn {\n  margin-top: 0;",
+            css,
+        )
 
     def test_pg_tabs_macro_still_defined_but_unused_on_pages(self):
         # Macro kept for compatibility; pages no longer inject duplicate horizontal tabs

@@ -12,8 +12,8 @@ class Version367Tests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.6.8")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.6.8")
+        self.assertEqual(__version__, "4.5.1")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.5.1")
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.6.8"', notes)
 
@@ -90,10 +90,12 @@ class ShopSettingsCompletenessTests(unittest.TestCase):
         self.assertIn("افزودن/حذف", src)
 
     def test_web_permissions_never_empty(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn("DEFAULT_FEATURE_PERMS", src)
-        self.assertIn("with_shop_settings(parsed)", src)
-        self.assertNotIn("with_shop_settings(parsed) if parsed else parsed", src)
+        # Fail-closed empty ACL lives in authz; require_staff re-reads via helper
+        authz = (ROOT / "app/services/authz.py").read_text(encoding="utf-8")
+        self.assertIn("with_shop_settings(parsed) if parsed else parsed", authz)
+        app_src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        self.assertIn("resolve_shop_permissions_from_profile", app_src)
+        self.assertIn("DEFAULT_FEATURE_PERMS", app_src)
 
     def test_shop_buttons_filter_platform_labels(self):
         src = (ROOT / "app/api/shop_settings.py").read_text(encoding="utf-8")

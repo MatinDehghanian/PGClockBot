@@ -6,36 +6,10 @@
   <div>
     {{ page_title('groups', 'گروه‌ها', 'pg') }}
   </div>
-  {% if can_write and not edit_group %}
+  {% if can_create %}
   <button type="button" class="btn" data-modal-open="modal-pg-group-create">ساخت گروه</button>
   {% endif %}
 </div>
-{% if edit_group and can_write %}
-<div class="card">
-  <h2>ویرایش گروه #{{ edit_group.get('id') }}</h2>
-  <form method="post" action="/pg/groups/{{ edit_group.get('id') }}/edit" class="form-stack">
-    <label class="form-field">نام گروه
-      <input name="name" required value="{{ edit_group.get('name') or '' }}" />
-    </label>
-    <div class="form-field">
-      <span class="form-field-label">اینباندها</span>
-      <div class="ui-switch-grid">
-        {% set selected = edit_group.get('inbound_tags') or [] %}
-        {% for tag in inbound_tags %}
-        {{ switch_chip('tag_' ~ loop.index, tag, checked=(tag in selected), value=tag) }}
-        {% endfor %}
-      </div>
-    </div>
-    <div class="ui-switch-list">
-      {{ switch('is_disabled', 'غیرفعال', checked=edit_group.get('is_disabled')) }}
-    </div>
-    <div class="actions">
-      <button class="btn" type="submit">ذخیره تغییرات</button>
-      <a class="btn btn-ghost" href="/pg/groups">انصراف</a>
-    </div>
-  </form>
-</div>
-{% endif %}
 
 <div class="card card-flush">
   <h2>گروه‌های موجود</h2>
@@ -54,12 +28,21 @@
         <td class="mono col-hide-sm">{{ g.get('total_users') if g.get('total_users') is not none else '—' }}</td>
         <td>{% if g.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
         <td class="col-actions">
-          {% if can_write %}
+          {% if (can_update or can_delete) and g.get('id') %}
           {% call row_actions() %}
-            <a class="btn btn-ghost btn-sm" href="/pg/groups?edit={{ g.get('id') }}">ویرایش</a>
+            {% if can_update %}
+            <button type="button" class="btn btn-ghost btn-sm"
+              data-modal-open="modal-pg-group-edit"
+              data-gid="{{ g.get('id') }}"
+              data-name="{{ g.get('name') or '' }}"
+              data-disabled="{{ 1 if g.get('is_disabled') else 0 }}"
+              data-tags="{{ (g.get('inbound_tags') or [])|join('\u001f') }}">ویرایش</button>
+            {% endif %}
+            {% if can_delete %}
             <form method="post" action="/pg/groups/{{ g.get('id') }}/delete" data-confirm="این گروه حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
               <button class="btn btn-sm btn-danger" type="submit">حذف</button>
             </form>
+            {% endif %}
           {% endcall %}
           {% endif %}
         </td>
@@ -71,7 +54,7 @@
   {% endif %}
 </div>
 
-{% if can_write %}
+{% if can_create %}
 <div class="ui-modal" id="modal-pg-group-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
@@ -100,5 +83,91 @@
     </form>
   </div>
 </div>
+{% endif %}
+
+{% if can_update %}
+<div class="ui-modal" id="modal-pg-group-edit" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-group-edit-title">
+    <div class="ui-modal-head">
+      <h2 id="pg-group-edit-title">ویرایش گروه</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form method="post" action="/pg/groups/0/edit" class="form-stack" id="pg-group-edit-form">
+      <label class="form-field">نام گروه
+        <input name="name" id="pg-group-edit-name" required />
+      </label>
+      <div class="form-field">
+        <span class="form-field-label">اینباندها</span>
+        <div class="ui-switch-grid" id="pg-group-edit-tags">
+          {% for tag in inbound_tags %}
+          {{ switch_chip('tag_' ~ loop.index, tag, value=tag) }}
+          {% else %}
+          <span class="muted">اینباندی یافت نشد.</span>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="ui-switch-list">
+        {{ switch('is_disabled', 'غیرفعال', id='pg-group-edit-disabled') }}
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit">ذخیره تغییرات</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function(){
+  const form = document.getElementById('pg-group-edit-form');
+  if (!form) return;
+  const nameEl = document.getElementById('pg-group-edit-name');
+  const disabledEl = document.getElementById('pg-group-edit-disabled');
+  const titleEl = document.getElementById('pg-group-edit-title');
+
+  function fillEdit(btn){
+    const gid = btn.getAttribute('data-gid') || '';
+    form.action = '/pg/groups/' + gid + '/edit';
+    if (titleEl) titleEl.textContent = 'ویرایش گروه #' + gid;
+    if (nameEl) nameEl.value = btn.getAttribute('data-name') || '';
+    if (disabledEl) disabledEl.checked = btn.getAttribute('data-disabled') === '1';
+    const tags = new Set((btn.getAttribute('data-tags') || '').split('\u001f').filter(Boolean));
+    form.querySelectorAll('input[name^="tag_"]').forEach(function(inp){
+      inp.checked = tags.has(String(inp.value));
+    });
+  }
+
+  document.addEventListener('click', function(e){
+    const btn = e.target.closest('[data-modal-open="modal-pg-group-edit"]');
+    if (!btn) return;
+    fillEdit(btn);
+  });
+
+  {% if edit_group and edit_group.get('id') %}
+  (function openEdit(){
+    const gid = {{ edit_group.get('id')|tojson }};
+    const src = document.querySelector('[data-modal-open="modal-pg-group-edit"][data-gid="' + gid + '"]');
+    if (src) fillEdit(src);
+    else {
+      form.action = '/pg/groups/' + gid + '/edit';
+      if (titleEl) titleEl.textContent = 'ویرایش گروه #' + gid;
+      if (nameEl) nameEl.value = {{ (edit_group.get('name') or '')|tojson }};
+      if (disabledEl) disabledEl.checked = {{ 'true' if edit_group.get('is_disabled') else 'false' }};
+      const tags = new Set({{ (edit_group.get('inbound_tags') or [])|tojson }});
+      form.querySelectorAll('input[name^="tag_"]').forEach(function(inp){
+        inp.checked = tags.has(String(inp.value));
+      });
+    }
+    const m = document.getElementById('modal-pg-group-edit');
+    if (m && window.openModal) window.openModal('modal-pg-group-edit');
+    else if (m) {
+      m.hidden = false;
+      m.classList.add('open');
+      document.body.classList.add('modal-open');
+    }
+  })();
+  {% endif %}
+})();
+</script>
 {% endif %}
 {% endblock %}

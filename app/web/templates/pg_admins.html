@@ -43,7 +43,7 @@
           {% if a.get('note') %}<br><small class="muted">{{ a.get('note') }}</small>{% endif %}
         </td>
         <td class="mono" dir="ltr" title="مصرف / سقف کاربران">{{ usage.get('users_text') or '—' }}</td>
-        <td class="mono" dir="ltr" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
+        <td class="mono cell-tight num-ratio" dir="ltr" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
           {{ usage.get('traffic_text') or '—' }}
           {% if usage.get('lifetime_text') %}
           <br><small class="muted">Σ {{ usage.get('lifetime_text') }}</small>
@@ -92,6 +92,7 @@
           {% endif %}
         </td>
         <td class="col-actions">
+          {% if src != 'owner' %}
           {% call row_actions() %}
             {% if src == 'reseller' and st.get('reseller_user_id') %}
             <a class="btn btn-sm btn-ghost" href="/resellers/{{ st.get('reseller_user_id') }}/edit">مدیریت نماینده</a>
@@ -124,7 +125,7 @@
             <button type="button" class="btn btn-sm btn-ghost"
               data-modal-open="modal-reseller-{{ loop.index }}">اعطای نماینده</button>
             {% endif %}
-            {% if uname and src != 'owner' %}
+            {% if uname %}
             <form method="post" action="/pg/admins/{{ uname }}/delete"
               {% if src == 'reseller' %}
               data-confirm="ادمین پاسارگارد «{{ uname }}» و نمایندگی/ربات فروشگاه متصل هم حذف شوند؟ این عمل برگشت‌ناپذیر است."
@@ -141,6 +142,7 @@
             </form>
             {% endif %}
           {% endcall %}
+          {% endif %}
         </td>
       </tr>
     {% endfor %}
@@ -190,7 +192,7 @@
       </label>
       {% endif %}
       <label class="form-field">رمز عبور وب‌پنل
-        <input name="web_password" type="password" {% if src == 'none' %}required{% endif %} autocomplete="new-password"
+        <input name="web_password" type="password" {% if src == 'none' %}required{% endif %} autocomplete="new-password" dir="ltr"
           placeholder="{% if src == 'pg_staff' %}خالی = حفظ رمز فعلی (اگر اعتبارنامه ذخیره شده){% else %}رمز قوی{% endif %}" />
         <small class="muted">{% if src == 'pg_staff' %}اگر اعتبارنامه پاسارگارد ذخیره نشده، رمز الزامی است — {% endif %}طبق پاسارگارد: حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
       </label>
@@ -225,13 +227,13 @@
         <select name="plan_id" required {% if not reseller_plans %}disabled{% endif %}>
           <option value="">— انتخاب پلن —</option>
           {% for p in reseller_plans or [] %}
-          <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "{:,}".format(p.price_per_gb).replace(",", "٬") }}/گیگ{% elif p.commission_percent is not none %} · کمیسیون {{ p.commission_percent }}٪{% endif %}</option>
+          <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }} / گیگ{% elif p.commission_percent is not none %} · کمیسیون {{ p.commission_percent }}٪{% endif %}</option>
           {% endfor %}
         </select>
         <small class="muted">دسترسی‌های داشبورد، پلن، سفارش، تنظیمات ربات و… از این پلن می‌آید</small>
       </label>
       <label class="form-field">رمز عبور مشترک
-        <input name="web_password" type="password" autocomplete="new-password"
+        <input name="web_password" type="password" autocomplete="new-password" dir="ltr"
           placeholder="{% if st.get('credentials_ready') %}خالی = استفاده از رمز ذخیره‌شده{% else %}رمز الزامی است{% endif %}"
           {% if not st.get('credentials_ready') %}required{% endif %} />
         <small class="muted">همان رمز برای وب و پاسارگارد — اگر رمز ذخیره‌شده دارید می‌توانید خالی بگذارید</small>
@@ -267,7 +269,7 @@
         <select name="plan_id" required {% if not reseller_plans %}disabled{% endif %}>
           <option value="">— انتخاب پلن —</option>
           {% for p in reseller_plans or [] %}
-          <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "{:,}".format(p.price_per_gb).replace(",", "٬") }}/گیگ{% elif p.commission_percent is not none %} · کمیسیون {{ p.commission_percent }}٪{% endif %}</option>
+          <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }} / گیگ{% elif p.commission_percent is not none %} · کمیسیون {{ p.commission_percent }}٪{% endif %}</option>
           {% endfor %}
         </select>
         <small class="muted">دسترسی‌های داشبورد، پلن، سفارش، تنظیمات ربات و… از این پلن کپی می‌شود</small>
@@ -278,7 +280,7 @@
         <small class="muted">باید دقیقاً همان نام ادمین پاسارگارد باشد</small>
       </label>
       <label class="form-field">رمز عبور وب‌پنل
-        <input name="web_password" type="password" required autocomplete="new-password" placeholder="رمز قوی" />
+        <input name="web_password" type="password" required autocomplete="new-password" dir="ltr" placeholder="رمز قوی" />
         <small class="muted">طبق پاسارگارد: حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ/کوچک و کاراکتر خاص</small>
       </label>
       <label class="form-field">یادداشت
@@ -313,7 +315,7 @@
         </div>
         <div>
           <label class="form-field">رمز عبور
-            <input name="password" type="password" required autocomplete="new-password" placeholder="رمز قوی" minlength="12" />
+            <input name="password" type="password" required autocomplete="new-password" dir="ltr" placeholder="رمز قوی" minlength="12" />
             <small class="muted">حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ، دو حرف کوچک و یک کاراکتر خاص — طبق قوانین پاسارگارد؛ برای پاسارگارد و وب یکی است</small>
           </label>
         </div>
@@ -322,7 +324,9 @@
             <select name="role_id">
               <option value="">— بدون نقش (سازگاری قدیم) —</option>
               {% for r in pg_roles or [] %}
-              <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}{% if r.get('is_owner') %} (ادمین اصلی){% endif %}</option>
+              {% if not r.get('is_owner') %}
+              <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}</option>
+              {% endif %}
               {% endfor %}
             </select>
             <small class="muted">سطح دسترسی منو/عملیات از این نقش می‌آید</small>
@@ -364,7 +368,7 @@
           <select name="plan_id" id="create-plan-id" {% if not reseller_plans %}disabled{% endif %}>
             <option value="">— انتخاب پلن —</option>
             {% for p in reseller_plans or [] %}
-            <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "{:,}".format(p.price_per_gb).replace(",", "٬") }}/گیگ{% elif p.commission_percent is not none %} · کمیسیون {{ p.commission_percent }}٪{% endif %}</option>
+            <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }} / گیگ{% elif p.commission_percent is not none %} · کمیسیون {{ p.commission_percent }}٪{% endif %}</option>
             {% endfor %}
           </select>
           <small class="muted">دسترسی‌های پنل ربات/فروشگاه از این پلن کپی می‌شود؛ سهمیه کاربران از نقش پاسارگارد</small>
