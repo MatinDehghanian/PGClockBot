@@ -32,10 +32,10 @@
      --control-radius  → buttons, single-line fields, tabs, shortcuts, nav chips (pill)
      --menu-radius     → opened dropdown panels (not pill)
      --menu-item-radius→ items inside those menus */
-  --radius: 16px;
+  --radius: 20px;
   --control-radius: 999px;
-  --menu-radius: 12px;
-  --menu-item-radius: 8px;
+  --menu-radius: 16px;
+  --menu-item-radius: 10px;
   --side-w: 248px;
   --topbar-h: 52px;
   --btn-h: 36px;
@@ -78,7 +78,7 @@
   --accent-soft: rgba(249, 115, 22, 0.12);
   --danger: var(--destructive);
   --r: var(--radius);
-  --r-sm: 8px;
+  --r-sm: 10px;
   --r-control: var(--control-radius);
   /* Table header — milder than --muted so dark theme is less bright */
   --table-head-bg: color-mix(in srgb, var(--muted) 42%, var(--bg-card));
@@ -236,7 +236,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   flex: 0 0 auto;
   width: 36px;
   height: 36px;
-  /* Match v4.3.10 header chrome (8px) — not the larger card --radius */
+  /* Soft square chrome — not the larger card --radius */
   border-radius: var(--r-sm);
   overflow: hidden;
   background: #f97316;
@@ -449,7 +449,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   border: none;
   outline: none;
   box-shadow: none;
-  border-radius: 15px;
+  border-radius: 18px;
   background: color-mix(in srgb, var(--brand) 16%, var(--muted));
   color: var(--brand-fg);
   animation: page-title-ico-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -544,7 +544,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   background: var(--muted);
   color: var(--muted-fg);
 }
@@ -1838,7 +1838,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   flex: 0 0 auto;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   background-repeat: no-repeat;
   background-position: center;
   background-size: 15px 15px;
@@ -1938,7 +1938,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 .auth-brand .brand-logo {
   width: 56px;
   height: 56px;
-  border-radius: 14px;
+  border-radius: 18px;
   margin: 0 auto var(--space-2);
 }
 .auth-brand h1 {
@@ -1992,7 +1992,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--muted-fg);
   cursor: pointer;
@@ -2081,7 +2081,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   word-break: break-all;
   line-height: 1.5;
   padding: var(--space-1);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--border);
 }
@@ -3270,7 +3270,7 @@ form.settings-form > .actions.sticky-actions,
   .pg-head > .section-tabs { margin-bottom: 0; padding-bottom: 0; }
   .pg-head > .page-head { margin-bottom: var(--page-title-gap); }
   .page-title { gap: var(--space-1); }
-  .page-title-ico { width: 34px; height: 34px; border-radius: 12px; }
+  .page-title-ico { width: 34px; height: 34px; border-radius: 14px; }
   .page-title-ico svg { width: 17px; height: 17px; }
   .page-head h1,
   .page-title h1 { font-size: 18px; }
@@ -3518,7 +3518,7 @@ form.settings-form > .actions.sticky-actions,
     radial-gradient(120% 80% at 100% 0%, rgba(43, 82, 120, 0.35), transparent 55%),
     linear-gradient(165deg, #0b121a 0%, var(--tg-bg) 48%, #0a1018 100%);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 18px;
+  border-radius: 22px;
   overflow: hidden;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
   color: var(--tg-text);
@@ -3564,7 +3564,7 @@ form.settings-form > .actions.sticky-actions,
 .tg-bubble {
   max-width: 92%;
   padding: var(--space-1) var(--space-2);
-  border-radius: 14px 14px 4px 14px;
+  border-radius: 18px 18px 6px 18px;
   background: var(--tg-bubble);
   border: 1px solid rgba(255, 255, 255, 0.04);
   font-size: 13px;
@@ -3579,7 +3579,7 @@ form.settings-form > .actions.sticky-actions,
   max-width: 220px;
   background: var(--tg-bubble);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
   animation: tg-in .32s ease both;
 }
@@ -3610,7 +3610,7 @@ form.settings-form > .actions.sticky-actions,
 }
 .tg-qr-box.has-bg::after {
   inset: 22%;
-  border-radius: 10px;
+  border-radius: 12px;
   z-index: 1;
   background:
     #fff
@@ -3664,7 +3664,7 @@ form.settings-form > .actions.sticky-actions,
 .tg-key {
   flex: 1 1 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: linear-gradient(180deg, #356891, var(--tg-key));
   color: #f2f7fb;
   font: inherit;
@@ -3874,7 +3874,7 @@ form.settings-form > .actions.sticky-actions,
 }
 
 @media (max-width: 900px) {
-  .tg-preview { min-height: 380px; border-radius: 14px; }
+  .tg-preview { min-height: 380px; border-radius: 18px; }
 }
 
 /* ── Panel split: Bot vs PasarGuard ── */
