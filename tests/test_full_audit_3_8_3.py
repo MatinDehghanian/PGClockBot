@@ -242,8 +242,8 @@ class Version383Tests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.5.6")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.5.6")
+        self.assertEqual(__version__, "4.6.0")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.6.0")
 
 
 if __name__ == "__main__":
