@@ -9,32 +9,39 @@
 </div>
 {# flash_ok / flash_err rendered once in base.html (above title) #}
 <div class="card card-flush">
+  <form method="get" action="/users" class="search-bar">
+    <label class="search-bar-field">
+      <span class="search-bar-label">جستجو</span>
+      <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، نقش…" autocomplete="off" />
+    </label>
+    <button class="btn btn-ghost" type="submit">جستجو</button>
+  </form>
   <div class="table-wrap">
-  <table class="table-compact">
+  <table class="table-compact" data-sortable>
     <thead>
       <tr>
-        <th class="col-hide-sm">#</th>
-        <th>تلگرام</th>
-        <th>نام</th>
-        <th>نقش</th>
-        <th class="col-hide-sm">کیف پول</th>
-        <th>وضعیت</th>
+        <th class="col-hide-sm" data-sort-type="num">#</th>
+        <th data-sort-type="num">تلگرام</th>
+        <th data-sort-type="text">نام</th>
+        <th data-sort-type="text">نقش</th>
+        <th class="col-hide-sm" data-sort-type="num">کیف پول</th>
+        <th data-sort-type="text">وضعیت</th>
         <th class="col-actions"></th>
       </tr>
     </thead>
     <tbody>
     {% for u in users %}
       <tr>
-        <td class="mono col-hide-sm" dir="ltr">{{ u.id }}</td>
-        <td class="mono" dir="ltr">{{ u.telegram_id }}</td>
-        <td>{{ u.full_name or u.username or "—" }}</td>
-        <td>
+        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.id }}">{{ u.id }}</td>
+        <td class="mono" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
+        <td data-sort-value="{{ u.full_name or u.username or '' }}">{{ u.full_name or u.username or "—" }}</td>
+        <td data-sort-value="{{ u.role }}">
           <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
             {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
           </span>
         </td>
-        <td class="mono col-hide-sm" dir="ltr">{{ u.wallet_balance | num }}</td>
-        <td>
+        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.wallet_balance or 0 }}">{{ u.wallet_balance | num }}</td>
+        <td data-sort-value="{{ '1' if u.is_blocked else '0' }}">
           {% if u.is_blocked %}
           <span class="badge blocked">مسدود</span>
           {% else %}

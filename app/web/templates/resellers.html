@@ -76,21 +76,28 @@
 
 <div class="card card-flush">
   <h2>لیست نمایندگان</h2>
+  <form method="get" action="/resellers" class="search-bar">
+    <label class="search-bar-field">
+      <span class="search-bar-label">جستجو</span>
+      <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، وب، ربات…" autocomplete="off" />
+    </label>
+    <button class="btn btn-ghost" type="submit">جستجو</button>
+  </form>
   <div class="table-wrap">
-  <table class="table-compact">
+  <table class="table-compact" data-sortable>
     <thead>
       <tr>
-        <th>کاربر</th>
-        <th class="col-hide-sm">تلگرام</th>
-        <th class="col-hide-sm">نقش</th>
-        <th>نوع پلن</th>
-        <th>وضعیت</th>
-        <th class="reseller-quota-th">کاربران</th>
-        <th class="reseller-quota-th">حجم</th>
-        <th class="col-hide-sm">کمیسیون</th>
-        <th class="col-hide-sm">وب</th>
-        <th class="col-hide-sm">ربات</th>
-        <th class="col-hide-sm">راه‌اندازی</th>
+        <th data-sort-type="text">کاربر</th>
+        <th class="col-hide-sm" data-sort-type="num">تلگرام</th>
+        <th class="col-hide-sm" data-sort-type="text">نقش</th>
+        <th data-sort-type="text">نوع پلن</th>
+        <th data-sort-type="text">وضعیت</th>
+        <th class="reseller-quota-th" data-sort-type="num">کاربران</th>
+        <th class="reseller-quota-th" data-sort-type="num">حجم</th>
+        <th class="col-hide-sm" data-sort-type="num">کمیسیون</th>
+        <th class="col-hide-sm" data-sort-type="text">وب</th>
+        <th class="col-hide-sm" data-sort-type="text">ربات</th>
+        <th class="col-hide-sm" data-sort-type="text">راه‌اندازی</th>
         <th class="col-actions"></th>
       </tr>
     </thead>
@@ -98,21 +105,21 @@
     {% for u, p in rows %}
       {% set usage = (reseller_usage or {}).get(u.id) or {} %}
       <tr>
-        <td>{{ u.full_name or u.username or '—' }}</td>
-        <td class="mono col-hide-sm" dir="ltr">{{ u.telegram_id }}</td>
-        <td class="col-hide-sm">
+        <td data-sort-value="{{ u.full_name or u.username or '' }}">{{ u.full_name or u.username or '—' }}</td>
+        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
+        <td class="col-hide-sm" data-sort-value="{{ u.role }}">
           <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
             {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
           </span>
         </td>
-        <td>
+        <td data-sort-value="{{ p.billing_mode or 'fixed' }}">
           {% if (p.billing_mode or 'fixed') == 'payg' %}
           <span class="badge info">PAYG</span>
           {% else %}
           <span class="badge fixed">ثابت</span>
           {% endif %}
         </td>
-        <td>
+        <td data-sort-value="{% if p.billing_suspended_at %}2{% elif p.is_active %}1{% else %}0{% endif %}">
           {% if p.billing_suspended_at %}
           <span class="badge rejected">مسدود</span>
           {% elif p.is_active %}
@@ -121,10 +128,10 @@
           <span class="badge warn">غیرفعال</span>
           {% endif %}
         </td>
-        <td class="mono reseller-quota-cell" title="مصرف / سقف کاربران">
+        <td class="mono reseller-quota-cell" title="مصرف / سقف کاربران" data-sort-value="{{ usage.get('users_used') if usage.get('users_used') is not none else usage.get('users_text') or '' }}">
           <span class="reseller-quota-line" dir="ltr">{{ usage.get('users_text') or '—' }}</span>
         </td>
-        <td class="mono reseller-quota-cell" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
+        <td class="mono reseller-quota-cell" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}" data-sort-value="{{ usage.get('traffic_used') if usage.get('traffic_used') is not none else usage.get('traffic_text') or '' }}">
           <div class="reseller-quota byte-stack">
             <span class="reseller-quota-line byte-size">{{ usage.get('traffic_text') or '—' }}</span>
             {% if usage.get('lifetime_text') %}
@@ -132,10 +139,10 @@
             {% endif %}
           </div>
         </td>
-        <td class="mono col-hide-sm" dir="ltr">{% if (p.billing_mode or 'fixed') == 'payg' %}—{% else %}{{ p.commission_percent }}٪{% endif %}</td>
-        <td class="mono col-hide-sm" dir="ltr">{{ p.web_username or '—' }}</td>
-        <td class="mono col-hide-sm" dir="ltr">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
-        <td class="col-hide-sm">{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.web_username %}<span class="badge pending">بدون ربات</span>{% else %}—{% endif %}</td>
+        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ p.commission_percent or 0 }}">{% if (p.billing_mode or 'fixed') == 'payg' %}—{% else %}{{ p.commission_percent }}٪{% endif %}</td>
+        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ p.web_username or '' }}">{{ p.web_username or '—' }}</td>
+        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ p.bot_username or '' }}">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
+        <td class="col-hide-sm" data-sort-value="{% if p.setup_completed_at %}2{% elif p.web_username %}1{% else %}0{% endif %}">{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.web_username %}<span class="badge pending">بدون ربات</span>{% else %}—{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
             <button type="button" class="btn btn-ghost btn-sm"

@@ -351,10 +351,14 @@ def register_pg_pages(
         access = staff.get("pg_access") or {}
         require_template = bool(access.get("require_template")) and not _is_admin(staff)
         try:
+            from app.services.list_query import filter_by_search, normalize_search_q
+
+            search_q = normalize_search_q(q)
             pg = await staff_pg_read_client(session, staff)
             params: dict = {"offset": 0, "limit": 200}
-            if q:
-                params["username"] = q
+            if search_q:
+                # Remote API may be exact/prefix; keep hint + local casefold substring
+                params["username"] = search_q
             owner = _pg_owner(staff)
             if not _is_admin(staff) and owner:
                 params["admin"] = owner
@@ -371,6 +375,35 @@ def register_pg_pages(
             elif isinstance(data, list):
                 users = data
             users = _filter_owned_users(users, staff)
+            if search_q:
+
+                def _user_search_parts(u: dict):
+                    return (
+                        u.get("username"),
+                        u.get("note"),
+                        u.get("id"),
+                        u.get("status"),
+                        (u.get("admin") or {}).get("username")
+                        if isinstance(u.get("admin"), dict)
+                        else u.get("admin"),
+                        u.get("owner_username"),
+                    )
+
+                filtered = filter_by_search(users, search_q, _user_search_parts)
+                if not filtered:
+                    # Remote may be exact-only or case-sensitive — widen then filter locally
+                    params_wide = {k: v for k, v in params.items() if k != "username"}
+                    try:
+                        data_wide = await pg.get_users(**params_wide)
+                        if isinstance(data_wide, dict):
+                            users = as_list(data_wide, "users") or []
+                        elif isinstance(data_wide, list):
+                            users = data_wide
+                        users = _filter_owned_users(users, staff)
+                        filtered = filter_by_search(users, search_q, _user_search_parts)
+                    except Exception:
+                        filtered = []
+                users = filtered
             for u in users:
                 if not isinstance(u, dict):
                     continue
@@ -1256,8 +1289,18 @@ def register_pg_pages(
         ok = request.query_params.get("ok")
         nodes = []
         try:
+            from app.services.node_traffic import enrich_nodes_with_traffic
+
             pg = await staff_pg_read_client(session, staff)
-            nodes = await pg.get_nodes()
+            nodes_raw = await pg.get_nodes()
+            if not isinstance(nodes_raw, list):
+                nodes_raw = []
+            realtime = None
+            try:
+                realtime = await pg.get_nodes_realtime()
+            except Exception:
+                realtime = None
+            nodes = enrich_nodes_with_traffic(nodes_raw, realtime)
         except PgReadDenied as e:
             err = e.message
         except Exception as e:

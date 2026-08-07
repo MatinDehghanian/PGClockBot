@@ -8,40 +8,65 @@
   </div>
 </div>
 <div class="card card-flush">
+  <form method="get" action="/orders" class="search-bar">
+    <label class="search-bar-field">
+      <span class="search-bar-label">جستجو</span>
+      <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، پلن، وضعیت…" autocomplete="off" />
+    </label>
+    <button class="btn btn-ghost" type="submit">جستجو</button>
+  </form>
   <div class="table-wrap">
-  <table class="table-compact">
+  <table class="table-compact" data-sortable>
     <thead>
       <tr>
-        <th>#</th><th>کاربر</th><th class="col-hide-sm">پلن</th><th>مبلغ</th><th>وضعیت</th><th class="col-hide-sm">روش</th><th class="col-hide-sm">زمان</th><th class="col-actions"></th>
+        <th data-sort-type="num">#</th>
+        <th data-sort-type="text">کاربر</th>
+        <th class="col-hide-sm" data-sort-type="text">پلن</th>
+        <th data-sort-type="num">مبلغ</th>
+        <th data-sort-type="text">وضعیت</th>
+        <th class="col-hide-sm" data-sort-type="text">روش</th>
+        <th class="col-hide-sm" data-sort-type="text">زمان</th>
+        <th class="col-actions"></th>
       </tr>
     </thead>
     <tbody>
     {% for o in orders %}
       {% set pay = payments_by_order.get(o.id) %}
+      {% set uname = (o.user.full_name or o.user.username or o.user_id) if o.user else o.user_id %}
+      {% set pname = o.plan.name if o.plan else (o.plan_id or "—") %}
       <tr>
-        <td class="mono">{{ o.id }}</td>
-        <td>{{ (o.user.full_name or o.user.username or o.user_id) if o.user else o.user_id }}</td>
-        <td class="col-hide-sm">{% if o.plan %}{{ o.plan.name }}{% else %}{{ o.plan_id or "—" }}{% endif %}</td>
-        <td class="mono">{{ o.amount | num }}</td>
-        <td>
+        <td class="mono" data-sort-value="{{ o.id }}">{{ o.id }}</td>
+        <td data-sort-value="{{ uname }}">{{ uname }}</td>
+        <td class="col-hide-sm" data-sort-value="{{ pname }}">{{ pname }}</td>
+        <td class="mono" data-sort-value="{{ o.amount }}">{{ o.amount | num }}</td>
+        <td data-sort-value="{{ o.status }}">
           <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}pending{% elif o.status in ['rejected','cancelled','failed'] %}rejected{% else %}neutral{% endif %}">
             {{ ord_status(o.status) }}
           </span>
         </td>
-        <td class="col-hide-sm">{% if o.payment_method=='card' %}کارت{% elif o.payment_method=='wallet' %}کیف پول{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
-        <td class="muted col-hide-sm">{{ o.created_at }}</td>
+        <td class="col-hide-sm" data-sort-value="{{ o.payment_method or '' }}">{% if o.payment_method=='card' %}کارت{% elif o.payment_method=='wallet' %}کیف پول{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
+        <td class="muted col-hide-sm" data-sort-value="{{ o.created_at }}">{{ o.created_at }}</td>
         <td class="col-actions">
           {% if o.status == 'delivered' %}
             <span class="muted">تحویل</span>
-          {% elif o.status in ['rejected','cancelled'] %}
+          {% elif o.status == 'cancelled' %}
             <span class="muted">—</span>
+          {% elif o.status == 'rejected' %}
+            {% call row_actions() %}
+              <form method="post" action="/orders/{{ o.id }}/cancel" data-confirm="این سفارش لغو شود؟" data-confirm-title="لغو سفارش" data-confirm-warn="1" data-confirm-label="لغو">
+                <button class="btn btn-ghost btn-sm" type="submit">لغو</button>
+              </form>
+            {% endcall %}
           {% elif pay and pay.status == 'pending' %}
             {% call row_actions() %}
-              <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="این سفارش تأیید شود؟" data-confirm-title="تأیید سفارش" data-confirm-label="تأیید">
+              <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="این سفارش تأیید و محصول ارسال شود؟" data-confirm-title="تأیید سفارش" data-confirm-label="تأیید">
                 <button class="btn btn-ok btn-sm" type="submit">تأیید</button>
               </form>
               <form method="post" action="/orders/{{ o.id }}/reject" data-confirm="این سفارش رد شود؟" data-confirm-title="رد سفارش" data-confirm-danger="1" data-confirm-label="رد">
                 <button class="btn btn-danger btn-sm" type="submit">رد</button>
+              </form>
+              <form method="post" action="/orders/{{ o.id }}/cancel" data-confirm="این سفارش لغو شود؟" data-confirm-title="لغو سفارش" data-confirm-warn="1" data-confirm-label="لغو">
+                <button class="btn btn-ghost btn-sm" type="submit">لغو</button>
               </form>
             {% endcall %}
           {% elif o.status in ['paid','awaiting_approval'] %}
@@ -49,9 +74,24 @@
               <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="سفارش تأیید و تحویل شود؟" data-confirm-title="تأیید و تحویل" data-confirm-label="تأیید و تحویل">
                 <button class="btn btn-ok btn-sm" type="submit">تأیید و تحویل</button>
               </form>
+              {% if o.status == 'awaiting_approval' %}
+              <form method="post" action="/orders/{{ o.id }}/reject" data-confirm="این سفارش رد شود؟" data-confirm-title="رد سفارش" data-confirm-danger="1" data-confirm-label="رد">
+                <button class="btn btn-danger btn-sm" type="submit">رد</button>
+              </form>
+              <form method="post" action="/orders/{{ o.id }}/cancel" data-confirm="این سفارش لغو شود؟" data-confirm-title="لغو سفارش" data-confirm-warn="1" data-confirm-label="لغو">
+                <button class="btn btn-ghost btn-sm" type="submit">لغو</button>
+              </form>
+              {% endif %}
             {% endcall %}
           {% else %}
-            <span class="muted">منتظر رسید</span>
+            {% call row_actions() %}
+              <form method="post" action="/orders/{{ o.id }}/reject" data-confirm="این سفارش رد شود؟" data-confirm-title="رد سفارش" data-confirm-danger="1" data-confirm-label="رد">
+                <button class="btn btn-danger btn-sm" type="submit">رد</button>
+              </form>
+              <form method="post" action="/orders/{{ o.id }}/cancel" data-confirm="این سفارش لغو شود؟" data-confirm-title="لغو سفارش" data-confirm-warn="1" data-confirm-label="لغو">
+                <button class="btn btn-ghost btn-sm" type="submit">لغو</button>
+              </form>
+            {% endcall %}
           {% endif %}
         </td>
       </tr>

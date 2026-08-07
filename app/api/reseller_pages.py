@@ -117,6 +117,29 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             .order_by(ResellerProfile.id.desc())
         )
         rows = result.all()
+        search_q = ""
+        try:
+            from app.services.list_query import filter_by_search, normalize_search_q
+
+            search_q = normalize_search_q(request.query_params.get("q"))
+            if search_q:
+                rows = filter_by_search(
+                    rows,
+                    search_q,
+                    lambda pair: (
+                        pair[0].id,
+                        pair[0].telegram_id,
+                        pair[0].username,
+                        pair[0].full_name,
+                        pair[0].role,
+                        pair[1].web_username,
+                        pair[1].bot_username,
+                        pair[1].pg_admin_username,
+                        pair[1].billing_mode,
+                    ),
+                )
+        except Exception:
+            search_q = (request.query_params.get("q") or "").strip()
         # One-time PAYG→wallet link; only auto-restore wrongful legacy suspend on first merge
         try:
             from app.services.billing import ensure_payg_shop_wallet, is_payg
@@ -213,6 +236,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
                 "open_edit": request.query_params.get("edit"),
+                "q": search_q,
             },
         )
 
