@@ -35,6 +35,7 @@ from app.services.orders import (
     approve_payment,
     cancel_order,
     deliver_order,
+    manual_fulfill_unpaid_order,
     reject_order,
     reject_payment,
 )
@@ -2211,6 +2212,15 @@ def create_api_app(lifespan=None) -> FastAPI:
                 delivered = await deliver_order(session, order)
                 if not had_service:
                     await _notify_order_user(session, payment, delivered)
+            elif order.status in {
+                OrderStatus.PENDING.value,
+                OrderStatus.AWAITING_RECEIPT.value,
+            }:
+                # Pending without receipt: staff can still approve → deliver once
+                delivered, payment = await manual_fulfill_unpaid_order(
+                    session, order, note="web manual approve"
+                )
+                await _notify_order_user(session, payment, delivered)
             else:
                 return _redirect_msg("/orders", err="این سفارش هنوز قابل تأیید نیست (رسید لازم است)")
         except Exception as e:

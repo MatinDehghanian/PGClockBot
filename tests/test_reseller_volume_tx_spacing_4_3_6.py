@@ -18,8 +18,9 @@ class ResellerVolumeAlignTests(unittest.TestCase):
     def test_quota_css_right_align(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         block = css.split(".reseller-quota {")[1].split("}")[0]
-        self.assertIn("align-items: flex-end", block)
+        self.assertIn("align-items: flex-start", block)
         self.assertIn("text-align: right", block)
+        self.assertIn("direction: rtl", block)
         self.assertIn("white-space: nowrap", css.split(".reseller-quota-line")[1].split("}")[0])
         self.assertIn("min-width: 7.5rem", css)
 

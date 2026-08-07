@@ -32,10 +32,10 @@
      --control-radius  → buttons, single-line fields, tabs, shortcuts, nav chips (pill)
      --menu-radius     → opened dropdown panels (not pill)
      --menu-item-radius→ items inside those menus */
-  --radius: 14px;
+  --radius: 16px;
   --control-radius: 999px;
-  --menu-radius: 10px;
-  --menu-item-radius: 7px;
+  --menu-radius: 12px;
+  --menu-item-radius: 8px;
   --side-w: 248px;
   --topbar-h: 52px;
   --btn-h: 36px;
@@ -449,7 +449,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   border: none;
   outline: none;
   box-shadow: none;
-  border-radius: 13px;
+  border-radius: 15px;
   background: color-mix(in srgb, var(--brand) 16%, var(--muted));
   color: var(--brand-fg);
   animation: page-title-ico-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -1653,48 +1653,47 @@ th {
 th[data-sort-type] {
   cursor: pointer;
   user-select: none;
-  padding-inline-end: 1.1rem;
+  padding-inline-end: 1.15rem;
   position: relative;
 }
+/* Delicate dual-chevron (idle) / single chevron (active) — no box artifact */
 th[data-sort-type]::after {
   content: "";
   position: absolute;
-  inset-inline-end: 0.35rem;
+  inset-inline-end: 0.28rem;
   top: 50%;
-  width: 0.35rem;
-  height: 0.55rem;
+  width: 0.42rem;
+  height: 0.72rem;
   transform: translateY(-50%);
-  opacity: 0.35;
+  opacity: 0.28;
+  pointer-events: none;
   background:
-    linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat,
-    linear-gradient(transparent 35%, currentColor 35% 65%, transparent 65%);
-  mask:
-    polygon(50% 0, 100% 40%, 0 40%) top / 100% 45% no-repeat,
-    polygon(0 60%, 100% 60%, 50% 100%) bottom / 100% 45% no-repeat;
-  -webkit-mask:
-    polygon(50% 0, 100% 40%, 0 40%) top / 100% 45% no-repeat,
-    polygon(0 60%, 100% 60%, 50% 100%) bottom / 100% 45% no-repeat;
-  background-color: currentColor;
+    linear-gradient(45deg, transparent 45%, currentColor 45% 55%, transparent 55%) 0 0 / 100% 42% no-repeat,
+    linear-gradient(-45deg, transparent 45%, currentColor 45% 55%, transparent 55%) 0 0 / 100% 42% no-repeat,
+    linear-gradient(45deg, transparent 45%, currentColor 45% 55%, transparent 55%) 0 100% / 100% 42% no-repeat,
+    linear-gradient(-45deg, transparent 45%, currentColor 45% 55%, transparent 55%) 0 100% / 100% 42% no-repeat;
+}
+th[data-sort-type]:hover::after {
+  opacity: 0.5;
 }
 th[data-sort-type][aria-sort="ascending"]::after,
 th[data-sort-type][aria-sort="descending"]::after {
-  opacity: 0.85;
-  mask: none;
-  -webkit-mask: none;
   width: 0;
   height: 0;
-  border-inline: 0.28rem solid transparent;
+  opacity: 0.7;
   background: none;
+  border-style: solid;
+  border-color: transparent;
 }
 th[data-sort-type][aria-sort="ascending"]::after {
-  border-bottom: 0.34rem solid currentColor;
-  border-top: 0;
-  transform: translateY(calc(-50% - 0.05rem));
+  border-width: 0 0.22rem 0.28rem 0.22rem;
+  border-bottom-color: currentColor;
+  transform: translateY(calc(-50% - 0.04rem));
 }
 th[data-sort-type][aria-sort="descending"]::after {
-  border-top: 0.34rem solid currentColor;
-  border-bottom: 0;
-  transform: translateY(calc(-50% + 0.05rem));
+  border-width: 0.28rem 0.22rem 0 0.22rem;
+  border-top-color: currentColor;
+  transform: translateY(calc(-50% + 0.04rem));
 }
 th[data-sort-type]:hover {
   color: var(--accent, var(--foreground));
@@ -1935,7 +1934,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 .auth-brand .brand-logo {
   width: 56px;
   height: 56px;
-  border-radius: 12px;
+  border-radius: 14px;
   margin: 0 auto var(--space-2);
 }
 .auth-brand h1 {
@@ -3267,7 +3266,7 @@ form.settings-form > .actions.sticky-actions,
   .pg-head > .section-tabs { margin-bottom: 0; padding-bottom: 0; }
   .pg-head > .page-head { margin-bottom: var(--page-title-gap); }
   .page-title { gap: var(--space-1); }
-  .page-title-ico { width: 34px; height: 34px; border-radius: 10px; }
+  .page-title-ico { width: 34px; height: 34px; border-radius: 12px; }
   .page-title-ico svg { width: 17px; height: 17px; }
   .page-head h1,
   .page-title h1 { font-size: 18px; }
@@ -4274,7 +4273,8 @@ td.byte-size {
 .byte-stack {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  /* RTL: flex-start = inline-start = visual right */
+  align-items: flex-start;
   justify-content: center;
   gap: var(--space-0);
   min-width: 0;
@@ -4354,7 +4354,8 @@ td.byte-size {
 .reseller-quota {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  /* RTL: flex-start = visual right (was flex-end → stuck left) */
+  align-items: flex-start;
   justify-content: center;
   gap: var(--space-0);
   min-width: 6.5rem;

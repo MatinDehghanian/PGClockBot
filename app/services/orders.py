@@ -735,6 +735,76 @@ async def _claim_payable_order(
     return order
 
 
+async def manual_fulfill_unpaid_order(
+    session: AsyncSession,
+    order: Order,
+    *,
+    note: str = "web manual approve",
+) -> tuple[Order, Payment]:
+    """Staff override: mark an unpaid order paid and deliver without a receipt.
+
+    Used when status is pending / awaiting_receipt (no pending payment row).
+    Still respects single-delivery guards (service_id / delivered).
+    """
+    note_txt = (order.note or "").strip()
+    is_renew_or_app = note_txt.startswith("renew:") or note_txt.startswith("reseller_app:")
+    if order.status == OrderStatus.DELIVERED.value:
+        raise ValueError("این سفارش قبلاً تحویل شده")
+    if order.service_id and not is_renew_or_app:
+        raise ValueError("این سفارش قبلاً تحویل شده")
+    if order.status not in _PAYABLE_ORDER_STATUSES:
+        raise ValueError("این سفارش قابل تأیید نیست")
+
+    method = (order.payment_method or PaymentMethod.CARD.value).strip() or PaymentMethod.CARD.value
+    order = await _claim_payable_order(session, order, payment_method=method)
+    if order.status == OrderStatus.DELIVERED.value:
+        # Concurrent path already finished
+        pay = (
+            await session.execute(
+                select(Payment)
+                .where(Payment.order_id == order.id)
+                .order_by(Payment.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if pay is None:
+            raise ValueError("این سفارش قبلاً تحویل شده")
+        return order, pay
+
+    payment = Payment(
+        order_id=order.id,
+        user_id=order.user_id,
+        amount=order.amount,
+        method=method,
+        status=PaymentStatus.APPROVED.value,
+        review_note=(note or "").strip() or "web manual approve",
+    )
+    session.add(payment)
+    await session.commit()
+    await session.refresh(order)
+    await session.refresh(payment)
+
+    if note_txt.startswith("reseller_app:"):
+        from app.services.resellers import mark_application_paid
+
+        await mark_application_paid(session, order)
+        order.status = OrderStatus.DELIVERED.value
+        await session.commit()
+        await session.refresh(order)
+        return order, payment
+    if note_txt.startswith("renew:"):
+        if not (order.service_id and order.plan_id):
+            raise ValueError("سفارش تمدید ناقص است")
+        service = await session.get(UserService, order.service_id)
+        plan = await session.get(Plan, order.plan_id)
+        if not service or not plan:
+            raise ValueError("سرویس یا پلن تمدید یافت نشد")
+        delivered = await apply_renewal(session, order, service, plan)
+        return delivered, payment
+    delivered = await deliver_order(session, order)
+    return delivered, payment
+
+
 def wallet_purchase_reason(order: Order) -> str:
     """Human-readable wallet debit reason (shows wholesale clearly in تراکنش‌ها)."""
     qty = order_quantity(order)
