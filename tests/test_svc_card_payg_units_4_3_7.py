@@ -14,7 +14,8 @@ GB = 1024**3
 class SvcCardMetaTests(unittest.TestCase):
     def test_user_edit_uses_meta_stack(self):
         html = (ROOT / "app/web/templates/_user_edit_body.html").read_text(encoding="utf-8")
-        self.assertIn("svc-card-meta", html)
+        self.assertIn("user-edit-meta", html)
+        self.assertIn("svc-stat-row", html)
         self.assertIn("volume_text", html)
         self.assertIn("num-ratio", html)
         self.assertNotIn("svc-card-stats", html)
@@ -23,9 +24,12 @@ class SvcCardMetaTests(unittest.TestCase):
 
     def test_css_right_align_meta(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        block = css.split(".svc-card-meta {")[1].split("}")[0]
-        self.assertIn("text-align: right", block)
+        self.assertIn(".svc-stat-pill", css)
+        pill = css.split(".svc-stat-pill {")[1].split("}")[0]
+        self.assertIn("text-align: right", pill)
         self.assertIn(".num-ratio", css)
+        ratio = css.split("\n.num-ratio {")[1].split("}")[0]
+        self.assertIn("text-align: right", ratio)
 
 
 class ResellerModalLayoutTests(unittest.TestCase):
@@ -98,7 +102,7 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.3.9")
+        self.assertEqual(__version__, "4.5.0")
 
 
 if __name__ == "__main__":

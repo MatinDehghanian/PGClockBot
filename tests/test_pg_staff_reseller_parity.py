@@ -123,7 +123,9 @@ class WiringTests(unittest.TestCase):
         src = Path("app/web/templates/home.html").read_text(encoding="utf-8")
         # Percent lives in the ring center (like CPU); used/total muted like cores.
         self.assertIn('id="home-mem-val"', src)
-        self.assertIn('class="muted" id="home-mem-hint" dir="ltr"', src)
+        self.assertIn('id="home-mem-hint"', src)
+        self.assertIn("num-ratio", src)
+        self.assertIn("muted", src[src.find("home-mem-hint") - 80 : src.find("home-mem-hint")])
         self.assertNotIn("home-gauge-amount", src)
         self.assertNotIn("home-gauge-center-quiet", src)
         # PG dashboard boxes: users + admins first (no templates slot)

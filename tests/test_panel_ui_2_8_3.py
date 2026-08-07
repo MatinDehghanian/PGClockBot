@@ -12,17 +12,18 @@ ROOT = Path(__file__).resolve().parents[1]
 class PlansPageActionsTests(unittest.TestCase):
     def test_title_actions_same_primary_style(self):
         html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
-        head = html.split("{% block content %}", 1)[1].split("{% if flash_ok %}", 1)[0]
-        self.assertIn('data-modal-open="modal-trial">پلن تست</button>', head)
-        self.assertIn('data-modal-open="modal-custom">پلن دلخواه</button>', head)
-        self.assertIn('data-modal-open="modal-plan-create">پلن ثابت</button>', head)
+        head = html.split("{% block content %}", 1)[1].split("{% if pg_error %}", 1)[0]
+        self.assertIn('data-modal-open="modal-plan-unified">افزودن پلن</button>', head)
         self.assertNotIn("btn-ghost", head)
-        self.assertNotIn("افزودن پلن</button>", head)
+        # Legacy separate trial/custom/fixed buttons removed
+        self.assertNotIn('data-modal-open="modal-trial"', head)
+        self.assertNotIn('data-modal-open="modal-custom"', head)
+        self.assertNotIn('data-modal-open="modal-plan-create"', head)
 
     def test_empty_state_mentions_fixed_plan(self):
         html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
         self.assertIn("پلن ثابت", html)
-        self.assertIn('از «پلن ثابت» بسازید', html)
+        self.assertIn("از «افزودن پلن»", html)
 
 
 class PlanNamingSpacingTests(unittest.TestCase):

@@ -56,8 +56,8 @@ def _seed_sqlite(db_path: Path) -> str:
             text(
                 "INSERT INTO reseller_plans (id, name, price, commission_percent, "
                 "can_approve_receipts, create_pg_admin, create_web_access, share_pg_panel_url, "
-                "is_active, sort_order) "
-                "VALUES (1, 'Starter', 0, 10, 0, 1, 1, 0, 1, 0)"
+                "is_active, sort_order, billing_mode) "
+                "VALUES (1, 'Starter', 0, 10, 0, 1, 1, 0, 1, 0, 'fixed')"
             )
         )
         conn.execute(

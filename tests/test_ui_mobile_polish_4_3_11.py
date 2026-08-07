@@ -178,7 +178,7 @@ class ResellersPlanColumnTests(unittest.TestCase):
         self.assertIn("badge fixed", RESELLERS)
         # Name cell should not stack plan/status badges anymore
         name_cell = RESELLERS.split("{% for u, p in rows %}", 1)[1].split(
-            "<td class=\"mono col-hide-sm\">{{ u.telegram_id }}</td>", 1
+            '<td class="mono col-hide-sm" dir="ltr">{{ u.telegram_id }}</td>', 1
         )[0]
         self.assertNotIn("badge info", name_cell)
         self.assertNotIn("badge approved", name_cell)

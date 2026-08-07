@@ -35,13 +35,13 @@ class PaygPlanUiTests(unittest.TestCase):
         html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
         self.assertIn("reseller-price-per-gb-field", html)
         self.assertIn('name="price_per_gb"', html)
-        self.assertIn("reseller-payg-groups", html)
-        self.assertIn("نرخ / گیگ", html)
+        self.assertIn('id="reseller-groups"', html)
+        self.assertIn("نرخ هر گیگ", html)
 
     def test_edit_has_payg_rate(self):
         html = (ROOT / "app/web/templates/reseller_plan_edit.html").read_text(encoding="utf-8")
         self.assertIn('name="price_per_gb"', html)
-        self.assertIn("edit-payg-groups", html)
+        self.assertIn('id="edit-groups"', html)
         self.assertIn("switch_chip", html)
 
     def test_crud_wires_price_per_gb(self):
@@ -88,8 +88,8 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.1.0")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.1.0")
+        self.assertEqual(__version__, "4.5.0")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.5.0")
 
 
 if __name__ == "__main__":

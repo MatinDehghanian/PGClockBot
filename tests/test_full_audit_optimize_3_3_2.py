@@ -13,8 +13,8 @@ class VersionTests(unittest.TestCase):
         from app.services.release_notes import RELEASE_NOTES_FA
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.3.2")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.3.2")
+        self.assertEqual(__version__, "4.5.0")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.5.0")
         self.assertIn("3.3.2", RELEASE_NOTES_FA)
         blob = " ".join(RELEASE_NOTES_FA["3.3.2"])
         self.assertIn("ممیزی", blob)
@@ -50,9 +50,11 @@ class DeadCodeRemovedTests(unittest.TestCase):
         self.assertNotIn("require_pg_any", pg_src)
 
     def test_backup_status_route_removed(self):
+        # Route kept intentionally — settings UI polls restore progress as JSON
         src = (ROOT / "app/api/backup_pages.py").read_text(encoding="utf-8")
-        self.assertNotIn("/backup/status", src)
-        self.assertNotIn("read_restore_status", src)
+        self.assertIn("/backup/status", src)
+        self.assertIn("read_restore_status", src)
+        self.assertIn("JSONResponse", src)
 
 
 class UnreadSkipTests(unittest.TestCase):
@@ -88,9 +90,11 @@ class PgPermReuseTests(unittest.TestCase):
     def test_require_pg_perm_reuses_staff_features(self):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
         dep = src[src.find("def require_pg_perm") : src.find("@app.middleware")]
-        self.assertIn('features = user.get("pg_permissions") or []', dep)
+        # Features come from authz context (already on staff), not a fresh PG resolve
+        self.assertIn("features = list(ctx.pg_permissions)", dep)
         self.assertNotIn("resolve_reseller_pg_features", dep)
         self.assertIn("raise NotAdmin(redirect=_live_pg_home(features))", dep)
+        self.assertIn("authz_from_staff", dep)
 
 
 class ClientPerfTests(unittest.TestCase):

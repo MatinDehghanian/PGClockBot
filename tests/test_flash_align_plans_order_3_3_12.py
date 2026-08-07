@@ -13,7 +13,8 @@ PLANS = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
 
 class FlashAlignColorTests(unittest.TestCase):
     def test_flash_vertically_centers_icon_and_text(self):
-        block = CSS.split(".flash {")[1].split("}")[0]
+        # Prefer the root `.flash` rule (not `.card.card-flush > .flash`)
+        block = CSS.split("\n.flash {")[1].split("}")[0]
         self.assertIn("align-items: center", block)
         self.assertNotIn("align-items: flex-start", block)
 
@@ -26,18 +27,14 @@ class FlashAlignColorTests(unittest.TestCase):
 
 class PlansWholesaleButtonOrderTests(unittest.TestCase):
     def test_wholesale_is_last_action_button(self):
-        m = re.search(
-            r'page-title-actions actions">(.*?)</div>',
-            PLANS,
-            re.S,
-        )
-        self.assertIsNotNone(m)
-        buttons = re.findall(r'data-modal-open="([^"]+)"', m.group(1))
-        self.assertEqual(
-            buttons,
-            ["modal-trial", "modal-custom", "modal-plan-create", "modal-wholesale"],
-        )
-        self.assertEqual(buttons[-1], "modal-wholesale")
+        # Unified modal: single add button; wholesale is a kind inside the modal
+        self.assertIn('data-modal-open="modal-plan-unified"', PLANS)
+        self.assertIn("modal-plan-unified", PLANS)
+        self.assertIn("فروش عمده", PLANS)
+        self.assertIn("value: 'wholesale'", PLANS)
+        # Old multi-button chrome removed
+        self.assertNotIn('data-modal-open="modal-wholesale"', PLANS)
+        self.assertNotIn('data-modal-open="modal-plan-create"', PLANS)
 
 
 class GaugeCenterLabelTests(unittest.TestCase):

@@ -25,8 +25,10 @@ class WelcomePhotoRemovedTests(unittest.TestCase):
 
     def test_edit_recovers_legacy_photo_menu(self):
         src = Path("app/bot/handlers/start.py").read_text(encoding="utf-8")
-        self.assertIn("Legacy photo home messages", src)
+        # Photo welcome removed; edit-home still recovers if a legacy photo bubble remains
         self.assertIn('getattr(message, "photo", None)', src)
+        self.assertIn("await message.delete()", src)
+        self.assertIn("await message.answer(text, reply_markup=reply_kb)", src)
 
 
 class UploadProgressTests(unittest.TestCase):

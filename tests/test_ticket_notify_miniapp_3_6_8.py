@@ -12,8 +12,8 @@ class Version368Tests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.6.8")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.6.8")
+        self.assertEqual(__version__, "4.5.0")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.5.0")
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.6.8"', notes)
 
@@ -23,7 +23,8 @@ class TicketNotifyDeliveryTests(unittest.TestCase):
         src = (ROOT / "app/services/notifications.py").read_text(encoding="utf-8")
         chunk = src.split("async def _shop_recipient_chat_ids")[1].split("async def ")[0]
         self.assertIn('notify_key != "notify_new_ticket"', chunk)
-        self.assertIn("tid > 0", chunk)
+        self.assertIn("deliverable_telegram_id", chunk)
+        self.assertIn("ids.append(tid)", chunk)
 
     def test_dispatch_prefers_live_shop_bot(self):
         src = (ROOT / "app/services/notifications.py").read_text(encoding="utf-8")

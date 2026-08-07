@@ -12,8 +12,8 @@ class Version365Tests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.6.8")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "3.6.8")
+        self.assertEqual(__version__, "4.5.0")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.5.0")
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.6.8"', notes)
 
@@ -79,7 +79,8 @@ class ShopChromeReplyTests(unittest.TestCase):
         self.assertTrue(any("Demo" in t for t in texts))
         self.assertFalse(any("دلخواه" in t for t in texts))
         self.assertFalse(any("عمده" in t for t in texts))
-        self.assertFalse(any("بازگشت" in t for t in texts))
+        # Inline back to kind picker is intentional chrome
+        self.assertTrue(any("بازگشت" in t for t in texts))
 
         shop = shop_reply_keyboard(
             {"btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"},

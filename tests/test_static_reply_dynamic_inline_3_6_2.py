@@ -26,9 +26,9 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
 
         from app.version import __version__
 
-        self.assertEqual(__version__, "3.6.8")
+        self.assertEqual(__version__, "4.5.0")
         root = Path(__file__).resolve().parents[1]
-        self.assertEqual((root / "VERSION").read_text(encoding="utf-8").strip(), "3.6.8")
+        self.assertEqual((root / "VERSION").read_text(encoding="utf-8").strip(), "4.5.0")
 
     def test_user_cannot_map_admin_labels(self):
         ui = {"btn_menu_home": "🏠 منوی اصلی", "btn_back": "⬅️ بازگشت", "menu_order": "shop,wallet"}
@@ -62,7 +62,7 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
         mapping = reply_action_map("admin", ui=ui, include_submenus=True, is_reseller_bot=False)
         self.assertEqual(mapping["🆕 ساخت بکاپ کامل"], "backup_create")
         self.assertEqual(mapping["📢 همه"], "bc_aud_all")
-        self.assertEqual(mapping["➕ پلن جدید"], "adm_plan_add")
+        self.assertEqual(mapping["➕ افزودن پلن"], "adm_plans_add")
         flat = [b.text for row in admin_backup_reply_keyboard(ui).keyboard for b in row]
         self.assertIn("🆕 ساخت بکاپ کامل", flat)
         self.assertIn("⬅️ بازگشت", flat)
@@ -122,8 +122,9 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
         # soft-injected by with_shop_settings — still present by design
         self.assertIn("💎 پلن‌های فروش", mapping)
         self.assertIn("⚙️ تنظیمات فروشگاه", mapping)
-        # dashboard/stats NOT in stored perms and not soft-injected
-        self.assertNotIn("🏠 خانه نماینده", mapping)
+        # dashboard is soft-injected with other core shop keys
+        self.assertIn("🏠 خانه نماینده", mapping)
+        # stats is NOT soft-injected
         self.assertNotIn("📊 آمار و کمیسیون", mapping)
 
     def test_legacy_hubs_no_longer_static_chrome(self):

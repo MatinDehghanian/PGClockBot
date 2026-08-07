@@ -93,7 +93,8 @@ class PgOverviewMergeTests(unittest.TestCase):
 class PageTitleGapBumpTests(unittest.TestCase):
     def test_page_title_gap_is_24(self):
         css = CSS.read_text(encoding="utf-8")
-        self.assertIn("--page-title-gap: 24px;", css)
+        self.assertIn("--page-title-gap: var(--space-3);", css)
+        self.assertIn("--space-3: 24px;", css)
         self.assertNotIn("--page-title-gap: 16px;", css)
 
 

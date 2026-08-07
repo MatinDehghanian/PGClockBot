@@ -147,7 +147,7 @@ class SharedAdminAuthTests(unittest.TestCase):
 
         admin = SimpleNamespace(role=Role.ADMIN.value, telegram_id=1)
         user = SimpleNamespace(role="user", telegram_id=999)
-        with patch("app.bot.auth.get_settings") as gs:
+        with patch("app.config.get_settings") as gs:
             gs.return_value.admin_ids = {42}
             self.assertTrue(is_platform_admin(admin))
             self.assertFalse(is_platform_admin(user))

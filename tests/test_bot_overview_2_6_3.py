@@ -35,7 +35,9 @@ class RamMetaStyleTests(unittest.TestCase):
         cpu = home.split('data-metric="cpu"')[1].split("data-metric=")[0]
         mem = home.split('data-metric="mem"')[1].split("</article>")[0]
         self.assertIn('class="muted"', cpu)
-        self.assertIn('class="muted" id="home-mem-hint"', mem)
+        self.assertIn('id="home-mem-hint"', mem)
+        self.assertIn("muted", mem.split("home-mem-hint")[0].split("<")[-1])
+        self.assertIn("num-ratio", mem)
         self.assertNotIn("home-gauge-amount", mem)
         self.assertNotIn("<strong", mem.split("home-gauge-meta")[1])
 
