@@ -17,7 +17,6 @@ from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.handlers.admin_settings import CUSTOM_PRICE
 from app.config import get_settings
 from app.db.models import BotUser, Plan, ResellerPlan
-from app.services.formatting import format_toman
 from app.services.orders import parse_wholesale_tiers, wholesale_description
 from app.services.pasarguard import get_pg
 from app.services.resellers import (

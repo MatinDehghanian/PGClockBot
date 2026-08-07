@@ -34,7 +34,6 @@ from app.db.session import SessionLocal
 from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.pasarguard import get_pg
 from app.services.resellers import (
-    parse_perms,
     setup_is_complete,
     DEFAULT_FEATURE_PERMS,
 )
@@ -46,11 +45,9 @@ from app.services.setup_wizard import (
     is_local_setup_client,
     is_setup_complete,
     mark_setup_complete,
-    panel_url_hint,
     setup_finish_login_url,
     wizard_panel_url_hint,
     parse_admin_ids,
-    persist_setup_entry_url,
     revoke_setup_gate,
     rotate_setup_gate_token,
     setup_gate_cookie_max_age,
@@ -318,7 +315,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             from sqlalchemy import select
 
             from app.db.models import ResellerProfile
-            from app.services.resellers import parse_perms, setup_is_complete
+            from app.services.resellers import setup_is_complete
 
             bot_user_id = user.get("bot_user_id")
             if not bot_user_id:

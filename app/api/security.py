@@ -15,7 +15,6 @@ from app.services.setup_wizard import update_env_keys
 from app.services.web_auth import (
     change_web_admin_password,
     change_web_admin_username,
-    hash_password,
     load_web_admin,
     validate_password_strength,
     validate_web_username,
@@ -245,6 +244,27 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
             cleaned, err = validate_web_username(new_username, lowercase=False)
             if err:
                 return _err(err)
+            # Same collision guards as /security/credentials (Owner rename).
+            from app.db.models import PgStaffAccess
+
+            res_rows = (
+                await session.execute(
+                    select(ResellerProfile.web_username).where(
+                        ResellerProfile.web_username.is_not(None)
+                    )
+                )
+            ).scalars().all()
+            if any((u or "").lower() == cleaned.lower() for u in res_rows):
+                return _err("این نام کاربری قبلاً برای یک نماینده گرفته شده")
+            staff_rows = (
+                await session.execute(
+                    select(PgStaffAccess.web_username).where(
+                        PgStaffAccess.web_username.is_not(None)
+                    )
+                )
+            ).scalars().all()
+            if any((u or "").lower() == cleaned.lower() for u in staff_rows):
+                return _err("این نام کاربری قبلاً برای دسترسی وب ادمین پاسارگارد گرفته شده")
             try:
                 saved = change_web_admin_username(cleaned)
                 update_env_keys({"WEB_ADMIN_USER": saved})
@@ -273,6 +293,12 @@ def register_security_pages(app, *, render, require_staff, get_db, get_signer, c
         cleaned, err = validate_web_username(new_username, lowercase=True)
         if err:
             return _err(err)
+        # Phase D / unified login: match /security/credentials — web == pg username.
+        pg_u = (profile.pg_admin_username or "").strip().lower()
+        if pg_u and cleaned != pg_u:
+            return _err(
+                "نام کاربری باید همان یوزر پاسارگارد باشد (ورود یکپارچه وب‌پنل و پاسارگارد)"
+            )
         clash = await session.execute(
             select(ResellerProfile).where(
                 ResellerProfile.web_username == cleaned,

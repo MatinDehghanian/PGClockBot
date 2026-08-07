@@ -24,6 +24,17 @@ class PaygWalletLinkTests(unittest.IsolatedAsyncioTestCase):
 
         session = AsyncMock()
         session.get = AsyncMock(return_value=user)
+        # claim link (rowcount=1) then wallet += billing; refresh applies merge
+        session.execute = AsyncMock(return_value=MagicMock(rowcount=1))
+
+        async def _refresh(obj):
+            if obj is user:
+                user.wallet_balance = 8621
+
+        session.refresh = AsyncMock(side_effect=_refresh)
+        session.no_autoflush = MagicMock()
+        session.no_autoflush.__enter__ = MagicMock(return_value=None)
+        session.no_autoflush.__exit__ = MagicMock(return_value=False)
 
         out_user, bal = await ensure_payg_shop_wallet(session, profile)
         self.assertEqual(bal, 8621)
@@ -31,6 +42,40 @@ class PaygWalletLinkTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(profile.billing_balance, 8621)
         self.assertTrue(profile.payg_wallet_linked)
         self.assertIs(out_user, user)
+        self.assertEqual(session.execute.await_count, 2)
+
+    async def test_first_link_loser_mirrors_wallet_only(self):
+        from app.services.billing import ensure_payg_shop_wallet
+
+        profile = MagicMock()
+        profile.user_id = 5
+        profile.billing_balance = -379
+        profile.payg_wallet_linked = False
+
+        user = MagicMock()
+        user.id = 5
+        user.wallet_balance = 5000
+
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=user)
+        session.execute = AsyncMock(return_value=MagicMock(rowcount=0))
+
+        async def _refresh(obj):
+            if obj is profile:
+                profile.payg_wallet_linked = True
+                profile.billing_balance = 5000
+            if obj is user:
+                user.wallet_balance = 5000
+
+        session.refresh = AsyncMock(side_effect=_refresh)
+        session.no_autoflush = MagicMock()
+        session.no_autoflush.__enter__ = MagicMock(return_value=None)
+        session.no_autoflush.__exit__ = MagicMock(return_value=False)
+
+        _u, bal = await ensure_payg_shop_wallet(session, profile)
+        self.assertEqual(bal, 5000)
+        self.assertEqual(user.wallet_balance, 5000)
+        self.assertEqual(session.execute.await_count, 1)
 
     async def test_linked_mirrors_wallet_only(self):
         from app.services.billing import ensure_payg_shop_wallet
@@ -140,15 +185,40 @@ class SuspendListBadgeTests(unittest.TestCase):
         self.assertIn("فعال", src)
 
     def test_edit_shows_wallet_as_payg_source(self):
-        src = Path("app/web/templates/reseller_edit.html").read_text(encoding="utf-8")
-        self.assertIn("wallet_balance", src)
-        self.assertIn("منبع PAYG", src)
+        # Edit form body lives in the shared fragment (page shell only includes it).
+        shell = Path("app/web/templates/reseller_edit.html").read_text(encoding="utf-8")
+        body = Path("app/web/templates/_reseller_edit_body.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("_reseller_edit_body.html", shell)
+        self.assertIn("wallet_balance", body)
+        self.assertIn("کیف پول فروشگاهی", body)
+        self.assertIn("مدیریت PAYG", body)
 
     def test_delete_warn_no_double_billing_pot(self):
-        edit = Path("app/web/templates/reseller_edit.html").read_text(encoding="utf-8")
+        edit = Path("app/web/templates/_reseller_edit_body.html").read_text(
+            encoding="utf-8"
+        )
         listing = Path("app/web/templates/resellers.html").read_text(encoding="utf-8")
         self.assertNotIn("موجودی PAYG:", edit)
         self.assertNotIn("موجودی PAYG", listing)
+
+    def test_first_link_uses_atomic_claim(self):
+        src = Path("app/services/billing.py").read_text(encoding="utf-8")
+        fn = src[
+            src.find("async def ensure_payg_shop_wallet") : src.find(
+                "async def payg_available_balance"
+            )
+        ]
+        self.assertIn("payg_wallet_linked.is_(False)", fn)
+        self.assertIn("BotUser.wallet_balance + int(billing)", fn)
+
+    def test_debit_usage_retry_stays_balance_guarded(self):
+        src = Path("app/services/billing.py").read_text(encoding="utf-8")
+        i = src.find("Race: charge whatever remains")
+        self.assertGreater(i, 0)
+        chunk = src[i : i + 700]
+        self.assertIn("wallet_balance >= int(charge)", chunk)
 
 
 class SchemaLinkFlagTests(unittest.TestCase):

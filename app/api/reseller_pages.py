@@ -24,7 +24,6 @@ from app.services.resellers import (
     get_reseller_pg_panel_base_url,
     join_perms,
     list_applications,
-    list_reseller_plans,
     normalize_feature_perms,
     notify_reseller_revoked,
     parse_perms,

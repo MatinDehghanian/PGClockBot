@@ -73,9 +73,11 @@ class ProvisionNoConversionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_no_revoke_in_source(self):
         src = Path("app/services/resellers.py").read_text(encoding="utf-8")
+        # Slice only provision_existing_pg_admin — convert_staff_to_reseller
+        # (which follows) intentionally calls revoke_web_access.
         fn = src[
             src.find("async def provision_existing_pg_admin") : src.find(
-                "async def approve_application"
+                "async def convert_staff_to_reseller"
             )
         ]
         self.assertNotIn("revoke_web_access", fn)
