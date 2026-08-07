@@ -1267,4 +1267,63 @@
         form.querySelectorAll('input').forEach(applyNormalize);
       }, true);
     })();
+
+    /* Sortable table headers: click th[data-sort-type] on table[data-sortable] */
+    (function () {
+      function cellValue(td, type) {
+        if (!td) return type === 'num' ? Number.NEGATIVE_INFINITY : '';
+        const raw = td.getAttribute('data-sort-value');
+        const text = raw != null ? raw : (td.textContent || '').trim();
+        if (type === 'num') {
+          if (text === '' || text === '—' || text === '-') return Number.NEGATIVE_INFINITY;
+          const n = Number(String(text).replace(/[^\d.+-eE]/g, ''));
+          return Number.isFinite(n) ? n : Number.NEGATIVE_INFINITY;
+        }
+        return String(text).toLowerCase();
+      }
+      function sortTable(table, th) {
+        const tbody = table.tBodies[0];
+        if (!tbody) return;
+        const heads = Array.from(th.parentNode.children);
+        const col = heads.indexOf(th);
+        if (col < 0) return;
+        const type = th.getAttribute('data-sort-type') || 'text';
+        const cur = th.getAttribute('aria-sort');
+        const asc = cur !== 'ascending';
+        heads.forEach((h) => {
+          if (h !== th) h.removeAttribute('aria-sort');
+        });
+        th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');
+        const rows = Array.from(tbody.querySelectorAll('tr')).filter((tr) =>
+          tr.querySelector('td')
+        );
+        // Keep empty-state single muted row at end
+        const dataRows = rows.filter((tr) => !tr.querySelector('td[colspan]'));
+        const emptyRows = rows.filter((tr) => tr.querySelector('td[colspan]'));
+        dataRows.sort((a, b) => {
+          const av = cellValue(a.children[col], type);
+          const bv = cellValue(b.children[col], type);
+          let cmp = 0;
+          if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
+          else cmp = String(av).localeCompare(String(bv), 'fa', { sensitivity: 'base', numeric: true });
+          return asc ? cmp : -cmp;
+        });
+        dataRows.concat(emptyRows).forEach((tr) => tbody.appendChild(tr));
+      }
+      function bind(table) {
+        if (!(table instanceof HTMLTableElement)) return;
+        table.querySelectorAll('thead th[data-sort-type]').forEach((th) => {
+          th.setAttribute('role', 'columnheader');
+          th.tabIndex = 0;
+          th.addEventListener('click', () => sortTable(table, th));
+          th.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              sortTable(table, th);
+            }
+          });
+        });
+      }
+      document.querySelectorAll('table[data-sortable]').forEach(bind);
+    })();
   })();

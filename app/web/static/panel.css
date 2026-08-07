@@ -1650,6 +1650,55 @@ th {
   background: var(--table-head-bg);
   white-space: nowrap;
 }
+th[data-sort-type] {
+  cursor: pointer;
+  user-select: none;
+  padding-inline-end: 1.1rem;
+  position: relative;
+}
+th[data-sort-type]::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: 0.35rem;
+  top: 50%;
+  width: 0.35rem;
+  height: 0.55rem;
+  transform: translateY(-50%);
+  opacity: 0.35;
+  background:
+    linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat,
+    linear-gradient(transparent 35%, currentColor 35% 65%, transparent 65%);
+  mask:
+    polygon(50% 0, 100% 40%, 0 40%) top / 100% 45% no-repeat,
+    polygon(0 60%, 100% 60%, 50% 100%) bottom / 100% 45% no-repeat;
+  -webkit-mask:
+    polygon(50% 0, 100% 40%, 0 40%) top / 100% 45% no-repeat,
+    polygon(0 60%, 100% 60%, 50% 100%) bottom / 100% 45% no-repeat;
+  background-color: currentColor;
+}
+th[data-sort-type][aria-sort="ascending"]::after,
+th[data-sort-type][aria-sort="descending"]::after {
+  opacity: 0.85;
+  mask: none;
+  -webkit-mask: none;
+  width: 0;
+  height: 0;
+  border-inline: 0.28rem solid transparent;
+  background: none;
+}
+th[data-sort-type][aria-sort="ascending"]::after {
+  border-bottom: 0.34rem solid currentColor;
+  border-top: 0;
+  transform: translateY(calc(-50% - 0.05rem));
+}
+th[data-sort-type][aria-sort="descending"]::after {
+  border-top: 0.34rem solid currentColor;
+  border-bottom: 0;
+  transform: translateY(calc(-50% + 0.05rem));
+}
+th[data-sort-type]:hover {
+  color: var(--accent, var(--foreground));
+}
 thead th {
   position: sticky;
   top: 0;

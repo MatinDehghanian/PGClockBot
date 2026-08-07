@@ -1229,6 +1229,86 @@ async def reject_payment(session: AsyncSession, payment: Payment, reviewer_tg: i
     await session.commit()
 
 
+_MANUAL_CANCEL_STATUSES = frozenset(
+    {
+        OrderStatus.PENDING.value,
+        OrderStatus.AWAITING_RECEIPT.value,
+        OrderStatus.AWAITING_APPROVAL.value,
+        OrderStatus.REJECTED.value,
+    }
+)
+
+
+async def cancel_order(session: AsyncSession, order: Order, *, note: str = "") -> Order:
+    """Manually cancel an unpaid order; reject sibling pending payments.
+
+    Paid / delivering / delivered orders cannot be cancelled from the panel
+    (would orphan provisioned services / skip refunds).
+    """
+    order_id = int(order.id)
+    with session.no_autoflush:
+        claim = await session.execute(
+            update(Order)
+            .where(
+                Order.id == order_id,
+                Order.status.in_(tuple(_MANUAL_CANCEL_STATUSES)),
+            )
+            .values(status=OrderStatus.CANCELLED.value)
+            .execution_options(synchronize_session=False)
+        )
+    if claim.rowcount != 1:
+        raise ValueError("این سفارش قابل لغو نیست")
+    reject_note = (note or "").strip() or "web order cancel"
+    await session.execute(
+        update(Payment)
+        .where(
+            Payment.order_id == order_id,
+            Payment.status == PaymentStatus.PENDING.value,
+        )
+        .values(status=PaymentStatus.REJECTED.value, review_note=reject_note)
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
+    await session.refresh(order)
+    return order
+
+
+async def reject_order(session: AsyncSession, order: Order, *, note: str = "") -> Order:
+    """Reject an unpaid order (and pending payments) without going through a payment row."""
+    order_id = int(order.id)
+    with session.no_autoflush:
+        claim = await session.execute(
+            update(Order)
+            .where(
+                Order.id == order_id,
+                Order.status.in_(
+                    (
+                        OrderStatus.PENDING.value,
+                        OrderStatus.AWAITING_RECEIPT.value,
+                        OrderStatus.AWAITING_APPROVAL.value,
+                    )
+                ),
+            )
+            .values(status=OrderStatus.REJECTED.value)
+            .execution_options(synchronize_session=False)
+        )
+    if claim.rowcount != 1:
+        raise ValueError("این سفارش قابل رد نیست")
+    reject_note = (note or "").strip() or "web order reject"
+    await session.execute(
+        update(Payment)
+        .where(
+            Payment.order_id == order_id,
+            Payment.status == PaymentStatus.PENDING.value,
+        )
+        .values(status=PaymentStatus.REJECTED.value, review_note=reject_note)
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
+    await session.refresh(order)
+    return order
+
+
 async def deliver_order(session: AsyncSession, order: Order) -> Order:
     order_id = int(order.id)
     # Atomic delivery claim (SQLite has no real row locks — status flip is the mutex)
