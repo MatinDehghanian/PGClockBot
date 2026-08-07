@@ -319,7 +319,7 @@ class PanelTemplateContractTests(unittest.TestCase):
     def test_sort_idle_icon_not_box(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         block = css.split("th[data-sort-type]::after {", 1)[1].split("th[data-sort-type]:hover::after", 1)[0]
-        self.assertIn("mask:", block)
+        self.assertIn("mask-image:", block)
         self.assertIn("data:image/svg+xml", block)
         self.assertIn("background-color: currentColor", block)
         # No CSS-triangle / gradient X hack
