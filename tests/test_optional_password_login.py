@@ -65,10 +65,17 @@ class ProvisionPasswordKeepTests(unittest.IsolatedAsyncioTestCase):
         session.commit = AsyncMock()
         session.refresh = AsyncMock()
 
+        call_n = {"n": 0}
+
         async def _exec(stmt):
+            call_n["n"] += 1
             result = MagicMock()
+            # 1st execute: linked resellers (.scalars().all)
             result.scalars.return_value.all.return_value = [existing]
-            result.scalar_one_or_none.return_value = existing
+            # later: username uniqueness — same reseller ok; staff clash none
+            result.scalar_one_or_none.return_value = (
+                existing if call_n["n"] == 2 else None
+            )
             return result
 
         session.execute = AsyncMock(side_effect=_exec)
