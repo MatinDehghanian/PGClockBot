@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.5.5": [
+        "فیلد علت فقط برای حذف کاربر/نماینده/ادمین رندر می‌شود (دیگر در همه Confirmationها ظاهر نمی‌شود)",
+        "علت حذف اجباری است و در اعلان تلگرام شخص حذف‌شده نمایش داده می‌شود",
+        "آیکن سورت تیتر جدول‌ها با chevron استاندارد Lucide جایگزین شد",
+    ],
     "4.5.4": [
         "سفارش‌های در انتظار: دکمه تأیید برای ارسال سرویس به کاربر",
         "سفارش‌های لغوشده بدون منوی عملیات",
