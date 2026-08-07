@@ -130,7 +130,7 @@
             {% if uname %}
             <form method="post" action="/pg/admins/{{ uname }}/delete"
               {% if src == 'reseller' %}
-              data-confirm="ادمین پاسارگارد «{{ uname }}» و نمایندگی/ربات فروشگاه متصل هم حذف شوند؟ این عمل برگشت‌ناپذیر است."
+              data-confirm="ادمین پاسارگارد «{{ uname }}» و نمایندگی/ربات فروشگاه متصل هم حذف شوند؟ این عمل برگشت‌ناپذیر است. علت برای شخص حذف‌شده ارسال می‌شود."
               data-confirm-title="حذف ادمین + نماینده"
               {% elif src == 'pg_staff' %}
               data-confirm="ادمین پاسارگارد «{{ uname }}» و دسترسی وب ادمین فرعی حذف شوند؟"
@@ -139,7 +139,12 @@
               data-confirm="ادمین پاسارگارد «{{ uname }}» حذف شود؟"
               data-confirm-title="تأیید حذف"
               {% endif %}
-              data-confirm-danger="1" data-confirm-label="حذف">
+              data-confirm-danger="1"
+              data-confirm-reason="1"
+              data-confirm-reason-label="علت حذف"
+              data-confirm-reason-name="reason"
+              data-confirm-label="حذف">
+              <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف ادمین</button>
             </form>
             {% endif %}
