@@ -2173,6 +2173,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                 return _redirect_msg("/orders", err=e.message)
         if order.status == OrderStatus.DELIVERED.value:
             return _redirect_msg("/orders", ok="قبلاً تحویل شده")
+        # Already provisioned (status may have been tampered) — never re-deliver/notify
+        note = (order.note or "").strip()
+        is_renew_or_app = note.startswith("renew:") or note.startswith("reseller_app:")
+        if order.service_id and not is_renew_or_app:
+            if order.status != OrderStatus.DELIVERED.value:
+                order.status = OrderStatus.DELIVERED.value
+                await session.commit()
+            return _redirect_msg("/orders", ok="قبلاً تحویل شده")
 
         result = await session.execute(
             select(Payment)
@@ -2194,12 +2202,15 @@ def create_api_app(lifespan=None) -> FastAPI:
                 delivered = await approve_payment(session, payment, reviewer_tg=0)
                 await _notify_order_user(session, payment, delivered or order)
             elif order.status == OrderStatus.PAID.value:
+                had_service = bool(order.service_id)
                 delivered = await deliver_order(session, order)
-                if payment:
+                if payment and not had_service:
                     await _notify_order_user(session, payment, delivered)
             elif payment and payment.status == PaymentStatus.APPROVED.value and order.status != OrderStatus.DELIVERED.value:
+                had_service = bool(order.service_id)
                 delivered = await deliver_order(session, order)
-                await _notify_order_user(session, payment, delivered)
+                if not had_service:
+                    await _notify_order_user(session, payment, delivered)
             else:
                 return _redirect_msg("/orders", err="این سفارش هنوز قابل تأیید نیست (رسید لازم است)")
         except Exception as e:

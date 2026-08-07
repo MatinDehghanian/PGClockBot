@@ -1120,7 +1120,15 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
         return None
     # Order already fulfilled — roll THIS payment back to rejected (do not leave
     # a second APPROVED row that double-counts revenue).
-    if order.status in {OrderStatus.DELIVERED.value, OrderStatus.DELIVERING.value}:
+    # Also block when service_id is set even if status was tampered away from
+    # delivered (cancel/re-approve must never mint a second VPN user).
+    note = (order.note or "").strip()
+    is_renew_or_app = note.startswith("renew:") or note.startswith("reseller_app:")
+    already_fulfilled = order.status in {
+        OrderStatus.DELIVERED.value,
+        OrderStatus.DELIVERING.value,
+    } or (bool(order.service_id) and not is_renew_or_app)
+    if already_fulfilled:
         payment.status = PaymentStatus.REJECTED.value
         payment.review_note = payment.review_note or "order already delivered"
         await session.commit()
@@ -1243,16 +1251,37 @@ async def cancel_order(session: AsyncSession, order: Order, *, note: str = "") -
     """Manually cancel an unpaid order; reject sibling pending payments.
 
     Paid / delivering / delivered orders cannot be cancelled from the panel
-    (would orphan provisioned services / skip refunds).
+    (would orphan provisioned services / skip refunds). Also blocked when a
+    service was already linked or a payment was already approved — cancel then
+    re-approve must never become a second delivery path.
     """
     order_id = int(order.id)
+    note_txt = (order.note or "").strip()
+    is_renew_or_app = note_txt.startswith("renew:") or note_txt.startswith("reseller_app:")
+    if order.service_id and not is_renew_or_app:
+        raise ValueError("این سفارش قبلاً تحویل شده و قابل لغو نیست")
+    approved = (
+        await session.execute(
+            select(Payment.id)
+            .where(
+                Payment.order_id == order_id,
+                Payment.status == PaymentStatus.APPROVED.value,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if approved is not None:
+        raise ValueError("پرداخت تأییدشده دارد — قابل لغو نیست")
+    cond = [
+        Order.id == order_id,
+        Order.status.in_(tuple(_MANUAL_CANCEL_STATUSES)),
+    ]
+    if not is_renew_or_app:
+        cond.append(Order.service_id.is_(None))
     with session.no_autoflush:
         claim = await session.execute(
             update(Order)
-            .where(
-                Order.id == order_id,
-                Order.status.in_(tuple(_MANUAL_CANCEL_STATUSES)),
-            )
+            .where(*cond)
             .values(status=OrderStatus.CANCELLED.value)
             .execution_options(synchronize_session=False)
         )
@@ -1311,6 +1340,28 @@ async def reject_order(session: AsyncSession, order: Order, *, note: str = "") -
 
 async def deliver_order(session: AsyncSession, order: Order) -> Order:
     order_id = int(order.id)
+    # If a prior delivery already linked services (even after status tampering),
+    # never mint another PG user — just seal the order as delivered.
+    if order.service_id:
+        if order.status != OrderStatus.DELIVERED.value:
+            order.status = OrderStatus.DELIVERED.value
+            await session.commit()
+            await session.refresh(order)
+        return order
+    prior = (
+        await session.execute(
+            select(UserService)
+            .where(UserService.remark.like(f"order:{order_id}%"))
+            .order_by(UserService.id.asc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if prior is not None:
+        order.service_id = prior.id
+        order.status = OrderStatus.DELIVERED.value
+        await session.commit()
+        await session.refresh(order)
+        return order
     # Atomic delivery claim (SQLite has no real row locks — status flip is the mutex)
     with session.no_autoflush:
         claim = await session.execute(

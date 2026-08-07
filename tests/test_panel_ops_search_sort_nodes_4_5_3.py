@@ -111,6 +111,164 @@ class OrdersCancelServiceTests(unittest.IsolatedAsyncioTestCase):
                 await cancel_order(session, order)
 
 
+class SingleDeliveryGuaranteeTests(unittest.IsolatedAsyncioTestCase):
+    async def _session(self):
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        from app.db.models import Base
+
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        return async_sessionmaker(engine, expire_on_commit=False)
+
+    async def test_second_payment_rejected_when_service_already_linked(self):
+        """Even if status was reset away from delivered, do not mint again."""
+        from app.db.models import (
+            BotUser,
+            Order,
+            OrderStatus,
+            Payment,
+            PaymentStatus,
+            Role,
+            UserService,
+        )
+        from app.services.orders import approve_payment
+
+        Session = await self._session()
+        async with Session() as session:
+            user = BotUser(telegram_id=301, role=Role.USER.value, referral_code="r301")
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
+            order = Order(
+                user_id=user.id,
+                amount=5000,
+                status=OrderStatus.AWAITING_APPROVAL.value,  # tampered
+            )
+            session.add(order)
+            await session.commit()
+            await session.refresh(order)
+            svc = UserService(
+                bot_user_id=user.id,
+                pg_username="already",
+                remark=f"order:{order.id}",
+            )
+            session.add(svc)
+            await session.commit()
+            await session.refresh(svc)
+            order.service_id = svc.id
+            await session.commit()
+            pay = Payment(
+                order_id=order.id,
+                user_id=user.id,
+                amount=5000,
+                status=PaymentStatus.PENDING.value,
+            )
+            session.add(pay)
+            await session.commit()
+            await session.refresh(pay)
+            with self.assertRaises(ValueError) as ctx:
+                await approve_payment(session, pay, reviewer_tg=0)
+            self.assertIn("قبلاً تحویل", str(ctx.exception))
+            await session.refresh(pay)
+            self.assertEqual(pay.status, PaymentStatus.REJECTED.value)
+
+    async def test_deliver_order_idempotent_with_prior_remark(self):
+        from app.db.models import BotUser, Order, OrderStatus, Role, UserService
+        from app.services.orders import deliver_order
+
+        Session = await self._session()
+        async with Session() as session:
+            user = BotUser(telegram_id=302, role=Role.USER.value, referral_code="r302")
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
+            order = Order(user_id=user.id, amount=1, status=OrderStatus.PAID.value)
+            session.add(order)
+            await session.commit()
+            await session.refresh(order)
+            svc = UserService(
+                bot_user_id=user.id,
+                pg_username="prior",
+                remark=f"order:{order.id}",
+            )
+            session.add(svc)
+            await session.commit()
+            await session.refresh(svc)
+            out = await deliver_order(session, order)
+            await session.refresh(order)
+            self.assertEqual(out.status, OrderStatus.DELIVERED.value)
+            self.assertEqual(order.service_id, svc.id)
+            # second call still no-op
+            out2 = await deliver_order(session, order)
+            self.assertEqual(out2.service_id, svc.id)
+
+    async def test_cancel_blocked_after_approved_payment(self):
+        from app.db.models import (
+            BotUser,
+            Order,
+            OrderStatus,
+            Payment,
+            PaymentStatus,
+            Role,
+        )
+        from app.services.orders import cancel_order
+
+        Session = await self._session()
+        async with Session() as session:
+            user = BotUser(telegram_id=303, role=Role.USER.value, referral_code="r303")
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
+            order = Order(
+                user_id=user.id,
+                amount=100,
+                status=OrderStatus.AWAITING_APPROVAL.value,
+            )
+            session.add(order)
+            await session.commit()
+            await session.refresh(order)
+            session.add(
+                Payment(
+                    order_id=order.id,
+                    user_id=user.id,
+                    amount=100,
+                    status=PaymentStatus.APPROVED.value,
+                )
+            )
+            await session.commit()
+            with self.assertRaises(ValueError):
+                await cancel_order(session, order)
+
+    async def test_cancel_blocked_when_service_linked(self):
+        from app.db.models import BotUser, Order, OrderStatus, Role, UserService
+        from app.services.orders import cancel_order
+
+        Session = await self._session()
+        async with Session() as session:
+            user = BotUser(telegram_id=304, role=Role.USER.value, referral_code="r304")
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
+            order = Order(
+                user_id=user.id,
+                amount=100,
+                status=OrderStatus.AWAITING_APPROVAL.value,
+            )
+            session.add(order)
+            await session.commit()
+            await session.refresh(order)
+            svc = UserService(bot_user_id=user.id, pg_username="x", remark=f"order:{order.id}")
+            session.add(svc)
+            await session.commit()
+            await session.refresh(svc)
+            order.service_id = svc.id
+            await session.commit()
+            with self.assertRaises(ValueError):
+                await cancel_order(session, order)
+
+
 class PanelTemplateContractTests(unittest.TestCase):
     def test_orders_actions_and_search_sort(self):
         html = (ROOT / "app/web/templates/orders.html").read_text(encoding="utf-8")
