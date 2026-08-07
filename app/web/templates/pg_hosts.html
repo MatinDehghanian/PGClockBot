@@ -6,7 +6,7 @@
   <div>
     {{ page_title('hosts', 'هاست‌ها', 'pg') }}
   </div>
-  {% if can_create or can_write %}
+  {% if can_create %}
   <button type="button" class="btn" data-modal-open="modal-pg-host-create">ساخت هاست</button>
   {% endif %}
 </div>
@@ -30,9 +30,9 @@
         <td class="mono col-hide-sm" dir="ltr">{{ h.get('inbound_tag') or '—' }}</td>
         <td>{% if h.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
         <td class="col-actions">
-          {% if (can_update or can_delete or can_write) and h.get('id') %}
+          {% if (can_update or can_delete) and h.get('id') %}
           {% call row_actions() %}
-            {% if can_update or can_write %}
+            {% if can_update %}
             <button type="button" class="btn btn-ghost btn-sm"
               data-modal-open="modal-pg-host-edit"
               data-hid="{{ h.get('id') }}"
@@ -45,7 +45,7 @@
               <button class="btn btn-ghost btn-sm" type="submit">{% if h.get('is_disabled') %}فعال{% else %}خاموش{% endif %}</button>
             </form>
             {% endif %}
-            {% if can_delete or can_write %}
+            {% if can_delete %}
             <form method="post" action="/pg/hosts/{{ h.get('id') }}/delete" data-confirm="این هاست حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
               <button class="btn btn-sm btn-danger" type="submit">حذف</button>
             </form>
@@ -61,7 +61,7 @@
   {% endif %}
 </div>
 
-{% if can_create or can_write %}
+{% if can_create %}
 <div class="ui-modal" id="modal-pg-host-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
@@ -109,7 +109,7 @@
 </div>
 {% endif %}
 
-{% if can_update or can_write %}
+{% if can_update %}
 <div class="ui-modal" id="modal-pg-host-edit" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-host-edit-title">

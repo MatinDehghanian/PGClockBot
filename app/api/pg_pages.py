@@ -837,7 +837,6 @@ def register_pg_pages(
                 groups=groups,
                 flash_err=err,
                 flash_ok=ok,
-                can_write=staff_pg_writes(staff)["templates"],
                 can_create=staff_pg_action(staff, "templates", "create"),
                 can_update=staff_pg_action(staff, "templates", "update"),
                 can_delete=staff_pg_action(staff, "templates", "delete"),
@@ -1003,7 +1002,6 @@ def register_pg_pages(
                 edit_group=edit_group,
                 flash_err=err,
                 flash_ok=ok,
-                can_write=staff_pg_writes(staff)["groups"],
                 can_create=staff_pg_action(staff, "groups", "create"),
                 can_update=staff_pg_action(staff, "groups", "update"),
                 can_delete=staff_pg_action(staff, "groups", "delete"),
@@ -1118,13 +1116,9 @@ def register_pg_pages(
                 inbound_tags=inbound_tags,
                 flash_err=err,
                 flash_ok=ok,
-                can_write=staff_pg_writes(staff)["hosts"],
                 can_create=staff_pg_action(staff, "hosts", "create"),
                 can_update=staff_pg_action(staff, "hosts", "update"),
-                can_delete=(
-                    staff_pg_action(staff, "hosts", "delete")
-                    or staff_pg_action(staff, "hosts", "update")
-                ),
+                can_delete=staff_pg_action(staff, "hosts", "delete"),
                 active="pg_hosts",
             ),
         )
@@ -1236,11 +1230,7 @@ def register_pg_pages(
         staff: dict = Depends(require_pg_perm("pg_hosts")),
         session: AsyncSession = Depends(get_db),
     ):
-        # PasarGuard host ACL often exposes update without a distinct delete bit
-        if not (
-            staff_pg_action(staff, "hosts", "delete")
-            or staff_pg_action(staff, "hosts", "update")
-        ):
+        if not staff_pg_action(staff, "hosts", "delete"):
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه حذف ندارید')}", status_code=303)
         try:
             await assert_can_mutate_owned_users(staff)
@@ -1612,9 +1602,31 @@ def register_pg_pages(
             "note": note or "created from PGClockBot",
         }
         if role_raw.isdigit():
-            payload["role_id"] = int(role_raw)
+            rid = int(role_raw)
+            # Never assign an owner-equivalent PG role via panel create.
+            # Capability matrix is role-driven; is_owner bypasses all action checks.
+            try:
+                roles = await get_pg().get_admin_roles()
+            except Exception:
+                roles = []
+            chosen = next(
+                (r for r in (roles or []) if isinstance(r, dict) and int(r.get("id") or 0) == rid),
+                None,
+            )
+            if chosen and chosen.get("is_owner"):
+                return RedirectResponse(
+                    f"/pg/admins?err={_q('نمی‌توان نقش ادمین اصلی را به ادمین جدید داد')}",
+                    status_code=303,
+                )
+            payload["role_id"] = rid
         else:
-            payload["is_sudo"] = bool(form.get("is_sudo"))
+            # Legacy sudo flag must not mint owner-equivalent admins from the panel.
+            if bool(form.get("is_sudo")):
+                return RedirectResponse(
+                    f"/pg/admins?err={_q('ساخت ادمین با دسترسی sudo از پنل مجاز نیست — یک نقش غیرمالک انتخاب کنید')}",
+                    status_code=303,
+                )
+            payload["is_sudo"] = False
         if data_limit_gb:
             try:
                 gb = parse_float(data_limit_gb)
@@ -1637,17 +1649,8 @@ def register_pg_pages(
         try:
             await get_pg().create_admin(payload)
         except Exception as e:
-            if "role_id" in payload:
-                payload.pop("role_id", None)
-                payload["is_sudo"] = False
-                try:
-                    await get_pg().create_admin(payload)
-                except Exception as e2:
-                    return RedirectResponse(
-                        f"/pg/admins?err={_pg_err(e2)}", status_code=303
-                    )
-            else:
-                return RedirectResponse(f"/pg/admins?err={_pg_err(e)}", status_code=303)
+            # Do not retry without role_id / with elevated flags — fail closed.
+            return RedirectResponse(f"/pg/admins?err={_pg_err(e)}", status_code=303)
 
         msg = f"ادمین «{uname}» در پاسارگارد ساخته شد"
         # One web path only: reseller XOR pg_staff (never both)

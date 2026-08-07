@@ -324,7 +324,9 @@
             <select name="role_id">
               <option value="">— بدون نقش (سازگاری قدیم) —</option>
               {% for r in pg_roles or [] %}
-              <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}{% if r.get('is_owner') %} (ادمین اصلی){% endif %}</option>
+              {% if not r.get('is_owner') %}
+              <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}</option>
+              {% endif %}
               {% endfor %}
             </select>
             <small class="muted">سطح دسترسی منو/عملیات از این نقش می‌آید</small>

@@ -6,7 +6,7 @@
   <div>
     {{ page_title('templates', 'تمپلیت‌های کاربر', 'pg') }}
   </div>
-  {% if can_create or can_write %}
+  {% if can_create %}
   <button type="button" class="btn" data-modal-open="modal-pg-template-create">ساخت تمپلیت</button>
   {% endif %}
 </div>
@@ -47,9 +47,9 @@
         </td>
         <td class="mono col-hide-sm">{{ gids or '—' }}</td>
         <td class="col-actions">
-          {% if (can_update or can_delete or can_write) and t.get('id') %}
+          {% if (can_update or can_delete) and t.get('id') %}
           {% call row_actions() %}
-            {% if can_update or can_write %}
+            {% if can_update %}
             <button type="button" class="btn btn-ghost btn-sm"
               data-modal-open="modal-pg-template-edit"
               data-tid="{{ t.get('id') }}"
@@ -58,7 +58,7 @@
               data-days="{{ days }}"
               data-groups="{{ gids|join(',') }}">ویرایش</button>
             {% endif %}
-            {% if can_delete or can_write %}
+            {% if can_delete %}
             <form method="post" action="/pg/templates/{{ t.get('id') }}/delete" data-confirm="این تمپلیت حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
               <button class="btn btn-sm btn-danger" type="submit">حذف</button>
             </form>
@@ -74,7 +74,7 @@
   {% endif %}
 </div>
 
-{% if can_create or can_write %}
+{% if can_create %}
 <div class="ui-modal" id="modal-pg-template-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
@@ -119,7 +119,7 @@
 </div>
 {% endif %}
 
-{% if can_update or can_write %}
+{% if can_update %}
 <div class="ui-modal" id="modal-pg-template-edit" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-template-edit-title">

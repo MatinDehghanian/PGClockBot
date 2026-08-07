@@ -6,7 +6,7 @@
   <div>
     {{ page_title('groups', 'گروه‌ها', 'pg') }}
   </div>
-  {% if can_create or can_write %}
+  {% if can_create %}
   <button type="button" class="btn" data-modal-open="modal-pg-group-create">ساخت گروه</button>
   {% endif %}
 </div>
@@ -28,9 +28,9 @@
         <td class="mono col-hide-sm">{{ g.get('total_users') if g.get('total_users') is not none else '—' }}</td>
         <td>{% if g.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
         <td class="col-actions">
-          {% if (can_update or can_write or can_delete) and g.get('id') %}
+          {% if (can_update or can_delete) and g.get('id') %}
           {% call row_actions() %}
-            {% if can_update or can_write %}
+            {% if can_update %}
             <button type="button" class="btn btn-ghost btn-sm"
               data-modal-open="modal-pg-group-edit"
               data-gid="{{ g.get('id') }}"
@@ -38,7 +38,7 @@
               data-disabled="{{ 1 if g.get('is_disabled') else 0 }}"
               data-tags="{{ (g.get('inbound_tags') or [])|join('\u001f') }}">ویرایش</button>
             {% endif %}
-            {% if can_delete or can_write %}
+            {% if can_delete %}
             <form method="post" action="/pg/groups/{{ g.get('id') }}/delete" data-confirm="این گروه حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
               <button class="btn btn-sm btn-danger" type="submit">حذف</button>
             </form>
@@ -54,7 +54,7 @@
   {% endif %}
 </div>
 
-{% if can_create or can_write %}
+{% if can_create %}
 <div class="ui-modal" id="modal-pg-group-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
@@ -85,7 +85,7 @@
 </div>
 {% endif %}
 
-{% if can_update or can_write %}
+{% if can_update %}
 <div class="ui-modal" id="modal-pg-group-edit" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-group-edit-title">
