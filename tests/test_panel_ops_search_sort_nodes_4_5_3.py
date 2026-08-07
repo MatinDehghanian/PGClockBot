@@ -319,8 +319,21 @@ class PanelTemplateContractTests(unittest.TestCase):
     def test_sort_idle_icon_not_box(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         block = css.split("th[data-sort-type]::after {", 1)[1].split("th[data-sort-type]:hover::after", 1)[0]
-        self.assertNotIn("background-color: currentColor", block)
-        self.assertNotIn("-webkit-mask:", block)
+        self.assertIn("mask:", block)
+        self.assertIn("data:image/svg+xml", block)
+        self.assertIn("background-color: currentColor", block)
+        # No CSS-triangle / gradient X hack
+        self.assertNotIn("linear-gradient(45deg", block)
+        self.assertNotIn("border-bottom-color", block)
+
+    def test_sort_active_icons_are_svg_chevrons(self):
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        asc = css.split('th[data-sort-type][aria-sort="ascending"]::after {', 1)[1].split("}", 1)[0]
+        desc = css.split('th[data-sort-type][aria-sort="descending"]::after {', 1)[1].split("}", 1)[0]
+        self.assertIn("data:image/svg+xml", asc)
+        self.assertIn("data:image/svg+xml", desc)
+        self.assertNotIn("border-width", asc)
+        self.assertNotIn("border-width", desc)
 
     def test_reseller_create_button_label(self):
         html = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
