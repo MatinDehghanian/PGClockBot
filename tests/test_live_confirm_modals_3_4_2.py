@@ -28,11 +28,13 @@ class PanelHtmlNoStoreTests(unittest.TestCase):
 class ConfirmModalTests(unittest.TestCase):
     def test_shared_modal_in_base(self):
         self.assertIn('id="modal-confirm"', BASE)
-        self.assertIn('id="confirm-reason"', BASE)
-        self.assertIn("confirm-reason-wrap", BASE)
+        self.assertIn('id="confirm-reason-slot"', BASE)
         self.assertIn("panelConfirm", JS)
         self.assertIn("data-confirm", JS)
         self.assertIn("data-confirm-reason", JS)
+        self.assertIn("requireReason", JS)
+        confirm = BASE.split('id="modal-confirm"', 1)[1].split("</div>\n  <script", 1)[0]
+        self.assertNotIn('id="confirm-reason"', confirm)
 
     def test_users_block_role_delete_use_data_confirm(self):
         self.assertIn("data-confirm=", USERS)

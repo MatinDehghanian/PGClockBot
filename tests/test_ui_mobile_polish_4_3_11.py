@@ -117,10 +117,13 @@ class TitleActionsAlignTests(unittest.TestCase):
 
 class DeleteReasonBoxTests(unittest.TestCase):
     def test_confirm_reason_ui_present(self):
-        self.assertIn('id="confirm-reason-wrap"', BASE)
-        self.assertIn('id="confirm-reason"', BASE)
-        self.assertIn("confirm-reason-wrap", JS)
+        self.assertIn('id="confirm-reason-slot"', BASE)
+        self.assertIn("confirm-reason-slot", JS)
+        self.assertIn("requireReason", JS)
         self.assertIn("data-confirm-reason", JS)
+        # Reason field must not be permanently in the modal shell
+        confirm = BASE.split('id="modal-confirm"', 1)[1].split("</div>\n  <script", 1)[0]
+        self.assertNotIn('id="confirm-reason"', confirm)
 
     def test_delete_forms_require_reason(self):
         self.assertIn("data-confirm-reason", USERS)
