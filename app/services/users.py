@@ -484,8 +484,6 @@ DEFAULT_SETTINGS = {
     "bot_tg_description": "",
     "bot_tg_short_description": "",
     "bot_tg_photo": "",
-    "bot_cmd_start": "شروع / منو",
-    "bot_cmd_help": "راهنما",
 
     "btn_shop": "🟢🛒 خرید سرویس",
     "btn_services": "🔵📦 سرویس‌های من",

@@ -1,4 +1,4 @@
-"""Telegram Bot API appearance (name, about, short description, photo, commands)."""
+"""Telegram Bot API appearance (name, about, short description, photo)."""
 
 from __future__ import annotations
 
@@ -15,10 +15,7 @@ log = logging.getLogger(__name__)
 NAME_MAX = 64
 DESCRIPTION_MAX = 512
 SHORT_DESCRIPTION_MAX = 120
-CMD_DESC_MAX = 256
 
-DEFAULT_CMD_START = "شروع / منو"
-DEFAULT_CMD_HELP = "راهنما"
 
 @dataclass
 class BotAppearance:
@@ -26,8 +23,6 @@ class BotAppearance:
     username: str = ""
     description: str = ""
     short_description: str = ""
-    cmd_start: str = DEFAULT_CMD_START
-    cmd_help: str = DEFAULT_CMD_HELP
     photo_url: str = ""
     ok: bool = False
     error: str = ""
@@ -43,8 +38,6 @@ def validate_appearance_form(
     name: str,
     description: str,
     short_description: str,
-    cmd_start: str,
-    cmd_help: str,
 ) -> str | None:
     if len(name) > NAME_MAX:
         return f"نام ربات حداکثر {NAME_MAX} کاراکتر است"
@@ -53,23 +46,7 @@ def validate_appearance_form(
         return f"متن وسط صفحه حداکثر {DESCRIPTION_MAX} کاراکتر است"
     if len(short_description) > SHORT_DESCRIPTION_MAX:
         return f"کپشن / درباره حداکثر {SHORT_DESCRIPTION_MAX} کاراکتر است"
-    if len(cmd_start) > CMD_DESC_MAX or len(cmd_help) > CMD_DESC_MAX:
-        return f"توضیح دستور حداکثر {CMD_DESC_MAX} کاراکتر است"
-    if not (cmd_start or "").strip():
-        return "توضیح دستور /start الزامی است"
-    if not (cmd_help or "").strip():
-        return "توضیح دستور /help الزامی است"
     return None
-
-
-def _cmd_map(commands: list[Any] | None) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for c in commands or []:
-        try:
-            out[str(c.command)] = str(c.description or "")
-        except Exception:
-            continue
-    return out
 
 
 async def fetch_appearance(token: str, *, local_photo: str = "") -> BotAppearance:
@@ -83,19 +60,12 @@ async def fetch_appearance(token: str, *, local_photo: str = "") -> BotAppearanc
         name_obj = await bot.get_my_name()
         desc_obj = await bot.get_my_description()
         short_obj = await bot.get_my_short_description()
-        try:
-            cmds = await bot.get_my_commands()
-        except Exception:
-            cmds = []
-        cmap = _cmd_map(cmds)
         name = (getattr(name_obj, "name", None) or me.first_name or "").strip()
         return BotAppearance(
             name=name,
             username=(me.username or "").strip(),
             description=(getattr(desc_obj, "description", None) or "").strip(),
             short_description=(getattr(short_obj, "short_description", None) or "").strip(),
-            cmd_start=cmap.get("start") or DEFAULT_CMD_START,
-            cmd_help=cmap.get("help") or DEFAULT_CMD_HELP,
             photo_url=local_photo,
             ok=True,
         )
@@ -112,8 +82,6 @@ async def apply_appearance(
     name: str,
     description: str,
     short_description: str,
-    cmd_start: str = DEFAULT_CMD_START,
-    cmd_help: str = DEFAULT_CMD_HELP,
     photo_bytes: bytes | None = None,
     photo_filename: str = "photo.jpg",
     remove_photo: bool = False,
@@ -126,15 +94,11 @@ async def apply_appearance(
     name = clip(name, NAME_MAX)
     description = clip(description, DESCRIPTION_MAX)
     short_description = clip(short_description, SHORT_DESCRIPTION_MAX)
-    cmd_start = clip(cmd_start, CMD_DESC_MAX) or DEFAULT_CMD_START
-    cmd_help = clip(cmd_help, CMD_DESC_MAX) or DEFAULT_CMD_HELP
 
     err = validate_appearance_form(
         name=name,
         description=description,
         short_description=short_description,
-        cmd_start=cmd_start,
-        cmd_help=cmd_help,
     )
     if err:
         return BotAppearance(error=err)
@@ -145,6 +109,7 @@ async def apply_appearance(
         await bot.set_my_name(name=name)
         await bot.set_my_description(description=description)
         await bot.set_my_short_description(short_description=short_description)
+        # Reply keyboard replaced the side Menu — keep commands unpublished
         await bot.delete_my_commands()
         try:
             from aiogram.types import MenuButtonDefault
@@ -156,7 +121,6 @@ async def apply_appearance(
             await bot.delete_chat_menu_button()
         except Exception:
             pass
-        # Keep descriptions in return value for panel form, but do not show Menu beside input
         if remove_photo and not photo_bytes:
             try:
                 await bot.remove_my_profile_photo()
@@ -180,8 +144,6 @@ async def apply_appearance(
                     username=(me.username or "").strip(),
                     description=description,
                     short_description=short_description,
-                    cmd_start=cmd_start,
-                    cmd_help=cmd_help,
                 )
 
         return BotAppearance(
@@ -189,8 +151,6 @@ async def apply_appearance(
             username=(me.username or "").strip(),
             description=description,
             short_description=short_description,
-            cmd_start=cmd_start,
-            cmd_help=cmd_help,
             ok=True,
         )
     except Exception as exc:
@@ -206,8 +166,6 @@ def appearance_to_form_dict(app: BotAppearance, *, local_photo: str = "") -> dic
         "bot_tg_description": app.description or "",
         "bot_tg_short_description": app.short_description or "",
         "bot_tg_photo": local_photo or app.photo_url or "",
-        "bot_cmd_start": app.cmd_start or DEFAULT_CMD_START,
-        "bot_cmd_help": app.cmd_help or DEFAULT_CMD_HELP,
         "bot_username": app.username or "",
     }
 
@@ -239,8 +197,6 @@ async def load_appearance_context(
         "bot_tg_description": values.get("bot_tg_description") or "",
         "bot_tg_short_description": values.get("bot_tg_short_description") or "",
         "bot_tg_photo": local_photo,
-        "bot_cmd_start": values.get("bot_cmd_start") or DEFAULT_CMD_START,
-        "bot_cmd_help": values.get("bot_cmd_help") or DEFAULT_CMD_HELP,
         "bot_username": fallback_username or "",
     }
     return {
@@ -268,16 +224,12 @@ async def save_appearance_from_form(
     name = clip(str(form.get("bot_tg_name") or ""), NAME_MAX)
     description = clip(str(form.get("bot_tg_description") or ""), DESCRIPTION_MAX)
     short_description = clip(str(form.get("bot_tg_short_description") or ""), SHORT_DESCRIPTION_MAX)
-    cmd_start = clip(str(form.get("bot_cmd_start") or ""), CMD_DESC_MAX) or DEFAULT_CMD_START
-    cmd_help = clip(str(form.get("bot_cmd_help") or ""), CMD_DESC_MAX) or DEFAULT_CMD_HELP
     remove_photo = str(form.get("bot_tg_photo_clear") or "") in {"1", "on", "true", "yes"}
 
     err = validate_appearance_form(
         name=name,
         description=description,
         short_description=short_description,
-        cmd_start=cmd_start,
-        cmd_help=cmd_help,
     )
     if err:
         return False, err
@@ -303,8 +255,6 @@ async def save_appearance_from_form(
         name=name,
         description=description,
         short_description=short_description,
-        cmd_start=cmd_start,
-        cmd_help=cmd_help,
         photo_bytes=photo_bytes,
         photo_filename=photo_filename,
         remove_photo=remove_photo,
@@ -318,8 +268,8 @@ async def save_appearance_from_form(
         "bot_tg_name": name,
         "bot_tg_description": description,
         "bot_tg_short_description": short_description,
-        "bot_cmd_start": cmd_start,
-        "bot_cmd_help": cmd_help,
+        "bot_cmd_start": "",
+        "bot_cmd_help": "",
         "welcome_image": "",
     }
 

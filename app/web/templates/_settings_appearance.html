@@ -66,27 +66,6 @@
     </div>
   </div>
 
-  <div class="card settings-card">
-    <h2>دستورهای منوی ربات</h2>
-    <p class="muted update-card-caption">
-      توضیحاتی که کنار <code dir="ltr">/start</code> و <code dir="ltr">/help</code> در منوی دستورات تلگرام دیده می‌شود.
-    </p>
-    <div class="settings-grid">
-      <div class="setting-item">
-        <label>توضیح /start
-          <input name="bot_cmd_start" id="ap-cmd-start" type="text" maxlength="256"
-                 value="{{ ap.get('bot_cmd_start','شروع / منو') }}" required dir="auto" />
-        </label>
-      </div>
-      <div class="setting-item">
-        <label>توضیح /help
-          <input name="bot_cmd_help" id="ap-cmd-help" type="text" maxlength="256"
-                 value="{{ ap.get('bot_cmd_help','راهنما') }}" required dir="auto" />
-        </label>
-      </div>
-    </div>
-  </div>
-
   <div class="actions sticky-actions">
     <button class="btn" type="submit">ذخیره و اعمال در تلگرام</button>
   </div>
