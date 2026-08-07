@@ -570,43 +570,10 @@ def register_pg_pages(
                     )
                 )
 
-            if not as_owner:
-                # Created as the shop PG admin — already owned; no owner-token transfer.
-                pass
-            elif not _is_admin(staff):
-                owner = _pg_owner(staff)
-                uid = created.get("id") if isinstance(created, dict) else None
-                if not owner:
-                    if uid:
-                        try:
-                            await get_pg().delete_user_by_id(int(uid))
-                        except Exception:
-                            pass
-                    return _pg_form_err(
-                        "ادمین پاسارگارد برای این حساب تنظیم نشده است",
-                        modal="create",
-                    )
-                if not uid:
-                    return _pg_form_err(
-                        "کاربر ساخته شد ولی شناسه برگشت داده نشد — مالکیت قابل تنظیم نیست",
-                        modal="create",
-                    )
-                try:
-                    await get_pg().set_owner_by_id(int(uid), owner)
-                except Exception as e:
-                    try:
-                        await get_pg().delete_user_by_id(int(uid))
-                    except Exception:
-                        pass
-                    msg = (
-                        e.user_message(fallback="خطا در تخصیص مالکیت کاربر")
-                        if isinstance(e, PasarGuardError)
-                        else str(e)
-                    )
-                    return _pg_form_err(
-                        f"کاربر ساخته شد ولی مالکیت ست نشد و حذف شد: {msg}",
-                        modal="create",
-                    )
+            # Ownership comes from `_staff_pg` credentials (admin→owner token,
+            # reseller/pg_staff→own PG admin). Do not call get_pg() here for a
+            # second owner-token transfer — that path bypassed staff ACL.
+            _ = as_owner
         except Exception as e:
             msg = e.user_message(fallback="خطا در ساخت کاربر") if isinstance(e, PasarGuardError) else str(e)
             return _pg_form_err(msg, modal="create")
