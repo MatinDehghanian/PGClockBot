@@ -6,16 +6,12 @@
   const captionEl = document.getElementById('ap-caption');
   const middleEl = document.getElementById('ap-middle');
   const photoEl = document.getElementById('ap-photo');
-  const cmdStart = document.getElementById('ap-cmd-start');
-  const cmdHelp = document.getElementById('ap-cmd-help');
   const pvName = document.getElementById('ap-pv-name');
   const pvEmptyName = document.getElementById('ap-pv-empty-name');
   const pvDesc = document.getElementById('ap-pv-desc');
   const pvShort = document.getElementById('ap-pv-short');
   const pvImg = document.getElementById('ap-pv-img');
   const pvLetter = document.getElementById('ap-pv-letter');
-  const pvCmdStart = document.getElementById('ap-pv-cmd-start');
-  const pvCmdHelp = document.getElementById('ap-pv-cmd-help');
   let objectUrl = null;
 
   function setAvatar(src, letter){
@@ -41,8 +37,6 @@
     if (pvEmptyName) pvEmptyName.textContent = name;
     if (pvDesc) pvDesc.textContent = (captionEl && captionEl.value) || 'کپشن / درباره ربات…';
     if (pvShort) pvShort.textContent = (middleEl && middleEl.value) || 'متن وسط صفحه…';
-    if (pvCmdStart) pvCmdStart.textContent = (cmdStart && cmdStart.value) || '/start';
-    if (pvCmdHelp) pvCmdHelp.textContent = (cmdHelp && cmdHelp.value) || '/help';
     if (objectUrl) {
       setAvatar(objectUrl, name);
     } else if (pvImg && pvImg.getAttribute('src') && !pvImg.hidden) {

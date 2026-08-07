@@ -3816,31 +3816,6 @@ form.settings-form > .actions.sticky-actions,
   white-space: pre-wrap;
   word-break: break-word;
 }
-.tg-profile-cmds {
-  padding: var(--space-1) var(--space-2) var(--space-2);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  background: var(--tg-panel);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-.tg-cmd-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: 12px;
-  color: var(--tg-text);
-}
-.tg-cmd-row code {
-  direction: ltr;
-  font-size: 11px;
-  padding: var(--space-1);
-  border-radius: 6px;
-  background: rgba(43, 82, 120, 0.55);
-  color: #cfe4f7;
-  min-width: 52px;
-  text-align: center;
-}
 .ap-photo-row {
   display: flex;
   align-items: center;

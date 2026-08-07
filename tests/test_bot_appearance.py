@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from app.services.bot_appearance import (
     DESCRIPTION_MAX,
@@ -13,6 +14,8 @@ from app.services.bot_appearance import (
     validate_appearance_form,
     BotAppearance,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class ClipTests(unittest.TestCase):
@@ -28,8 +31,6 @@ class ValidateTests(unittest.TestCase):
                 name="Clock",
                 description="about",
                 short_description="hi",
-                cmd_start="start",
-                cmd_help="help",
             )
         )
 
@@ -38,8 +39,6 @@ class ValidateTests(unittest.TestCase):
             name="x" * (NAME_MAX + 1),
             description="",
             short_description="",
-            cmd_start="a",
-            cmd_help="b",
         )
         self.assertIn("نام", err or "")
 
@@ -48,8 +47,6 @@ class ValidateTests(unittest.TestCase):
             name="n",
             description="d" * (DESCRIPTION_MAX + 1),
             short_description="",
-            cmd_start="a",
-            cmd_help="b",
         )
         self.assertIn("وسط", err or "")
 
@@ -58,20 +55,8 @@ class ValidateTests(unittest.TestCase):
             name="n",
             description="",
             short_description="s" * (SHORT_DESCRIPTION_MAX + 1),
-            cmd_start="a",
-            cmd_help="b",
         )
         self.assertIn("کپشن", err or "")
-
-    def test_commands_required(self):
-        err = validate_appearance_form(
-            name="n",
-            description="",
-            short_description="",
-            cmd_start="",
-            cmd_help="b",
-        )
-        self.assertIn("/start", err or "")
 
 
 class FormDictTests(unittest.TestCase):
@@ -81,14 +66,55 @@ class FormDictTests(unittest.TestCase):
             username="bot",
             description="D",
             short_description="S",
-            cmd_start="st",
-            cmd_help="hp",
         )
         d = appearance_to_form_dict(app, local_photo="uploads/x.jpg")
         self.assertEqual(d["bot_tg_name"], "A")
         self.assertEqual(d["bot_username"], "bot")
         self.assertEqual(d["bot_tg_photo"], "uploads/x.jpg")
-        self.assertEqual(d["bot_cmd_start"], "st")
+        self.assertNotIn("bot_cmd_start", d)
+        self.assertNotIn("bot_cmd_help", d)
+
+
+class CommandsUiRemovedTests(unittest.TestCase):
+    def test_settings_form_has_no_command_fields(self):
+        ap = (ROOT / "app/web/templates/_settings_appearance.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("دستورهای منوی ربات", ap)
+        self.assertNotIn("bot_cmd_start", ap)
+        self.assertNotIn("bot_cmd_help", ap)
+        self.assertNotIn("ap-cmd-start", ap)
+
+    def test_preview_has_no_command_rows(self):
+        prev = (ROOT / "app/web/templates/_tg_preview_appearance.html").read_text(
+            encoding="utf-8"
+        )
+        js = (ROOT / "app/web/templates/_tg_preview_appearance_js.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("tg-profile-cmds", prev)
+        self.assertNotIn("bot_cmd_start", prev)
+        self.assertNotIn("ap-pv-cmd", prev)
+        self.assertNotIn("ap-cmd-start", js)
+        self.assertNotIn("ap-pv-cmd", js)
+
+    def test_service_no_longer_reads_or_sets_command_descriptions(self):
+        src = (ROOT / "app/services/bot_appearance.py").read_text(encoding="utf-8")
+        self.assertNotIn("get_my_commands", src)
+        self.assertNotIn("set_my_commands", src)
+        self.assertNotIn("form.get(\"bot_cmd_start\")", src)
+        self.assertNotIn("form.get(\"bot_cmd_help\")", src)
+        self.assertNotIn("DEFAULT_CMD_", src)
+        self.assertIn("delete_my_commands", src)
+        # Legacy keys cleared on save so old DB values disappear
+        self.assertIn('"bot_cmd_start": ""', src)
+        self.assertIn('"bot_cmd_help": ""', src)
+
+    def test_defaults_drop_command_keys(self):
+        from app.services.users import DEFAULT_SETTINGS
+
+        self.assertNotIn("bot_cmd_start", DEFAULT_SETTINGS)
+        self.assertNotIn("bot_cmd_help", DEFAULT_SETTINGS)
 
 
 class TabsTests(unittest.TestCase):
