@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.6.0": [
+        "حذف بخش بلااستفاده «دستورهای منوی ربات» از تنظیمات ظاهر",
+        "منوی کناری دستورات تلگرام همچنان غیرفعال می‌ماند؛ ناوبری با کیبورد پایین است",
+    ],
     "4.5.6": [
         "گردی گوشه‌های غیرکپسولی کمی بیشتر شد (کارت‌ها، منوها و باکس‌ها)",
         "دکمه‌ها و کنترل‌های کپسولی بدون تغییر ماندند",
