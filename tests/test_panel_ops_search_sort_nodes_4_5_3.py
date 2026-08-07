@@ -279,6 +279,11 @@ class PanelTemplateContractTests(unittest.TestCase):
         self.assertIn("/orders/{{ o.id }}/approve", html)
         self.assertIn("/orders/{{ o.id }}/reject", html)
         self.assertIn("data-sort-type", html)
+        # Pending (no receipt) still offers approve → deliver
+        self.assertIn("o.status in ['pending','awaiting_receipt']", html)
+        # Cancelled: muted dash only — no kebab/actions
+        self.assertIn("o.status in ['delivered', 'cancelled']", html)
+        self.assertNotIn("o.status == 'cancelled'\n            {% call row_actions()", html)
 
     def test_payments_search_sort_and_actions(self):
         html = (ROOT / "app/web/templates/payments.html").read_text(encoding="utf-8")
@@ -311,10 +316,22 @@ class PanelTemplateContractTests(unittest.TestCase):
         self.assertIn("data-sort-type", js)
         self.assertIn("aria-sort", js)
 
+    def test_sort_idle_icon_not_box(self):
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        block = css.split("th[data-sort-type]::after {", 1)[1].split("th[data-sort-type]:hover::after", 1)[0]
+        self.assertNotIn("background-color: currentColor", block)
+        self.assertNotIn("-webkit-mask:", block)
+
+    def test_reseller_create_button_label(self):
+        html = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
+        self.assertIn("ذخیره و ارسال اطلاعات", html)
+        self.assertNotIn("فعال‌سازی و ارسال اطلاعات ورود", html)
+
     def test_api_wires_cancel_and_search(self):
         app = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("order_cancel", app)
         self.assertIn("cancel_order", app)
+        self.assertIn("manual_fulfill_unpaid_order", app)
         self.assertIn("notify_payer", app)
         self.assertIn("filter_by_search", app)
         self.assertIn("normalize_search_q", app)

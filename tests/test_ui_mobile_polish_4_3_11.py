@@ -25,10 +25,10 @@ RESELLER_API = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
 class RadiusTokensTests(unittest.TestCase):
     def test_control_radius_pill_menus_moderate(self):
         root = CSS.split(":root {", 1)[1].split("}", 1)[0]
-        self.assertIn("--radius: 14px;", root)
+        self.assertIn("--radius: 16px;", root)
         self.assertIn("--control-radius: 999px;", root)
-        self.assertIn("--menu-radius: 10px;", root)
-        self.assertIn("--menu-item-radius: 7px;", root)
+        self.assertIn("--menu-radius: 12px;", root)
+        self.assertIn("--menu-item-radius: 8px;", root)
 
     def test_buttons_fields_tabs_use_control_radius(self):
         btn = CSS.split(".btn, a.btn, .btn-sm, a.btn-sm {", 1)[1].split("}", 1)[0]
@@ -171,14 +171,14 @@ class ServicesRedesignTests(unittest.TestCase):
 
 class ResellersPlanColumnTests(unittest.TestCase):
     def test_plan_type_and_status_columns(self):
-        self.assertIn("<th>نوع پلن</th>", RESELLERS)
-        self.assertIn("<th>وضعیت</th>", RESELLERS)
+        self.assertIn(">نوع پلن</th>", RESELLERS)
+        self.assertIn(">وضعیت</th>", RESELLERS)
         self.assertIn("badge info", RESELLERS)
         self.assertIn("PAYG", RESELLERS)
         self.assertIn("badge fixed", RESELLERS)
         # Name cell should not stack plan/status badges anymore
         name_cell = RESELLERS.split("{% for u, p in rows %}", 1)[1].split(
-            '<td class="mono col-hide-sm" dir="ltr">{{ u.telegram_id }}</td>', 1
+            "{{ u.telegram_id }}</td>", 1
         )[0]
         self.assertNotIn("badge info", name_cell)
         self.assertNotIn("badge approved", name_cell)
@@ -293,7 +293,7 @@ class VersionBumpTests(unittest.TestCase):
             tuple(int(x) for x in __version__.split(".")), (4, 5, 0)
         )
         self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.5.3"
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.5.4"
         )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"4.5.0"', notes)
