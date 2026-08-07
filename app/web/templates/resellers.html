@@ -99,7 +99,7 @@
       {% set usage = (reseller_usage or {}).get(u.id) or {} %}
       <tr>
         <td>{{ u.full_name or u.username or '—' }}</td>
-        <td class="mono col-hide-sm">{{ u.telegram_id }}</td>
+        <td class="mono col-hide-sm" dir="ltr">{{ u.telegram_id }}</td>
         <td class="col-hide-sm">
           <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
             {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
@@ -132,9 +132,9 @@
             {% endif %}
           </div>
         </td>
-        <td class="mono col-hide-sm">{% if (p.billing_mode or 'fixed') == 'payg' %}—{% else %}{{ p.commission_percent }}%{% endif %}</td>
-        <td class="mono col-hide-sm">{{ p.web_username or '—' }}</td>
-        <td class="mono col-hide-sm">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
+        <td class="mono col-hide-sm" dir="ltr">{% if (p.billing_mode or 'fixed') == 'payg' %}—{% else %}{{ p.commission_percent }}٪{% endif %}</td>
+        <td class="mono col-hide-sm" dir="ltr">{{ p.web_username or '—' }}</td>
+        <td class="mono col-hide-sm" dir="ltr">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
         <td class="col-hide-sm">{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.web_username %}<span class="badge pending">بدون ربات</span>{% else %}—{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -188,7 +188,7 @@
         <div>
           <label class="form-field">آیدی عددی تلگرام
             
-            <input name="telegram_id" type="number" required />
+            <input name="telegram_id" type="number" required dir="ltr" />
         <small class="muted">مثال: 123456789</small>
           </label>
         </div>

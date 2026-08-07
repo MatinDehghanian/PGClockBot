@@ -73,8 +73,10 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
         block = re.search(r"(?ms)input::placeholder,\s*textarea::placeholder\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
         body = block.group(1)
-        self.assertIn("text-align: right", body)
-        self.assertIn("direction: rtl", body)
+        # Inherit field direction so LTR inputs keep LTR placeholders
+        self.assertIn("text-align: start", body)
+        self.assertIn("direction: inherit", body)
+        self.assertIn('input[dir="ltr"]::placeholder', css)
 
     def test_field_help_ordered_below_control(self):
         css = CSS.read_text(encoding="utf-8")

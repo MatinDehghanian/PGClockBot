@@ -819,8 +819,20 @@ textarea::placeholder {
   font-size: inherit;
   font-weight: 400;
   opacity: 1;
-  text-align: right;
-  direction: rtl;
+  text-align: start;
+  direction: inherit;
+}
+/* LTR fields (usernames, URLs, IPs, tokens) keep LTR placeholders */
+input[dir="ltr"]::placeholder,
+textarea[dir="ltr"]::placeholder {
+  direction: ltr;
+  text-align: start;
+}
+input[dir="ltr"],
+textarea[dir="ltr"] {
+  direction: ltr;
+  text-align: start;
+  unicode-bidi: isolate;
 }
 /* CRITICAL: keep ≥16px — iOS/Android Safari zoom on focus if smaller. Never use --title-size here. */
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),

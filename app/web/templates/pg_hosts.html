@@ -23,11 +23,11 @@
       {% set addr = h.get('address') %}
       {% set addr_text = addr if addr is string else (addr | join(', ') if addr is iterable and addr is not string else '') %}
       <tr>
-        <td class="mono">{{ h.get('id') or '—' }}</td>
+        <td class="mono" dir="ltr">{{ h.get('id') or '—' }}</td>
         <td>{{ h.get('remark') or h.get('name') or '—' }}</td>
-        <td class="mono col-hide-sm">{{ addr_text or '—' }}</td>
-        <td class="mono col-hide-sm">{{ h.get('port') or '—' }}</td>
-        <td class="mono col-hide-sm">{{ h.get('inbound_tag') or '—' }}</td>
+        <td class="mono col-hide-sm" dir="ltr">{{ addr_text or '—' }}</td>
+        <td class="mono col-hide-sm" dir="ltr">{{ h.get('port') or '—' }}</td>
+        <td class="mono col-hide-sm" dir="ltr">{{ h.get('inbound_tag') or '—' }}</td>
         <td>{% if h.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
         <td class="col-actions">
           {% if (can_update or can_delete or can_write) and h.get('id') %}
@@ -78,17 +78,17 @@
         </div>
         <div>
           <label class="form-field">آدرس (چندتایی با ویرگول)
-            <input name="address" required placeholder="1.2.3.4 یا domain.com" />
+            <input name="address" required placeholder="1.2.3.4 یا domain.com" dir="ltr" />
           </label>
         </div>
         <div>
           <label class="form-field">پورت (اختیاری)
-            <input name="port" type="number" placeholder="443" inputmode="numeric" />
+            <input name="port" type="number" placeholder="443" inputmode="numeric" dir="ltr" />
           </label>
         </div>
         <div>
           <label class="form-field">اولویت
-            <input name="priority" type="number" value="0" inputmode="numeric" />
+            <input name="priority" type="number" value="0" inputmode="numeric" dir="ltr" />
           </label>
         </div>
       </div>
@@ -126,17 +126,17 @@
         </div>
         <div>
           <label class="form-field">آدرس (چندتایی با ویرگول)
-            <input name="address" id="pg-host-edit-address" required />
+            <input name="address" id="pg-host-edit-address" required dir="ltr" />
           </label>
         </div>
         <div>
           <label class="form-field">پورت (اختیاری)
-            <input name="port" id="pg-host-edit-port" type="number" placeholder="443" inputmode="numeric" />
+            <input name="port" id="pg-host-edit-port" type="number" placeholder="443" inputmode="numeric" dir="ltr" />
           </label>
         </div>
         <div>
           <label class="form-field">اولویت
-            <input name="priority" id="pg-host-edit-priority" type="number" value="0" inputmode="numeric" />
+            <input name="priority" id="pg-host-edit-priority" type="number" value="0" inputmode="numeric" dir="ltr" />
           </label>
         </div>
       </div>

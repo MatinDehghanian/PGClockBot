@@ -43,7 +43,7 @@
       {% set gb_left = u.get('_data_gb') %}
       {% set gids = u.get('_group_ids') or [] %}
       <tr>
-        <td class="mono">{{ u.get('username') or '—' }}</td>
+        <td class="mono" dir="ltr">{{ u.get('username') or '—' }}</td>
         <td>
           {% if disabled %}
           <span class="badge warn">غیرفعال</span>
@@ -58,11 +58,11 @@
             {{ u.get('used_traffic') | bytes }}
           {% else %}—{% endif %}
         </td>
-        <td class="mono muted col-hide-sm">
+        <td class="mono muted col-hide-sm" dir="ltr">
           {% if u.get('expire') %}{{ u.get('expire') | expire }}{% elif u.get('expire_date') %}{{ u.get('expire_date') | expire }}{% else %}—{% endif %}
         </td>
         {% if is_admin %}
-        <td class="mono muted col-hide-sm">
+        <td class="mono muted col-hide-sm" dir="ltr">
           {% set adm = u.get('admin') %}
           {% if adm is mapping %}{{ adm.get('username') or '—' }}
           {% else %}{{ adm or u.get('owner_username') or '—' }}{% endif %}

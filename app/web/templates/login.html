@@ -16,14 +16,14 @@
       </p>
       <label>نام کاربری
         <input name="username" value="{{ username or '' }}" required autocomplete="username" autofocus
-               inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false"
+               dir="ltr" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false"
                placeholder="user_name" />
         <small class="muted">برای نماینده: همان یوزر پاسارگارد</small>
       </label>
       <label>رمز عبور
         <div class="pw-field">
           <input id="login-password" name="password" type="password" required autocomplete="current-password"
-                 placeholder="••••••••" />
+                 dir="ltr" placeholder="••••••••" />
           <button type="button" class="pw-toggle" id="pw-toggle" aria-label="نمایش رمز" aria-pressed="false" title="نمایش / مخفی کردن رمز">
             <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>

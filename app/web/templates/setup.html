@@ -44,10 +44,10 @@
         <small class="muted">حروف انگلیسی، عدد و _ — بعداً قابل تغییر است</small>
       </label>
       <label>رمز عبور
-        <input name="password" type="password" required autocomplete="new-password" minlength="12" />
+        <input name="password" type="password" required autocomplete="new-password" minlength="12" dir="ltr" />
       </label>
       <label>تکرار رمز عبور
-        <input name="password_confirm" type="password" required autocomplete="new-password" minlength="12" />
+        <input name="password_confirm" type="password" required autocomplete="new-password" minlength="12" dir="ltr" />
       </label>
       <div class="setup-actions">
         <button type="button" class="btn btn-ghost" data-prev="0">قبلی</button>
@@ -87,7 +87,7 @@
         <small class="muted">یوزر ورود API پاسارگارد</small>
       </label>
       <label>رمز پاسارگارد
-        <input name="pg_password" type="password" value="{{ values.PG_PASSWORD or '' }}" required autocomplete="off" />
+        <input name="pg_password" type="password" value="{{ values.PG_PASSWORD or '' }}" required autocomplete="off" dir="ltr" />
       </label>
       <label>پورت وب‌پنل (WEB_PORT)
         <input name="web_port" value="{{ values.WEB_PORT or '9000' }}" required dir="ltr" />

@@ -105,7 +105,7 @@
             <label>توکن ربات
               
               <input name="BOT_TOKEN" type="text" value="" dir="ltr" autocomplete="off" required placeholder="123456:ABC..." />
-        <small class="muted">فعلی: {{ bot_token_masked or '—' }} · یوزرنیم: @{{ bot_username or '—' }}</small>
+        <small class="muted">فعلی: {{ bot_token_masked or '—' }} · یوزرنیم: <span dir="ltr">@{{ bot_username or '—' }}</span></small>
             </label>
           </div>
         </div>
@@ -113,7 +113,7 @@
         <div class="flash {{ 'ok' if bot_status.ok else 'err' }}">
           وضعیت ربات:
           {% if bot_status.ok %}
-            آنلاین · @{{ bot_status.username or '—' }} (id={{ bot_status.id or '—' }})
+            آنلاین · <span dir="ltr">@{{ bot_status.username or '—' }}</span> (id=<span dir="ltr">{{ bot_status.id or '—' }}</span>)
           {% else %}
             {{ bot_status.error }}
           {% endif %}
