@@ -1964,6 +1964,7 @@ def register_pg_pages(
 
     @app.post("/pg/admins/{username}/delete")
     async def pg_admins_delete(
+        request: Request,
         username: str,
         staff: dict = Depends(require_admin),
         session=Depends(get_db),
@@ -1973,7 +1974,15 @@ def register_pg_pages(
             reseller_by_pg_username,
             revoke_web_access,
         )
-        from app.services.resellers import revoke_reseller
+        from app.services.resellers import notify_reseller_revoked, revoke_reseller
+
+        form = await request.form()
+        reason = str(form.get("reason") or "").strip()
+        if len(reason) < 3:
+            return RedirectResponse(
+                f"/pg/admins?err={_q('علت حذف ادمین الزامی است (حداقل ۳ کاراکتر)')}",
+                status_code=303,
+            )
 
         pg_u = (username or "").strip()
         if not pg_u:
@@ -1990,7 +1999,7 @@ def register_pg_pages(
                     session,
                     int(reseller.user_id),
                     delete_pg_admin=True,
-                    reason="حذف ادمین پاسارگارد از وب‌پنل",
+                    reason=reason,
                 )
                 notes.append("نمایندگی/ربات فروشگاه هم حذف شد")
                 if info.get("pg_admin_deleted"):
@@ -2002,6 +2011,12 @@ def register_pg_pages(
                         notes.append("ادمین پاسارگارد حذف شد")
                     except Exception:
                         notes.append("ادمین پاسارگارد از قبل نبود یا حذف نشد")
+                tg = info.get("telegram_id")
+                if tg:
+                    try:
+                        await notify_reseller_revoked(int(tg), reason)
+                    except Exception:
+                        pass
             except Exception as e:
                 return RedirectResponse(f"/pg/admins?err={_pg_err(e)}", status_code=303)
         else:

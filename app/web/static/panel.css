@@ -1810,6 +1810,11 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 .flash[hidden] {
   display: none !important;
 }
+/* Same trap: .form-field { display:flex } beats UA [hidden] — never show gated fields */
+.form-field[hidden],
+#confirm-reason-slot[hidden] {
+  display: none !important;
+}
 .flash > .flash-copy,
 .flash > .home-update-copy,
 .flash > .dash-bot-setup-inner {

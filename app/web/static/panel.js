@@ -729,12 +729,18 @@
       document.body.classList.add('modal-open');
       /* Ensure every select in this modal is custom (covers late DOM / fragments) */
       enhanceAllSelects(el);
-      /* Never focus a native <select> — on iOS that opens the system picker */
+      /* Never focus a native <select> — on iOS that opens the system picker.
+         Also skip anything inside [hidden] (e.g. empty confirm-reason-slot). */
       const panel = el.querySelector('.ui-modal-panel') || el;
-      const focus =
-        panel.querySelector('input:not([type="hidden"]):not([disabled]):not(.ui-select-native), textarea:not([disabled])') ||
-        panel.querySelector('.ui-select-toggle:not([disabled])') ||
-        panel.querySelector('button:not([disabled]), [href]');
+      const candidates = panel.querySelectorAll(
+        'input:not([type="hidden"]):not([disabled]):not(.ui-select-native), textarea:not([disabled]), .ui-select-toggle:not([disabled]), button:not([disabled]), [href]'
+      );
+      let focus = null;
+      for (const node of candidates) {
+        if (node.closest('[hidden]')) continue;
+        focus = node;
+        break;
+      }
       if (focus) setTimeout(() => focus.focus(), 30);
     }
     window.openModal = openModal;
@@ -1039,22 +1045,49 @@
       });
     })();
 
-    /* Shared confirm modal — replaces native confirm()/prompt() for panel mutations */
+    /* Shared confirm modal — replaces native confirm()/prompt() for panel mutations.
+       Reason field is RENDERED only when requireReason=true (delete user/reseller/admin).
+       Never leave a hidden .form-field in the DOM — author CSS display:flex beats [hidden]. */
     (function setupPanelConfirm(){
       const modal = document.getElementById('modal-confirm');
       if (!modal) return;
       const titleEl = document.getElementById('confirm-title');
       const msgEl = document.getElementById('confirm-message');
-      const reasonWrap = document.getElementById('confirm-reason-wrap');
-      const reasonInput = document.getElementById('confirm-reason');
-      const reasonLabel = document.getElementById('confirm-reason-label');
+      const reasonSlot = document.getElementById('confirm-reason-slot');
       const submitBtn = document.getElementById('confirm-submit');
       const formEl = document.getElementById('confirm-form');
       let resolver = null;
+      let activeRequireReason = false;
+      let activeReasonMin = 3;
+
+      function clearReasonField(){
+        activeRequireReason = false;
+        if (reasonSlot) {
+          reasonSlot.innerHTML = '';
+          reasonSlot.hidden = true;
+        }
+      }
+
+      function renderReasonField(opts){
+        if (!reasonSlot) return null;
+        const label = opts.reasonLabel || 'علت حذف';
+        const min = Math.max(1, parseInt(opts.reasonMin, 10) || 3);
+        activeRequireReason = true;
+        activeReasonMin = min;
+        reasonSlot.hidden = false;
+        reasonSlot.innerHTML =
+          '<label class="form-field" id="confirm-reason-wrap">' +
+            '<span id="confirm-reason-label">' + label.replace(/</g, '&lt;') + '</span>' +
+            '<textarea id="confirm-reason" name="confirm_reason" rows="3" required minlength="' + min + '" ' +
+              'placeholder="حداقل ' + min + ' کاراکتر" autocomplete="off"></textarea>' +
+          '</label>';
+        return document.getElementById('confirm-reason');
+      }
 
       function finish(result){
         const r = resolver;
         resolver = null;
+        clearReasonField();
         if (modal.classList.contains('open')) closeModal(modal);
         if (r) r(result || { ok: false });
       }
@@ -1072,17 +1105,19 @@
             submitBtn.textContent = opts.confirmLabel || 'تأیید';
             submitBtn.className = 'btn' + (opts.danger ? ' btn-danger' : (opts.warn ? ' btn-warn' : ''));
           }
-          /* Reason box only for explicit delete user/reseller flows */
-          const needReason = !!opts.reason;
-          if (reasonWrap) reasonWrap.hidden = !needReason;
-          if (reasonInput) {
-            reasonInput.required = needReason;
-            reasonInput.value = '';
-            reasonInput.minLength = opts.reasonMin || 3;
+          /* Strict: only true when caller sets requireReason (or legacy opts.reason === true) */
+          const requireReason = opts.requireReason === true || opts.reason === true;
+          clearReasonField();
+          let reasonInput = null;
+          if (requireReason) {
+            reasonInput = renderReasonField(opts);
           }
-          if (reasonLabel) reasonLabel.textContent = opts.reasonLabel || 'علت';
           openModal('modal-confirm');
-          if (needReason && reasonInput) setTimeout(() => reasonInput.focus(), 40);
+          if (requireReason && reasonInput) {
+            setTimeout(() => {
+              try { reasonInput.focus(); } catch (_) {}
+            }, 40);
+          }
         });
       };
 
@@ -1090,9 +1125,10 @@
         formEl.addEventListener('submit', (e) => {
           e.preventDefault();
           if (!resolver) return;
-          if (reasonWrap && !reasonWrap.hidden) {
+          if (activeRequireReason) {
+            const reasonInput = document.getElementById('confirm-reason');
             const v = (reasonInput && reasonInput.value || '').trim();
-            const min = (reasonInput && reasonInput.minLength) || 3;
+            const min = activeReasonMin || 3;
             if (v.length < min) {
               if (reasonInput) reasonInput.focus();
               return;
@@ -1109,6 +1145,7 @@
         if (e.target.closest('[data-modal-close]') || e.target === modal.querySelector('.ui-modal-backdrop')) {
           const r = resolver;
           resolver = null;
+          clearReasonField();
           if (r) r({ ok: false });
         }
       });
@@ -1119,26 +1156,34 @@
         finish({ ok: false });
       }, true);
 
+      function attrTruthy(el, name){
+        if (!el || !el.hasAttribute(name)) return false;
+        const v = (el.getAttribute(name) || '').trim().toLowerCase();
+        if (!v) return true; /* presence-only like data-confirm-reason */
+        return !(v === '0' || v === 'false' || v === 'no' || v === 'off');
+      }
+
       function readOpts(el, form){
-        const src = el.hasAttribute('data-confirm') ? el : form;
-        const needReason = src.hasAttribute('data-confirm-reason');
-        const reasonName = src.getAttribute('data-confirm-reason-name') || 'reason';
-        const reasonMin = parseInt(src.getAttribute('data-confirm-reason-min') || '3', 10) || 3;
+        const src = el && el.hasAttribute('data-confirm') ? el : form;
+        const requireReason = attrTruthy(src, 'data-confirm-reason');
+        const reasonName = (src && src.getAttribute('data-confirm-reason-name')) || 'reason';
+        const reasonMin = parseInt((src && src.getAttribute('data-confirm-reason-min')) || '3', 10) || 3;
         return {
-          title: src.getAttribute('data-confirm-title') || 'تأیید',
-          message: src.getAttribute('data-confirm') || 'ادامه می‌دهید؟',
-          danger: src.hasAttribute('data-confirm-danger'),
-          warn: src.hasAttribute('data-confirm-warn'),
-          reason: needReason,
+          title: (src && src.getAttribute('data-confirm-title')) || 'تأیید',
+          message: (src && src.getAttribute('data-confirm')) || 'ادامه می‌دهید؟',
+          danger: !!(src && src.hasAttribute('data-confirm-danger')),
+          warn: !!(src && src.hasAttribute('data-confirm-warn')),
+          requireReason: requireReason,
+          reason: requireReason, /* legacy alias for panelConfirm */
           reasonMin: reasonMin,
-          reasonLabel: src.getAttribute('data-confirm-reason-label') || 'علت',
+          reasonLabel: (src && src.getAttribute('data-confirm-reason-label')) || 'علت حذف',
           reasonName: reasonName,
-          confirmLabel: src.getAttribute('data-confirm-label') || 'تأیید',
+          confirmLabel: (src && src.getAttribute('data-confirm-label')) || 'تأیید',
         };
       }
 
       function applyReason(form, opts, reason){
-        if (!opts.reason || !reason) return;
+        if (!opts.requireReason || !reason) return;
         let hidden = form.querySelector(
           'input[name="' + opts.reasonName + '"], textarea[name="' + opts.reasonName + '"]'
         );

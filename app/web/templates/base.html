@@ -291,10 +291,8 @@
       </div>
       <form id="confirm-form" class="form-stack" action="#" method="post">
         <p id="confirm-message" class="confirm-message"></p>
-        <label class="form-field" id="confirm-reason-wrap" hidden>
-          <span id="confirm-reason-label">علت</span>
-          <textarea id="confirm-reason" name="confirm_reason" rows="3" minlength="3" placeholder="حداقل ۳ کاراکتر"></textarea>
-        </label>
+        {# Reason field is injected by panel.js only when requireReason=true #}
+        <div id="confirm-reason-slot" hidden></div>
         <div class="actions">
           <button type="submit" class="btn btn-danger" id="confirm-submit">تأیید</button>
           <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
