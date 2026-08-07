@@ -67,7 +67,12 @@ def _fmt_unit_amount(n: float, *, precision: int | None = None) -> str:
 
 
 def format_bytes(num: int | float | None, *, precision: int | None = None) -> str:
-    """Human-readable size using IEC binary units (1024) with Persian labels."""
+    """Human-readable size using IEC binary units (1024) with Persian labels.
+
+    Logical order is «number unit» (e.g. «10 گیگ»). In the RTL web panel the
+    unit renders on the visual left of the number run — do not wrap the whole
+    string in dir=ltr.
+    """
     if num is None:
         return "نامحدود"
     try:
@@ -91,7 +96,8 @@ def format_bytes_ratio(
 ) -> str:
     """Shared-unit used/limit string, e.g. «10 / 100 گیگ» or «10 از 100 گیگ».
 
-    Number first, unit once at the end — never unit-before-number.
+    Number run first, unit once at the end of the string. Web CSS uses RTL so
+    «گیگ» sits on the visual left; never put dir=ltr on the whole cell.
     """
     if limit is None:
         return format_bytes(used, precision=precision)

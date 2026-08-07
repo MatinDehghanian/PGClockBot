@@ -43,7 +43,8 @@ class RtlLtrHotspotsTests(unittest.TestCase):
 
     def test_payg_rate_isolates_amount(self):
         src = (ROOT / "app/web/templates/_reseller_edit_body.html").read_text(encoding="utf-8")
-        self.assertIn('dir="ltr" class="num-ratio"', src)
+        # Rate amount uses num-ratio (RTL presentation); unit «/ گیگ» stays beside it
+        self.assertIn('class="num-ratio"', src)
         self.assertIn("/ گیگ", src)
 
 

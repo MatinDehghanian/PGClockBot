@@ -121,14 +121,14 @@
           <span class="badge warn">غیرفعال</span>
           {% endif %}
         </td>
-        <td class="mono reseller-quota-cell" dir="ltr" title="مصرف / سقف کاربران">
-          <span class="reseller-quota-line">{{ usage.get('users_text') or '—' }}</span>
+        <td class="mono reseller-quota-cell" title="مصرف / سقف کاربران">
+          <span class="reseller-quota-line" dir="ltr">{{ usage.get('users_text') or '—' }}</span>
         </td>
-        <td class="mono reseller-quota-cell" dir="ltr" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
-          <div class="reseller-quota">
-            <span class="reseller-quota-line">{{ usage.get('traffic_text') or '—' }}</span>
+        <td class="mono reseller-quota-cell" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
+          <div class="reseller-quota byte-stack">
+            <span class="reseller-quota-line byte-size">{{ usage.get('traffic_text') or '—' }}</span>
             {% if usage.get('lifetime_text') %}
-            <small class="muted reseller-quota-life">Σ {{ usage.get('lifetime_text') }}</small>
+            <small class="muted reseller-quota-life byte-size">Σ {{ usage.get('lifetime_text') }}</small>
             {% endif %}
           </div>
         </td>
