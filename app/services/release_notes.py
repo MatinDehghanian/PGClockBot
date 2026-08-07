@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.5.6": [
+        "گردی گوشه‌های غیرکپسولی کمی بیشتر شد (کارت‌ها، منوها و باکس‌ها)",
+        "دکمه‌ها و کنترل‌های کپسولی بدون تغییر ماندند",
+    ],
     "4.5.5": [
         "فیلد علت فقط برای حذف کاربر/نماینده/ادمین رندر می‌شود (دیگر در همه Confirmationها ظاهر نمی‌شود)",
         "علت حذف اجباری است و در اعلان تلگرام شخص حذف‌شده نمایش داده می‌شود",
