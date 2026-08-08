@@ -603,7 +603,6 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("qr", "QR اشتراک"),
     ("naming", "نام‌گذاری سرویس"),
     ("forcejoin", "کانال اجباری"),
-    ("reseller", "نمایندگی"),
     ("notifications", "نوتیفیکیشن"),
     ("bot", "ربات و اتصال"),
 ]
@@ -615,6 +614,7 @@ SETTINGS_DOMAIN_REDIRECTS: dict[str, str] = {
     "finance": "/finance?tab=orders&settings=payment",
     "supports": "/tickets?supports=1",
     "loyalty": "/loyalty?settings=referral",
+    "reseller": "/resellers",
 }
 
 # Web-panel settings (sidebar under dashboard — not bot settings tabs)
@@ -685,26 +685,6 @@ SETTING_GROUPS = {
             "select",
             "منوی اصلی داخل کیبورد پایین است؛ انتخاب‌ها (پلن/پرداخت/…) زیر پیام می‌آیند",
             [("classic", "کلاسیک — هر دکمه یک ردیف"), ("compact", "فشرده — دکمه‌ها جفتی")],
-        ),
-    ],
-    "نمایندگی": [
-        (
-            "show_reseller_apply",
-            "نمایش درخواست نمایندگی",
-            "toggle",
-            "دکمه درخواست نمایندگی در منوی کاربران عادی",
-        ),
-        (
-            "reseller_panel_base_url",
-            "آدرس وب‌پنل نماینده",
-            "text",
-            "اختیاری. خالی = پیش‌فرض سیستم (آی‌پی سرور + پورت پنل، معمولاً :9000). در پیام تأیید برای نماینده ارسال می‌شود.",
-        ),
-        (
-            "reseller_pg_panel_base_url",
-            "آدرس پنل پاسارگارد برای نماینده",
-            "text",
-            "اختیاری. خالی = دقیقاً همان PG_BASE_URL تنظیم‌شده در اتصال بات (با path کامل).",
         ),
     ],
     "مدیریت PAYG": [
@@ -866,7 +846,6 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "loyalty": ["متن دعوت دوستان"],
     "naming": ["نام‌گذاری سرویس در پاسارگارد"],
     "forcejoin": ["کانال اجباری"],
-    "reseller": ["نمایندگی"],
     "billing": ["مدیریت PAYG"],
     "notifications": ["هشدار سرویس کاربر"],
     "backup": [],
@@ -882,6 +861,9 @@ TOGGLE_KEYS = {
     for fields in SETTING_GROUPS.values()
     for item in fields
     if len(item) >= 3 and item[2] == "toggle"
+} | {
+    # Managed on /resellers (not a bot-settings tab), still a boolean setting.
+    "show_reseller_apply",
 }
 
 IMAGE_KEYS = {

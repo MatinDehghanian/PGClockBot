@@ -715,7 +715,13 @@
     }
     function modalStripKeys(el){
       if (!el) return null;
-      const raw = el.getAttribute('data-modal-close-strip');
+      /* Prefer dedicated strip-keys attr on the modal root. Legacy:
+         data-modal-close-strip on .ui-modal also held keys, but that made
+         every inner click (tabs/inputs) soft-close the modal via closest(). */
+      const raw = el.getAttribute('data-modal-strip-keys')
+        || (el.classList && el.classList.contains('ui-modal')
+          ? el.getAttribute('data-modal-close-strip')
+          : null);
       if (!raw) return null;
       return raw.split(',').map((s) => s.trim()).filter(Boolean);
     }
@@ -781,7 +787,9 @@
         return;
       }
       const stripClose = e.target.closest('[data-modal-close-strip]');
-      if (stripClose) {
+      /* Ignore when the only match is the modal root (keys attr legacy).
+         Close targets are backdrop / X button (and any explicit strip control). */
+      if (stripClose && !(stripClose.classList && stripClose.classList.contains('ui-modal'))) {
         e.preventDefault();
         const modal = stripClose.closest('.ui-modal');
         closeModalSoft(modal);

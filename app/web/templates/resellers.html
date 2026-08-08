@@ -15,13 +15,22 @@
   {% endfor %}
 </div>
 
-<div class="card">
-  <h2>آدرس پنل‌ها برای نماینده</h2>
-  <p class="muted">
-    این آدرس‌ها در پیام تأیید نمایندگی ارسال می‌شوند.
+<div class="card settings-card">
+  <h2>تنظیمات نمایندگی</h2>
+  <p class="muted update-card-caption">
+    آدرس پنل‌ها در پیام تأیید نمایندگی ارسال می‌شوند.
     اگر خالی بگذارید، پیش‌فرض سیستم استفاده می‌شود.
+    نمایش درخواست نمایندگی فقط در ربات اصلی اثر دارد.
   </p>
   <form method="post" action="/resellers/panel-url" class="form-stack" id="reseller-urls-form">
+    <div class="ui-switch-list">
+      {{ switch(
+        'show_reseller_apply',
+        'نمایش درخواست نمایندگی',
+        checked=(show_reseller_apply in ['1','true','yes','on']),
+        help='دکمه درخواست نمایندگی در منوی کاربران عادی ربات اصلی'
+      ) }}
+    </div>
     <label class="form-field">آدرس وب‌پنل ربات (نماینده)
       <input name="reseller_panel_base_url"
              value="{{ custom_panel_url or '' }}"
@@ -59,7 +68,7 @@
       </small>
     </label>
     <div class="actions">
-      <button class="btn" type="submit">ذخیره آدرس‌ها</button>
+      <button class="btn" type="submit">ذخیره تنظیمات</button>
       {% if custom_panel_url or custom_pg_panel_url %}
       <button class="btn btn-ghost" type="button"
               onclick="
@@ -67,7 +76,7 @@
                 this.form.reseller_pg_panel_base_url.value='';
                 this.form.submit();
               ">
-        بازگشت هر دو به پیش‌فرض
+        بازگشت آدرس‌ها به پیش‌فرض
       </button>
       {% endif %}
     </div>
