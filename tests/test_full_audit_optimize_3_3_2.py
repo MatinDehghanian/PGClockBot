@@ -13,8 +13,8 @@ class VersionTests(unittest.TestCase):
         from app.services.release_notes import RELEASE_NOTES_FA
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.10.5")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.5")
+        self.assertEqual(__version__, "4.10.6")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.6")
         self.assertIn("3.3.2", RELEASE_NOTES_FA)
         blob = " ".join(RELEASE_NOTES_FA["3.3.2"])
         self.assertIn("ممیزی", blob)

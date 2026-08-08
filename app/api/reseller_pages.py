@@ -23,6 +23,7 @@ from app.services.resellers import (
     get_reseller_panel_base_url,
     get_reseller_pg_panel_base_url,
     join_perms,
+    list_active_reseller_plans,
     list_applications,
     normalize_feature_perms,
     notify_reseller_revoked,
@@ -215,6 +216,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         custom_pg_url = (await get_setting(session, "reseller_pg_panel_base_url") or "").strip()
         default_pg_url = normalize_pg_base_url(get_settings().pg_base_url or "")
         show_reseller_apply = await get_setting(session, "show_reseller_apply", "1")
+        try:
+            reseller_plans = await list_active_reseller_plans(session)
+        except Exception:
+            reseller_plans = []
         return render(
             request,
             "resellers.html",
@@ -226,6 +231,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 "tab": "list",
                 "feature_perms": FEATURE_PERMS,
                 "pg_roles": roles,
+                "reseller_plans": reseller_plans,
                 "panel_url": panel_url,
                 "custom_panel_url": custom_url,
                 "default_panel_url": default_url,
@@ -282,10 +288,18 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 f"/resellers?err={_q('کاربر با این آیدی در ربات پیدا نشد — اول باید استارت زده باشد')}",
                 status_code=303,
             )
-        try:
-            commission = int(str(form.get("commission_percent") or "10"))
-        except ValueError:
-            commission = 10
+        plan_raw = str(form.get("plan_id") or "").strip()
+        if not plan_raw.isdigit():
+            return RedirectResponse(
+                f"/resellers?err={_q('انتخاب پلن نمایندگی الزامی است')}",
+                status_code=303,
+            )
+        plan = await session.get(ResellerPlan, int(plan_raw))
+        if not plan or not plan.is_active:
+            return RedirectResponse(
+                f"/resellers?err={_q('پلن نمایندگی نامعتبر یا غیرفعال است')}",
+                status_code=303,
+            )
         perms = _feature_perms_from_form(form)
         create_pg = bool(form.get("create_pg_admin"))
         share_pg = bool(form.get("share_pg_panel_url"))
@@ -296,7 +310,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             creds = await provision_reseller(
                 session,
                 user=user,
-                commission_percent=commission,
+                plan=plan,
                 web_permissions=perms,
                 bot_permissions=perms,
                 create_pg_admin=create_pg,
