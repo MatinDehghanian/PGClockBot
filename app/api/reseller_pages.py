@@ -214,6 +214,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         pg_panel_url = await get_reseller_pg_panel_base_url(session)
         custom_pg_url = (await get_setting(session, "reseller_pg_panel_base_url") or "").strip()
         default_pg_url = normalize_pg_base_url(get_settings().pg_base_url or "")
+        show_reseller_apply = await get_setting(session, "show_reseller_apply", "1")
         return render(
             request,
             "resellers.html",
@@ -233,6 +234,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 "custom_pg_panel_url": custom_pg_url,
                 "default_pg_panel_url": default_pg_url,
                 "using_custom_pg_panel_url": bool(custom_pg_url),
+                "show_reseller_apply": show_reseller_apply,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
                 "open_edit": request.query_params.get("edit"),
@@ -251,10 +253,14 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         form = await request.form()
         bot_url = str(form.get("reseller_panel_base_url") or "").strip().rstrip("/")
         pg_url = normalize_pg_base_url(str(form.get("reseller_pg_panel_base_url") or ""))
+        show_apply = "1" if str(form.get("show_reseller_apply") or "") in {
+            "1", "on", "true", "yes"
+        } else "0"
         await set_setting(session, "reseller_panel_base_url", bot_url)
         await set_setting(session, "reseller_pg_panel_base_url", pg_url)
+        await set_setting(session, "show_reseller_apply", show_apply)
         return RedirectResponse(
-            f"/resellers?ok={_q('آدرس‌های پنل نماینده ذخیره شد')}",
+            f"/resellers?ok={_q('تنظیمات نمایندگی ذخیره شد')}",
             status_code=303,
         )
 

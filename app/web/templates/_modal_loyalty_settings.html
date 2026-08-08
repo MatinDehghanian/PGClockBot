@@ -4,11 +4,11 @@
 {% set show_referral_tab = referral_tab_groups and referral_tab_groups|length > 0 %}
 <div class="ui-modal{% if open_loy %} open{% endif %}" id="modal-loyalty-settings"
      {% if not open_loy %}hidden{% endif %}
-     data-modal-close-strip="{{ strip_keys }}">
+     data-modal-strip-keys="{{ strip_keys }}">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-xl settings-modal-panel" role="dialog" aria-modal="true" aria-labelledby="loyalty-settings-title">
     <div class="ui-modal-head">
-      <h2 id="loyalty-settings-title">تنظیمات دعوت و امتیاز</h2>
+      <h2 id="loyalty-settings-title">تنظیمات باشگاه مشتریان</h2>
       <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
@@ -19,8 +19,8 @@
       {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
     </div>
     {% endif %}
-    <nav class="section-tabs settings-tabs modal-section-tabs" role="tablist" aria-label="تب‌های تنظیمات امتیاز" data-modal-tabs>
-      <button type="button" class="tab-btn {% if loyalty_settings_tab != 'referral' or not show_referral_tab %}active{% endif %}" data-modal-tab="club" role="tab">باشگاه امتیاز</button>
+    <nav class="section-tabs settings-tabs modal-section-tabs" role="tablist" aria-label="تب‌های تنظیمات باشگاه" data-modal-tabs>
+      <button type="button" class="tab-btn {% if loyalty_settings_tab != 'referral' or not show_referral_tab %}active{% endif %}" data-modal-tab="club" role="tab">باشگاه</button>
       {% if show_referral_tab %}
       <button type="button" class="tab-btn {% if loyalty_settings_tab == 'referral' %}active{% endif %}" data-modal-tab="referral" role="tab">متن دعوت</button>
       {% endif %}
@@ -30,7 +30,7 @@
         <form method="post" action="/loyalty/settings" class="settings-form">
           <input type="hidden" name="next_tab" value="{{ tab or 'overview' }}" />
           <div class="card settings-card">
-            <h2>باشگاه امتیاز</h2>
+            <h2>باشگاه مشتریان</h2>
             <div class="settings-grid">
               <div class="setting-item full">
                 <label class="toggle-row ui-switch-row">

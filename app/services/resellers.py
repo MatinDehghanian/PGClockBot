@@ -30,7 +30,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("tickets", "تیکت‌ها"),
     ("stats", "آمار و کمیسیون"),
     ("shop_settings", "تنظیمات ربات فروشگاه"),
-    ("loyalty", "دعوت و باشگاه امتیاز"),
+    ("loyalty", "باشگاه مشتریان"),
 ]
 
 DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,loyalty"

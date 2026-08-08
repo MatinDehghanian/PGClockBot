@@ -14,10 +14,11 @@ class DomainSettingsRedirectTests(unittest.TestCase):
         from app.services.users import SETTINGS_DOMAIN_REDIRECTS, SETTINGS_TABS
 
         keys = {k for k, _ in SETTINGS_TABS}
-        for removed in ("payment", "supports", "billing"):
+        for removed in ("payment", "supports", "billing", "reseller"):
             self.assertNotIn(removed, keys)
             self.assertIn(removed, SETTINGS_DOMAIN_REDIRECTS)
         self.assertIn("loyalty", SETTINGS_DOMAIN_REDIRECTS)
+        self.assertEqual(SETTINGS_DOMAIN_REDIRECTS["reseller"], "/resellers")
 
     def test_shop_settings_tabs_slimmed(self):
         from app.services.resellers import (
@@ -62,6 +63,9 @@ class DomainModalTemplateTests(unittest.TestCase):
         html = (TEMPLATES / "loyalty.html").read_text(encoding="utf-8")
         self.assertIn('data-modal-open="modal-loyalty-settings"', html)
         self.assertIn("section-tabs", html)
+        self.assertIn("باشگاه مشتریان", html)
+        self.assertIn("home-panel-grid", html)
+        self.assertIn("loyalty-overview", html)
         self.assertNotIn("tabs tabs-scroll", html)
         self.assertNotIn('href="/loyalty?tab=settings"', html)
         self.assertIn("_modal_loyalty_settings.html", html)
@@ -73,6 +77,19 @@ class DomainModalTemplateTests(unittest.TestCase):
         html = (TEMPLATES / "settings.html").read_text(encoding="utf-8")
         self.assertNotIn("tab == 'supports'", html)
         self.assertNotIn("tab == 'payment'", html)
+        self.assertNotIn("tab == 'reseller'", html)
+
+    def test_reseller_settings_live_on_resellers_page(self):
+        html = (TEMPLATES / "resellers.html").read_text(encoding="utf-8")
+        self.assertIn("تنظیمات نمایندگی", html)
+        self.assertIn("show_reseller_apply", html)
+        self.assertIn("reseller_panel_base_url", html)
+        self.assertIn("reseller_pg_panel_base_url", html)
+        self.assertIn("/resellers/panel-url", html)
+        from app.services.users import SETTING_GROUPS, keys_for_tab
+
+        self.assertNotIn("نمایندگی", SETTING_GROUPS)
+        self.assertEqual(keys_for_tab("reseller"), set())
 
     def test_legacy_order_payment_templates_removed(self):
         self.assertFalse((TEMPLATES / "orders.html").exists())
@@ -84,6 +101,7 @@ class DomainModalTemplateTests(unittest.TestCase):
         self.assertIn("data-modal-tabs", js)
         self.assertIn("data-modal-tab-panel", js)
         self.assertIn("data-modal-close-strip", js)
+        self.assertIn("data-modal-strip-keys", js)
         self.assertIn("settings-modal-panel", css)
         self.assertIn(".section-tabs .tab-btn", css)
         self.assertIn("settings-modal-flash", css)
@@ -95,9 +113,16 @@ class DomainModalTemplateTests(unittest.TestCase):
             "_modal_loyalty_settings.html",
         ):
             html = (TEMPLATES / name).read_text(encoding="utf-8")
+            self.assertIn("data-modal-strip-keys", html)
             self.assertIn("data-modal-close-strip", html)
             self.assertIn("settings-modal-flash", html)
             self.assertNotIn("data-modal-close-nav", html)
+            # Keys must not live on the close-strip of the modal root
+            # (that made tab clicks soft-close the dialog).
+            self.assertNotRegex(
+                html,
+                r'class="ui-modal[^"]*"[^>]*data-modal-close-strip="',
+            )
 
 
 class DomainSettingGroupsTests(unittest.TestCase):
