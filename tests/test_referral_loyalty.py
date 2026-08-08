@@ -315,7 +315,246 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(u.points_balance, 0)
             await reverse_points_tx(session, tx, reason="refund")
             await session.refresh(u)
-            self.assertEqual(u.points_balance, -100)  # debt until future earns
+            self.assertEqual(u.points_balance, -100)
+
+    async def test_discount_redeem_and_checkout_apply(self):
+        from sqlalchemy import select
+
+        from app.db.models import LoyaltyDiscountEntitlement, LoyaltyReward, Order, OrderStatus
+        from app.services.loyalty import credit_points, redeem_reward
+        from app.services.orders import apply_discount_to_order
+
+        async with self.Session() as session:
+            u = await self._user(session, 9001, "KKKK1111")
+            await credit_points(
+                session,
+                u,
+                300,
+                tx_type="earn",
+                source="test",
+                reference=None,
+                description="seed",
+                idempotency_key="seed300",
+            )
+            reward = LoyaltyReward(
+                name="۱۵٪",
+                reward_type="discount_percent",
+                reward_value=15,
+                points_cost=300,
+                enabled=True,
+                archived=False,
+                min_purchase_toman=0,
+                max_discount_toman=50000,
+                expires_days=7,
+            )
+            session.add(reward)
+            await session.commit()
+            await session.refresh(reward)
+
+            red = await redeem_reward(session, u, reward.id, idempotency_key="disc1")
+            self.assertTrue(red.discount_code)
+            self.assertTrue(red.discount_code.startswith("LOY"))
+            await session.refresh(u)
+            self.assertEqual(u.points_balance, 0)
+
+            ent = (
+                await session.execute(
+                    select(LoyaltyDiscountEntitlement).where(
+                        LoyaltyDiscountEntitlement.code == red.discount_code
+                    )
+                )
+            ).scalar_one()
+            self.assertEqual(ent.status, "available")
+            self.assertEqual(ent.user_id, u.id)
+
+            order = Order(
+                user_id=u.id,
+                amount=200000,
+                discount_amount=0,
+                status=OrderStatus.PENDING.value,
+            )
+            session.add(order)
+            await session.commit()
+            await session.refresh(order)
+
+            order = await apply_discount_to_order(session, order, red.discount_code)
+            # 15% of 200000 = 30000, under max 50000
+            self.assertEqual(order.discount_amount, 30000)
+            self.assertEqual(order.amount, 170000)
+            await session.refresh(ent)
+            self.assertEqual(ent.status, "reserved")
+
+            # Other user cannot use
+            u2 = await self._user(session, 9002, "LLLL2222")
+            order2 = Order(
+                user_id=u2.id,
+                amount=100000,
+                status=OrderStatus.PENDING.value,
+            )
+            session.add(order2)
+            await session.commit()
+            await session.refresh(order2)
+            with self.assertRaises(ValueError):
+                await apply_discount_to_order(session, order2, red.discount_code)
+
+            # Duplicate apply on same order blocked (already has discount)
+            with self.assertRaises(ValueError):
+                await apply_discount_to_order(session, order, red.discount_code)
+
+    async def test_discount_min_max_and_release(self):
+        from sqlalchemy import select
+
+        from app.db.models import LoyaltyDiscountEntitlement, LoyaltyReward, Order, OrderStatus
+        from app.services.loyalty import (
+            consume_loyalty_discount_for_order,
+            credit_points,
+            redeem_reward,
+            release_loyalty_discount_for_order,
+        )
+        from app.services.orders import apply_discount_to_order
+
+        async with self.Session() as session:
+            u = await self._user(session, 9101, "MMMM3333")
+            await credit_points(
+                session,
+                u,
+                300,
+                tx_type="earn",
+                source="test",
+                reference=None,
+                description="seed",
+                idempotency_key="seed300b",
+            )
+            reward = LoyaltyReward(
+                name="۱۰٪",
+                reward_type="discount_percent",
+                reward_value=10,
+                points_cost=300,
+                enabled=True,
+                archived=False,
+                min_purchase_toman=50000,
+                max_discount_toman=5000,
+                expires_days=7,
+            )
+            session.add(reward)
+            await session.commit()
+            await session.refresh(reward)
+            red = await redeem_reward(session, u, reward.id, idempotency_key="disc2")
+
+            small = Order(
+                user_id=u.id, amount=10000, status=OrderStatus.PENDING.value
+            )
+            session.add(small)
+            await session.commit()
+            await session.refresh(small)
+            with self.assertRaises(ValueError):
+                await apply_discount_to_order(session, small, red.discount_code)
+
+            order = Order(
+                user_id=u.id, amount=100000, status=OrderStatus.PENDING.value
+            )
+            session.add(order)
+            await session.commit()
+            await session.refresh(order)
+            order = await apply_discount_to_order(session, order, red.discount_code)
+            # 10% = 10000 capped to 5000
+            self.assertEqual(order.discount_amount, 5000)
+            self.assertEqual(order.amount, 95000)
+
+            await release_loyalty_discount_for_order(session, order)
+            await session.commit()
+            ent = (
+                await session.execute(
+                    select(LoyaltyDiscountEntitlement).where(
+                        LoyaltyDiscountEntitlement.code == red.discount_code
+                    )
+                )
+            ).scalar_one()
+            self.assertEqual(ent.status, "available")
+
+            # Re-apply and consume
+            order.discount_code = None
+            order.discount_amount = 0
+            order.amount = 100000
+            await session.commit()
+            order = await apply_discount_to_order(session, order, red.discount_code)
+            await consume_loyalty_discount_for_order(session, order)
+            await session.commit()
+            await session.refresh(ent)
+            self.assertEqual(ent.status, "consumed")
+
+    async def test_traffic_and_time_call_pasarguard(self):
+        from unittest.mock import AsyncMock, patch
+
+        from app.db.models import LoyaltyReward, UserService
+        from app.services.loyalty import credit_points, redeem_reward
+
+        async with self.Session() as session:
+            u = await self._user(session, 9201, "NNNN4444")
+            await credit_points(
+                session,
+                u,
+                500,
+                tx_type="earn",
+                source="test",
+                reference=None,
+                description="seed",
+                idempotency_key="seed500b",
+            )
+            svc = UserService(
+                bot_user_id=u.id,
+                pg_user_id=77,
+                pg_username="u77",
+            )
+            session.add(svc)
+            traffic = LoyaltyReward(
+                name="۵گ",
+                reward_type="traffic_gb",
+                reward_value=5,
+                points_cost=100,
+                enabled=True,
+                archived=False,
+            )
+            time_r = LoyaltyReward(
+                name="۷روز",
+                reward_type="time_days",
+                reward_value=7,
+                points_cost=150,
+                enabled=True,
+                archived=False,
+            )
+            session.add_all([traffic, time_r])
+            await session.commit()
+            await session.refresh(svc)
+            await session.refresh(traffic)
+            await session.refresh(time_r)
+
+            mock_pg = AsyncMock()
+            mock_pg.get_user_by_id = AsyncMock(
+                return_value={"data_limit": 10 * (1024**3), "expire": 2000000000}
+            )
+            mock_pg.modify_user_by_id = AsyncMock(return_value={})
+            with patch("app.services.pasarguard.get_pg", return_value=mock_pg):
+                await redeem_reward(
+                    session, u, traffic.id, service_id=svc.id, idempotency_key="tr1"
+                )
+                await redeem_reward(
+                    session, u, time_r.id, service_id=svc.id, idempotency_key="tm1"
+                )
+            self.assertEqual(mock_pg.modify_user_by_id.await_count, 2)
+            traffic_payload = mock_pg.modify_user_by_id.await_args_list[0].args[1]
+            self.assertEqual(
+                traffic_payload["data_limit"], 15 * (1024**3)
+            )
+            time_payload = mock_pg.modify_user_by_id.await_args_list[1].args[1]
+            self.assertGreater(time_payload["expire"], 2000000000)
+
+            # Duplicate traffic idempotent
+            with patch("app.services.pasarguard.get_pg", return_value=mock_pg):
+                await redeem_reward(
+                    session, u, traffic.id, service_id=svc.id, idempotency_key="tr1"
+                )
+            self.assertEqual(mock_pg.modify_user_by_id.await_count, 2)
 
 
 class LoyaltyStaticContractTests(unittest.TestCase):

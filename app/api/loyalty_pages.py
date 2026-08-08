@@ -169,6 +169,9 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         reward_type: str = Form(...),
         reward_value: int = Form(...),
         points_cost: int = Form(...),
+        min_purchase_toman: int = Form(0),
+        max_discount_toman: str = Form(""),
+        expires_days: str = Form(""),
     ):
         if reward_type not in REWARD_TYPE_LABELS:
             return RedirectResponse(
@@ -179,6 +182,13 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 f"/loyalty?tab=rewards&err={quote('مقدار و هزینه باید مثبت باشند')}",
                 status_code=303,
             )
+        if reward_type == "discount_percent" and int(reward_value) > 100:
+            return RedirectResponse(
+                f"/loyalty?tab=rewards&err={quote('درصد تخفیف حداکثر ۱۰۰ است')}",
+                status_code=303,
+            )
+        mx = str(max_discount_toman or "").strip()
+        ex = str(expires_days or "").strip()
         session.add(
             LoyaltyReward(
                 name=(name or "").strip()[:128] or "جایزه",
@@ -189,6 +199,11 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 enabled=True,
                 archived=False,
                 sort_order=100,
+                min_purchase_toman=max(0, int(min_purchase_toman or 0))
+                if reward_type == "discount_percent"
+                else 0,
+                max_discount_toman=int(mx) if mx.isdigit() and reward_type == "discount_percent" else None,
+                expires_days=int(ex) if ex.isdigit() and reward_type == "discount_percent" else None,
             )
         )
         await session.commit()
@@ -206,6 +221,9 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         enabled: str = Form("0"),
         max_redemptions_global: str = Form(""),
         max_redemptions_per_user: str = Form(""),
+        min_purchase_toman: int = Form(0),
+        max_discount_toman: str = Form(""),
+        expires_days: str = Form(""),
     ):
         reward = await session.get(LoyaltyReward, reward_id)
         if not reward:
@@ -215,12 +233,20 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         reward.name = (name or reward.name).strip()[:128]
         reward.description = (description or "").strip() or None
         reward.reward_value = max(1, int(reward_value))
+        if reward.reward_type == "discount_percent":
+            reward.reward_value = min(100, reward.reward_value)
         reward.points_cost = max(1, int(points_cost))
         reward.enabled = str(enabled) in {"1", "on", "true", "yes"}
         g = str(max_redemptions_global or "").strip()
         u = str(max_redemptions_per_user or "").strip()
         reward.max_redemptions_global = int(g) if g.isdigit() else None
         reward.max_redemptions_per_user = int(u) if u.isdigit() else None
+        if reward.reward_type == "discount_percent":
+            reward.min_purchase_toman = max(0, int(min_purchase_toman or 0))
+            mx = str(max_discount_toman or "").strip()
+            ex = str(expires_days or "").strip()
+            reward.max_discount_toman = int(mx) if mx.isdigit() else None
+            reward.expires_days = int(ex) if ex.isdigit() else None
         await session.commit()
         return RedirectResponse("/loyalty?tab=rewards&saved=1", status_code=303)
 

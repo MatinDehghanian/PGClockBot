@@ -16,6 +16,7 @@ from app.services.loyalty import (
     ensure_loyalty_defaults,
     get_tier_for_points,
     list_active_rewards,
+    list_available_discounts,
     list_points_history,
     loyalty_enabled,
     month_earned_points,
@@ -53,6 +54,7 @@ def _loy_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🎁 جوایز", callback_data="loy:rewards"),
                 InlineKeyboardButton(text="📜 تاریخچه", callback_data="loy:hist:0"),
             ],
+            [InlineKeyboardButton(text="🏷 تخفیف‌های من", callback_data="loy:discounts")],
             [InlineKeyboardButton(text="👥 دعوت دوستان", callback_data="ref:home")],
             [InlineKeyboardButton(text="🏠 خانه", callback_data="menu:home")],
         ]
@@ -298,19 +300,71 @@ async def _do_redeem(
     await callback.answer("جایزه با موفقیت دریافت شد ✅", show_alert=True)
     await session.refresh(db_user)
     type_label = REWARD_TYPE_LABELS.get(red.reward_type, red.reward_type)
-    body = "\n".join(
-        [
-            f"جایزه اعمال شد.",
-            kv_line("🎁", "نوع", type_label),
-            kv_line("📦", "مقدار", str(red.reward_value)),
-            kv_line("⭐", "امتیاز باقی‌مانده", str(int(db_user.points_balance or 0))),
-        ]
-    )
+    lines = [
+        "جایزه اعمال شد.",
+        kv_line("🎁", "نوع", type_label),
+        kv_line("📦", "مقدار", str(red.reward_value)),
+        kv_line("⭐", "امتیاز باقی‌مانده", str(int(db_user.points_balance or 0))),
+    ]
+    if red.reward_type == "discount_percent" and red.discount_code:
+        lines.extend(
+            [
+                "",
+                kv_line("🏷", "کد تخفیف", f"<code>{red.discount_code}</code>"),
+                "در خرید بعدی از دکمه «کد تخفیف» استفاده کنید.",
+            ]
+        )
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("✅ بازخرید موفق", body),
+            format_message("✅ بازخرید موفق", "\n".join(lines)),
             reply_markup=_loy_keyboard(),
+        )
+
+
+@router.callback_query(F.data == "loy:discounts")
+async def loyalty_discounts(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    await callback.answer()
+    ents = await list_available_discounts(session, db_user.id)
+    if not ents:
+        body = "تخفیف فعالی ندارید.\nاز بخش جوایز یک تخفیف بازخرید کنید."
+    else:
+        lines = []
+        for e in ents:
+            exp = "بدون انقضا"
+            if e.expires_at:
+                exp = e.expires_at.strftime("%Y-%m-%d")
+            max_d = (
+                format_toman(int(e.max_discount_toman), get_settings().currency)
+                if e.max_discount_toman is not None
+                else "بدون سقف"
+            )
+            min_p = (
+                format_toman(int(e.min_purchase_toman), get_settings().currency)
+                if int(e.min_purchase_toman or 0) > 0
+                else "—"
+            )
+            lines.append(
+                "\n".join(
+                    [
+                        f"• <b>{e.percent}٪</b> — کد: <code>{e.code}</code>",
+                        f"  انقضا: {exp}",
+                        f"  حداقل خرید: {min_p}",
+                        f"  سقف تخفیف: {max_d}",
+                    ]
+                )
+            )
+        body = "\n\n".join(lines) + "\n\nدر صفحه پرداخت سفارش، کد را وارد کنید."
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message("🏷 تخفیف‌های من", body),
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="بازگشت", callback_data="loy:home")],
+                    [InlineKeyboardButton(text="🏠 خانه", callback_data="menu:home")],
+                ]
+            ),
         )
 
 

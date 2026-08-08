@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
     BotUser,
+    LoyaltyDiscountEntitlement,
     LoyaltyReward,
     LoyaltyTier,
     Order,
@@ -149,6 +150,17 @@ DEFAULT_REWARDS: list[dict[str, Any]] = [
         "points_cost": 500,
         "sort_order": 40,
     },
+    {
+        "name": "۱۵٪ تخفیف خرید",
+        "description": "کد تخفیف یک‌بارمصرف برای خرید بعدی",
+        "reward_type": "discount_percent",
+        "reward_value": 15,
+        "points_cost": 300,
+        "sort_order": 50,
+        "min_purchase_toman": 0,
+        "max_discount_toman": 100000,
+        "expires_days": 7,
+    },
 ]
 
 SETTING_LOYALTY_ENABLED = "loyalty_enabled"
@@ -229,6 +241,9 @@ async def ensure_loyalty_defaults(session: AsyncSession, *, reseller_id: int | N
                     archived=False,
                     sort_order=int(row.get("sort_order", 0)),
                     reseller_id=reseller_id,
+                    min_purchase_toman=int(row.get("min_purchase_toman") or 0),
+                    max_discount_toman=row.get("max_discount_toman"),
+                    expires_days=row.get("expires_days"),
                 )
             )
     await session.commit()
@@ -1120,6 +1135,7 @@ async def redeem_reward(
 
             await credit_wallet(session, user, rval, wallet_reason, commit=False)
         reward.redemption_count = int(reward.redemption_count or 0) + 1
+        meta: dict[str, Any] = {"reward_name": reward.name}
         red = RewardRedemption(
             user_id=user.id,
             reward_id=reward.id,
@@ -1131,9 +1147,18 @@ async def redeem_reward(
             points_tx_id=pts_tx.id if pts_tx else None,
             wallet_reason=wallet_reason,
             idempotency_key=key,
-            meta_json=json.dumps({"reward_name": reward.name}, ensure_ascii=False),
+            meta_json=json.dumps(meta, ensure_ascii=False),
         )
         session.add(red)
+        await session.flush()
+
+        if rtype == "discount_percent":
+            ent = await _create_discount_entitlement(session, user, reward, red)
+            red.discount_code = ent.code
+            meta["discount_code"] = ent.code
+            meta["expires_at"] = ent.expires_at.isoformat() if ent.expires_at else None
+            red.meta_json = json.dumps(meta, ensure_ascii=False)
+
         await session.commit()
         await session.refresh(red)
         await session.refresh(user)
@@ -1151,6 +1176,225 @@ async def redeem_reward(
         await session.rollback()
         raise
     return red
+
+
+async def _unique_discount_code(session: AsyncSession) -> str:
+    import secrets
+    import string
+
+    alphabet = string.ascii_uppercase + string.digits
+    for _ in range(20):
+        code = "LOY" + "".join(secrets.choice(alphabet) for _ in range(8))
+        exists = (
+            await session.execute(
+                select(LoyaltyDiscountEntitlement.id).where(
+                    LoyaltyDiscountEntitlement.code == code
+                )
+            )
+        ).scalar_one_or_none()
+        if exists is None:
+            return code
+    raise ValueError("ساخت کد تخفیف ناموفق بود")
+
+
+async def _create_discount_entitlement(
+    session: AsyncSession,
+    user: BotUser,
+    reward: LoyaltyReward,
+    redemption: RewardRedemption,
+) -> LoyaltyDiscountEntitlement:
+    code = await _unique_discount_code(session)
+    expires_at = None
+    days = reward.expires_days
+    if days is not None and int(days) > 0:
+        expires_at = datetime.now(timezone.utc) + timedelta(days=int(days))
+    ent = LoyaltyDiscountEntitlement(
+        user_id=int(user.id),
+        redemption_id=int(redemption.id),
+        code=code,
+        percent=int(reward.reward_value),
+        min_purchase_toman=int(reward.min_purchase_toman or 0),
+        max_discount_toman=int(reward.max_discount_toman)
+        if reward.max_discount_toman is not None
+        else None,
+        status="available",
+        expires_at=expires_at,
+    )
+    session.add(ent)
+    await session.flush()
+    return ent
+
+
+def _entitlement_expired(ent: LoyaltyDiscountEntitlement, *, now: datetime | None = None) -> bool:
+    if not ent.expires_at:
+        return False
+    now = now or datetime.now(timezone.utc)
+    exp = ent.expires_at
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    return exp < now
+
+
+async def list_available_discounts(
+    session: AsyncSession, user_id: int
+) -> list[LoyaltyDiscountEntitlement]:
+    rows = list(
+        (
+            await session.execute(
+                select(LoyaltyDiscountEntitlement)
+                .where(
+                    LoyaltyDiscountEntitlement.user_id == int(user_id),
+                    LoyaltyDiscountEntitlement.status == "available",
+                )
+                .order_by(LoyaltyDiscountEntitlement.id.desc())
+            )
+        ).scalars().all()
+    )
+    return [r for r in rows if not _entitlement_expired(r)]
+
+
+def compute_loyalty_discount_amount(ent: LoyaltyDiscountEntitlement, base_amount: int) -> int:
+    base = max(0, int(base_amount))
+    if int(ent.min_purchase_toman or 0) > 0 and base < int(ent.min_purchase_toman):
+        return 0
+    pct = max(0, min(100, int(ent.percent or 0)))
+    discount = int(base * pct // 100)
+    if ent.max_discount_toman is not None:
+        discount = min(discount, int(ent.max_discount_toman))
+    return max(0, min(discount, base))
+
+
+async def reserve_loyalty_discount(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    code: str,
+    order: Order,
+    base_amount: int,
+) -> tuple[int, str]:
+    """Atomically reserve a personal loyalty discount onto a pending order."""
+    normalized = (code or "").upper().strip()
+    if not normalized:
+        raise ValueError("کد تخفیف نامعتبر است")
+    try:
+        ent = (
+            await session.execute(
+                select(LoyaltyDiscountEntitlement)
+                .where(LoyaltyDiscountEntitlement.code == normalized)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+    except Exception:
+        ent = (
+            await session.execute(
+                select(LoyaltyDiscountEntitlement).where(
+                    LoyaltyDiscountEntitlement.code == normalized
+                )
+            )
+        ).scalar_one_or_none()
+    if not ent or int(ent.user_id) != int(user_id):
+        raise ValueError("کد تخفیف نامعتبر است")
+    if ent.status == "reserved" and ent.reserved_order_id == int(order.id):
+        return int(ent.discount_amount or 0), ent.code
+    if ent.status != "available":
+        raise ValueError("این تخفیف قبلاً استفاده شده")
+    if _entitlement_expired(ent):
+        ent.status = "void"
+        await session.flush()
+        raise ValueError("مهلت این تخفیف تمام شده")
+    discount = compute_loyalty_discount_amount(ent, base_amount)
+    if discount <= 0:
+        if int(ent.min_purchase_toman or 0) > base_amount:
+            raise ValueError(
+                f"حداقل مبلغ خرید برای این تخفیف {int(ent.min_purchase_toman)} تومان است"
+            )
+        raise ValueError("تخفیف قابل اعمال نیست")
+    claim = await session.execute(
+        update(LoyaltyDiscountEntitlement)
+        .where(
+            LoyaltyDiscountEntitlement.id == ent.id,
+            LoyaltyDiscountEntitlement.status == "available",
+            LoyaltyDiscountEntitlement.user_id == int(user_id),
+        )
+        .values(
+            status="reserved",
+            reserved_order_id=int(order.id),
+            reserved_at=datetime.now(timezone.utc),
+            original_amount=int(base_amount),
+            discount_amount=int(discount),
+            final_amount=max(0, int(base_amount) - int(discount)),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if claim.rowcount != 1:
+        raise ValueError("این تخفیف هم‌اکنون قابل استفاده نیست")
+    return discount, ent.code
+
+
+async def release_loyalty_discount_for_order(session: AsyncSession, order: Order) -> None:
+    """Return reserved loyalty discount to available (failed/cancelled unpaid order)."""
+    code = (order.discount_code or "").strip().upper()
+    if not code.startswith("LOY"):
+        return
+    ent = (
+        await session.execute(
+            select(LoyaltyDiscountEntitlement).where(
+                LoyaltyDiscountEntitlement.code == code,
+                LoyaltyDiscountEntitlement.status == "reserved",
+                LoyaltyDiscountEntitlement.reserved_order_id == int(order.id),
+            )
+        )
+    ).scalar_one_or_none()
+    if not ent:
+        return
+    if _entitlement_expired(ent):
+        ent.status = "void"
+    else:
+        ent.status = "available"
+        ent.reserved_order_id = None
+        ent.reserved_at = None
+        ent.original_amount = None
+        ent.discount_amount = None
+        ent.final_amount = None
+    await session.flush()
+
+
+async def consume_loyalty_discount_for_order(session: AsyncSession, order: Order) -> None:
+    """Mark reserved loyalty discount consumed after successful payment/delivery."""
+    code = (order.discount_code or "").strip().upper()
+    if not code.startswith("LOY"):
+        return
+    now = datetime.now(timezone.utc)
+    await session.execute(
+        update(LoyaltyDiscountEntitlement)
+        .where(
+            LoyaltyDiscountEntitlement.code == code,
+            LoyaltyDiscountEntitlement.status == "reserved",
+            LoyaltyDiscountEntitlement.reserved_order_id == int(order.id),
+        )
+        .values(
+            status="consumed",
+            consumed_order_id=int(order.id),
+            consumed_at=now,
+        )
+        .execution_options(synchronize_session=False)
+    )
+
+
+async def void_loyalty_discount_on_refund(session: AsyncSession, order: Order) -> None:
+    """Refunded orders must not revive a consumed loyalty discount."""
+    code = (order.discount_code or "").strip().upper()
+    if not code.startswith("LOY"):
+        return
+    await session.execute(
+        update(LoyaltyDiscountEntitlement)
+        .where(
+            LoyaltyDiscountEntitlement.code == code,
+            LoyaltyDiscountEntitlement.consumed_order_id == int(order.id),
+        )
+        .values(status="void")
+        .execution_options(synchronize_session=False)
+    )
 
 
 async def _apply_service_reward(
@@ -1179,10 +1423,8 @@ async def _apply_service_reward(
         add_bytes = int(reward_value) * (1024**3)
         current = info.get("data_limit")
         if current is None or int(current or 0) <= 0:
-            # Unlimited — leave unlimited; still record redemption as granted meta
-            payload["data_limit"] = 0
-        else:
-            payload["data_limit"] = int(current) + add_bytes
+            raise ValueError("سرویس نامحدود است؛ جایزه ترافیک قابل اعمال نیست")
+        payload["data_limit"] = int(current) + add_bytes
     elif reward_type == "time_days":
         add_sec = int(reward_value) * 86400
         expire = info.get("expire")

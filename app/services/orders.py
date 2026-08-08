@@ -318,7 +318,19 @@ async def apply_discount_to_order(
         raise ValueError("روی این سفارش قبلاً تخفیف اعمال شده")
     # Base amount before any discount
     base = int(order.amount) + int(order.discount_amount or 0)
-    discount, used_code = await _reserve_discount_code(session, code, base)
+    normalized = (code or "").strip().upper()
+    if normalized.startswith("LOY"):
+        from app.services.loyalty import reserve_loyalty_discount
+
+        discount, used_code = await reserve_loyalty_discount(
+            session,
+            user_id=int(order.user_id),
+            code=normalized,
+            order=order,
+            base_amount=base,
+        )
+    else:
+        discount, used_code = await _reserve_discount_code(session, code, base)
     if not used_code:
         raise ValueError("کد تخفیف نامعتبر است")
     order.discount_amount = discount
@@ -927,7 +939,7 @@ async def revert_failed_free_delivery(session: AsyncSession, order: Order) -> No
             await session.delete(claim)
     # Release reserved discount use if any
     if order.discount_code:
-        await _release_discount_code(session, order.discount_code)
+        await _release_order_discount(session, order)
     await session.commit()
 
 
@@ -936,6 +948,9 @@ async def _release_discount_code(session: AsyncSession, code: str | None) -> Non
     if not code:
         return
     normalized = code.upper().strip()
+    if normalized.startswith("LOY"):
+        # Loyalty path needs the order context — handled by release_loyalty_discount_for_order
+        return
     await session.execute(
         update(DiscountCode)
         .where(
@@ -945,6 +960,22 @@ async def _release_discount_code(session: AsyncSession, code: str | None) -> Non
         .values(used_count=DiscountCode.used_count - 1)
         .execution_options(synchronize_session=False)
     )
+
+
+async def _release_order_discount(session: AsyncSession, order: Order) -> None:
+    """Release both shop DiscountCode uses and loyalty entitlements for an unpaid order."""
+    code = order.discount_code
+    if not code:
+        return
+    if str(code).upper().startswith("LOY"):
+        from app.services.loyalty import release_loyalty_discount_for_order
+
+        await release_loyalty_discount_for_order(session, order)
+    else:
+        await _release_discount_code(session, code)
+    order.amount = int(order.amount) + int(order.discount_amount or 0)
+    order.discount_amount = 0
+    order.discount_code = None
 
 
 async def start_card_payment(session: AsyncSession, order: Order, user_id: int) -> Payment:
@@ -1074,7 +1105,12 @@ async def cancel_stale_pending_orders(
             pay.status = PaymentStatus.REJECTED.value
             pay.review_note = pay.review_note or "auto-cancelled stale pending order"
         if order.discount_code:
-            await _release_discount_code(session, order.discount_code)
+            if str(order.discount_code).upper().startswith("LOY"):
+                from app.services.loyalty import release_loyalty_discount_for_order
+
+                await release_loyalty_discount_for_order(session, order)
+            else:
+                await _release_discount_code(session, order.discount_code)
         # Drop unpaid trial claim so user can retry
         note = (order.note or "").strip()
         if note.startswith("trial:"):
@@ -1367,6 +1403,14 @@ async def cancel_order(session: AsyncSession, order: Order, *, note: str = "") -
         .values(status=PaymentStatus.REJECTED.value, review_note=reject_note)
         .execution_options(synchronize_session=False)
     )
+    await session.refresh(order)
+    if order.discount_code:
+        from app.services.loyalty import release_loyalty_discount_for_order
+
+        if str(order.discount_code).upper().startswith("LOY"):
+            await release_loyalty_discount_for_order(session, order)
+        else:
+            await _release_discount_code(session, order.discount_code)
     await session.commit()
     await session.refresh(order)
     return order
@@ -1643,8 +1687,10 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         except Exception:
             pass
         try:
-            from app.services.loyalty import on_order_delivered
+            from app.services.loyalty import consume_loyalty_discount_for_order, on_order_delivered
 
+            await consume_loyalty_discount_for_order(session, order)
+            await session.commit()
             await on_order_delivered(session, order)
         except Exception:
             logger.warning("loyalty on_order_delivered failed order=%s", order.id, exc_info=True)
@@ -1807,8 +1853,10 @@ async def apply_renewal(session: AsyncSession, order: Order, service: UserServic
         await session.commit()
         await session.refresh(order)
         try:
-            from app.services.loyalty import on_order_delivered
+            from app.services.loyalty import consume_loyalty_discount_for_order, on_order_delivered
 
+            await consume_loyalty_discount_for_order(session, order)
+            await session.commit()
             await on_order_delivered(session, order)
         except Exception:
             logger.warning("loyalty on_order_delivered renew failed order=%s", order.id, exc_info=True)

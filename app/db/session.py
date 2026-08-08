@@ -273,6 +273,31 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
                 )
             )
 
+    if insp.has_table("loyalty_rewards"):
+        lrcols = {c["name"] for c in insp.get_columns("loyalty_rewards")}
+        if "min_purchase_toman" not in lrcols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE loyalty_rewards ADD COLUMN min_purchase_toman INTEGER DEFAULT 0"
+                )
+            )
+        if "max_discount_toman" not in lrcols:
+            sync_conn.execute(
+                sql_text("ALTER TABLE loyalty_rewards ADD COLUMN max_discount_toman INTEGER")
+            )
+        if "expires_days" not in lrcols:
+            sync_conn.execute(
+                sql_text("ALTER TABLE loyalty_rewards ADD COLUMN expires_days INTEGER")
+            )
+    if insp.has_table("reward_redemptions"):
+        rrcols = {c["name"] for c in insp.get_columns("reward_redemptions")}
+        if "discount_code" not in rrcols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE reward_redemptions ADD COLUMN discount_code VARCHAR(64)"
+                )
+            )
+
     marker = None
     try:
         from app.config import DATA_DIR

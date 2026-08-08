@@ -603,6 +603,10 @@ class LoyaltyReward(Base):
     reseller_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bot_users.id"), nullable=True, index=True
     )
+    # Discount-only constraints (ignored for other reward types)
+    min_purchase_toman: Mapped[int] = mapped_column(Integer, default=0)
+    max_discount_toman: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    expires_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -629,8 +633,41 @@ class RewardRedemption(Base):
         ForeignKey("points_transactions.id"), nullable=True
     )
     wallet_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    discount_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     idempotency_key: Mapped[str] = mapped_column(String(128))
     meta_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LoyaltyDiscountEntitlement(Base):
+    """Personal one-time loyalty discount usable via existing checkout discount step."""
+
+    __tablename__ = "loyalty_discount_entitlements"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_loyalty_discount_code"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    redemption_id: Mapped[int] = mapped_column(ForeignKey("reward_redemptions.id"), index=True)
+    code: Mapped[str] = mapped_column(String(64), index=True)
+    percent: Mapped[int] = mapped_column(Integer)
+    min_purchase_toman: Mapped[int] = mapped_column(Integer, default=0)
+    max_discount_toman: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # available | reserved | consumed | void
+    status: Mapped[str] = mapped_column(String(32), default="available", index=True)
+    reserved_order_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("orders.id"), nullable=True, index=True
+    )
+    consumed_order_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("orders.id"), nullable=True
+    )
+    original_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    discount_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    final_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reserved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
