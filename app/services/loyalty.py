@@ -1410,10 +1410,7 @@ async def _apply_service_reward(
     from app.services.pasarguard import get_pg, get_pg_for_reseller
 
     if user.reseller_id:
-        try:
-            pg = await get_pg_for_reseller(session, int(user.reseller_id))
-        except Exception:
-            pg = get_pg()
+        pg = await get_pg_for_reseller(session, int(user.reseller_id))
     else:
         pg = get_pg()
 
@@ -1445,77 +1442,110 @@ async def _apply_service_reward(
     await pg.modify_user_by_id(int(service.pg_user_id), payload)
 
 
-async def overview_metrics(session: AsyncSession) -> dict[str, Any]:
+async def overview_metrics(
+    session: AsyncSession, *, reseller_id: int | None = None
+) -> dict[str, Any]:
+    user_filter = []
+    if reseller_id is not None:
+        user_filter = [BotUser.reseller_id == int(reseller_id)]
+
     total_refs = int(
         (
             await session.execute(
-                select(func.count()).select_from(BotUser).where(BotUser.referred_by_id.is_not(None))
-            )
-        ).scalar_one()
-        or 0
-    )
-    qualified = int(
-        (
-            await session.execute(
                 select(func.count())
-                .select_from(ReferralEvent)
-                .where(ReferralEvent.qualification_state == "qualified")
+                .select_from(BotUser)
+                .where(BotUser.referred_by_id.is_not(None), *user_filter)
             )
         ).scalar_one()
         or 0
     )
-    issued = int(
-        (
-            await session.execute(
-                select(func.coalesce(func.sum(PointsTransaction.amount), 0)).where(
-                    PointsTransaction.amount > 0
-                )
-            )
-        ).scalar_one()
-        or 0
+    qual_q = select(func.count()).select_from(ReferralEvent).where(
+        ReferralEvent.qualification_state == "qualified"
     )
-    redeemed = int(
-        (
-            await session.execute(
-                select(func.coalesce(func.sum(PointsTransaction.amount), 0)).where(
-                    PointsTransaction.amount < 0,
-                    PointsTransaction.tx_type == "redeem",
-                )
+    if reseller_id is not None:
+        qual_q = (
+            select(func.count())
+            .select_from(ReferralEvent)
+            .join(BotUser, BotUser.id == ReferralEvent.referrer_id)
+            .where(
+                ReferralEvent.qualification_state == "qualified",
+                BotUser.reseller_id == int(reseller_id),
             )
-        ).scalar_one()
-        or 0
-    )
-    wallet_credits = int(
-        (
-            await session.execute(
-                select(func.coalesce(func.sum(RewardRedemption.reward_value), 0)).where(
-                    RewardRedemption.reward_type == "wallet_credit",
-                    RewardRedemption.status == "completed",
-                )
-            )
-        ).scalar_one()
-        or 0
-    )
-    active_rewards = int(
-        (
-            await session.execute(
-                select(func.count())
-                .select_from(LoyaltyReward)
-                .where(LoyaltyReward.enabled.is_(True), LoyaltyReward.archived.is_(False))
-            )
-        ).scalar_one()
-        or 0
-    )
-    # Top referrers
-    top_rows = (
-        await session.execute(
-            select(BotUser.referred_by_id, func.count())
-            .where(BotUser.referred_by_id.is_not(None))
-            .group_by(BotUser.referred_by_id)
-            .order_by(func.count().desc())
-            .limit(5)
         )
-    ).all()
+    qualified = int((await session.execute(qual_q)).scalar_one() or 0)
+
+    pts_base = select(func.coalesce(func.sum(PointsTransaction.amount), 0))
+    if reseller_id is not None:
+        pts_join = pts_base.select_from(PointsTransaction).join(
+            BotUser, BotUser.id == PointsTransaction.user_id
+        ).where(BotUser.reseller_id == int(reseller_id), PointsTransaction.amount > 0)
+        issued = int((await session.execute(pts_join)).scalar_one() or 0)
+        redeemed_q = (
+            select(func.coalesce(func.sum(PointsTransaction.amount), 0))
+            .select_from(PointsTransaction)
+            .join(BotUser, BotUser.id == PointsTransaction.user_id)
+            .where(
+                BotUser.reseller_id == int(reseller_id),
+                PointsTransaction.amount < 0,
+                PointsTransaction.tx_type == "redeem",
+            )
+        )
+        redeemed = int((await session.execute(redeemed_q)).scalar_one() or 0)
+    else:
+        issued = int(
+            (
+                await session.execute(
+                    pts_base.where(PointsTransaction.amount > 0)
+                )
+            ).scalar_one()
+            or 0
+        )
+        redeemed = int(
+            (
+                await session.execute(
+                    select(func.coalesce(func.sum(PointsTransaction.amount), 0)).where(
+                        PointsTransaction.amount < 0,
+                        PointsTransaction.tx_type == "redeem",
+                    )
+                )
+            ).scalar_one()
+            or 0
+        )
+
+    red_q = select(func.coalesce(func.sum(RewardRedemption.reward_value), 0)).where(
+        RewardRedemption.reward_type == "wallet_credit",
+        RewardRedemption.status == "completed",
+    )
+    if reseller_id is not None:
+        red_q = (
+            select(func.coalesce(func.sum(RewardRedemption.reward_value), 0))
+            .select_from(RewardRedemption)
+            .join(BotUser, BotUser.id == RewardRedemption.user_id)
+            .where(
+                RewardRedemption.reward_type == "wallet_credit",
+                RewardRedemption.status == "completed",
+                BotUser.reseller_id == int(reseller_id),
+            )
+        )
+    wallet_credits = int((await session.execute(red_q)).scalar_one() or 0)
+
+    rw_q = select(func.count()).select_from(LoyaltyReward).where(
+        LoyaltyReward.enabled.is_(True), LoyaltyReward.archived.is_(False)
+    )
+    if reseller_id is None:
+        rw_q = rw_q.where(LoyaltyReward.reseller_id.is_(None))
+    else:
+        rw_q = rw_q.where(LoyaltyReward.reseller_id == int(reseller_id))
+    active_rewards = int((await session.execute(rw_q)).scalar_one() or 0)
+
+    top_q = (
+        select(BotUser.referred_by_id, func.count())
+        .where(BotUser.referred_by_id.is_not(None), *user_filter)
+        .group_by(BotUser.referred_by_id)
+        .order_by(func.count().desc())
+        .limit(5)
+    )
+    top_rows = (await session.execute(top_q)).all()
     top: list[dict[str, Any]] = []
     for rid, cnt in top_rows:
         u = await session.get(BotUser, int(rid))

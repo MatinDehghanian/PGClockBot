@@ -173,7 +173,11 @@
 {% if tab == 'tiers' %}
 <div class="card" style="margin-top:1rem">
   <h2>سطوح باشگاه</h2>
+  {% if not is_platform_admin %}
+  <p class="muted">سطوح سراسری هستند و فقط ادمین اصلی می‌تواند آن‌ها را ویرایش کند.</p>
+  {% endif %}
   {% for tier in tiers %}
+  {% if is_platform_admin %}
   <form method="post" action="/loyalty/tiers/{{ tier.id }}/save" class="form-stack" style="border-top:1px solid var(--border,#333);padding-top:1rem;margin-top:1rem">
     <label class="form-field">نام<input name="name" value="{{ tier.name }}" required /></label>
     <div class="form-row" style="display:flex;gap:.75rem;flex-wrap:wrap">
@@ -186,6 +190,12 @@
     </label>
     <div class="actions"><button class="btn" type="submit">ذخیره</button></div>
   </form>
+  {% else %}
+  <div style="border-top:1px solid var(--border,#333);padding-top:1rem;margin-top:1rem">
+    <strong>{{ tier.name }}</strong>
+    <span class="muted"> · از {{ tier.min_points }}{% if tier.max_points is not none %} تا {{ tier.max_points }}{% else %}+{% endif %}</span>
+  </div>
+  {% endif %}
   {% else %}
   <p class="muted">سطحی تعریف نشده.</p>
   {% endfor %}

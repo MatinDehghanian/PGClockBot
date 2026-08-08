@@ -575,6 +575,71 @@ class LoyaltyStaticContractTests(unittest.TestCase):
         mig = Path("alembic/versions/0007_referral_loyalty.py").read_text()
         self.assertIn("0007_referral_loyalty", mig)
 
+    def test_no_owner_pg_fallback_on_reseller_reward(self):
+        from pathlib import Path
+
+        src = Path("app/services/loyalty.py").read_text()
+        block = src.split("async def _apply_service_reward", 1)[1].split(
+            "async def overview_metrics", 1
+        )[0]
+        self.assertIn("get_pg_for_reseller(session, int(user.reseller_id))", block)
+        self.assertNotIn("except Exception:\n            pg = get_pg()", block)
+        self.assertNotIn("except Exception:\n        pg = get_pg()", block)
+        # Reseller path must not silently fall back to platform owner client
+        self.assertNotRegex(
+            block,
+            r"get_pg_for_reseller[\s\S]{0,120}except Exception:[\s\S]{0,80}get_pg\(\)",
+        )
+
+    def test_panel_shop_scope_helpers(self):
+        from app.api.loyalty_pages import _reward_in_scope, _rule_in_scope, _shop_scope
+        from app.db.models import LoyaltyReward, PointsRule
+
+        self.assertIsNone(_shop_scope({"role": "admin"}))
+        self.assertEqual(_shop_scope({"role": "reseller", "bot_user_id": 42}), 42)
+        with self.assertRaises(ValueError):
+            _shop_scope({"role": "reseller"})
+
+        platform_rule = PointsRule(
+            name="p", event_key="purchase", amount_mode="fixed", amount=1, reseller_id=None
+        )
+        shop_rule = PointsRule(
+            name="s", event_key="purchase", amount_mode="fixed", amount=1, reseller_id=42
+        )
+        self.assertTrue(_rule_in_scope(platform_rule, None))
+        self.assertFalse(_rule_in_scope(shop_rule, None))
+        self.assertTrue(_rule_in_scope(shop_rule, 42))
+        self.assertFalse(_rule_in_scope(platform_rule, 42))
+
+        platform_rw = LoyaltyReward(
+            name="p",
+            reward_type="wallet_credit",
+            reward_value=1,
+            points_cost=1,
+            reseller_id=None,
+        )
+        shop_rw = LoyaltyReward(
+            name="s",
+            reward_type="wallet_credit",
+            reward_value=1,
+            points_cost=1,
+            reseller_id=42,
+        )
+        self.assertTrue(_reward_in_scope(platform_rw, None))
+        self.assertFalse(_reward_in_scope(shop_rw, None))
+        self.assertTrue(_reward_in_scope(shop_rw, 42))
+        self.assertFalse(_reward_in_scope(platform_rw, 42))
+
+    def test_tier_save_requires_admin(self):
+        from pathlib import Path
+
+        src = Path("app/api/loyalty_pages.py").read_text()
+        self.assertIn('async def loyalty_tier_save', src)
+        # Tier mutation must use require_admin, not require_loyalty
+        idx = src.index("async def loyalty_tier_save")
+        chunk = src[idx : idx + 250]
+        self.assertIn("Depends(require_admin)", chunk)
+
     def test_wallet_commit_flag(self):
         import inspect
         from app.services.wallet import credit_wallet, debit_wallet
@@ -588,6 +653,15 @@ class LoyaltyStaticContractTests(unittest.TestCase):
         keys = {k for k, _ in FEATURE_PERMS}
         self.assertIn("loyalty", keys)
         self.assertIn("loyalty", DEFAULT_FEATURE_PERMS)
+
+    def test_loyalty_perm_does_not_imply_other_shop_keys(self):
+        from app.services.authz import authz_from_shop_perm_list, can_shop
+
+        ctx = authz_from_shop_perm_list(["loyalty"], role="reseller")
+        self.assertTrue(can_shop(ctx, "loyalty"))
+        self.assertFalse(can_shop(ctx, "orders"))
+        self.assertFalse(can_shop(ctx, "payments"))
+        self.assertFalse(can_shop(ctx, "plans"))
 
 
 if __name__ == "__main__":

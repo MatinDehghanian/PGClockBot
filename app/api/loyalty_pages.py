@@ -26,6 +26,28 @@ from app.services.loyalty import (
 from app.services.users import get_setting, set_setting
 
 
+def _shop_scope(staff: dict) -> int | None:
+    """Platform admin → None (platform shop). Reseller → their bot_user_id only."""
+    if staff.get("role") == "reseller":
+        rid = staff.get("bot_user_id")
+        if rid is None:
+            raise ValueError("reseller scope missing")
+        return int(rid)
+    return None
+
+
+def _rule_in_scope(rule: PointsRule, scope: int | None) -> bool:
+    if scope is None:
+        return rule.reseller_id is None
+    return rule.reseller_id is not None and int(rule.reseller_id) == int(scope)
+
+
+def _reward_in_scope(reward: LoyaltyReward, scope: int | None) -> bool:
+    if scope is None:
+        return reward.reseller_id is None
+    return reward.reseller_id is not None and int(reward.reseller_id) == int(scope)
+
+
 def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
     require_loyalty = require_perm("loyalty")
 
@@ -36,23 +58,29 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         session: AsyncSession = Depends(get_db),
         tab: str = "overview",
     ):
-        await ensure_loyalty_defaults(session)
-        metrics = await overview_metrics(session)
+        try:
+            scope = _shop_scope(staff)
+        except ValueError:
+            return RedirectResponse("/home", status_code=303)
+        await ensure_loyalty_defaults(session, reseller_id=scope)
+        metrics = await overview_metrics(session, reseller_id=scope)
+        if scope is None:
+            rules_q = select(PointsRule).where(PointsRule.reseller_id.is_(None))
+            rewards_q = select(LoyaltyReward).where(LoyaltyReward.reseller_id.is_(None))
+        else:
+            rules_q = select(PointsRule).where(PointsRule.reseller_id == int(scope))
+            rewards_q = select(LoyaltyReward).where(LoyaltyReward.reseller_id == int(scope))
         rules = list(
             (
                 await session.execute(
-                    select(PointsRule)
-                    .where(PointsRule.reseller_id.is_(None))
-                    .order_by(PointsRule.sort_order.asc(), PointsRule.id.asc())
+                    rules_q.order_by(PointsRule.sort_order.asc(), PointsRule.id.asc())
                 )
             ).scalars().all()
         )
         rewards = list(
             (
                 await session.execute(
-                    select(LoyaltyReward)
-                    .where(LoyaltyReward.reseller_id.is_(None))
-                    .order_by(LoyaltyReward.sort_order.asc(), LoyaltyReward.id.asc())
+                    rewards_q.order_by(LoyaltyReward.sort_order.asc(), LoyaltyReward.id.asc())
                 )
             ).scalars().all()
         )
@@ -63,15 +91,22 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 )
             ).scalars().all()
         )
-        txs = list(
-            (
-                await session.execute(
-                    select(PointsTransaction).order_by(PointsTransaction.id.desc()).limit(50)
-                )
-            ).scalars().all()
+        txs_q = select(PointsTransaction).order_by(PointsTransaction.id.desc()).limit(50)
+        if scope is not None:
+            txs_q = (
+                select(PointsTransaction)
+                .join(BotUser, BotUser.id == PointsTransaction.user_id)
+                .where(BotUser.reseller_id == int(scope))
+                .order_by(PointsTransaction.id.desc())
+                .limit(50)
+            )
+        txs = list((await session.execute(txs_q)).scalars().all())
+        loyalty_enabled = await get_setting(
+            session, "loyalty_enabled", "1", reseller_id=scope
         )
-        loyalty_enabled = await get_setting(session, "loyalty_enabled", "1")
-        wallet_rate = await get_setting(session, "points_to_wallet_rate", "100")
+        wallet_rate = await get_setting(
+            session, "points_to_wallet_rate", "100", reseller_id=scope
+        )
         return render(
             request,
             "loyalty.html",
@@ -87,6 +122,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 "reward_type_labels": REWARD_TYPE_LABELS,
                 "loyalty_enabled": loyalty_enabled,
                 "wallet_rate": wallet_rate,
+                "is_platform_admin": staff.get("role") == "admin",
                 "flash_ok": request.query_params.get("saved"),
                 "flash_err": request.query_params.get("err"),
                 "flash_msg": request.query_params.get("msg"),
@@ -101,6 +137,10 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         loyalty_enabled: str = Form("0"),
         points_to_wallet_rate: str = Form("100"),
     ):
+        try:
+            scope = _shop_scope(staff)
+        except ValueError:
+            return RedirectResponse("/home", status_code=303)
         enabled = "1" if str(loyalty_enabled) in {"1", "on", "true", "yes"} else "0"
         try:
             rate = int(str(points_to_wallet_rate).replace(",", "").strip() or "0")
@@ -111,8 +151,8 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 f"/loyalty?tab=settings&err={quote('نرخ تبدیل نامعتبر است')}",
                 status_code=303,
             )
-        await set_setting(session, "loyalty_enabled", enabled)
-        await set_setting(session, "points_to_wallet_rate", str(rate))
+        await set_setting(session, "loyalty_enabled", enabled, reseller_id=scope)
+        await set_setting(session, "points_to_wallet_rate", str(rate), reseller_id=scope)
         return RedirectResponse("/loyalty?tab=settings&saved=1", status_code=303)
 
     @app.post("/loyalty/rules/{rule_id}/save")
@@ -130,8 +170,12 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         max_reward: str = Form(""),
         cooldown_hours: int = Form(0),
     ):
+        try:
+            scope = _shop_scope(staff)
+        except ValueError:
+            return RedirectResponse("/home", status_code=303)
         rule = await session.get(PointsRule, rule_id)
-        if not rule:
+        if not rule or not _rule_in_scope(rule, scope):
             return RedirectResponse(
                 f"/loyalty?tab=rules&err={quote('قانون پیدا نشد')}", status_code=303
             )
@@ -154,8 +198,12 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         staff: dict = Depends(require_loyalty),
         session: AsyncSession = Depends(get_db),
     ):
+        try:
+            scope = _shop_scope(staff)
+        except ValueError:
+            return RedirectResponse("/home", status_code=303)
         rule = await session.get(PointsRule, rule_id)
-        if rule:
+        if rule and _rule_in_scope(rule, scope):
             rule.enabled = not bool(rule.enabled)
             await session.commit()
         return RedirectResponse("/loyalty?tab=rules&saved=1", status_code=303)
@@ -173,6 +221,10 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         max_discount_toman: str = Form(""),
         expires_days: str = Form(""),
     ):
+        try:
+            scope = _shop_scope(staff)
+        except ValueError:
+            return RedirectResponse("/home", status_code=303)
         if reward_type not in REWARD_TYPE_LABELS:
             return RedirectResponse(
                 f"/loyalty?tab=rewards&err={quote('نوع جایزه نامعتبر')}", status_code=303
@@ -199,6 +251,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 enabled=True,
                 archived=False,
                 sort_order=100,
+                reseller_id=scope,
                 min_purchase_toman=max(0, int(min_purchase_toman or 0))
                 if reward_type == "discount_percent"
                 else 0,
@@ -225,8 +278,12 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         max_discount_toman: str = Form(""),
         expires_days: str = Form(""),
     ):
+        try:
+            scope = _shop_scope(staff)
+        except ValueError:
+            return RedirectResponse("/home", status_code=303)
         reward = await session.get(LoyaltyReward, reward_id)
-        if not reward:
+        if not reward or not _reward_in_scope(reward, scope):
             return RedirectResponse(
                 f"/loyalty?tab=rewards&err={quote('جایزه پیدا نشد')}", status_code=303
             )
@@ -256,8 +313,12 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         staff: dict = Depends(require_loyalty),
         session: AsyncSession = Depends(get_db),
     ):
+        try:
+            scope = _shop_scope(staff)
+        except ValueError:
+            return RedirectResponse("/home", status_code=303)
         reward = await session.get(LoyaltyReward, reward_id)
-        if reward:
+        if reward and _reward_in_scope(reward, scope):
             reward.archived = True
             reward.enabled = False
             await session.commit()
@@ -266,7 +327,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
     @app.post("/loyalty/tiers/{tier_id}/save")
     async def loyalty_tier_save(
         tier_id: int,
-        staff: dict = Depends(require_loyalty),
+        staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
         name: str = Form(...),
         min_points: int = Form(0),
@@ -274,6 +335,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         multiplier_bps: int = Form(10000),
         enabled: str = Form("0"),
     ):
+        # Tiers are platform-global — admin only (no reseller mutation).
         tier = await session.get(LoyaltyTier, tier_id)
         if not tier:
             return RedirectResponse(
