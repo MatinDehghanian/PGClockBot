@@ -264,6 +264,15 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
             except Exception:
                 pass
 
+    if insp.has_table("bot_users"):
+        bucols = {c["name"] for c in insp.get_columns("bot_users")}
+        if "points_balance" not in bucols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE bot_users ADD COLUMN points_balance INTEGER DEFAULT 0"
+                )
+            )
+
     marker = None
     try:
         from app.config import DATA_DIR

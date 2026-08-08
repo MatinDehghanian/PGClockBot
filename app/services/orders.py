@@ -1642,6 +1642,12 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             await _maybe_pay_referral_bonus(session, order)
         except Exception:
             pass
+        try:
+            from app.services.loyalty import on_order_delivered
+
+            await on_order_delivered(session, order)
+        except Exception:
+            logger.warning("loyalty on_order_delivered failed order=%s", order.id, exc_info=True)
         return order
     except Exception:
         try:
@@ -1800,6 +1806,12 @@ async def apply_renewal(session: AsyncSession, order: Order, service: UserServic
         order.status = OrderStatus.DELIVERED.value
         await session.commit()
         await session.refresh(order)
+        try:
+            from app.services.loyalty import on_order_delivered
+
+            await on_order_delivered(session, order)
+        except Exception:
+            logger.warning("loyalty on_order_delivered renew failed order=%s", order.id, exc_info=True)
         return order
     except Exception:
         try:

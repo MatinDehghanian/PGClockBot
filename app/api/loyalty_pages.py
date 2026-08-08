@@ -1,0 +1,294 @@
+"""Web panel: Referral + Loyalty / Points admin."""
+
+from __future__ import annotations
+
+from urllib.parse import quote
+
+from fastapi import Depends, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models import (
+    BotUser,
+    LoyaltyReward,
+    LoyaltyTier,
+    PointsRule,
+    PointsTransaction,
+)
+from app.services.loyalty import (
+    EVENT_LABELS,
+    REWARD_TYPE_LABELS,
+    admin_adjust_points,
+    ensure_loyalty_defaults,
+    overview_metrics,
+)
+from app.services.users import get_setting, set_setting
+
+
+def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
+    require_loyalty = require_perm("loyalty")
+
+    @app.get("/loyalty", response_class=HTMLResponse)
+    async def loyalty_overview(
+        request: Request,
+        staff: dict = Depends(require_loyalty),
+        session: AsyncSession = Depends(get_db),
+        tab: str = "overview",
+    ):
+        await ensure_loyalty_defaults(session)
+        metrics = await overview_metrics(session)
+        rules = list(
+            (
+                await session.execute(
+                    select(PointsRule)
+                    .where(PointsRule.reseller_id.is_(None))
+                    .order_by(PointsRule.sort_order.asc(), PointsRule.id.asc())
+                )
+            ).scalars().all()
+        )
+        rewards = list(
+            (
+                await session.execute(
+                    select(LoyaltyReward)
+                    .where(LoyaltyReward.reseller_id.is_(None))
+                    .order_by(LoyaltyReward.sort_order.asc(), LoyaltyReward.id.asc())
+                )
+            ).scalars().all()
+        )
+        tiers = list(
+            (
+                await session.execute(
+                    select(LoyaltyTier).order_by(LoyaltyTier.sort_order.asc(), LoyaltyTier.id.asc())
+                )
+            ).scalars().all()
+        )
+        txs = list(
+            (
+                await session.execute(
+                    select(PointsTransaction).order_by(PointsTransaction.id.desc()).limit(50)
+                )
+            ).scalars().all()
+        )
+        loyalty_enabled = await get_setting(session, "loyalty_enabled", "1")
+        wallet_rate = await get_setting(session, "points_to_wallet_rate", "100")
+        return render(
+            request,
+            "loyalty.html",
+            {
+                "staff": staff,
+                "tab": tab or "overview",
+                "metrics": metrics,
+                "rules": rules,
+                "rewards": rewards,
+                "tiers": tiers,
+                "txs": txs,
+                "event_labels": EVENT_LABELS,
+                "reward_type_labels": REWARD_TYPE_LABELS,
+                "loyalty_enabled": loyalty_enabled,
+                "wallet_rate": wallet_rate,
+                "flash_ok": request.query_params.get("saved"),
+                "flash_err": request.query_params.get("err"),
+                "flash_msg": request.query_params.get("msg"),
+            },
+        )
+
+    @app.post("/loyalty/settings")
+    async def loyalty_settings_save(
+        request: Request,
+        staff: dict = Depends(require_loyalty),
+        session: AsyncSession = Depends(get_db),
+        loyalty_enabled: str = Form("0"),
+        points_to_wallet_rate: str = Form("100"),
+    ):
+        enabled = "1" if str(loyalty_enabled) in {"1", "on", "true", "yes"} else "0"
+        try:
+            rate = int(str(points_to_wallet_rate).replace(",", "").strip() or "0")
+            if rate < 0:
+                raise ValueError("نرخ نامعتبر")
+        except ValueError:
+            return RedirectResponse(
+                f"/loyalty?tab=settings&err={quote('نرخ تبدیل نامعتبر است')}",
+                status_code=303,
+            )
+        await set_setting(session, "loyalty_enabled", enabled)
+        await set_setting(session, "points_to_wallet_rate", str(rate))
+        return RedirectResponse("/loyalty?tab=settings&saved=1", status_code=303)
+
+    @app.post("/loyalty/rules/{rule_id}/save")
+    async def loyalty_rule_save(
+        rule_id: int,
+        staff: dict = Depends(require_loyalty),
+        session: AsyncSession = Depends(get_db),
+        name: str = Form(...),
+        amount: int = Form(0),
+        amount_mode: str = Form("fixed"),
+        enabled: str = Form("0"),
+        first_time_only: str = Form("0"),
+        min_purchase_toman: int = Form(0),
+        min_purchase_gb: int = Form(0),
+        max_reward: str = Form(""),
+        cooldown_hours: int = Form(0),
+    ):
+        rule = await session.get(PointsRule, rule_id)
+        if not rule:
+            return RedirectResponse(
+                f"/loyalty?tab=rules&err={quote('قانون پیدا نشد')}", status_code=303
+            )
+        rule.name = (name or rule.name).strip()[:128]
+        rule.amount = max(0, int(amount))
+        rule.amount_mode = amount_mode if amount_mode in {"fixed", "per_gb"} else "fixed"
+        rule.enabled = str(enabled) in {"1", "on", "true", "yes"}
+        rule.first_time_only = str(first_time_only) in {"1", "on", "true", "yes"}
+        rule.min_purchase_toman = max(0, int(min_purchase_toman))
+        rule.min_purchase_gb = max(0, int(min_purchase_gb))
+        rule.cooldown_hours = max(0, int(cooldown_hours))
+        mr = str(max_reward or "").strip()
+        rule.max_reward = int(mr) if mr.isdigit() else None
+        await session.commit()
+        return RedirectResponse("/loyalty?tab=rules&saved=1", status_code=303)
+
+    @app.post("/loyalty/rules/{rule_id}/toggle")
+    async def loyalty_rule_toggle(
+        rule_id: int,
+        staff: dict = Depends(require_loyalty),
+        session: AsyncSession = Depends(get_db),
+    ):
+        rule = await session.get(PointsRule, rule_id)
+        if rule:
+            rule.enabled = not bool(rule.enabled)
+            await session.commit()
+        return RedirectResponse("/loyalty?tab=rules&saved=1", status_code=303)
+
+    @app.post("/loyalty/rewards/create")
+    async def loyalty_reward_create(
+        staff: dict = Depends(require_loyalty),
+        session: AsyncSession = Depends(get_db),
+        name: str = Form(...),
+        description: str = Form(""),
+        reward_type: str = Form(...),
+        reward_value: int = Form(...),
+        points_cost: int = Form(...),
+    ):
+        if reward_type not in REWARD_TYPE_LABELS:
+            return RedirectResponse(
+                f"/loyalty?tab=rewards&err={quote('نوع جایزه نامعتبر')}", status_code=303
+            )
+        if int(reward_value) <= 0 or int(points_cost) <= 0:
+            return RedirectResponse(
+                f"/loyalty?tab=rewards&err={quote('مقدار و هزینه باید مثبت باشند')}",
+                status_code=303,
+            )
+        session.add(
+            LoyaltyReward(
+                name=(name or "").strip()[:128] or "جایزه",
+                description=(description or "").strip() or None,
+                reward_type=reward_type,
+                reward_value=int(reward_value),
+                points_cost=int(points_cost),
+                enabled=True,
+                archived=False,
+                sort_order=100,
+            )
+        )
+        await session.commit()
+        return RedirectResponse("/loyalty?tab=rewards&saved=1", status_code=303)
+
+    @app.post("/loyalty/rewards/{reward_id}/save")
+    async def loyalty_reward_save(
+        reward_id: int,
+        staff: dict = Depends(require_loyalty),
+        session: AsyncSession = Depends(get_db),
+        name: str = Form(...),
+        description: str = Form(""),
+        reward_value: int = Form(...),
+        points_cost: int = Form(...),
+        enabled: str = Form("0"),
+        max_redemptions_global: str = Form(""),
+        max_redemptions_per_user: str = Form(""),
+    ):
+        reward = await session.get(LoyaltyReward, reward_id)
+        if not reward:
+            return RedirectResponse(
+                f"/loyalty?tab=rewards&err={quote('جایزه پیدا نشد')}", status_code=303
+            )
+        reward.name = (name or reward.name).strip()[:128]
+        reward.description = (description or "").strip() or None
+        reward.reward_value = max(1, int(reward_value))
+        reward.points_cost = max(1, int(points_cost))
+        reward.enabled = str(enabled) in {"1", "on", "true", "yes"}
+        g = str(max_redemptions_global or "").strip()
+        u = str(max_redemptions_per_user or "").strip()
+        reward.max_redemptions_global = int(g) if g.isdigit() else None
+        reward.max_redemptions_per_user = int(u) if u.isdigit() else None
+        await session.commit()
+        return RedirectResponse("/loyalty?tab=rewards&saved=1", status_code=303)
+
+    @app.post("/loyalty/rewards/{reward_id}/archive")
+    async def loyalty_reward_archive(
+        reward_id: int,
+        staff: dict = Depends(require_loyalty),
+        session: AsyncSession = Depends(get_db),
+    ):
+        reward = await session.get(LoyaltyReward, reward_id)
+        if reward:
+            reward.archived = True
+            reward.enabled = False
+            await session.commit()
+        return RedirectResponse("/loyalty?tab=rewards&saved=1", status_code=303)
+
+    @app.post("/loyalty/tiers/{tier_id}/save")
+    async def loyalty_tier_save(
+        tier_id: int,
+        staff: dict = Depends(require_loyalty),
+        session: AsyncSession = Depends(get_db),
+        name: str = Form(...),
+        min_points: int = Form(0),
+        max_points: str = Form(""),
+        multiplier_bps: int = Form(10000),
+        enabled: str = Form("0"),
+    ):
+        tier = await session.get(LoyaltyTier, tier_id)
+        if not tier:
+            return RedirectResponse(
+                f"/loyalty?tab=tiers&err={quote('سطح پیدا نشد')}", status_code=303
+            )
+        tier.name = (name or tier.name).strip()[:64]
+        tier.min_points = max(0, int(min_points))
+        mx = str(max_points or "").strip()
+        tier.max_points = int(mx) if mx.isdigit() else None
+        tier.multiplier_bps = max(0, int(multiplier_bps))
+        tier.enabled = str(enabled) in {"1", "on", "true", "yes"}
+        await session.commit()
+        return RedirectResponse("/loyalty?tab=tiers&saved=1", status_code=303)
+
+    @app.post("/loyalty/adjust")
+    async def loyalty_adjust(
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+        user_id: int = Form(...),
+        delta: int = Form(...),
+        reason: str = Form(...),
+    ):
+        user = await session.get(BotUser, int(user_id))
+        if not user:
+            return RedirectResponse(
+                f"/loyalty?tab=transactions&err={quote('کاربر پیدا نشد')}", status_code=303
+            )
+        admin_id = str(staff.get("username") or staff.get("telegram_id") or staff.get("id") or "admin")
+        try:
+            await admin_adjust_points(
+                session,
+                user,
+                int(delta),
+                reason=reason,
+                admin_identity=admin_id,
+            )
+        except ValueError as e:
+            return RedirectResponse(
+                f"/loyalty?tab=transactions&err={quote(str(e)[:200])}", status_code=303
+            )
+        return RedirectResponse(
+            f"/loyalty?tab=transactions&saved=1&msg={quote('تعدیل ثبت شد')}",
+            status_code=303,
+        )

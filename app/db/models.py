@@ -83,6 +83,7 @@ class BotUser(Base):
     full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(32), default=Role.USER.value, index=True)
     wallet_balance: Mapped[int] = mapped_column(Integer, default=0)
+    points_balance: Mapped[int] = mapped_column(Integer, default=0)
     referral_code: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     referred_by_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bot_users.id"), nullable=True
@@ -525,3 +526,143 @@ class TrialClaim(Base):
     shop_key: Mapped[str] = mapped_column(String(64))  # "platform" or str(reseller_id)
     order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PointsTransaction(Base):
+    """Auditable loyalty points ledger (source of truth; BotUser.points_balance is cache)."""
+
+    __tablename__ = "points_transactions"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_points_tx_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    amount: Mapped[int] = mapped_column(Integer)  # signed: +earn / -spend
+    balance_after: Mapped[int] = mapped_column(Integer)
+    tx_type: Mapped[str] = mapped_column(String(64), index=True)
+    source: Mapped[str] = mapped_column(String(64), default="system", index=True)
+    reference: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    description: Mapped[str] = mapped_column(String(255), default="")
+    idempotency_key: Mapped[str] = mapped_column(String(128))
+    meta_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reversed_tx_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("points_transactions.id"), nullable=True
+    )
+    created_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PointsRule(Base):
+    """Configurable earn rules evaluated on loyalty events."""
+
+    __tablename__ = "points_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128))
+    event_key: Mapped[str] = mapped_column(String(64), index=True)
+    # fixed | per_gb
+    amount_mode: Mapped[str] = mapped_column(String(32), default="fixed")
+    amount: Mapped[int] = mapped_column(Integer, default=0)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    first_time_only: Mapped[bool] = mapped_column(Boolean, default=False)
+    min_purchase_toman: Mapped[int] = mapped_column(Integer, default=0)
+    min_purchase_gb: Mapped[int] = mapped_column(Integer, default=0)
+    max_reward: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cooldown_hours: Mapped[int] = mapped_column(Integer, default=0)
+    plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("plans.id"), nullable=True)
+    tier_min_points: Mapped[int] = mapped_column(Integer, default=0)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class LoyaltyReward(Base):
+    """Redeemable catalog items priced in points."""
+
+    __tablename__ = "loyalty_rewards"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # traffic_gb | time_days | wallet_credit | discount_percent
+    reward_type: Mapped[str] = mapped_column(String(32), index=True)
+    reward_value: Mapped[int] = mapped_column(Integer)  # GB / days / toman / percent
+    points_cost: Mapped[int] = mapped_column(Integer)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    max_redemptions_global: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    max_redemptions_per_user: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    redemption_count: Mapped[int] = mapped_column(Integer, default=0)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class RewardRedemption(Base):
+    __tablename__ = "reward_redemptions"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_reward_redemption_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    reward_id: Mapped[int] = mapped_column(ForeignKey("loyalty_rewards.id"), index=True)
+    points_spent: Mapped[int] = mapped_column(Integer)
+    reward_type: Mapped[str] = mapped_column(String(32))
+    reward_value: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(32), default="completed", index=True)
+    service_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("user_services.id"), nullable=True
+    )
+    points_tx_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("points_transactions.id"), nullable=True
+    )
+    wallet_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128))
+    meta_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ReferralEvent(Base):
+    """Referral lifecycle events (signup / qualification / purchase). Level-1 only."""
+
+    __tablename__ = "referral_events"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_referral_event_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    referrer_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    referred_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    event_key: Mapped[str] = mapped_column(String(64), index=True)
+    source: Mapped[str] = mapped_column(String(64), default="telegram")
+    status: Mapped[str] = mapped_column(String(32), default="recorded")
+    qualification_state: Mapped[str] = mapped_column(String(32), default="pending")
+    reward_state: Mapped[str] = mapped_column(String(32), default="none")
+    order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128))
+    meta_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LoyaltyTier(Base):
+    __tablename__ = "loyalty_tiers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64))
+    min_points: Mapped[int] = mapped_column(Integer, default=0)
+    max_points: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    multiplier_bps: Mapped[int] = mapped_column(Integer, default=10000)  # 10000 = 1.0x
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)

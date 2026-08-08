@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title %}
+{% block title %}دعوت و باشگاه امتیاز{% endblock %}
+{% block content %}
+{% set tab = tab or 'overview' %}
+<div class="page-head">
+  <div>
+    {{ page_title('loyalty', 'دعوت و باشگاه امتیاز') }}
+  </div>
+</div>
+
+{% if flash_ok %}
+<div class="flash ok">{{ flash_msg or 'ذخیره شد' }}</div>
+{% endif %}
+{% if flash_err %}
+<div class="flash err">{{ flash_err }}</div>
+{% endif %}
+
+<div class="tabs tabs-scroll">
+  <a class="tab {% if tab=='overview' %}active{% endif %}" href="/loyalty?tab=overview">نمای کلی</a>
+  <a class="tab {% if tab=='rules' %}active{% endif %}" href="/loyalty?tab=rules">قوانین امتیاز</a>
+  <a class="tab {% if tab=='rewards' %}active{% endif %}" href="/loyalty?tab=rewards">جوایز</a>
+  <a class="tab {% if tab=='tiers' %}active{% endif %}" href="/loyalty?tab=tiers">سطوح</a>
+  <a class="tab {% if tab=='transactions' %}active{% endif %}" href="/loyalty?tab=transactions">تراکنش‌ها</a>
+  <a class="tab {% if tab=='settings' %}active{% endif %}" href="/loyalty?tab=settings">تنظیمات</a>
+</div>
+
+{% if tab == 'overview' %}
+<div class="home-panel-grid" style="margin-top:1rem">
+  <div class="stat"><div class="stat-label">کل دعوت‌ها</div><div class="stat-value">{{ metrics.total_referrals }}</div></div>
+  <div class="stat"><div class="stat-label">واجد شرایط</div><div class="stat-value">{{ metrics.qualified_referrals }}</div></div>
+  <div class="stat"><div class="stat-label">امتیاز صادرشده</div><div class="stat-value">{{ metrics.points_issued }}</div></div>
+  <div class="stat"><div class="stat-label">امتیاز مصرف‌شده</div><div class="stat-value">{{ metrics.points_redeemed }}</div></div>
+  <div class="stat"><div class="stat-label">اعتبار کیف از جوایز</div><div class="stat-value">{{ metrics.wallet_credits_issued }}</div></div>
+  <div class="stat"><div class="stat-label">جوایز فعال</div><div class="stat-value">{{ metrics.active_rewards }}</div></div>
+</div>
+<div class="card" style="margin-top:1rem">
+  <h2>برترین معرف‌ها</h2>
+  <div class="table-wrap">
+  <table class="table-compact">
+    <thead><tr><th>کاربر</th><th>تعداد دعوت</th></tr></thead>
+    <tbody>
+    {% for r in metrics.top_referrers %}
+      <tr><td>{{ r.label }}</td><td class="mono">{{ r.count }}</td></tr>
+    {% else %}
+      <tr><td colspan="2" class="muted">هنوز دعوتی ثبت نشده</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+{% if tab == 'rules' %}
+<div class="card" style="margin-top:1rem">
+  <h2>قوانین امتیاز</h2>
+  <p class="muted">قوانین را بدون نیاز به شناسه‌های فنی مدیریت کنید. فقط رویدادهای فعال امتیاز می‌دهند.</p>
+  {% for rule in rules %}
+  <div style="border-top:1px solid var(--border, #333); padding-top:1rem; margin-top:1rem">
+    <div class="page-head" style="margin:0">
+      <strong>{{ event_labels.get(rule.event_key, rule.event_key) }}</strong>
+      <form method="post" action="/loyalty/rules/{{ rule.id }}/toggle" style="display:inline">
+        <button class="btn btn-sm btn-ghost" type="submit">{% if rule.enabled %}غیرفعال{% else %}فعال{% endif %}</button>
+      </form>
+    </div>
+  <form method="post" action="/loyalty/rules/{{ rule.id }}/save" class="form-stack">
+    <label class="form-field">عنوان
+      <input name="name" value="{{ rule.name }}" required />
+    </label>
+    <div class="form-row" style="display:flex; gap:.75rem; flex-wrap:wrap">
+      <label class="form-field">حالت محاسبه
+        <select name="amount_mode">
+          <option value="fixed" {% if rule.amount_mode=='fixed' %}selected{% endif %}>مقدار ثابت</option>
+          <option value="per_gb" {% if rule.amount_mode=='per_gb' %}selected{% endif %}>به‌ازای هر گیگ</option>
+        </select>
+      </label>
+      <label class="form-field">مقدار امتیاز
+        <input name="amount" type="number" min="0" value="{{ rule.amount }}" />
+      </label>
+      <label class="form-field">حداکثر امتیاز (اختیاری)
+        <input name="max_reward" type="number" min="0" value="{{ rule.max_reward if rule.max_reward is not none else '' }}" placeholder="بدون سقف" />
+      </label>
+    </div>
+    <div class="form-row" style="display:flex; gap:.75rem; flex-wrap:wrap">
+      <label class="form-field">حداقل مبلغ خرید (تومان)
+        <input name="min_purchase_toman" type="number" min="0" value="{{ rule.min_purchase_toman }}" />
+      </label>
+      <label class="form-field">حداقل حجم (گیگ)
+        <input name="min_purchase_gb" type="number" min="0" value="{{ rule.min_purchase_gb }}" />
+      </label>
+      <label class="form-field">کول‌داون (ساعت)
+        <input name="cooldown_hours" type="number" min="0" value="{{ rule.cooldown_hours }}" />
+      </label>
+    </div>
+    <label class="form-field" style="display:flex; align-items:center; gap:.5rem">
+      <input type="checkbox" name="enabled" value="1" {% if rule.enabled %}checked{% endif %} /> فعال
+    </label>
+    <label class="form-field" style="display:flex; align-items:center; gap:.5rem">
+      <input type="checkbox" name="first_time_only" value="1" {% if rule.first_time_only %}checked{% endif %} /> فقط بار اول
+    </label>
+    <div class="actions"><button class="btn" type="submit">ذخیره</button></div>
+  </form>
+  </div>
+  {% else %}
+  <p class="muted">قانونی تعریف نشده — با باز کردن صفحه، پیش‌فرض‌ها ایجاد می‌شوند.</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if tab == 'rewards' %}
+<div class="card" style="margin-top:1rem">
+  <h2>افزودن جایزه</h2>
+  <form method="post" action="/loyalty/rewards/create" class="form-stack">
+    <label class="form-field">نام<input name="name" required placeholder="مثلاً ۱۰ گیگ رایگان" /></label>
+    <label class="form-field">توضیح<textarea name="description" rows="2"></textarea></label>
+    <div class="form-row" style="display:flex; gap:.75rem; flex-wrap:wrap">
+      <label class="form-field">نوع
+        <select name="reward_type">
+          {% for k,v in reward_type_labels.items() %}
+          <option value="{{ k }}">{{ v }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="form-field">مقدار<input name="reward_value" type="number" min="1" required /></label>
+      <label class="form-field">هزینه (امتیاز)<input name="points_cost" type="number" min="1" required /></label>
+    </div>
+    <div class="actions"><button class="btn" type="submit">ایجاد</button></div>
+  </form>
+</div>
+{% for reward in rewards if not reward.archived %}
+<div class="card">
+  <form method="post" action="/loyalty/rewards/{{ reward.id }}/save" class="form-stack">
+    <strong>{{ reward.name }}</strong>
+    <span class="muted">{{ reward_type_labels.get(reward.reward_type, reward.reward_type) }} · بازخرید: {{ reward.redemption_count }}</span>
+    <label class="form-field">نام<input name="name" value="{{ reward.name }}" required /></label>
+    <label class="form-field">توضیح<textarea name="description" rows="2">{{ reward.description or '' }}</textarea></label>
+    <div class="form-row" style="display:flex; gap:.75rem; flex-wrap:wrap">
+      <label class="form-field">مقدار<input name="reward_value" type="number" min="1" value="{{ reward.reward_value }}" /></label>
+      <label class="form-field">هزینه<input name="points_cost" type="number" min="1" value="{{ reward.points_cost }}" /></label>
+      <label class="form-field">سقف کل<input name="max_redemptions_global" type="number" min="0" value="{{ reward.max_redemptions_global if reward.max_redemptions_global is not none else '' }}" placeholder="نامحدود" /></label>
+      <label class="form-field">سقف هر کاربر<input name="max_redemptions_per_user" type="number" min="0" value="{{ reward.max_redemptions_per_user if reward.max_redemptions_per_user is not none else '' }}" placeholder="نامحدود" /></label>
+    </div>
+    <label class="form-field" style="display:flex; align-items:center; gap:.5rem">
+      <input type="checkbox" name="enabled" value="1" {% if reward.enabled %}checked{% endif %} /> فعال
+    </label>
+    <div class="actions">
+      <button class="btn" type="submit">ذخیره</button>
+    </div>
+  </form>
+  <form method="post" action="/loyalty/rewards/{{ reward.id }}/archive" style="margin-top:.5rem"
+        data-confirm="این جایزه بایگانی شود؟" data-confirm-title="بایگانی جایزه" data-confirm-danger="1" data-confirm-label="بایگانی">
+    <button class="btn btn-danger btn-sm" type="submit">بایگانی</button>
+  </form>
+</div>
+{% else %}
+{% if not rewards %}<div class="card"><p class="muted">جایزه‌ای نیست.</p></div>{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if tab == 'tiers' %}
+<div class="card" style="margin-top:1rem">
+  <h2>سطوح باشگاه</h2>
+  {% for tier in tiers %}
+  <form method="post" action="/loyalty/tiers/{{ tier.id }}/save" class="form-stack" style="border-top:1px solid var(--border,#333);padding-top:1rem;margin-top:1rem">
+    <label class="form-field">نام<input name="name" value="{{ tier.name }}" required /></label>
+    <div class="form-row" style="display:flex;gap:.75rem;flex-wrap:wrap">
+      <label class="form-field">حداقل امتیاز<input name="min_points" type="number" min="0" value="{{ tier.min_points }}" /></label>
+      <label class="form-field">حداکثر (خالی=بدون سقف)<input name="max_points" type="number" min="0" value="{{ tier.max_points if tier.max_points is not none else '' }}" /></label>
+      <label class="form-field">ضریب (bps، ۱۰۰۰۰=۱×)<input name="multiplier_bps" type="number" min="0" value="{{ tier.multiplier_bps }}" /></label>
+    </div>
+    <label class="form-field" style="display:flex;align-items:center;gap:.5rem">
+      <input type="checkbox" name="enabled" value="1" {% if tier.enabled %}checked{% endif %} /> فعال
+    </label>
+    <div class="actions"><button class="btn" type="submit">ذخیره</button></div>
+  </form>
+  {% else %}
+  <p class="muted">سطحی تعریف نشده.</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if tab == 'transactions' %}
+<div class="card" style="margin-top:1rem">
+  <h2>تعدیل دستی امتیاز</h2>
+  <p class="muted">فقط ادمین — دلیل الزامی است و در دفترکل ثبت می‌شود.</p>
+  <form method="post" action="/loyalty/adjust" class="form-stack">
+    <div class="form-row" style="display:flex;gap:.75rem;flex-wrap:wrap">
+      <label class="form-field">شناسه کاربر<input name="user_id" type="number" min="1" required /></label>
+      <label class="form-field">تغییر امتیاز (+/-)<input name="delta" type="number" required /></label>
+    </div>
+    <label class="form-field">دلیل<textarea name="reason" rows="2" required maxlength="255"></textarea></label>
+    <div class="actions"><button class="btn" type="submit">ثبت تعدیل</button></div>
+  </form>
+</div>
+<div class="card card-flush">
+  <div class="card-flush-head"><h2>آخرین تراکنش‌های امتیاز</h2></div>
+  <div class="table-wrap">
+  <table class="table-compact">
+    <thead><tr><th>#</th><th>کاربر</th><th>مقدار</th><th>مانده</th><th>شرح</th><th>زمان</th></tr></thead>
+    <tbody>
+    {% for t in txs %}
+      <tr>
+        <td class="mono">{{ t.id }}</td>
+        <td class="mono">{{ t.user_id }}</td>
+        <td class="mono">{% if t.amount > 0 %}+{% endif %}{{ t.amount }}</td>
+        <td class="mono">{{ t.balance_after }}</td>
+        <td>{{ t.description }}</td>
+        <td class="muted mono">{{ t.created_at }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="muted">تراکنشی نیست</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+{% if tab == 'settings' %}
+<div class="card" style="margin-top:1rem">
+  <h2>تنظیمات باشگاه</h2>
+  <form method="post" action="/loyalty/settings" class="form-stack">
+    <label class="form-field" style="display:flex;align-items:center;gap:.5rem">
+      <input type="checkbox" name="loyalty_enabled" value="1" {% if loyalty_enabled in ['1','true','yes','on'] %}checked{% endif %} />
+      فعال بودن سیستم امتیاز
+    </label>
+    <label class="form-field">نرخ تبدیل امتیاز به کیف پول (تومان به‌ازای هر امتیاز — برای مرجع جوایز کیف پول)
+      <input name="points_to_wallet_rate" type="number" min="0" value="{{ wallet_rate }}" />
+      <small class="muted">پاداش دعوت کیف‌پولی موجود (`referral_bonus` در تنظیمات پرداخت) همچنان جداگانه کار می‌کند.</small>
+    </label>
+    <div class="actions"><button class="btn" type="submit">ذخیره</button></div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

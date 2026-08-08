@@ -378,27 +378,6 @@ async def help_faq(callback: CallbackQuery, session: AsyncSession):
         )
 
 
-@router.callback_query(F.data == "ref:home")
-async def referral_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    from app.services.formatting import format_message
-
-    await callback.answer()
-    ui = await get_all_settings(session)
-    me = await callback.bot.get_me()
-    uname = me.username or get_settings().bot_username or "bot"
-    link = f"https://t.me/{uname}?start=ref_{db_user.referral_code}"
-    try:
-        body = safe_format(ui["referral_text"], code=db_user.referral_code, link=link)
-    except Exception:
-        body = f"کد: {db_user.referral_code}\n{link}"
-    if callback.message:
-        await safe_edit_text(
-            callback.message,
-            format_message("🎁 دعوت دوستان", body),
-            reply_markup=kb.back_home(ui),
-        )
-
-
 async def _link_subscription(
     message: Message,
     session: AsyncSession,

@@ -1,0 +1,355 @@
+"""Focused tests for Referral + Loyalty / Points engine."""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import tempfile
+import unittest
+from pathlib import Path
+
+# Force sqlite for unit tests
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+
+
+def _run(coro):
+    return asyncio.get_event_loop().run_until_complete(coro)
+
+
+class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        from app.db import Base
+        import app.db.models  # noqa: F401
+
+        self._tmpdir = tempfile.TemporaryDirectory()
+        db_path = Path(self._tmpdir.name) / "loy.db"
+        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+
+    async def asyncTearDown(self):
+        await self.engine.dispose()
+        self._tmpdir.cleanup()
+
+    async def _user(self, session, tid: int, code: str, *, referred_by=None):
+        from app.db.models import BotUser, Role
+
+        u = BotUser(
+            telegram_id=tid,
+            role=Role.USER.value,
+            referral_code=code,
+            referred_by_id=referred_by,
+            wallet_balance=0,
+            points_balance=0,
+        )
+        session.add(u)
+        await session.commit()
+        await session.refresh(u)
+        return u
+
+    async def test_credit_debit_idempotent_and_balance(self):
+        from app.services.loyalty import credit_points, debit_points, ensure_loyalty_defaults
+
+        async with self.Session() as session:
+            await ensure_loyalty_defaults(session)
+            u = await self._user(session, 1001, "AAAA1111")
+            t1 = await credit_points(
+                session,
+                u,
+                50,
+                tx_type="earn",
+                source="test",
+                reference="1",
+                description="first",
+                idempotency_key="k1",
+            )
+            t2 = await credit_points(
+                session,
+                u,
+                50,
+                tx_type="earn",
+                source="test",
+                reference="1",
+                description="first",
+                idempotency_key="k1",
+            )
+            self.assertEqual(t1.id, t2.id)
+            await session.refresh(u)
+            self.assertEqual(u.points_balance, 50)
+
+            await debit_points(
+                session,
+                u,
+                20,
+                tx_type="spend",
+                source="test",
+                reference="2",
+                description="spend",
+                idempotency_key="k2",
+            )
+            await session.refresh(u)
+            self.assertEqual(u.points_balance, 30)
+
+            with self.assertRaises(ValueError):
+                await debit_points(
+                    session,
+                    u,
+                    999,
+                    tx_type="spend",
+                    source="test",
+                    reference="3",
+                    description="over",
+                    idempotency_key="k3",
+                )
+
+    async def test_self_referral_blocked_on_event(self):
+        from app.services.loyalty import record_referral_event
+
+        async with self.Session() as session:
+            u = await self._user(session, 2001, "BBBB2222")
+            ev = await record_referral_event(
+                session,
+                referrer_id=u.id,
+                referred_id=u.id,
+                event_key="referral_signup",
+                idempotency_key="self1",
+            )
+            self.assertIsNone(ev)
+
+    async def test_duplicate_referral_event_idempotent(self):
+        from app.services.loyalty import record_referral_event
+
+        async with self.Session() as session:
+            a = await self._user(session, 3001, "CCCC3333")
+            b = await self._user(session, 3002, "DDDD4444", referred_by=a.id)
+            e1 = await record_referral_event(
+                session,
+                referrer_id=a.id,
+                referred_id=b.id,
+                event_key="referral_signup",
+                idempotency_key="dup1",
+            )
+            await session.commit()
+            e2 = await record_referral_event(
+                session,
+                referrer_id=a.id,
+                referred_id=b.id,
+                event_key="referral_signup",
+                idempotency_key="dup1",
+            )
+            self.assertEqual(e1.id, e2.id)
+
+    async def test_order_delivery_awards_and_duplicate_safe(self):
+        from app.db.models import Order, OrderStatus, Plan
+        from app.services.loyalty import ensure_loyalty_defaults, on_order_delivered
+
+        async with self.Session() as session:
+            await ensure_loyalty_defaults(session)
+            ref = await self._user(session, 4001, "EEEE5555")
+            buyer = await self._user(session, 4002, "FFFF6666", referred_by=ref.id)
+            plan = Plan(name="P", price=10000, duration_days=30, data_limit_gb=10, is_active=True)
+            session.add(plan)
+            await session.commit()
+            await session.refresh(plan)
+            order = Order(
+                user_id=buyer.id,
+                plan_id=plan.id,
+                amount=10000,
+                status=OrderStatus.DELIVERED.value,
+            )
+            session.add(order)
+            await session.commit()
+            await session.refresh(order)
+            order.user = buyer
+            order.plan = plan
+
+            await on_order_delivered(session, order)
+            await on_order_delivered(session, order)  # duplicate callback
+            await session.refresh(buyer)
+            await session.refresh(ref)
+            self.assertGreater(buyer.points_balance, 0)
+            self.assertGreater(ref.points_balance, 0)
+            buyer_pts = buyer.points_balance
+            ref_pts = ref.points_balance
+            await on_order_delivered(session, order)
+            await session.refresh(buyer)
+            await session.refresh(ref)
+            self.assertEqual(buyer.points_balance, buyer_pts)
+            self.assertEqual(ref.points_balance, ref_pts)
+
+    async def test_wallet_credit_redeem_atomic(self):
+        from app.db.models import LoyaltyReward
+        from app.services.loyalty import credit_points, ensure_loyalty_defaults, redeem_reward
+
+        async with self.Session() as session:
+            await ensure_loyalty_defaults(session)
+            u = await self._user(session, 5001, "GGGG7777")
+            await credit_points(
+                session,
+                u,
+                500,
+                tx_type="earn",
+                source="test",
+                reference=None,
+                description="seed",
+                idempotency_key="seed500",
+            )
+            reward = LoyaltyReward(
+                name="کیف",
+                reward_type="wallet_credit",
+                reward_value=50000,
+                points_cost=500,
+                enabled=True,
+                archived=False,
+            )
+            session.add(reward)
+            await session.commit()
+            await session.refresh(reward)
+            red = await redeem_reward(
+                session, u, reward.id, idempotency_key="redeem-once"
+            )
+            red2 = await redeem_reward(
+                session, u, reward.id, idempotency_key="redeem-once"
+            )
+            self.assertEqual(red.id, red2.id)
+            await session.refresh(u)
+            self.assertEqual(u.points_balance, 0)
+            self.assertEqual(u.wallet_balance, 50000)
+
+            with self.assertRaises(ValueError):
+                await redeem_reward(
+                    session, u, reward.id, idempotency_key="redeem-again"
+                )
+
+    async def test_disabled_reward_cannot_redeem(self):
+        from app.db.models import LoyaltyReward
+        from app.services.loyalty import credit_points, redeem_reward
+
+        async with self.Session() as session:
+            u = await self._user(session, 6001, "HHHH8888")
+            await credit_points(
+                session,
+                u,
+                200,
+                tx_type="earn",
+                source="test",
+                reference=None,
+                description="seed",
+                idempotency_key="seed200",
+            )
+            reward = LoyaltyReward(
+                name="off",
+                reward_type="wallet_credit",
+                reward_value=1000,
+                points_cost=100,
+                enabled=False,
+                archived=False,
+            )
+            session.add(reward)
+            await session.commit()
+            await session.refresh(reward)
+            with self.assertRaises(ValueError):
+                await redeem_reward(session, u, reward.id, idempotency_key="x1")
+
+    async def test_admin_adjust_requires_reason(self):
+        from app.services.loyalty import admin_adjust_points, credit_points
+
+        async with self.Session() as session:
+            u = await self._user(session, 7001, "IIII9999")
+            await credit_points(
+                session,
+                u,
+                10,
+                tx_type="earn",
+                source="test",
+                reference=None,
+                description="seed",
+                idempotency_key="seed10",
+            )
+            with self.assertRaises(ValueError):
+                await admin_adjust_points(session, u, 5, reason="  ", admin_identity="admin")
+            tx = await admin_adjust_points(
+                session, u, 5, reason="جبران دستی", admin_identity="admin"
+            )
+            self.assertEqual(tx.tx_type, "adjust")
+            await session.refresh(u)
+            self.assertEqual(u.points_balance, 15)
+
+    async def test_referral_link_uses_config_username(self):
+        from app.services.loyalty import referral_link
+
+        self.assertEqual(
+            referral_link("MyBot", "ABC123"),
+            "https://t.me/MyBot?start=ref_ABC123",
+        )
+
+    async def test_reverse_allows_negative_debt_policy(self):
+        from app.services.loyalty import credit_points, debit_points, reverse_points_tx
+
+        async with self.Session() as session:
+            u = await self._user(session, 8001, "JJJJ0000")
+            tx = await credit_points(
+                session,
+                u,
+                100,
+                tx_type="earn",
+                source="test",
+                reference="ord1",
+                description="buy",
+                idempotency_key="earn100",
+            )
+            await debit_points(
+                session,
+                u,
+                100,
+                tx_type="redeem",
+                source="reward:1",
+                reference="1",
+                description="spent",
+                idempotency_key="spent100",
+            )
+            await session.refresh(u)
+            self.assertEqual(u.points_balance, 0)
+            await reverse_points_tx(session, tx, reason="refund")
+            await session.refresh(u)
+            self.assertEqual(u.points_balance, -100)  # debt until future earns
+
+
+class LoyaltyStaticContractTests(unittest.TestCase):
+    def test_handlers_and_panel_wired(self):
+        from pathlib import Path
+
+        bot_init = Path("app/bot/__init__.py").read_text()
+        self.assertIn("loyalty", bot_init)
+        app_py = Path("app/api/app.py").read_text()
+        self.assertIn("register_loyalty_pages", app_py)
+        base = Path("app/web/templates/base.html").read_text()
+        self.assertIn("/loyalty", base)
+        orders = Path("app/services/orders.py").read_text()
+        self.assertIn("on_order_delivered", orders)
+        models = Path("app/db/models.py").read_text()
+        self.assertIn("points_balance", models)
+        self.assertIn("class PointsTransaction", models)
+        mig = Path("alembic/versions/0007_referral_loyalty.py").read_text()
+        self.assertIn("0007_referral_loyalty", mig)
+
+    def test_wallet_commit_flag(self):
+        import inspect
+        from app.services.wallet import credit_wallet, debit_wallet
+
+        self.assertIn("commit", inspect.signature(credit_wallet).parameters)
+        self.assertIn("commit", inspect.signature(debit_wallet).parameters)
+
+    def test_feature_perm_loyalty(self):
+        from app.services.resellers import DEFAULT_FEATURE_PERMS, FEATURE_PERMS
+
+        keys = {k for k, _ in FEATURE_PERMS}
+        self.assertIn("loyalty", keys)
+        self.assertIn("loyalty", DEFAULT_FEATURE_PERMS)
+
+
+if __name__ == "__main__":
+    unittest.main()
