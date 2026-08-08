@@ -23,6 +23,7 @@ class PanelHtmlNoStoreTests(unittest.TestCase):
     def test_redirect_msg_cache_busts(self):
         block = API.split("def _redirect_msg(")[1].split("\n\n")[0]
         self.assertIn('f"_={int(time.time())}"', block)
+        self.assertIn('sep = "&" if "?" in path else "?"', block)
 
 
 class ConfirmModalTests(unittest.TestCase):
@@ -61,8 +62,7 @@ class ConfirmModalTests(unittest.TestCase):
             "plans.html",
             "pg_users.html",
             "pg_hosts.html",
-            "payments.html",
-            "orders.html",
+            "finance.html",
         ):
             src = (ROOT / "app/web/templates" / rel).read_text(encoding="utf-8")
             # Allow window.confirm fallback only in JS pages; table templates should not use it

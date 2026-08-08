@@ -136,12 +136,16 @@ class SettingsPaygUiTests(unittest.TestCase):
         from app.services.users import SETTING_GROUPS, SETTINGS_TABS, TAB_SETTING_GROUPS
 
         tabs = dict(SETTINGS_TABS)
-        self.assertEqual(tabs.get("billing"), "مدیریت PAYG")
+        self.assertNotIn("billing", tabs)
         self.assertIn("مدیریت PAYG", SETTING_GROUPS)
         keys = [item[0] for item in SETTING_GROUPS["مدیریت PAYG"]]
         self.assertNotIn("billing_price_per_gb", keys)
         self.assertIn("billing_low_balance", keys)
         self.assertEqual(TAB_SETTING_GROUPS.get("billing"), ["مدیریت PAYG"])
+        from app.services.users import SETTINGS_DOMAIN_REDIRECTS
+
+        self.assertIn("billing", SETTINGS_DOMAIN_REDIRECTS)
+        self.assertIn("/finance", SETTINGS_DOMAIN_REDIRECTS["billing"])
 
 
 class VpnLabelRemovalTests(unittest.TestCase):

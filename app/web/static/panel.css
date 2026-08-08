@@ -2744,7 +2744,8 @@ form.settings-form > .actions.sticky-actions,
 .pg-head + .pg-admin-head {
   margin-top: 0;
 }
-.section-tabs a {
+.section-tabs a,
+.section-tabs .tab-btn {
   display: inline-flex;
   align-items: center;
   height: var(--btn-h);
@@ -2755,18 +2756,63 @@ form.settings-form > .actions.sticky-actions,
   font-weight: 500;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1;
 }
-.section-tabs a:hover { color: var(--foreground); background: rgba(255, 255, 255, 0.07); opacity: 1; }
-.section-tabs a.active {
+.section-tabs a:hover,
+.section-tabs .tab-btn:hover { color: var(--foreground); background: rgba(255, 255, 255, 0.07); opacity: 1; }
+.section-tabs a.active,
+.section-tabs .tab-btn.active {
   background: rgba(249, 115, 22, 0.12);
   color: var(--brand-fg);
   border: 1px solid rgba(249, 115, 22, 0.42);
   font-weight: 600;
 }
-.section-tabs a.active:hover {
+.section-tabs a.active:hover,
+.section-tabs .tab-btn.active:hover {
   background: rgba(249, 115, 22, 0.2);
   color: var(--brand-fg);
   opacity: 1;
+}
+
+/* Domain settings modals (finance / support / loyalty) */
+.settings-modal-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: min(92vh, 880px);
+  padding-bottom: 0;
+}
+.settings-modal-panel > .ui-modal-head {
+  flex: 0 0 auto;
+}
+.settings-modal-flash {
+  flex: 0 0 auto;
+  margin: 0 0 var(--space-2);
+}
+.settings-modal-flash .flash {
+  margin: 0;
+}
+.settings-modal-panel > .modal-section-tabs {
+  flex: 0 0 auto;
+  margin-bottom: var(--space-2);
+}
+.settings-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: var(--space-3);
+  -webkit-overflow-scrolling: touch;
+}
+.settings-modal-body .settings-card {
+  margin-top: 0;
+}
+.settings-modal-body .settings-card + .settings-card {
+  margin-top: var(--space-3);
+}
+.modal-tab-panel[hidden] {
+  display: none !important;
 }
 
 /* Update page helpers */
@@ -3328,7 +3374,8 @@ form.settings-form > .actions.sticky-actions,
   .section-tabs.is-scrollable {
     mask-image: linear-gradient(to left, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
   }
-  .section-tabs a {
+  .section-tabs a,
+  .section-tabs .tab-btn {
     flex: 0 0 auto;
     height: var(--btn-h);
     min-height: var(--btn-h);
@@ -5314,22 +5361,26 @@ html[data-theme="light"] .flash.err::before {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b91c1c' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M9 9l6 6M15 9l-6 6'/%3E%3C/svg%3E");
 }
 html[data-theme="light"] .quick-links a,
-html[data-theme="light"] .section-tabs a {
+html[data-theme="light"] .section-tabs a,
+html[data-theme="light"] .section-tabs .tab-btn {
   background: rgba(24, 24, 27, 0.03);
   border-color: var(--border);
   color: var(--muted-fg);
 }
 html[data-theme="light"] .quick-links a:hover,
-html[data-theme="light"] .section-tabs a:hover {
+html[data-theme="light"] .section-tabs a:hover,
+html[data-theme="light"] .section-tabs .tab-btn:hover {
   background: rgba(24, 24, 27, 0.06);
   color: var(--foreground);
 }
-html[data-theme="light"] .section-tabs a.active {
+html[data-theme="light"] .section-tabs a.active,
+html[data-theme="light"] .section-tabs .tab-btn.active {
   background: rgba(249, 115, 22, 0.12);
   color: #c2410c;
   border-color: rgba(249, 115, 22, 0.42);
 }
-html[data-theme="light"] .section-tabs a.active:hover {
+html[data-theme="light"] .section-tabs a.active:hover,
+html[data-theme="light"] .section-tabs .tab-btn.active:hover {
   background: rgba(249, 115, 22, 0.18);
   color: #c2410c;
 }

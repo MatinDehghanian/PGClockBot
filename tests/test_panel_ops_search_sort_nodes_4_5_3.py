@@ -271,8 +271,8 @@ class SingleDeliveryGuaranteeTests(unittest.IsolatedAsyncioTestCase):
 
 class PanelTemplateContractTests(unittest.TestCase):
     def test_orders_actions_and_search_sort(self):
-        html = (ROOT / "app/web/templates/orders.html").read_text(encoding="utf-8")
-        self.assertIn('action="/orders"', html)
+        html = (ROOT / "app/web/templates/finance.html").read_text(encoding="utf-8")
+        self.assertIn('action="/finance"', html)
         self.assertIn('name="q"', html)
         self.assertIn("data-sortable", html)
         self.assertIn("/orders/{{ o.id }}/cancel", html)
@@ -286,8 +286,8 @@ class PanelTemplateContractTests(unittest.TestCase):
         self.assertNotIn("o.status == 'cancelled'\n            {% call row_actions()", html)
 
     def test_payments_search_sort_and_actions(self):
-        html = (ROOT / "app/web/templates/payments.html").read_text(encoding="utf-8")
-        self.assertIn('action="/payments"', html)
+        html = (ROOT / "app/web/templates/finance.html").read_text(encoding="utf-8")
+        self.assertIn('action="/finance"', html)
         self.assertIn('name="q"', html)
         self.assertIn("data-sortable", html)
         self.assertIn("/payments/{{ p.id }}/approve", html)
@@ -356,7 +356,7 @@ class PanelTemplateContractTests(unittest.TestCase):
         app = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
         # cancel block must mirror approve/reject reseller isolation
         m = re.search(
-            r"async def order_cancel\([\s\S]*?return _redirect_msg\(\"/orders\", ok=",
+            r'async def order_cancel\([\s\S]*?return _redirect_msg\("/finance\?tab=orders", ok=',
             app,
         )
         self.assertIsNotNone(m)

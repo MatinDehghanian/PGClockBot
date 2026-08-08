@@ -64,8 +64,7 @@ class ConfirmReasonOnlyOnAccountDeletes(unittest.TestCase):
 
     def test_non_delete_confirms_have_no_reason(self):
         samples = {
-            "orders.html": ["/approve", "/reject", "/cancel"],
-            "payments.html": ["/approve", "/reject"],
+            "finance.html": ["/approve", "/reject", "/cancel"],
             "pg_users.html": ["/disable", "/enable", "/reset", "/revoke"],
             "pg_nodes.html": ["/reset", "/delete"],
             "_user_edit_body.html": ["/extend", "شارژ"],

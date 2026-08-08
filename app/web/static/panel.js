@@ -713,6 +713,26 @@
       if (!nav) return null;
       return nav.getAttribute('data-modal-close-nav') || '/tickets';
     }
+    function modalStripKeys(el){
+      if (!el) return null;
+      const raw = el.getAttribute('data-modal-close-strip');
+      if (!raw) return null;
+      return raw.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    function stripQueryParams(keys){
+      try {
+        const u = new URL(window.location.href);
+        (keys || []).forEach((k) => u.searchParams.delete(k));
+        const next = u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '') + u.hash;
+        window.history.replaceState({}, '', next);
+      } catch (e) {}
+    }
+    function closeModalSoft(el){
+      if (!el) return;
+      const keys = modalStripKeys(el);
+      closeModal(el);
+      if (keys && keys.length) stripQueryParams(keys);
+    }
     function openModal(id){
       const el = document.getElementById(id);
       if (!el) return;
@@ -760,6 +780,13 @@
         openModal(openBtn.getAttribute('data-modal-open'));
         return;
       }
+      const stripClose = e.target.closest('[data-modal-close-strip]');
+      if (stripClose) {
+        e.preventDefault();
+        const modal = stripClose.closest('.ui-modal');
+        closeModalSoft(modal);
+        return;
+      }
       const navClose = e.target.closest('[data-modal-close-nav]');
       if (navClose) {
         e.preventDefault();
@@ -776,12 +803,51 @@
       if (e.key !== 'Escape') return;
       const open = document.querySelector('.ui-modal.open');
       if (!open) return;
+      if (modalStripKeys(open)) {
+        closeModalSoft(open);
+        return;
+      }
       const href = modalEscapeHref(open);
       if (href) {
         window.location.href = href;
         return;
       }
       document.querySelectorAll('.ui-modal.open').forEach(closeModal);
+    });
+
+    /* Domain settings modals: inner tab buttons */
+    document.addEventListener('click', (e) => {
+      const tabBtn = e.target.closest('[data-modal-tabs] [data-modal-tab]');
+      if (!tabBtn) return;
+      const nav = tabBtn.closest('[data-modal-tabs]');
+      const root = tabBtn.closest('.ui-modal-panel') || tabBtn.closest('.ui-modal');
+      if (!nav || !root) return;
+      e.preventDefault();
+      const id = tabBtn.getAttribute('data-modal-tab');
+      nav.querySelectorAll('[data-modal-tab]').forEach((btn) => {
+        btn.classList.toggle('active', btn === tabBtn);
+      });
+      root.querySelectorAll('[data-modal-tab-panel]').forEach((panel) => {
+        const match = panel.getAttribute('data-modal-tab-panel') === id;
+        panel.hidden = !match;
+      });
+      try {
+        const u = new URL(window.location.href);
+        if (u.searchParams.has('settings') || u.searchParams.has('supports') || u.searchParams.has('stab')) {
+          if (id === 'payment' || id === 'billing') u.searchParams.set('settings', id);
+          else if (id === 'club') u.searchParams.set('settings', '1');
+          else if (id === 'referral') u.searchParams.set('settings', 'referral');
+          else if (id === 'contacts') {
+            u.searchParams.set('supports', '1');
+            u.searchParams.set('stab', 'contacts');
+          } else if (id === 'text') {
+            u.searchParams.set('supports', '1');
+            u.searchParams.set('stab', 'text');
+          }
+          const next = u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '') + u.hash;
+          window.history.replaceState({}, '', next);
+        }
+      } catch (err) {}
     });
 
     /* Copy helpers (subscription links, etc.) */

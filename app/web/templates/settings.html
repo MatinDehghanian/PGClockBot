@@ -33,8 +33,6 @@
     {% include "_settings_backup.html" %}
   {% elif tab == 'notifications' %}
     {% include "_settings_notifications.html" %}
-  {% elif tab == 'supports' %}
-    {% include "_settings_supports.html" %}
   {% elif tab == 'bot' %}
     {% include "_settings_bot.html" %}
   {% elif tab == 'appearance' %}
@@ -103,10 +101,6 @@
         <button class="btn" type="submit">ذخیره تنظیمات</button>
       </div>
     </form>
-    {% if tab == 'payment' %}
-      {% set pending_orders_action = '/settings/cancel-pending-orders' %}
-      {% include "_settings_pending_orders.html" %}
-    {% endif %}
   {% endif %}
 
   </div>

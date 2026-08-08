@@ -8,10 +8,12 @@ from unittest.mock import AsyncMock, patch
 
 
 class PaymentsShortcutTests(unittest.TestCase):
-    def test_payments_link_opens_payment_tab(self):
-        src = Path("app/web/templates/payments.html").read_text(encoding="utf-8")
-        self.assertIn('href="/settings?tab=payment"', src)
-        self.assertNotIn('href="/settings"', src.replace('href="/settings?tab=payment"', ""))
+    def test_finance_settings_opens_payment_modal(self):
+        src = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
+        self.assertIn('data-modal-open="modal-finance-settings"', src)
+        self.assertIn("_modal_finance_settings.html", src)
+        modal = Path("app/web/templates/_modal_finance_settings.html").read_text(encoding="utf-8")
+        self.assertIn('data-modal-tab="payment"', modal)
 
 
 class PlansModalTests(unittest.TestCase):

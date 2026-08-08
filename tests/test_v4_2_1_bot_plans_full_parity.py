@@ -94,8 +94,8 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.7.0")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.7.0")
+        self.assertEqual(__version__, "4.9.1")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.9.1")
 
 
 if __name__ == "__main__":
