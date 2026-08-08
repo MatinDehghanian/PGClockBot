@@ -425,6 +425,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             if not (user.get("pg_permissions") or []):
                 # No mapped features → deny panel use
                 raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
+        elif user.get("role") == "admin":
+            # Hybrid Owner: shop stays full; PG menus/actions follow env PG role.
+            from app.services.pg_access import enrich_platform_admin_staff
+
+            user = await enrich_platform_admin_staff(dict(user))
         # Skip unread COUNT on mutations / JSON polls that never render the sidebar.
         try:
             from app.services.panel_tickets import should_skip_unread_count, sidebar_unread_count
@@ -479,7 +484,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         return "/logout"
 
     def require_pg_perm(perm: str):
-        """Admin always; reseller/pg_staff need mapped PG feature (already on staff)."""
+        """Require mapped PG feature (Hybrid: Owner also clamped to env PG role)."""
 
         async def _dep(
             request: Request,
@@ -492,6 +497,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx = authz_from_staff(user)
             if not can_pg_page(ctx, perm):
                 features = list(ctx.pg_permissions)
+                # Platform admin without PG features → shop home, not logout
+                if is_platform_admin(ctx) and not features:
+                    raise NotAdmin(redirect="/home")
                 raise NotAdmin(redirect=_live_pg_home(features))
             # C1: uncredentialed pg_staff may only open overview (menu clamp alone is insufficient)
             if not is_platform_admin(ctx):
@@ -851,6 +859,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "show_done": show_done,
                 "flash_err": err or request.query_params.get("err"),
                 "flash_ok": ok or request.query_params.get("ok"),
+                "flash_warn": request.query_params.get("pg_warn"),
                 "panel_url": wizard_panel_url_hint(values.get("WEB_PORT", "9000")),
                 "bot_username": (values.get("BOT_USERNAME") or "").lstrip("@"),
             },
@@ -954,6 +963,29 @@ def create_api_app(lifespan=None) -> FastAPI:
                 raise ValueError
         except ValueError:
             return _setup_page(request, step=3, err="پورت وب نامعتبر است.")
+        # Hybrid: probe credentials + role before saving (fail closed on bad login).
+        from app.services.pg_access import (
+            clear_platform_pg_capability_cache,
+            resolve_platform_pg_capabilities,
+        )
+
+        caps = await resolve_platform_pg_capabilities(
+            username=(pg_username or "").strip(),
+            password=(pg_password or "").strip(),
+            base_url=base,
+            use_cache=False,
+        )
+        if not caps.get("ok"):
+            detail = caps.get("error") or "نامعتبر"
+            return _setup_page(
+                request,
+                step=3,
+                err=(
+                    f"ورود به پاسارگارد ناموفق بود: {detail}. "
+                    "علت محتمل: آدرس/یوزر/رمز اشتباه. "
+                    "راه حل: همان اعتبارنامه ورود پنل پاسارگارد را وارد کنید."
+                ),
+            )
         ensure_web_secret()
         pub = (public_base_url or "").strip().rstrip("/")
         if pub.startswith("https://"):
@@ -968,6 +1000,17 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "CURRENCY": (currency or "").strip() or "تومان",
             }
         )
+        clear_platform_pg_capability_cache()
+        # Soft warn when installer is not PG owner — setup still completes (Hybrid).
+        if not caps.get("pg_is_owner"):
+            from app.services.pg_access import PG_FEATURE_LABELS
+
+            feats = caps.get("features") or []
+            labels = "، ".join(PG_FEATURE_LABELS.get(f, f) for f in feats) if feats else "هیچ بخش پاسارگارد"
+            return RedirectResponse(
+                f"/setup?step=4&pg_warn={quote('حساب پاسارگارد مالک کامل نیست؛ منوی پاسارگارد محدود به: ' + labels)}",
+                status_code=303,
+            )
         return RedirectResponse("/setup?step=4", status_code=303)
 
     @app.post("/setup/finish")
@@ -3186,6 +3229,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             ensure_web_secret()
             get_settings.cache_clear()
             reset_pg()
+            from app.services.pg_access import clear_platform_pg_capability_cache
+
+            clear_platform_pg_capability_cache()
             schedule_panel_restart(delay_sec=2.5, reason="bot settings saved")
             return RedirectResponse(
                 "/settings?tab=bot&restarting=1",

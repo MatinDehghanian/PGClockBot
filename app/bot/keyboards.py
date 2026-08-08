@@ -361,8 +361,12 @@ def _reply_user_entries(
     return entries
 
 
-def _reply_admin_entries(ui: dict | None = None) -> list[tuple[str, str]]:
-    return [
+def _reply_admin_entries(
+    ui: dict | None = None,
+    *,
+    pg_features: frozenset[str] | set[str] | None = None,
+) -> list[tuple[str, str]]:
+    entries = [
         (REPLY_ACTION_ADMIN_DASH, "📊 داشبورد"),
         (REPLY_ACTION_ADMIN_ORDERS, _t(ui, "btn_adm_orders")),
         (REPLY_ACTION_ADMIN_PAYMENTS, _t(ui, "btn_adm_payments")),
@@ -377,19 +381,37 @@ def _reply_admin_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         (REPLY_ACTION_ADMIN_BACKUP, "💾 بکاپ / ریستور"),
         (REPLY_ACTION_ADMIN_PREVIEW, _t(ui, "btn_adm_preview")),
     ]
+    if pg_features is not None and not pg_features:
+        entries = [e for e in entries if e[0] != REPLY_ACTION_ADMIN_PG]
+    return entries
 
 
-def _pg_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+def _pg_submenu_entries(
+    ui: dict | None = None,
+    *,
+    features: frozenset[str] | set[str] | None = None,
+    can_create_user: bool = True,
+) -> list[tuple[str, str]]:
+    """PasarGuard reply submenu — filtered by Hybrid PG feature keys when given."""
     _ = ui
-    return [
-        (REPLY_ACTION_PG_STATS, "🏠 نمای کلی"),
-        (REPLY_ACTION_PG_USERS, "👥 کاربران"),
-        (REPLY_ACTION_PG_CREATE, "➕ ساخت کاربر"),
-        (REPLY_ACTION_PG_SEARCH, "🔎 جستجوی یوزر"),
-        (REPLY_ACTION_PG_NODES, "🕸 نودها"),
-        (REPLY_ACTION_PG_GROUP, "📁 ساخت گروه"),
-        (REPLY_ACTION_PG_TEMPLATE, "📋 ساخت تمپلیت"),
+    feats = features
+    all_entries = [
+        (REPLY_ACTION_PG_STATS, "🏠 نمای کلی", "pg_overview"),
+        (REPLY_ACTION_PG_USERS, "👥 کاربران", "pg_users"),
+        (REPLY_ACTION_PG_CREATE, "➕ ساخت کاربر", "pg_users"),
+        (REPLY_ACTION_PG_SEARCH, "🔎 جستجوی یوزر", "pg_users"),
+        (REPLY_ACTION_PG_NODES, "🕸 نودها", "pg_nodes"),
+        (REPLY_ACTION_PG_GROUP, "📁 ساخت گروه", "pg_groups"),
+        (REPLY_ACTION_PG_TEMPLATE, "📋 ساخت تمپلیت", "pg_templates"),
     ]
+    out: list[tuple[str, str]] = []
+    for key, label, feat in all_entries:
+        if feats is not None and feat not in feats:
+            continue
+        if key == REPLY_ACTION_PG_CREATE and not can_create_user:
+            continue
+        out.append((key, label))
+    return out
 
 
 def _admin_users_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
@@ -709,10 +731,14 @@ def main_reply_keyboard(
     return _reply_markup(rows, placeholder="از منوی پایین انتخاب کنید…")
 
 
-def admin_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+def admin_reply_keyboard(
+    ui: dict | None = None,
+    *,
+    pg_features: frozenset[str] | set[str] | None = None,
+) -> ReplyKeyboardMarkup:
     """Admin panel as an explicit submenu (with back + home)."""
     rows = _pack_reply_rows(
-        _reply_admin_entries(ui),
+        _reply_admin_entries(ui, pg_features=pg_features),
         ui,
         footer_row=_submenu_footer(ui),
     )
@@ -776,8 +802,17 @@ def topup_pay_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
     return _reply_markup(rows, placeholder="روش شارژ را انتخاب کنید…")
 
 
-def pg_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
-    rows = _pack_reply_rows(_pg_submenu_entries(ui), ui, footer_row=_submenu_footer(ui))
+def pg_reply_keyboard(
+    ui: dict | None = None,
+    *,
+    features: frozenset[str] | set[str] | None = None,
+    can_create_user: bool = True,
+) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _pg_submenu_entries(ui, features=features, can_create_user=can_create_user),
+        ui,
+        footer_row=_submenu_footer(ui),
+    )
     return _reply_markup(rows, placeholder="پاسارگارد — یک گزینه را انتخاب کنید…")
 
 

@@ -127,10 +127,24 @@ class RestrictedAdminBoundaries(unittest.TestCase):
         self.assertFalse(staff_pg_action(staff, "nodes", "reconnect"))
 
     def test_owner_full_access(self):
-        admin = {"role": "admin"}
+        from app.services.pg_access import (
+            full_pg_owner_features,
+            map_pg_role_actions,
+            role_user_actions,
+        )
+
+        admin = {
+            "role": "admin",
+            "pg_permissions": full_pg_owner_features(),
+            "pg_actions": map_pg_role_actions({"is_owner": True}),
+            "pg_user_actions": role_user_actions({"is_owner": True}),
+            "pg_is_owner": True,
+        }
         self.assertTrue(staff_pg_action(admin, "hosts", "delete"))
         self.assertTrue(staff_pg_action(admin, "nodes", "reconnect"))
         self.assertTrue(staff_user_actions(admin)["delete"])
+        # Hybrid: bare admin session without enrichment is fail-closed for PG
+        self.assertFalse(staff_pg_action({"role": "admin"}, "hosts", "delete"))
 
 
 class HostsDeleteExactAction(unittest.TestCase):
@@ -176,11 +190,12 @@ class NoOwnerTokenOnStaffWrites(unittest.TestCase):
         ):
             self.assertIn(f'@app.post("{path}', PG_PAGES)
         self.assertIn("await _staff_pg(", PG_PAGES)
-        # Owner token only in _staff_pg platform-admin branch or /pg/admins*
+        # Env client for platform admin; as_owner gated by pg_is_owner (Hybrid)
         fn = PG_PAGES[
             PG_PAGES.find("async def _staff_pg") : PG_PAGES.find("async def _assert_owned_user")
         ]
-        self.assertEqual(fn.count("return get_pg(), True"), 1)
+        self.assertIn("return get_pg(), bool(staff.get(\"pg_is_owner\"))", fn)
+        self.assertEqual(fn.count("return get_pg(), True"), 0)
         self.assertIn("is_platform_admin(staff)", fn)
 
 

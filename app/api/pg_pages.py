@@ -39,14 +39,14 @@ def _q(msg: str) -> str:
 
 
 async def _staff_pg(session: AsyncSession, staff: dict):
-    """Return (client, as_owner) for mutations (Phase C2 + C5).
+    """Return (client, as_owner) for mutations (Phase C2 + C5 + Hybrid).
 
-    - Platform admin → owner credentials (as_owner=True)
+    - Platform admin → env credentials; ``as_owner`` only when PG account is owner
     - Reseller → shop PG admin credentials (as_owner=False)
     - pg_staff → own PG credentials when stored (as_owner=False); else fail closed
     """
     if is_platform_admin(staff):
-        return get_pg(), True
+        return get_pg(), bool(staff.get("pg_is_owner"))
     rid = shop_owner_id(staff)
     if rid:
         return await get_pg_for_reseller(session, int(rid)), False
@@ -133,6 +133,11 @@ def _is_admin(staff: dict) -> bool:
     return staff.get("role") == "admin"
 
 
+def _is_pg_owner_principal(staff: dict) -> bool:
+    """True PasarGuard owner (Hybrid) — not merely web Owner session."""
+    return bool(staff.get("pg_is_owner"))
+
+
 def _pg_owner(staff: dict) -> str:
     return str(staff.get("pg_admin_username") or "").strip()
 
@@ -145,7 +150,10 @@ def _owner_of(user: dict) -> str:
 
 
 def _filter_owned_users(users: list[dict], staff: dict) -> list[dict]:
-    if _is_admin(staff):
+    # Full PG owner sees env-client list as-is; limited principals stay scoped.
+    if _is_pg_owner_principal(staff):
+        return users
+    if _is_admin(staff) and not _pg_owner(staff):
         return users
     mine = _pg_owner(staff).lower()
     if not mine:
@@ -170,23 +178,10 @@ def _pg_ctx(staff: dict, **extra) -> dict:
 
     writes = staff_pg_writes(staff)
     actions = staff_user_actions(staff)
-    if _is_admin(staff):
-        pg_perms = [
-            "pg_overview",
-            "pg_users",
-            "pg_templates",
-            "pg_groups",
-            "pg_hosts",
-            "pg_inbounds",
-            "pg_nodes",
-            "pg_admins",
-        ]
-    else:
-        pg_perms = effective_pg_menu_keys(staff)
-    # Sidebar reads staff.pg_permissions — keep menu/data aligned (C1).
+    pg_perms = effective_pg_menu_keys(staff)
+    # Sidebar reads staff.pg_permissions — keep menu/data aligned (C1 + Hybrid).
     staff_view = dict(staff)
-    if not _is_admin(staff):
-        staff_view["pg_permissions"] = list(pg_perms)
+    staff_view["pg_permissions"] = list(pg_perms)
     ctx = {
         "staff": staff_view,
         "is_admin": _is_admin(staff),
@@ -221,7 +216,7 @@ def register_pg_pages(
         counts = {"admins": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0}
         reseller_overview = None
         try:
-            if _is_admin(staff):
+            if _is_pg_owner_principal(staff):
                 pg = get_pg()
                 raw, nodes, admins, groups, hosts = await asyncio.gather(
                     pg.get_system_stats(),
@@ -276,7 +271,7 @@ def register_pg_pages(
                 counts["groups"] = len(groups) if isinstance(groups, list) else 0
                 counts["hosts"] = len(hosts) if isinstance(hosts, list) else 0
             else:
-                # Reseller/pg_staff: tenant-safe overview only (no owner-token lists)
+                # Limited Hybrid Owner / reseller / pg_staff: tenant-safe overview
                 reseller_overview = await build_reseller_pg_overview(staff, session=session)
                 # Keep overview.error in template; don't blank the page via flash_err
         except Exception as e:
@@ -320,7 +315,7 @@ def register_pg_pages(
             _pg_ctx(
                 staff,
                 stats_rows=stats_rows,
-                nodes=nodes if _is_admin(staff) else [],
+                nodes=nodes if _is_pg_owner_principal(staff) else [],
                 counts=counts,
                 reseller_overview=reseller_overview,
                 flash_err=err,
@@ -349,7 +344,7 @@ def register_pg_pages(
         templates: list[dict] = []
         groups: list[dict] = []
         access = staff.get("pg_access") or {}
-        require_template = bool(access.get("require_template")) and not _is_admin(staff)
+        require_template = bool(access.get("require_template")) and not _is_pg_owner_principal(staff)
         try:
             from app.services.list_query import filter_by_search, normalize_search_q
 
@@ -487,7 +482,7 @@ def register_pg_pages(
             return _pg_form_err("نام کاربری الزامی است", modal="create")
 
         access = staff.get("pg_access") or {}
-        require_template = bool(access.get("require_template")) and not _is_admin(staff)
+        require_template = bool(access.get("require_template")) and not _is_pg_owner_principal(staff)
         mode = str(form.get("mode") or "").strip().lower()
         if require_template:
             mode = "template"
@@ -1306,14 +1301,6 @@ def register_pg_pages(
         except Exception as e:
             err = str(e)
         node_acts = (staff.get("pg_actions") or {}).get("nodes") or {}
-        if _is_admin(staff):
-            node_acts = {
-                "create": True,
-                "update": True,
-                "delete": True,
-                "reconnect": True,
-                "stats": True,
-            }
         return render(
             request,
             "pg_nodes.html",
@@ -1336,7 +1323,7 @@ def register_pg_pages(
         staff: dict = Depends(require_pg_perm("pg_nodes")),
         session: AsyncSession = Depends(get_db),
     ):
-        if not (_is_admin(staff) or staff_pg_action(staff, "nodes", "reconnect")):
+        if not staff_pg_action(staff, "nodes", "reconnect"):
             return RedirectResponse(
                 f"/pg/nodes?err={_q('اجازه اتصال مجدد ندارید. علت: نقش پاسارگارد این عمل را ندارد. راه حل: نقش ادمین را در پاسارگارد بررسی کنید.')}",
                 status_code=303,
@@ -1357,7 +1344,7 @@ def register_pg_pages(
         staff: dict = Depends(require_pg_perm("pg_nodes")),
         session: AsyncSession = Depends(get_db),
     ):
-        if not (_is_admin(staff) or staff_pg_action(staff, "nodes", "reconnect")):
+        if not staff_pg_action(staff, "nodes", "reconnect"):
             return RedirectResponse(f"/pg/nodes?err={_q('اجازه اتصال مجدد ندارید')}", status_code=303)
         try:
             pg, _ = await _staff_pg(session, staff)
@@ -1373,7 +1360,7 @@ def register_pg_pages(
         staff: dict = Depends(require_pg_perm("pg_nodes")),
         session: AsyncSession = Depends(get_db),
     ):
-        if not (_is_admin(staff) or staff_pg_action(staff, "nodes", "update")):
+        if not staff_pg_action(staff, "nodes", "update"):
             return RedirectResponse(f"/pg/nodes?err={_q('اجازه ریست مصرف نود ندارید')}", status_code=303)
         try:
             pg, _ = await _staff_pg(session, staff)
@@ -1389,7 +1376,7 @@ def register_pg_pages(
         staff: dict = Depends(require_pg_perm("pg_nodes")),
         session: AsyncSession = Depends(get_db),
     ):
-        if not (_is_admin(staff) or staff_pg_action(staff, "nodes", "update")):
+        if not staff_pg_action(staff, "nodes", "update"):
             return RedirectResponse(f"/pg/nodes?err={_q('اجازه همگام‌سازی نود ندارید')}", status_code=303)
         try:
             pg, _ = await _staff_pg(session, staff)
@@ -1405,7 +1392,7 @@ def register_pg_pages(
         staff: dict = Depends(require_pg_perm("pg_nodes")),
         session: AsyncSession = Depends(get_db),
     ):
-        if not (_is_admin(staff) or staff_pg_action(staff, "nodes", "update")):
+        if not staff_pg_action(staff, "nodes", "update"):
             return RedirectResponse(f"/pg/nodes?err={_q('اجازه تغییر وضعیت نود ندارید')}", status_code=303)
         try:
             pg, _ = await _staff_pg(session, staff)
@@ -1425,7 +1412,7 @@ def register_pg_pages(
         staff: dict = Depends(require_pg_perm("pg_nodes")),
         session: AsyncSession = Depends(get_db),
     ):
-        if not (_is_admin(staff) or staff_pg_action(staff, "nodes", "delete")):
+        if not staff_pg_action(staff, "nodes", "delete"):
             return RedirectResponse(f"/pg/nodes?err={_q('اجازه حذف نود ندارید')}", status_code=303)
         try:
             pg, _ = await _staff_pg(session, staff)
@@ -1441,7 +1428,7 @@ def register_pg_pages(
         staff: dict = Depends(require_pg_perm("pg_nodes")),
         session: AsyncSession = Depends(get_db),
     ):
-        if not (_is_admin(staff) or staff_pg_action(staff, "nodes", "create")):
+        if not staff_pg_action(staff, "nodes", "create"):
             return RedirectResponse(f"/pg/nodes?err={_q('اجازه ساخت نود ندارید')}", status_code=303)
         form = await request.form()
         name = str(form.get("name") or "").strip()

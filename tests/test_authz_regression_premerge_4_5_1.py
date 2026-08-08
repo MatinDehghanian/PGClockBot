@@ -107,7 +107,8 @@ class PgWriteRouteStaticAudit(unittest.TestCase):
         fn = PG_PAGES[
             PG_PAGES.find("async def _staff_pg") : PG_PAGES.find("async def _assert_owned_user")
         ]
-        self.assertEqual(fn.count("return get_pg(), True"), 1)
+        self.assertIn("return get_pg(), bool(staff.get(\"pg_is_owner\"))", fn)
+        self.assertEqual(fn.count("return get_pg(), True"), 0)
         self.assertIn("is_platform_admin(staff)", fn)
         self.assertIn("get_pg_for_reseller", fn)
         self.assertIn("get_pg_for_staff", fn)
@@ -136,11 +137,26 @@ class RoleMatrixAuthz(unittest.TestCase):
         self.assertIn("{% call row_actions() %}", html.split("{% if src != 'owner' %}", 1)[1][:400])
 
     def test_admin_bypasses_staff_pg_action(self):
-        admin = {"role": "admin"}
+        from app.services.pg_access import (
+            full_pg_owner_features,
+            map_pg_role_actions,
+            role_user_actions,
+        )
+
+        admin = {
+            "role": "admin",
+            "pg_permissions": full_pg_owner_features(),
+            "pg_actions": map_pg_role_actions({"is_owner": True}),
+            "pg_user_actions": role_user_actions({"is_owner": True}),
+            "pg_writes": {"templates": True},
+            "pg_is_owner": True,
+        }
         self.assertTrue(staff_pg_action(admin, "hosts", "create"))
         self.assertTrue(staff_pg_action(admin, "users", "delete"))
         self.assertTrue(staff_can_create_pg_template(admin))
         self.assertTrue(staff_user_actions(admin)["create"])
+        # Hybrid fail-closed without enrichment
+        self.assertFalse(staff_pg_action({"role": "admin"}, "hosts", "create"))
 
     def test_reseller_limited_permissions_denied(self):
         reseller = {
@@ -208,7 +224,9 @@ class StaffPgCredentialMatrix(unittest.IsolatedAsyncioTestCase):
 
         fake = MagicMock()
         with patch("app.api.pg_pages.get_pg", return_value=fake):
-            client, as_owner = await _staff_pg(AsyncMock(), {"role": "admin"})
+            client, as_owner = await _staff_pg(
+                AsyncMock(), {"role": "admin", "pg_is_owner": True}
+            )
         self.assertTrue(as_owner)
         self.assertIs(client, fake)
 

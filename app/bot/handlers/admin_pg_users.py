@@ -13,6 +13,11 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.bot import keyboards as kb
+from app.bot.auth import (
+    can_platform_pg_action,
+    can_platform_pg_page,
+    filtered_pg_reply_keyboard,
+)
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
@@ -27,6 +32,29 @@ from app.services.pasarguard import (
 )
 
 router = Router(name="admin_pg_users")
+
+async def _require_users(db_user: BotUser, callback=None, message=None, *, action: str | None = None) -> bool:
+    if not _is_admin(db_user):
+        if callback is not None:
+            await callback.answer("ادمین نیستید", show_alert=True)
+        elif message is not None:
+            await message.answer("ادمین نیستید.")
+        return False
+    if not await can_platform_pg_page(db_user, "pg_users"):
+        if callback is not None:
+            await callback.answer("به کاربران پاسارگارد دسترسی ندارید", show_alert=True)
+        elif message is not None:
+            await message.answer("به کاربران پاسارگارد دسترسی ندارید.")
+        return False
+    if action and not await can_platform_pg_action(db_user, "users", action):
+        if callback is not None:
+            await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+        elif message is not None:
+            await message.answer("اجازه این عمل را ندارید.")
+        return False
+    return True
+
+
 
 PAGE_SIZE = 10
 _USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,32}$")
@@ -205,7 +233,7 @@ async def _show_user_card(
         if edit:
             await safe_edit_text(target, text, reply_markup=None)
         else:
-            await target.answer(text, reply_markup=kb.pg_reply_keyboard())
+            await target.answer(text, reply_markup=await filtered_pg_reply_keyboard(db_user))
         return
     text = service_card(user if isinstance(user, dict) else {})
     if notice:
@@ -223,8 +251,7 @@ async def _show_user_card(
 @router.callback_query(F.data == "adm:pg:users")
 @router.callback_query(F.data == "adm:pg:users:clear")
 async def pg_users_list(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     await callback.answer()
     await state.update_data(pg_list_q=None, pg_list_page=0)
@@ -234,8 +261,7 @@ async def pg_users_list(callback: CallbackQuery, state: FSMContext, db_user: Bot
 
 @router.callback_query(F.data.startswith("adm:pg:users:p:"))
 async def pg_users_page(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     try:
         page = int(callback.data.rsplit(":", 1)[-1])
@@ -252,8 +278,7 @@ async def pg_users_page(callback: CallbackQuery, state: FSMContext, db_user: Bot
 
 @router.callback_query(F.data == "adm:pg:search")
 async def pg_search_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     await callback.answer()
     await state.set_state(PgUserStates.search)
@@ -267,12 +292,12 @@ async def pg_search_start(callback: CallbackQuery, state: FSMContext, db_user: B
 
 @router.message(PgUserStates.search)
 async def pg_search_query(message: Message, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
+    if not await _require_users(db_user, message=message):
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
         return
     q = (message.text or "").strip()
     if not q:
@@ -297,8 +322,7 @@ async def pg_search_query(message: Message, state: FSMContext, db_user: BotUser)
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+$"))
 async def pg_user_detail(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     uid = int(callback.data.rsplit(":", 1)[-1])
     await callback.answer()
@@ -308,8 +332,7 @@ async def pg_user_detail(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:link$"))
 async def pg_user_link(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     uid = int(callback.data.split(":")[3])
     try:
@@ -333,8 +356,7 @@ async def pg_user_link(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:pg:reset:"))
 async def pg_reset(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     uid = int(callback.data.split(":")[-1])
     try:
@@ -352,8 +374,7 @@ async def pg_reset(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:pg:dis:"))
 async def pg_dis(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     uid = int(callback.data.split(":")[-1])
     try:
@@ -371,8 +392,7 @@ async def pg_dis(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:pg:en:"))
 async def pg_en(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     uid = int(callback.data.split(":")[-1])
     try:
@@ -390,8 +410,7 @@ async def pg_en(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:pg:rev:"))
 async def pg_rev(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     uid = int(callback.data.split(":")[-1])
     try:
@@ -409,8 +428,7 @@ async def pg_rev(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:delask$"))
 async def pg_user_del_ask(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     uid = int(callback.data.split(":")[3])
     await callback.answer()
@@ -432,8 +450,7 @@ async def pg_user_del_ask(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:del$"))
 async def pg_user_del(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     uid = int(callback.data.split(":")[3])
     try:
@@ -455,8 +472,7 @@ async def pg_user_del(callback: CallbackQuery, state: FSMContext, db_user: BotUs
 
 @router.callback_query(F.data == "adm:pg:create")
 async def pg_create_menu(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     await callback.answer()
     await state.clear()
@@ -477,8 +493,7 @@ async def pg_create_menu(callback: CallbackQuery, state: FSMContext, db_user: Bo
 
 @router.callback_query(F.data == "adm:pg:create:tpl")
 async def pg_create_tpl_pick(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     await callback.answer()
     await state.update_data(pg_create_mode="template", pg_template_id=None, pg_selected_groups=[])
@@ -517,8 +532,7 @@ async def pg_create_tpl_pick(callback: CallbackQuery, state: FSMContext, db_user
 
 @router.callback_query(F.data.startswith("adm:pg:settpl:"))
 async def pg_create_tpl_chosen(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     tid = int(callback.data.split(":")[-1])
     await callback.answer()
@@ -533,8 +547,7 @@ async def pg_create_tpl_chosen(callback: CallbackQuery, state: FSMContext, db_us
 
 @router.callback_query(F.data == "adm:pg:create:custom")
 async def pg_create_custom_groups(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     await callback.answer()
     await state.update_data(pg_create_mode="custom", pg_template_id=None, pg_selected_groups=[])
@@ -599,8 +612,7 @@ async def _show_create_group_picker(callback: CallbackQuery, state: FSMContext) 
 
 @router.callback_query(F.data.startswith("adm:pg:toggrp:"))
 async def pg_create_toggrp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     gid = int(callback.data.split(":")[-1])
     data = await state.get_data()
@@ -616,8 +628,7 @@ async def pg_create_toggrp(callback: CallbackQuery, state: FSMContext, db_user: 
 
 @router.callback_query(F.data == "adm:pg:grpdone")
 async def pg_create_grpdone(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     data = await state.get_data()
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
@@ -635,12 +646,12 @@ async def pg_create_grpdone(callback: CallbackQuery, state: FSMContext, db_user:
 
 @router.message(PgUserStates.create_username)
 async def pg_create_username(message: Message, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
+    if not await _require_users(db_user, message=message):
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
         return
     uname = (message.text or "").strip()
     if not _USERNAME_RE.fullmatch(uname):
@@ -653,7 +664,7 @@ async def pg_create_username(message: Message, state: FSMContext, db_user: BotUs
         tid = data.get("pg_template_id")
         if not tid:
             await state.clear()
-            await message.answer("تمپلیت انتخاب نشده.", reply_markup=kb.pg_reply_keyboard())
+            await message.answer("تمپلیت انتخاب نشده.", reply_markup=await filtered_pg_reply_keyboard(db_user))
             return
         try:
             user = await get_pg().create_user_from_template(
@@ -671,7 +682,7 @@ async def pg_create_username(message: Message, state: FSMContext, db_user: BotUs
         if uid:
             await _show_user_card(message, uid, edit=False, notice="✅ کاربر ساخته شد")
         else:
-            await message.answer("✅ کاربر ساخته شد.", reply_markup=kb.pg_reply_keyboard())
+            await message.answer("✅ کاربر ساخته شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
         return
     await state.set_state(PgUserStates.create_gb)
     await message.answer(
@@ -682,12 +693,12 @@ async def pg_create_username(message: Message, state: FSMContext, db_user: BotUs
 
 @router.message(PgUserStates.create_gb)
 async def pg_create_gb(message: Message, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
+    if not await _require_users(db_user, message=message):
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
         return
     raw = (message.text or "").strip().replace(",", ".")
     try:
@@ -707,12 +718,12 @@ async def pg_create_gb(message: Message, state: FSMContext, db_user: BotUser):
 
 @router.message(PgUserStates.create_days)
 async def pg_create_days(message: Message, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
+    if not await _require_users(db_user, message=message):
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
         return
     raw = (message.text or "").strip()
     try:
@@ -728,7 +739,7 @@ async def pg_create_days(message: Message, state: FSMContext, db_user: BotUser):
     gb = float(data.get("pg_create_gb") or 0)
     if not uname or not groups:
         await state.clear()
-        await message.answer("داده ناقص است — دوباره شروع کنید.", reply_markup=kb.pg_reply_keyboard())
+        await message.answer("داده ناقص است — دوباره شروع کنید.", reply_markup=await filtered_pg_reply_keyboard(db_user))
         return
     data_limit = int(gb * (1024**3)) if gb > 0 else 0
     expire_ts = int(time.time()) + days * 86400 if days > 0 else 0
@@ -754,7 +765,7 @@ async def pg_create_days(message: Message, state: FSMContext, db_user: BotUser):
     if uid:
         await _show_user_card(message, uid, edit=False, notice="✅ کاربر ساخته شد")
     else:
-        await message.answer("✅ کاربر ساخته شد.", reply_markup=kb.pg_reply_keyboard())
+        await message.answer("✅ کاربر ساخته شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
 
 
 # ----- edit -----
@@ -762,8 +773,7 @@ async def pg_create_days(message: Message, state: FSMContext, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:edit$"))
 async def pg_user_edit_menu(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     uid = int(callback.data.split(":")[3])
     await callback.answer()
@@ -778,8 +788,7 @@ async def pg_user_edit_menu(callback: CallbackQuery, state: FSMContext, db_user:
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:ed:name$"))
 async def pg_edit_name_ask(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     uid = int(callback.data.split(":")[3])
     await callback.answer()
@@ -794,12 +803,12 @@ async def pg_edit_name_ask(callback: CallbackQuery, state: FSMContext, db_user: 
 
 @router.message(PgUserStates.edit_username)
 async def pg_edit_name_save(message: Message, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
+    if not await _require_users(db_user, message=message):
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
         return
     uname = (message.text or "").strip()
     if not _USERNAME_RE.fullmatch(uname):
@@ -828,8 +837,7 @@ async def pg_edit_name_save(message: Message, state: FSMContext, db_user: BotUse
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:ed:gb$"))
 async def pg_edit_gb_ask(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     uid = int(callback.data.split(":")[3])
     await callback.answer()
@@ -844,12 +852,12 @@ async def pg_edit_gb_ask(callback: CallbackQuery, state: FSMContext, db_user: Bo
 
 @router.message(PgUserStates.edit_gb)
 async def pg_edit_gb_save(message: Message, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
+    if not await _require_users(db_user, message=message):
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
         return
     raw = (message.text or "").strip().replace(",", ".")
     try:
@@ -884,8 +892,7 @@ async def pg_edit_gb_save(message: Message, state: FSMContext, db_user: BotUser)
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:ed:days$"))
 async def pg_edit_days_ask(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     uid = int(callback.data.split(":")[3])
     await callback.answer()
@@ -900,12 +907,12 @@ async def pg_edit_days_ask(callback: CallbackQuery, state: FSMContext, db_user: 
 
 @router.message(PgUserStates.edit_days)
 async def pg_edit_days_save(message: Message, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
+    if not await _require_users(db_user, message=message):
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.pg_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
         return
     raw = (message.text or "").strip()
     try:
@@ -941,8 +948,7 @@ async def pg_edit_days_save(message: Message, state: FSMContext, db_user: BotUse
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:ed:grps$"))
 async def pg_edit_groups_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     uid = int(callback.data.split(":")[3])
     await callback.answer()
@@ -957,8 +963,7 @@ async def pg_edit_groups_start(callback: CallbackQuery, state: FSMContext, db_us
 
 @router.callback_query(F.data.startswith("adm:pg:edgrp:"))
 async def pg_edit_toggrp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     gid = int(callback.data.split(":")[-1])
     data = await state.get_data()
@@ -974,8 +979,7 @@ async def pg_edit_toggrp(callback: CallbackQuery, state: FSMContext, db_user: Bo
 
 @router.callback_query(F.data == "adm:pg:edgrpdone")
 async def pg_edit_grpdone(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_users(db_user, callback=callback):
         return
     data = await state.get_data()
     uid = int(data.get("pg_edit_uid") or 0)

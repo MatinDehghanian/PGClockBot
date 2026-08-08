@@ -15,8 +15,19 @@ class StaffPgWriteClientTests(unittest.IsolatedAsyncioTestCase):
 
         fake = MagicMock()
         with patch("app.api.pg_pages.get_pg", return_value=fake):
-            client, as_owner = await _staff_pg(AsyncMock(), {"role": "admin"})
+            client, as_owner = await _staff_pg(
+                AsyncMock(), {"role": "admin", "pg_is_owner": True}
+            )
         self.assertTrue(as_owner)
+        self.assertIs(client, fake)
+
+    async def test_limited_admin_env_client_not_as_owner(self):
+        from app.api.pg_pages import _staff_pg
+
+        fake = MagicMock()
+        with patch("app.api.pg_pages.get_pg", return_value=fake):
+            client, as_owner = await _staff_pg(AsyncMock(), {"role": "admin"})
+        self.assertFalse(as_owner)
         self.assertIs(client, fake)
 
     async def test_reseller_own_client(self):
@@ -116,8 +127,9 @@ class ExactActionSourceGuards(unittest.TestCase):
         src = Path("app/api/pg_pages.py").read_text(encoding="utf-8")
         fn = src[src.find("async def _staff_pg") : src.find("async def _assert_owned_user")]
         self.assertIn("بدون اعتبارنامه اختصاصی", fn)
-        # Only platform-admin branch may return owner client
-        self.assertEqual(fn.count("return get_pg(), True"), 1)
+        # Platform-admin uses env client; as_owner only when pg_is_owner (Hybrid)
+        self.assertIn("return get_pg(), bool(staff.get(\"pg_is_owner\"))", fn)
+        self.assertEqual(fn.count("return get_pg(), True"), 0)
         self.assertIn("get_pg_for_staff", fn)
         self.assertIn('staff.get("role") == "pg_staff"', fn)
 

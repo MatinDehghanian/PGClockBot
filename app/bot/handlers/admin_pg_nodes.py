@@ -10,6 +10,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.bot import keyboards as kb
+from app.bot.auth import can_platform_pg_action, can_platform_pg_page
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.tg_utils import parse_bot_int, safe_edit_text
 from app.db.models import BotUser
@@ -17,6 +18,30 @@ from app.services.formatting import node_status_fa
 from app.services.pasarguard import PasarGuardError, get_pg
 
 router = Router(name="admin_pg_nodes")
+
+async def _require_nodes(db_user: BotUser, callback=None, message=None, *, action: str | None = None) -> bool:
+    """Return True when caller may continue."""
+    if not _is_admin(db_user):
+        if callback is not None:
+            await callback.answer("ادمین نیستید", show_alert=True)
+        elif message is not None:
+            await message.answer("ادمین نیستید.")
+        return False
+    if not await can_platform_pg_page(db_user, "pg_nodes"):
+        if callback is not None:
+            await callback.answer("به نودها دسترسی ندارید", show_alert=True)
+        elif message is not None:
+            await message.answer("به نودها دسترسی ندارید.")
+        return False
+    if action and not await can_platform_pg_action(db_user, "nodes", action):
+        if callback is not None:
+            await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+        elif message is not None:
+            await message.answer("اجازه این عمل را ندارید.")
+        return False
+    return True
+
+
 
 
 class PgNodeStates(StatesGroup):
@@ -135,8 +160,7 @@ async def _render_nodes_list(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "adm:pg:nodes")
 async def pg_nodes(callback: CallbackQuery, db_user: BotUser, state: FSMContext | None = None):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_nodes(db_user, callback=callback):
         return
     if state is not None:
         await state.set_state(None)
@@ -146,8 +170,7 @@ async def pg_nodes(callback: CallbackQuery, db_user: BotUser, state: FSMContext 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:n:\d+$"))
 async def pg_node_detail(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_nodes(db_user, callback=callback):
         return
     nid = int(callback.data.rsplit(":", 1)[-1])
     await callback.answer()
@@ -169,8 +192,7 @@ async def pg_node_detail(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:pg:recon:"))
 async def pg_recon(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_nodes(db_user, callback=callback):
         return
     try:
         node_id = int(callback.data.split(":")[-1])
@@ -186,8 +208,7 @@ async def pg_recon(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data == "adm:pg:nreconall")
 async def pg_recon_all(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_nodes(db_user, callback=callback):
         return
     try:
         await get_pg().reconnect_all_nodes()
@@ -198,8 +219,7 @@ async def pg_recon_all(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:pg:nsync:"))
 async def pg_node_sync(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_nodes(db_user, callback=callback):
         return
     try:
         node_id = int(callback.data.split(":")[-1])
@@ -215,8 +235,7 @@ async def pg_node_sync(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:nresetask:\d+$"))
 async def pg_node_reset_ask(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_nodes(db_user, callback=callback):
         return
     nid = int(callback.data.split(":")[-1])
     await callback.answer()
@@ -240,8 +259,7 @@ async def pg_node_reset_ask(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:nreset:\d+$"))
 async def pg_node_reset(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_nodes(db_user, callback=callback):
         return
     node_id = int(callback.data.split(":")[-1])
     try:
@@ -264,8 +282,7 @@ async def pg_node_reset(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:ntog:\d+$"))
 async def pg_node_toggle(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_nodes(db_user, callback=callback):
         return
     node_id = int(callback.data.split(":")[-1])
     try:
@@ -288,8 +305,7 @@ async def pg_node_toggle(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:ndelask:\d+$"))
 async def pg_node_del_ask(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_nodes(db_user, callback=callback):
         return
     nid = int(callback.data.split(":")[-1])
     await callback.answer()
@@ -313,8 +329,7 @@ async def pg_node_del_ask(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:ndel:\d+$"))
 async def pg_node_delete(callback: CallbackQuery, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_nodes(db_user, callback=callback):
         return
     node_id = int(callback.data.split(":")[-1])
     try:
@@ -331,8 +346,7 @@ async def pg_node_delete(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data == "adm:pg:ncreate")
 async def pg_node_create_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_nodes(db_user, callback=callback):
         return
     await state.set_state(PgNodeStates.create_name)
     await state.update_data(node_create={})
@@ -352,9 +366,12 @@ async def pg_node_create_start(callback: CallbackQuery, state: FSMContext, db_us
 
 @router.message(PgNodeStates.create_name)
 async def pg_node_create_name(message: Message, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
-        await state.set_state(None)
+    if kb.is_cancel_text(message.text):
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
+        await state.clear()
+        return
+    if not await _require_nodes(db_user, message=message):
+        await state.clear()
         return
     name = (message.text or "").strip()
     if not name:
@@ -369,9 +386,12 @@ async def pg_node_create_name(message: Message, state: FSMContext, db_user: BotU
 
 @router.message(PgNodeStates.create_address)
 async def pg_node_create_address(message: Message, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
-        await state.set_state(None)
+    if kb.is_cancel_text(message.text):
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
+        await state.clear()
+        return
+    if not await _require_nodes(db_user, message=message):
+        await state.clear()
         return
     address = (message.text or "").strip()
     if not address:
@@ -389,9 +409,12 @@ async def pg_node_create_address(message: Message, state: FSMContext, db_user: B
 
 @router.message(PgNodeStates.create_port)
 async def pg_node_create_port(message: Message, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
-        await state.set_state(None)
+    if kb.is_cancel_text(message.text):
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
+        await state.clear()
+        return
+    if not await _require_nodes(db_user, message=message):
+        await state.clear()
         return
     raw = (message.text or "").strip()
     data = (await state.get_data()).get("node_create") or {}
@@ -419,8 +442,7 @@ async def pg_node_create_port(message: Message, state: FSMContext, db_user: BotU
 
 @router.callback_query(F.data.startswith("adm:pg:nconn:"))
 async def pg_node_create_conn(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+    if not await _require_nodes(db_user, callback=callback):
         return
     conn = callback.data.rsplit(":", 1)[-1]
     if conn not in {"grpc", "rest"}:
@@ -449,9 +471,12 @@ async def pg_node_create_conn(callback: CallbackQuery, state: FSMContext, db_use
 
 @router.message(PgNodeStates.create_core)
 async def pg_node_create_core(message: Message, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
-        await state.set_state(None)
+    if kb.is_cancel_text(message.text):
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
+        await state.clear()
+        return
+    if not await _require_nodes(db_user, message=message):
+        await state.clear()
         return
     raw = (message.text or "").strip()
     data = (await state.get_data()).get("node_create") or {}
@@ -468,9 +493,12 @@ async def pg_node_create_core(message: Message, state: FSMContext, db_user: BotU
 
 @router.message(PgNodeStates.create_api_key)
 async def pg_node_create_api_key(message: Message, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
-        await state.set_state(None)
+    if kb.is_cancel_text(message.text):
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
+        await state.clear()
+        return
+    if not await _require_nodes(db_user, message=message):
+        await state.clear()
         return
     raw = (message.text or "").strip()
     data = (await state.get_data()).get("node_create") or {}
@@ -486,9 +514,12 @@ async def pg_node_create_api_key(message: Message, state: FSMContext, db_user: B
 
 @router.message(PgNodeStates.create_server_ca)
 async def pg_node_create_server_ca(message: Message, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
-        await state.set_state(None)
+    if kb.is_cancel_text(message.text):
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
+        await state.clear()
+        return
+    if not await _require_nodes(db_user, message=message):
+        await state.clear()
         return
     raw = (message.text or "").strip()
     data = dict((await state.get_data()).get("node_create") or {})
