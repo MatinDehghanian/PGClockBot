@@ -65,13 +65,33 @@ class DomainModalTemplateTests(unittest.TestCase):
         self.assertIn("section-tabs", html)
         self.assertIn("باشگاه مشتریان", html)
         self.assertIn("home-panel-grid", html)
+        self.assertIn("home-panel-neutral", html)
         self.assertIn("loyalty-overview", html)
         self.assertNotIn("tabs tabs-scroll", html)
         self.assertNotIn('href="/loyalty?tab=settings"', html)
+        self.assertNotIn('href="/loyalty?tab=rules"', html)
+        self.assertNotIn('href="/loyalty?tab=rewards"', html)
+        self.assertNotIn('href="/loyalty?tab=tiers"', html)
         self.assertIn("_modal_loyalty_settings.html", html)
         modal = (TEMPLATES / "_modal_loyalty_settings.html").read_text(encoding="utf-8")
         self.assertIn('data-modal-tab="club"', modal)
         self.assertIn('data-modal-tab="referral"', modal)
+        self.assertIn('data-modal-tab="rules"', modal)
+        self.assertIn('data-modal-tab="rewards"', modal)
+        self.assertIn('data-modal-tab="tiers"', modal)
+
+    def test_search_bars_have_no_title_label(self):
+        for name in ("users.html", "finance.html", "resellers.html", "pg_users.html"):
+            html = (TEMPLATES / name).read_text(encoding="utf-8")
+            self.assertNotIn("search-bar-label", html)
+
+    def test_bot_settings_nav_is_last(self):
+        src = (TEMPLATES / "base.html").read_text(encoding="utf-8")
+        bot = src.split("nav-section-bot", 1)[1].split("nav-section-pg", 1)[0]
+        loyalty_i = bot.find("باشگاه مشتریان")
+        settings_i = bot.find(">تنظیمات</span>")
+        self.assertGreater(loyalty_i, 0)
+        self.assertGreater(settings_i, loyalty_i)
 
     def test_settings_html_no_supports_or_payment_branches(self):
         html = (TEMPLATES / "settings.html").read_text(encoding="utf-8")

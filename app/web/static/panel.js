@@ -841,10 +841,20 @@
       });
       try {
         const u = new URL(window.location.href);
-        if (u.searchParams.has('settings') || u.searchParams.has('supports') || u.searchParams.has('stab')) {
+        const inDomainModal = !!(
+          tabBtn.closest('#modal-loyalty-settings')
+          || tabBtn.closest('#modal-finance-settings')
+          || tabBtn.closest('#modal-supports-settings')
+          || u.searchParams.has('settings')
+          || u.searchParams.has('supports')
+          || u.searchParams.has('stab')
+        );
+        if (inDomainModal) {
           if (id === 'payment' || id === 'billing') u.searchParams.set('settings', id);
           else if (id === 'club') u.searchParams.set('settings', '1');
-          else if (id === 'referral') u.searchParams.set('settings', 'referral');
+          else if (id === 'referral' || id === 'rules' || id === 'rewards' || id === 'tiers') {
+            u.searchParams.set('settings', id);
+          }
           else if (id === 'contacts') {
             u.searchParams.set('supports', '1');
             u.searchParams.set('stab', 'contacts');
