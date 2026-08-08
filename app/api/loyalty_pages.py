@@ -108,9 +108,13 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
             session, "points_to_wallet_rate", "100", reseller_id=scope
         )
         page_tab = tab or "overview"
-        if page_tab == "settings":
-            return RedirectResponse("/loyalty?tab=overview&settings=1", status_code=303)
-        if page_tab not in {"overview", "rules", "rewards", "tiers", "transactions"}:
+        # Legacy page tabs moved into the settings modal.
+        if page_tab in {"settings", "rules", "rewards", "tiers"}:
+            settings_key = "1" if page_tab == "settings" else page_tab
+            return RedirectResponse(
+                f"/loyalty?tab=overview&settings={settings_key}", status_code=303
+            )
+        if page_tab not in {"overview", "transactions"}:
             page_tab = "overview"
 
         from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
@@ -121,10 +125,14 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         )
         ref_names = (TAB_SETTING_GROUPS.get("loyalty") or []) if can_edit_referral_text else []
         settings_q = (request.query_params.get("settings") or "").strip()
-        open_settings = settings_q in {"1", "true", "yes", "club", "referral"}
-        loyalty_settings_tab = (
-            "referral" if settings_q == "referral" and can_edit_referral_text else "club"
-        )
+        settings_tabs = {"1", "true", "yes", "club", "referral", "rules", "rewards", "tiers"}
+        open_settings = settings_q in settings_tabs
+        if settings_q in {"rules", "rewards", "tiers"}:
+            loyalty_settings_tab = settings_q
+        elif settings_q == "referral" and can_edit_referral_text:
+            loyalty_settings_tab = "referral"
+        else:
+            loyalty_settings_tab = "club"
         next_referral = quote(f"/loyalty?tab={page_tab}&settings=referral")
         if staff.get("role") == "admin":
             referral_text_action = f"/settings?tab=loyalty&next={next_referral}"
@@ -183,7 +191,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         except ValueError:
             return RedirectResponse("/home", status_code=303)
         page_tab = str(next_tab or "overview").strip()
-        if page_tab not in {"overview", "rules", "rewards", "tiers", "transactions"}:
+        if page_tab not in {"overview", "transactions"}:
             page_tab = "overview"
         enabled = "1" if str(loyalty_enabled) in {"1", "on", "true", "yes"} else "0"
         try:
@@ -221,7 +229,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         rule = await session.get(PointsRule, rule_id)
         if not rule or not _rule_in_scope(rule, scope):
             return RedirectResponse(
-                f"/loyalty?tab=rules&err={quote('قانون پیدا نشد')}", status_code=303
+                f"/loyalty?tab=overview&settings=rules&err={quote('قانون پیدا نشد')}", status_code=303
             )
         rule.name = (name or rule.name).strip()[:128]
         rule.amount = max(0, int(amount))
@@ -234,7 +242,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         mr = str(max_reward or "").strip()
         rule.max_reward = int(mr) if mr.isdigit() else None
         await session.commit()
-        return RedirectResponse("/loyalty?tab=rules&saved=1", status_code=303)
+        return RedirectResponse("/loyalty?tab=overview&settings=rules&saved=1", status_code=303)
 
     @app.post("/loyalty/rules/{rule_id}/toggle")
     async def loyalty_rule_toggle(
@@ -250,7 +258,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         if rule and _rule_in_scope(rule, scope):
             rule.enabled = not bool(rule.enabled)
             await session.commit()
-        return RedirectResponse("/loyalty?tab=rules&saved=1", status_code=303)
+        return RedirectResponse("/loyalty?tab=overview&settings=rules&saved=1", status_code=303)
 
     @app.post("/loyalty/rewards/create")
     async def loyalty_reward_create(
@@ -271,16 +279,16 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
             return RedirectResponse("/home", status_code=303)
         if reward_type not in REWARD_TYPE_LABELS:
             return RedirectResponse(
-                f"/loyalty?tab=rewards&err={quote('نوع جایزه نامعتبر')}", status_code=303
+                f"/loyalty?tab=overview&settings=rewards&err={quote('نوع جایزه نامعتبر')}", status_code=303
             )
         if int(reward_value) <= 0 or int(points_cost) <= 0:
             return RedirectResponse(
-                f"/loyalty?tab=rewards&err={quote('مقدار و هزینه باید مثبت باشند')}",
+                f"/loyalty?tab=overview&settings=rewards&err={quote('مقدار و هزینه باید مثبت باشند')}",
                 status_code=303,
             )
         if reward_type == "discount_percent" and int(reward_value) > 100:
             return RedirectResponse(
-                f"/loyalty?tab=rewards&err={quote('درصد تخفیف حداکثر ۱۰۰ است')}",
+                f"/loyalty?tab=overview&settings=rewards&err={quote('درصد تخفیف حداکثر ۱۰۰ است')}",
                 status_code=303,
             )
         mx = str(max_discount_toman or "").strip()
@@ -304,7 +312,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
             )
         )
         await session.commit()
-        return RedirectResponse("/loyalty?tab=rewards&saved=1", status_code=303)
+        return RedirectResponse("/loyalty?tab=overview&settings=rewards&saved=1", status_code=303)
 
     @app.post("/loyalty/rewards/{reward_id}/save")
     async def loyalty_reward_save(
@@ -329,7 +337,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         reward = await session.get(LoyaltyReward, reward_id)
         if not reward or not _reward_in_scope(reward, scope):
             return RedirectResponse(
-                f"/loyalty?tab=rewards&err={quote('جایزه پیدا نشد')}", status_code=303
+                f"/loyalty?tab=overview&settings=rewards&err={quote('جایزه پیدا نشد')}", status_code=303
             )
         reward.name = (name or reward.name).strip()[:128]
         reward.description = (description or "").strip() or None
@@ -349,7 +357,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
             reward.max_discount_toman = int(mx) if mx.isdigit() else None
             reward.expires_days = int(ex) if ex.isdigit() else None
         await session.commit()
-        return RedirectResponse("/loyalty?tab=rewards&saved=1", status_code=303)
+        return RedirectResponse("/loyalty?tab=overview&settings=rewards&saved=1", status_code=303)
 
     @app.post("/loyalty/rewards/{reward_id}/archive")
     async def loyalty_reward_archive(
@@ -366,7 +374,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
             reward.archived = True
             reward.enabled = False
             await session.commit()
-        return RedirectResponse("/loyalty?tab=rewards&saved=1", status_code=303)
+        return RedirectResponse("/loyalty?tab=overview&settings=rewards&saved=1", status_code=303)
 
     @app.post("/loyalty/tiers/{tier_id}/save")
     async def loyalty_tier_save(
@@ -383,7 +391,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         tier = await session.get(LoyaltyTier, tier_id)
         if not tier:
             return RedirectResponse(
-                f"/loyalty?tab=tiers&err={quote('سطح پیدا نشد')}", status_code=303
+                f"/loyalty?tab=overview&settings=tiers&err={quote('سطح پیدا نشد')}", status_code=303
             )
         tier.name = (name or tier.name).strip()[:64]
         tier.min_points = max(0, int(min_points))
@@ -392,7 +400,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         tier.multiplier_bps = max(0, int(multiplier_bps))
         tier.enabled = str(enabled) in {"1", "on", "true", "yes"}
         await session.commit()
-        return RedirectResponse("/loyalty?tab=tiers&saved=1", status_code=303)
+        return RedirectResponse("/loyalty?tab=overview&settings=tiers&saved=1", status_code=303)
 
     @app.post("/loyalty/adjust")
     async def loyalty_adjust(
