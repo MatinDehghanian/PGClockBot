@@ -67,8 +67,10 @@
       </div>
     </form>
     <form method="post" action="/loyalty/rewards/{{ reward.id }}/archive" class="loyalty-editor-danger"
-          data-confirm="این جایزه بایگانی شود؟" data-confirm-title="بایگانی جایزه" data-confirm-danger="1" data-confirm-label="بایگانی">
-      <button class="btn btn-danger btn-sm" type="submit">بایگانی</button>
+          data-confirm="این جایزه حذف شود؟ از لیست فعال‌ها خارج می‌شود." data-confirm-title="حذف جایزه" data-confirm-danger="1" data-confirm-label="حذف">
+      <div class="actions">
+        <button class="btn btn-danger" type="submit">حذف</button>
+      </div>
     </form>
   </div>
   {% endfor %}
