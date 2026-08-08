@@ -26,9 +26,15 @@ async def list_broadcast_targets(
     *,
     audience: str = "all",
 ) -> list[BotUser]:
+    """Resolve recipients for a broadcast audience.
+
+    ``users`` = customer-facing audience: role user **and** reseller.
+    Dual-role shop owners (role=reseller) still receive «کاربران عادی» messages
+    because they use the bot as customers too. Admins are excluded from ``users``.
+    """
     q = select(BotUser).where(BotUser.is_blocked.is_(False))
     if audience == "users":
-        q = q.where(BotUser.role == Role.USER.value)
+        q = q.where(BotUser.role.in_([Role.USER.value, Role.RESELLER.value]))
     elif audience == "resellers":
         q = q.where(BotUser.role == Role.RESELLER.value)
     elif audience == "admins":

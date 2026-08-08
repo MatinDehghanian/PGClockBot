@@ -2,6 +2,7 @@
    Expects: settings_form_action, tab_groups, groups, values
    Optional: show_pending_orders, pending_orders_action
 #}
+<div class="settings-domain-stack">
 <form method="post" action="{{ settings_form_action }}" enctype="multipart/form-data" class="settings-form">
   {% for group_name in tab_groups %}
   {% set fields = groups[group_name] %}
@@ -21,3 +22,4 @@
 {% if show_pending_orders %}
   {% include "_settings_pending_orders.html" %}
 {% endif %}
+</div>
