@@ -83,8 +83,21 @@ class DomainModalTemplateTests(unittest.TestCase):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn("data-modal-tabs", js)
         self.assertIn("data-modal-tab-panel", js)
+        self.assertIn("data-modal-close-strip", js)
         self.assertIn("settings-modal-panel", css)
         self.assertIn(".section-tabs .tab-btn", css)
+        self.assertIn("settings-modal-flash", css)
+
+    def test_domain_modals_soft_close_and_inline_flash(self):
+        for name in (
+            "_modal_finance_settings.html",
+            "_modal_supports_settings.html",
+            "_modal_loyalty_settings.html",
+        ):
+            html = (TEMPLATES / name).read_text(encoding="utf-8")
+            self.assertIn("data-modal-close-strip", html)
+            self.assertIn("settings-modal-flash", html)
+            self.assertNotIn("data-modal-close-nav", html)
 
 
 class DomainSettingGroupsTests(unittest.TestCase):
@@ -99,6 +112,27 @@ class DomainSettingGroupsTests(unittest.TestCase):
         self.assertEqual(keys_for_tab("supports"), {"support_text"})
         self.assertEqual(keys_for_tab("loyalty"), {"referral_text"})
         self.assertIn("روش‌های پرداخت", TAB_SETTING_GROUPS["payment"])
+
+    def test_preview_js_drops_moved_message_fields(self):
+        src = (TEMPLATES / "_tg_preview_chat_js.html").read_text(encoding="utf-8")
+        self.assertNotIn("s_support_text", src)
+        self.assertNotIn("s_referral_text", src)
+        self.assertNotIn("s_payment_reject_text", src)
+
+
+class SafeNextTests(unittest.TestCase):
+    def test_safe_internal_next_blocks_open_redirects(self):
+        from app.api.safe_next import safe_internal_next
+
+        self.assertEqual(
+            safe_internal_next("/finance?tab=orders&settings=payment", "/home"),
+            "/finance?tab=orders&settings=payment",
+        )
+        self.assertEqual(safe_internal_next("//evil.example", "/home"), "/home")
+        self.assertEqual(safe_internal_next("https://evil.example/", "/home"), "/home")
+        self.assertEqual(safe_internal_next("/finance\nLocation: x", "/home"), "/home")
+        self.assertEqual(safe_internal_next("/not-allowed", "/home"), "/home")
+        self.assertEqual(safe_internal_next("  /tickets?supports=1  ", "/home"), "/tickets?supports=1")
 
 
 if __name__ == "__main__":

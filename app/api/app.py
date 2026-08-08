@@ -163,11 +163,11 @@ def render(request: Request, name: str, context: dict | None = None, status_code
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
 
+from app.api.safe_next import safe_internal_next
+
+
 def _settings_next(request: Request, fallback: str) -> str:
-    raw = (request.query_params.get("next") or "").strip()
-    if raw.startswith("/") and not raw.startswith("//") and "://" not in raw:
-        return raw
-    return fallback
+    return safe_internal_next(request.query_params.get("next"), fallback)
 
 
 def _redirect_msg(path: str, *, ok: str | None = None, err: str | None = None) -> RedirectResponse:
@@ -3272,8 +3272,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                     payload[key] = f"uploads/{dest_name}"
         if payload:
             await set_settings_bulk(session, payload)
-        next_url = (request.query_params.get("next") or "").strip()
-        if next_url.startswith("/") and not next_url.startswith("//") and "://" not in next_url:
+        next_url = safe_internal_next(request.query_params.get("next"), "")
+        if next_url:
             sep = "&" if "?" in next_url else "?"
             return RedirectResponse(f"{next_url}{sep}saved=1", status_code=303)
         return RedirectResponse(f"/settings?tab={tab}&saved=1", status_code=303)

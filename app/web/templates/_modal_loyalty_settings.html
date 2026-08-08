@@ -1,23 +1,32 @@
 {# Loyalty club settings modal #}
 {% set open_loy = open_loyalty_settings %}
-{% set loy_return = '/loyalty?tab=' ~ (tab or 'overview') %}
+{% set strip_keys = 'settings,supports,stab,saved,ok,err,msg,_' %}
+{% set show_referral_tab = referral_tab_groups and referral_tab_groups|length > 0 %}
 <div class="ui-modal{% if open_loy %} open{% endif %}" id="modal-loyalty-settings"
      {% if not open_loy %}hidden{% endif %}
-     data-modal-escape-href="{{ loy_return }}">
-  <div class="ui-modal-backdrop" data-modal-close-nav="{{ loy_return }}"></div>
+     data-modal-close-strip="{{ strip_keys }}">
+  <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-xl settings-modal-panel" role="dialog" aria-modal="true" aria-labelledby="loyalty-settings-title">
     <div class="ui-modal-head">
       <h2 id="loyalty-settings-title">تنظیمات دعوت و امتیاز</h2>
-      <button type="button" class="icon-btn" data-modal-close-nav="{{ loy_return }}" aria-label="بستن">
+      <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
+    {% if open_loy and (flash_ok or flash_err) %}
+    <div class="settings-modal-flash">
+      {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+      {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+    </div>
+    {% endif %}
     <nav class="section-tabs settings-tabs modal-section-tabs" role="tablist" aria-label="تب‌های تنظیمات امتیاز" data-modal-tabs>
-      <button type="button" class="tab-btn {% if loyalty_settings_tab != 'referral' %}active{% endif %}" data-modal-tab="club" role="tab">باشگاه امتیاز</button>
+      <button type="button" class="tab-btn {% if loyalty_settings_tab != 'referral' or not show_referral_tab %}active{% endif %}" data-modal-tab="club" role="tab">باشگاه امتیاز</button>
+      {% if show_referral_tab %}
       <button type="button" class="tab-btn {% if loyalty_settings_tab == 'referral' %}active{% endif %}" data-modal-tab="referral" role="tab">متن دعوت</button>
+      {% endif %}
     </nav>
     <div class="settings-modal-body">
-      <div class="modal-tab-panel" data-modal-tab-panel="club" {% if loyalty_settings_tab == 'referral' %}hidden{% endif %}>
+      <div class="modal-tab-panel" data-modal-tab-panel="club" {% if loyalty_settings_tab == 'referral' and show_referral_tab %}hidden{% endif %}>
         <form method="post" action="/loyalty/settings" class="settings-form">
           <input type="hidden" name="next_tab" value="{{ tab or 'overview' }}" />
           <div class="card settings-card">
@@ -48,6 +57,7 @@
           </div>
         </form>
       </div>
+      {% if show_referral_tab %}
       <div class="modal-tab-panel" data-modal-tab-panel="referral" {% if loyalty_settings_tab != 'referral' %}hidden{% endif %}>
         {% set settings_form_action = referral_text_action %}
         {% set tab_groups = referral_tab_groups %}
@@ -55,6 +65,7 @@
         {% set show_pending_orders = false %}
         {% include "_domain_settings_form.html" %}
       </div>
+      {% endif %}
     </div>
   </div>
 </div>

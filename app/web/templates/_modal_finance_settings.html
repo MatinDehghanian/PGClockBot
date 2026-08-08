@@ -1,17 +1,23 @@
 {# Finance settings modal — tabs: پرداخت | PAYG #}
 {% set open_settings = (open_finance_settings or '')|string %}
-{% set finance_return = '/finance?tab=' ~ (finance_tab or 'orders') %}
+{% set strip_keys = 'settings,supports,stab,saved,ok,err,msg,_' %}
 <div class="ui-modal{% if open_settings %} open{% endif %}" id="modal-finance-settings"
      {% if not open_settings %}hidden{% endif %}
-     data-modal-escape-href="{{ finance_return }}">
-  <div class="ui-modal-backdrop" data-modal-close-nav="{{ finance_return }}"></div>
+     data-modal-close-strip="{{ strip_keys }}">
+  <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-xl settings-modal-panel" role="dialog" aria-modal="true" aria-labelledby="finance-settings-title">
     <div class="ui-modal-head">
       <h2 id="finance-settings-title">تنظیمات مالی</h2>
-      <button type="button" class="icon-btn" data-modal-close-nav="{{ finance_return }}" aria-label="بستن">
+      <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
+    {% if open_settings and (flash_ok or flash_err) %}
+    <div class="settings-modal-flash">
+      {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+      {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+    </div>
+    {% endif %}
     <nav class="section-tabs settings-tabs modal-section-tabs" role="tablist" aria-label="تب‌های تنظیمات مالی" data-modal-tabs>
       <button type="button" class="tab-btn {% if open_settings != 'billing' %}active{% endif %}" data-modal-tab="payment" role="tab">پرداخت</button>
       {% if can_billing_settings %}

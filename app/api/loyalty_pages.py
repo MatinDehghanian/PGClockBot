@@ -116,15 +116,22 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
 
         values = await get_all_settings(session, reseller_id=scope)
-        ref_names = TAB_SETTING_GROUPS.get("loyalty") or []
+        can_edit_referral_text = staff.get("role") == "admin" or (
+            "shop_settings" in (staff.get("permissions") or [])
+        )
+        ref_names = (TAB_SETTING_GROUPS.get("loyalty") or []) if can_edit_referral_text else []
         settings_q = (request.query_params.get("settings") or "").strip()
         open_settings = settings_q in {"1", "true", "yes", "club", "referral"}
-        loyalty_settings_tab = "referral" if settings_q == "referral" else "club"
+        loyalty_settings_tab = (
+            "referral" if settings_q == "referral" and can_edit_referral_text else "club"
+        )
         next_referral = quote(f"/loyalty?tab={page_tab}&settings=referral")
         if staff.get("role") == "admin":
             referral_text_action = f"/settings?tab=loyalty&next={next_referral}"
-        else:
+        elif can_edit_referral_text:
             referral_text_action = f"/shop-settings?tab=loyalty&next={next_referral}"
+        else:
+            referral_text_action = ""
 
         flash_ok = None
         if request.query_params.get("saved"):

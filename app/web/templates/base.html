@@ -262,10 +262,11 @@
 
     <main class="main">
       <div class="main-body">
-        {# Page flashes stay above the title. When an edit modal is reopening,
-           the same message is shown inside the modal instead. #}
-        {% if flash_ok and not open_edit %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
-        {% if flash_err and not open_edit %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+        {# Page flashes stay above the title. When an edit/domain settings modal
+           is reopening, the same message is shown inside the modal instead. #}
+        {% set _domain_modal_open = open_supports_modal or open_loyalty_settings or (open_finance_settings|default('')|string|length > 0) %}
+        {% if flash_ok and not open_edit and not _domain_modal_open %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+        {% if flash_err and not open_edit and not _domain_modal_open %}<div class="flash err">{{ flash_err }}</div>{% endif %}
         {% block content %}{% endblock %}
       </div>
       <footer class="site-footer">

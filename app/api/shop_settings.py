@@ -13,6 +13,7 @@ from starlette.datastructures import UploadFile
 
 from app.config import DATA_DIR
 from app.db.models import ResellerProfile
+from app.api.safe_next import safe_internal_next
 from app.services.resellers import (
     RESELLER_SETTINGS_TABS,
     SHOP_SETTINGS_DOMAIN_POST_TABS,
@@ -35,10 +36,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
     shop_dep = require_shop_settings or require_staff
 
     def _safe_next(request: Request, fallback: str) -> str:
-        raw = (request.query_params.get("next") or "").strip()
-        if raw.startswith("/") and not raw.startswith("//") and "://" not in raw:
-            return raw
-        return fallback
+        return safe_internal_next(request.query_params.get("next"), fallback)
 
     def _redirect_after_save(request: Request, fallback: str, *, msg: str | None = None) -> RedirectResponse:
         dest = _safe_next(request, fallback)

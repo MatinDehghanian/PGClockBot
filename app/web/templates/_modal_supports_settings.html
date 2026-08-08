@@ -1,17 +1,23 @@
 {# Support contacts + support_text modal on /tickets #}
 {% set open_supports = open_supports_modal %}
-{% set tickets_return = '/tickets' %}
+{% set strip_keys = 'settings,supports,stab,saved,ok,err,msg,_' %}
 <div class="ui-modal{% if open_supports %} open{% endif %}" id="modal-supports-settings"
      {% if not open_supports %}hidden{% endif %}
-     data-modal-escape-href="{{ tickets_return }}">
-  <div class="ui-modal-backdrop" data-modal-close-nav="{{ tickets_return }}"></div>
+     data-modal-close-strip="{{ strip_keys }}">
+  <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-xl settings-modal-panel" role="dialog" aria-modal="true" aria-labelledby="supports-settings-title">
     <div class="ui-modal-head">
       <h2 id="supports-settings-title">پشتیبان‌ها</h2>
-      <button type="button" class="icon-btn" data-modal-close-nav="{{ tickets_return }}" aria-label="بستن">
+      <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
+    {% if open_supports and (flash_ok or flash_err) %}
+    <div class="settings-modal-flash">
+      {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+      {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+    </div>
+    {% endif %}
     <nav class="section-tabs settings-tabs modal-section-tabs" role="tablist" aria-label="تب‌های پشتیبانی" data-modal-tabs>
       <button type="button" class="tab-btn {% if supports_modal_tab != 'text' %}active{% endif %}" data-modal-tab="contacts" role="tab">پشتیبان‌های تلگرام</button>
       <button type="button" class="tab-btn {% if supports_modal_tab == 'text' %}active{% endif %}" data-modal-tab="text" role="tab">متن پشتیبانی</button>
