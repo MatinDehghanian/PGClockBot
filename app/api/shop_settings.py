@@ -13,7 +13,12 @@ from starlette.datastructures import UploadFile
 
 from app.config import DATA_DIR
 from app.db.models import ResellerProfile
-from app.services.resellers import RESELLER_SETTINGS_TABS, complete_reseller_setup
+from app.services.resellers import (
+    RESELLER_SETTINGS_TABS,
+    SHOP_SETTINGS_DOMAIN_POST_TABS,
+    SHOP_SETTINGS_DOMAIN_REDIRECTS,
+    complete_reseller_setup,
+)
 from app.services.users import (
     IMAGE_KEYS,
     TAB_SETTING_GROUPS,
@@ -26,7 +31,22 @@ from app.services.users import (
 
 def register_shop_settings(app, *, render, require_staff, get_db, require_shop_settings=None):
     allowed_tabs = {t[0] for t in RESELLER_SETTINGS_TABS}
+    post_tabs = allowed_tabs | set(SHOP_SETTINGS_DOMAIN_POST_TABS)
     shop_dep = require_shop_settings or require_staff
+
+    def _safe_next(request: Request, fallback: str) -> str:
+        raw = (request.query_params.get("next") or "").strip()
+        if raw.startswith("/") and not raw.startswith("//") and "://" not in raw:
+            return raw
+        return fallback
+
+    def _redirect_after_save(request: Request, fallback: str, *, msg: str | None = None) -> RedirectResponse:
+        dest = _safe_next(request, fallback)
+        sep = "&" if "?" in dest else "?"
+        url = f"{dest}{sep}saved=1"
+        if msg:
+            url += f"&msg={quote(msg)}"
+        return RedirectResponse(url, status_code=303)
 
     def _menu_tab_context(values: dict) -> dict:
         from app.bot.keyboards import DEFAULT_MENU_ORDER
@@ -124,6 +144,18 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         tab = (request.query_params.get("tab") or "welcome").strip()
         if tab == "security":
             return RedirectResponse("/security", status_code=303)
+        if tab in SHOP_SETTINGS_DOMAIN_REDIRECTS:
+            dest = SHOP_SETTINGS_DOMAIN_REDIRECTS[tab]
+            from urllib.parse import urlencode
+
+            extra = {}
+            for k in ("ok", "err", "saved", "msg"):
+                if request.query_params.get(k):
+                    extra[k] = request.query_params.get(k)
+            if extra:
+                sep = "&" if "?" in dest else "?"
+                dest = dest + sep + urlencode(extra)
+            return RedirectResponse(dest, status_code=303)
         if tab not in allowed_tabs:
             tab = "welcome"
 
@@ -195,10 +227,6 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                     fallback_username=uname,
                 )
             )
-        elif tab == "supports":
-            from app.services.support_contacts import get_support_contacts
-
-            ctx["support_contacts"] = await get_support_contacts(session, reseller_id=rid)
         elif tab == "notifications":
             from app.services.authz import resolve_shop_permissions_from_profile
             from app.services.notifications import (
@@ -227,7 +255,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if not rid:
             return _deny_scope()
         tab = (request.query_params.get("tab") or "welcome").strip()
-        if tab not in allowed_tabs:
+        if tab not in post_tabs:
             return RedirectResponse("/shop-settings", status_code=303)
 
         form = await request.form()
@@ -361,7 +389,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         from app.services.users import set_settings_bulk
 
         await set_settings_bulk(session, payload, reseller_id=rid)
-        return RedirectResponse(f"/shop-settings?tab={tab}&saved=1", status_code=303)
+        return _redirect_after_save(request, f"/shop-settings?tab={tab}")
 
     @app.post("/shop-settings/cancel-pending-orders")
     async def shop_cancel_pending_orders(
@@ -370,26 +398,26 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") != "reseller":
-            return RedirectResponse("/settings?tab=payment", status_code=303)
+            return RedirectResponse("/finance?tab=orders&settings=payment", status_code=303)
         rid = _rid(staff)
         if not rid:
             return _deny_scope()
         from app.services.orders import cancel_stale_pending_for_settings
 
+        fallback = "/finance?tab=orders&settings=payment"
         try:
             n = await cancel_stale_pending_for_settings(
                 session, reseller_id=int(rid), force=True
             )
         except Exception as e:
+            dest = _safe_next(request, fallback)
+            sep = "&" if "?" in dest else "?"
             return RedirectResponse(
-                f"/shop-settings?tab=payment&err={quote(str(e)[:200])}",
+                f"{dest}{sep}err={quote(str(e)[:200])}",
                 status_code=303,
             )
         msg = f"{n} سفارش معلق/تأییدنشده لغو شد" if n else "سفارش معلقی برای لغو نبود"
-        return RedirectResponse(
-            f"/shop-settings?tab=payment&saved=1&msg={quote(msg)}",
-            status_code=303,
-        )
+        return _redirect_after_save(request, fallback, msg=msg)
 
     @app.post("/shop-notifications")
     async def shop_notifications_save(
@@ -475,7 +503,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") != "reseller":
-            return RedirectResponse("/settings?tab=supports", status_code=303)
+            return RedirectResponse("/tickets?supports=1", status_code=303)
         from app.services.support_contacts import upsert_support_contact
 
         rid = _rid(staff)
@@ -503,10 +531,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         )
         if err:
             return RedirectResponse(
-                f"/shop-settings?tab=supports&err={quote(err)}",
+                f"/tickets?supports=1&err={quote(err)}",
                 status_code=303,
             )
-        return RedirectResponse("/shop-settings?tab=supports&saved=1", status_code=303)
+        return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
 
     @app.post("/shop-supports/delete")
     async def shop_supports_delete(
@@ -515,7 +543,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         session: AsyncSession = Depends(get_db),
     ):
         if staff.get("role") != "reseller":
-            return RedirectResponse("/settings?tab=supports", status_code=303)
+            return RedirectResponse("/tickets?supports=1", status_code=303)
         from app.services.support_contacts import delete_support_contact
 
         rid = _rid(staff)
@@ -525,4 +553,4 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         contact_id = str(form.get("id") or "").strip()
         if contact_id:
             await delete_support_contact(session, contact_id, reseller_id=rid)
-        return RedirectResponse("/shop-settings?tab=supports&saved=1", status_code=303)
+        return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)

@@ -70,6 +70,7 @@ from app.services.security_policy import (
 )
 from app.services.updates import local_version
 from app.services.users import (
+    SETTINGS_DOMAIN_REDIRECTS,
     SETTING_GROUPS,
     SETTINGS_TABS,
     PANEL_SETTINGS_KEYS,
@@ -162,6 +163,13 @@ def render(request: Request, name: str, context: dict | None = None, status_code
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
 
+def _settings_next(request: Request, fallback: str) -> str:
+    raw = (request.query_params.get("next") or "").strip()
+    if raw.startswith("/") and not raw.startswith("//") and "://" not in raw:
+        return raw
+    return fallback
+
+
 def _redirect_msg(path: str, *, ok: str | None = None, err: str | None = None) -> RedirectResponse:
     q = []
     if ok:
@@ -170,7 +178,8 @@ def _redirect_msg(path: str, *, ok: str | None = None, err: str | None = None) -
         q.append(f"err={quote(err)}")
     # Bust caches that key only on stable ?ok= text (table must refresh with flash)
     q.append(f"_={int(time.time())}")
-    url = f"{path}?{'&'.join(q)}"
+    sep = "&" if "?" in path else "?"
+    url = f"{path}{sep}{'&'.join(q)}"
     return RedirectResponse(url, status_code=303)
 
 
@@ -674,8 +683,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 ("/home", "dashboard"),
                 ("/dashboard", "dashboard"),
                 ("/plans", "plans"),
-                ("/orders", "orders"),
-                ("/payments", "payments"),
+                ("/finance", "orders"),
+                ("/finance", "payments"),
                 ("/tickets", "tickets"),
                 ("/loyalty", "loyalty"),
                 ("/shop-settings", "shop_settings"),
@@ -706,6 +715,13 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     register_reseller_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     register_user_pages(app, render=render, require_admin=require_admin, get_db=get_db)
+    from app.api.finance_pages import register_finance_pages
+    register_finance_pages(
+        app,
+        render=render,
+        require_staff=require_staff,
+        get_db=get_db,
+    )
     register_shop_settings(
         app,
         render=render,
@@ -1284,8 +1300,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 home = ""
                 for path, key in (
                     ("/plans", "plans"),
-                    ("/orders", "orders"),
-                    ("/payments", "payments"),
+                    ("/finance", "orders"),
+                    ("/finance", "payments"),
                     ("/tickets", "tickets"),
                     ("/shop-settings", "shop_settings"),
                 ):
@@ -2040,91 +2056,6 @@ def create_api_app(lifespan=None) -> FastAPI:
             await session.commit()
         return RedirectResponse("/plans", status_code=303)
 
-    @app.get("/orders", response_class=HTMLResponse)
-    async def orders_page(
-        request: Request,
-        staff: dict = Depends(require_perm("orders")),
-        session: AsyncSession = Depends(get_db),
-    ):
-        search_q = normalize_search_q(request.query_params.get("q"))
-        fetch_limit = 500 if search_q else 100
-        q = (
-            select(Order)
-            .options(
-                selectinload(Order.plan),
-                selectinload(Order.user),
-            )
-            .order_by(Order.id.desc())
-            .limit(fetch_limit)
-        )
-        from app.services.shop_scope import is_platform_admin, shop_owner_id
-
-        if is_platform_admin(staff):
-            # Match payments + bot isolation: platform admin sees main-bot orders only
-            q = q.where(Order.reseller_id.is_(None))
-        else:
-            rid = shop_owner_id(staff)
-            if not rid:
-                orders = []
-                return render(
-                    request,
-                    "orders.html",
-                    {
-                        "staff": staff,
-                        "orders": orders,
-                        "payments_by_order": {},
-                        "q": search_q,
-                        "flash_ok": request.query_params.get("ok"),
-                        "flash_err": request.query_params.get("err")
-                        or "محدوده فروشگاه مشخص نیست",
-                    },
-                )
-            q = q.where(Order.reseller_id == rid)
-        result = await session.execute(q)
-        orders = list(result.scalars().all())
-        if search_q:
-            orders = filter_by_search(
-                orders,
-                search_q,
-                lambda o: (
-                    o.id,
-                    o.status,
-                    o.payment_method,
-                    o.amount,
-                    o.note,
-                    o.user_id,
-                    (o.user.username if o.user else None),
-                    (o.user.full_name if o.user else None),
-                    (o.user.telegram_id if o.user else None),
-                    (o.plan.name if o.plan else None),
-                    o.plan_id,
-                ),
-            )
-        payments_by_order: dict[int, Payment] = {}
-        if orders:
-            ids = [o.id for o in orders]
-            pay_rows = (
-                await session.execute(
-                    select(Payment)
-                    .where(Payment.order_id.in_(ids))
-                    .order_by(Payment.id.desc())
-                )
-            ).scalars().all()
-            for p in pay_rows:
-                if p.order_id is not None and p.order_id not in payments_by_order:
-                    payments_by_order[p.order_id] = p
-        return render(
-            request,
-            "orders.html",
-            {
-                "staff": staff,
-                "orders": orders,
-                "payments_by_order": payments_by_order,
-                "q": search_q,
-                "flash_ok": request.query_params.get("ok"),
-                "flash_err": request.query_params.get("err"),
-            },
-        )
 
     async def _notify_order_user(session: AsyncSession, payment: Payment, order: Order | None) -> None:
         user = await session.get(BotUser, payment.user_id)
@@ -2167,12 +2098,12 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         order = await session.get(Order, order_id)
         if not order:
-            return _redirect_msg("/orders", err="سفارش یافت نشد")
+            return _redirect_msg("/finance?tab=orders", err="سفارش یافت نشد")
         # Hard shop isolation (match bot ordrev + web payments): platform admin
         # must never approve tenant shop orders.
         if order.reseller_id and staff.get("role") == "admin":
             return _redirect_msg(
-                "/orders",
+                "/finance?tab=orders",
                 err="این سفارش مربوط به نماینده است — فقط در ربات/پنل همان فروشگاه قابل تأیید است",
             )
         if staff.get("role") != "admin":
@@ -2181,9 +2112,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             try:
                 assert_order_in_scope(staff, order)
             except ShopScopeError as e:
-                return _redirect_msg("/orders", err=e.message)
+                return _redirect_msg("/finance?tab=orders", err=e.message)
         if order.status == OrderStatus.DELIVERED.value:
-            return _redirect_msg("/orders", ok="قبلاً تحویل شده")
+            return _redirect_msg("/finance?tab=orders", ok="قبلاً تحویل شده")
         # Already provisioned (status may have been tampered) — never re-deliver/notify
         note = (order.note or "").strip()
         is_renew_or_app = note.startswith("renew:") or note.startswith("reseller_app:")
@@ -2191,7 +2122,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             if order.status != OrderStatus.DELIVERED.value:
                 order.status = OrderStatus.DELIVERED.value
                 await session.commit()
-            return _redirect_msg("/orders", ok="قبلاً تحویل شده")
+            return _redirect_msg("/finance?tab=orders", ok="قبلاً تحویل شده")
 
         result = await session.execute(
             select(Payment)
@@ -2207,7 +2138,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     perms = staff.get("permissions") or []
                     if "payments" not in perms:
                         return _redirect_msg(
-                            "/orders",
+                "/finance?tab=orders",
                             err="تأیید رسید نیاز به دسترسی «پرداخت‌ها» دارد",
                         )
                 delivered = await approve_payment(session, payment, reviewer_tg=0)
@@ -2232,10 +2163,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 )
                 await _notify_order_user(session, payment, delivered)
             else:
-                return _redirect_msg("/orders", err="این سفارش هنوز قابل تأیید نیست (رسید لازم است)")
+                return _redirect_msg("/finance?tab=orders", err="این سفارش هنوز قابل تأیید نیست (رسید لازم است)")
         except Exception as e:
-            return _redirect_msg("/orders", err=str(e))
-        return _redirect_msg("/orders", ok="سفارش تأیید و تحویل شد")
+            return _redirect_msg("/finance?tab=orders", err=str(e))
+        return _redirect_msg("/finance?tab=orders", ok="سفارش تأیید و تحویل شد")
 
     @app.post("/orders/{order_id}/reject")
     async def order_reject(
@@ -2245,10 +2176,10 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         order = await session.get(Order, order_id)
         if not order:
-            return _redirect_msg("/orders", err="سفارش یافت نشد")
+            return _redirect_msg("/finance?tab=orders", err="سفارش یافت نشد")
         if order.reseller_id and staff.get("role") == "admin":
             return _redirect_msg(
-                "/orders",
+                "/finance?tab=orders",
                 err="این سفارش مربوط به نماینده است — فقط در ربات/پنل همان فروشگاه قابل رد است",
             )
         if staff.get("role") != "admin":
@@ -2257,7 +2188,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             try:
                 assert_order_in_scope(staff, order)
             except ShopScopeError as e:
-                return _redirect_msg("/orders", err=e.message)
+                return _redirect_msg("/finance?tab=orders", err=e.message)
         # Rejecting a pending receipt also requires payments perm for limited staff
         pending_pay = (
             await session.execute(
@@ -2271,7 +2202,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             perms = staff.get("permissions") or []
             if "payments" not in perms:
                 return _redirect_msg(
-                    "/orders",
+                "/finance?tab=orders",
                     err="رد رسید نیاز به دسترسی «پرداخت‌ها» دارد",
                 )
         try:
@@ -2280,14 +2211,14 @@ def create_api_app(lifespan=None) -> FastAPI:
             else:
                 await reject_order(session, order, note="web order reject")
         except Exception as e:
-            return _redirect_msg("/orders", err=str(e))
+            return _redirect_msg("/finance?tab=orders", err=str(e))
         await notify_payer(
             session,
             order.user_id,
             title="❌ سفارش رد شد",
             body=f"سفارش #{order_id} رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید.",
         )
-        return _redirect_msg("/orders", ok="سفارش رد شد")
+        return _redirect_msg("/finance?tab=orders", ok="سفارش رد شد")
 
     @app.post("/orders/{order_id}/cancel")
     async def order_cancel(
@@ -2297,10 +2228,10 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         order = await session.get(Order, order_id)
         if not order:
-            return _redirect_msg("/orders", err="سفارش یافت نشد")
+            return _redirect_msg("/finance?tab=orders", err="سفارش یافت نشد")
         if order.reseller_id and staff.get("role") == "admin":
             return _redirect_msg(
-                "/orders",
+                "/finance?tab=orders",
                 err="این سفارش مربوط به نماینده است — فقط در ربات/پنل همان فروشگاه قابل لغو است",
             )
         if staff.get("role") != "admin":
@@ -2309,118 +2240,23 @@ def create_api_app(lifespan=None) -> FastAPI:
             try:
                 assert_order_in_scope(staff, order)
             except ShopScopeError as e:
-                return _redirect_msg("/orders", err=e.message)
+                return _redirect_msg("/finance?tab=orders", err=e.message)
         try:
             await cancel_order(session, order, note="web order cancel")
         except Exception as e:
-            return _redirect_msg("/orders", err=str(e))
+            return _redirect_msg("/finance?tab=orders", err=str(e))
         await notify_payer(
             session,
             order.user_id,
             title="⏹ سفارش لغو شد",
             body=f"سفارش #{order_id} لغو شد.",
         )
-        return _redirect_msg("/orders", ok="سفارش لغو شد")
+        return _redirect_msg("/finance?tab=orders", ok="سفارش لغو شد")
 
-    @app.get("/payments", response_class=HTMLResponse)
-    async def payments_page(
-        request: Request,
-        staff: dict = Depends(require_perm("payments")),
-        session: AsyncSession = Depends(get_db),
-    ):
-        from sqlalchemy import or_
-
-        from app.services.shop_scope import is_platform_admin, shop_owner_id
-
-        search_q = normalize_search_q(request.query_params.get("q"))
-        fetch_limit = 500 if search_q else 100
-
-        if is_platform_admin(staff):
-            # Platform admin: wallet top-ups + main-bot orders only (hard shop isolation)
-            q = (
-                select(Payment)
-                .outerjoin(Order, Order.id == Payment.order_id)
-                .where(
-                    or_(
-                        Payment.is_wallet_topup.is_(True),
-                        Order.reseller_id.is_(None),
-                    )
-                )
-                .order_by(Payment.id.desc())
-                .limit(fetch_limit)
-            )
-        else:
-            rid = shop_owner_id(staff)
-            if not rid:
-                return render(
-                    request,
-                    "payments.html",
-                    {
-                        "staff": staff,
-                        "payments": [],
-                        "payers": {},
-                        "q": search_q,
-                        "flash_ok": request.query_params.get("ok"),
-                        "flash_err": request.query_params.get("err")
-                        or "محدوده فروشگاه مشخص نیست",
-                    },
-                )
-            # Shop-scoped order payments only — wallet top-ups are platform-admin only
-            q = (
-                select(Payment)
-                .join(Order, Order.id == Payment.order_id)
-                .where(
-                    Order.reseller_id == rid,
-                    Payment.is_wallet_topup.is_(False),
-                )
-                .order_by(Payment.id.desc())
-                .limit(fetch_limit)
-            )
-        result = await session.execute(q)
-        payments = list(result.scalars().all())
-        payer_ids = {int(p.user_id) for p in payments if p.user_id}
-        payers: dict[int, BotUser] = {}
-        if payer_ids:
-            payers = {
-                int(u.id): u
-                for u in (
-                    await session.execute(select(BotUser).where(BotUser.id.in_(payer_ids)))
-                ).scalars().all()
-            }
-        if search_q:
-            payments = filter_by_search(
-                payments,
-                search_q,
-                lambda p: (
-                    p.id,
-                    p.user_id,
-                    p.order_id,
-                    p.amount,
-                    p.status,
-                    p.method,
-                    p.review_note,
-                    "شارژ" if p.is_wallet_topup else "خرید",
-                    (payers.get(int(p.user_id)).username if payers.get(int(p.user_id)) else None),
-                    (payers.get(int(p.user_id)).full_name if payers.get(int(p.user_id)) else None),
-                    (payers.get(int(p.user_id)).telegram_id if payers.get(int(p.user_id)) else None),
-                ),
-            )
-        return render(
-            request,
-            "payments.html",
-            {
-                "staff": staff,
-                "payments": payments,
-                "payers": payers,
-                "q": search_q,
-                "flash_ok": request.query_params.get("ok"),
-                "flash_err": request.query_params.get("err"),
-            },
-        )
 
     @app.get("/payments/{payment_id}/approve")
     async def payment_approve_get(payment_id: int):
-        return _redirect_msg("/payments", err="برای تأیید از دکمه داخل صفحه پرداخت‌ها استفاده کنید")
+        return _redirect_msg("/finance?tab=payments", err="برای تأیید از دکمه داخل صفحه پرداخت‌ها استفاده کنید")
 
     @app.post("/payments/{payment_id}/approve")
     async def payment_approve(
@@ -2430,36 +2266,36 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         payment = await session.get(Payment, payment_id)
         if not payment:
-            return _redirect_msg("/payments", err="پرداخت یافت نشد")
+            return _redirect_msg("/finance?tab=payments", err="پرداخت یافت نشد")
         if staff.get("role") != "admin":
             from app.services.shop_scope import ShopScopeError, require_shop_owner_id
 
             # Wallet top-ups mint global balance — tenant reviewers cannot approve them.
             if payment.is_wallet_topup:
-                return _redirect_msg("/payments", err="شارژ کیف پول فقط توسط مدیر اصلی تأیید می‌شود")
+                return _redirect_msg("/finance?tab=payments", err="شارژ کیف پول فقط توسط مدیر اصلی تأیید می‌شود")
             try:
                 rid = require_shop_owner_id(staff)
             except ShopScopeError as e:
-                return _redirect_msg("/payments", err=e.message)
+                return _redirect_msg("/finance?tab=payments", err=e.message)
             if not payment.order_id:
-                return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
+                return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
             order_row = await session.get(Order, payment.order_id)
             if not order_row or order_row.reseller_id != rid:
-                return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
+                return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
         elif payment.order_id and not payment.is_wallet_topup:
             # Platform admin must not approve shop-tenant payments (match bot isolation)
             order_row = await session.get(Order, payment.order_id)
             if order_row and order_row.reseller_id is not None:
                 return _redirect_msg(
-                    "/payments",
+                "/finance?tab=payments",
                     err="پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه تأیید می‌شود",
                 )
         if payment.status != PaymentStatus.PENDING.value:
-            return _redirect_msg("/payments", err="این پرداخت قابل تأیید نیست")
+            return _redirect_msg("/finance?tab=payments", err="این پرداخت قابل تأیید نیست")
         try:
             order = await approve_payment(session, payment, reviewer_tg=0)
         except Exception as e:
-            return _redirect_msg("/payments", err=str(e))
+            return _redirect_msg("/finance?tab=payments", err=str(e))
         user = await session.get(BotUser, payment.user_id)
         if user:
             try:
@@ -2490,7 +2326,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                         await bot.session.close()
             except Exception:
                 pass
-        return _redirect_msg("/payments", ok="پرداخت تأیید شد")
+        return _redirect_msg("/finance?tab=payments", ok="پرداخت تأیید شد")
 
     @app.post("/payments/{payment_id}/reject")
     async def payment_reject(
@@ -2500,32 +2336,32 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         payment = await session.get(Payment, payment_id)
         if not payment:
-            return _redirect_msg("/payments", err="پرداخت یافت نشد")
+            return _redirect_msg("/finance?tab=payments", err="پرداخت یافت نشد")
         if staff.get("role") != "admin":
             from app.services.shop_scope import ShopScopeError, require_shop_owner_id
 
             if payment.is_wallet_topup:
-                return _redirect_msg("/payments", err="شارژ کیف پول فقط توسط مدیر اصلی رد می‌شود")
+                return _redirect_msg("/finance?tab=payments", err="شارژ کیف پول فقط توسط مدیر اصلی رد می‌شود")
             try:
                 rid = require_shop_owner_id(staff)
             except ShopScopeError as e:
-                return _redirect_msg("/payments", err=e.message)
+                return _redirect_msg("/finance?tab=payments", err=e.message)
             if not payment.order_id:
-                return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
+                return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
             order_row = await session.get(Order, payment.order_id)
             if not order_row or order_row.reseller_id != rid:
-                return _redirect_msg("/payments", err="دسترسی به این پرداخت ندارید")
+                return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
         elif payment.order_id and not payment.is_wallet_topup:
             order_row = await session.get(Order, payment.order_id)
             if order_row and order_row.reseller_id is not None:
                 return _redirect_msg(
-                    "/payments",
+                "/finance?tab=payments",
                     err="پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه رد می‌شود",
                 )
         try:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
         except Exception as e:
-            return _redirect_msg("/payments", err=str(e))
+            return _redirect_msg("/finance?tab=payments", err=str(e))
         body = "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
         user = await session.get(BotUser, payment.user_id)
         if user:
@@ -2541,7 +2377,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             title="❌ پرداخت رد شد",
             body=body,
         )
-        return _redirect_msg("/payments", ok="پرداخت رد شد")
+        return _redirect_msg("/finance?tab=payments", ok="پرداخت رد شد")
 
     @app.get("/users", response_class=HTMLResponse)
     async def users_page(
@@ -2956,10 +2792,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         )
         if err:
             return RedirectResponse(
-                f"/settings?tab=supports&err={quote(err)}",
+                f"/tickets?supports=1&err={quote(err)}",
                 status_code=303,
             )
-        return RedirectResponse("/settings?tab=supports&saved=1", status_code=303)
+        return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
 
     @app.post("/supports/delete")
     async def supports_delete(
@@ -2973,7 +2809,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         contact_id = str(form.get("id") or "").strip()
         if contact_id:
             await delete_support_contact(session, contact_id)
-        return RedirectResponse("/settings?tab=supports&saved=1", status_code=303)
+        return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
 
     def _menu_tab_context(values: dict) -> dict:
         from app.bot.keyboards import DEFAULT_MENU_ORDER
@@ -3050,6 +2886,17 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         tab = (request.query_params.get("tab") or "welcome").strip()
         valid = {t[0] for t in SETTINGS_TABS} | PANEL_SETTINGS_KEYS
+        if tab in SETTINGS_DOMAIN_REDIRECTS:
+            dest = SETTINGS_DOMAIN_REDIRECTS[tab]
+            from urllib.parse import urlencode
+            extra = {}
+            for k in ("ok", "err", "saved", "msg"):
+                if request.query_params.get(k):
+                    extra[k] = request.query_params.get(k)
+            if extra:
+                sep = "&" if "?" in dest else "?"
+                dest = dest + sep + urlencode(extra)
+            return RedirectResponse(dest, status_code=303)
         if tab == "users":
             return RedirectResponse("/settings?tab=naming", status_code=303)
         if tab == "security":
@@ -3147,10 +2994,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                     session, token=token, fallback_username=uname
                 )
             )
-        elif tab == "supports":
-            from app.services.support_contacts import get_support_contacts
-
-            ctx["support_contacts"] = await get_support_contacts(session)
 
         return render(request, "settings.html", ctx)
 
@@ -3168,12 +3011,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                 session, reseller_id=None, force=True
             )
         except Exception as e:
-            return _redirect_msg(
-                "/settings?tab=payment",
-                err=f"لغو سفارش‌ها ناموفق: {e}",
-            )
+            dest = _settings_next(request, "/finance?tab=orders&settings=payment")
+            return _redirect_msg(dest, err=f"لغو سفارش‌ها ناموفق: {e}")
+        dest = _settings_next(request, "/finance?tab=orders&settings=payment")
         return _redirect_msg(
-            "/settings?tab=payment",
+            dest,
             ok=f"{n} سفارش معلق/تأییدنشده لغو شد" if n else "سفارش معلقی برای لغو نبود",
         )
 
@@ -3430,6 +3272,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     payload[key] = f"uploads/{dest_name}"
         if payload:
             await set_settings_bulk(session, payload)
+        next_url = (request.query_params.get("next") or "").strip()
+        if next_url.startswith("/") and not next_url.startswith("//") and "://" not in next_url:
+            sep = "&" if "?" in next_url else "?"
+            return RedirectResponse(f"{next_url}{sep}saved=1", status_code=303)
         return RedirectResponse(f"/settings?tab={tab}&saved=1", status_code=303)
 
     @app.get("/broadcast", response_class=HTMLResponse)

@@ -601,15 +601,21 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("buttons", "متن دکمه‌ها"),
     ("menu", "منوی بات"),
     ("qr", "QR اشتراک"),
-    ("payment", "پرداخت"),
-    ("supports", "پشتیبان‌ها"),
     ("naming", "نام‌گذاری سرویس"),
     ("forcejoin", "کانال اجباری"),
     ("reseller", "نمایندگی"),
-    ("billing", "مدیریت PAYG"),
     ("notifications", "نوتیفیکیشن"),
     ("bot", "ربات و اتصال"),
 ]
+
+# Legacy bot-settings tabs moved to page-level modals (finance / support / loyalty).
+SETTINGS_DOMAIN_REDIRECTS: dict[str, str] = {
+    "payment": "/finance?tab=orders&settings=payment",
+    "billing": "/finance?tab=orders&settings=billing",
+    "finance": "/finance?tab=orders&settings=payment",
+    "supports": "/tickets?supports=1",
+    "loyalty": "/loyalty?settings=referral",
+}
 
 # Web-panel settings (sidebar under dashboard — not bot settings tabs)
 PANEL_SETTINGS_TABS: list[tuple[str, str]] = [
@@ -634,13 +640,17 @@ SETTING_GROUPS = {
     "متن پیام‌ها": [
         ("guide_text", "متن راهنما", "textarea", "دستور /help در تلگرام"),
         ("faq_text", "متن سوالات متداول", "textarea", "قابل استفاده در پیام‌ها"),
-        ("support_text", "متن صفحه پشتیبانی", "textarea", "بالای فرم تیکت نمایش داده می‌شود"),
-        ("referral_text", "متن دعوت دوستان", "textarea", "متغیرها: {code} و {link}"),
         ("empty_services_text", "وقتی سرویسی ندارد", "textarea", "پیام بخش سرویس‌های من اگر لیست خالی باشد"),
         ("shop_empty_text", "وقتی پلنی نیست", "textarea", "پیام فروشگاه اگر پلن فعالی نباشد"),
         ("delivery_title", "عنوان پیام تحویل سرویس", "text", "مثلاً: ✅ سرویس آماده است"),
         ("purchase_success_text", "متن موفقیت خرید", "textarea", "متغیر: {order_id} — پیام کوتاه موفقیت (جزئیات روی QR است)"),
         ("wallet_success_text", "متن موفقیت شارژ کیف پول", "textarea", "متغیر: {amount}"),
+    ],
+    "متن پشتیبانی ربات": [
+        ("support_text", "متن صفحه پشتیبانی", "textarea", "بالای دکمه/فرم پشتیبانی در ربات نمایش داده می‌شود"),
+    ],
+    "متن دعوت دوستان": [
+        ("referral_text", "متن دعوت دوستان", "textarea", "متغیرها: {code} و {link}"),
     ],
     "متن دکمه‌های منو": [
         ("btn_shop", "دکمه خرید", "text", ""),
@@ -852,7 +862,8 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
         "استارز تلگرام",
         "متن دکمه‌های پرداخت",
     ],
-    "supports": [],
+    "supports": ["متن پشتیبانی ربات"],
+    "loyalty": ["متن دعوت دوستان"],
     "naming": ["نام‌گذاری سرویس در پاسارگارد"],
     "forcejoin": ["کانال اجباری"],
     "reseller": ["نمایندگی"],

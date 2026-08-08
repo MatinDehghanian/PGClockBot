@@ -1,0 +1,23 @@
+{# Shared settings groups inside a domain modal panel.
+   Expects: settings_form_action, tab_groups, groups, values
+   Optional: show_pending_orders, pending_orders_action
+#}
+<form method="post" action="{{ settings_form_action }}" enctype="multipart/form-data" class="settings-form">
+  {% for group_name in tab_groups %}
+  {% set fields = groups[group_name] %}
+  <div class="card settings-card">
+    <h2>{{ group_name }}</h2>
+    <div class="settings-grid">
+    {% for field in fields %}
+      {% include "_settings_field.html" %}
+    {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+  <div class="actions sticky-actions">
+    <button class="btn" type="submit">ذخیره تنظیمات</button>
+  </div>
+</form>
+{% if show_pending_orders %}
+  {% include "_settings_pending_orders.html" %}
+{% endif %}

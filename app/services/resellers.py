@@ -43,13 +43,19 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("buttons", "متن دکمه‌ها"),
     ("menu", "منوی بات"),
     ("qr", "QR اشتراک"),
-    ("payment", "پرداخت"),
-    ("supports", "پشتیبان‌ها"),
     ("forcejoin", "کانال اجباری"),
     ("naming", "نام‌گذاری سرویس"),
     ("notifications", "نوتیفیکیشن"),
     ("bot", "ربات اختصاصی"),
 ]
+
+# Legacy shop-settings tabs moved to page modals
+SHOP_SETTINGS_DOMAIN_REDIRECTS: dict[str, str] = {
+    "payment": "/finance?tab=orders&settings=payment",
+    "supports": "/tickets?supports=1",
+    "loyalty": "/loyalty?settings=referral",
+}
+SHOP_SETTINGS_DOMAIN_POST_TABS = frozenset(SHOP_SETTINGS_DOMAIN_REDIRECTS.keys())
 
 
 async def get_reseller_panel_base_url(session: AsyncSession) -> str:

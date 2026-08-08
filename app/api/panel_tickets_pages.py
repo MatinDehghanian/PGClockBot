@@ -114,28 +114,71 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
 
         ok_key = (request.query_params.get("ok") or "").strip()
         flash_ok = _OK_FLASH.get(ok_key, ok_key or None)
+        if request.query_params.get("saved") == "1" and not flash_ok:
+            flash_ok = "ذخیره شد."
 
-        return render(
-            request,
-            "tickets.html",
-            {
-                "staff": staff,
-                "panel_tickets": panel_tickets,
-                "tg_tickets": tg_tickets,
-                "show_tg": show_tg,
-                "active_ticket": active_ticket,
-                "open_new": bool(new),
-                "status_labels": STATUS_LABELS,
-                "priority_labels": PRIORITY_LABELS,
-                "status_badge": STATUS_BADGE,
-                "priority_badge": PRIORITY_BADGE,
-                "is_owner": is_platform_admin(staff),
-                "can_create": staff.get("role") in {"reseller", "pg_staff"},
-                "flash_ok": flash_ok,
-                "flash_err": request.query_params.get("err"),
-                "tickets_unread": tickets_unread,
-            },
+        open_supports = request.query_params.get("supports") in {"1", "true", "yes"}
+        supports_modal_tab = (request.query_params.get("stab") or "contacts").strip()
+        if supports_modal_tab not in {"contacts", "text"}:
+            supports_modal_tab = "contacts"
+
+        can_manage_supports = staff.get("role") == "admin" or (
+            staff.get("role") == "reseller" and "shop_settings" in (staff.get("permissions") or [])
         )
+
+        ctx = {
+            "staff": staff,
+            "panel_tickets": panel_tickets,
+            "tg_tickets": tg_tickets,
+            "show_tg": show_tg,
+            "active_ticket": active_ticket,
+            "open_new": bool(new),
+            "status_labels": STATUS_LABELS,
+            "priority_labels": PRIORITY_LABELS,
+            "status_badge": STATUS_BADGE,
+            "priority_badge": PRIORITY_BADGE,
+            "is_owner": is_platform_admin(staff),
+            "can_create": staff.get("role") in {"reseller", "pg_staff"},
+            "flash_ok": flash_ok,
+            "flash_err": request.query_params.get("err"),
+            "tickets_unread": tickets_unread,
+            "can_manage_supports": can_manage_supports,
+            "open_supports_modal": open_supports and can_manage_supports,
+            "supports_modal_tab": supports_modal_tab,
+            "support_contacts": [],
+            "values": {},
+            "support_text_tab_groups": [],
+            "support_text_groups": {},
+            "supports_save_action": "/supports/save",
+            "supports_delete_action": "/supports/delete",
+            "support_text_action": (
+                "/settings?tab=supports&next="
+                + quote("/tickets?supports=1&stab=text")
+            ),
+        }
+
+        if can_manage_supports:
+            from app.services.support_contacts import get_support_contacts
+            from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
+
+            rid = None if staff.get("role") == "admin" else shop_owner_id(staff)
+            ctx["support_contacts"] = await get_support_contacts(session, reseller_id=rid)
+            values = await get_all_settings(session, reseller_id=rid)
+            ctx["values"] = values
+            names = TAB_SETTING_GROUPS.get("supports") or []
+            ctx["support_text_tab_groups"] = names
+            ctx["support_text_groups"] = {
+                n: SETTING_GROUPS[n] for n in names if n in SETTING_GROUPS
+            }
+            if staff.get("role") != "admin":
+                ctx["supports_save_action"] = "/shop-supports/save"
+                ctx["supports_delete_action"] = "/shop-supports/delete"
+                ctx["support_text_action"] = (
+                    "/shop-settings?tab=supports&next="
+                    + quote("/tickets?supports=1&stab=text")
+                )
+
+        return render(request, "tickets.html", ctx)
 
     @app.post("/tickets/panel/create")
     async def tickets_panel_create(

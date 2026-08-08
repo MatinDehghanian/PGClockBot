@@ -784,6 +784,24 @@
       document.querySelectorAll('.ui-modal.open').forEach(closeModal);
     });
 
+    /* Domain settings modals: inner tab buttons */
+    document.addEventListener('click', (e) => {
+      const tabBtn = e.target.closest('[data-modal-tabs] [data-modal-tab]');
+      if (!tabBtn) return;
+      const nav = tabBtn.closest('[data-modal-tabs]');
+      const root = tabBtn.closest('.ui-modal-panel') || tabBtn.closest('.ui-modal');
+      if (!nav || !root) return;
+      e.preventDefault();
+      const id = tabBtn.getAttribute('data-modal-tab');
+      nav.querySelectorAll('[data-modal-tab]').forEach((btn) => {
+        btn.classList.toggle('active', btn === tabBtn);
+      });
+      root.querySelectorAll('[data-modal-tab-panel]').forEach((panel) => {
+        const match = panel.getAttribute('data-modal-tab-panel') === id;
+        panel.hidden = !match;
+      });
+    });
+
     /* Copy helpers (subscription links, etc.) */
     function markCopied(btn) {
       if (!btn) return;

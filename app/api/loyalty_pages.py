@@ -107,12 +107,37 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         wallet_rate = await get_setting(
             session, "points_to_wallet_rate", "100", reseller_id=scope
         )
+        page_tab = tab or "overview"
+        if page_tab == "settings":
+            return RedirectResponse("/loyalty?tab=overview&settings=1", status_code=303)
+        if page_tab not in {"overview", "rules", "rewards", "tiers", "transactions"}:
+            page_tab = "overview"
+
+        from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
+
+        values = await get_all_settings(session, reseller_id=scope)
+        ref_names = TAB_SETTING_GROUPS.get("loyalty") or []
+        settings_q = (request.query_params.get("settings") or "").strip()
+        open_settings = settings_q in {"1", "true", "yes", "club", "referral"}
+        loyalty_settings_tab = "referral" if settings_q == "referral" else "club"
+        next_referral = quote(f"/loyalty?tab={page_tab}&settings=referral")
+        if staff.get("role") == "admin":
+            referral_text_action = f"/settings?tab=loyalty&next={next_referral}"
+        else:
+            referral_text_action = f"/shop-settings?tab=loyalty&next={next_referral}"
+
+        flash_ok = None
+        if request.query_params.get("saved"):
+            flash_ok = request.query_params.get("msg") or "ذخیره شد."
+        elif request.query_params.get("ok"):
+            flash_ok = request.query_params.get("ok")
+
         return render(
             request,
             "loyalty.html",
             {
                 "staff": staff,
-                "tab": tab or "overview",
+                "tab": page_tab,
                 "metrics": metrics,
                 "rules": rules,
                 "rewards": rewards,
@@ -123,9 +148,17 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 "loyalty_enabled": loyalty_enabled,
                 "wallet_rate": wallet_rate,
                 "is_platform_admin": staff.get("role") == "admin",
-                "flash_ok": request.query_params.get("saved"),
+                "flash_ok": flash_ok,
                 "flash_err": request.query_params.get("err"),
                 "flash_msg": request.query_params.get("msg"),
+                "open_loyalty_settings": open_settings,
+                "loyalty_settings_tab": loyalty_settings_tab,
+                "values": values,
+                "referral_tab_groups": ref_names,
+                "referral_groups": {
+                    n: SETTING_GROUPS[n] for n in ref_names if n in SETTING_GROUPS
+                },
+                "referral_text_action": referral_text_action,
             },
         )
 
@@ -136,11 +169,15 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         session: AsyncSession = Depends(get_db),
         loyalty_enabled: str = Form("0"),
         points_to_wallet_rate: str = Form("100"),
+        next_tab: str = Form("overview"),
     ):
         try:
             scope = _shop_scope(staff)
         except ValueError:
             return RedirectResponse("/home", status_code=303)
+        page_tab = str(next_tab or "overview").strip()
+        if page_tab not in {"overview", "rules", "rewards", "tiers", "transactions"}:
+            page_tab = "overview"
         enabled = "1" if str(loyalty_enabled) in {"1", "on", "true", "yes"} else "0"
         try:
             rate = int(str(points_to_wallet_rate).replace(",", "").strip() or "0")
@@ -148,12 +185,12 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 raise ValueError("نرخ نامعتبر")
         except ValueError:
             return RedirectResponse(
-                f"/loyalty?tab=settings&err={quote('نرخ تبدیل نامعتبر است')}",
+                f"/loyalty?tab={page_tab}&settings=1&err={quote('نرخ تبدیل نامعتبر است')}",
                 status_code=303,
             )
         await set_setting(session, "loyalty_enabled", enabled, reseller_id=scope)
         await set_setting(session, "points_to_wallet_rate", str(rate), reseller_id=scope)
-        return RedirectResponse("/loyalty?tab=settings&saved=1", status_code=303)
+        return RedirectResponse(f"/loyalty?tab={page_tab}&settings=1&saved=1", status_code=303)
 
     @app.post("/loyalty/rules/{rule_id}/save")
     async def loyalty_rule_save(

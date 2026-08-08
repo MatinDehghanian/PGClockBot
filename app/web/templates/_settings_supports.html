@@ -1,3 +1,5 @@
+{% set supports_save = supports_save or '/supports/save' %}
+{% set supports_delete = supports_delete or '/supports/delete' %}
 <div class="card settings-card">
   <h2>پشتیبان‌های تلگرام</h2>
   <p class="muted update-card-caption">
@@ -11,7 +13,7 @@
   {% else %}
   <div class="support-list">
     {% for c in support_contacts %}
-    <form method="post" action="/supports/save" class="support-row">
+    <form method="post" action="{{ supports_save }}" class="support-row">
       <input type="hidden" name="id" value="{{ c.id }}" />
       <div class="support-fields">
         <label>عنوان
@@ -33,7 +35,7 @@
       </div>
       <div class="support-actions">
         <button class="btn" type="submit">ذخیره</button>
-        <button class="btn btn-danger" type="submit" formaction="/supports/delete" formmethod="post"
+        <button class="btn btn-danger" type="submit" formaction="{{ supports_delete }}" formmethod="post"
                 data-confirm="این پشتیبان حذف شود؟" data-confirm-title="تأیید" data-confirm-danger="1" data-confirm-label="تأیید">حذف</button>
       </div>
     </form>
@@ -42,22 +44,20 @@
   {% endif %}
 </div>
 
-<form method="post" action="/supports/save" class="settings-form">
+<form method="post" action="{{ supports_save }}" class="settings-form">
   <div class="card settings-card">
     <h2>افزودن پشتیبان</h2>
     <div class="settings-grid">
       <div class="setting-item">
         <label>عنوان
-          
           <input name="title" required maxlength="80" placeholder="مثلاً پشتیبان ربات" />
-        <small class="muted">مثلاً پشتیبان ربات، پشتیبان سرور</small>
+          <small class="muted">مثلاً پشتیبان ربات، پشتیبان سرور</small>
         </label>
       </div>
       <div class="setting-item">
         <label>آیدی یا یوزرنیم تلگرام
-          
           <input name="telegram" required dir="ltr" placeholder="@support یا 123456789" />
-        <small class="muted">@username یا آیدی عددی</small>
+          <small class="muted">@username یا آیدی عددی</small>
         </label>
       </div>
       <div class="setting-item">

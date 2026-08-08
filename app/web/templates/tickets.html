@@ -7,9 +7,14 @@
     {{ page_title('tickets', 'پشتیبانی') }}
     <p class="muted page-sub">ارتباط مستقیم با ادمین اصلی پنل</p>
   </div>
-  {% if can_create %}
-  <button type="button" class="btn" data-modal-open="modal-ticket-new">تیکت جدید</button>
-  {% endif %}
+  <div class="page-head-actions">
+    {% if can_manage_supports %}
+    <button type="button" class="btn btn-ghost" data-modal-open="modal-supports-settings">پشتیبان‌ها</button>
+    {% endif %}
+    {% if can_create %}
+    <button type="button" class="btn" data-modal-open="modal-ticket-new">تیکت جدید</button>
+    {% endif %}
+  </div>
 </div>
 
 <div class="card card-flush">
@@ -223,5 +228,9 @@
     </div>
   </div>
 </div>
+{% endif %}
+
+{% if can_manage_supports %}
+  {% include "_modal_supports_settings.html" %}
 {% endif %}
 {% endblock %}
