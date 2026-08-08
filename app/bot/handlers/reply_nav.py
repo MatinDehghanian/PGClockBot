@@ -148,11 +148,20 @@ class ReplyMenuTextFilter(BaseFilter):
             # «👥 کاربران» on PG keyboard must not resolve to admin hub users
             for key, label in kb._pg_submenu_entries(ui):
                 mapping[(label or "").strip()] = key
+        elif level == nav.NAV_LOYALTY:
+            for key, label in kb._loyalty_submenu_entries(ui):
+                mapping[(label or "").strip()] = key
+        elif level == nav.NAV_ADMIN_LOYALTY:
+            include_tiers = not bool(is_reseller_bot)
+            for key, label in kb._admin_loyalty_submenu_entries(ui, include_tiers=include_tiers):
+                mapping[(label or "").strip()] = key
         elif role == "admin" and not is_reseller_bot and level not in {
             nav.NAV_ADMIN_PLANS_AUDIENCE,
             nav.NAV_ADMIN_PLANS_KIND,
             nav.NAV_ADMIN_PLANS_ADD_TYPE,
             nav.NAV_ADMIN_PG,
+            nav.NAV_LOYALTY,
+            nav.NAV_ADMIN_LOYALTY,
         }:
             # Prefer admin hub labels outside broadcast / plans / PG (avoid «نمایندگان» / «کاربران» collision)
             for key, label in kb._reply_admin_entries(ui):
@@ -438,10 +447,52 @@ async def open_support_list(
     )
 
 
-async def open_referral(message: Message, session: AsyncSession, db_user: BotUser) -> None:
-    from app.bot.handlers.loyalty import open_referral_message
+async def open_referral(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+) -> None:
+    """Legacy label — invite lives under باشگاه مشتریان."""
+    from app.bot.handlers.loyalty import open_loyalty_referral_message
 
-    await open_referral_message(message, session, db_user)
+    await open_loyalty_referral_message(message, session, db_user, state, push=True)
+
+
+async def open_loyalty_home(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+) -> None:
+    from app.bot.handlers.loyalty import open_loyalty_home_message
+
+    await open_loyalty_home_message(message, session, db_user, state, push=push)
+
+
+async def open_admin_loyalty_hub(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+    push: bool = True,
+) -> None:
+    from app.bot.handlers.loyalty import open_admin_loyalty_hub as _open
+
+    await _open(
+        message,
+        session,
+        db_user,
+        state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+        push=push,
+    )
 
 
 async def open_reseller_apply(message: Message, session: AsyncSession, db_user: BotUser) -> None:
@@ -1047,6 +1098,20 @@ async def handle_back(
     if level == nav.NAV_SUPPORT:
         await open_support_home(message, session, db_user, state, push=False)
         return
+    if level == nav.NAV_LOYALTY:
+        await open_loyalty_home(message, session, db_user, state, push=False)
+        return
+    if level == nav.NAV_ADMIN_LOYALTY:
+        await open_admin_loyalty_hub(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            push=False,
+        )
+        return
     if level == nav.NAV_ADMIN:
         await open_admin_home(message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot)
         return
@@ -1328,6 +1393,16 @@ async def _soft_reseller(
             reseller_owner_id=reseller_owner_id,
         )
         return
+    if action == "res_loyalty":
+        await open_admin_loyalty_hub(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
     if action == "res_plans":
         await open_reseller_plans_hub(
             message,
@@ -1472,6 +1547,7 @@ async def reply_main_nav(
         "res_orders",
         "res_payments",
         "res_tickets",
+        "res_loyalty",
         "res_renew",
         "res_buy_gb",
         "res_buy_users",
@@ -1499,6 +1575,19 @@ async def reply_main_nav(
         kb.REPLY_ACTION_ADM_RES_LIST,
         kb.REPLY_ACTION_ADM_RES_APPS,
         kb.REPLY_ACTION_ADM_RES_ADD,
+        kb.REPLY_ACTION_LOYALTY,
+        kb.REPLY_ACTION_LOY_REFERRAL,
+        kb.REPLY_ACTION_LOY_POINTS,
+        kb.REPLY_ACTION_LOY_REWARDS,
+        kb.REPLY_ACTION_LOY_HISTORY,
+        kb.REPLY_ACTION_REFERRAL,
+        kb.REPLY_ACTION_ADMIN_LOYALTY,
+        kb.REPLY_ACTION_ADM_LOY_OVERVIEW,
+        kb.REPLY_ACTION_ADM_LOY_RULES,
+        kb.REPLY_ACTION_ADM_LOY_REWARDS,
+        kb.REPLY_ACTION_ADM_LOY_TIERS,
+        kb.REPLY_ACTION_ADM_LOY_SETTINGS,
+        kb.REPLY_ACTION_ADM_LOY_REF_TEXT,
     }
     if not preserve_state:
         await state.clear()
@@ -1555,8 +1644,97 @@ async def reply_main_nav(
         await open_support_new(message, session, state)
     elif action == kb.REPLY_ACTION_SUPPORT_LIST:
         await open_support_list(message, session, db_user)
-    elif action == kb.REPLY_ACTION_REFERRAL:
-        await open_referral(message, session, db_user)
+    elif action in {kb.REPLY_ACTION_LOYALTY}:
+        await open_loyalty_home(message, session, db_user, state)
+    elif action in {kb.REPLY_ACTION_REFERRAL, kb.REPLY_ACTION_LOY_REFERRAL}:
+        from app.bot.handlers.loyalty import open_loyalty_referral_message
+
+        await open_loyalty_referral_message(message, session, db_user, state, push=False)
+    elif action == kb.REPLY_ACTION_LOY_POINTS:
+        from app.bot.handlers.loyalty import open_loyalty_points_message
+
+        await open_loyalty_points_message(message, session, db_user)
+    elif action == kb.REPLY_ACTION_LOY_REWARDS:
+        from app.bot.handlers.loyalty import open_loyalty_rewards_message
+
+        await open_loyalty_rewards_message(message, session, db_user)
+    elif action == kb.REPLY_ACTION_LOY_HISTORY:
+        from app.bot.handlers.loyalty import open_loyalty_history_message
+
+        await open_loyalty_history_message(message, session, db_user)
+    elif action == kb.REPLY_ACTION_ADMIN_LOYALTY:
+        if is_reseller_bot:
+            await _refuse_admin(message)
+        else:
+            await open_admin_loyalty_hub(
+                message,
+                session,
+                db_user,
+                state,
+                is_reseller_bot=False,
+                reseller_owner_id=None,
+            )
+    elif action == kb.REPLY_ACTION_ADM_LOY_OVERVIEW:
+        from app.bot.handlers.loyalty import open_admin_loyalty_overview
+
+        await open_admin_loyalty_overview(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+    elif action == kb.REPLY_ACTION_ADM_LOY_RULES:
+        from app.bot.handlers.loyalty import open_admin_loyalty_rules
+
+        await open_admin_loyalty_rules(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+    elif action == kb.REPLY_ACTION_ADM_LOY_REWARDS:
+        from app.bot.handlers.loyalty import open_admin_loyalty_rewards
+
+        await open_admin_loyalty_rewards(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+    elif action == kb.REPLY_ACTION_ADM_LOY_TIERS:
+        from app.bot.handlers.loyalty import open_admin_loyalty_tiers
+
+        await open_admin_loyalty_tiers(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+    elif action == kb.REPLY_ACTION_ADM_LOY_SETTINGS:
+        from app.bot.handlers.loyalty import open_admin_loyalty_settings
+
+        await open_admin_loyalty_settings(
+            message,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+    elif action == kb.REPLY_ACTION_ADM_LOY_REF_TEXT:
+        from app.bot.handlers.loyalty import open_admin_loyalty_ref_text
+
+        await open_admin_loyalty_ref_text(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
     elif action == kb.REPLY_ACTION_RESELLER_APPLY:
         await open_reseller_apply(message, session, db_user)
     elif action == kb.REPLY_ACTION_RESELLER:

@@ -24,13 +24,13 @@ DEFAULT_MENU_ORDER = [
     "services",
     "wallet",
     "support",
-    "referral",
+    "loyalty",
     "reseller_apply",
     "miniapp",
 ]
 
 # Legacy keys stripped from saved menu_order so old installs drop them from the keyboard
-REMOVED_MENU_KEYS = frozenset({"guide", "faq", "restart", "help"})
+REMOVED_MENU_KEYS = frozenset({"guide", "faq", "restart", "help", "referral"})
 
 
 def _t(ui: dict | None, key: str) -> str:
@@ -90,6 +90,15 @@ def _menu_order(ui: dict | None) -> list[str]:
     """Active menu keys from menu_order only (no re-inject of removed items)."""
     raw = _t(ui, "menu_order")
     parts = [p.strip() for p in (raw or "").split(",") if p.strip()]
+    # Migrate legacy «دعوت دوستان» key → باشگاه مشتریان
+    migrated: list[str] = []
+    for p in parts:
+        if p == "referral":
+            if "loyalty" not in migrated:
+                migrated.append("loyalty")
+            continue
+        migrated.append(p)
+    parts = migrated
     known = set(DEFAULT_MENU_ORDER)
     ordered = [p for p in parts if p in known and p not in REMOVED_MENU_KEYS]
     # shop always present
@@ -101,7 +110,7 @@ def _menu_order(ui: dict | None) -> list[str]:
 MENU_SHOW_KEYS = (
     "wallet",
     "support",
-    "referral",
+    "loyalty",
     "reseller_apply",
     "miniapp",
     "services",
@@ -111,7 +120,13 @@ MENU_SHOW_KEYS = (
 def sync_show_flags_for_order(order: list[str]) -> dict[str, str]:
     """Map menu_order → show_* flags (for persistence / legacy readers)."""
     active = set(order)
-    return {f"show_{key}": ("1" if key in active else "0") for key in MENU_SHOW_KEYS}
+    # Legacy menu_order may still list «referral» before migration
+    if "referral" in active:
+        active.add("loyalty")
+    flags = {f"show_{key}": ("1" if key in active else "0") for key in MENU_SHOW_KEYS}
+    # Legacy readers still look at show_referral
+    flags["show_referral"] = flags.get("show_loyalty", "0")
+    return flags
 
 
 def main_menu(
@@ -175,9 +190,12 @@ def main_menu(
             buttons.append(
                 InlineKeyboardButton(text=_t(ui, "btn_faq"), callback_data="help:faq")
             )
-        elif key == "referral":
+        elif key in {"loyalty", "referral"}:
             buttons.append(
-                InlineKeyboardButton(text=_t(ui, "btn_referral"), callback_data="ref:home")
+                InlineKeyboardButton(
+                    text=_t(ui, "btn_loyalty") if key == "loyalty" else _t(ui, "btn_referral"),
+                    callback_data="loy:home",
+                )
             )
         elif key == "reseller_apply" and role == Role.USER.value and not show_reseller_creds:
             buttons.append(
@@ -228,7 +246,19 @@ REPLY_ACTION_WALLET_TX = "wallet_tx"
 REPLY_ACTION_SUPPORT = "support"
 REPLY_ACTION_SUPPORT_NEW = "support_new"
 REPLY_ACTION_SUPPORT_LIST = "support_list"
-REPLY_ACTION_REFERRAL = "referral"
+REPLY_ACTION_REFERRAL = "referral"  # legacy alias → loyalty referral subset
+REPLY_ACTION_LOYALTY = "loyalty"
+REPLY_ACTION_LOY_REFERRAL = "loy_referral"
+REPLY_ACTION_LOY_POINTS = "loy_points"
+REPLY_ACTION_LOY_REWARDS = "loy_rewards"
+REPLY_ACTION_LOY_HISTORY = "loy_history"
+REPLY_ACTION_ADMIN_LOYALTY = "adm_loyalty"
+REPLY_ACTION_ADM_LOY_OVERVIEW = "adm_loy_overview"
+REPLY_ACTION_ADM_LOY_RULES = "adm_loy_rules"
+REPLY_ACTION_ADM_LOY_REWARDS = "adm_loy_rewards"
+REPLY_ACTION_ADM_LOY_TIERS = "adm_loy_tiers"
+REPLY_ACTION_ADM_LOY_SETTINGS = "adm_loy_settings"
+REPLY_ACTION_ADM_LOY_REF_TEXT = "adm_loy_ref_text"
 REPLY_ACTION_RESELLER_APPLY = "reseller_apply"
 REPLY_ACTION_RESELLER = "reseller"
 REPLY_ACTION_CREDS = "reseller_creds"
@@ -285,12 +315,12 @@ def _reply_markup(
     *,
     placeholder: str = "از منوی پایین انتخاب کنید…",
 ) -> ReplyKeyboardMarkup:
-    """Standard reply keyboard — not persistent (no side menu icon)."""
+    """Standard reply keyboard — persistent so Telegram shows the 4-square menu icon."""
     return ReplyKeyboardMarkup(
         keyboard=rows or [[KeyboardButton(text=_home_label())]],
         resize_keyboard=True,
         one_time_keyboard=False,
-        is_persistent=False,
+        is_persistent=True,
         input_field_placeholder=placeholder,
     )
 
@@ -313,8 +343,8 @@ def _reply_user_entries(
             entries.append((REPLY_ACTION_WALLET, _t(ui, "btn_wallet")))
         elif key == "support":
             entries.append((REPLY_ACTION_SUPPORT, _t(ui, "btn_support")))
-        elif key == "referral":
-            entries.append((REPLY_ACTION_REFERRAL, _t(ui, "btn_referral")))
+        elif key == "loyalty":
+            entries.append((REPLY_ACTION_LOYALTY, _t(ui, "btn_loyalty")))
         elif key == "reseller_apply" and role == Role.USER.value and not show_reseller_creds:
             entries.append((REPLY_ACTION_RESELLER_APPLY, _t(ui, "btn_reseller_apply")))
         elif key == "miniapp":
@@ -340,6 +370,7 @@ def _reply_admin_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         (REPLY_ACTION_ADMIN_PLANS, _t(ui, "btn_adm_plans")),
         (REPLY_ACTION_ADMIN_USERS, _t(ui, "btn_adm_users")),
         (REPLY_ACTION_ADMIN_RESELLERS, "🤝 نمایندگان"),
+        (REPLY_ACTION_ADMIN_LOYALTY, "⭐ باشگاه مشتریان"),
         (REPLY_ACTION_ADMIN_PG, _t(ui, "btn_adm_pg")),
         (REPLY_ACTION_ADMIN_SETTINGS, _t(ui, "btn_adm_settings")),
         (REPLY_ACTION_ADMIN_BROADCAST, _t(ui, "btn_adm_broadcast")),
@@ -502,6 +533,35 @@ def _support_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     ]
 
 
+def _loyalty_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    """Customer club main subsets on reply keyboard (invite is one subset)."""
+    return [
+        (REPLY_ACTION_LOY_REFERRAL, _t(ui, "btn_referral") or "🎁 دعوت دوستان"),
+        (REPLY_ACTION_LOY_POINTS, "⭐ امتیاز من"),
+        (REPLY_ACTION_LOY_REWARDS, "🎁 جوایز"),
+        (REPLY_ACTION_LOY_HISTORY, "📜 تاریخچه"),
+    ]
+
+
+def _admin_loyalty_submenu_entries(ui: dict | None = None, *, include_tiers: bool = True) -> list[tuple[str, str]]:
+    """Staff club management subsets (platform admin / reseller with loyalty perm)."""
+    _ = ui
+    entries = [
+        (REPLY_ACTION_ADM_LOY_OVERVIEW, "📊 نمای کلی"),
+        (REPLY_ACTION_ADM_LOY_RULES, "📐 قوانین امتیاز"),
+        (REPLY_ACTION_ADM_LOY_REWARDS, "🎁 جوایز"),
+    ]
+    if include_tiers:
+        entries.append((REPLY_ACTION_ADM_LOY_TIERS, "🏅 سطوح"))
+    entries.extend(
+        [
+            (REPLY_ACTION_ADM_LOY_SETTINGS, "⚙️ تنظیمات باشگاه"),
+            (REPLY_ACTION_ADM_LOY_REF_TEXT, "📝 متن دعوت"),
+        ]
+    )
+    return entries
+
+
 def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
     from app.services.authz import shop_feature_allowed
 
@@ -541,6 +601,8 @@ def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
         entries.append(("res_payments", "🧾 رسیدهای در انتظار"))
     if shop_feature_allowed(key="tickets", profile=profile):
         entries.append(("res_tickets", "🎫 تیکت‌های مشتریان"))
+    if shop_feature_allowed(key="loyalty", profile=profile):
+        entries.append(("res_loyalty", "⭐ باشگاه مشتریان"))
     if shop_feature_allowed(key="shop_settings", profile=profile):
         entries.append(("res_settings", "⚙️ تنظیمات فروشگاه"))
     # Shop owner is admin of their bot — preview customer keyboard
@@ -670,6 +732,26 @@ def support_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
         footer_row=_submenu_footer(ui),
     )
     return _reply_markup(rows, placeholder="پشتیبانی — یک گزینه را انتخاب کنید…")
+
+
+def loyalty_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _loyalty_submenu_entries(ui),
+        ui,
+        footer_row=_submenu_footer(ui),
+    )
+    return _reply_markup(rows, placeholder="باشگاه مشتریان — یک گزینه را انتخاب کنید…")
+
+
+def admin_loyalty_reply_keyboard(
+    ui: dict | None = None, *, include_tiers: bool = True
+) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _admin_loyalty_submenu_entries(ui, include_tiers=include_tiers),
+        ui,
+        footer_row=_submenu_footer(ui),
+    )
+    return _reply_markup(rows, placeholder="مدیریت باشگاه مشتریان…")
 
 
 def reseller_reply_keyboard(profile=None, ui: dict | None = None) -> ReplyKeyboardMarkup:
@@ -868,11 +950,13 @@ def reply_action_map(
             mapping[(_t(ui, "btn_admin") or "").strip()] = REPLY_ACTION_ADMIN
 
     if include_submenus:
-        # Customer surfaces (wallet/support/pay) — everyone except pure admin hub
+        # Customer surfaces (wallet/support/loyalty/pay) — everyone except pure admin hub
         if not platform_admin:
             for key, text in _wallet_submenu_entries(ui):
                 mapping[(text or "").strip()] = key
             for key, text in _support_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _loyalty_submenu_entries(ui):
                 mapping[(text or "").strip()] = key
             for key, text in _pay_method_entries(ui):
                 mapping[(text or "").strip()] = key
@@ -883,6 +967,10 @@ def reply_action_map(
             for key, text in _wallet_submenu_entries(ui):
                 mapping[(text or "").strip()] = key
             for key, text in _support_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _loyalty_submenu_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _admin_loyalty_submenu_entries(ui, include_tiers=True):
                 mapping[(text or "").strip()] = key
             for key, text in _pay_method_entries(ui):
                 mapping[(text or "").strip()] = key
@@ -932,6 +1020,10 @@ def reply_action_map(
                         mapping[(text or "").strip()] = key
                 if shop_feature_allowed(key="plans", profile=profile):
                     for key, text in _reseller_plans_submenu_entries(ui):
+                        mapping[(text or "").strip()] = key
+                if shop_feature_allowed(key="loyalty", profile=profile):
+                    # Resellers manage shop-scoped club; tiers stay platform-global
+                    for key, text in _admin_loyalty_submenu_entries(ui, include_tiers=False):
                         mapping[(text or "").strip()] = key
 
     return {k: v for k, v in mapping.items() if k}

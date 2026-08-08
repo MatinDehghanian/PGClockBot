@@ -746,7 +746,7 @@ async def on_user_referred(
         await session.commit()
         return
     try:
-        await ensure_loyalty_defaults(session, reseller_id=None)
+        await ensure_loyalty_defaults(session, reseller_id=referred.reseller_id)
     except Exception:
         pass
     await record_referral_event(
@@ -803,7 +803,7 @@ async def on_order_delivered(session: AsyncSession, order: Order) -> None:
         plan = await session.get(Plan, order.plan_id)
     reseller_id = order.reseller_id
     try:
-        await ensure_loyalty_defaults(session, reseller_id=None)
+        await ensure_loyalty_defaults(session, reseller_id=reseller_id)
     except Exception:
         logger.exception("ensure_loyalty_defaults failed")
 
@@ -1074,6 +1074,16 @@ async def redeem_reward(
     except Exception:
         reward = await session.get(LoyaltyReward, int(reward_id))
     if not reward or not reward.enabled or reward.archived:
+        raise ValueError("این جایزه فعال نیست")
+    # Scope isolation: shop users cannot redeem another shop's rewards.
+    # Platform users may only redeem platform (reseller_id IS NULL) rewards.
+    # Shop users may redeem own-shop rewards or platform catalog (same as list_active_rewards).
+    user_rid = user.reseller_id
+    reward_rid = reward.reseller_id
+    if user_rid is None:
+        if reward_rid is not None:
+            raise ValueError("این جایزه فعال نیست")
+    elif reward_rid is not None and int(reward_rid) != int(user_rid):
         raise ValueError("این جایزه فعال نیست")
     if reward.max_redemptions_global is not None and int(reward.redemption_count) >= int(
         reward.max_redemptions_global
@@ -1408,10 +1418,15 @@ async def _apply_service_reward(
     import time
 
     from app.services.pasarguard import get_pg, get_pg_for_reseller
+    from app.services.users import current_shop_reseller_id
 
     if user.reseller_id:
+        # Shop path: never fall back to Owner/platform PG credentials
         pg = await get_pg_for_reseller(session, int(user.reseller_id))
     else:
+        # Fail closed on shop bots — Owner token must never serve shop traffic
+        if current_shop_reseller_id():
+            raise ValueError("کاربر فروشگاه بدون مالک معتبر است؛ اعمال جایزه ممکن نیست")
         pg = get_pg()
 
     info = await pg.get_user_by_id(int(service.pg_user_id))

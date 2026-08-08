@@ -26,7 +26,7 @@ class KeyboardMenu357Tests(unittest.TestCase):
     def test_submenus_persistent_with_home(self):
         ui = {"btn_menu_home": "🏠 منوی اصلی", "menu_layout": "compact", "btn_back": "⬅️ بازگشت"}
         for kb in (wallet_reply_keyboard(ui), support_reply_keyboard(ui)):
-            self.assertFalse(kb.is_persistent)
+            self.assertTrue(kb.is_persistent)
             flat = [b.text for row in kb.keyboard for b in row]
             self.assertIn("🏠 منوی اصلی", flat)
             self.assertIn("⬅️ بازگشت", flat)

@@ -583,6 +583,7 @@ class LoyaltyStaticContractTests(unittest.TestCase):
             "async def overview_metrics", 1
         )[0]
         self.assertIn("get_pg_for_reseller(session, int(user.reseller_id))", block)
+        self.assertIn("current_shop_reseller_id", block)
         self.assertNotIn("except Exception:\n            pg = get_pg()", block)
         self.assertNotIn("except Exception:\n        pg = get_pg()", block)
         # Reseller path must not silently fall back to platform owner client

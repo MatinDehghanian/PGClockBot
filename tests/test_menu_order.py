@@ -44,10 +44,10 @@ class MenuOrderTests(unittest.TestCase):
 
     def test_main_menu_follows_order_not_stale_show_flags(self):
         ui = {
-            "menu_order": "shop,referral",
+            "menu_order": "shop,loyalty",
             "show_wallet": "1",  # stale — must not appear
             "btn_shop": "خرید",
-            "btn_referral": "دعوت",
+            "btn_loyalty": "باشگاه",
             "btn_wallet": "کیف پول",
             "menu_layout": "classic",
             "support_contacts": "[]",
@@ -58,19 +58,25 @@ class MenuOrderTests(unittest.TestCase):
             markup = main_menu("user", has_services=False, ui=ui)
         labels = [btn.text for row in markup.inline_keyboard for btn in row]
         self.assertIn("خرید", labels)
-        self.assertIn("دعوت", labels)
+        self.assertIn("باشگاه", labels)
         self.assertNotIn("کیف پول", labels)
+
+    def test_legacy_referral_order_migrates_to_loyalty(self):
+        self.assertEqual(
+            _menu_order({"menu_order": "shop,referral,wallet"}),
+            ["shop", "loyalty", "wallet"],
+        )
 
     def test_compact_layout_pairs_all_buttons_including_shop_services(self):
         """Regression: shop/services used to force full-width rows even in compact."""
         ui = {
-            "menu_order": "shop,services,support,wallet,referral",
+            "menu_order": "shop,services,support,wallet,loyalty",
             "menu_layout": "compact",
             "btn_shop": "خرید سرویس",
             "btn_services": "سرویس‌های من",
             "btn_support": "پشتیبانی",
             "btn_wallet": "کیف پول",
-            "btn_referral": "دعوت",
+            "btn_loyalty": "باشگاه",
             "support_contacts": "[]",
             "show_reseller_apply": "0",
         }
@@ -84,7 +90,7 @@ class MenuOrderTests(unittest.TestCase):
         self.assertEqual(len(rows[1]), 2, rows)
         self.assertEqual([b.text for b in rows[1]], ["پشتیبانی", "کیف پول"])
         self.assertEqual(len(rows[2]), 1)
-        self.assertEqual(rows[2][0].text, "دعوت")
+        self.assertEqual(rows[2][0].text, "باشگاه")
 
     def test_classic_layout_one_button_per_row(self):
         ui = {

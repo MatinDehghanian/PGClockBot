@@ -23,7 +23,8 @@ from app.bot.keyboards import (
 
 
 class ReplyKeyboard360Tests(unittest.TestCase):
-    def test_not_persistent(self):
+    def test_is_persistent_menu_icon(self):
+        """Persistent reply KB so Telegram shows the side 4-square menu button."""
         ui = {
             "menu_layout": "compact",
             "menu_order": "shop,wallet",
@@ -39,7 +40,7 @@ class ReplyKeyboard360Tests(unittest.TestCase):
             admin_reply_keyboard(ui),
             cancel_reply(ui),
         ):
-            self.assertFalse(kb.is_persistent)
+            self.assertTrue(kb.is_persistent)
 
     def test_submenu_has_back_and_home(self):
         ui = {
