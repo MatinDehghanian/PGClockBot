@@ -1110,11 +1110,14 @@ async def provision_existing_pg_admin(
     password: str,
     plan_id: int,
     note: str = "",
+    web_permissions: str | None = None,
+    share_pg_panel_url: bool | None = None,
 ) -> tuple[ResellerProfile | None, str | None, str | None]:
     """Grant web + shop access to an existing PG admin using a reseller plan.
 
     Creates/updates a ResellerProfile linked to ``pg_username`` (no new PG admin).
     Refuses when a PgStaffAccess row exists (Phase D2 — no automatic conversion).
+    Optional ``web_permissions`` overrides the plan defaults (same keys as create-reseller).
     Returns ``(profile, setup_hint, error)``.
     """
     from app.services.pg_staff_access import (
@@ -1222,7 +1225,9 @@ async def provision_existing_pg_admin(
         return None, None, "این نام کاربری قبلاً برای دسترسی وب ادمین پاسارگارد گرفته شده"
 
     role_id = await resolve_pg_role_id_for_admin(pg_u)
-    perms = normalize_feature_perms(plan.web_permissions or plan.bot_permissions)
+    perms = normalize_feature_perms(
+        web_permissions or plan.web_permissions or plan.bot_permissions
+    )
     # Ensure core shop surfaces are always available for secondary admins
     base = parse_perms(perms)
     for must in ("dashboard", "shop_settings"):
@@ -1250,6 +1255,10 @@ async def provision_existing_pg_admin(
         # Store operator note on profile via unused field if present; else ignore
         pass
     profile.is_active = True
+    if share_pg_panel_url is not None:
+        profile.share_pg_panel_url = bool(share_pg_panel_url)
+    elif getattr(plan, "share_pg_panel_url", None) is not None:
+        profile.share_pg_panel_url = bool(plan.share_pg_panel_url)
     # Keep Pasarguard password in sync when operator sets a new shared password
     if pwd:
         from app.services.pasarguard import get_pg, reset_pg

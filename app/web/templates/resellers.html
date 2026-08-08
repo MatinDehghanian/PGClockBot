@@ -197,8 +197,11 @@
       <h2>افزودن نماینده</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <p class="muted">پس از ثبت، اطلاعات ورود در تلگرام ارسال می‌شود. دسترسی‌های پاسارگارد از نقش انتخاب‌شده می‌آید.</p>
+    <p class="muted">پس از ثبت، اطلاعات ورود در تلگرام ارسال می‌شود. حالت پرداخت و کمیسیون از پلن نمایندگی می‌آید؛ دسترسی‌های پاسارگارد از نقش انتخاب‌شده.</p>
     <form method="post" action="/resellers" class="form-stack">
+      {% if not reseller_plans %}
+      <div class="flash warn">هنوز پلن نمایندگی فعالی ندارید — ابتدا از بخش پلن‌ها یک پلن نماینده بسازید.</div>
+      {% endif %}
       <div class="form-row">
         <div>
           <label class="form-field">آیدی عددی تلگرام
@@ -208,23 +211,27 @@
           </label>
         </div>
         <div>
-          <label class="form-field">کمیسیون ٪
-            <input name="commission_percent" type="number" value="10" />
-          </label>
-        </div>
-        <div>
           <label class="form-field">نقش پاسارگارد
             
             <select name="pg_role_id">
-              <option value="">—</option>
+              <option value="">— از پلن —</option>
               {% for r in pg_roles %}
               <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}</option>
               {% endfor %}
             </select>
-        <small class="muted">دسترسی‌های پاسارگارد در وب‌پنل از این نقش می‌آید</small>
+        <small class="muted">خالی = نقش تعریف‌شده در پلن؛ در غیر این صورت این نقش جایگزین می‌شود</small>
           </label>
         </div>
       </div>
+      <label class="form-field">پلن نمایندگی
+        <select name="plan_id" required {% if not reseller_plans %}disabled{% endif %}>
+          <option value="">— انتخاب پلن —</option>
+          {% for p in reseller_plans or [] %}
+          <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }} / گیگ{% elif p.commission_percent is not none %} · کمیسیون {{ p.commission_percent }}٪{% endif %}</option>
+          {% endfor %}
+        </select>
+        <small class="muted">ثابت یا Pay As You Go — کمیسیون / نرخ گیگ و حالت پرداخت از همین پلن تنظیم می‌شود</small>
+      </label>
 
       <div class="ui-switch-section">
         <span class="ui-switch-section-title">سطح دسترسی پنل ربات (وب = بات)</span>
@@ -242,7 +249,7 @@
       </div>
 
       <div class="actions">
-        <button class="btn" type="submit">ذخیره و ارسال اطلاعات</button>
+        <button class="btn" type="submit" {% if not reseller_plans %}disabled{% endif %}>ذخیره و ارسال اطلاعات</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
       </div>
     </form>

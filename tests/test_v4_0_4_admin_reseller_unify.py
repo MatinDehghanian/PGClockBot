@@ -76,12 +76,16 @@ class AdminResellerUnifySourceTests(unittest.TestCase):
         self.assertIn("تبدیل به نماینده", html)
         self.assertIn("convert-to-reseller", html)
         self.assertIn("ادمین + نماینده", html)
+        # Create-admin: reseller option starts OFF; gated block starts hidden
+        create = html[html.find('id="modal-pg-admin-create"') : html.find("syncCreateAdminMode")]
+        self.assertIn("checked=false", create)
+        self.assertIn('id="create-reseller-fields"', create)
 
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.10.5")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.5")
+        self.assertEqual(__version__, "4.10.6")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.6")
 
 
 class ConvertStaffTests(unittest.IsolatedAsyncioTestCase):
