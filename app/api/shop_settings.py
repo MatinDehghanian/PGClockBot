@@ -51,6 +51,9 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
 
         order_raw = values.get("menu_order") or ",".join(DEFAULT_MENU_ORDER)
         order = [p.strip() for p in order_raw.split(",") if p.strip()]
+        if "referral" in order and "loyalty" not in order:
+            order = ["loyalty" if k == "referral" else k for k in order]
+        order = [k for k in order if k != "referral"]
         order = [k for k in order if k in DEFAULT_MENU_ORDER and k != "reseller_apply"]
         if "shop" not in order:
             order.insert(0, "shop")
@@ -59,8 +62,9 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             "services": {"label": "سرویس‌های من", "required": False},
             "wallet": {"label": "کیف پول", "required": False},
             "support": {"label": "پشتیبانی", "required": False},
-            "referral": {"label": "دعوت دوستان", "required": False},
+            "loyalty": {"label": "باشگاه مشتریان", "required": False},
         }
+
         items = []
         for key in order:
             meta = catalog_meta.get(key)

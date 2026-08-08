@@ -58,7 +58,8 @@ SECTIONS: dict[str, dict] = {
                 ("btn_support", "پشتیبانی", "text"),
                 ("btn_guide", "راهنما", "text"),
                 ("btn_faq", "سوالات", "text"),
-                ("btn_referral", "دعوت", "text"),
+                ("btn_loyalty", "باشگاه مشتریان", "text"),
+                ("btn_referral", "دعوت دوستان", "text"),
                 ("btn_menu_home", "منوی اصلی (کیبورد)", "text"),
                 ("btn_back", "بازگشت (زیر پیام)", "text"),
                 ("btn_cancel", "انصراف", "text"),
@@ -178,7 +179,8 @@ MENU_ORDER_LABELS = {
     "services": "سرویس‌ها",
     "wallet": "کیف پول",
     "support": "پشتیبانی",
-    "referral": "دعوت",
+    "loyalty": "باشگاه مشتریان",
+    "referral": "باشگاه مشتریان",
 }
 
 

@@ -2824,10 +2824,14 @@ def create_api_app(lifespan=None) -> FastAPI:
             "services": {"label": "سرویس‌های من", "required": False},
             "wallet": {"label": "کیف پول", "required": False},
             "support": {"label": "پشتیبانی", "required": False},
-            "referral": {"label": "دعوت دوستان", "required": False},
+            "loyalty": {"label": "باشگاه مشتریان", "required": False},
             "reseller_apply": {"label": "درخواست نمایندگی", "required": False},
             "miniapp": {"label": "مینی‌اپ", "required": False},
         }
+        # Migrate legacy referral → loyalty for DnD UI
+        if "referral" in order and "loyalty" not in order:
+            order = ["loyalty" if k == "referral" else k for k in order]
+        order = [k for k in order if k != "referral"]
         items = []
         for key in order:
             meta = catalog_meta.get(key)

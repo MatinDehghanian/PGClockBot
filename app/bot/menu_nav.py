@@ -20,6 +20,8 @@ NAV_MAIN = "main"
 NAV_SHOP = "shop"
 NAV_WALLET = "wallet"
 NAV_SUPPORT = "support"
+NAV_LOYALTY = "loyalty"
+NAV_ADMIN_LOYALTY = "admin_loyalty"
 NAV_ADMIN = "admin"
 NAV_ADMIN_PG = "admin_pg"
 NAV_ADMIN_USERS = "admin_users"
@@ -230,6 +232,12 @@ async def show_nav_keyboard(
         markup = kb.wallet_reply_keyboard(ui)
     elif level == NAV_SUPPORT:
         markup = kb.support_reply_keyboard(ui)
+    elif level == NAV_LOYALTY:
+        markup = kb.loyalty_reply_keyboard(ui)
+    elif level == NAV_ADMIN_LOYALTY:
+        # Platform admin sees tiers; reseller manage hub excludes global tiers
+        include_tiers = not bool(is_reseller_bot)
+        markup = kb.admin_loyalty_reply_keyboard(ui, include_tiers=include_tiers)
     elif level == NAV_ADMIN:
         markup = kb.admin_reply_keyboard(ui)
     elif level == NAV_ADMIN_PG:

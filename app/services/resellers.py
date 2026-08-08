@@ -988,7 +988,7 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
             continue
         if key == "menu_order":
             # Shop-safe order: never seed platform miniapp / reseller_apply
-            value = "shop,services,wallet,support,referral"
+            value = "shop,services,wallet,support,loyalty"
         elif key == "show_miniapp":
             value = "0"
         elif key not in DEFAULT_SETTINGS:

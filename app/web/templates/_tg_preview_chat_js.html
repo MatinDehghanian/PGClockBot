@@ -59,8 +59,8 @@
     const mo = document.getElementById('menu_order');
     const raw = (mo && mo.value)
       ? mo.value
-      : String(values.menu_order || 'shop,services,wallet,support,referral,reseller_apply,miniapp');
-    return raw.split(',').map(s => s.trim()).filter(k => k && !REMOVED_MENU[k]);
+      : String(values.menu_order || 'shop,services,wallet,support,loyalty,reseller_apply,miniapp');
+    return raw.split(',').map(s => s.trim() === 'referral' ? 'loyalty' : s.trim()).filter(k => k && !REMOVED_MENU[k] && k !== 'referral');
   }
   function menuLayout(){
     const sel = document.getElementById('menu_layout_select')
@@ -148,7 +148,8 @@
         services: values.btn_services || '🔵📦 سرویس‌های من',
         wallet: values.btn_wallet || '🟡👛 کیف پول',
         support: values.btn_support || '🟣🎧 پشتیبانی',
-        referral: values.btn_referral || '🎁 دعوت دوستان',
+        loyalty: values.btn_loyalty || '⭐ باشگاه مشتریان',
+        referral: values.btn_loyalty || values.btn_referral || '⭐ باشگاه مشتریان',
         reseller_apply: values.btn_reseller_apply || '🤝 درخواست نمایندگی',
         miniapp: values.btn_miniapp || '📱 مینی‌اپ',
       };
@@ -157,7 +158,8 @@
         map.services = val('btn_services', map.services);
         map.wallet = val('btn_wallet', map.wallet);
         map.support = val('btn_support', map.support);
-        map.referral = val('btn_referral', map.referral);
+        map.loyalty = val('btn_loyalty', map.loyalty);
+        map.referral = map.loyalty;
         map.reseller_apply = val('btn_reseller_apply', map.reseller_apply);
         map.miniapp = val('btn_miniapp', map.miniapp);
       }
