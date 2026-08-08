@@ -500,7 +500,7 @@ DEFAULT_SETTINGS = {
     "btn_support": "🟣🎧 پشتیبانی",
     "btn_guide": "📘 راهنما",
     "btn_faq": "❓ سوالات متداول",
-    "btn_referral": "🎁 دعوت دوستان",
+    "btn_referral": "👥 دعوت دوستان",
     "btn_loyalty": "⭐ باشگاه مشتریان",
     "btn_reseller_apply": "🤝 درخواست نمایندگی",
     "btn_miniapp": "📱 مینی‌اپ",
