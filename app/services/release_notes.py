@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
-    "4.8.0": [
+    "4.9.1": [
         "بازتوزیع تنظیمات پنل: پرداخت، پشتیبانی و دعوت از تنظیمات ربات به مودال صفحهٔ مربوطه منتقل شدند",
         "برگه جدید «مدیریت مالی» با تب‌های سفارشات و پرداخت‌ها + مودال تنظیمات (پرداخت / PAYG)",
         "صفحه پشتیبانی: دکمه «پشتیبان‌ها» و مودال مخاطبین + متن پشتیبانی",
