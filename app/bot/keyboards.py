@@ -534,9 +534,12 @@ def _support_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
 
 
 def _loyalty_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
-    """Customer club main subsets on reply keyboard (invite is one subset)."""
+    """Customer club main subsets on reply keyboard (invite is one subset).
+
+    Secondary actions (share link, redeem, pagination, my-discounts) stay inline.
+    """
     return [
-        (REPLY_ACTION_LOY_REFERRAL, _t(ui, "btn_referral") or "🎁 دعوت دوستان"),
+        (REPLY_ACTION_LOY_REFERRAL, _t(ui, "btn_referral") or "👥 دعوت دوستان"),
         (REPLY_ACTION_LOY_POINTS, "⭐ امتیاز من"),
         (REPLY_ACTION_LOY_REWARDS, "🎁 جوایز"),
         (REPLY_ACTION_LOY_HISTORY, "📜 تاریخچه"),

@@ -78,6 +78,61 @@ class BotLoyaltyMenuTests(unittest.TestCase):
         self.assertIn("reward_rid", block)
         self.assertIn("این جایزه فعال نیست", block)
 
+    def test_inline_does_not_mirror_reply_main_subsets(self):
+        """Reply KB owns club nav; inline only secondary actions."""
+        from app.bot.handlers import loyalty as loy_h
+
+        reply_labels = {
+            b.text
+            for row in loyalty_reply_keyboard(
+                {"btn_referral": "👥 دعوت دوستان", "btn_menu_home": "🏠 منوی اصلی", "btn_back": "⬅️ بازگشت"}
+            ).keyboard
+            for b in row
+        }
+        # Main subsets must be on reply keyboard
+        self.assertIn("👥 دعوت دوستان", reply_labels)
+        self.assertIn("⭐ امتیاز من", reply_labels)
+        self.assertIn("🎁 جوایز", reply_labels)
+        self.assertIn("📜 تاریخچه", reply_labels)
+
+        ref_labels = {
+            b.text
+            for row in loy_h._ref_actions_keyboard(share_url="https://t.me/share").inline_keyboard
+            for b in row
+        }
+        points_labels = {
+            b.text for row in loy_h._points_extras_keyboard().inline_keyboard for b in row
+        }
+        # Must not duplicate reply main subsets / home
+        for forbidden in (
+            "👥 دعوت دوستان",
+            "⭐ امتیاز من",
+            "🎁 جوایز",
+            "📜 تاریخچه",
+            "🏠 خانه",
+            "🏠 منوی اصلی",
+        ):
+            self.assertNotIn(forbidden, ref_labels)
+            self.assertNotIn(forbidden, points_labels)
+        self.assertIn("📤 اشتراک‌گذاری لینک", ref_labels)
+        self.assertIn("📊 آمار دعوت", ref_labels)
+        self.assertEqual(points_labels, {"🏷 تخفیف‌های من"})
+
+        # Legacy full menus removed
+        self.assertFalse(hasattr(loy_h, "_loy_keyboard"))
+        self.assertFalse(hasattr(loy_h, "_ref_keyboard"))
+
+    def test_home_opener_has_no_quick_inline_menu(self):
+        from pathlib import Path
+
+        src = Path("app/bot/handlers/loyalty.py").read_text(encoding="utf-8")
+        home = src.split("async def open_loyalty_home_message", 1)[1].split(
+            "async def open_loyalty_referral_message", 1
+        )[0]
+        self.assertNotIn("گزینه‌های سریع", home)
+        self.assertNotIn("_points_extras_keyboard", home)
+        self.assertNotIn("_ref_actions_keyboard", home)
+
 
 class ResolveLoyaltyManageScopeTests(unittest.IsolatedAsyncioTestCase):
     async def test_platform_admin_ok(self):

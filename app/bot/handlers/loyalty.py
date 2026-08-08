@@ -43,39 +43,78 @@ class LoyaltyManageStates(StatesGroup):
 
 
 # ---------------------------------------------------------------------------
-# Customer inline keyboards
+# Customer inline keyboards — secondary actions ONLY
+# Main club subsets live on the reply keyboard (like wallet/support).
+# Never mirror دعوت / امتیاز / جوایز / تاریخچه / خانه here.
 # ---------------------------------------------------------------------------
 
 
-def _ref_keyboard(*, share_url: str | None = None) -> InlineKeyboardMarkup:
+def _ref_actions_keyboard(*, share_url: str | None = None) -> InlineKeyboardMarkup:
+    """Invite extras: share URL + stats drill-down."""
     rows: list[list[InlineKeyboardButton]] = []
     if share_url:
         rows.append(
             [InlineKeyboardButton(text="📤 اشتراک‌گذاری لینک", url=share_url)]
         )
     rows.append(
-        [
-            InlineKeyboardButton(text="📊 آمار دعوت", callback_data="ref:stats"),
-            InlineKeyboardButton(text="⭐ امتیاز من", callback_data="loy:home"),
-        ]
+        [InlineKeyboardButton(text="📊 آمار دعوت", callback_data="ref:stats")]
     )
-    rows.append([InlineKeyboardButton(text="🎁 جوایز", callback_data="loy:rewards")])
-    rows.append([InlineKeyboardButton(text="🏠 خانه", callback_data="menu:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _loy_keyboard() -> InlineKeyboardMarkup:
+def _points_extras_keyboard() -> InlineKeyboardMarkup:
+    """Under امتیاز من — discounts are not a reply-KB main subset."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🎁 جوایز", callback_data="loy:rewards"),
-                InlineKeyboardButton(text="📜 تاریخچه", callback_data="loy:hist:0"),
-            ],
             [InlineKeyboardButton(text="🏷 تخفیف‌های من", callback_data="loy:discounts")],
-            [InlineKeyboardButton(text="👥 دعوت دوستان", callback_data="ref:home")],
-            [InlineKeyboardButton(text="🏠 خانه", callback_data="menu:home")],
         ]
     )
+
+
+def _rewards_redeem_keyboard(
+    rewards: list, *, include_back: bool = False
+) -> InlineKeyboardMarkup | None:
+    """Per-reward redeem buttons (item pickers). Optional back only for callback trees."""
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text=f"دریافت «{r.name}»",
+                callback_data=f"loy:redeem:{r.id}",
+            )
+        ]
+        for r in rewards
+    ]
+    if include_back:
+        rows.append(
+            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="loy:home")]
+        )
+    if not rows:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _hist_page_keyboard(
+    *, page: int, has_more: bool, include_back: bool = False
+) -> InlineKeyboardMarkup | None:
+    nav_btns: list[InlineKeyboardButton] = []
+    if page > 0:
+        nav_btns.append(
+            InlineKeyboardButton(text="◀️ قبلی", callback_data=f"loy:hist:{page - 1}")
+        )
+    if has_more:
+        nav_btns.append(
+            InlineKeyboardButton(text="بعدی ▶️", callback_data=f"loy:hist:{page + 1}")
+        )
+    rows: list[list[InlineKeyboardButton]] = []
+    if nav_btns:
+        rows.append(nav_btns)
+    if include_back:
+        rows.append(
+            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="loy:home")]
+        )
+    if not rows:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 async def _bot_username(callback_or_message) -> str:
@@ -105,7 +144,7 @@ async def build_referral_text(session: AsyncSession, db_user: BotUser, uname: st
             f"لینک دعوت:\n<code>{link}</code>",
         ]
     )
-    text = format_message("🎁 دعوت دوستان", body + extra)
+    text = format_message("👥 دعوت دوستان", body + extra)
     return text, link
 
 
@@ -197,6 +236,7 @@ async def open_loyalty_home_message(
     *,
     push: bool = True,
 ) -> None:
+    """Club hub: overview text + reply submenu only (no duplicate inline nav)."""
     from app.bot import menu_nav as nav
 
     if not await loyalty_enabled(session, reseller_id=db_user.reseller_id):
@@ -220,7 +260,6 @@ async def open_loyalty_home_message(
         state=state,
         push=push,
     )
-    await message.answer("گزینه‌های سریع:", reply_markup=_loy_keyboard())
 
 
 async def open_loyalty_referral_message(
@@ -231,6 +270,7 @@ async def open_loyalty_referral_message(
     *,
     push: bool = True,
 ) -> None:
+    """Invite subset: reply club KB + inline share/stats only."""
     from app.bot import menu_nav as nav
 
     uname = await _bot_username(message)
@@ -246,14 +286,15 @@ async def open_loyalty_referral_message(
         push=push,
     )
     await message.answer(
-        "گزینه‌ها:",
-        reply_markup=_ref_keyboard(share_url=share),
+        "اشتراک و آمار:",
+        reply_markup=_ref_actions_keyboard(share_url=share),
     )
 
 
 async def open_loyalty_points_message(
     message: Message, session: AsyncSession, db_user: BotUser
 ) -> None:
+    """Points overview on reply KB; discounts as the only inline extra."""
     ui = await get_all_settings(session)
     if not await loyalty_enabled(session, reseller_id=db_user.reseller_id):
         await message.answer(
@@ -263,17 +304,20 @@ async def open_loyalty_points_message(
         return
     text = await build_loyalty_text(session, db_user)
     await message.answer(text, reply_markup=kb.loyalty_reply_keyboard(ui))
-    await message.answer("گزینه‌های سریع:", reply_markup=_loy_keyboard())
+    await message.answer(
+        "جزئیات بیشتر:",
+        reply_markup=_points_extras_keyboard(),
+    )
 
 
 async def open_loyalty_rewards_message(
     message: Message, session: AsyncSession, db_user: BotUser
 ) -> None:
+    """Rewards list on reply KB; redeem pickers inline (not main nav)."""
     ui = await get_all_settings(session)
     await session.refresh(db_user)
     rewards = await list_active_rewards(session, reseller_id=db_user.reseller_id)
     lines = [kv_line("⭐", "امتیاز فعلی", f"<b>{int(db_user.points_balance or 0)}</b>"), ""]
-    rows: list[list[InlineKeyboardButton]] = []
     if not rewards:
         lines.append("هنوز جایزه‌ای تعریف نشده است.")
     else:
@@ -285,28 +329,19 @@ async def open_loyalty_rewards_message(
                 f"  {type_label}: {r.reward_value} · هزینه: {r.points_cost} امتیاز"
                 + (f"\n  <i>{desc}</i>" if desc else "")
             )
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"دریافت «{r.name}»",
-                        callback_data=f"loy:redeem:{r.id}",
-                    )
-                ]
-            )
-    rows.append([InlineKeyboardButton(text="بازگشت", callback_data="loy:home")])
     await message.answer(
         format_message("🎁 جوایز", "\n".join(lines)),
         reply_markup=kb.loyalty_reply_keyboard(ui),
     )
-    await message.answer(
-        "انتخاب جایزه:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-    )
+    redeem_kb = _rewards_redeem_keyboard(rewards, include_back=False)
+    if redeem_kb is not None:
+        await message.answer("برای دریافت، جایزه را انتخاب کنید:", reply_markup=redeem_kb)
 
 
 async def open_loyalty_history_message(
     message: Message, session: AsyncSession, db_user: BotUser
 ) -> None:
+    """History on reply KB; pagination inline only when needed."""
     ui = await get_all_settings(session)
     rows = await list_points_history(session, db_user.id, limit=8, offset=0)
     await session.refresh(db_user)
@@ -323,16 +358,9 @@ async def open_loyalty_history_message(
         format_message("📜 تاریخچه امتیاز", body),
         reply_markup=kb.loyalty_reply_keyboard(ui),
     )
-    nav_rows: list[list[InlineKeyboardButton]] = []
-    if len(rows) >= 8:
-        nav_rows.append(
-            [InlineKeyboardButton(text="بعدی ▶️", callback_data="loy:hist:1")]
-        )
-    nav_rows.append([InlineKeyboardButton(text="بازگشت", callback_data="loy:home")])
-    await message.answer(
-        "صفحه‌بندی:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=nav_rows),
-    )
+    page_kb = _hist_page_keyboard(page=0, has_more=len(rows) >= 8, include_back=False)
+    if page_kb is not None:
+        await message.answer("صفحه‌بندی:", reply_markup=page_kb)
 
 
 async def open_referral_message(message: Message, session: AsyncSession, db_user: BotUser) -> None:
@@ -756,7 +784,7 @@ async def referral_home(callback: CallbackQuery, session: AsyncSession, db_user:
         await safe_edit_text(
             callback.message,
             text,
-            reply_markup=_ref_keyboard(share_url=share),
+            reply_markup=_ref_actions_keyboard(share_url=share),
         )
 
 
@@ -773,8 +801,7 @@ async def referral_stats_cb(callback: CallbackQuery, session: AsyncSession, db_u
     )
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="بازگشت", callback_data="ref:home")],
-            [InlineKeyboardButton(text="🏠 خانه", callback_data="menu:home")],
+            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="ref:home")],
         ]
     )
     if callback.message:
@@ -787,20 +814,23 @@ async def referral_stats_cb(callback: CallbackQuery, session: AsyncSession, db_u
 
 @router.callback_query(F.data == "loy:home")
 async def loyalty_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    """Legacy/deep-link entry — content + discounts extra only (nav = reply KB)."""
     await callback.answer()
     if not await loyalty_enabled(session, reseller_id=db_user.reseller_id):
         if callback.message:
             await safe_edit_text(
                 callback.message,
                 format_message("⭐ باشگاه مشتریان", "این بخش فعلاً غیرفعال است."),
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[[InlineKeyboardButton(text="🏠 خانه", callback_data="menu:home")]]
-                ),
+                reply_markup=None,
             )
         return
     text = await build_loyalty_text(session, db_user)
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=_loy_keyboard())
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=_points_extras_keyboard(),
+        )
 
 
 @router.callback_query(F.data == "loy:rewards")
@@ -809,7 +839,6 @@ async def loyalty_rewards(callback: CallbackQuery, session: AsyncSession, db_use
     await session.refresh(db_user)
     rewards = await list_active_rewards(session, reseller_id=db_user.reseller_id)
     lines = [kv_line("⭐", "امتیاز فعلی", f"<b>{int(db_user.points_balance or 0)}</b>"), ""]
-    rows: list[list[InlineKeyboardButton]] = []
     if not rewards:
         lines.append("هنوز جایزه‌ای تعریف نشده است.")
     else:
@@ -821,21 +850,11 @@ async def loyalty_rewards(callback: CallbackQuery, session: AsyncSession, db_use
                 f"  {type_label}: {r.reward_value} · هزینه: {r.points_cost} امتیاز"
                 + (f"\n  <i>{desc}</i>" if desc else "")
             )
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"دریافت «{r.name}»",
-                        callback_data=f"loy:redeem:{r.id}",
-                    )
-                ]
-            )
-    rows.append([InlineKeyboardButton(text="بازگشت", callback_data="loy:home")])
-    rows.append([InlineKeyboardButton(text="🏠 خانه", callback_data="menu:home")])
     if callback.message:
         await safe_edit_text(
             callback.message,
             format_message("🎁 جوایز", "\n".join(lines)),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            reply_markup=_rewards_redeem_keyboard(rewards, include_back=True),
         )
 
 
@@ -946,7 +965,16 @@ async def _do_redeem(
         await safe_edit_text(
             callback.message,
             format_message("✅ بازخرید موفق", "\n".join(lines)),
-            reply_markup=_loy_keyboard(),
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="⬅️ بازگشت به جوایز",
+                            callback_data="loy:rewards",
+                        )
+                    ],
+                ]
+            ),
         )
 
 
@@ -989,8 +1017,7 @@ async def loyalty_discounts(callback: CallbackQuery, session: AsyncSession, db_u
             format_message("🏷 تخفیف‌های من", body),
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [InlineKeyboardButton(text="بازگشت", callback_data="loy:home")],
-                    [InlineKeyboardButton(text="🏠 خانه", callback_data="menu:home")],
+                    [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="loy:home")],
                 ]
             ),
         )
@@ -1016,20 +1043,14 @@ async def loyalty_history(callback: CallbackQuery, session: AsyncSession, db_use
             lines.append(f"{sign}{t.amount} — {t.description or t.tx_type}")
         body = "\n".join(lines)
     body += f"\n\nموجودی فعلی: <b>{int(db_user.points_balance or 0)}</b>"
-    nav_btns: list[InlineKeyboardButton] = []
-    if page > 0:
-        nav_btns.append(InlineKeyboardButton(text="◀️ قبلی", callback_data=f"loy:hist:{page - 1}"))
-    if len(rows) >= limit:
-        nav_btns.append(InlineKeyboardButton(text="بعدی ▶️", callback_data=f"loy:hist:{page + 1}"))
-    kb_rows: list[list[InlineKeyboardButton]] = []
-    if nav_btns:
-        kb_rows.append(nav_btns)
-    kb_rows.append([InlineKeyboardButton(text="بازگشت", callback_data="loy:home")])
+    page_kb = _hist_page_keyboard(
+        page=page, has_more=len(rows) >= limit, include_back=True
+    )
     if callback.message:
         await safe_edit_text(
             callback.message,
             format_message("📜 تاریخچه امتیاز", body),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows),
+            reply_markup=page_kb,
         )
 
 
