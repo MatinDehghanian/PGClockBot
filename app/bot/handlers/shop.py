@@ -3,7 +3,7 @@ from __future__ import annotations
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1007,7 +1007,12 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
 
 
 @router.callback_query(F.data.startswith("pay:discount:"))
-async def ask_discount(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+async def ask_discount(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+):
     ui = await get_all_settings(session)
     if not on(ui.get("pay_discount_enabled")):
         await callback.answer("کد تخفیف غیرفعال است", show_alert=True)
@@ -1016,11 +1021,72 @@ async def ask_discount(callback: CallbackQuery, state: FSMContext, session: Asyn
     order_id = int(callback.data.split(":")[-1])
     await state.set_state(ShopStates.discount)
     await state.update_data(order_id=order_id)
+
+    from app.services.loyalty import list_available_discounts
+
+    ents = await list_available_discounts(session, db_user.id)
+    rows: list[list[InlineKeyboardButton]] = []
+    for e in ents[:5]:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"🏷 {e.percent}٪ — {e.code}",
+                    callback_data=f"pay:loydisc:{order_id}:{e.id}",
+                )
+            ]
+        )
+    hint = "کد تخفیف را ارسال کنید یا از دکمه زیر استفاده کنید:"
+    if not ents:
+        hint = "کد تخفیف را ارسال کنید یا «انصراف» بزنید:"
     if callback.message:
         await callback.message.answer(
-            "کد تخفیف را ارسال کنید یا «انصراف» بزنید:",
+            hint,
             reply_markup=kb.cancel_reply(),
         )
+        if rows:
+            await callback.message.answer(
+                "تخفیف‌های باشگاه شما:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            )
+
+
+@router.callback_query(F.data.startswith("pay:loydisc:"))
+async def apply_loyalty_discount_btn(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+):
+    parts = (callback.data or "").split(":")
+    try:
+        order_id = int(parts[2])
+        ent_id = int(parts[3])
+    except (IndexError, TypeError, ValueError):
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    from app.db.models import LoyaltyDiscountEntitlement
+    from app.bot.menu_nav import present_order_pay
+
+    ent = await session.get(LoyaltyDiscountEntitlement, ent_id)
+    order = await session.get(Order, order_id)
+    if not order or order.user_id != db_user.id:
+        await callback.answer("سفارش نامعتبر", show_alert=True)
+        return
+    if not ent or int(ent.user_id) != int(db_user.id):
+        await callback.answer("تخفیف نامعتبر", show_alert=True)
+        return
+    await state.clear()
+    try:
+        order = await apply_discount_to_order(session, order, ent.code)
+    except ValueError as e:
+        await callback.answer(str(e)[:180], show_alert=True)
+        return
+    await callback.answer("تخفیف اعمال شد ✅")
+    if callback.message:
+        await callback.message.answer(
+            f"تخفیف اعمال شد ✅\nمبلغ جدید: {format_toman(order.amount, get_settings().currency)}",
+        )
+        await present_order_pay(callback.message, session, db_user, order.id, state=state)
 
 
 @router.message(ShopStates.discount)

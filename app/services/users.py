@@ -299,6 +299,13 @@ async def get_or_create_user(
         user.reseller_id = None
         await session.commit()
         await session.refresh(user)
+    if referred_by_id:
+        try:
+            from app.services.loyalty import on_user_referred
+
+            await on_user_referred(session, referred=user, source="telegram")
+        except Exception:
+            pass
     return user
 
 
@@ -428,6 +435,8 @@ DEFAULT_SETTINGS = {
     "force_join_enabled": "0",
     "trial_enabled": "0",
     "referral_bonus": "0",
+    "loyalty_enabled": "1",
+    "points_to_wallet_rate": "100",
     "auto_approve_payments": "0",
     "faq_text": (
         "❓ حجم تمام شد چه کنم؟\nاز بخش سرویس‌ها → تمدید.\n\n"

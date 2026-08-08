@@ -63,6 +63,8 @@ async def credit_wallet(
     user: BotUser,
     amount: int,
     reason: str,
+    *,
+    commit: bool = True,
 ) -> BotUser:
     if amount <= 0:
         raise ValueError("amount must be positive")
@@ -93,8 +95,11 @@ async def credit_wallet(
         )
     except Exception:
         logger.exception("PAYG restore-after-wallet-credit failed user=%s", user.id)
-    await session.commit()
-    await session.refresh(user)
+    if commit:
+        await session.commit()
+        await session.refresh(user)
+    else:
+        await session.flush()
     return user
 
 
@@ -103,6 +108,8 @@ async def debit_wallet(
     user: BotUser,
     amount: int,
     reason: str,
+    *,
+    commit: bool = True,
 ) -> BotUser:
     if amount <= 0:
         raise ValueError("amount must be positive")
@@ -127,8 +134,11 @@ async def debit_wallet(
             reason=reason,
         )
     )
-    await session.commit()
-    await session.refresh(user)
+    if commit:
+        await session.commit()
+        await session.refresh(user)
+    else:
+        await session.flush()
     return user
 
 

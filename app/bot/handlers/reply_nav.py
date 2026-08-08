@@ -439,22 +439,9 @@ async def open_support_list(
 
 
 async def open_referral(message: Message, session: AsyncSession, db_user: BotUser) -> None:
-    from app.bot.menu_nav import build_main_reply_keyboard
-    from app.config import get_settings
+    from app.bot.handlers.loyalty import open_referral_message
 
-    ui = await get_all_settings(session)
-    me = await message.bot.get_me()
-    uname = me.username or get_settings().bot_username or "bot"
-    link = f"https://t.me/{uname}?start=ref_{db_user.referral_code}"
-    try:
-        body = safe_format(ui["referral_text"], code=db_user.referral_code, link=link)
-    except Exception:
-        body = f"کد: {db_user.referral_code}\n{link}"
-    main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
-    await message.answer(
-        format_message("🎁 دعوت دوستان", body),
-        reply_markup=main_kb,
-    )
+    await open_referral_message(message, session, db_user)
 
 
 async def open_reseller_apply(message: Message, session: AsyncSession, db_user: BotUser) -> None:

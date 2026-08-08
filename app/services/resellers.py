@@ -30,9 +30,10 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("tickets", "تیکت‌ها"),
     ("stats", "آمار و کمیسیون"),
     ("shop_settings", "تنظیمات ربات فروشگاه"),
+    ("loyalty", "دعوت و باشگاه امتیاز"),
 ]
 
-DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings"
+DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,loyalty"
 
 # Tabs a reseller may edit for their own shop bot
 RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [

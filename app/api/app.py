@@ -677,6 +677,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 ("/orders", "orders"),
                 ("/payments", "payments"),
                 ("/tickets", "tickets"),
+                ("/loyalty", "loyalty"),
                 ("/shop-settings", "shop_settings"),
             ):
                 if key in perms and path != request.url.path:
@@ -710,6 +711,15 @@ def create_api_app(lifespan=None) -> FastAPI:
         render=render,
         require_staff=require_staff,
         require_shop_settings=require_perm("shop_settings"),
+        get_db=get_db,
+    )
+    from app.api.loyalty_pages import register_loyalty_pages
+
+    register_loyalty_pages(
+        app,
+        render=render,
+        require_perm=require_perm,
+        require_admin=require_admin,
         get_db=get_db,
     )
     from app.api.backup_pages import register_backup_pages
