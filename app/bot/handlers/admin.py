@@ -2714,6 +2714,12 @@ async def adm_pg(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
+    from app.bot.auth import filtered_pg_reply_keyboard, platform_pg_features
+
+    feats = await platform_pg_features()
+    if not feats:
+        await callback.answer("دسترسی پاسارگارد برای این حساب تعریف نشده", show_alert=True)
+        return
     await callback.answer()
     if callback.message:
         await callback.message.edit_text(
@@ -2724,7 +2730,7 @@ async def adm_pg(callback: CallbackQuery, db_user: BotUser):
         try:
             await callback.message.answer(
                 "⌨️",
-                reply_markup=kb.pg_reply_keyboard(),
+                reply_markup=await filtered_pg_reply_keyboard(db_user),
             )
         except Exception:
             pass
@@ -2734,6 +2740,11 @@ async def adm_pg(callback: CallbackQuery, db_user: BotUser):
 async def adm_pg_group_hint(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    from app.bot.auth import can_platform_pg_page
+
+    if not await can_platform_pg_page(db_user, "pg_groups"):
+        await callback.answer("به گروه‌ها دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
     text = (
@@ -2751,6 +2762,11 @@ async def adm_pg_template_hint(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
+    from app.bot.auth import can_platform_pg_page
+
+    if not await can_platform_pg_page(db_user, "pg_templates"):
+        await callback.answer("به تمپلیت‌ها دسترسی ندارید", show_alert=True)
+        return
     await callback.answer()
     text = (
         "📋 <b>تمپلیت‌های پاسارگارد</b>\n\n"
@@ -2765,6 +2781,11 @@ async def adm_pg_template_hint(callback: CallbackQuery, db_user: BotUser):
 async def pg_stats(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    from app.bot.auth import can_platform_pg_page
+
+    if not await can_platform_pg_page(db_user, "pg_overview"):
+        await callback.answer("به نمای کلی دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
     try:

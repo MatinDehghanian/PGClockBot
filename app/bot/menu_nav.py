@@ -239,9 +239,30 @@ async def show_nav_keyboard(
         include_tiers = not bool(is_reseller_bot)
         markup = kb.admin_loyalty_reply_keyboard(ui, include_tiers=include_tiers)
     elif level == NAV_ADMIN:
-        markup = kb.admin_reply_keyboard(ui)
+        pg_feats: frozenset[str] | None = None
+        try:
+            from app.bot.auth import is_platform_admin, platform_pg_features
+
+            if is_platform_admin(db_user):
+                pg_feats = await platform_pg_features()
+        except Exception:
+            pg_feats = frozenset()
+        markup = kb.admin_reply_keyboard(ui, pg_features=pg_feats)
     elif level == NAV_ADMIN_PG:
-        markup = kb.pg_reply_keyboard(ui)
+        feats: frozenset[str] = frozenset()
+        can_create = False
+        try:
+            from app.bot.auth import can_platform_pg_action, platform_pg_features
+
+            feats = await platform_pg_features()
+            can_create = await can_platform_pg_action(db_user, "users", "create")
+        except Exception:
+            feats = frozenset()
+            can_create = False
+        if not feats:
+            markup = kb.admin_reply_keyboard(ui, pg_features=feats)
+        else:
+            markup = kb.pg_reply_keyboard(ui, features=feats, can_create_user=can_create)
     elif level == NAV_ADMIN_USERS:
         markup = kb.admin_users_reply_keyboard(ui)
     elif level == NAV_ADMIN_RESELLERS:

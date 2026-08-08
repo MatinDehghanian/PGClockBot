@@ -77,8 +77,17 @@ class PgActionMatrixTests(unittest.TestCase):
         self.assertFalse(staff_pg_action(staff, "nodes", "reconnect"))
 
     def test_admin_has_all_actions(self):
-        self.assertTrue(staff_pg_action({"role": "admin"}, "nodes", "reconnect"))
-        self.assertTrue(staff_pg_action({"role": "admin"}, "hosts", "delete"))
+        from app.services.pg_access import map_pg_role_actions
+
+        staff = {
+            "role": "admin",
+            "pg_actions": map_pg_role_actions({"is_owner": True}),
+            "pg_is_owner": True,
+        }
+        self.assertTrue(staff_pg_action(staff, "nodes", "reconnect"))
+        self.assertTrue(staff_pg_action(staff, "hosts", "delete"))
+        # Hybrid fail-closed without matrix
+        self.assertFalse(staff_pg_action({"role": "admin"}, "nodes", "reconnect"))
 
 
 class PaymentTenancyTests(unittest.IsolatedAsyncioTestCase):

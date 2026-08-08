@@ -40,10 +40,27 @@ class PrincipalKindTests(unittest.TestCase):
 
 
 class AuthzFromStaffTests(unittest.TestCase):
-    def test_admin_bypass(self):
+    def test_admin_shop_bypass_pg_fail_closed_without_matrix(self):
+        """Hybrid: shop stays open; PG requires mapped permissions."""
         ctx = authz_from_staff({"role": "admin", "username": "owner"})
         self.assertTrue(is_platform_admin(ctx))
         self.assertTrue(can_shop(ctx, "payments"))
+        self.assertFalse(can_pg_page(ctx, "pg_nodes"))
+        self.assertFalse(can_pg_action(ctx, "hosts", "delete"))
+        self.assertFalse(can_pg_user_action(ctx, "revoke_sub"))
+
+    def test_admin_with_full_pg_matrix_allows(self):
+        from app.services.pg_access import full_pg_owner_features, map_pg_role_actions, role_user_actions
+
+        staff = {
+            "role": "admin",
+            "username": "owner",
+            "pg_permissions": full_pg_owner_features(),
+            "pg_actions": map_pg_role_actions({"is_owner": True}),
+            "pg_user_actions": role_user_actions({"is_owner": True}),
+            "pg_is_owner": True,
+        }
+        ctx = authz_from_staff(staff)
         self.assertTrue(can_pg_page(ctx, "pg_nodes"))
         self.assertTrue(can_pg_action(ctx, "hosts", "delete"))
         self.assertTrue(can_pg_user_action(ctx, "revoke_sub"))
@@ -110,7 +127,15 @@ class LegacyParityStaffPgActionTests(unittest.TestCase):
                 self.assertEqual(staff_pg_action(staff, res, act), allowed)
 
     def test_admin_all_true(self):
-        staff = {"role": "admin"}
+        from app.services.pg_access import full_pg_owner_features, map_pg_role_actions, map_pg_role_writes
+
+        staff = {
+            "role": "admin",
+            "pg_permissions": full_pg_owner_features(),
+            "pg_actions": map_pg_role_actions({"is_owner": True}),
+            "pg_writes": map_pg_role_writes({"is_owner": True}),
+            "pg_is_owner": True,
+        }
         ctx = authz_from_staff(staff)
         self.assertTrue(staff_pg_action(staff, "nodes", "reconnect"))
         self.assertTrue(can_pg_action(ctx, "nodes", "reconnect"))
@@ -181,13 +206,15 @@ class RequirePermLogicParityTests(unittest.TestCase):
         return perm in (user.get("permissions") or [])
 
     def _old_pg(self, user: dict, perm: str) -> bool:
-        if user.get("role") == "admin":
-            return True
+        # Hybrid: admin also needs mapped pg_permissions (fail-closed).
         return perm in (user.get("pg_permissions") or [])
 
     def test_matrix(self):
+        from app.services.pg_access import full_pg_owner_features
+
         cases = [
-            {"role": "admin"},
+            {"role": "admin", "pg_permissions": full_pg_owner_features()},
+            {"role": "admin"},  # fail-closed PG
             {"role": "reseller", "permissions": ["dashboard"], "pg_permissions": []},
             {
                 "role": "reseller",

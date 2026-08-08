@@ -154,10 +154,11 @@ def groups_allowed_for_staff(staff: dict | None, group_ids: list[int]) -> bool:
 
 def staff_can_create_pg_template(staff: dict | None) -> bool:
     """True only when the principal may perform templates.create (exact ACL)."""
-    if not staff or staff.get("role") == "admin":
-        return True
+    if not staff:
+        return False
     from app.services.pg_access import staff_pg_action
 
+    # Hybrid: platform admin also needs templates.create on the env PG role.
     return staff_pg_action(staff, "templates", "create")
 
 

@@ -1,4 +1,4 @@
-"""Shared bot authorization helpers (Phase C4 / D4 — aligned with Web authz)."""
+"""Shared bot authorization helpers (Phase C4 / D4 / Hybrid Owner PG)."""
 
 from __future__ import annotations
 
@@ -37,3 +37,45 @@ def can_shop_feature(
     if db_user is not None:
         role = db_user.role
     return shop_feature_allowed(key=key, profile=profile, role=role)
+
+
+async def platform_pg_features() -> frozenset[str]:
+    """Live PG menu keys for the env installer account (Hybrid fail-closed)."""
+    from app.services.pg_access import resolve_platform_pg_capabilities
+
+    caps = await resolve_platform_pg_capabilities()
+    return frozenset(caps.get("features") or [])
+
+
+async def can_platform_pg_page(db_user: BotUser | None, key: str) -> bool:
+    """True when platform bot admin may open a PasarGuard bot surface."""
+    if not is_platform_admin(db_user):
+        return False
+    return key in await platform_pg_features()
+
+
+async def can_platform_pg_action(db_user: BotUser | None, resource: str, action: str) -> bool:
+    if not is_platform_admin(db_user):
+        return False
+    from app.services.authz import authz_from_staff, can_pg_action
+    from app.services.pg_access import enrich_staff_pg_from_role, resolve_platform_pg_capabilities
+
+    caps = await resolve_platform_pg_capabilities()
+    role = caps.get("role") if isinstance(caps.get("role"), dict) else None
+    if caps.get("pg_is_owner"):
+        role = {"is_owner": True}
+    staff = enrich_staff_pg_from_role(
+        {"role": "admin", "pg_is_owner": bool(caps.get("pg_is_owner"))},
+        list(caps.get("features") or []),
+        role,
+    )
+    return can_pg_action(authz_from_staff(staff), resource, action)
+
+
+async def filtered_pg_reply_keyboard(db_user: BotUser | None = None, ui: dict | None = None):
+    """Reply keyboard for PasarGuard submenu clamped to env PG role."""
+    from app.bot import keyboards as kb
+
+    feats = await platform_pg_features()
+    can_create = await can_platform_pg_action(db_user, "users", "create")
+    return kb.pg_reply_keyboard(ui, features=feats, can_create_user=can_create)

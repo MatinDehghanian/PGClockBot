@@ -3,6 +3,9 @@ from __future__ import annotations
 """Map PasarGuard admin-role permissions → lightweight web-panel feature keys.
 
 Resellers never get PG settings / admin_roles / cores / api_keys in our UI.
+
+Hybrid Owner ACL: platform web Owner keeps full *shop* power, but PasarGuard
+menus/actions are clamped to the env ``PG_USERNAME`` role (fail-closed).
 """
 
 import time
@@ -19,6 +22,9 @@ PG_FEATURE_KEYS = (
     "pg_nodes",
 )
 
+# Owner-only PG UI (admin management) — never granted from limited role maps.
+PG_OWNER_ONLY_FEATURES = ("pg_admins",)
+
 PG_FEATURE_LABELS: dict[str, str] = {
     "pg_overview": "نمای کلی",
     "pg_users": "کاربران",
@@ -33,6 +39,209 @@ PG_FEATURE_LABELS: dict[str, str] = {
 # Short-lived cache: role_id → (monotonic_at, features, raw_role)
 _ROLE_CACHE: dict[int, tuple[float, list[str], dict]] = {}
 _ROLE_CACHE_TTL = 60.0
+
+# Platform env-credential capability cache: key → (monotonic_at, payload)
+_PLATFORM_CAPS_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_PLATFORM_CAPS_TTL = 60.0
+
+
+def clear_platform_pg_capability_cache() -> None:
+    """Drop cached Owner PG ACL (call after setup / PG credential changes)."""
+    _PLATFORM_CAPS_CACHE.clear()
+
+
+def _admin_looks_like_pg_owner(admin: dict | None, role: dict | None) -> bool:
+    """True when PasarGuard marks this account as panel owner / sudo."""
+    if isinstance(role, dict) and role.get("is_owner"):
+        return True
+    if not isinstance(admin, dict):
+        return False
+    if admin.get("is_owner") or admin.get("is_sudo") or admin.get("is_superuser"):
+        return True
+    nested = admin.get("role")
+    if isinstance(nested, dict) and nested.get("is_owner"):
+        return True
+    return False
+
+
+def full_pg_owner_features() -> list[str]:
+    """Complete PG sidebar keys for a true PasarGuard owner account."""
+    out = list(PG_FEATURE_KEYS)
+    for k in PG_OWNER_ONLY_FEATURES:
+        if k not in out:
+            out.append(k)
+    return out
+
+
+async def resolve_platform_pg_capabilities(
+    *,
+    username: str | None = None,
+    password: str | None = None,
+    base_url: str | None = None,
+    use_cache: bool = True,
+) -> dict[str, Any]:
+    """Resolve PG menu/action ACL for platform env credentials (Hybrid Owner).
+
+    Fail-closed: any probe/role failure → empty features (no PG UI).
+    Does not elevate beyond the token of the given / env credentials.
+    """
+    from app.config import get_settings
+    from app.services.pasarguard import PasarGuardClient, PasarGuardError
+
+    settings = get_settings()
+    uname = (username if username is not None else settings.pg_username or "").strip()
+    pwd = (
+        password if password is not None else (settings.pg_password or "")
+    ).replace("\r", "").strip()
+    # base_url override only for setup probe (temporary client)
+    cache_key = f"{(base_url or settings.pg_base_url or '').rstrip('/')}|{uname.lower()}"
+    now = time.monotonic()
+    if use_cache and username is None and password is None and base_url is None:
+        hit = _PLATFORM_CAPS_CACHE.get(cache_key)
+        if hit and (now - hit[0]) < _PLATFORM_CAPS_TTL:
+            return dict(hit[1])
+
+    empty: dict[str, Any] = {
+        "ok": False,
+        "error": None,
+        "username": uname or None,
+        "pg_is_owner": False,
+        "pg_role_id": None,
+        "features": [],
+        "role": None,
+        "admin": None,
+    }
+    if not uname or not pwd:
+        empty["error"] = "اعتبارنامه پاسارگارد ناقص است"
+        return empty
+
+    client: PasarGuardClient | None = None
+    own_client = bool(username is not None or password is not None or base_url is not None)
+    try:
+        if own_client:
+            # Temporary client for setup probe — do not touch global get_pg() singleton.
+            from app.config import get_settings as _gs
+
+            # PasarGuardClient reads base from settings; briefly not ideal.
+            # Construct with explicit login overrides (token via password grant).
+            client = PasarGuardClient(username=uname, password=pwd)
+            if base_url:
+                client.base_url = str(base_url).rstrip("/")
+                # Rebind httpx client base
+                import httpx
+
+                old = client._client
+                client._client = httpx.AsyncClient(
+                    base_url=client.base_url,
+                    timeout=30.0,
+                    follow_redirects=False,
+                )
+                try:
+                    await old.aclose()
+                except Exception:
+                    pass
+        else:
+            from app.services.pasarguard import get_pg
+
+            client = get_pg()
+
+        await client.ensure_token()
+        admin = await client.get_admin(uname)
+        if not isinstance(admin, dict):
+            empty["error"] = "ادمین پاسارگارد یافت نشد"
+            empty["ok"] = False
+            if use_cache and not own_client:
+                _PLATFORM_CAPS_CACHE[cache_key] = (now, dict(empty))
+            return empty
+
+        role_id = None
+        nested_role = admin.get("role")
+        if isinstance(nested_role, dict) and nested_role.get("id") is not None:
+            try:
+                role_id = int(nested_role["id"])
+            except (TypeError, ValueError):
+                role_id = None
+        if role_id is None:
+            for key in ("role_id", "admin_role_id"):
+                if admin.get(key) is not None:
+                    try:
+                        role_id = int(admin[key])
+                        break
+                    except (TypeError, ValueError):
+                        pass
+
+        role: dict | None = None
+        if role_id is not None:
+            features, role = await resolve_reseller_pg_features(role_id)
+        else:
+            features, role = [], None
+            # Some owner accounts expose permissions on the admin object itself
+            if isinstance(nested_role, dict) and (
+                nested_role.get("permissions") or nested_role.get("is_owner")
+            ):
+                role = nested_role
+                features = map_pg_role_to_features(role)
+
+        pg_is_owner = _admin_looks_like_pg_owner(admin, role)
+        if pg_is_owner:
+            features = full_pg_owner_features()
+            if not role:
+                role = {"is_owner": True, "permissions": {}}
+            else:
+                role = dict(role)
+                role["is_owner"] = True
+
+        payload = {
+            "ok": True,
+            "error": None,
+            "username": uname,
+            "pg_is_owner": pg_is_owner,
+            "pg_role_id": role_id,
+            "features": list(features or []),
+            "role": role,
+            "admin": admin,
+        }
+        if use_cache and not own_client:
+            _PLATFORM_CAPS_CACHE[cache_key] = (now, dict(payload))
+        return payload
+    except PasarGuardError as e:
+        empty["error"] = e.user_message(fallback=str(e))
+        if use_cache and not own_client:
+            _PLATFORM_CAPS_CACHE[cache_key] = (now, dict(empty))
+        return empty
+    except Exception as e:
+        empty["error"] = str(e) or "خطا در خواندن نقش پاسارگارد"
+        if use_cache and not own_client:
+            _PLATFORM_CAPS_CACHE[cache_key] = (now, dict(empty))
+        return empty
+    finally:
+        if own_client and client is not None:
+            try:
+                await client.close()
+            except Exception:
+                pass
+
+
+async def enrich_platform_admin_staff(user: dict) -> dict:
+    """Attach live PG ACL onto a web Owner / platform-admin staff dict."""
+    caps = await resolve_platform_pg_capabilities()
+    features = list(caps.get("features") or [])
+    role = caps.get("role") if isinstance(caps.get("role"), dict) else None
+    out = enrich_staff_pg_from_role(user, features, role)
+    out["pg_is_owner"] = bool(caps.get("pg_is_owner"))
+    out["pg_capabilities_ok"] = bool(caps.get("ok"))
+    out["pg_capabilities_error"] = caps.get("error")
+    if caps.get("username"):
+        out["pg_admin_username"] = caps["username"]
+    if caps.get("pg_role_id") is not None:
+        out["pg_role_id"] = caps["pg_role_id"]
+    # Owner-equivalent: ensure action matrices are fully open
+    if out.get("pg_is_owner"):
+        out["pg_permissions"] = full_pg_owner_features()
+        out["pg_actions"] = map_pg_role_actions({"is_owner": True})
+        out["pg_user_actions"] = role_user_actions({"is_owner": True})
+        out["pg_writes"] = map_pg_role_writes({"is_owner": True})
+    return out
 
 
 def _action_allowed(value: Any) -> bool:
@@ -228,13 +437,11 @@ def enrich_staff_pg_from_role(user: dict, features: list[str], role: dict | None
 
 
 def staff_pg_writes(staff: dict) -> dict[str, bool]:
-    """Broad write flags — decisions via authz (Owner/admin bypass preserved)."""
-    from app.services.authz import authz_from_staff, can_pg_write_resource, is_platform_admin
+    """Broad write flags — Hybrid: Owner shop bypass does not imply PG writes."""
+    from app.services.authz import authz_from_staff, can_pg_write_resource
 
     ctx = authz_from_staff(staff)
     keys = ("users", "templates", "groups", "hosts", "nodes")
-    if is_platform_admin(ctx):
-        return {k: True for k in keys}
     return {k: can_pg_write_resource(ctx, k) for k in keys}
 
 
@@ -246,7 +453,7 @@ def staff_pg_action(staff: dict, resource: str, action: str) -> bool:
 
 
 def staff_user_actions(staff: dict) -> dict[str, bool]:
-    from app.services.authz import authz_from_staff, can_pg_user_action, is_platform_admin
+    from app.services.authz import authz_from_staff, can_pg_user_action
 
     ctx = authz_from_staff(staff)
     keys = (
@@ -259,6 +466,4 @@ def staff_user_actions(staff: dict) -> dict[str, bool]:
         "disable",
         "enable",
     )
-    if is_platform_admin(ctx):
-        return {k: True for k in keys}
     return {k: can_pg_user_action(ctx, k) for k in keys}

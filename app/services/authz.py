@@ -1,14 +1,20 @@
-"""Unified authorization decision layer (Phase C0 / D4).
+"""Unified authorization decision layer (Phase C0 / D4 / Hybrid Owner PG).
 
 Web, Bot, and API must ask the same allow/deny questions here.
 Shop feature keys use ``web_permissions`` (``bot_permissions`` is a mirrored
 column only — never read for decisions).
 
+Hybrid Owner:
+- ``role==admin`` keeps full *shop* allow.
+- PasarGuard pages/actions use ``pg_permissions`` / action matrices from the
+  env ``PG_USERNAME`` role (fail-closed when empty). Enrichment lives in
+  ``pg_access.enrich_platform_admin_staff`` (called from ``require_staff``).
+
 This module does **not**:
 - select PasarGuard clients
 - enforce quotas / limits
 - merge Web Owner (``web_admin.json``) with Bot ``ADMIN_IDS`` (D4 Q1 deferred;
-  both remain session/bot ``role==\"admin\"`` / platform-admin bypass)
+  both remain session/bot ``role==\"admin\"`` for shop)
 - invent Bot PG access for reseller/pg_staff (D4 Q2 — Web remains SoT)
 - perform I/O (role fetch stays in require_staff / pg_access)
 
@@ -53,7 +59,7 @@ def principal_kind_from_role(role: str | None) -> PrincipalKind:
 
     D4 Q1: Owner is still not distinguishable from platform admin at session
     level (``PrincipalKind.OWNER`` reserved; unused for ACL). Both use role
-    ``admin`` and receive full allow (same as before).
+    ``admin`` for full *shop* allow; PG is clamped via ``pg_permissions``.
     """
     r = (role or "").strip()
     if r == "admin":
@@ -66,7 +72,7 @@ def principal_kind_from_role(role: str | None) -> PrincipalKind:
 
 
 def is_platform_admin(ctx: AuthzContext) -> bool:
-    """True for Owner / platform admin (session role admin) — full bypass."""
+    """True for Owner / platform admin (session role admin) — shop bypass."""
     return ctx.role == "admin" or ctx.kind in {
         PrincipalKind.OWNER,
         PrincipalKind.PLATFORM_ADMIN,
@@ -81,16 +87,16 @@ def can_shop(ctx: AuthzContext, key: str) -> bool:
 
 
 def can_pg_page(ctx: AuthzContext, key: str) -> bool:
-    """PasarGuard panel page key (pg_users, pg_hosts, …). Admin always allowed."""
-    if is_platform_admin(ctx):
-        return True
+    """PasarGuard panel page key (pg_users, pg_hosts, …).
+
+    Hybrid: platform admin is *not* an automatic PG allow — uses mapped
+    ``pg_permissions`` (fail-closed when empty / unresolved).
+    """
     return key in ctx.pg_permissions
 
 
 def can_pg_action(ctx: AuthzContext, resource: str, action: str) -> bool:
     """Exact PG resource action (e.g. hosts.create). Fail closed when matrix missing."""
-    if is_platform_admin(ctx):
-        return True
     block = ctx.pg_actions.get(resource) if isinstance(ctx.pg_actions, Mapping) else None
     if isinstance(block, Mapping) and action in block:
         return bool(block.get(action))
@@ -99,8 +105,6 @@ def can_pg_action(ctx: AuthzContext, resource: str, action: str) -> bool:
 
 def can_pg_user_action(ctx: AuthzContext, action: str) -> bool:
     """Fine-grained VPN user action. Matches prior staff_user_actions semantics."""
-    if is_platform_admin(ctx):
-        return True
     raw = ctx.pg_user_actions if isinstance(ctx.pg_user_actions, Mapping) else {}
     if action in ("disable", "enable"):
         return bool(raw.get(action) or raw.get("update"))
@@ -109,8 +113,6 @@ def can_pg_user_action(ctx: AuthzContext, action: str) -> bool:
 
 def can_pg_write_resource(ctx: AuthzContext, resource: str) -> bool:
     """Broad write flag (any mutate) — legacy pg_writes parity."""
-    if is_platform_admin(ctx):
-        return True
     return bool(ctx.pg_writes.get(resource)) if isinstance(ctx.pg_writes, Mapping) else False
 
 
