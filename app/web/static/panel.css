@@ -1806,8 +1806,26 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 }
 /* Same trap: .form-field { display:flex } beats UA [hidden] — never show gated fields */
 .form-field[hidden],
-#confirm-reason-slot[hidden] {
+#confirm-reason-slot[hidden],
+#create-reseller-fields[hidden],
+.create-reseller-fields[hidden] {
   display: none !important;
+}
+/* Nested reseller options keep the same vertical rhythm as .form-stack */
+.form-stack > .create-reseller-fields,
+#create-reseller-fields.create-reseller-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+.form-stack > .create-reseller-fields > .ui-switch-section,
+#create-reseller-fields.create-reseller-fields > .ui-switch-section {
+  margin: 0;
+}
+.form-stack > .create-reseller-fields > .ui-switch-list,
+#create-reseller-fields.create-reseller-fields > .ui-switch-list {
+  margin: 0;
 }
 .flash > .flash-copy,
 .flash > .home-update-copy,

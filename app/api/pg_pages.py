@@ -1502,7 +1502,7 @@ def register_pg_pages(
             purge_orphaned_staff_access,
             web_access_status_map,
         )
-        from app.services.resellers import list_reseller_plans
+        from app.services.resellers import FEATURE_PERMS, list_reseller_plans
 
         err = request.query_params.get("err")
         ok = request.query_params.get("ok")
@@ -1581,6 +1581,7 @@ def register_pg_pages(
                 web_status=web_status,
                 admin_usage=admin_usage,
                 reseller_plans=reseller_plans,
+                feature_perms=FEATURE_PERMS,
                 flash_err=err,
                 flash_ok=ok,
                 active="pg_admins",
@@ -1598,7 +1599,7 @@ def register_pg_pages(
         form = await request.form()
         role_raw = str(form.get("role_id") or "").strip()
         note = str(form.get("note") or "").strip()
-        # as_reseller: checkbox absent when OFF (default UI is ON/checked)
+        # as_reseller: checkbox absent when OFF (default UI is OFF / fields hidden)
         as_reseller = str(form.get("as_reseller") or "").strip().lower() in {
             "1",
             "on",
@@ -1612,10 +1613,22 @@ def register_pg_pages(
             "yes",
         }
         plan_raw = str(form.get("plan_id") or "").strip()
+        share_pg = str(form.get("share_pg_panel_url") or "").strip().lower() in {
+            "1",
+            "on",
+            "true",
+            "yes",
+        }
         data_limit_gb = str(form.get("data_limit_gb") or "").strip()
         max_users = str(form.get("max_users") or "").strip()
         max_hwid = str(form.get("max_hwid_per_user") or "").strip()
         from app.services.credential_policy import validate_credentials
+        from app.services.resellers import (
+            DEFAULT_FEATURE_PERMS,
+            FEATURE_PERMS,
+            join_perms,
+            normalize_feature_perms,
+        )
 
         # Reject early with clear Persian causes (PasarGuard username+password rules)
         uname, cerr = validate_credentials(username, password, lowercase_username=False)
@@ -1625,6 +1638,12 @@ def register_pg_pages(
             return RedirectResponse(
                 f"/pg/admins?err={_q('برای ساخت به‌عنوان نماینده، انتخاب پلن نمایندگی الزامی است')}",
                 status_code=303,
+            )
+        reseller_perms = None
+        if as_reseller:
+            selected = [key for key, _ in FEATURE_PERMS if form.get(f"perm_{key}")]
+            reseller_perms = normalize_feature_perms(
+                join_perms(selected) or DEFAULT_FEATURE_PERMS
             )
         payload: dict = {
             "username": uname,
@@ -1694,6 +1713,8 @@ def register_pg_pages(
                 password=password,
                 plan_id=int(plan_raw),
                 note=note or "auto reseller from create admin",
+                web_permissions=reseller_perms,
+                share_pg_panel_url=share_pg,
             )
             if werr:
                 return RedirectResponse(

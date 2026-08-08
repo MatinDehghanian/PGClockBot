@@ -76,6 +76,10 @@ class AdminResellerUnifySourceTests(unittest.TestCase):
         self.assertIn("تبدیل به نماینده", html)
         self.assertIn("convert-to-reseller", html)
         self.assertIn("ادمین + نماینده", html)
+        # Create-admin: reseller option starts OFF; gated block starts hidden
+        create = html[html.find('id="modal-pg-admin-create"') : html.find("syncCreateAdminMode")]
+        self.assertIn("checked=false", create)
+        self.assertIn('id="create-reseller-fields"', create)
 
     def test_version(self):
         from app.version import __version__

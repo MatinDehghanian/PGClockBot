@@ -307,7 +307,7 @@
 
 <div class="ui-modal" id="modal-pg-admin-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
-  <div class="ui-modal-panel" role="dialog" aria-modal="true">
+  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
       <h2>ساخت ادمین پنل</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -365,23 +365,35 @@
         <small class="muted">اختیاری — در پاسارگارد ذخیره می‌شود</small>
       </label>
       <div class="ui-switch-list">
-        {{ switch('as_reseller', 'این ادمین نماینده شود (ربات شخصی + پنل فروشگاه)', checked=true, help='ادمین پاسارگارد + دسترسی وب نماینده؛ محدودیت‌های نقش و پلن اعمال می‌شود. پیش‌فرض: فعال', id='create-as-reseller') }}
+        {{ switch('as_reseller', 'این ادمین نماینده شود (ربات شخصی + پنل فروشگاه)', checked=false, help='با روشن کردن، پلن و دسترسی‌های پنل نماینده نمایش داده می‌شود', id='create-as-reseller') }}
       </div>
-      <div id="create-reseller-fields">
+      <div id="create-reseller-fields" class="create-reseller-fields" hidden>
         {% if not reseller_plans %}
-        <div class="flash warn">برای ساخت نماینده ابتدا از بخش نمایندگان یک پلن فعال بسازید — یا سوییچ بالا را خاموش کنید.</div>
+        <div class="flash warn">برای ساخت نماینده ابتدا از بخش پلن‌ها یک پلن فعال بسازید — یا سوییچ بالا را خاموش بگذارید.</div>
         {% endif %}
         <label class="form-field">پلن نمایندگی
-          <select name="plan_id" id="create-plan-id" {% if not reseller_plans %}disabled{% endif %}>
+          <select name="plan_id" id="create-plan-id" disabled {% if not reseller_plans %}data-no-plans="1"{% endif %}>
             <option value="">— انتخاب پلن —</option>
             {% for p in reseller_plans or [] %}
             <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }} / گیگ{% elif p.commission_percent is not none %} · کمیسیون {{ p.commission_percent }}٪{% endif %}</option>
             {% endfor %}
           </select>
-          <small class="muted">دسترسی‌های پنل ربات/فروشگاه از این پلن کپی می‌شود؛ سهمیه کاربران از نقش پاسارگارد</small>
+          <small class="muted">ثابت یا Pay As You Go — حالت پرداخت و نرخ از همین پلن می‌آید</small>
         </label>
+        <div class="ui-switch-section">
+          <span class="ui-switch-section-title">سطح دسترسی پنل ربات (وب = بات)</span>
+          <p class="ui-switch-section-hint">هر سوییچ هم‌زمان برای وب‌پنل و ربات اعمال می‌شود — مثل مودال افزودن نماینده.</p>
+          <div class="ui-switch-list" id="create-reseller-perms">
+            {% for key, label in feature_perms or [] %}
+            {{ switch('perm_' ~ key, label, checked=true) }}
+            {% endfor %}
+          </div>
+        </div>
+        <div class="ui-switch-list">
+          {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=false, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند', id='create-share-pg') }}
+        </div>
       </div>
-      <div class="ui-switch-list" id="create-staff-web-wrap" hidden>
+      <div class="ui-switch-list" id="create-staff-web-wrap">
         {{ switch('grant_web', 'دسترسی وب ادمین فرعی (فقط پاسارگارد)', checked=true, help='بدون فروشگاه/ربات — فقط منوی پاسارگارد مطابق نقش', id='create-grant-web') }}
       </div>
       <div class="ui-switch-list">
@@ -396,6 +408,14 @@
 </div>
 <script>
 (function () {
+  function setDisabledDeep(root, disabled) {
+    if (!root) return;
+    root.querySelectorAll('input, select, textarea, button').forEach(function (el) {
+      if (el.id === 'create-as-reseller') return;
+      if (disabled) el.setAttribute('disabled', 'disabled');
+      else el.removeAttribute('disabled');
+    });
+  }
   function syncCreateAdminMode() {
     var asRes = document.getElementById('create-as-reseller');
     var planWrap = document.getElementById('create-reseller-fields');
@@ -405,9 +425,20 @@
     var on = !!asRes.checked;
     planWrap.hidden = !on;
     staffWrap.hidden = on;
+    setDisabledDeep(planWrap, !on);
+    setDisabledDeep(staffWrap, on);
     if (planSel) {
-      if (on) planSel.setAttribute('required', 'required');
-      else planSel.removeAttribute('required');
+      var noPlans = planSel.getAttribute('data-no-plans') === '1';
+      if (on && !noPlans) {
+        planSel.removeAttribute('disabled');
+        planSel.setAttribute('required', 'required');
+      } else {
+        planSel.removeAttribute('required');
+        planSel.setAttribute('disabled', 'disabled');
+      }
+    }
+    if (on && typeof window.enhanceAllSelects === 'function') {
+      window.enhanceAllSelects(planWrap);
     }
   }
   var asRes = document.getElementById('create-as-reseller');
