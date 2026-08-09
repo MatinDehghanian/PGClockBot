@@ -1091,6 +1091,45 @@ def miniapp_inline_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup | No
     )
 
 
+def force_join_inline_keyboard(
+    raw_channels: str | None,
+    *,
+    ui: dict | None = None,
+    channels: list[str] | None = None,
+) -> InlineKeyboardMarkup:
+    """URL buttons per required channel + «عضو شدم» re-check callback."""
+    from app.services.users import (
+        force_join_channel_url,
+        parse_force_join_channels,
+        parse_force_join_entries,
+    )
+
+    entries = parse_force_join_entries(raw_channels)
+    link_by_id = {
+        str(e.get("id") or "").lower(): str(e.get("link") or "")
+        for e in entries
+        if e.get("id")
+    }
+    required = channels if channels is not None else parse_force_join_channels(raw_channels)
+    btn_join = _t(ui, "btn_force_join")
+    rows: list[list[InlineKeyboardButton]] = []
+    for ch in required:
+        url = force_join_channel_url(ch, link_by_id.get(ch.lower()))
+        if not url:
+            continue
+        label = f"{btn_join} {ch}" if ch.startswith("@") else btn_join
+        rows.append([InlineKeyboardButton(text=label[:64], url=url)])
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=_t(ui, "btn_force_join_check"),
+                callback_data="forcejoin:check",
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def admin_main_menu(ui: dict | None = None) -> InlineKeyboardMarkup:
     """Legacy stub — live admin home uses admin_reply_keyboard / main_reply_keyboard."""
     _ = ui

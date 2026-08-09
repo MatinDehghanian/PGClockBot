@@ -1000,16 +1000,18 @@
               data.forEach((item) => {
                 let id = '';
                 let required = true;
+                let link = '';
                 if (typeof item === 'string') id = item.trim();
                 else if (item && typeof item === 'object') {
                   id = String(item.id || item.channel || '').trim();
                   required = item.required !== false && item.required !== 0 && item.required !== '0';
+                  link = String(item.link || item.invite_link || item.url || '').trim();
                 }
                 if (!id) return;
                 const key = id.toLowerCase();
                 if (seen[key]) return;
                 seen[key] = 1;
-                out.push({ id, required: !!required });
+                out.push({ id, required: !!required, link });
               });
               return out;
             }
@@ -1019,17 +1021,23 @@
           .map((p) => p.trim())
           .filter(Boolean)
           .filter((ch, i, arr) => arr.findIndex((x) => x.toLowerCase() === ch.toLowerCase()) === i)
-          .map((id) => ({ id, required: true }));
+          .map((id) => ({ id, required: true, link: '' }));
       }
       function rowHtml(entry){
         const id = entry && entry.id ? String(entry.id) : '';
+        const link = entry && entry.link ? String(entry.link) : '';
         const req = !entry || entry.required !== false;
         return (
           '<div class="force-channel-row">' +
             '<label class="form-field force-channel-id-wrap">شناسه کانال' +
-              '<input type="text" class="force-channel-id" dir="ltr" placeholder="@channel یا 123456789" value="' +
+              '<input type="text" class="force-channel-id" dir="ltr" placeholder="@channel یا -100…" value="' +
                 id.replace(/"/g, '&quot;') + '" autocomplete="off" />' +
-              '<small class="muted">@username یا آیدی عددی کانال/گروه</small>' +
+              '<small class="muted">برای چک عضویت: @username یا آیدی عددی (−100…). ربات باید ادمین باشد</small>' +
+            '</label>' +
+            '<label class="form-field force-channel-link-wrap">لینک دعوت (اختیاری)' +
+              '<input type="text" class="force-channel-link" dir="ltr" placeholder="https://t.me/+… یا t.me/channel" value="' +
+                link.replace(/"/g, '&quot;') + '" autocomplete="off" />' +
+              '<small class="muted">برای دکمه اینلاین؛ کانال خصوصی حتماً لینک دعوت بگذارید</small>' +
             '</label>' +
             '<div class="force-channel-foot">' +
               '<label class="force-channel-req ui-switch-row">' +
@@ -1068,20 +1076,26 @@
           if (seen[key]) return;
           seen[key] = 1;
           const reqInput = row.querySelector('.force-channel-required');
-          entries.push({ id: ch, required: !!(reqInput && reqInput.checked) });
+          const link = String((row.querySelector('.force-channel-link') || {}).value || '').trim();
+          const entry = { id: ch, required: !!(reqInput && reqInput.checked) };
+          if (link) entry.link = link;
+          entries.push(entry);
         });
         hidden.value = JSON.stringify(entries);
       }
       function blurForceChannelFocus(){
         const el = document.activeElement;
-        if (el && el.classList && el.classList.contains('force-channel-id')) {
+        if (el && el.classList && (
+          el.classList.contains('force-channel-id') ||
+          el.classList.contains('force-channel-link')
+        )) {
           try { el.blur(); } catch (_) {}
         }
       }
       /* readonly until real user tap — stops post-save / navigation autofocus
          from opening the mobile keyboard on channel name fields. */
       function guardChannelInputs(scope){
-        (scope || document).querySelectorAll('.force-channel-id').forEach((inp) => {
+        (scope || document).querySelectorAll('.force-channel-id, .force-channel-link').forEach((inp) => {
           if (inp.dataset.focusGuard === '1') return;
           inp.dataset.focusGuard = '1';
           inp.setAttribute('readonly', 'readonly');
@@ -1116,8 +1130,8 @@
             const list = root.querySelector('[data-force-channels-list]');
             if (!list) return;
             const add = list.querySelector('[data-force-channels-add]');
-            if (add) add.insertAdjacentHTML('beforebegin', rowHtml({ id: '', required: true }));
-            else list.insertAdjacentHTML('beforeend', rowHtml({ id: '', required: true }));
+            if (add) add.insertAdjacentHTML('beforebegin', rowHtml({ id: '', required: true, link: '' }));
+            else list.insertAdjacentHTML('beforeend', rowHtml({ id: '', required: true, link: '' }));
             sync(root);
             guardChannelInputs(list);
             return;

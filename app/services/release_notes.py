@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.10.9": [
+        "عضویت اجباری: تأیید با نوع ChatMember تلگرام (member/admin/creator و restricted با is_member)",
+        "دکمه‌های اینلاین لینک کانال + «عضو شدم» برای بررسی دوباره؛ پیام جدا وقتی ربات ادمین نیست یا آیدی غلط است",
+        "متن قابل‌ویرایش پیام عضویت و دکمه‌ها در تنظیمات کانال اجباری؛ لینک دعوت اختیاری برای کانال خصوصی",
+    ],
     "4.10.8": [
         "بعد از ذخیره کانال اجباری، کیبورد موبایل دیگر روی فیلد نام کانال باز نمی‌شود",
     ],

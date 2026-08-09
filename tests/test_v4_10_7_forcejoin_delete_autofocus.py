@@ -23,7 +23,7 @@ class ForceJoinFixTests(unittest.TestCase):
             parse_force_join_channels,
         )
 
-        self.assertEqual(normalize_force_join_channel_id("https://t.me/MyChan"), "@MyChan")
+        self.assertEqual(normalize_force_join_channel_id("https://t.me/MyChan"), "@mychan")
         self.assertEqual(normalize_force_join_channel_id("mychan"), "@mychan")
         self.assertEqual(normalize_force_join_channel_id("-100123"), "-100123")
         raw = '[{"id":"https://t.me/must","required":true},{"id":"@opt","required":false}]'
@@ -70,7 +70,7 @@ class ForceJoinFixTests(unittest.TestCase):
             self.assertEqual(missing, [])
             self.assertEqual(unverified, ["@chan"])
             text = mw.force_join_block_message(missing, unverified)
-            self.assertIn("هنوز عضو", text)
+            self.assertIn("تأیید نشد", text)
             self.assertIn("@chan", text)
 
         asyncio.run(_run())
@@ -126,8 +126,8 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.10.8")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.8")
+        self.assertEqual(__version__, "4.10.9")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.9")
 
 
 if __name__ == "__main__":

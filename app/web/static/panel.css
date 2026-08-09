@@ -2454,8 +2454,27 @@ form.settings-form > .sticky-actions,
   width: 100%;
   margin-top: var(--space-1);
 }
+.force-channel-link-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.force-channel-link-wrap .force-channel-link {
+  width: 100%;
+  margin-top: var(--space-1);
+}
 .force-channel-id-wrap .muted,
-.force-channel-id-wrap small.muted {
+.force-channel-id-wrap small.muted,
+.force-channel-link-wrap .muted,
+.force-channel-link-wrap small.muted {
   margin-top: var(--space-1);
   font-size: 11px;
   font-weight: 400;
