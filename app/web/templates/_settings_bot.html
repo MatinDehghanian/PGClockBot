@@ -1,19 +1,23 @@
+{% set update_mode = bot_update_mode or env_values.get('BOT_UPDATE_MODE') or 'polling' %}
+{% set wh_url = env_values.get('WEBHOOK_URL','') %}
+{% set wh_path = env_values.get('WEBHOOK_PATH','/telegram/webhook') %}
+
 <form method="post" action="/settings?tab=bot" class="settings-form" id="bot-env-form">
-  <div id="bot-restart-banner" class="flash warn" {% if request.query_params.get('restarting') != '1' %}hidden{% endif %}>
-    در حال اعمال تنظیمات و ری‌استارت سرویس… لطفاً چند ثانیه صبر کنید.
+  <div id="bot-saved-flash" class="flash ok" {% if request.query_params.get('saved') != '1' %}hidden{% endif %}>
+    تغییرات اعمال شد.
   </div>
-  <div id="bot-restart-ok" class="flash ok" hidden>تنظیمات اعمال شد و سرویس برگشت.</div>
-  <div id="bot-restart-err" class="flash err" hidden></div>
+  <div id="bot-err-flash" class="flash err" {% if not request.query_params.get('err') %}hidden{% endif %}>
+    {{ request.query_params.get('err') or '' }}
+  </div>
 
   <div class="card settings-card">
     <h2>ربات تلگرام</h2>
-    <p class="muted update-card-caption">پس از ذخیره، سرویس یک‌بار ری‌استارت می‌شود تا توکن جدید اعمال شود.</p>
+    <p class="muted update-card-caption">تغییر اتصال ربات معمولاً نیاز به ری‌استارت سرویس دارد؛ قبل از اعمال از شما تأیید گرفته می‌شود.</p>
     <div class="settings-grid">
       <div class="setting-item full">
         <label>توکن ربات (BOT_TOKEN)
-          
           <input name="BOT_TOKEN" type="password" value="" dir="ltr" autocomplete="off" placeholder="•••• یا توکن جدید" />
-        <small class="muted">خالی بگذارید تا توکن فعلی حفظ شود. فعلی: {{ bot_token_masked or '—' }}</small>
+          <small class="muted">خالی بگذارید تا توکن فعلی حفظ شود. فعلی: {{ bot_token_masked or '—' }}</small>
         </label>
       </div>
       <div class="setting-item">
@@ -23,11 +27,81 @@
       </div>
       <div class="setting-item">
         <label>آیدی ادمین‌ها
-          
           <input name="ADMIN_IDS" value="{{ env_values.get('ADMIN_IDS','') }}" dir="ltr" required placeholder="123456789" />
-        <small class="muted">با کاما جدا کنید</small>
+          <small class="muted">با کاما جدا کنید</small>
         </label>
       </div>
+    </div>
+  </div>
+
+  <div class="card settings-card">
+    <h2>دریافت پیام تلگرام</h2>
+    <p class="muted update-card-caption">
+      پیش‌فرض Long Polling است. Webhook برای بار بالاتر مناسب‌تر است و به آدرس HTTPS عمومی نیاز دارد
+      (معمولاً همان دامنه پنل با SSL).
+    </p>
+    <div class="settings-grid">
+      <div class="setting-item full">
+        <fieldset class="bot-update-mode" id="bot-update-mode">
+          <legend class="sr-only">حالت دریافت پیام</legend>
+          <label class="bot-mode-option">
+            <input type="radio" name="BOT_UPDATE_MODE" value="polling" {% if update_mode != 'webhook' %}checked{% endif %} />
+            <span>
+              <strong>Long Polling</strong>
+              <small class="muted">ربات خودش پیام‌ها را از تلگرام می‌گیرد — بدون نیاز به دامنه عمومی</small>
+            </span>
+          </label>
+          <label class="bot-mode-option">
+            <input type="radio" name="BOT_UPDATE_MODE" value="webhook" {% if update_mode == 'webhook' %}checked{% endif %} />
+            <span>
+              <strong>Webhook</strong>
+              <small class="muted">تلگرام پیام‌ها را به آدرس HTTPS پنل می‌فرستد</small>
+            </span>
+          </label>
+        </fieldset>
+      </div>
+      <div class="setting-item full bot-webhook-fields" data-webhook-fields {% if update_mode != 'webhook' %}hidden{% endif %}>
+        <label>آدرس پایه Webhook
+          <input
+            name="WEBHOOK_URL"
+            id="webhook-url-input"
+            value="{{ wh_url }}"
+            dir="ltr"
+            placeholder="https://bot.example.com"
+            autocomplete="off"
+          />
+          <small class="muted">فقط ریشهٔ HTTPS (بدون مسیر). اگر خالی باشد از «آدرس عمومی» پایین صفحه استفاده می‌شود.</small>
+        </label>
+      </div>
+      <div class="setting-item bot-webhook-fields" data-webhook-fields {% if update_mode != 'webhook' %}hidden{% endif %}>
+        <label>مسیر Webhook
+          <input
+            name="WEBHOOK_PATH"
+            id="webhook-path-input"
+            value="{{ wh_path }}"
+            dir="ltr"
+            placeholder="/telegram/webhook"
+            autocomplete="off"
+          />
+        </label>
+      </div>
+      <div class="setting-item full bot-webhook-fields" data-webhook-fields {% if update_mode != 'webhook' %}hidden{% endif %}>
+        <div class="flash warn" style="margin:0">
+          آدرس نهایی:
+          <code dir="ltr" id="webhook-full-preview">{{ webhook_full_url or '—' }}</code>
+          <br />
+          سکرت Webhook به‌صورت خودکار ساخته می‌شود و در پنل نمایش داده نمی‌شود.
+          دامنه باید از اینترنت با HTTPS به همین سرویس برسد.
+        </div>
+      </div>
+    </div>
+    <div class="flash {{ 'ok' if update_mode == 'webhook' else 'warn' }}" style="margin-top:var(--space-2)">
+      حالت فعلی:
+      {% if update_mode == 'webhook' %}
+        Webhook{% if webhook_full_url %} · <span dir="ltr">{{ webhook_full_url }}</span>{% endif %}
+      {% else %}
+        Long Polling
+      {% endif %}
     </div>
   </div>
 
@@ -36,9 +110,8 @@
     <div class="settings-grid">
       <div class="setting-item full">
         <label>آدرس پنل (PG_BASE_URL)
-          
           <input name="PG_BASE_URL" value="{{ env_values.get('PG_BASE_URL','') }}" dir="ltr" required placeholder="https://panel.example.com" />
-        <small class="muted">ریشه API پاسارگارد (نه مسیر داشبورد). مسیرهایی مثل <code dir="ltr">/MrClock</code> یا <code dir="ltr">/dashboard</code> فقط UI هستند و باعث خطای ۴۰۵ می‌شوند. اگر اشتباه وارد شود، ربات خودش ریشه دامنه را هم امتحان می‌کند.</small>
+          <small class="muted">ریشه API پاسارگارد (نه مسیر داشبورد). مسیرهایی مثل <code dir="ltr">/MrClock</code> یا <code dir="ltr">/dashboard</code> فقط UI هستند و باعث خطای ۴۰۵ می‌شوند. اگر اشتباه وارد شود، ربات خودش ریشه دامنه را هم امتحان می‌کند.</small>
         </label>
       </div>
       <div class="setting-item">
@@ -48,9 +121,8 @@
       </div>
       <div class="setting-item">
         <label>رمز پاسارگارد
-          
           <input name="PG_PASSWORD" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="•••• یا رمز جدید" />
-        <small class="muted">خالی = حفظ رمز فعلی</small>
+          <small class="muted">خالی = حفظ رمز فعلی</small>
         </label>
       </div>
     </div>
@@ -71,16 +143,15 @@
       </div>
       <div class="setting-item full">
         <label>آدرس عمومی (PUBLIC_BASE_URL) — اختیاری
-          
-          <input name="PUBLIC_BASE_URL" value="{{ env_values.get('PUBLIC_BASE_URL','') }}" dir="ltr" placeholder="https://bot.example.com" />
-        <small class="muted">برای مینی‌اپ و لینک‌های عمومی</small>
+          <input name="PUBLIC_BASE_URL" id="public-base-input" value="{{ env_values.get('PUBLIC_BASE_URL','') }}" dir="ltr" placeholder="https://bot.example.com" />
+          <small class="muted">برای مینی‌اپ، لینک‌های عمومی، و پیش‌فرض آدرس Webhook</small>
         </label>
       </div>
     </div>
   </div>
 
   {% if bot_status %}
-  <div class="flash {{ 'ok' if bot_status.ok else 'err' }}">
+  <div class="flash {{ 'ok' if bot_status.ok else 'err' }}" id="bot-status-flash">
     وضعیت ربات:
     {% if bot_status.ok %}
       آنلاین · @{{ bot_status.username or '—' }} (id={{ bot_status.id or '—' }})
@@ -91,57 +162,340 @@
   {% endif %}
 
   <div class="actions sticky-actions">
-    <button class="btn" type="submit" id="bot-save-btn">ذخیره و ری‌استارت ربات</button>
+    <button class="btn" type="submit" id="bot-save-btn">ذخیره تنظیمات</button>
   </div>
 </form>
+
+{# Confirm restart #}
+<div class="ui-modal" id="modal-bot-restart-confirm" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="bot-restart-confirm-title">
+    <div class="ui-modal-head">
+      <h3 id="bot-restart-confirm-title">تأیید ری‌استارت</h3>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن">×</button>
+    </div>
+    <p class="muted">
+      برای اعمال این تغییرات سرویس یک‌بار ری‌استارت می‌شود. چند ثانیه قطعی طبیعی است؛
+      پیام‌های در صف تلگرام ممکن است از دست بروند. پس از تأیید در همین صفحه می‌مانید.
+    </p>
+    <div class="actions">
+      <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      <button type="button" class="btn" id="bot-restart-confirm-btn">تأیید و ری‌استارت</button>
+    </div>
+  </div>
+</div>
+
+{# Progress during restart #}
+<div class="ui-modal" id="modal-bot-restart-progress" hidden data-modal-no-escape="1">
+  <div class="ui-modal-backdrop"></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="bot-restart-progress-title">
+    <div class="ui-modal-head">
+      <h3 id="bot-restart-progress-title">در حال اعمال تغییرات</h3>
+    </div>
+    <div class="flash warn update-stay-warn" role="status">
+      تا پایان عملیات از این صفحه خارج نشوید.
+    </div>
+    <div class="progress-wrap" aria-label="نوار پیشرفت">
+      <div class="progress-bar">
+        <div class="progress-fill" id="bot-restart-fill" style="width: 0%"></div>
+      </div>
+      <div class="progress-meta">
+        <span id="bot-restart-step-label">آماده</span>
+        <strong id="bot-restart-percent">۰٪</strong>
+      </div>
+    </div>
+    <ol class="bot-restart-steps" id="bot-restart-steps">
+      <li data-step="save">ذخیره تنظیمات</li>
+      <li data-step="stop">توقف سرویس</li>
+      <li data-step="start">راه‌اندازی مجدد</li>
+      <li data-step="health">بررسی سلامت پنل</li>
+      <li data-step="bot">بررسی اتصال ربات</li>
+    </ol>
+    <div class="flash err" id="bot-restart-progress-err" hidden></div>
+  </div>
+</div>
+
 <script>
 (function(){
-  const params = new URLSearchParams(location.search);
-  if (params.get('restarting') !== '1') return;
-  const banner = document.getElementById('bot-restart-banner');
-  const okEl = document.getElementById('bot-restart-ok');
-  const errEl = document.getElementById('bot-restart-err');
-  const btn = document.getElementById('bot-save-btn');
-  if (btn) btn.disabled = true;
-  let tries = 0;
-  const maxTries = 45;
-  let sawDown = false;
-  const started = Date.now();
-  function doneOk(){
-    if (banner) banner.hidden = true;
-    if (okEl) okEl.hidden = false;
-    if (btn) btn.disabled = false;
+  const form = document.getElementById('bot-env-form');
+  if (!form) return;
+
+  const saveBtn = document.getElementById('bot-save-btn');
+  const modeRoot = document.getElementById('bot-update-mode');
+  const whFields = form.querySelectorAll('[data-webhook-fields]');
+  const whUrl = document.getElementById('webhook-url-input');
+  const whPath = document.getElementById('webhook-path-input');
+  const pubBase = document.getElementById('public-base-input');
+  const fullPreview = document.getElementById('webhook-full-preview');
+  const savedFlash = document.getElementById('bot-saved-flash');
+  const errFlash = document.getElementById('bot-err-flash');
+  const confirmModal = document.getElementById('modal-bot-restart-confirm');
+  const progressModal = document.getElementById('modal-bot-restart-progress');
+  const confirmBtn = document.getElementById('bot-restart-confirm-btn');
+  const fillEl = document.getElementById('bot-restart-fill');
+  const pctEl = document.getElementById('bot-restart-percent');
+  const stepLabel = document.getElementById('bot-restart-step-label');
+  const stepsRoot = document.getElementById('bot-restart-steps');
+  const progressErr = document.getElementById('bot-restart-progress-err');
+
+  const STEP_ORDER = ['save', 'stop', 'start', 'health', 'bot'];
+  const STEP_PCT = { save: 15, stop: 35, start: 55, health: 80, bot: 100 };
+  const STEP_LABEL = {
+    save: 'ذخیره تنظیمات',
+    stop: 'توقف سرویس',
+    start: 'راه‌اندازی مجدد',
+    health: 'بررسی سلامت پنل',
+    bot: 'بررسی اتصال ربات',
+  };
+
+  function selectedMode(){
+    const el = form.querySelector('input[name="BOT_UPDATE_MODE"]:checked');
+    return el ? el.value : 'polling';
+  }
+
+  function syncModeUi(){
+    const webhook = selectedMode() === 'webhook';
+    whFields.forEach((el) => { el.hidden = !webhook; });
+    if (whUrl) whUrl.required = webhook;
+    updatePreview();
+  }
+
+  function updatePreview(){
+    if (!fullPreview) return;
+    const base = ((whUrl && whUrl.value) || (pubBase && pubBase.value) || '').trim().replace(/\/+$/, '');
+    let path = ((whPath && whPath.value) || '/telegram/webhook').trim() || '/telegram/webhook';
+    if (path && path.charAt(0) !== '/') path = '/' + path;
+    if (path.length > 1) path = path.replace(/\/+$/, '');
+    fullPreview.textContent = base ? (base + path) : '—';
+  }
+
+  function showErr(msg){
+    if (!errFlash) return alert(msg || 'خطا');
+    errFlash.hidden = false;
+    errFlash.textContent = msg || 'خطا';
+    if (savedFlash) savedFlash.hidden = true;
+  }
+
+  function showSaved(msg){
+    if (savedFlash) {
+      savedFlash.hidden = false;
+      savedFlash.textContent = msg || 'تغییرات اعمال شد.';
+    }
+    if (errFlash) errFlash.hidden = true;
+  }
+
+  function openModal(el){
+    if (!el) return;
+    if (typeof window.openModal === 'function') {
+      /* panel.js uses id without # via data-modal-open */
+    }
+    el.hidden = false;
+    el.classList.add('open');
+    document.body.classList.add('modal-open');
+    try {
+      if (!el.__home) {
+        el.__home = { parent: el.parentNode, next: el.nextSibling };
+      }
+      document.body.appendChild(el);
+    } catch (e) {}
+  }
+
+  function closeModal(el){
+    if (!el) return;
+    el.classList.remove('open');
+    el.hidden = true;
+    const home = el.__home;
+    if (home && home.parent) {
+      if (home.next) home.parent.insertBefore(el, home.next);
+      else home.parent.appendChild(el);
+    }
+    if (!document.querySelector('.ui-modal.open')) {
+      document.body.classList.remove('modal-open');
+    }
+  }
+
+  function setStep(activeKey, doneThrough){
+    const idx = STEP_ORDER.indexOf(activeKey);
+    const doneIdx = doneThrough != null ? STEP_ORDER.indexOf(doneThrough) : idx - 1;
+    if (stepsRoot) {
+      stepsRoot.querySelectorAll('[data-step]').forEach((li) => {
+        const key = li.getAttribute('data-step');
+        const i = STEP_ORDER.indexOf(key);
+        li.classList.toggle('is-active', key === activeKey);
+        li.classList.toggle('is-done', i <= doneIdx);
+      });
+    }
+    const pct = STEP_PCT[activeKey] || 0;
+    if (fillEl) fillEl.style.width = pct + '%';
+    if (pctEl) pctEl.textContent = pct + '٪';
+    if (stepLabel) stepLabel.textContent = STEP_LABEL[activeKey] || '…';
+  }
+
+  async function postBot(extra){
+    const fd = new FormData(form);
+    fd.set('ajax', '1');
+    Object.keys(extra || {}).forEach((k) => fd.set(k, extra[k]));
+    const resp = await fetch(form.action, {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin',
+      headers: { 'Accept': 'application/json' },
+    });
+    let data = null;
+    try { data = await resp.json(); } catch (e) { data = null; }
+    if (!data) {
+      return { ok: false, error: resp.ok ? 'پاسخ نامعتبر از سرور' : ('خطای سرور (' + resp.status + ')') };
+    }
+    return data;
+  }
+
+  async function waitForRestart(preBootId){
+    setStep('stop', 'save');
+    let sawDown = false;
+    const started = Date.now();
+    const maxMs = 90000;
+    while (Date.now() - started < maxMs) {
+      await new Promise((r) => setTimeout(r, 800));
+      try {
+        const h = await fetch('/health', { cache: 'no-store', credentials: 'same-origin' });
+        if (!h.ok) {
+          sawDown = true;
+          setStep('stop', 'save');
+          continue;
+        }
+        if (!sawDown && (Date.now() - started) < 3500) {
+          continue;
+        }
+        setStep('start', 'stop');
+        const d = await fetch('/health/detail', { cache: 'no-store', credentials: 'same-origin' });
+        if (!d.ok) {
+          sawDown = true;
+          continue;
+        }
+        const detail = await d.json();
+        if (preBootId && detail.boot_id && detail.boot_id === preBootId) {
+          continue;
+        }
+        setStep('health', 'start');
+        setStep('bot', 'health');
+        return { ok: true, detail };
+      } catch (e) {
+        sawDown = true;
+        setStep('stop', 'save');
+      }
+    }
+    return { ok: false, error: 'ری‌استارت بیش از حد طول کشید. دستی بررسی کنید: sudo systemctl restart pgclockbot' };
+  }
+
+  async function applyWithRestart(){
+    closeModal(confirmModal);
+    openModal(progressModal);
+    if (progressErr) { progressErr.hidden = true; progressErr.textContent = ''; }
+    if (saveBtn) saveBtn.disabled = true;
+    setStep('save', null);
+    const saved = await postBot({ confirm_restart: '1' });
+    if (!saved.ok) {
+      if (progressErr) {
+        progressErr.hidden = false;
+        progressErr.textContent = saved.error || 'ذخیره ناموفق بود';
+      }
+      if (saveBtn) saveBtn.disabled = false;
+      return;
+    }
+    if (!saved.restarting) {
+      closeModal(progressModal);
+      showSaved(saved.message || 'تغییرات اعمال شد.');
+      if (saveBtn) saveBtn.disabled = false;
+      return;
+    }
+    setStep('stop', 'save');
+    const waited = await waitForRestart(saved.pre_boot_id || '');
+    if (!waited.ok) {
+      if (progressErr) {
+        progressErr.hidden = false;
+        progressErr.textContent = waited.error || 'خطا در ری‌استارت';
+      }
+      if (saveBtn) saveBtn.disabled = false;
+      return;
+    }
+    setStep('bot', 'bot');
+    if (fillEl) fillEl.style.width = '100%';
+    if (pctEl) pctEl.textContent = '۱۰۰٪';
+    await new Promise((r) => setTimeout(r, 500));
     const url = new URL(location.href);
     url.searchParams.delete('restarting');
+    url.searchParams.delete('err');
+    url.searchParams.set('tab', 'bot');
     url.searchParams.set('saved', '1');
-    history.replaceState(null, '', url);
+    location.replace(url.pathname + '?' + url.searchParams.toString());
   }
-  function doneErr(msg){
-    if (banner) banner.hidden = true;
-    if (errEl) {
-      errEl.hidden = false;
-      errEl.textContent = msg || 'ری‌استارت خودکار انجام نشد. دستی اجرا کنید: sudo systemctl restart pgclockbot';
-    }
-    if (btn) btn.disabled = false;
+
+  if (modeRoot) modeRoot.addEventListener('change', syncModeUi);
+  if (whUrl) whUrl.addEventListener('input', updatePreview);
+  if (whPath) whPath.addEventListener('input', updatePreview);
+  if (pubBase) pubBase.addEventListener('input', updatePreview);
+  syncModeUi();
+
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', () => { applyWithRestart(); });
   }
-  const timer = setInterval(async () => {
-    tries += 1;
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (saveBtn) saveBtn.disabled = true;
+    if (errFlash) errFlash.hidden = true;
     try {
-      const r = await fetch('/health', { cache: 'no-store' });
-      if (!r.ok) {
-        sawDown = true;
-      } else if (sawDown || (Date.now() - started) > 4000) {
-        clearInterval(timer);
-        doneOk();
+      const preview = await postBot({ preview: '1' });
+      if (!preview.ok) {
+        showErr(preview.error || 'اعتبارسنجی ناموفق بود');
+        if (saveBtn) saveBtn.disabled = false;
         return;
       }
-    } catch (_) {
-      sawDown = true;
+      if (preview.needs_restart) {
+        if (saveBtn) saveBtn.disabled = false;
+        openModal(confirmModal);
+        return;
+      }
+      const saved = await postBot({ confirm_restart: '0' });
+      if (!saved.ok) {
+        showErr(saved.error || 'ذخیره ناموفق بود');
+        if (saveBtn) saveBtn.disabled = false;
+        return;
+      }
+      showSaved(saved.message || 'تغییرات اعمال شد.');
+      if (saveBtn) saveBtn.disabled = false;
+    } catch (err) {
+      showErr('ارتباط با سرور برقرار نشد');
+      if (saveBtn) saveBtn.disabled = false;
     }
-    if (tries >= maxTries) {
-      clearInterval(timer);
-      doneErr();
+  });
+
+  /* Do not dismiss the in-progress modal with Escape */
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && progressModal && progressModal.classList.contains('open')) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
     }
-  }, 800);
+  }, true);
+
+  /* Legacy query ?restarting=1 (non-JS submit) */
+  const params = new URLSearchParams(location.search);
+  if (params.get('restarting') === '1') {
+    openModal(progressModal);
+    setStep('stop', 'save');
+    (async () => {
+      const waited = await waitForRestart('');
+      if (!waited.ok) {
+        if (progressErr) {
+          progressErr.hidden = false;
+          progressErr.textContent = waited.error || 'ری‌استارت ناموفق';
+        }
+        return;
+      }
+      params.delete('restarting');
+      params.set('saved', '1');
+      location.replace(location.pathname + '?' + params.toString());
+    })();
+  }
 })();
 </script>

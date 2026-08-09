@@ -54,6 +54,9 @@ from app.services.setup_wizard import (
     is_local_setup_client,
     is_setup_complete,
     mark_setup_complete,
+    normalize_webhook_base_url,
+    normalize_webhook_path,
+    resolve_bot_update_mode,
     setup_finish_login_url,
     wizard_panel_url_hint,
     parse_admin_ids,
@@ -790,6 +793,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.updates import local_version
 
         creds = load_web_admin()
+        settings = get_settings()
+        webhook_base = normalize_webhook_base_url(settings.webhook_url)
+        webhook_path = normalize_webhook_path(settings.webhook_path)
         return {
             "ok": True,
             "web_panel": True,
@@ -800,6 +806,10 @@ def create_api_app(lifespan=None) -> FastAPI:
             "boot_at": BOOT_AT,
             "pid": PID,
             "staff": staff.get("username"),
+            "bot_update_mode": "webhook" if webhook_base else "polling",
+            "webhook_url": webhook_base,
+            "webhook_path": webhook_path,
+            "webhook_full_url": (webhook_base + webhook_path) if webhook_base else "",
         }
 
     @app.get("/manifest.webmanifest")
@@ -3016,6 +3026,12 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["bot_token_masked"] = (
                 ("••••" + token[-6:]) if len(token) > 8 else ("••••" if token else "")
             )
+            wh_base = env_values.get("WEBHOOK_URL") or ""
+            wh_path = env_values.get("WEBHOOK_PATH") or "/telegram/webhook"
+            ctx["bot_update_mode"] = env_values.get("BOT_UPDATE_MODE") or (
+                "webhook" if wh_base else "polling"
+            )
+            ctx["webhook_full_url"] = (wh_base + wh_path) if wh_base else ""
         elif tab == "ssl":
             from urllib.parse import urlparse
 
@@ -3162,9 +3178,27 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse("/settings?tab=ssl&working=1", status_code=303)
 
         if tab == "bot":
+            from fastapi.responses import JSONResponse
+
+            from app.runtime import BOOT_ID
             from app.services.pasarguard import reset_pg
             from app.services.service_control import schedule_panel_restart
             from app.services.setup_wizard import current_setup_values, parse_admin_ids
+
+            ajax = str(form.get("ajax") or "").strip() == "1"
+            preview = str(form.get("preview") or "").strip() == "1"
+            confirmed = str(form.get("confirm_restart") or "").strip() == "1"
+
+            def _bot_err(msg: str, *, code: int = 400):
+                if ajax or preview:
+                    return JSONResponse(
+                        {"ok": False, "error": msg, "needs_confirm": False},
+                        status_code=code,
+                    )
+                return RedirectResponse(
+                    "/settings?tab=bot&err=" + quote(msg),
+                    status_code=303,
+                )
 
             token = str(form.get("BOT_TOKEN") or "").strip()
             uname = str(form.get("BOT_USERNAME") or "").strip().lstrip("@")
@@ -3182,57 +3216,135 @@ def create_api_app(lifespan=None) -> FastAPI:
             except Exception:
                 pass
             currency = str(form.get("CURRENCY") or "").strip() or "تومان"
+            update_mode_raw = str(form.get("BOT_UPDATE_MODE") or "").strip().lower()
+            webhook_url_raw = str(form.get("WEBHOOK_URL") or "").strip()
+            webhook_path_raw = str(form.get("WEBHOOK_PATH") or "").strip()
             current = current_setup_values()
             if not token:
                 token = (current.get("BOT_TOKEN") or "").strip()
             if not pg_pass:
                 pg_pass = (current.get("PG_PASSWORD") or "").strip()
             if not token or not uname or not ids_raw or not pg_base or not pg_user or not pg_pass:
-                return RedirectResponse(
-                    "/settings?tab=bot&err=" + quote("همه فیلدهای الزامی را پر کنید"),
-                    status_code=303,
-                )
+                return _bot_err("همه فیلدهای الزامی را پر کنید")
             try:
                 ids = parse_admin_ids(ids_raw)
             except ValueError:
-                return RedirectResponse(
-                    "/settings?tab=bot&err=" + quote("آیدی ادمین‌ها نامعتبر است"),
-                    status_code=303,
-                )
+                return _bot_err("آیدی ادمین‌ها نامعتبر است")
             if not ids:
-                return RedirectResponse(
-                    "/settings?tab=bot&err=" + quote("حداقل یک آیدی ادمین لازم است"),
-                    status_code=303,
-                )
+                return _bot_err("حداقل یک آیدی ادمین لازم است")
             try:
                 port_n = int(web_port)
                 if port_n < 1 or port_n > 65535:
                     raise ValueError
             except ValueError:
-                return RedirectResponse(
-                    "/settings?tab=bot&err=" + quote("پورت نامعتبر است"),
-                    status_code=303,
+                return _bot_err("پورت نامعتبر است")
+            try:
+                update_mode, webhook_base, webhook_path = resolve_bot_update_mode(
+                    mode=update_mode_raw or current.get("BOT_UPDATE_MODE"),
+                    webhook_url=webhook_url_raw,
+                    webhook_path=webhook_path_raw or current.get("WEBHOOK_PATH"),
+                    public_base_url=public_base,
                 )
-            update_env_keys(
-                {
-                    "BOT_TOKEN": token,
-                    "BOT_USERNAME": uname,
-                    "ADMIN_IDS": ",".join(str(i) for i in ids),
-                    "PG_BASE_URL": pg_base,
-                    "PG_USERNAME": pg_user,
-                    "PG_PASSWORD": pg_pass,
-                    "WEB_PORT": str(port_n),
-                    "PUBLIC_BASE_URL": public_base,
-                    "CURRENCY": currency,
-                }
+            except ValueError as exc:
+                return _bot_err(str(exc))
+
+            admin_ids_norm = ",".join(str(i) for i in ids)
+            payload = {
+                "BOT_TOKEN": token,
+                "BOT_USERNAME": uname,
+                "ADMIN_IDS": admin_ids_norm,
+                "PG_BASE_URL": pg_base,
+                "PG_USERNAME": pg_user,
+                "PG_PASSWORD": pg_pass,
+                "WEB_PORT": str(port_n),
+                "PUBLIC_BASE_URL": public_base,
+                "CURRENCY": currency,
+                "WEBHOOK_URL": webhook_base,
+                "WEBHOOK_PATH": webhook_path,
+            }
+            try:
+                current_admin_ids = ",".join(
+                    str(i) for i in parse_admin_ids(current.get("ADMIN_IDS") or "")
+                )
+            except ValueError:
+                current_admin_ids = str(current.get("ADMIN_IDS") or "").strip()
+            current_norm = {
+                "BOT_TOKEN": str(current.get("BOT_TOKEN") or "").strip(),
+                "BOT_USERNAME": str(current.get("BOT_USERNAME") or "").strip().lstrip("@"),
+                "ADMIN_IDS": current_admin_ids,
+                "PG_BASE_URL": normalize_pg_base_url(str(current.get("PG_BASE_URL") or "").strip()),
+                "PG_USERNAME": str(current.get("PG_USERNAME") or "").strip(),
+                "PG_PASSWORD": str(current.get("PG_PASSWORD") or "").strip(),
+                "WEB_PORT": str(current.get("WEB_PORT") or "9000").strip(),
+                "PUBLIC_BASE_URL": str(current.get("PUBLIC_BASE_URL") or "").strip().rstrip("/"),
+                "CURRENCY": str(current.get("CURRENCY") or "تومان").strip() or "تومان",
+                "WEBHOOK_URL": normalize_webhook_base_url(current.get("WEBHOOK_URL")),
+                "WEBHOOK_PATH": normalize_webhook_path(
+                    current.get("WEBHOOK_PATH") or "/telegram/webhook"
+                ),
+            }
+            needs_restart = any(
+                str(payload.get(k) or "").strip() != str(current_norm.get(k) or "").strip()
+                for k in payload
             )
+
+            if preview:
+                return JSONResponse(
+                    {
+                        "ok": True,
+                        "needs_restart": needs_restart,
+                        "bot_update_mode": update_mode,
+                        "webhook_full_url": (webhook_base + webhook_path) if webhook_base else "",
+                    }
+                )
+
+            if needs_restart and ajax and not confirmed:
+                return JSONResponse(
+                    {
+                        "ok": False,
+                        "needs_confirm": True,
+                        "needs_restart": True,
+                        "error": "برای اعمال این تغییرات ری‌استارت سرویس لازم است",
+                        "bot_update_mode": update_mode,
+                        "webhook_full_url": (webhook_base + webhook_path) if webhook_base else "",
+                    }
+                )
+
+            if not needs_restart:
+                if ajax:
+                    return JSONResponse(
+                        {
+                            "ok": True,
+                            "restarting": False,
+                            "changed": False,
+                            "message": "تغییری برای ذخیره نبود",
+                            "bot_update_mode": update_mode,
+                            "webhook_full_url": (webhook_base + webhook_path) if webhook_base else "",
+                        }
+                    )
+                return RedirectResponse("/settings?tab=bot&saved=1", status_code=303)
+
+            update_env_keys(payload)
             ensure_web_secret()
             get_settings.cache_clear()
             reset_pg()
             from app.services.pg_access import clear_platform_pg_capability_cache
 
             clear_platform_pg_capability_cache()
+            pre_boot = BOOT_ID
             schedule_panel_restart(delay_sec=2.5, reason="bot settings saved")
+            if ajax:
+                return JSONResponse(
+                    {
+                        "ok": True,
+                        "restarting": True,
+                        "changed": True,
+                        "pre_boot_id": pre_boot,
+                        "bot_update_mode": update_mode,
+                        "webhook_full_url": (webhook_base + webhook_path) if webhook_base else "",
+                        "message": "تنظیمات ذخیره شد — در حال ری‌استارت",
+                    }
+                )
             return RedirectResponse(
                 "/settings?tab=bot&restarting=1",
                 status_code=303,
