@@ -46,6 +46,42 @@ def _split_channel_tokens(raw: str | None) -> list[str]:
     return out
 
 
+def normalize_force_join_channel_id(raw: str | None) -> str:
+    """Normalize @username / numeric id / t.me URL into a Telegram chat id string."""
+    import re
+
+    ch = (raw or "").strip()
+    if not ch:
+        return ""
+    lower = ch.lower()
+    for prefix in (
+        "https://t.me/",
+        "http://t.me/",
+        "t.me/",
+        "https://telegram.me/",
+        "http://telegram.me/",
+        "telegram.me/",
+    ):
+        if lower.startswith(prefix):
+            ch = ch[len(prefix) :]
+            break
+    ch = ch.strip().strip("/")
+    if "?" in ch:
+        ch = ch.split("?", 1)[0].strip()
+    if not ch or "/" in ch:
+        # invite hashes / joinchat paths are not usable with get_chat_member by username
+        return (raw or "").strip()
+    if ch.startswith("@"):
+        return ch
+    if ch.startswith("-") and ch[1:].isdigit():
+        return ch
+    if ch.isdigit():
+        return ch
+    if re.match(r"^[A-Za-z][A-Za-z0-9_]{3,}$", ch):
+        return f"@{ch}"
+    return ch
+
+
 def _parse_channel_line(part: str) -> tuple[str, bool]:
     """Parse one force-join line → (channel_id, required).
 
@@ -65,7 +101,7 @@ def _parse_channel_line(part: str) -> tuple[str, bool]:
     if ch.endswith("(اختیاری)"):
         ch = ch[: -len("(اختیاری)")].strip()
         required = False
-    return ch, required
+    return normalize_force_join_channel_id(ch), required
 
 
 def parse_force_join_entries(raw: str | None) -> list[dict[str, Any]]:
@@ -89,7 +125,9 @@ def parse_force_join_entries(raw: str | None) -> list[dict[str, Any]]:
                 if isinstance(item, str):
                     ch, required = _parse_channel_line(item)
                 elif isinstance(item, dict):
-                    ch = str(item.get("id") or item.get("channel") or "").strip()
+                    ch = normalize_force_join_channel_id(
+                        str(item.get("id") or item.get("channel") or "")
+                    )
                     req = item.get("required", True)
                     if isinstance(req, str):
                         required = req.strip().lower() in {"1", "true", "yes", "on"}
@@ -131,7 +169,7 @@ def serialize_force_join_entries(entries: list[dict[str, Any]] | None) -> str:
     for item in entries or []:
         if not isinstance(item, dict):
             continue
-        ch = str(item.get("id") or "").strip()
+        ch = normalize_force_join_channel_id(str(item.get("id") or ""))
         if not ch:
             continue
         key = ch.lower()

@@ -27,9 +27,9 @@ class NativeSelectKillTests(unittest.TestCase):
     def test_open_modal_never_focuses_native_select(self):
         block = JS.split("function openModal")[1].split("window.openModal")[0]
         self.assertIn("enhanceAllSelects(el)", block)
-        self.assertIn(".ui-select-toggle", block)
+        # v4.10.7: no autofocus at all (mobile keyboard must stay closed)
+        self.assertNotIn(".focus()", block)
         self.assertNotIn("select:not([disabled])", block)
-        self.assertIn("ui-select-native", block)
 
     def test_mutation_observer_enhances_new_selects(self):
         self.assertIn("selectMo.observe", JS)
@@ -44,7 +44,7 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.10.6")
+        self.assertEqual(__version__, "4.10.7")
 
 
 if __name__ == "__main__":

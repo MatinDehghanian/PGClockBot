@@ -40,8 +40,10 @@ class ConfirmReasonRenderOnlyWhenRequired(unittest.TestCase):
         block = CSS.split(".form-field[hidden]", 1)[1].split("}", 1)[0]
         self.assertIn("display: none !important", block)
 
-    def test_open_modal_skips_hidden_focus_targets(self):
-        self.assertIn("node.closest('[hidden]')", JS)
+    def test_open_modal_does_not_autofocus(self):
+        block = JS.split("function openModal")[1].split("window.openModal")[0]
+        self.assertIn("Never autofocus", block)
+        self.assertNotIn(".focus()", block)
 
 
 class ConfirmReasonOnlyOnAccountDeletes(unittest.TestCase):
@@ -49,6 +51,7 @@ class ConfirmReasonOnlyOnAccountDeletes(unittest.TestCase):
         "users.html",
         "resellers.html",
         "_reseller_edit_body.html",
+        "_user_edit_body.html",
         "pg_admins.html",
     }
 
@@ -67,7 +70,6 @@ class ConfirmReasonOnlyOnAccountDeletes(unittest.TestCase):
             "finance.html": ["/approve", "/reject", "/cancel"],
             "pg_users.html": ["/disable", "/enable", "/reset", "/revoke"],
             "pg_nodes.html": ["/reset", "/delete"],
-            "_user_edit_body.html": ["/extend", "شارژ"],
             "_settings_ssl.html": ["غیرفعال‌سازی HTTPS"],
         }
         for name, needles in samples.items():
@@ -75,6 +77,16 @@ class ConfirmReasonOnlyOnAccountDeletes(unittest.TestCase):
             self.assertNotIn("data-confirm-reason", src, msg=name)
             for n in needles:
                 self.assertIn(n, src, msg=f"{name} missing {n}")
+        # User edit: wallet/extend confirms must stay reason-free; delete may require reason
+        user_edit = (TEMPLATES / "_user_edit_body.html").read_text(encoding="utf-8")
+        for needle in ("/extend", "شارژ", "/wallet-credit", "/renew"):
+            self.assertIn(needle, user_edit)
+        credit = user_edit.split("/wallet-credit", 1)[1].split("</form>", 1)[0]
+        extend = user_edit.split("/extend", 1)[1].split("</form>", 1)[0]
+        self.assertNotIn("data-confirm-reason", credit)
+        self.assertNotIn("data-confirm-reason", extend)
+        delete = user_edit.split("/users/{{ user.id }}/delete", 1)[1].split("</form>", 1)[0]
+        self.assertIn('data-confirm-reason="1"', delete)
 
     def test_user_reseller_admin_deletes_require_reason(self):
         users = (TEMPLATES / "users.html").read_text(encoding="utf-8")
