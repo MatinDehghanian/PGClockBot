@@ -27,7 +27,7 @@ class NativeSelectKillTests(unittest.TestCase):
     def test_open_modal_never_focuses_native_select(self):
         block = JS.split("function openModal")[1].split("window.openModal")[0]
         self.assertIn("enhanceAllSelects(el)", block)
-        # v4.10.7: no autofocus at all (mobile keyboard must stay closed)
+        # v4.10.8: no autofocus at all (mobile keyboard must stay closed)
         self.assertNotIn(".focus()", block)
         self.assertNotIn("select:not([disabled])", block)
 
@@ -44,7 +44,7 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.10.7")
+        self.assertEqual(__version__, "4.10.8")
 
 
 if __name__ == "__main__":
