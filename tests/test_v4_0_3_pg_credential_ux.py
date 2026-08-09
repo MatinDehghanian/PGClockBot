@@ -125,8 +125,8 @@ class SourceGuardTests(unittest.TestCase):
 
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.10.6")
-        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "4.10.6")
+        self.assertEqual(__version__, "4.10.7")
+        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "4.10.7")
 
 
 if __name__ == "__main__":

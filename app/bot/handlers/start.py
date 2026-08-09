@@ -175,17 +175,6 @@ async def cmd_start(
         await message.answer(
             "کد دعوت ثبت شد ✅" if db_user.referred_by_id else "به ربات خوش آمدید."
         )
-    elif args.startswith("sub_"):
-        token = args[4:].strip()
-        await _link_subscription(
-            message,
-            session,
-            db_user,
-            token,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-        )
-        return
     ui = await get_all_settings(session)
     channels = []
     try:
@@ -196,7 +185,11 @@ async def cmd_start(
         ch = (ui.get("force_join_channel") or "").strip()
         channels = [ch] if ch else []
     enabled = ui.get("force_join_enabled")
-    from app.bot.middlewares import check_force_join_all
+    from app.bot.middlewares import (
+        check_force_join_all,
+        clear_force_join_member_cache,
+        force_join_block_message,
+    )
     from app.services.reseller_access import effective_menu_role
 
     role_for_force = await effective_menu_role(
@@ -206,17 +199,28 @@ async def cmd_start(
         reseller_owner_id=reseller_owner_id,
     )
     if on(enabled) and channels and role_for_force == "user":
-        missing, _ = await check_force_join_all(
+        # Always re-check on /start (drop stale negative cache)
+        clear_force_join_member_cache(int(db_user.telegram_id))
+        missing, unverified = await check_force_join_all(
             message.bot, int(db_user.telegram_id), channels
         )
-        if missing:
-            listed = "\n".join(f"• {c}" for c in missing)
+        if missing or unverified:
             await message.answer(
-                "برای استفاده، ابتدا در همه کانال‌های زیر عضو شوید سپس دوباره /start بزنید:\n"
-                f"{listed}",
+                force_join_block_message(missing, unverified),
                 reply_markup=kb.persistent_reply_keyboard(),
             )
             return
+    if args.startswith("sub_"):
+        token = args[4:].strip()
+        await _link_subscription(
+            message,
+            session,
+            db_user,
+            token,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
     await render_home(
         message,
         session,

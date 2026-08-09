@@ -85,20 +85,47 @@ def _extract_start_payload(event: TelegramObject) -> str | None:
     return None
 
 
+def _force_join_chat_id(channel: str):
+    """Chat id for get_chat_member (@username str or numeric int)."""
+    from app.services.users import normalize_force_join_channel_id
+
+    ch = normalize_force_join_channel_id(channel)
+    if not ch:
+        return channel
+    if ch.startswith("@"):
+        return ch
+    if ch.lstrip("-").isdigit():
+        try:
+            return int(ch)
+        except ValueError:
+            return ch
+    return ch
+
+
+def clear_force_join_member_cache(telegram_id: int | None = None) -> None:
+    """Drop cached membership results (all, or one user)."""
+    if telegram_id is None:
+        _FORCE_JOIN_MEMBER_CACHE.clear()
+        return
+    tid = int(telegram_id)
+    for key in [k for k in _FORCE_JOIN_MEMBER_CACHE if k[0] == tid]:
+        _FORCE_JOIN_MEMBER_CACHE.pop(key, None)
+
+
 async def check_force_join_member(bot: Bot, telegram_id: int, channel: str) -> bool | None:
     """Return True if member, False if left/kicked, None if membership cannot be verified.
 
-    None means the channel/bot is misconfigured or Telegram errored — callers should
-    not permanently lock users out on None.
+    Only positive membership is cached briefly. Negative / error results are never
+    cached so a user who just joined can pass on the next /start.
     """
     import time
 
-    chat_id = channel if str(channel).startswith("@") else channel
+    chat_id = _force_join_chat_id(channel)
     cache_key = (int(telegram_id), str(chat_id))
     now = time.monotonic()
     hit = _FORCE_JOIN_MEMBER_CACHE.get(cache_key)
-    if hit and (now - hit[0]) < _FORCE_JOIN_MEMBER_TTL:
-        return hit[1]
+    if hit and hit[1] is True and (now - hit[0]) < _FORCE_JOIN_MEMBER_TTL:
+        return True
     try:
         member = await bot.get_chat_member(chat_id, int(telegram_id))
         status = getattr(member, "status", None)
@@ -110,9 +137,9 @@ async def check_force_join_member(bot: Bot, telegram_id: int, channel: str) -> b
     except Exception as exc:
         logger.warning("force-join membership check failed for %s: %s", channel, exc)
         result = None
-    # Cache only definitive answers; None should be rechecked next time
-    if result is not None:
-        _FORCE_JOIN_MEMBER_CACHE[cache_key] = (now, result)
+    # Cache only confirmed members — never cache left/kicked/errors
+    if result is True:
+        _FORCE_JOIN_MEMBER_CACHE[cache_key] = (now, True)
         if len(_FORCE_JOIN_MEMBER_CACHE) > 4000:
             oldest = sorted(_FORCE_JOIN_MEMBER_CACHE.items(), key=lambda kv: kv[1][0])[:1000]
             for k, _ in oldest:
@@ -121,7 +148,7 @@ async def check_force_join_member(bot: Bot, telegram_id: int, channel: str) -> b
 
 
 _FORCE_JOIN_MEMBER_CACHE: dict[tuple[int, str], tuple[float, bool | None]] = {}
-_FORCE_JOIN_MEMBER_TTL = 120.0
+_FORCE_JOIN_MEMBER_TTL = 60.0
 
 # Simple per-user flood guard (process-local)
 _RATE_BUCKETS: dict[int, list[float]] = {}
@@ -182,10 +209,10 @@ class RateLimitMiddleware(BaseMiddleware):
 async def check_force_join_all(
     bot: Bot, telegram_id: int, channels: list[str]
 ) -> tuple[list[str], list[str]]:
-    """Check membership for every channel.
+    """Check membership for every required channel.
 
     Returns (missing, unverified). missing = left/kicked; unverified = API errors.
-    Caller should require missing empty; unverified may allow-through to avoid lockouts.
+    Callers must block when either list is non-empty — membership must be confirmed.
     """
     if not channels:
         return [], []
@@ -200,6 +227,22 @@ async def check_force_join_all(
         elif joined is None:
             unverified.append(ch)
     return missing, unverified
+
+
+def force_join_block_message(missing: list[str], unverified: list[str] | None = None) -> str:
+    """User-facing Persian copy when required membership is not confirmed."""
+    blocked = list(missing or [])
+    for ch in unverified or []:
+        if ch not in blocked:
+            blocked.append(ch)
+    listed = "\n".join(f"• {c}" for c in blocked)
+    if not listed:
+        return "هنوز عضو کانال‌های اجباری نشده‌اید. ابتدا عضو شوید، سپس دوباره /start بزنید."
+    return (
+        "هنوز عضو کانال‌های زیر نشده‌اید (یا عضویت شما تأیید نشده).\n"
+        "لطفاً عضو شوید و دوباره /start بزنید:\n"
+        f"{listed}"
+    )
 
 
 class DbSessionMiddleware(BaseMiddleware):
@@ -350,16 +393,12 @@ class ForceJoinMiddleware(BaseMiddleware):
         if role != "user":
             return await handler(event, data)
 
-        missing, _unverified = await check_force_join_all(
+        missing, unverified = await check_force_join_all(
             bot, int(db_user.telegram_id), channels
         )
-        if missing:
+        if missing or unverified:
             msg = _reply_message(event)
-            listed = "\n".join(f"• {c}" for c in missing)
-            text = (
-                "برای ادامه، ابتدا در همه کانال‌های زیر عضو شوید، سپس دوباره /start بزنید:\n"
-                f"{listed}"
-            )
+            text = force_join_block_message(missing, unverified)
             if msg:
                 try:
                     await msg.answer(text)
@@ -370,11 +409,10 @@ class ForceJoinMiddleware(BaseMiddleware):
             )
             if cq is not None:
                 try:
-                    await cq.answer("ابتدا در همه کانال‌ها عضو شوید", show_alert=True)
+                    await cq.answer("هنوز عضو کانال‌های اجباری نشده‌اید", show_alert=True)
                 except Exception:
                     pass
             return None
-        # All definitive checks passed (or only unverifiable) → allow through
 
         return await handler(event, data)
 

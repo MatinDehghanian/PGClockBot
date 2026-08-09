@@ -14,6 +14,9 @@ class DeleteWalletWarnTests(unittest.TestCase):
         self.assertIn("wallet_balance", html)
         self.assertIn("موجودی کیف پول", html)
         self.assertIn("سفارش‌ها", html)
+        body = (ROOT / "app/web/templates/_user_edit_body.html").read_text(encoding="utf-8")
+        self.assertIn("موجودی کیف پول", body)
+        self.assertIn("/users/{{ user.id }}/delete", body)
 
     def test_reseller_full_delete_warns_wallet(self):
         html = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")

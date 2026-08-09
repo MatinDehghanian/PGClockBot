@@ -63,11 +63,12 @@ class ForceJoinTests(unittest.TestCase):
         self.assertIn("parse_force_join_channels", src)
         self.assertIn("missing", src)
 
-    def test_middleware_allows_on_api_error(self):
+    def test_middleware_blocks_on_api_error(self):
         src = Path("app/bot/middlewares.py").read_text(encoding="utf-8")
         self.assertIn("check_force_join_all", src)
         self.assertIn("check_force_join_member", src)
-        self.assertIn("missing", src)
+        self.assertIn("missing or unverified", src)
+        self.assertIn("force_join_block_message", src)
 
     def test_check_force_join_member_left(self):
         import asyncio

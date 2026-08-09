@@ -167,3 +167,27 @@
   </div>
 </section>
 {% endif %}
+
+{% if user.role != 'admin' %}
+<section class="edit-section">
+  <header class="edit-section-head">
+    <h3>حذف کاربر</h3>
+    <p class="muted">کاربر بات و تمام سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های مرتبط حذف می‌شوند. برگشت‌ناپذیر است.</p>
+  </header>
+  {% if (user.wallet_balance or 0) > 0 %}
+  <div class="flash warn">موجودی کیف پول: {{ user.wallet_balance | num }} تومان — با حذف از بین می‌رود.</div>
+  {% endif %}
+  <form method="post" action="/users/{{ user.id }}/delete" class="form-stack"
+        data-confirm="{% if (user.wallet_balance or 0) > 0 %}هشدار: موجودی کیف پول {{ user.wallet_balance | num }} تومان از بین می‌رود. {% endif %}کاربر و تمام سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است."
+        data-confirm-title="تأیید حذف کاربر"
+        data-confirm-danger="1"
+        {% if (user.wallet_balance or 0) > 0 %}data-confirm-warn="1"{% endif %}
+        data-confirm-reason="1"
+        data-confirm-reason-label="علت حذف"
+        data-confirm-reason-name="reason"
+        data-confirm-label="حذف کاربر">
+    <input type="hidden" name="reason" value="" />
+    <button class="btn btn-danger" type="submit">حذف کاربر</button>
+  </form>
+</section>
+{% endif %}

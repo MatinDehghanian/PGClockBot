@@ -755,19 +755,7 @@
       document.body.classList.add('modal-open');
       /* Ensure every select in this modal is custom (covers late DOM / fragments) */
       enhanceAllSelects(el);
-      /* Never focus a native <select> — on iOS that opens the system picker.
-         Also skip anything inside [hidden] (e.g. empty confirm-reason-slot). */
-      const panel = el.querySelector('.ui-modal-panel') || el;
-      const candidates = panel.querySelectorAll(
-        'input:not([type="hidden"]):not([disabled]):not(.ui-select-native), textarea:not([disabled]), .ui-select-toggle:not([disabled]), button:not([disabled]), [href]'
-      );
-      let focus = null;
-      for (const node of candidates) {
-        if (node.closest('[hidden]')) continue;
-        focus = node;
-        break;
-      }
-      if (focus) setTimeout(() => focus.focus(), 30);
+      /* Never autofocus inputs/buttons — mobile keyboards must only open on user tap. */
     }
     window.openModal = openModal;
     /* SSR-open modals (e.g. ticket view/create) — portal like button-opened modals */
@@ -1102,9 +1090,6 @@
             const add = list.querySelector('[data-force-channels-add]');
             if (add) add.insertAdjacentHTML('beforebegin', rowHtml({ id: '', required: true }));
             else list.insertAdjacentHTML('beforeend', rowHtml({ id: '', required: true }));
-            const inputs = list.querySelectorAll('.force-channel-id');
-            const last = inputs[inputs.length - 1];
-            if (last) last.focus();
             sync(root);
             return;
           }
@@ -1197,11 +1182,7 @@
             reasonInput = renderReasonField(opts);
           }
           openModal('modal-confirm');
-          if (requireReason && reasonInput) {
-            setTimeout(() => {
-              try { reasonInput.focus(); } catch (_) {}
-            }, 40);
-          }
+          /* Do not autofocus reason — avoids mobile keyboard popping open. */
         });
       };
 
