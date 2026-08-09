@@ -4,24 +4,46 @@
 
 <form method="post" action="/settings?tab=bot" class="settings-form" id="bot-env-form">
   <div id="bot-saved-flash" class="flash ok" {% if request.query_params.get('saved') != '1' %}hidden{% endif %}>
-    تغییرات اعمال شد.
+    <div class="flash-copy">
+      <strong>تغییرات اعمال شد</strong>
+      <span class="muted">تنظیمات ربات و اتصال ذخیره شده‌اند.</span>
+    </div>
   </div>
   <div id="bot-err-flash" class="flash err" {% if not request.query_params.get('err') %}hidden{% endif %}>
-    {{ request.query_params.get('err') or '' }}
+    <div class="flash-copy">
+      <strong>ذخیره انجام نشد</strong>
+      <span class="muted" id="bot-err-flash-text">{{ request.query_params.get('err') or '' }}</span>
+    </div>
   </div>
 
   <div class="card settings-card">
     <h2>ربات تلگرام</h2>
-    <p class="muted update-card-caption">تغییر اتصال ربات معمولاً نیاز به ری‌استارت سرویس دارد؛ قبل از اعمال از شما تأیید گرفته می‌شود.</p>
+    <p class="muted update-card-caption">توکن و هویت ربات اصلی. تغییر این بخش معمولاً ری‌استارت می‌خواهد؛ قبل از اعمال تأیید می‌گیریم.</p>
+
+    {% if bot_status %}
+    <div class="flash {{ 'ok' if bot_status.ok else 'err' }}" id="bot-status-flash">
+      <div class="flash-copy">
+        <strong>{% if bot_status.ok %}ربات آنلاین{% else %}ربات قطع / در انتظار{% endif %}</strong>
+        <span class="muted" dir="ltr">
+          {% if bot_status.ok %}
+            @{{ bot_status.username or '—' }} · id={{ bot_status.id or '—' }}
+          {% else %}
+            {{ bot_status.error or 'آفلاین' }}
+          {% endif %}
+        </span>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="settings-grid">
       <div class="setting-item full">
         <label>توکن ربات (BOT_TOKEN)
           <input name="BOT_TOKEN" type="password" value="" dir="ltr" autocomplete="off" placeholder="•••• یا توکن جدید" />
-          <small class="muted">خالی بگذارید تا توکن فعلی حفظ شود. فعلی: {{ bot_token_masked or '—' }}</small>
+          <small class="muted">خالی = حفظ توکن فعلی · {{ bot_token_masked or '—' }}</small>
         </label>
       </div>
       <div class="setting-item">
-        <label>نام کاربری ربات (بدون @)
+        <label>نام کاربری (بدون @)
           <input name="BOT_USERNAME" value="{{ env_values.get('BOT_USERNAME','') }}" dir="ltr" required />
         </label>
       </div>
@@ -36,10 +58,21 @@
 
   <div class="card settings-card">
     <h2>دریافت پیام تلگرام</h2>
-    <p class="muted update-card-caption">
-      پیش‌فرض Long Polling است. Webhook برای بار بالاتر مناسب‌تر است و به آدرس HTTPS عمومی نیاز دارد
-      (معمولاً همان دامنه پنل با SSL).
-    </p>
+    <p class="muted update-card-caption">پیش‌فرض Long Polling است. Webhook برای بار بالاتر مناسب‌تر است و به HTTPS عمومی نیاز دارد.</p>
+
+    <div class="flash {{ 'ok' if update_mode == 'webhook' else 'warn' }}" id="bot-mode-status">
+      <div class="flash-copy">
+        <strong>حالت فعلی</strong>
+        <span class="muted">
+          {% if update_mode == 'webhook' %}
+            Webhook{% if webhook_full_url %} · <span dir="ltr">{{ webhook_full_url }}</span>{% endif %}
+          {% else %}
+            Long Polling
+          {% endif %}
+        </span>
+      </div>
+    </div>
+
     <div class="settings-grid">
       <div class="setting-item full">
         <fieldset class="bot-update-mode" id="bot-update-mode">
@@ -48,7 +81,7 @@
             <input type="radio" name="BOT_UPDATE_MODE" value="polling" {% if update_mode != 'webhook' %}checked{% endif %} />
             <span>
               <strong>Long Polling</strong>
-              <small class="muted">ربات خودش پیام‌ها را از تلگرام می‌گیرد — بدون نیاز به دامنه عمومی</small>
+              <small class="muted">ربات خودش پیام‌ها را از تلگرام می‌گیرد — بدون دامنه عمومی</small>
             </span>
           </label>
           <label class="bot-mode-option">
@@ -60,67 +93,66 @@
           </label>
         </fieldset>
       </div>
-      <div class="setting-item full bot-webhook-fields" data-webhook-fields {% if update_mode != 'webhook' %}hidden{% endif %}>
-        <label>آدرس پایه Webhook
-          <input
-            name="WEBHOOK_URL"
-            id="webhook-url-input"
-            value="{{ wh_url }}"
-            dir="ltr"
-            placeholder="https://bot.example.com"
-            autocomplete="off"
-          />
-          <small class="muted">فقط ریشهٔ HTTPS (بدون مسیر). اگر خالی باشد از «آدرس عمومی» پایین صفحه استفاده می‌شود.</small>
-        </label>
-      </div>
-      <div class="setting-item bot-webhook-fields" data-webhook-fields {% if update_mode != 'webhook' %}hidden{% endif %}>
-        <label>مسیر Webhook
-          <input
-            name="WEBHOOK_PATH"
-            id="webhook-path-input"
-            value="{{ wh_path }}"
-            dir="ltr"
-            placeholder="/telegram/webhook"
-            autocomplete="off"
-          />
-        </label>
-      </div>
-      <div class="setting-item full bot-webhook-fields" data-webhook-fields {% if update_mode != 'webhook' %}hidden{% endif %}>
-        <div class="flash warn" style="margin:0">
-          آدرس نهایی:
-          <code dir="ltr" id="webhook-full-preview">{{ webhook_full_url or '—' }}</code>
-          <br />
-          سکرت Webhook به‌صورت خودکار ساخته می‌شود و در پنل نمایش داده نمی‌شود.
-          دامنه باید از اینترنت با HTTPS به همین سرویس برسد.
+    </div>
+
+    <div class="bot-webhook-block" data-webhook-fields {% if update_mode != 'webhook' %}hidden{% endif %}>
+      <h3 class="ssl-subhead">تنظیمات Webhook</h3>
+      <p class="muted update-card-caption">آدرس پایه فقط ریشهٔ HTTPS است؛ مسیر جدا وارد می‌شود. سکرت به‌صورت خودکار ساخته می‌شود.</p>
+      <div class="settings-grid">
+        <div class="setting-item full">
+          <label>آدرس پایه
+            <input
+              name="WEBHOOK_URL"
+              id="webhook-url-input"
+              value="{{ wh_url }}"
+              dir="ltr"
+              placeholder="https://bot.example.com"
+              autocomplete="off"
+            />
+            <small class="muted">اگر خالی باشد از «آدرس عمومی» پایین استفاده می‌شود</small>
+          </label>
+        </div>
+        <div class="setting-item full">
+          <label>مسیر
+            <input
+              name="WEBHOOK_PATH"
+              id="webhook-path-input"
+              value="{{ wh_path }}"
+              dir="ltr"
+              placeholder="/telegram/webhook"
+              autocomplete="off"
+            />
+          </label>
+        </div>
+        <div class="setting-item full">
+          <div class="flash warn">
+            <div class="flash-copy">
+              <strong>آدرس نهایی</strong>
+              <span class="muted"><code dir="ltr" id="webhook-full-preview">{{ webhook_full_url or '—' }}</code></span>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="flash {{ 'ok' if update_mode == 'webhook' else 'warn' }}" style="margin-top:var(--space-2)">
-      حالت فعلی:
-      {% if update_mode == 'webhook' %}
-        Webhook{% if webhook_full_url %} · <span dir="ltr">{{ webhook_full_url }}</span>{% endif %}
-      {% else %}
-        Long Polling
-      {% endif %}
     </div>
   </div>
 
   <div class="card settings-card">
     <h2>پاسارگارد</h2>
+    <p class="muted update-card-caption">ریشه API پاسارگارد را وارد کنید — نه مسیر داشبورد UI.</p>
     <div class="settings-grid">
       <div class="setting-item full">
         <label>آدرس پنل (PG_BASE_URL)
           <input name="PG_BASE_URL" value="{{ env_values.get('PG_BASE_URL','') }}" dir="ltr" required placeholder="https://panel.example.com" />
-          <small class="muted">ریشه API پاسارگارد (نه مسیر داشبورد). مسیرهایی مثل <code dir="ltr">/MrClock</code> یا <code dir="ltr">/dashboard</code> فقط UI هستند و باعث خطای ۴۰۵ می‌شوند. اگر اشتباه وارد شود، ربات خودش ریشه دامنه را هم امتحان می‌کند.</small>
+          <small class="muted">مسیرهایی مثل <code dir="ltr">/dashboard</code> فقط UI هستند و باعث خطای ۴۰۵ می‌شوند</small>
         </label>
       </div>
       <div class="setting-item">
-        <label>نام کاربری پاسارگارد
+        <label>نام کاربری
           <input name="PG_USERNAME" value="{{ env_values.get('PG_USERNAME','') }}" dir="ltr" required />
         </label>
       </div>
       <div class="setting-item">
-        <label>رمز پاسارگارد
+        <label>رمز
           <input name="PG_PASSWORD" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="•••• یا رمز جدید" />
           <small class="muted">خالی = حفظ رمز فعلی</small>
         </label>
@@ -130,43 +162,32 @@
 
   <div class="card settings-card">
     <h2>وب و عمومی</h2>
+    <p class="muted update-card-caption">پورت پنل، واحد پول، و آدرس عمومی برای مینی‌اپ و پیش‌فرض Webhook.</p>
     <div class="settings-grid">
       <div class="setting-item">
-        <label>پورت وب‌پنل (WEB_PORT)
+        <label>پورت وب‌پنل
           <input name="WEB_PORT" value="{{ env_values.get('WEB_PORT','9000') }}" dir="ltr" required />
         </label>
       </div>
       <div class="setting-item">
-        <label>واحد پول (CURRENCY)
+        <label>واحد پول
           <input name="CURRENCY" value="{{ env_values.get('CURRENCY','تومان') }}" required />
         </label>
       </div>
       <div class="setting-item full">
-        <label>آدرس عمومی (PUBLIC_BASE_URL) — اختیاری
+        <label>آدرس عمومی (اختیاری)
           <input name="PUBLIC_BASE_URL" id="public-base-input" value="{{ env_values.get('PUBLIC_BASE_URL','') }}" dir="ltr" placeholder="https://bot.example.com" />
-          <small class="muted">برای مینی‌اپ، لینک‌های عمومی، و پیش‌فرض آدرس Webhook</small>
+          <small class="muted">برای مینی‌اپ، لینک‌های عمومی و پیش‌فرض Webhook</small>
         </label>
       </div>
     </div>
   </div>
-
-  {% if bot_status %}
-  <div class="flash {{ 'ok' if bot_status.ok else 'err' }}" id="bot-status-flash">
-    وضعیت ربات:
-    {% if bot_status.ok %}
-      آنلاین · @{{ bot_status.username or '—' }} (id={{ bot_status.id or '—' }})
-    {% else %}
-      {{ bot_status.error or 'آفلاین / در انتظار ری‌استارت' }}
-    {% endif %}
-  </div>
-  {% endif %}
 
   <div class="actions sticky-actions">
     <button class="btn" type="submit" id="bot-save-btn">ذخیره تنظیمات</button>
   </div>
 </form>
 
-{# Confirm restart #}
 <div class="ui-modal" id="modal-bot-restart-confirm" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="bot-restart-confirm-title">
@@ -185,7 +206,6 @@
   </div>
 </div>
 
-{# Progress during restart #}
 <div class="ui-modal" id="modal-bot-restart-progress" hidden data-modal-no-escape="1">
   <div class="ui-modal-backdrop"></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="bot-restart-progress-title">
@@ -193,7 +213,10 @@
       <h3 id="bot-restart-progress-title">در حال اعمال تغییرات</h3>
     </div>
     <div class="flash warn update-stay-warn" role="status">
-      تا پایان عملیات از این صفحه خارج نشوید.
+      <div class="flash-copy">
+        <strong>منتظر بمانید</strong>
+        <span class="muted">تا پایان عملیات از این صفحه خارج نشوید.</span>
+      </div>
     </div>
     <div class="progress-wrap" aria-label="نوار پیشرفت">
       <div class="progress-bar">
@@ -204,14 +227,19 @@
         <strong id="bot-restart-percent">۰٪</strong>
       </div>
     </div>
-    <ol class="bot-restart-steps" id="bot-restart-steps">
-      <li data-step="save">ذخیره تنظیمات</li>
-      <li data-step="stop">توقف سرویس</li>
-      <li data-step="start">راه‌اندازی مجدد</li>
-      <li data-step="health">بررسی سلامت پنل</li>
-      <li data-step="bot">بررسی اتصال ربات</li>
+    <ol class="update-steps" id="bot-restart-steps">
+      <li data-step="save"><span class="step-dot" aria-hidden="true"></span>ذخیره تنظیمات</li>
+      <li data-step="stop"><span class="step-dot" aria-hidden="true"></span>توقف سرویس</li>
+      <li data-step="start"><span class="step-dot" aria-hidden="true"></span>راه‌اندازی مجدد</li>
+      <li data-step="health"><span class="step-dot" aria-hidden="true"></span>بررسی سلامت پنل</li>
+      <li data-step="bot"><span class="step-dot" aria-hidden="true"></span>بررسی اتصال ربات</li>
     </ol>
-    <div class="flash err" id="bot-restart-progress-err" hidden></div>
+    <div class="flash err" id="bot-restart-progress-err" hidden>
+      <div class="flash-copy">
+        <strong>ری‌استارت کامل نشد</strong>
+        <span class="muted" id="bot-restart-progress-err-text"></span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -229,6 +257,7 @@
   const fullPreview = document.getElementById('webhook-full-preview');
   const savedFlash = document.getElementById('bot-saved-flash');
   const errFlash = document.getElementById('bot-err-flash');
+  const errFlashText = document.getElementById('bot-err-flash-text');
   const confirmModal = document.getElementById('modal-bot-restart-confirm');
   const progressModal = document.getElementById('modal-bot-restart-progress');
   const confirmBtn = document.getElementById('bot-restart-confirm-btn');
@@ -237,6 +266,7 @@
   const stepLabel = document.getElementById('bot-restart-step-label');
   const stepsRoot = document.getElementById('bot-restart-steps');
   const progressErr = document.getElementById('bot-restart-progress-err');
+  const progressErrText = document.getElementById('bot-restart-progress-err-text');
 
   const STEP_ORDER = ['save', 'stop', 'start', 'health', 'bot'];
   const STEP_PCT = { save: 15, stop: 35, start: 55, health: 80, bot: 100 };
@@ -272,23 +302,22 @@
   function showErr(msg){
     if (!errFlash) return alert(msg || 'خطا');
     errFlash.hidden = false;
-    errFlash.textContent = msg || 'خطا';
+    if (errFlashText) errFlashText.textContent = msg || 'خطا';
+    else errFlash.textContent = msg || 'خطا';
     if (savedFlash) savedFlash.hidden = true;
   }
 
   function showSaved(msg){
     if (savedFlash) {
       savedFlash.hidden = false;
-      savedFlash.textContent = msg || 'تغییرات اعمال شد.';
+      const span = savedFlash.querySelector('.muted');
+      if (span && msg) span.textContent = msg;
     }
     if (errFlash) errFlash.hidden = true;
   }
 
   function openModal(el){
     if (!el) return;
-    if (typeof window.openModal === 'function') {
-      /* panel.js uses id without # via data-modal-open */
-    }
     el.hidden = false;
     el.classList.add('open');
     document.body.classList.add('modal-open');
@@ -321,14 +350,20 @@
       stepsRoot.querySelectorAll('[data-step]').forEach((li) => {
         const key = li.getAttribute('data-step');
         const i = STEP_ORDER.indexOf(key);
-        li.classList.toggle('is-active', key === activeKey);
-        li.classList.toggle('is-done', i <= doneIdx);
+        li.classList.toggle('current', key === activeKey);
+        li.classList.toggle('done', i <= doneIdx && key !== activeKey);
       });
     }
     const pct = STEP_PCT[activeKey] || 0;
     if (fillEl) fillEl.style.width = pct + '%';
     if (pctEl) pctEl.textContent = pct + '٪';
     if (stepLabel) stepLabel.textContent = STEP_LABEL[activeKey] || '…';
+  }
+
+  function showProgressErr(msg){
+    if (!progressErr) return;
+    progressErr.hidden = false;
+    if (progressErrText) progressErrText.textContent = msg || 'خطا';
   }
 
   async function postBot(extra){
@@ -390,15 +425,12 @@
   async function applyWithRestart(){
     closeModal(confirmModal);
     openModal(progressModal);
-    if (progressErr) { progressErr.hidden = true; progressErr.textContent = ''; }
+    if (progressErr) progressErr.hidden = true;
     if (saveBtn) saveBtn.disabled = true;
     setStep('save', null);
     const saved = await postBot({ confirm_restart: '1' });
     if (!saved.ok) {
-      if (progressErr) {
-        progressErr.hidden = false;
-        progressErr.textContent = saved.error || 'ذخیره ناموفق بود';
-      }
+      showProgressErr(saved.error || 'ذخیره ناموفق بود');
       if (saveBtn) saveBtn.disabled = false;
       return;
     }
@@ -411,10 +443,7 @@
     setStep('stop', 'save');
     const waited = await waitForRestart(saved.pre_boot_id || '');
     if (!waited.ok) {
-      if (progressErr) {
-        progressErr.hidden = false;
-        progressErr.textContent = waited.error || 'خطا در ری‌استارت';
-      }
+      showProgressErr(waited.error || 'خطا در ری‌استارت');
       if (saveBtn) saveBtn.disabled = false;
       return;
     }
@@ -470,7 +499,6 @@
     }
   });
 
-  /* Do not dismiss the in-progress modal with Escape */
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && progressModal && progressModal.classList.contains('open')) {
       e.stopImmediatePropagation();
@@ -478,7 +506,6 @@
     }
   }, true);
 
-  /* Legacy query ?restarting=1 (non-JS submit) */
   const params = new URLSearchParams(location.search);
   if (params.get('restarting') === '1') {
     openModal(progressModal);
@@ -486,10 +513,7 @@
     (async () => {
       const waited = await waitForRestart('');
       if (!waited.ok) {
-        if (progressErr) {
-          progressErr.hidden = false;
-          progressErr.textContent = waited.error || 'ری‌استارت ناموفق';
-        }
+        showProgressErr(waited.error || 'ری‌استارت ناموفق');
         return;
       }
       params.delete('restarting');
