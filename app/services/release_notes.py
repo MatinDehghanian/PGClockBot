@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.10.10": [
+        "عضویت اجباری: resolve کانال با getChat (لینک دعوت / t.me/c/… / @username) و چک ادمین بودن ربات قبل از تأیید کاربر",
+        "کانال‌ها فقط روی دکمه‌های اینلاین؛ عنوان دکمه قابل تنظیم؛ متن پیام عضویت در همان تنظیمات کانال اجباری شخصی‌سازی می‌شود",
+        "اگر ربات ادمین نباشد پیام جدا از «عضو نیستی» نشان داده می‌شود؛ لینک دعوت alone هم برای دکمه و resolve پشتیبانی می‌شود",
+    ],
     "4.10.9": [
         "عضویت اجباری: تأیید با نوع ChatMember تلگرام (member/admin/creator و restricted با is_member)",
         "دکمه‌های اینلاین لینک کانال + «عضو شدم» برای بررسی دوباره؛ پیام جدا وقتی ربات ادمین نیست یا آیدی غلط است",

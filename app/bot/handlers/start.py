@@ -177,13 +177,17 @@ async def cmd_start(
         )
     ui = await get_all_settings(session)
     channels = []
+    force_entries: list = []
     try:
-        from app.services.users import parse_force_join_channels
+        from app.services.users import parse_force_join_channels, parse_force_join_entries
 
-        channels = parse_force_join_channels(ui.get("force_join_channel"))
+        raw_fj = ui.get("force_join_channel")
+        force_entries = parse_force_join_entries(raw_fj)
+        channels = parse_force_join_channels(raw_fj)
     except Exception:
         ch = (ui.get("force_join_channel") or "").strip()
         channels = [ch] if ch else []
+        force_entries = []
     enabled = ui.get("force_join_enabled")
     from app.bot.middlewares import (
         check_force_join_all,
@@ -202,7 +206,7 @@ async def cmd_start(
         # Always re-check on /start (drop stale negative cache)
         clear_force_join_member_cache(int(db_user.telegram_id))
         missing, unverified = await check_force_join_all(
-            message.bot, int(db_user.telegram_id), channels
+            message.bot, int(db_user.telegram_id), channels, entries=force_entries
         )
         if missing or unverified:
             await message.answer(
@@ -237,6 +241,15 @@ async def cmd_start(
     )
 
 
+@router.callback_query(F.data == "forcejoin:nolink")
+async def cb_force_join_nolink(callback: CallbackQuery):
+    """Private channel saved without an invite URL — cannot open a join button."""
+    await callback.answer(
+        "لینک دعوت کانال در تنظیمات ذخیره نشده. ادمین باید لینک t.me/+… را وارد کند.",
+        show_alert=True,
+    )
+
+
 @router.callback_query(F.data == "forcejoin:check")
 async def cb_force_join_check(
     callback: CallbackQuery,
@@ -253,10 +266,12 @@ async def cb_force_join_check(
         force_join_block_message,
     )
     from app.services.reseller_access import effective_menu_role
-    from app.services.users import parse_force_join_channels
+    from app.services.users import parse_force_join_channels, parse_force_join_entries
 
     ui = await get_all_settings(session)
-    channels = parse_force_join_channels(ui.get("force_join_channel"))
+    raw_fj = ui.get("force_join_channel")
+    force_entries = parse_force_join_entries(raw_fj)
+    channels = parse_force_join_channels(raw_fj)
     enabled = ui.get("force_join_enabled")
     role_for_force = await effective_menu_role(
         session,
@@ -282,19 +297,19 @@ async def cb_force_join_check(
 
     clear_force_join_member_cache(int(db_user.telegram_id))
     missing, unverified = await check_force_join_all(
-        callback.bot, int(db_user.telegram_id), channels
+        callback.bot, int(db_user.telegram_id), channels, entries=force_entries
     )
     if missing or unverified:
         text = force_join_block_message(
             missing, unverified, custom=ui.get("force_join_msg")
         )
         markup = kb.force_join_inline_keyboard(
-            ui.get("force_join_channel"), ui=ui, channels=channels
+            raw_fj, ui=ui, channels=channels
         )
         alert = (
             "عضویت تأیید نشد — ربات باید ادمین کانال باشد"
             if unverified and not missing
-            else "هنوز عضو کانال‌ها نشده‌اید"
+            else "هنوز عضو کانال‌ها نشده‌اید — چند ثانیه بعد دوباره بزنید"
         )
         await callback.answer(alert, show_alert=True)
         if callback.message:

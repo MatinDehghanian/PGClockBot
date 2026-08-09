@@ -86,7 +86,10 @@ def _extract_start_payload(event: TelegramObject) -> str | None:
 
 
 def _force_join_chat_id(channel: str):
-    """Chat id for get_chat_member (@username str or numeric int)."""
+    """Chat id for get_chat_member (@username str or numeric int).
+
+    Invite links return None here — use :func:`resolve_force_join_chat_id` instead.
+    """
     from app.services.users import normalize_force_join_channel_id
 
     ch = normalize_force_join_channel_id(channel)
@@ -103,7 +106,13 @@ def _force_join_chat_id(channel: str):
 
 
 def clear_force_join_member_cache(telegram_id: int | None = None) -> None:
-    """Drop cached membership results (all, or one user)."""
+    """Drop cached membership results (all, or one user).
+
+    Also clears bot-admin / chat-resolve caches so a freshly promoted bot or
+    corrected channel id is picked up on the next «عضو شدم» /start.
+    """
+    _FORCE_JOIN_BOT_ADMIN_CACHE.clear()
+    _FORCE_JOIN_RESOLVE_CACHE.clear()
     if telegram_id is None:
         _FORCE_JOIN_MEMBER_CACHE.clear()
         return
@@ -115,68 +124,229 @@ def clear_force_join_member_cache(telegram_id: int | None = None) -> None:
 _JOINED_STATUSES = frozenset({"member", "administrator", "creator"})
 _LEFT_STATUSES = frozenset({"left", "kicked"})
 
+_FORCE_JOIN_MEMBER_CACHE: dict[tuple[int, str], tuple[float, bool | None]] = {}
+_FORCE_JOIN_MEMBER_TTL = 45.0
+_FORCE_JOIN_RESOLVE_CACHE: dict[str, tuple[float, int | str]] = {}
+_FORCE_JOIN_RESOLVE_TTL = 300.0
+_FORCE_JOIN_BOT_ADMIN_CACHE: dict[str, tuple[float, bool]] = {}
+_FORCE_JOIN_BOT_ADMIN_TTL = 120.0
 
-async def check_force_join_member(bot: Bot, telegram_id: int, channel: str) -> bool | None:
+
+def _status_value(member: Any) -> str:
+    status = getattr(member, "status", None)
+    if status is None:
+        return ""
+    val = getattr(status, "value", None)
+    if val is not None:
+        return str(val).lower()
+    text = str(status).lower()
+    if "." in text:
+        text = text.rsplit(".", 1)[-1]
+    return text
+
+
+def _member_is_joined(member: Any) -> bool | None:
+    """Map Telegram ChatMember → True / False / None (unknown)."""
+    from aiogram.types import (
+        ChatMemberAdministrator,
+        ChatMemberBanned,
+        ChatMemberLeft,
+        ChatMemberMember,
+        ChatMemberOwner,
+        ChatMemberRestricted,
+    )
+
+    if isinstance(member, (ChatMemberMember, ChatMemberAdministrator, ChatMemberOwner)):
+        return True
+    if isinstance(member, ChatMemberRestricted):
+        return bool(getattr(member, "is_member", False))
+    if isinstance(member, (ChatMemberLeft, ChatMemberBanned)):
+        return False
+    status_val = _status_value(member)
+    if status_val in _LEFT_STATUSES:
+        return False
+    if status_val == "restricted":
+        return bool(getattr(member, "is_member", False))
+    if status_val in _JOINED_STATUSES:
+        return True
+    logger.warning(
+        "force-join unknown chat_member %r status=%r",
+        type(member).__name__,
+        status_val,
+    )
+    return None
+
+
+def _bot_can_inspect_members(member: Any) -> bool:
+    """Channels require the bot to be admin/owner to call getChatMember on others."""
+    from aiogram.types import ChatMemberAdministrator, ChatMemberOwner
+
+    if isinstance(member, (ChatMemberAdministrator, ChatMemberOwner)):
+        return True
+    return _status_value(member) in {"administrator", "creator"}
+
+
+async def resolve_force_join_chat_id(
+    bot: Bot,
+    channel: str,
+    *,
+    invite_link: str | None = None,
+) -> int | str | None:
+    """Resolve @username / -100… / invite link to a chat id Telegram accepts."""
+    import time
+
+    from app.services.users import (
+        is_force_join_invite_ref,
+        normalize_force_join_invite_link,
+    )
+
+    direct = _force_join_chat_id(channel)
+    invite = normalize_force_join_invite_link(invite_link) or (
+        normalize_force_join_invite_link(channel) if is_force_join_invite_ref(channel) else ""
+    )
+    cache_key = f"{direct!s}|{invite}"
+    now = time.monotonic()
+    hit = _FORCE_JOIN_RESOLVE_CACHE.get(cache_key)
+    if hit and (now - hit[0]) < _FORCE_JOIN_RESOLVE_TTL:
+        return hit[1]
+
+    candidates: list[Any] = []
+    if direct is not None:
+        candidates.append(direct)
+    if invite:
+        candidates.append(invite)
+
+    resolved: int | str | None = None
+    last_exc: BaseException | None = None
+    for cand in candidates:
+        try:
+            chat = await bot.get_chat(cand)
+            cid = getattr(chat, "id", None)
+            # Require a real int (AsyncMock children int()→1 and must not be trusted)
+            if type(cid) is int:
+                resolved = cid
+                break
+            if isinstance(cid, str) and cid.lstrip("-").isdigit():
+                resolved = int(cid)
+                break
+            resolved = cand
+            break
+        except Exception as exc:
+            last_exc = exc
+            continue
+
+    if resolved is None:
+        # Fall back to direct id even if get_chat failed (public @username often works)
+        if direct is not None:
+            resolved = direct
+        else:
+            logger.warning(
+                "force-join chat resolve failed for %r invite=%r: %s",
+                channel,
+                invite,
+                last_exc,
+            )
+            return None
+
+    _FORCE_JOIN_RESOLVE_CACHE[cache_key] = (now, resolved)
+    if len(_FORCE_JOIN_RESOLVE_CACHE) > 2000:
+        oldest = sorted(_FORCE_JOIN_RESOLVE_CACHE.items(), key=lambda kv: kv[1][0])[:500]
+        for k, _ in oldest:
+            _FORCE_JOIN_RESOLVE_CACHE.pop(k, None)
+    return resolved
+
+
+async def _ensure_bot_can_check(bot: Bot, chat_id: int | str) -> bool:
+    """Return True when this bot may call getChatMember for other users in chat_id."""
+    import time
+
+    token = getattr(bot, "token", "") or ""
+    cache_key = f"{token[-12:]}:{chat_id}"
+    now = time.monotonic()
+    hit = _FORCE_JOIN_BOT_ADMIN_CACHE.get(cache_key)
+    if hit and (now - hit[0]) < _FORCE_JOIN_BOT_ADMIN_TTL:
+        return hit[1]
+
+    try:
+        me = await bot.get_me()
+        bot_id = getattr(me, "id", None)
+        if type(bot_id) is not int:
+            # Cannot resolve bot id (tests / transient) — still attempt user check
+            return True
+    except Exception:
+        return True
+
+    ok = False
+    try:
+        bot_member = await bot.get_chat_member(chat_id, bot_id)
+        ok = _bot_can_inspect_members(bot_member)
+        if not ok:
+            logger.warning(
+                "force-join: bot is not admin/owner in chat %s (status=%s) — "
+                "cannot verify user membership",
+                chat_id,
+                _status_value(bot_member),
+            )
+    except Exception as exc:
+        logger.warning("force-join: bot admin probe failed for %s: %s", chat_id, exc)
+        ok = False
+    _FORCE_JOIN_BOT_ADMIN_CACHE[cache_key] = (now, ok)
+    return ok
+
+
+async def check_force_join_member(
+    bot: Bot,
+    telegram_id: int,
+    channel: str,
+    *,
+    invite_link: str | None = None,
+) -> bool | None:
     """Return True if member, False if left/kicked, None if membership cannot be verified.
 
     Joined statuses: member, administrator, creator, and restricted with is_member=True.
-    Only positive membership is cached briefly. Negative / error results are never
-    cached so a user who just joined can pass on the next /start.
+    Resolves invite links / usernames via getChat first. Requires the bot to be an
+    admin of the channel (Telegram API rule for channels). Only positive membership
+    is cached briefly so a user who just joined can pass on the next check.
     """
     import time
 
-    chat_id = _force_join_chat_id(channel)
+    chat_id = await resolve_force_join_chat_id(bot, channel, invite_link=invite_link)
     if chat_id is None:
         logger.warning(
-            "force-join channel id unusable for get_chat_member: %r "
-            "(need @username or numeric -100… id; invite links alone cannot be verified)",
+            "force-join channel id unusable: %r "
+            "(need @username, -100…, t.me/c/…, or invite link while bot is a member)",
             channel,
         )
         return None
+
     cache_key = (int(telegram_id), str(chat_id))
     now = time.monotonic()
     hit = _FORCE_JOIN_MEMBER_CACHE.get(cache_key)
     if hit and hit[1] is True and (now - hit[0]) < _FORCE_JOIN_MEMBER_TTL:
         return True
-    try:
-        from aiogram.types import (
-            ChatMemberAdministrator,
-            ChatMemberBanned,
-            ChatMemberLeft,
-            ChatMemberMember,
-            ChatMemberOwner,
-            ChatMemberRestricted,
-        )
 
+    if not await _ensure_bot_can_check(bot, chat_id):
+        return None
+
+    try:
         member = await bot.get_chat_member(chat_id, int(telegram_id))
-        # Prefer concrete aiogram types — more reliable than status string alone
-        if isinstance(member, (ChatMemberMember, ChatMemberAdministrator, ChatMemberOwner)):
-            result = True
-        elif isinstance(member, ChatMemberRestricted):
-            result = bool(getattr(member, "is_member", False))
-        elif isinstance(member, (ChatMemberLeft, ChatMemberBanned)):
+        result = _member_is_joined(member)
+    except Exception as exc:
+        err = str(exc).lower()
+        # Explicit non-membership for this user (chat itself is reachable)
+        if any(
+            token in err
+            for token in (
+                "user not found",
+                "member not found",
+                "participant_id_invalid",
+            )
+        ):
             result = False
         else:
-            status = getattr(member, "status", None)
-            status_val = str(getattr(status, "value", status) or "").lower()
-            if status_val in _LEFT_STATUSES:
-                result = False
-            elif status_val == "restricted":
-                result = bool(getattr(member, "is_member", False))
-            elif status_val in _JOINED_STATUSES:
-                result = True
-            else:
-                logger.warning(
-                    "force-join unknown chat_member %r status=%r for %s",
-                    type(member).__name__,
-                    status_val,
-                    channel,
-                )
-                result = None
-    except Exception as exc:
-        logger.warning("force-join membership check failed for %s: %s", channel, exc)
-        result = None
-    # Cache only confirmed members — never cache left/kicked/errors
+            logger.warning("force-join membership check failed for %s: %s", channel, exc)
+            result = None
+
     if result is True:
         _FORCE_JOIN_MEMBER_CACHE[cache_key] = (now, True)
         if len(_FORCE_JOIN_MEMBER_CACHE) > 4000:
@@ -184,10 +354,6 @@ async def check_force_join_member(bot: Bot, telegram_id: int, channel: str) -> b
             for k, _ in oldest:
                 _FORCE_JOIN_MEMBER_CACHE.pop(k, None)
     return result
-
-
-_FORCE_JOIN_MEMBER_CACHE: dict[tuple[int, str], tuple[float, bool | None]] = {}
-_FORCE_JOIN_MEMBER_TTL = 60.0
 
 # Simple per-user flood guard (process-local)
 _RATE_BUCKETS: dict[int, list[float]] = {}
@@ -246,7 +412,11 @@ class RateLimitMiddleware(BaseMiddleware):
 
 
 async def check_force_join_all(
-    bot: Bot, telegram_id: int, channels: list[str]
+    bot: Bot,
+    telegram_id: int,
+    channels: list[str],
+    *,
+    entries: list[dict[str, Any]] | None = None,
 ) -> tuple[list[str], list[str]]:
     """Check membership for every required channel.
 
@@ -255,8 +425,19 @@ async def check_force_join_all(
     """
     if not channels:
         return [], []
+    link_by_id: dict[str, str] = {}
+    for e in entries or []:
+        cid = str((e or {}).get("id") or "").lower()
+        link = str((e or {}).get("link") or "")
+        if cid and link:
+            link_by_id[cid] = link
     results = await asyncio.gather(
-        *[check_force_join_member(bot, telegram_id, ch) for ch in channels]
+        *[
+            check_force_join_member(
+                bot, telegram_id, ch, invite_link=link_by_id.get(ch.lower())
+            )
+            for ch in channels
+        ]
     )
     missing: list[str] = []
     unverified: list[str] = []
@@ -276,9 +457,9 @@ def force_join_block_message(
 ) -> str:
     """User-facing Persian copy when required membership is not confirmed.
 
-    If *custom* is set (``force_join_msg``), ``{channels}`` is replaced with the
-    bullet list. Unverified-only failures get a clearer admin-config hint when
-    using the built-in template (API errors ≠ user not joined).
+    Channels belong on inline buttons — default copy does **not** dump a bullet
+    list. If *custom* (``force_join_msg``) contains ``{channels}``, that placeholder
+    is replaced with the bullet list; otherwise the custom text is shown as-is.
     """
     blocked = list(missing or [])
     for ch in unverified or []:
@@ -287,28 +468,23 @@ def force_join_block_message(
     listed = "\n".join(f"• {c}" for c in blocked)
     custom_text = (custom or "").strip()
     if custom_text:
-        try:
-            return custom_text.format(channels=listed or "—")
-        except Exception:
-            return custom_text.replace("{channels}", listed or "—")
+        if "{channels}" in custom_text:
+            try:
+                return custom_text.format(channels=listed or "—")
+            except Exception:
+                return custom_text.replace("{channels}", listed or "—")
+        return custom_text
 
     only_unverified = bool(unverified) and not missing
     if only_unverified:
-        body = (
-            "عضویت شما تأیید نشد (خطای بررسی کانال).\n"
-            "ربات باید ادمین کانال باشد و شناسه کانال (@username یا -100…) درست باشد.\n"
-            "پس از رفع، دوباره /start بزنید یا «عضو شدم» را بزنید:"
-        )
-        return f"{body}\n{listed}" if listed else body
-    if not listed:
         return (
-            "هنوز عضو کانال‌های اجباری نشده‌اید. "
-            "ابتدا عضو شوید، سپس «عضو شدم» را بزنید یا دوباره /start بفرستید."
+            "الان نمی‌توان عضویت شما را تأیید کرد.\n"
+            "ربات باید ادمین کانال باشد و شناسه/لینک کانال درست ذخیره شده باشد.\n"
+            "بعد از رفع، از دکمه «عضو شدم» استفاده کنید."
         )
     return (
-        "هنوز عضو کانال‌های زیر نشده‌اید.\n"
-        "لطفاً عضو شوید و «عضو شدم» را بزنید یا دوباره /start بفرستید:\n"
-        f"{listed}"
+        "برای ورود به ربات ابتدا از دکمه‌های زیر عضو کانال شوید، "
+        "سپس «عضو شدم» را بزنید."
     )
 
 
@@ -453,13 +629,20 @@ class ForceJoinMiddleware(BaseMiddleware):
         if cb and cb.startswith("forcejoin:"):
             return await handler(event, data)
 
-        from app.services.users import get_all_settings, on, parse_force_join_channels
+        from app.services.users import (
+            get_all_settings,
+            on,
+            parse_force_join_channels,
+            parse_force_join_entries,
+        )
         from app.services.reseller_access import effective_menu_role
         from app.bot import keyboards as kb
 
         ui = await get_all_settings(session)
         enabled = ui.get("force_join_enabled")
-        channels = parse_force_join_channels(ui.get("force_join_channel"))
+        raw_channels = ui.get("force_join_channel")
+        entries = parse_force_join_entries(raw_channels)
+        channels = parse_force_join_channels(raw_channels)
         if not on(enabled) or not channels:
             return await handler(event, data)
 
@@ -474,7 +657,7 @@ class ForceJoinMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         missing, unverified = await check_force_join_all(
-            bot, int(db_user.telegram_id), channels
+            bot, int(db_user.telegram_id), channels, entries=entries
         )
         if missing or unverified:
             msg = _reply_message(event)
@@ -482,7 +665,7 @@ class ForceJoinMiddleware(BaseMiddleware):
                 missing, unverified, custom=ui.get("force_join_msg")
             )
             markup = kb.force_join_inline_keyboard(
-                ui.get("force_join_channel"), ui=ui, channels=channels
+                raw_channels, ui=ui, channels=channels
             )
             if msg:
                 try:
@@ -493,8 +676,13 @@ class ForceJoinMiddleware(BaseMiddleware):
                 event if isinstance(event, CallbackQuery) else None
             )
             if cq is not None:
+                alert = (
+                    "عضویت تأیید نشد — ربات باید ادمین کانال باشد"
+                    if unverified and not missing
+                    else "هنوز عضو کانال‌ها نشده‌اید"
+                )
                 try:
-                    await cq.answer("هنوز عضو کانال‌های اجباری نشده‌اید", show_alert=True)
+                    await cq.answer(alert, show_alert=True)
                 except Exception:
                     pass
             return None

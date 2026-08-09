@@ -66,10 +66,22 @@ def normalize_force_join_invite_link(raw: str | None) -> str:
             rest = link[len(prefix) :].lstrip("/")
             if not rest:
                 return ""
+            # Private message deep-links (t.me/c/…) are not join URLs
+            if rest.lower().startswith("c/"):
+                return ""
             return f"https://t.me/{rest}"
     if link.startswith("@") and len(link) > 1:
         return f"https://t.me/{link[1:].lower()}"
     return ""
+
+
+def is_force_join_invite_ref(raw: str | None) -> bool:
+    """True when value is an invite / joinchat URL (resolved via getChat at check time)."""
+    link = normalize_force_join_invite_link(raw)
+    if not link:
+        return False
+    lower = link.lower()
+    return "/+" in lower or "joinchat/" in lower
 
 
 def force_join_channel_url(channel_id: str, invite_link: str | None = None) -> str | None:
@@ -77,27 +89,31 @@ def force_join_channel_url(channel_id: str, invite_link: str | None = None) -> s
     custom = normalize_force_join_invite_link(invite_link)
     if custom:
         return custom
+    # Invite stored as the channel id itself
+    as_invite = normalize_force_join_invite_link(channel_id)
+    if as_invite:
+        return as_invite
     ch = normalize_force_join_channel_id(channel_id)
     if not ch:
         return None
     if ch.startswith("@"):
         return f"https://t.me/{ch[1:]}"
-    # Private numeric ids need an explicit invite link — no public URL
-    custom_id = normalize_force_join_invite_link(ch)
-    return custom_id or None
+    return None
 
 
 def normalize_force_join_channel_id(raw: str | None) -> str:
     """Normalize @username / numeric id / t.me URL into a Telegram chat id string.
 
-    Usernames are lowercased (Telegram treats them case-insensitively). Invite-only
-    links (``t.me/+hash``, ``joinchat/...``) are **not** valid ``get_chat_member``
-    chat ids — returns ``\"\"`` so callers must store a ``@username`` or ``-100…`` id
-    separately (optional ``link`` on the entry is for buttons only).
+    Usernames are lowercased (Telegram treats them case-insensitively).
+    Private invite links (``t.me/+hash``, ``joinchat/...``) return ``\"\"`` — keep them
+    in the optional ``link`` field (or as invite-ref id); runtime resolves via ``getChat``.
+    ``t.me/c/<internal>`` private deep-links become ``-100<internal>``.
     """
     import re
 
-    ch = (raw or "").strip()
+    from app.services.numbers import normalize_digits
+
+    ch = normalize_digits((raw or "").strip())
     if not ch:
         return ""
     lower = ch.lower()
@@ -117,14 +133,21 @@ def normalize_force_join_channel_id(raw: str | None) -> str:
         ch = ch.split("?", 1)[0].strip()
     if not ch:
         return ""
-    # Private invite paths cannot be used with get_chat_member
-    if ch.startswith("+") or "/" in ch or ch.lower().startswith("joinchat"):
+    # t.me/c/<channel_internal_id>[/message_id] → -100<internal>
+    m = re.match(r"^[Cc]/(\d+)(?:/\d+)?$", ch)
+    if m:
+        return f"-100{m.group(1)}"
+    # Private invite paths — not a direct get_chat_member chat id
+    if ch.startswith("+") or ch.lower().startswith("joinchat") or "/" in ch:
         return ""
     if ch.startswith("@"):
         return "@" + ch[1:].lower()
     if ch.startswith("-") and ch[1:].isdigit():
         return ch
     if ch.isdigit():
+        # Bare internal ids from t.me/c/… copy-paste without prefix
+        if len(ch) >= 9:
+            return f"-100{ch}" if not ch.startswith("100") else f"-{ch}"
         return ch
     if re.match(r"^[A-Za-z][A-Za-z0-9_]{3,}$", ch):
         return f"@{ch.lower()}"
@@ -150,7 +173,12 @@ def _parse_channel_line(part: str) -> tuple[str, bool]:
     if ch.endswith("(اختیاری)"):
         ch = ch[: -len("(اختیاری)")].strip()
         required = False
-    return normalize_force_join_channel_id(ch), required
+    normalized = normalize_force_join_channel_id(ch)
+    if normalized:
+        return normalized, required
+    # Invite-only line — keep normalized invite URL as id for runtime resolve
+    invite = normalize_force_join_invite_link(ch)
+    return (invite, required) if invite else ("", required)
 
 
 def _entry_invite_link(item: dict[str, Any], *, id_raw: str = "") -> str:
@@ -159,7 +187,6 @@ def _entry_invite_link(item: dict[str, Any], *, id_raw: str = "") -> str:
         link = normalize_force_join_invite_link(str(item.get(key) or ""))
         if link:
             return link
-    # Legacy: whole id was a private invite URL (not usable for get_chat_member)
     raw = (id_raw or "").strip()
     if not raw or raw.startswith("@"):
         return ""
@@ -169,12 +196,19 @@ def _entry_invite_link(item: dict[str, Any], *, id_raw: str = "") -> str:
     return ""
 
 
+def _entry_title(item: dict[str, Any] | None) -> str:
+    if not isinstance(item, dict):
+        return ""
+    title = str(item.get("title") or item.get("name") or item.get("label") or "").strip()
+    return title[:64]
+
+
 def parse_force_join_entries(raw: str | None) -> list[dict[str, Any]]:
-    """Parse force-join setting into [{id, required, link?}, ...].
+    """Parse force-join setting into [{id, required, link?, title?}, ...].
 
     Accepts JSON array (new) or legacy line/comma-separated channels (all required
-    unless marked ``!optional``). Optional ``link`` / ``invite_link`` is used only
-    for inline join buttons (private channels with numeric ids).
+    unless marked ``!optional``). ``link`` is the join URL for inline buttons;
+    invite-only ids are kept and resolved via ``getChat`` when checking membership.
     """
     s = (raw or "").strip()
     if not s:
@@ -188,18 +222,23 @@ def parse_force_join_entries(raw: str | None) -> list[dict[str, Any]]:
             out: list[dict[str, Any]] = []
             seen: set[str] = set()
             for item in data:
+                title = ""
                 link = ""
                 if isinstance(item, str):
-                    id_raw = item
                     ch, required = _parse_channel_line(item)
-                    link = normalize_force_join_invite_link(item) if not ch else ""
+                    if not ch:
+                        link = normalize_force_join_invite_link(item)
+                        ch = link
+                    elif is_force_join_invite_ref(ch):
+                        link = ch
                 elif isinstance(item, dict):
                     id_raw = str(item.get("id") or item.get("channel") or "")
                     ch = normalize_force_join_channel_id(id_raw)
                     link = _entry_invite_link(item, id_raw=id_raw)
+                    title = _entry_title(item)
                     if not ch and link:
-                        # Invite URL alone cannot verify membership — skip
-                        continue
+                        # Invite URL alone — keep for getChat resolve + button
+                        ch = link
                     req = item.get("required", True)
                     if isinstance(req, str):
                         required = req.strip().lower() in {"1", "true", "yes", "on"}
@@ -216,6 +255,10 @@ def parse_force_join_entries(raw: str | None) -> list[dict[str, Any]]:
                 entry: dict[str, Any] = {"id": ch, "required": required}
                 if link:
                     entry["link"] = link
+                elif is_force_join_invite_ref(ch):
+                    entry["link"] = ch
+                if title:
+                    entry["title"] = title
                 out.append(entry)
             return out
     out: list[dict[str, Any]] = []
@@ -228,7 +271,10 @@ def parse_force_join_entries(raw: str | None) -> list[dict[str, Any]]:
         if key in seen:
             continue
         seen.add(key)
-        out.append({"id": ch, "required": required})
+        entry: dict[str, Any] = {"id": ch, "required": required}
+        if is_force_join_invite_ref(ch):
+            entry["link"] = ch
+        out.append(entry)
     return out
 
 
@@ -246,6 +292,9 @@ def serialize_force_join_entries(entries: list[dict[str, Any]] | None) -> str:
             continue
         id_raw = str(item.get("id") or "")
         ch = normalize_force_join_channel_id(id_raw)
+        link = _entry_invite_link(item, id_raw=id_raw)
+        if not ch and link:
+            ch = link
         if not ch:
             continue
         key = ch.lower()
@@ -258,9 +307,13 @@ def serialize_force_join_entries(entries: list[dict[str, Any]] | None) -> str:
         else:
             required = bool(req)
         entry: dict[str, Any] = {"id": ch, "required": required}
-        link = _entry_invite_link(item, id_raw=id_raw)
         if link:
             entry["link"] = link
+        elif is_force_join_invite_ref(ch):
+            entry["link"] = ch
+        title = _entry_title(item)
+        if title:
+            entry["title"] = title
         normalized.append(entry)
     return json.dumps(normalized, ensure_ascii=False)
 
@@ -551,9 +604,12 @@ DEFAULT_SETTINGS = {
     "support_contacts": "[]",
     "force_join_channel": "",
     "force_join_enabled": "0",
-    "force_join_msg": "",
-    "btn_force_join": "📢 عضویت در کانال",
-    "btn_force_join_check": "✅ عضو شدم — بررسی",
+    "force_join_msg": (
+        "برای استفاده از ربات ابتدا از دکمه‌های زیر عضو کانال شوید، "
+        "سپس «عضو شدم» را بزنید."
+    ),
+    "btn_force_join": "عضویت در کانال",
+    "btn_force_join_check": "✅ عضو شدم",
     "trial_enabled": "0",
     "referral_bonus": "0",
     "loyalty_enabled": "1",
@@ -943,17 +999,17 @@ SETTING_GROUPS = {
         ("force_join_enabled", "عضویت اجباری کانال", "toggle", "قبل از استفاده از ربات"),
         (
             "force_join_channel",
-            "کانال‌ها",
+            "کانال‌ها (دکمه‌های اینلاین)",
             "force_channels",
-            "شناسه قابل‌بررسی (@username یا -100…) لازم است؛ ربات باید ادمین کانال باشد. برای کانال خصوصی لینک دعوت را جدا وارد کنید",
+            "ربات باید ادمین کانال باشد. شناسه: @username یا -100… یا لینک t.me/c/… — برای کانال خصوصی لینک دعوت (+…) را هم بگذارید. عنوان روی دکمه اینلاین نمایش داده می‌شود",
         ),
         (
             "force_join_msg",
             "متن پیام عضویت اجباری",
             "textarea",
-            "متغیرها: {channels} — لیست کانال‌ها. خالی = متن پیش‌فرض",
+            "پیام بالای دکمه‌های اینلاین. اختیاری: {channels} برای لیست متنی کانال‌ها (معمولاً لازم نیست — کانال‌ها روی دکمه‌اند)",
         ),
-        ("btn_force_join", "متن دکمه لینک کانال", "text", "روی دکمه اینلاین عضویت"),
+        ("btn_force_join", "متن پیش‌فرض دکمه لینک کانال", "text", "اگر عنوان کانال خالی باشد"),
         ("btn_force_join_check", "متن دکمه بررسی عضویت", "text", "دکمه «عضو شدم»"),
     ],
 }

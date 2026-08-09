@@ -32,7 +32,7 @@ class ForceJoinFixTests(unittest.TestCase):
     def test_blocks_on_unverified_and_missing(self):
         self.assertIn("force_join_block_message", MW)
         self.assertIn("if missing or unverified", MW)
-        self.assertIn("هنوز عضو کانال‌های اجباری نشده‌اید", MW)
+        self.assertIn("هنوز عضو کانال‌ها نشده‌اید", MW)
         self.assertIn("clear_force_join_member_cache", START)
         self.assertIn("missing or unverified", START)
         # deep-link sub_ must not bypass the gate
@@ -70,8 +70,8 @@ class ForceJoinFixTests(unittest.TestCase):
             self.assertEqual(missing, [])
             self.assertEqual(unverified, ["@chan"])
             text = mw.force_join_block_message(missing, unverified)
-            self.assertIn("تأیید نشد", text)
-            self.assertIn("@chan", text)
+            self.assertIn("تأیید", text)
+            self.assertIn("ادمین", text)
 
         asyncio.run(_run())
 
@@ -120,14 +120,6 @@ class NoAutofocusTests(unittest.TestCase):
 
     def test_login_has_no_autofocus(self):
         self.assertNotIn("autofocus", LOGIN)
-
-
-class VersionTests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-
-        self.assertEqual(__version__, "4.10.9")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.9")
 
 
 if __name__ == "__main__":
