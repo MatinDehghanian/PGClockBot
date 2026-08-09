@@ -1097,7 +1097,11 @@ def force_join_inline_keyboard(
     ui: dict | None = None,
     channels: list[str] | None = None,
 ) -> InlineKeyboardMarkup:
-    """URL buttons per required channel + «عضو شدم» re-check callback."""
+    """One URL inline button per required channel + «عضو شدم» re-check callback.
+
+    Channel targets live on these buttons (not as a text list). Optional per-channel
+    ``title`` becomes the button label; otherwise ``btn_force_join`` (+ @username).
+    """
     from app.services.users import (
         force_join_channel_url,
         parse_force_join_channels,
@@ -1105,19 +1109,36 @@ def force_join_inline_keyboard(
     )
 
     entries = parse_force_join_entries(raw_channels)
-    link_by_id = {
-        str(e.get("id") or "").lower(): str(e.get("link") or "")
+    by_id = {
+        str(e.get("id") or "").lower(): e
         for e in entries
         if e.get("id")
     }
     required = channels if channels is not None else parse_force_join_channels(raw_channels)
-    btn_join = _t(ui, "btn_force_join")
+    btn_join = (_t(ui, "btn_force_join") or "عضویت در کانال").strip()
     rows: list[list[InlineKeyboardButton]] = []
     for ch in required:
-        url = force_join_channel_url(ch, link_by_id.get(ch.lower()))
+        entry = by_id.get(str(ch).lower()) or {}
+        url = force_join_channel_url(ch, entry.get("link"))
         if not url:
+            # Still show a non-url hint row so admins notice missing invite link
+            label = (str(entry.get("title") or "").strip() or btn_join)[:64]
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"⚠️ {label}"[:64],
+                        callback_data="forcejoin:nolink",
+                    )
+                ]
+            )
             continue
-        label = f"{btn_join} {ch}" if ch.startswith("@") else btn_join
+        title = str(entry.get("title") or "").strip()
+        if title:
+            label = title
+        elif str(ch).startswith("@"):
+            label = f"{btn_join} · {ch}"
+        else:
+            label = btn_join
         rows.append([InlineKeyboardButton(text=label[:64], url=url)])
     rows.append(
         [

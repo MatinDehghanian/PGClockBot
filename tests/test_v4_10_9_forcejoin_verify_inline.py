@@ -110,8 +110,9 @@ class MessageAndKeyboardTests(unittest.TestCase):
 
         missing_text = force_join_block_message(["@a"], [])
         unverified_text = force_join_block_message([], ["@a"])
-        self.assertIn("هنوز عضو", missing_text)
-        self.assertIn("تأیید نشد", unverified_text)
+        # Channels live on inline buttons — default copy has no @ bullets
+        self.assertNotIn("@a", missing_text)
+        self.assertIn("دکمه‌های زیر", missing_text)
         self.assertIn("ادمین", unverified_text)
         custom = force_join_block_message(
             ["@a"], [], custom="join please:\n{channels}"
@@ -142,14 +143,6 @@ class MessageAndKeyboardTests(unittest.TestCase):
         self.assertIn("is_member", MW)
         self.assertIn("force-channel-link", JS)
         self.assertIn("force_join_inline_keyboard", KB)
-
-
-class VersionTests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-
-        self.assertEqual(__version__, "4.10.9")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.9")
 
 
 if __name__ == "__main__":

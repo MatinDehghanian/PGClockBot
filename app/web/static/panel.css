@@ -2437,23 +2437,8 @@ form.settings-form > .sticky-actions,
   background: var(--bg-card);
   box-sizing: border-box;
 }
-.force-channel-id-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  margin: 0;
-  width: 100%;
-  max-width: none;
-  min-width: 0;
-  flex: 1 1 auto;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--foreground);
-}
-.force-channel-id-wrap .force-channel-id {
-  width: 100%;
-  margin-top: var(--space-1);
-}
+.force-channel-title-wrap,
+.force-channel-id-wrap,
 .force-channel-link-wrap {
   display: flex;
   flex-direction: column;
@@ -2467,10 +2452,17 @@ form.settings-form > .sticky-actions,
   font-weight: 600;
   color: var(--foreground);
 }
+.force-channel-id-wrap {
+  flex: 1 1 auto;
+}
+.force-channel-title-wrap .force-channel-title,
+.force-channel-id-wrap .force-channel-id,
 .force-channel-link-wrap .force-channel-link {
   width: 100%;
   margin-top: var(--space-1);
 }
+.force-channel-title-wrap .muted,
+.force-channel-title-wrap small.muted,
 .force-channel-id-wrap .muted,
 .force-channel-id-wrap small.muted,
 .force-channel-link-wrap .muted,
