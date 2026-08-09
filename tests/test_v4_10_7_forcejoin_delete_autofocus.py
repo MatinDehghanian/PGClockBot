@@ -1,4 +1,4 @@
-"""v4.10.7 — force-join fail-closed, user delete wallet warn, no autofocus."""
+"""v4.10.8 — force-join fail-closed, user delete wallet warn, no autofocus."""
 
 from __future__ import annotations
 
@@ -104,8 +104,15 @@ class NoAutofocusTests(unittest.TestCase):
         self.assertNotIn("focus.focus", block)
 
     def test_force_channel_add_does_not_focus(self):
-        add_block = JS.split("data-force-channels-add")[1].split("force-channel-remove")[0]
+        add_block = JS.split("[data-force-channels-add]")[1].split("force-channel-remove")[0]
         self.assertNotIn(".focus()", add_block)
+
+    def test_force_channel_guards_post_save_keyboard(self):
+        block = JS.split("initForceChannels")[1].split("setupPanelConfirm")[0]
+        self.assertIn("guardChannelInputs", block)
+        self.assertIn("readonly", block)
+        self.assertIn("blurForceChannelFocus", block)
+        self.assertIn("pageshow", block)
 
     def test_confirm_open_does_not_focus_reason(self):
         self.assertIn("Do not autofocus reason", JS)
@@ -119,8 +126,8 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.10.7")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.7")
+        self.assertEqual(__version__, "4.10.8")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.8")
 
 
 if __name__ == "__main__":

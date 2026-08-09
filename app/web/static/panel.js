@@ -1072,12 +1072,40 @@
         });
         hidden.value = JSON.stringify(entries);
       }
+      function blurForceChannelFocus(){
+        const el = document.activeElement;
+        if (el && el.classList && el.classList.contains('force-channel-id')) {
+          try { el.blur(); } catch (_) {}
+        }
+      }
+      /* readonly until real user tap — stops post-save / navigation autofocus
+         from opening the mobile keyboard on channel name fields. */
+      function guardChannelInputs(scope){
+        (scope || document).querySelectorAll('.force-channel-id').forEach((inp) => {
+          if (inp.dataset.focusGuard === '1') return;
+          inp.dataset.focusGuard = '1';
+          inp.setAttribute('readonly', 'readonly');
+          const unlock = () => {
+            inp.removeAttribute('readonly');
+          };
+          inp.addEventListener('touchstart', unlock, { passive: true });
+          inp.addEventListener('mousedown', unlock);
+          inp.addEventListener('focus', () => {
+            /* Programmatic/browser restore: drop focus so keyboard stays closed */
+            if (inp.hasAttribute('readonly')) {
+              requestAnimationFrame(blurForceChannelFocus);
+            }
+          });
+        });
+      }
       function ensureRows(root, entries){
         const list = root.querySelector('[data-force-channels-list]');
         if (!list) return;
         const items = entries && entries.length ? entries : [];
         list.innerHTML = items.map(rowHtml).join('') + addTileHtml();
         sync(root);
+        guardChannelInputs(list);
+        blurForceChannelFocus();
       }
       document.querySelectorAll('[data-force-channels]').forEach((root) => {
         const hidden = root.querySelector('[data-force-channels-json]');
@@ -1091,6 +1119,7 @@
             if (add) add.insertAdjacentHTML('beforebegin', rowHtml({ id: '', required: true }));
             else list.insertAdjacentHTML('beforeend', rowHtml({ id: '', required: true }));
             sync(root);
+            guardChannelInputs(list);
             return;
           }
           const remove = e.target.closest('.force-channel-remove');
@@ -1110,7 +1139,19 @@
         root.addEventListener('input', () => sync(root));
         root.addEventListener('change', () => sync(root));
         const form = root.closest('form');
-        if (form) form.addEventListener('submit', () => sync(root));
+        if (form) {
+          form.addEventListener('submit', () => {
+            sync(root);
+            const active = document.activeElement;
+            if (active && typeof active.blur === 'function') {
+              try { active.blur(); } catch (_) {}
+            }
+          });
+        }
+      });
+      window.addEventListener('pageshow', () => {
+        guardChannelInputs(document);
+        blurForceChannelFocus();
       });
     })();
 

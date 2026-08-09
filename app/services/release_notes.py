@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "4.10.8": [
+        "بعد از ذخیره کانال اجباری، کیبورد موبایل دیگر روی فیلد نام کانال باز نمی‌شود",
+    ],
     "4.10.7": [
         "عضویت اجباری کانال: عضویت کانال‌های الزامی حتماً چک و تأیید می‌شود؛ در غیر این صورت پیام «هنوز عضو نشده‌اید»",
         "نرمال‌سازی آیدی/@/لینک t.me کانال و حذف کش منفی تا بعد از عضویت، /start دوباره درست چک کند",
