@@ -3025,9 +3025,6 @@ form.settings-form > .actions.sticky-actions,
 .settings-card > .bot-mode-switch-list {
   margin: 0;
 }
-.bot-mode-switch-list + .bot-webhook-block {
-  margin-top: var(--space-2);
-}
 .bot-webhook-block {
   display: flex;
   flex-direction: column;
