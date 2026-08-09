@@ -139,22 +139,40 @@ async def check_force_join_member(bot: Bot, telegram_id: int, channel: str) -> b
     if hit and hit[1] is True and (now - hit[0]) < _FORCE_JOIN_MEMBER_TTL:
         return True
     try:
+        from aiogram.types import (
+            ChatMemberAdministrator,
+            ChatMemberBanned,
+            ChatMemberLeft,
+            ChatMemberMember,
+            ChatMemberOwner,
+            ChatMemberRestricted,
+        )
+
         member = await bot.get_chat_member(chat_id, int(telegram_id))
-        status = getattr(member, "status", None)
-        status_val = str(getattr(status, "value", status) or "").lower()
-        if status_val in _LEFT_STATUSES:
-            result: bool | None = False
-        elif status_val == "restricted":
-            # Restricted users may or may not still be in the chat
-            result = bool(getattr(member, "is_member", False))
-        elif status_val in _JOINED_STATUSES:
+        # Prefer concrete aiogram types — more reliable than status string alone
+        if isinstance(member, (ChatMemberMember, ChatMemberAdministrator, ChatMemberOwner)):
             result = True
+        elif isinstance(member, ChatMemberRestricted):
+            result = bool(getattr(member, "is_member", False))
+        elif isinstance(member, (ChatMemberLeft, ChatMemberBanned)):
+            result = False
         else:
-            # Unknown status — fail closed (cannot confirm membership)
-            logger.warning(
-                "force-join unknown chat_member status %r for %s", status_val, channel
-            )
-            result = None
+            status = getattr(member, "status", None)
+            status_val = str(getattr(status, "value", status) or "").lower()
+            if status_val in _LEFT_STATUSES:
+                result = False
+            elif status_val == "restricted":
+                result = bool(getattr(member, "is_member", False))
+            elif status_val in _JOINED_STATUSES:
+                result = True
+            else:
+                logger.warning(
+                    "force-join unknown chat_member %r status=%r for %s",
+                    type(member).__name__,
+                    status_val,
+                    channel,
+                )
+                result = None
     except Exception as exc:
         logger.warning("force-join membership check failed for %s: %s", channel, exc)
         result = None

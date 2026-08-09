@@ -291,7 +291,12 @@ async def cb_force_join_check(
         markup = kb.force_join_inline_keyboard(
             ui.get("force_join_channel"), ui=ui, channels=channels
         )
-        await callback.answer("هنوز عضو نشده‌اید", show_alert=True)
+        alert = (
+            "عضویت تأیید نشد — ربات باید ادمین کانال باشد"
+            if unverified and not missing
+            else "هنوز عضو کانال‌ها نشده‌اید"
+        )
+        await callback.answer(alert, show_alert=True)
         if callback.message:
             try:
                 await callback.message.edit_text(text, reply_markup=markup)
