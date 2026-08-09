@@ -87,6 +87,15 @@ class UserDeleteWalletWarnTests(unittest.TestCase):
         self.assertIn("(user.wallet_balance or 0) > 0", USER_EDIT)
 
 
+class AuthFieldAlignTests(unittest.TestCase):
+    def test_auth_form_ltr_inputs_right_aligned(self):
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn("Login / setup auth boxes", css)
+        block = css.split("Login / setup auth boxes", 1)[1].split("CRITICAL:", 1)[0]
+        self.assertIn("text-align: right;", block)
+        self.assertIn(".auth-form input[dir=\"ltr\"]", block)
+
+
 class NoAutofocusTests(unittest.TestCase):
     def test_open_modal_does_not_autofocus(self):
         block = JS.split("function openModal")[1].split("window.openModal")[0]

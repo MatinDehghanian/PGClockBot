@@ -834,6 +834,17 @@ textarea[dir="ltr"] {
   text-align: start;
   unicode-bidi: isolate;
 }
+/* Login / setup auth boxes: keep LTR typing, show value+placeholder on the right */
+.auth-form input[dir="ltr"],
+.auth-form textarea[dir="ltr"],
+.auth-form .pw-field input {
+  text-align: right;
+}
+.auth-form input[dir="ltr"]::placeholder,
+.auth-form textarea[dir="ltr"]::placeholder,
+.auth-form .pw-field input::placeholder {
+  text-align: right;
+}
 /* CRITICAL: keep ≥16px — iOS/Android Safari zoom on focus if smaller. Never use --title-size here. */
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),
 select,

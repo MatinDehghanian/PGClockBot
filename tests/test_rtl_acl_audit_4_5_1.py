@@ -28,6 +28,12 @@ class RtlLtrHotspotsTests(unittest.TestCase):
         self.assertIn('dir="ltr"', src)
         self.assertIn('name="password"', src)
 
+    def test_auth_form_inputs_right_aligned(self):
+        self.assertIn(".auth-form input[dir=\"ltr\"]", CSS)
+        block = CSS.split("Login / setup auth boxes", 1)[1].split("CRITICAL:", 1)[0]
+        self.assertIn("text-align: right;", block)
+        self.assertIn(".auth-form .pw-field input", block)
+
     def test_hosts_users_nodes_ltr(self):
         hosts = (ROOT / "app/web/templates/pg_hosts.html").read_text(encoding="utf-8")
         users = (ROOT / "app/web/templates/pg_users.html").read_text(encoding="utf-8")
