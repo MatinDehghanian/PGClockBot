@@ -979,6 +979,9 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
         "pay_wallet_enabled",
         "force_join_enabled",
         "force_join_channel",
+        "force_join_msg",
+        "btn_force_join",
+        "btn_force_join_check",
         "notify_new_ticket",
         "show_miniapp",
     )

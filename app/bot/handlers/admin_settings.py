@@ -144,6 +144,9 @@ SECTIONS: dict[str, dict] = {
             ("force", "کانال اجباری", [
                 ("force_join_enabled", "فعال", "toggle"),
                 ("force_join_channel", "کانال‌ها (هر خط یکی)", "text"),
+                ("force_join_msg", "متن پیام عضویت", "textarea"),
+                ("btn_force_join", "متن دکمه لینک کانال", "text"),
+                ("btn_force_join_check", "متن دکمه بررسی", "text"),
             ]),
             ("trial", "پلن تست", "trial"),
             ("custom", "پلن دلخواه", "custom"),

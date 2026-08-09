@@ -91,7 +91,7 @@ def _force_join_chat_id(channel: str):
 
     ch = normalize_force_join_channel_id(channel)
     if not ch:
-        return channel
+        return None
     if ch.startswith("@"):
         return ch
     if ch.lstrip("-").isdigit():
@@ -112,15 +112,27 @@ def clear_force_join_member_cache(telegram_id: int | None = None) -> None:
         _FORCE_JOIN_MEMBER_CACHE.pop(key, None)
 
 
+_JOINED_STATUSES = frozenset({"member", "administrator", "creator"})
+_LEFT_STATUSES = frozenset({"left", "kicked"})
+
+
 async def check_force_join_member(bot: Bot, telegram_id: int, channel: str) -> bool | None:
     """Return True if member, False if left/kicked, None if membership cannot be verified.
 
+    Joined statuses: member, administrator, creator, and restricted with is_member=True.
     Only positive membership is cached briefly. Negative / error results are never
     cached so a user who just joined can pass on the next /start.
     """
     import time
 
     chat_id = _force_join_chat_id(channel)
+    if chat_id is None:
+        logger.warning(
+            "force-join channel id unusable for get_chat_member: %r "
+            "(need @username or numeric -100… id; invite links alone cannot be verified)",
+            channel,
+        )
+        return None
     cache_key = (int(telegram_id), str(chat_id))
     now = time.monotonic()
     hit = _FORCE_JOIN_MEMBER_CACHE.get(cache_key)
@@ -129,11 +141,20 @@ async def check_force_join_member(bot: Bot, telegram_id: int, channel: str) -> b
     try:
         member = await bot.get_chat_member(chat_id, int(telegram_id))
         status = getattr(member, "status", None)
-        status_val = getattr(status, "value", status)
-        if str(status_val) in {"left", "kicked"}:
+        status_val = str(getattr(status, "value", status) or "").lower()
+        if status_val in _LEFT_STATUSES:
             result: bool | None = False
-        else:
+        elif status_val == "restricted":
+            # Restricted users may or may not still be in the chat
+            result = bool(getattr(member, "is_member", False))
+        elif status_val in _JOINED_STATUSES:
             result = True
+        else:
+            # Unknown status — fail closed (cannot confirm membership)
+            logger.warning(
+                "force-join unknown chat_member status %r for %s", status_val, channel
+            )
+            result = None
     except Exception as exc:
         logger.warning("force-join membership check failed for %s: %s", channel, exc)
         result = None
@@ -229,20 +250,56 @@ async def check_force_join_all(
     return missing, unverified
 
 
-def force_join_block_message(missing: list[str], unverified: list[str] | None = None) -> str:
-    """User-facing Persian copy when required membership is not confirmed."""
+def force_join_block_message(
+    missing: list[str],
+    unverified: list[str] | None = None,
+    *,
+    custom: str | None = None,
+) -> str:
+    """User-facing Persian copy when required membership is not confirmed.
+
+    If *custom* is set (``force_join_msg``), ``{channels}`` is replaced with the
+    bullet list. Unverified-only failures get a clearer admin-config hint when
+    using the built-in template (API errors ≠ user not joined).
+    """
     blocked = list(missing or [])
     for ch in unverified or []:
         if ch not in blocked:
             blocked.append(ch)
     listed = "\n".join(f"• {c}" for c in blocked)
+    custom_text = (custom or "").strip()
+    if custom_text:
+        try:
+            return custom_text.format(channels=listed or "—")
+        except Exception:
+            return custom_text.replace("{channels}", listed or "—")
+
+    only_unverified = bool(unverified) and not missing
+    if only_unverified:
+        body = (
+            "عضویت شما تأیید نشد (خطای بررسی کانال).\n"
+            "ربات باید ادمین کانال باشد و شناسه کانال (@username یا -100…) درست باشد.\n"
+            "پس از رفع، دوباره /start بزنید یا «عضو شدم» را بزنید:"
+        )
+        return f"{body}\n{listed}" if listed else body
     if not listed:
-        return "هنوز عضو کانال‌های اجباری نشده‌اید. ابتدا عضو شوید، سپس دوباره /start بزنید."
+        return (
+            "هنوز عضو کانال‌های اجباری نشده‌اید. "
+            "ابتدا عضو شوید، سپس «عضو شدم» را بزنید یا دوباره /start بفرستید."
+        )
     return (
-        "هنوز عضو کانال‌های زیر نشده‌اید (یا عضویت شما تأیید نشده).\n"
-        "لطفاً عضو شوید و دوباره /start بزنید:\n"
+        "هنوز عضو کانال‌های زیر نشده‌اید.\n"
+        "لطفاً عضو شوید و «عضو شدم» را بزنید یا دوباره /start بفرستید:\n"
         f"{listed}"
     )
+
+
+def _callback_data(event: TelegramObject) -> str | None:
+    if isinstance(event, CallbackQuery) and event.data:
+        return event.data
+    if isinstance(event, Update) and event.callback_query and event.callback_query.data:
+        return event.callback_query.data
+    return None
 
 
 class DbSessionMiddleware(BaseMiddleware):
@@ -373,9 +430,14 @@ class ForceJoinMiddleware(BaseMiddleware):
         # Always allow /start so the join prompt can be shown
         if _extract_start_payload(event) is not None or _is_bare_start(event):
             return await handler(event, data)
+        # Allow re-check callback (must not be blocked before the handler runs)
+        cb = _callback_data(event)
+        if cb and cb.startswith("forcejoin:"):
+            return await handler(event, data)
 
         from app.services.users import get_all_settings, on, parse_force_join_channels
         from app.services.reseller_access import effective_menu_role
+        from app.bot import keyboards as kb
 
         ui = await get_all_settings(session)
         enabled = ui.get("force_join_enabled")
@@ -398,10 +460,15 @@ class ForceJoinMiddleware(BaseMiddleware):
         )
         if missing or unverified:
             msg = _reply_message(event)
-            text = force_join_block_message(missing, unverified)
+            text = force_join_block_message(
+                missing, unverified, custom=ui.get("force_join_msg")
+            )
+            markup = kb.force_join_inline_keyboard(
+                ui.get("force_join_channel"), ui=ui, channels=channels
+            )
             if msg:
                 try:
-                    await msg.answer(text)
+                    await msg.answer(text, reply_markup=markup)
                 except Exception:
                     pass
             cq = event.callback_query if isinstance(event, Update) else (

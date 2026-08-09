@@ -206,8 +206,12 @@ async def cmd_start(
         )
         if missing or unverified:
             await message.answer(
-                force_join_block_message(missing, unverified),
-                reply_markup=kb.persistent_reply_keyboard(),
+                force_join_block_message(
+                    missing, unverified, custom=ui.get("force_join_msg")
+                ),
+                reply_markup=kb.force_join_inline_keyboard(
+                    ui.get("force_join_channel"), ui=ui, channels=channels
+                ),
             )
             return
     if args.startswith("sub_"):
@@ -231,6 +235,86 @@ async def cmd_start(
         ui=ui,
         effective_role=role_for_force,
     )
+
+
+@router.callback_query(F.data == "forcejoin:check")
+async def cb_force_join_check(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    """Re-verify required channel membership after the user taps «عضو شدم»."""
+    from app.bot.middlewares import (
+        check_force_join_all,
+        clear_force_join_member_cache,
+        force_join_block_message,
+    )
+    from app.services.reseller_access import effective_menu_role
+    from app.services.users import parse_force_join_channels
+
+    ui = await get_all_settings(session)
+    channels = parse_force_join_channels(ui.get("force_join_channel"))
+    enabled = ui.get("force_join_enabled")
+    role_for_force = await effective_menu_role(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not on(enabled) or not channels or role_for_force != "user":
+        await callback.answer("ادامه دهید ✅")
+        await state.clear()
+        if callback.message:
+            await render_home(
+                callback.message,
+                session,
+                db_user,
+                seed_reply_kb=True,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+                ui=ui,
+                effective_role=role_for_force,
+            )
+        return
+
+    clear_force_join_member_cache(int(db_user.telegram_id))
+    missing, unverified = await check_force_join_all(
+        callback.bot, int(db_user.telegram_id), channels
+    )
+    if missing or unverified:
+        text = force_join_block_message(
+            missing, unverified, custom=ui.get("force_join_msg")
+        )
+        markup = kb.force_join_inline_keyboard(
+            ui.get("force_join_channel"), ui=ui, channels=channels
+        )
+        await callback.answer("هنوز عضو نشده‌اید", show_alert=True)
+        if callback.message:
+            try:
+                await callback.message.edit_text(text, reply_markup=markup)
+            except Exception:
+                try:
+                    await callback.message.answer(text, reply_markup=markup)
+                except Exception:
+                    pass
+        return
+
+    await callback.answer("عضویت تأیید شد ✅")
+    await state.clear()
+    if callback.message:
+        await render_home(
+            callback.message,
+            session,
+            db_user,
+            seed_reply_kb=True,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            ui=ui,
+            effective_role=role_for_force,
+        )
 
 
 @router.callback_query(F.data == "menu:home")
