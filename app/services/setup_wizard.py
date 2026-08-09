@@ -32,6 +32,8 @@ WIZARD_ENV_KEYS = (
     "WEB_SECRET",
     "PUBLIC_BASE_URL",
     "CURRENCY",
+    "WEBHOOK_URL",
+    "WEBHOOK_PATH",
 )
 
 
@@ -440,12 +442,54 @@ def ensure_web_secret() -> str:
     return secret
 
 
+def normalize_webhook_path(raw: str | None) -> str:
+    """Ensure webhook path starts with / and has no trailing slash (except root)."""
+    path = (raw or "").strip() or "/telegram/webhook"
+    if not path.startswith("/"):
+        path = "/" + path
+    if len(path) > 1:
+        path = path.rstrip("/")
+    return path or "/telegram/webhook"
+
+
+def normalize_webhook_base_url(raw: str | None) -> str:
+    """Strip whitespace and trailing slash from a public webhook base URL."""
+    return (raw or "").strip().rstrip("/")
+
+
+def resolve_bot_update_mode(
+    *,
+    mode: str | None,
+    webhook_url: str | None,
+    webhook_path: str | None = None,
+    public_base_url: str | None = None,
+) -> tuple[str, str, str]:
+    """Return (mode, webhook_base_url, webhook_path).
+
+    mode is ``polling`` or ``webhook``. For polling, webhook_base_url is empty.
+    """
+    path = normalize_webhook_path(webhook_path)
+    requested = (mode or "").strip().lower()
+    base = normalize_webhook_base_url(webhook_url)
+    if not base:
+        base = normalize_webhook_base_url(public_base_url)
+
+    if requested == "webhook" or (not requested and base):
+        if not base:
+            raise ValueError("برای حالت Webhook آدرس HTTPS عمومی لازم است")
+        if not base.lower().startswith("https://"):
+            raise ValueError("آدرس Webhook باید با https:// شروع شود")
+        return "webhook", base, path
+    return "polling", "", path
+
+
 def current_setup_values() -> dict[str, str]:
     """Values for pre-filling the wizard form."""
     creds = load_web_admin()
     # Only prefill username when credentials already exist (re-running wizard).
     # Never force-write "admin" into an empty first-time form.
     has_creds = bool(creds.get("password"))
+    webhook_url = normalize_webhook_base_url(_env_get("WEBHOOK_URL"))
     return {
         "username": (creds.get("username") or "") if has_creds else "",
         "BOT_TOKEN": _env_get("BOT_TOKEN"),
@@ -457,6 +501,9 @@ def current_setup_values() -> dict[str, str]:
         "WEB_PORT": _env_get("WEB_PORT") or "9000",
         "PUBLIC_BASE_URL": _env_get("PUBLIC_BASE_URL"),
         "CURRENCY": _env_get("CURRENCY") or "تومان",
+        "WEBHOOK_URL": webhook_url,
+        "WEBHOOK_PATH": normalize_webhook_path(_env_get("WEBHOOK_PATH") or "/telegram/webhook"),
+        "BOT_UPDATE_MODE": "webhook" if webhook_url else "polling",
     }
 
 

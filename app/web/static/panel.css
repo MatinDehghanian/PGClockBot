@@ -2930,6 +2930,96 @@ form.settings-form > .actions.sticky-actions,
   background: var(--brand);
   transition: width .3s ease;
 }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.bot-update-mode {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.bot-mode-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface, transparent);
+  cursor: pointer;
+}
+.bot-mode-option input {
+  margin-top: 4px;
+}
+.bot-mode-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bot-mode-option strong {
+  font-weight: 600;
+}
+.bot-restart-steps {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bot-restart-steps li {
+  position: relative;
+  padding-block: 6px;
+  padding-inline: 28px 10px;
+  border-radius: var(--radius);
+  color: var(--muted-fg);
+  font-size: 13px;
+}
+.bot-restart-steps li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 10px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--border);
+}
+.bot-restart-steps li.is-active {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+}
+.bot-restart-steps li.is-active::before {
+  background: var(--brand);
+}
+.bot-restart-steps li.is-done {
+  color: var(--foreground);
+}
+.bot-restart-steps li.is-done::before {
+  background: var(--ok, #2f9e44);
+}
+.forcejoin-admin-notice ul {
+  margin: 8px 0 0;
+  padding-inline-start: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.forcejoin-admin-notice li {
+  line-height: 1.55;
+}
 .progress-meta {
   display: flex;
   justify-content: space-between;
