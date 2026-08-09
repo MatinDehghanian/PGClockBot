@@ -1,6 +1,7 @@
 {% set update_mode = bot_update_mode or env_values.get('BOT_UPDATE_MODE') or 'polling' %}
 {% set wh_url = env_values.get('WEBHOOK_URL','') %}
 {% set wh_path = env_values.get('WEBHOOK_PATH','/telegram/webhook') %}
+{% set bot_ok = bot_status and bot_status.ok %}
 
 <form method="post" action="/settings?tab=bot" class="settings-form" id="bot-env-form">
   <div id="bot-saved-flash" class="flash ok" {% if request.query_params.get('saved') != '1' %}hidden{% endif %}>
@@ -16,83 +17,103 @@
     </div>
   </div>
 
+  {# —— Overview: live connection status —— #}
+  <div class="card settings-card bot-conn-overview">
+    <h2>وضعیت اتصال</h2>
+    <p class="muted update-card-caption">وضعیت زنده ربات و روش دریافت پیام از تلگرام.</p>
+    <div class="bot-conn-row" role="list">
+      <div class="bot-conn {% if bot_ok %}is-ok{% else %}is-err{% endif %}" role="listitem">
+        <svg class="bot-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+        <span class="bot-conn-text">
+          <span class="bot-conn-k">ربات</span>
+          <span class="bot-conn-cap muted" dir="ltr" id="bot-status-flash">
+            {% if bot_status %}
+              {% if bot_ok %}
+                @{{ bot_status.username or '—' }}{% if bot_status.id %} · id={{ bot_status.id }}{% endif %}
+              {% else %}
+                {{ bot_status.error or 'آفلاین' }}
+              {% endif %}
+            {% else %}
+              —
+            {% endif %}
+          </span>
+        </span>
+        {% if bot_ok %}
+        <span class="badge ok bot-conn-badge">متصل</span>
+        {% else %}
+        <span class="badge danger bot-conn-badge">قطع</span>
+        {% endif %}
+      </div>
+      <div class="bot-conn {% if update_mode == 'webhook' %}is-ok{% else %}is-neutral{% endif %}" role="listitem" id="bot-mode-status">
+        <svg class="bot-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-6 4 12 2-6h4"/><path d="M4 19h16"/></svg>
+        <span class="bot-conn-text">
+          <span class="bot-conn-k">دریافت پیام</span>
+          <span class="bot-conn-cap muted" id="bot-mode-status-cap">
+            {% if update_mode == 'webhook' %}
+              Webhook{% if webhook_full_url %} · <span dir="ltr">{{ webhook_full_url }}</span>{% endif %}
+            {% else %}
+              Long Polling
+            {% endif %}
+          </span>
+        </span>
+        {% if update_mode == 'webhook' %}
+        <span class="badge ok bot-conn-badge" id="bot-mode-status-badge">Webhook</span>
+        {% else %}
+        <span class="badge info bot-conn-badge" id="bot-mode-status-badge">Polling</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# —— Telegram identity —— #}
   <div class="card settings-card">
     <h2>ربات تلگرام</h2>
     <p class="muted update-card-caption">توکن و هویت ربات اصلی. تغییر این بخش معمولاً ری‌استارت می‌خواهد؛ قبل از اعمال تأیید می‌گیریم.</p>
 
-    {% if bot_status %}
-    <div class="flash {{ 'ok' if bot_status.ok else 'err' }}" id="bot-status-flash">
-      <div class="flash-copy">
-        <strong>{% if bot_status.ok %}ربات آنلاین{% else %}ربات قطع / در انتظار{% endif %}</strong>
-        <span class="muted" dir="ltr">
-          {% if bot_status.ok %}
-            @{{ bot_status.username or '—' }} · id={{ bot_status.id or '—' }}
-          {% else %}
-            {{ bot_status.error or 'آفلاین' }}
-          {% endif %}
-        </span>
-      </div>
-    </div>
-    {% endif %}
-
     <div class="settings-grid">
       <div class="setting-item full">
         <label>توکن ربات (BOT_TOKEN)
-          <input name="BOT_TOKEN" type="password" value="" dir="ltr" autocomplete="off" placeholder="•••• یا توکن جدید" />
-          <small class="muted">خالی = حفظ توکن فعلی · {{ bot_token_masked or '—' }}</small>
+          <div class="pw-field">
+            <input id="bot-token-input" name="BOT_TOKEN" type="password" value="" dir="ltr" autocomplete="off" placeholder="•••• یا توکن جدید" />
+            <button type="button" class="pw-toggle" data-pw-for="bot-token-input" aria-label="نمایش توکن" aria-pressed="false">
+              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <small class="muted">خالی = حفظ توکن فعلی · <span dir="ltr">{{ bot_token_masked or '—' }}</span></small>
         </label>
       </div>
       <div class="setting-item">
         <label>نام کاربری (بدون @)
-          <input name="BOT_USERNAME" value="{{ env_values.get('BOT_USERNAME','') }}" dir="ltr" required />
+          <input name="BOT_USERNAME" value="{{ env_values.get('BOT_USERNAME','') }}" dir="ltr" required autocomplete="off" autocapitalize="off" spellcheck="false" />
         </label>
       </div>
       <div class="setting-item">
         <label>آیدی ادمین‌ها
-          <input name="ADMIN_IDS" value="{{ env_values.get('ADMIN_IDS','') }}" dir="ltr" required placeholder="123456789" />
+          <input name="ADMIN_IDS" value="{{ env_values.get('ADMIN_IDS','') }}" dir="ltr" required placeholder="123456789" autocomplete="off" />
           <small class="muted">با کاما جدا کنید</small>
         </label>
       </div>
     </div>
   </div>
 
+  {# —— Update mode —— #}
   <div class="card settings-card">
     <h2>دریافت پیام تلگرام</h2>
     <p class="muted update-card-caption">پیش‌فرض Long Polling است. Webhook برای بار بالاتر مناسب‌تر است و به HTTPS عمومی نیاز دارد.</p>
 
-    <div class="flash {{ 'ok' if update_mode == 'webhook' else 'warn' }}" id="bot-mode-status">
-      <div class="flash-copy">
-        <strong>حالت فعلی</strong>
-        <span class="muted">
-          {% if update_mode == 'webhook' %}
-            Webhook{% if webhook_full_url %} · <span dir="ltr">{{ webhook_full_url }}</span>{% endif %}
-          {% else %}
-            Long Polling
-          {% endif %}
-        </span>
-      </div>
-    </div>
+    <input type="hidden" name="BOT_UPDATE_MODE" id="bot-update-mode-value" value="{{ 'webhook' if update_mode == 'webhook' else 'polling' }}" />
 
-    <div class="settings-grid">
-      <div class="setting-item full">
-        <fieldset class="bot-update-mode" id="bot-update-mode">
-          <legend class="sr-only">حالت دریافت پیام</legend>
-          <label class="bot-mode-option">
-            <input type="radio" name="BOT_UPDATE_MODE" value="polling" {% if update_mode != 'webhook' %}checked{% endif %} />
-            <span>
-              <strong>Long Polling</strong>
-              <small class="muted">ربات خودش پیام‌ها را از تلگرام می‌گیرد — بدون دامنه عمومی</small>
-            </span>
-          </label>
-          <label class="bot-mode-option">
-            <input type="radio" name="BOT_UPDATE_MODE" value="webhook" {% if update_mode == 'webhook' %}checked{% endif %} />
-            <span>
-              <strong>Webhook</strong>
-              <small class="muted">تلگرام پیام‌ها را به آدرس HTTPS پنل می‌فرستد</small>
-            </span>
-          </label>
-        </fieldset>
-      </div>
+    <div class="ui-switch-list bot-mode-switch-list" id="bot-update-mode">
+      <label class="ui-switch-row" id="bot-webhook-switch-row">
+        <span class="ui-switch-copy">
+          <strong>Webhook</strong>
+          <small>تلگرام پیام‌ها را به آدرس HTTPS پنل می‌فرستد. خاموش = Long Polling (بدون دامنه عمومی).</small>
+        </span>
+        <span class="ui-switch">
+          <input type="checkbox" id="bot-webhook-switch" value="1" {% if update_mode == 'webhook' %}checked{% endif %} />
+          <span class="ui-switch-track" aria-hidden="true"></span>
+        </span>
+      </label>
     </div>
 
     <div class="bot-webhook-block" data-webhook-fields {% if update_mode != 'webhook' %}hidden{% endif %}>
@@ -125,7 +146,7 @@
           </label>
         </div>
         <div class="setting-item full">
-          <div class="flash warn">
+          <div class="flash warn bot-webhook-preview">
             <div class="flash-copy">
               <strong>آدرس نهایی</strong>
               <span class="muted"><code dir="ltr" id="webhook-full-preview">{{ webhook_full_url or '—' }}</code></span>
@@ -136,47 +157,54 @@
     </div>
   </div>
 
+  {# —— Pasarguard —— #}
   <div class="card settings-card">
     <h2>پاسارگارد</h2>
     <p class="muted update-card-caption">ریشه API پاسارگارد را وارد کنید — نه مسیر داشبورد UI.</p>
     <div class="settings-grid">
       <div class="setting-item full">
         <label>آدرس پنل (PG_BASE_URL)
-          <input name="PG_BASE_URL" value="{{ env_values.get('PG_BASE_URL','') }}" dir="ltr" required placeholder="https://panel.example.com" />
+          <input name="PG_BASE_URL" value="{{ env_values.get('PG_BASE_URL','') }}" dir="ltr" required placeholder="https://panel.example.com" autocomplete="off" />
           <small class="muted">مسیرهایی مثل <code dir="ltr">/dashboard</code> فقط UI هستند و باعث خطای ۴۰۵ می‌شوند</small>
         </label>
       </div>
       <div class="setting-item">
         <label>نام کاربری
-          <input name="PG_USERNAME" value="{{ env_values.get('PG_USERNAME','') }}" dir="ltr" required />
+          <input name="PG_USERNAME" value="{{ env_values.get('PG_USERNAME','') }}" dir="ltr" required autocomplete="off" autocapitalize="off" spellcheck="false" />
         </label>
       </div>
       <div class="setting-item">
         <label>رمز
-          <input name="PG_PASSWORD" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="•••• یا رمز جدید" />
+          <div class="pw-field">
+            <input id="pg-password-input" name="PG_PASSWORD" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="•••• یا رمز جدید" />
+            <button type="button" class="pw-toggle" data-pw-for="pg-password-input" aria-label="نمایش رمز" aria-pressed="false">
+              <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
           <small class="muted">خالی = حفظ رمز فعلی</small>
         </label>
       </div>
     </div>
   </div>
 
+  {# —— Web & public —— #}
   <div class="card settings-card">
     <h2>وب و عمومی</h2>
     <p class="muted update-card-caption">پورت پنل، واحد پول، و آدرس عمومی برای مینی‌اپ و پیش‌فرض Webhook.</p>
     <div class="settings-grid">
       <div class="setting-item">
         <label>پورت وب‌پنل
-          <input name="WEB_PORT" value="{{ env_values.get('WEB_PORT','9000') }}" dir="ltr" required />
+          <input name="WEB_PORT" value="{{ env_values.get('WEB_PORT','9000') }}" dir="ltr" required inputmode="numeric" autocomplete="off" />
         </label>
       </div>
       <div class="setting-item">
         <label>واحد پول
-          <input name="CURRENCY" value="{{ env_values.get('CURRENCY','تومان') }}" required />
+          <input name="CURRENCY" value="{{ env_values.get('CURRENCY','تومان') }}" required autocomplete="off" />
         </label>
       </div>
       <div class="setting-item full">
         <label>آدرس عمومی (اختیاری)
-          <input name="PUBLIC_BASE_URL" id="public-base-input" value="{{ env_values.get('PUBLIC_BASE_URL','') }}" dir="ltr" placeholder="https://bot.example.com" />
+          <input name="PUBLIC_BASE_URL" id="public-base-input" value="{{ env_values.get('PUBLIC_BASE_URL','') }}" dir="ltr" placeholder="https://bot.example.com" autocomplete="off" />
           <small class="muted">برای مینی‌اپ، لینک‌های عمومی و پیش‌فرض Webhook</small>
         </label>
       </div>
@@ -249,12 +277,16 @@
   if (!form) return;
 
   const saveBtn = document.getElementById('bot-save-btn');
-  const modeRoot = document.getElementById('bot-update-mode');
+  const modeValue = document.getElementById('bot-update-mode-value');
+  const webhookSwitch = document.getElementById('bot-webhook-switch');
   const whFields = form.querySelectorAll('[data-webhook-fields]');
   const whUrl = document.getElementById('webhook-url-input');
   const whPath = document.getElementById('webhook-path-input');
   const pubBase = document.getElementById('public-base-input');
   const fullPreview = document.getElementById('webhook-full-preview');
+  const modeStatus = document.getElementById('bot-mode-status');
+  const modeStatusCap = document.getElementById('bot-mode-status-cap');
+  const modeStatusBadge = document.getElementById('bot-mode-status-badge');
   const savedFlash = document.getElementById('bot-saved-flash');
   const errFlash = document.getElementById('bot-err-flash');
   const errFlashText = document.getElementById('bot-err-flash-text');
@@ -278,16 +310,64 @@
     bot: 'بررسی اتصال ربات',
   };
 
+  document.querySelectorAll('.pw-toggle[data-pw-for]').forEach((btn) => {
+    const input = document.getElementById(btn.getAttribute('data-pw-for'));
+    if (!input) return;
+    btn.addEventListener('click', () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.classList.toggle('is-visible', show);
+      btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+      btn.setAttribute('aria-label', show ? 'مخفی کردن' : (input.id === 'bot-token-input' ? 'نمایش توکن' : 'نمایش رمز'));
+    });
+  });
+
   function selectedMode(){
-    const el = form.querySelector('input[name="BOT_UPDATE_MODE"]:checked');
-    return el ? el.value : 'polling';
+    if (webhookSwitch) return webhookSwitch.checked ? 'webhook' : 'polling';
+    return (modeValue && modeValue.value) || 'polling';
+  }
+
+  function syncModeValue(){
+    const mode = selectedMode();
+    if (modeValue) modeValue.value = mode;
+    return mode;
+  }
+
+  function syncModeStatus(mode){
+    const webhook = mode === 'webhook';
+    if (modeStatus) {
+      modeStatus.classList.toggle('is-ok', webhook);
+      modeStatus.classList.toggle('is-neutral', !webhook);
+    }
+    if (modeStatusBadge) {
+      modeStatusBadge.textContent = webhook ? 'Webhook' : 'Polling';
+      modeStatusBadge.className = 'badge bot-conn-badge ' + (webhook ? 'ok' : 'info');
+    }
+    if (modeStatusCap) {
+      if (webhook) {
+        const url = (fullPreview && fullPreview.textContent && fullPreview.textContent.trim()) || '';
+        modeStatusCap.textContent = '';
+        modeStatusCap.appendChild(document.createTextNode('Webhook'));
+        if (url && url !== '—') {
+          modeStatusCap.appendChild(document.createTextNode(' · '));
+          const span = document.createElement('span');
+          span.dir = 'ltr';
+          span.textContent = url;
+          modeStatusCap.appendChild(span);
+        }
+      } else {
+        modeStatusCap.textContent = 'Long Polling';
+      }
+    }
   }
 
   function syncModeUi(){
-    const webhook = selectedMode() === 'webhook';
+    const mode = syncModeValue();
+    const webhook = mode === 'webhook';
     whFields.forEach((el) => { el.hidden = !webhook; });
     if (whUrl) whUrl.required = webhook;
     updatePreview();
+    syncModeStatus(mode);
   }
 
   function updatePreview(){
@@ -297,6 +377,7 @@
     if (path && path.charAt(0) !== '/') path = '/' + path;
     if (path.length > 1) path = path.replace(/\/+$/, '');
     fullPreview.textContent = base ? (base + path) : '—';
+    if (selectedMode() === 'webhook') syncModeStatus('webhook');
   }
 
   function showErr(msg){
@@ -367,6 +448,7 @@
   }
 
   async function postBot(extra){
+    syncModeValue();
     const fd = new FormData(form);
     fd.set('ajax', '1');
     Object.keys(extra || {}).forEach((k) => fd.set(k, extra[k]));
@@ -459,7 +541,7 @@
     location.replace(url.pathname + '?' + url.searchParams.toString());
   }
 
-  if (modeRoot) modeRoot.addEventListener('change', syncModeUi);
+  if (webhookSwitch) webhookSwitch.addEventListener('change', syncModeUi);
   if (whUrl) whUrl.addEventListener('input', updatePreview);
   if (whPath) whPath.addEventListener('input', updatePreview);
   if (pubBase) pubBase.addEventListener('input', updatePreview);
@@ -471,6 +553,7 @@
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    syncModeValue();
     if (saveBtn) saveBtn.disabled = true;
     if (errFlash) errFlash.hidden = true;
     try {

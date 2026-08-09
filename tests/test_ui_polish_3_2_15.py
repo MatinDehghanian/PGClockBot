@@ -62,7 +62,8 @@ class FlashSeverityTests(unittest.TestCase):
     def test_bot_offline_status_is_err(self):
         bot = (TEMPLATES / "_settings_bot.html").read_text(encoding="utf-8")
         shop = (TEMPLATES / "shop_settings.html").read_text(encoding="utf-8")
-        self.assertIn("'ok' if bot_status.ok else 'err'", bot)
+        self.assertIn("is-ok{% else %}is-err", bot)
+        self.assertIn("badge danger", bot)
         self.assertIn("'ok' if bot_status.ok else 'err'", shop)
 
     def test_appearance_sync_err_is_err(self):
