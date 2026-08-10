@@ -69,6 +69,17 @@
           html.classList.remove('page-ready', 'page-booting');
         } catch (err) {}
       }, true);
+
+      document.addEventListener('submit', (e) => {
+        const form = e.target;
+        if (!form || form.tagName !== 'FORM') return;
+        if (form.target && form.target !== '_self') return;
+        if (form.hasAttribute('data-no-skeleton')) return;
+        try {
+          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+          sessionStorage.setItem('pg-page-nav', '1');
+        } catch (err) {}
+      }, true);
     })();
 
     /* Permanent no-zoom: keep focused text controls at ≥16px even if CSS regresses */
