@@ -2827,6 +2827,8 @@ form.settings-form > .actions.sticky-actions,
   flex-direction: column;
   max-height: min(92vh, 880px);
   padding-bottom: 0;
+  /* Outer panel must NOT scroll — only .settings-modal-body does */
+  overflow: hidden !important;
 }
 .settings-modal-panel > .ui-modal-head {
   flex: 0 0 auto;
@@ -2849,6 +2851,8 @@ form.settings-form > .actions.sticky-actions,
   overflow-x: hidden;
   padding-bottom: var(--space-3);
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 .settings-modal-body .settings-card {
   margin-top: 0;
@@ -4200,7 +4204,18 @@ form.settings-form > .actions.sticky-actions,
 }
 
 /* ── Modals (ported to body; above sidebar/topbar/kebab) ── */
-body.modal-open { overflow: hidden; }
+html.modal-open,
+body.modal-open {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+/* Panel scroll lives on .main / .side — lock them while a modal is open */
+body.modal-open .main,
+body.modal-open .side {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  touch-action: none;
+}
 .ui-modal {
   position: fixed;
   inset: 0;
@@ -4215,6 +4230,8 @@ body.modal-open { overflow: hidden; }
   line-height: 1.5;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  overscroll-behavior: none;
+  touch-action: none;
 }
 .ui-modal[hidden] { display: none !important; }
 .ui-modal.open { display: flex; }
@@ -4224,6 +4241,7 @@ body.modal-open { overflow: hidden; }
   background: rgba(0, 0, 0, 0.42);
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
+  touch-action: none;
 }
 .ui-modal-panel {
   position: relative;
@@ -4231,6 +4249,9 @@ body.modal-open { overflow: hidden; }
   width: min(560px, 100%);
   max-height: min(84vh, 900px);
   overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding: var(--card-pad);
   border-radius: var(--radius);
   border: 1px solid var(--border);
@@ -6541,6 +6562,18 @@ html[data-theme="light"] .ticket-attach {
 }
 .loyalty-overview .home-panel-grid {
   flex: 0 0 auto;
+}
+/* Top referrers: invite-count shrinks to content; user takes the rest */
+.col-count {
+  width: 1%;
+  white-space: nowrap;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.table-compact th.col-count,
+.table-compact td.col-count {
+  width: 1%;
+  padding-inline: var(--space-2);
 }
 .home-panel-neutral {
   border: 1px solid var(--border);

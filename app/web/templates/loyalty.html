@@ -90,12 +90,12 @@
   <div class="card-flush-head"><h2>برترین معرف‌ها</h2></div>
   <div class="table-wrap">
   <table class="table-compact" data-sortable>
-    <thead><tr><th data-sort-type="text">کاربر</th><th data-sort-type="num">تعداد دعوت</th></tr></thead>
+    <thead><tr><th data-sort-type="text">کاربر</th><th class="col-count" data-sort-type="num">تعداد دعوت</th></tr></thead>
     <tbody>
     {% for r in metrics.top_referrers %}
       <tr>
         <td data-sort-value="{{ r.label }}">{{ r.label }}</td>
-        <td class="mono" data-sort-value="{{ r.count }}">{{ r.count | num }}</td>
+        <td class="mono col-count" data-sort-value="{{ r.count }}">{{ r.count | num }}</td>
       </tr>
     {% else %}
       <tr><td colspan="2" class="muted">هنوز دعوتی ثبت نشده</td></tr>

@@ -662,6 +662,136 @@
 
     /* Lightweight modals — always render on document.body above sidebar */
     const modalHomes = new WeakMap();
+    let modalScrollLockDepth = 0;
+    let modalScrollY = 0;
+    let modalMainScrollTop = 0;
+    let modalWheelGuard = null;
+    let modalTouchGuard = null;
+
+    function modalScrollRoot(modal){
+      if (!modal) return null;
+      const body = modal.querySelector('.settings-modal-body');
+      if (body) return body;
+      return modal.querySelector('.ui-modal-panel');
+    }
+
+    function canScrollInside(el, deltaY){
+      if (!el) return false;
+      const top = el.scrollTop;
+      const max = el.scrollHeight - el.clientHeight;
+      if (max <= 1) return false;
+      if (deltaY < 0 && top > 0) return true;
+      if (deltaY > 0 && top < max - 1) return true;
+      return false;
+    }
+
+    function findScrollableAncestor(start, modal){
+      let node = start;
+      while (node && node !== modal && node !== document.body) {
+        if (node.nodeType === 1) {
+          const style = window.getComputedStyle(node);
+          const oy = style.overflowY;
+          if ((oy === 'auto' || oy === 'scroll' || oy === 'overlay')
+              && node.scrollHeight > node.clientHeight + 1) {
+            return node;
+          }
+        }
+        node = node.parentElement;
+      }
+      return modalScrollRoot(modal);
+    }
+
+    function installModalScrollGuards(){
+      if (modalWheelGuard) return;
+      let touchStartY = 0;
+      modalWheelGuard = (e) => {
+        if (!document.body.classList.contains('modal-open')) return;
+        const modal = document.querySelector('.ui-modal.open');
+        if (!modal) return;
+        if (!modal.contains(e.target)) {
+          e.preventDefault();
+          return;
+        }
+        if (e.target === modal || (e.target.classList && e.target.classList.contains('ui-modal-backdrop'))) {
+          e.preventDefault();
+          return;
+        }
+        const scroller = findScrollableAncestor(e.target, modal);
+        if (!canScrollInside(scroller, e.deltaY)) {
+          e.preventDefault();
+        }
+      };
+      const onTouchStart = (e) => {
+        if (!e.touches || !e.touches.length) return;
+        touchStartY = e.touches[0].clientY;
+      };
+      modalTouchGuard = (e) => {
+        if (!document.body.classList.contains('modal-open')) return;
+        const modal = document.querySelector('.ui-modal.open');
+        if (!modal) return;
+        if (!modal.contains(e.target)
+            || e.target === modal
+            || (e.target.classList && e.target.classList.contains('ui-modal-backdrop'))) {
+          e.preventDefault();
+          return;
+        }
+        if (!e.touches || !e.touches.length) return;
+        const dy = touchStartY - e.touches[0].clientY;
+        if (Math.abs(dy) < 1) return;
+        const scroller = findScrollableAncestor(e.target, modal);
+        if (!canScrollInside(scroller, dy)) {
+          e.preventDefault();
+        }
+      };
+      document.addEventListener('touchstart', onTouchStart, { passive: true, capture: true });
+      document.addEventListener('wheel', modalWheelGuard, { passive: false, capture: true });
+      document.addEventListener('touchmove', modalTouchGuard, { passive: false, capture: true });
+      modalTouchGuard._onTouchStart = onTouchStart;
+    }
+
+    function removeModalScrollGuards(){
+      if (modalWheelGuard) {
+        document.removeEventListener('wheel', modalWheelGuard, { capture: true });
+        modalWheelGuard = null;
+      }
+      if (modalTouchGuard) {
+        if (modalTouchGuard._onTouchStart) {
+          document.removeEventListener('touchstart', modalTouchGuard._onTouchStart, { capture: true });
+        }
+        document.removeEventListener('touchmove', modalTouchGuard, { capture: true });
+        modalTouchGuard = null;
+      }
+    }
+
+    function lockPageScroll(){
+      if (modalScrollLockDepth === 0) {
+        const main = document.querySelector('.main');
+        modalMainScrollTop = main ? main.scrollTop : 0;
+        modalScrollY = window.scrollY || window.pageYOffset || 0;
+        document.documentElement.classList.add('modal-open');
+        document.body.classList.add('modal-open');
+        if (main) main.scrollTop = modalMainScrollTop;
+      }
+      modalScrollLockDepth += 1;
+    }
+
+    function unlockPageScroll(){
+      if (modalScrollLockDepth <= 0) return;
+      modalScrollLockDepth -= 1;
+      if (modalScrollLockDepth > 0) return;
+      if (document.querySelector('.ui-modal.open')) {
+        modalScrollLockDepth = 1;
+        return;
+      }
+      document.documentElement.classList.remove('modal-open');
+      document.body.classList.remove('modal-open');
+      const main = document.querySelector('.main');
+      if (main) main.scrollTop = modalMainScrollTop;
+      if (modalScrollY) {
+        try { window.scrollTo(0, modalScrollY); } catch (e) {}
+      }
+    }
+
     function restoreModalHome(el){
       const home = modalHomes.get(el);
       if (!home || !home.parent) return;
@@ -682,6 +812,7 @@
     }
     function closeModal(el){
       if (!el) return;
+      const wasOpen = el.classList.contains('open');
       el.hidden = true;
       el.classList.remove('open');
       restoreModalHome(el);
@@ -701,7 +832,10 @@
           window.history.replaceState({}, '', next);
         } catch (e) {}
       }
-      if (!document.querySelector('.ui-modal.open')) {
+      if (wasOpen) unlockPageScroll();
+      else if (!document.querySelector('.ui-modal.open')) {
+        modalScrollLockDepth = 0;
+        document.documentElement.classList.remove('modal-open');
         document.body.classList.remove('modal-open');
       }
     }
@@ -752,17 +886,30 @@
       });
       el.hidden = false;
       el.classList.add('open');
-      document.body.classList.add('modal-open');
+      lockPageScroll();
       /* Ensure every select in this modal is custom (covers late DOM / fragments) */
       enhanceAllSelects(el);
       /* Never autofocus inputs/buttons — mobile keyboards must only open on user tap. */
     }
     window.openModal = openModal;
+    /* Always-on guards: catch wheel/touch even when a page sets body.modal-open itself */
+    installModalScrollGuards();
+    /* Keep <html> in sync if something toggles body.modal-open directly */
+    try {
+      const syncHtmlModal = () => {
+        const on = document.body.classList.contains('modal-open')
+          || !!document.querySelector('.ui-modal.open');
+        document.documentElement.classList.toggle('modal-open', on);
+      };
+      const mo = new MutationObserver(syncHtmlModal);
+      mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+      syncHtmlModal();
+    } catch (e) {}
     /* SSR-open modals (e.g. ticket view/create) — portal like button-opened modals */
     document.querySelectorAll('.ui-modal.open').forEach((el) => {
       ensureModalPorted(el);
       el.hidden = false;
-      document.body.classList.add('modal-open');
+      lockPageScroll();
       enhanceAllSelects(el);
       const thread = el.querySelector('.ticket-thread');
       if (thread) thread.scrollTop = thread.scrollHeight;
