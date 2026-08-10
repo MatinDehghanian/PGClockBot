@@ -734,8 +734,7 @@
 
     function modalScrollRoot(modal){
       if (!modal) return null;
-      const body = modal.querySelector('.settings-modal-body');
-      if (body) return body;
+      /* Always scroll the panel itself so the scrollbar sits on the same edge */
       return modal.querySelector('.ui-modal-panel');
     }
 

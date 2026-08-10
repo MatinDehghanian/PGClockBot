@@ -2884,14 +2884,18 @@ form.settings-form > .actions.sticky-actions,
   opacity: 1;
 }
 
-/* Domain settings modals (finance / support / loyalty) */
+/* Domain settings modals (finance / support / loyalty)
+   Scroll on the panel edge — same place as create-reseller / other modals. */
 .settings-modal-panel {
   display: flex;
   flex-direction: column;
-  max-height: min(92vh, 880px);
-  padding-bottom: 0;
-  /* Outer panel must NOT scroll — only .settings-modal-body does */
-  overflow: hidden !important;
+  max-height: min(84vh, 900px);
+  /* Match .ui-modal-panel scrolling; do not nest a second scrollbar */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 .settings-modal-panel > .ui-modal-head {
   flex: 0 0 auto;
@@ -2908,14 +2912,10 @@ form.settings-form > .actions.sticky-actions,
   margin-bottom: var(--space-2);
 }
 .settings-modal-body {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-bottom: var(--space-3);
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  touch-action: pan-y;
+  overflow: visible;
+  padding-bottom: var(--space-1);
 }
 .settings-modal-body .settings-card {
   margin-top: 0;
@@ -4338,6 +4338,7 @@ body.modal-open .side {
 .ui-modal-panel-xl {
   width: min(720px, 100%);
   overflow-x: hidden;
+  overflow-y: auto;
 }
 .edit-modal-body {
   display: flex;

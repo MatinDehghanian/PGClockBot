@@ -34,11 +34,14 @@ class ModalScrollLockTests(unittest.TestCase):
         self.assertIn("overflow: hidden !important;", css)
         self.assertIn("overscroll-behavior: contain;", css)
 
-    def test_settings_modal_panel_does_not_double_scroll(self):
+    def test_settings_modal_panel_scrolls_like_others(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(".settings-modal-panel {", css)
         block = css.split(".settings-modal-panel {", 1)[1].split("}", 1)[0]
-        self.assertIn("overflow: hidden !important;", block)
+        self.assertIn("overflow-y: auto;", block)
+        self.assertNotIn("overflow: hidden !important;", block)
+        body = css.split(".settings-modal-body {", 1)[1].split("}", 1)[0]
+        self.assertIn("overflow: visible;", body)
 
     def test_js_lock_helpers_exist(self):
         js = JS.read_text(encoding="utf-8")
@@ -47,6 +50,7 @@ class ModalScrollLockTests(unittest.TestCase):
         self.assertIn("installModalScrollGuards", js)
         self.assertIn("document.documentElement.classList.add('modal-open')", js)
         self.assertIn("Always-on guards", js)
+        self.assertIn("scroll the panel itself", js)
 
 
 if __name__ == "__main__":
