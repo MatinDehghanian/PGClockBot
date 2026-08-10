@@ -18,6 +18,59 @@
     if (back) back.addEventListener('click', () => setOpen(false));
     side && side.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setOpen(false)));
 
+    /* Page skeleton: reveal content when ready; mark nav for next paint */
+    (function () {
+      const html = document.documentElement;
+      function revealPage() {
+        html.classList.remove('page-loading', 'page-booting');
+        html.classList.add('page-ready');
+      }
+      function scheduleReveal() {
+        try {
+          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            revealPage();
+            return;
+          }
+        } catch (e) {}
+        const start = (window.performance && performance.now) ? performance.now() : Date.now();
+        const minMs = html.classList.contains('page-loading') ? 140 : 0;
+        const go = () => {
+          const now = (window.performance && performance.now) ? performance.now() : Date.now();
+          const wait = Math.max(0, minMs - (now - start));
+          if (wait > 0) setTimeout(revealPage, wait);
+          else requestAnimationFrame(revealPage);
+        };
+        if (document.readyState === 'complete' || document.readyState === 'interactive') go();
+        else document.addEventListener('DOMContentLoaded', go, { once: true });
+      }
+      scheduleReveal();
+      window.addEventListener('pageshow', (e) => {
+        if (e.persisted) revealPage();
+      });
+
+      document.addEventListener('click', (e) => {
+        if (e.defaultPrevented) return;
+        if (e.button !== 0) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        const a = e.target.closest && e.target.closest('a[href]');
+        if (!a) return;
+        if (a.target && a.target !== '_self') return;
+        if (a.hasAttribute('download')) return;
+        const href = a.getAttribute('href') || '';
+        if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
+        let url;
+        try { url = new URL(href, window.location.href); } catch (err) { return; }
+        if (url.origin !== window.location.origin) return;
+        if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) return;
+        try {
+          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+          sessionStorage.setItem('pg-page-nav', '1');
+          html.classList.add('page-loading');
+          html.classList.remove('page-ready', 'page-booting');
+        } catch (err) {}
+      }, true);
+    })();
+
     /* Permanent no-zoom: keep focused text controls at ≥16px even if CSS regresses */
     (function () {
       const MIN = 16;
@@ -810,11 +863,15 @@
         document.body.appendChild(el);
       }
     }
-    function closeModal(el){
+    function prefersReducedMotion(){
+      try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
+    }
+
+    function finishCloseModal(el){
       if (!el) return;
-      const wasOpen = el.classList.contains('open');
+      const wasOpen = el.classList.contains('open') || el.classList.contains('is-closing');
       el.hidden = true;
-      el.classList.remove('open');
+      el.classList.remove('open', 'is-closing');
       restoreModalHome(el);
       /* Drop sticky SSR form errors when closing (create/edit user modals) */
       el.querySelectorAll('.flash.err[id$="-form-err"]').forEach((err) => {
@@ -839,6 +896,36 @@
         document.body.classList.remove('modal-open');
       }
     }
+
+    function closeModal(el, opts){
+      if (!el) return;
+      const instant = !!(opts && opts.instant) || prefersReducedMotion();
+      if (!el.classList.contains('open')) {
+        finishCloseModal(el);
+        return;
+      }
+      if (el.classList.contains('is-closing')) return;
+      if (instant) {
+        finishCloseModal(el);
+        return;
+      }
+      el.classList.add('is-closing');
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        el.removeEventListener('animationend', onEnd);
+        finishCloseModal(el);
+      };
+      const onEnd = (e) => {
+        if (!e || !e.target) return;
+        if (e.target !== el && !(e.target.classList && e.target.classList.contains('ui-modal-panel'))) return;
+        finish();
+      };
+      el.addEventListener('animationend', onEnd);
+      setTimeout(finish, 240);
+    }
+
     function modalEscapeHref(el){
       if (!el) return null;
       const attr = el.getAttribute('data-modal-escape-href');
@@ -876,7 +963,7 @@
     function openModal(id){
       const el = document.getElementById(id);
       if (!el) return;
-      document.querySelectorAll('.ui-modal.open').forEach(closeModal);
+      document.querySelectorAll('.ui-modal.open').forEach((m) => closeModal(m, { instant: true }));
       ensureModalPorted(el);
       /* Fresh open: clear prior form errors unless SSR keep flag is set */
       el.querySelectorAll('.flash.err[id$="-form-err"]').forEach((err) => {
@@ -884,6 +971,7 @@
         err.hidden = true;
         err.textContent = '';
       });
+      el.classList.remove('is-closing');
       el.hidden = false;
       el.classList.add('open');
       lockPageScroll();

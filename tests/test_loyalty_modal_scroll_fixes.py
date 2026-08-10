@@ -22,7 +22,8 @@ class LoyaltyTopReferrersColumns(unittest.TestCase):
     def test_col_count_css_shrinks_to_content(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(".col-count {", css)
-        self.assertIn("width: 1%;", css)
+        block = css.split(".col-count {", 1)[1].split("}", 1)[0]
+        self.assertIn("width: 50%;", block)
 
 
 class ModalScrollLockTests(unittest.TestCase):
