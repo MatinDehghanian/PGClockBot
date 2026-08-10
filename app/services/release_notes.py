@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "5.0.5": [
+        "اسکلتون لود فقط وقتی صفحه واقعاً دیر آماده شود؛ بدون تاخیر عمدی در ناوبری سریع",
+        "موشن پنل واضح‌تر: باز/بسته مودال، hover دکمه‌ها، تب‌ها و ناوبری",
+    ],
     "5.0.4": [
         "موشن سبک پنل: دکمه/منو/تب‌ها و باز/بسته شدن نرم مودال بدون شلوغی",
         "لود اسکلتی صفحات هنگام جابه‌جایی و ارسال فرم؛ احترام به prefers-reduced-motion",

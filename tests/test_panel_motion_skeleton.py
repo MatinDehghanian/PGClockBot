@@ -21,7 +21,7 @@ class MotionTokensTests(unittest.TestCase):
     def test_buttons_and_nav_transition(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(".btn:active:not(:disabled), a.btn:active", css)
-        self.assertIn("transform: scale(0.97);", css)
+        self.assertIn("transform: scale(0.96) translateY(0);", css)
         nav = css.split(".nav-item {", 1)[1].split("}", 1)[0]
         self.assertIn("transition:", nav)
 
@@ -46,20 +46,23 @@ class PageSkeletonTests(unittest.TestCase):
         html = BASE.read_text(encoding="utf-8")
         self.assertIn('id="page-skeleton"', html)
         self.assertIn("page-surface", html)
-        self.assertIn("pg-page-nav", html)
+        self.assertIn("__pgPageReveal", html)
 
     def test_skeleton_css(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn("html.page-loading .page-skeleton", css)
         self.assertIn("@keyframes sk-shimmer", css)
         self.assertIn("@keyframes page-surface-in", css)
+        self.assertNotIn("html.page-booting .page-surface", css)
 
-    def test_js_reveal_and_nav_flag(self):
+    def test_js_reveal_helpers(self):
         js = JS.read_text(encoding="utf-8")
-        self.assertIn("pg-page-nav", js)
+        self.assertIn("__pgPageReveal", js)
         self.assertIn("page-ready", js)
         self.assertIn("function closeModal(el, opts)", js)
         self.assertIn("is-closing", js)
+        self.assertNotIn("pg-page-nav", js)
+        self.assertNotIn("minMs", js)
 
 
 if __name__ == "__main__":
