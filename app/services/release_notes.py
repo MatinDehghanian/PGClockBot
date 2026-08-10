@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "5.0.6": [
+        "یکدست‌سازی نوار اسکرول مودال‌ها: همه مودال‌ها مثل ساخت نماینده روی لبه پنل اسکرول می‌شوند",
+    ],
     "5.0.5": [
         "اسکلتون لود فقط وقتی صفحه واقعاً دیر آماده شود؛ بدون تاخیر عمدی در ناوبری سریع",
         "موشن پنل واضح‌تر: باز/بسته مودال، hover دکمه‌ها، تب‌ها و ناوبری",
