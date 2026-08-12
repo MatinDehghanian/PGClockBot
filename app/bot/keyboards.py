@@ -323,7 +323,7 @@ def _back_label(ui: dict | None = None) -> str:
 
 
 # Bot API 9.4 button colors — defaults live in app.services.button_styles;
-# panel tab «رنگبندی» overrides via btn_style_* settings.
+# panel tab «رنگبندی دکمه‌ها» overrides via btn_style_* settings.
 _STYLE_AUTO = object()
 
 

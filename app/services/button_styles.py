@@ -86,7 +86,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     },
     {
         "id": "plan_res_payg",
-        "label": "پلن نمایندگی: Pay As You Go",
+        "label": "پلن نمایندگی: PAYG",
         "group": "پلن نمایندگی",
         "default": "primary",
     },

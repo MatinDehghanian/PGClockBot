@@ -286,4 +286,4 @@ async def save_appearance_from_form(
 
     await set_settings_bulk(session, payload, reseller_id=reseller_id)
 
-    return True, "ظاهر ربات در تلگرام اعمال شد"
+    return True, "هویت ربات در تلگرام اعمال شد"

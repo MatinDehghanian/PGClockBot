@@ -334,8 +334,10 @@ class ButtonStyleTests(unittest.TestCase):
         from app.services.resellers import RESELLER_SETTINGS_TABS
         from app.services.users import DEFAULT_SETTINGS, SETTINGS_TABS, keys_for_tab
 
-        self.assertIn(("colors", "رنگبندی"), SETTINGS_TABS)
-        self.assertIn(("colors", "رنگبندی"), RESELLER_SETTINGS_TABS)
+        self.assertIn(("colors", "رنگبندی دکمه‌ها"), SETTINGS_TABS)
+        self.assertIn(("colors", "رنگبندی دکمه‌ها"), RESELLER_SETTINGS_TABS)
+        self.assertIn(("appearance", "هویت ربات"), SETTINGS_TABS)
+        self.assertIn(("appearance", "هویت ربات"), RESELLER_SETTINGS_TABS)
         keys = keys_for_tab("colors")
         for item in BUTTON_STYLE_CATALOG:
             k = f"btn_style_{item['id']}"
@@ -370,6 +372,8 @@ class ButtonStyleTests(unittest.TestCase):
         settings_html = Path("app/web/templates/_settings_colors.html").read_text(encoding="utf-8")
         self.assertNotIn("پیش‌فرض", settings_html)
         self.assertIn("style_options", settings_html)
+        self.assertIn("پلن نمایندگی: PAYG", "".join(item["label"] for item in BUTTON_STYLE_CATALOG))
+        self.assertNotIn("Pay As You Go", "".join(item["label"] for item in BUTTON_STYLE_CATALOG))
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('tab == \'colors\'', settings)
         self.assertNotIn("فانل خرید", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
