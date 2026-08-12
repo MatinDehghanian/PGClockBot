@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.models import BotUser, Role, Setting
+from app.services.button_styles import default_settings as button_style_defaults
+from app.services.button_styles import setting_group_fields as button_style_setting_fields
 
 # When handling updates on a reseller-owned bot, settings read/write overlay
 # that reseller's shop settings automatically.
@@ -790,6 +792,7 @@ DEFAULT_SETTINGS = {
     "funnel_tracking_enabled": "1",
     "one_tap_renew_enabled": "1",
 }
+DEFAULT_SETTINGS.update(button_style_defaults())
 
 # field kinds: text | textarea | toggle | select | number | image
 # (key, label, kind, help?, options?)
@@ -799,6 +802,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("appearance", "ظاهر ربات"),
     ("messages", "متن پیام‌ها"),
     ("buttons", "متن دکمه‌ها"),
+    ("colors", "رنگبندی"),
     ("menu", "منوی بات"),
     ("qr", "QR اشتراک"),
     ("naming", "نام‌گذاری سرویس"),
@@ -974,11 +978,12 @@ SETTING_GROUPS = {
         ),
         (
             "funnel_tracking_enabled",
-            "ثبت فانل خرید",
+            "ثبت رفتار کاربر",
             "toggle",
-            "مراحل باز کردن فروشگاه تا تحویل برای آمار داشبورد",
+            "مراحل باز کردن فروشگاه تا تحویل برای آمار «رفتار کاربر» در مدیریت مالی",
         ),
     ],
+    "رنگ دکمه‌ها": button_style_setting_fields(),
     "بکاپ زمان‌بندی": [
         (
             "backup_schedule_enabled",
@@ -1131,6 +1136,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "welcome": ["خوش‌آمد و هویت"],
     "messages": ["متن پیام‌ها"],
     "buttons": ["متن دکمه‌های منو"],
+    "colors": ["رنگ دکمه‌ها"],
     "qr": ["QR اشتراک"],
     "payment": [
         "روش‌های پرداخت",

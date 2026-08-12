@@ -210,6 +210,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
 
         if tab == "menu":
             ctx.update(_menu_tab_context(values))
+        elif tab == "colors":
+            from app.services.button_styles import grouped_catalog
+
+            ctx["button_style_groups"] = grouped_catalog(for_reseller=True)
         elif tab == "bot":
             token = (profile.bot_token if profile else "") or ""
             ctx["bot_status"] = await _bot_token_status(token)
@@ -347,6 +351,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             raw = form.get(f"s_{key}")
             if raw is not None and not isinstance(raw, UploadFile):
                 val = str(raw)
+                if key.startswith("btn_style_"):
+                    from app.services.button_styles import normalize_style
+
+                    val = normalize_style(val)
                 if key in ("user_alert_low_traffic_pct", "user_alert_low_time_pct"):
                     from app.services.users import clamp_alert_percent
 
