@@ -1,4 +1,30 @@
 {% set st = restore_status or {} %}
+<div class="card settings-card">
+  <h2>خروجی / ورودی تنظیمات فروشگاه</h2>
+  <p class="muted update-card-caption">پلن‌ها و متن‌ها/سوییچ‌ها را به‌صورت JSON جابه‌جا کنید (جدا از بکاپ کامل ZIP).</p>
+  <div class="actions" style="gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-2)">
+    <a class="btn btn-ghost" href="/tools/export">دانلود خروجی JSON</a>
+  </div>
+  <form method="post" action="/tools/import" enctype="multipart/form-data" class="form-stack">
+    <label class="upload-box">
+      <input type="file" name="file" accept=".json,application/json" required />
+      <span class="upload-box-plus" aria-hidden="true">+</span>
+      <span class="upload-box-title">انتخاب فایل JSON</span>
+      <span class="upload-box-hint muted">خروجی قبلی را اینجا رها کنید</span>
+    </label>
+    <label class="ui-switch-row">
+      <span class="ui-switch-copy"><strong>جایگزینی پلن‌های فعلی</strong><small>اگر خاموش باشد فقط اضافه می‌شود</small></span>
+      <span class="ui-switch">
+        <input type="checkbox" name="replace_plans" value="1" />
+        <span class="ui-switch-track" aria-hidden="true"></span>
+      </span>
+    </label>
+    <div class="actions">
+      <button class="btn" type="submit">وارد کردن</button>
+    </div>
+  </form>
+</div>
+
 {% if backup_schedule_groups %}
 <form method="post" action="/settings?tab=backup" class="settings-form" id="backup-schedule-form">
   {% for group_name, fields in backup_schedule_groups.items() %}
@@ -74,32 +100,6 @@
     <button class="btn btn-ghost" type="submit">بررسی آخرین بکاپ</button>
   </div>
 </form>
-
-<div class="card settings-card">
-  <h2>خروجی / ورودی تنظیمات فروشگاه</h2>
-  <p class="muted update-card-caption">پلن‌ها و متن‌ها/سوییچ‌ها را به‌صورت JSON جابه‌جا کنید (جدا از بکاپ کامل ZIP).</p>
-  <div class="actions" style="gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-2)">
-    <a class="btn btn-ghost" href="/tools/export">دانلود خروجی JSON</a>
-  </div>
-  <form method="post" action="/tools/import" enctype="multipart/form-data" class="form-stack">
-    <label class="upload-box">
-      <input type="file" name="file" accept=".json,application/json" required />
-      <span class="upload-box-plus" aria-hidden="true">+</span>
-      <span class="upload-box-title">انتخاب فایل JSON</span>
-      <span class="upload-box-hint muted">خروجی قبلی را اینجا رها کنید</span>
-    </label>
-    <label class="ui-switch-row">
-      <span class="ui-switch-copy"><strong>جایگزینی پلن‌های فعلی</strong><small>اگر خاموش باشد فقط اضافه می‌شود</small></span>
-      <span class="ui-switch">
-        <input type="checkbox" name="replace_plans" value="1" />
-        <span class="ui-switch-track" aria-hidden="true"></span>
-      </span>
-    </label>
-    <div class="actions">
-      <button class="btn" type="submit">وارد کردن</button>
-    </div>
-  </form>
-</div>
 
 <form method="post" action="/backup/upload" enctype="multipart/form-data" class="settings-form" id="backup-upload-form" data-busy-label="در حال آپلود…">
   <div class="card settings-card">
