@@ -266,23 +266,23 @@
   <div class="home-panel-grid">
     <div class="stat">
       <div class="stat-top"><span>فروشگاه</span></div>
-      <strong>{{ funnel.shop_open | num }}</strong>
+      <strong>{{ funnel.get('shop_open', 0) | num }}</strong>
     </div>
     <div class="stat">
       <div class="stat-top"><span>پلن</span></div>
-      <strong>{{ funnel.plan_view | num }}</strong>
+      <strong>{{ funnel.get('plan_view', 0) | num }}</strong>
     </div>
     <div class="stat">
       <div class="stat-top"><span>پرداخت</span></div>
-      <strong>{{ funnel.pay_start | num }}</strong>
+      <strong>{{ funnel.get('pay_start', 0) | num }}</strong>
     </div>
     <div class="stat">
       <div class="stat-top"><span>رسید</span></div>
-      <strong>{{ funnel.receipt | num }}</strong>
+      <strong>{{ funnel.get('receipt', 0) | num }}</strong>
     </div>
     <div class="stat">
       <div class="stat-top"><span>تحویل</span></div>
-      <strong>{{ funnel.delivered | num }}</strong>
+      <strong>{{ funnel.get('delivered', 0) | num }}</strong>
     </div>
   </div>
 </section>

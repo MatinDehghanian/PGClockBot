@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from fastapi import Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -14,6 +15,50 @@ from app.services.host_metrics import host_metrics
 from app.services.home_overview import _tone_class, build_home_overview
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
 
+logger = logging.getLogger(__name__)
+
+_EMPTY_FUNNEL = {
+    "shop_open": 0,
+    "plan_view": 0,
+    "pay_start": 0,
+    "receipt": 0,
+    "delivered": 0,
+}
+_EMPTY_ACTION_CENTER = {"items": [], "has_items": False}
+
+
+async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None, expire_days: int):
+    from app.services.ux20 import build_action_center
+
+    try:
+        return await build_action_center(
+            session, reseller_id=reseller_id, expire_days=expire_days
+        )
+    except Exception:
+        logger.exception("action_center failed reseller_id=%s", reseller_id)
+        return dict(_EMPTY_ACTION_CENTER)
+
+
+async def _safe_funnel(session: AsyncSession, *, reseller_id: int | None):
+    from app.services.ux20 import funnel_summary
+
+    try:
+        return await funnel_summary(session, reseller_id=reseller_id, days=7)
+    except Exception:
+        logger.exception("funnel_summary failed reseller_id=%s", reseller_id)
+        return dict(_EMPTY_FUNNEL)
+
+
+async def _safe_pg_health(*, reseller_user_id: int | None = None, session: AsyncSession | None = None):
+    from app.services.ux20 import check_pg_connection
+
+    try:
+        return await check_pg_connection(
+            reseller_user_id=reseller_user_id, session=session
+        )
+    except Exception:
+        logger.exception("pg_health failed reseller_user_id=%s", reseller_user_id)
+        return {"ok": False, "error": "بررسی اتصال ناموفق", "version": None}
 
 async def _reseller_shop_stats(session: AsyncSession, rid: int) -> dict[str, int]:
     """Single round-trip aggregate counts for a reseller shop dashboard."""
@@ -108,21 +153,20 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 unread=getattr(request.state, "panel_tickets_unread", None),
             )
             from app.services.users import get_all_settings, on
-            from app.services.ux20 import (
-                build_action_center,
-                check_pg_connection,
-                funnel_summary,
-            )
 
-            ui = await get_all_settings(session, reseller_id=None)
+            try:
+                ui = await get_all_settings(session, reseller_id=None)
+            except Exception:
+                logger.exception("home get_all_settings failed")
+                ui = {}
             try:
                 expire_days = int(ui.get("action_center_expire_days") or 3)
             except Exception:
                 expire_days = 3
-            action_center = await build_action_center(
+            action_center = await _safe_action_center(
                 session, reseller_id=None, expire_days=expire_days
             )
-            pg_health = await check_pg_connection()
+            pg_health = await _safe_pg_health()
             return render(
                 request,
                 "home.html",
@@ -135,7 +179,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "pg_health": pg_health,
                     "shop_maintenance": on(ui.get("shop_maintenance_enabled")),
                     "funnel_enabled": on(ui.get("funnel_tracking_enabled", "1")),
-                    "funnel": await funnel_summary(session, reseller_id=None, days=7),
+                    "funnel": await _safe_funnel(session, reseller_id=None),
                 },
             )
 
@@ -207,22 +251,21 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "suspended": profile.billing_suspended_at is not None,
                 }
         from app.services.users import get_all_settings, on
-        from app.services.ux20 import (
-            build_action_center,
-            capacity_should_warn,
-            check_pg_connection,
-            funnel_summary,
-        )
+        from app.services.ux20 import capacity_should_warn
 
-        ui = await get_all_settings(session, reseller_id=int(rid))
+        try:
+            ui = await get_all_settings(session, reseller_id=int(rid))
+        except Exception:
+            logger.exception("reseller home get_all_settings failed rid=%s", rid)
+            ui = {}
         try:
             expire_days = int(ui.get("action_center_expire_days") or 3)
         except Exception:
             expire_days = 3
-        action_center = await build_action_center(
+        action_center = await _safe_action_center(
             session, reseller_id=int(rid), expire_days=expire_days
         )
-        pg_health = await check_pg_connection(
+        pg_health = await _safe_pg_health(
             reseller_user_id=int(rid) if staff.get("pg_admin_username") else None,
             session=session if staff.get("pg_admin_username") else None,
         )
@@ -233,9 +276,12 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         except Exception:
             thr = 80.0
         if pg_limits:
-            capacity_warn = capacity_should_warn(
-                [pg_limits.get("users"), pg_limits.get("traffic")], thr
-            )
+            try:
+                capacity_warn = capacity_should_warn(
+                    [pg_limits.get("users"), pg_limits.get("traffic")], thr
+                )
+            except Exception:
+                capacity_warn = False
         return render(
             request,
             "reseller_home.html",
@@ -251,7 +297,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "pg_health": pg_health,
                 "shop_maintenance": shop_maintenance,
                 "capacity_warn": capacity_warn,
-                "funnel": await funnel_summary(session, reseller_id=int(rid), days=7),
+                "funnel": await _safe_funnel(session, reseller_id=int(rid)),
             },
         )
 

@@ -220,15 +220,51 @@ class Ux20AsyncServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(out["has_items"])
 
 
+class FormatNumberSafetyTests(unittest.TestCase):
+    def test_undefined_does_not_raise(self):
+        from jinja2 import Undefined
+
+        from app.services.formatting import format_number
+
+        self.assertEqual(format_number(Undefined(name="shop_open")), "—")
+        self.assertEqual(format_number(None), "—")
+        self.assertEqual(format_number(12), "12")
+
+    def test_home_funnel_empty_dict_renders(self):
+        from jinja2 import BaseLoader, Environment
+
+        from app.services.formatting import format_number
+
+        env = Environment(loader=BaseLoader())
+        env.filters["num"] = format_number
+        tpl = env.from_string(
+            "{{ funnel.get('shop_open', 0) | num }}|{{ funnel.shop_open | num }}"
+        )
+        self.assertEqual(tpl.render(funnel={}), "0|—")
+
+
+class ButtonStyleTests(unittest.TestCase):
+    def test_review_and_buy_styles(self):
+        from app.bot.keyboards import order_review, payment_review, plan_actions
+
+        ok, no = order_review(1).inline_keyboard[0]
+        self.assertEqual(ok.style, "success")
+        self.assertEqual(no.style, "danger")
+        pok, pno = payment_review(2).inline_keyboard[0]
+        self.assertEqual(pok.style, "success")
+        self.assertEqual(pno.style, "danger")
+        self.assertEqual(plan_actions(3).inline_keyboard[0][0].style, "primary")
+
+
 class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.1")
-        self.assertEqual(__version__, "5.1.1")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.2")
+        self.assertEqual(__version__, "5.1.2")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"5.1.2"', notes)
         self.assertIn('"5.1.1"', notes)
-        self.assertIn('"5.1.0"', notes)
 
 
 if __name__ == "__main__":

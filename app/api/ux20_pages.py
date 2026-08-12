@@ -201,9 +201,18 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 q = q.where(ChargeCode.reseller_id == int(rid))
             codes = list((await session.execute(q)).scalars().all())
 
-        funnel = {}
+        funnel = {
+            "shop_open": 0,
+            "plan_view": 0,
+            "pay_start": 0,
+            "receipt": 0,
+            "delivered": 0,
+        }
         if tab == "steps":
-            funnel = await funnel_summary(session, reseller_id=rid, days=7)
+            try:
+                funnel = await funnel_summary(session, reseller_id=rid, days=7)
+            except Exception:
+                pass
 
         return render(
             request,
