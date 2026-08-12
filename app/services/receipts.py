@@ -54,7 +54,16 @@ async def process_receipt(
         try:
             order = await approve_payment(session, payment, reviewer_tg=0)
             if user_tg_id:
-                await send_delivery_to_user(bot, user_tg_id, session, payment, order)
+                try:
+                    await send_delivery_to_user(bot, user_tg_id, session, payment, order)
+                except Exception as send_exc:
+                    if order is not None:
+                        from app.services.ux20 import note_delivery_send_failure
+
+                        await note_delivery_send_failure(
+                            session, order=order, payment=payment, error=str(send_exc)
+                        )
+                    raise
             await notify_auto_approve(bot, session, payment)
             if payment.is_wallet_topup:
                 await notify_wallet_topup_ok(bot, session, payment, user_tg_id)

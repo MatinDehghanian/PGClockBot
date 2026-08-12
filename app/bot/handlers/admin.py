@@ -385,8 +385,18 @@ async def _approve_order_bot(session: AsyncSession, order: Order, bot) -> str:
                 await send_delivery_to_user(
                     bot, user.telegram_id, session, pay, delivered or order
                 )
-        except Exception:
-            pass
+        except Exception as send_exc:
+            try:
+                from app.services.ux20 import note_delivery_send_failure
+
+                await note_delivery_send_failure(
+                    session,
+                    order=delivered or order,
+                    payment=pay,
+                    error=str(send_exc),
+                )
+            except Exception:
+                pass
         msg = "سفارش تأیید و تحویل شد"
     elif order.status == OrderStatus.PAID.value or (
         pay and pay.status == PaymentStatus.APPROVED.value and order.status != OrderStatus.DELIVERED.value
@@ -401,8 +411,18 @@ async def _approve_order_bot(session: AsyncSession, order: Order, bot) -> str:
                     await send_delivery_to_user(
                         bot, user.telegram_id, session, pay, delivered
                     )
-            except Exception:
-                pass
+            except Exception as send_exc:
+                try:
+                    from app.services.ux20 import note_delivery_send_failure
+
+                    await note_delivery_send_failure(
+                        session,
+                        order=delivered or order,
+                        payment=pay,
+                        error=str(send_exc),
+                    )
+                except Exception:
+                    pass
         msg = "سفارش تحویل شد"
     else:
         raise ValueError("این سفارش هنوز قابل تأیید نیست (رسید لازم است)")

@@ -38,6 +38,7 @@ from app.services.safe_format import safe_format
 
 router = Router(name="shop")
 
+
 async def _show_order_pay(message, session, db_user, order_id, state, text: str):
     """Show order summary then payment methods on the reply keyboard."""
     from app.bot.menu_nav import present_order_pay
@@ -52,6 +53,59 @@ async def _show_order_pay(message, session, db_user, order_id, state, text: str)
                 pass
         await present_order_pay(message, session, db_user, order_id, state=state, text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:")
 
+
+async def shop_under_maintenance(session: AsyncSession, ui: dict | None = None) -> str | None:
+    """Return maintenance message if shop buying is gated; renew flows stay open."""
+    if ui is None:
+        ui = await get_all_settings(session)
+    if on(ui.get("shop_maintenance_enabled")):
+        return (
+            (ui.get("shop_maintenance_text") or "").strip()
+            or "فروشگاه موقتاً در حال به‌روزرسانی است.\nتمدید و پشتیبانی فعال است."
+        )
+    return None
+
+
+async def _answer_shop_maintenance(callback: CallbackQuery, session: AsyncSession, ui: dict | None = None) -> bool:
+    """If maintenance is on, answer the callback and return True (caller should return)."""
+    msg = await shop_under_maintenance(session, ui)
+    if not msg:
+        return False
+    await callback.answer(msg[:180], show_alert=True)
+    if callback.message:
+        try:
+            await callback.message.answer(format_message("🛠 فروشگاه", msg))
+        except Exception:
+            pass
+    return True
+
+
+async def _record_shop_funnel(
+    session: AsyncSession,
+    db_user: BotUser,
+    step: str,
+    *,
+    ui: dict | None = None,
+    plan_id: int | None = None,
+    order_id: int | None = None,
+) -> None:
+    if ui is None:
+        ui = await get_all_settings(session)
+    if not on(ui.get("funnel_tracking_enabled", "1")):
+        return
+    try:
+        from app.services.ux20 import record_funnel_event
+
+        await record_funnel_event(
+            session,
+            step=step,
+            user_id=int(db_user.id),
+            reseller_id=int(db_user.reseller_id) if db_user.reseller_id else None,
+            plan_id=int(plan_id) if plan_id else None,
+            order_id=int(order_id) if order_id else None,
+        )
+    except Exception:
+        pass
 
 
 class ShopStates(StatesGroup):
@@ -167,11 +221,15 @@ async def _shop_kind_flags(
 
 @router.callback_query(F.data == "shop:list")
 async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
+    ui_gate = await get_all_settings(session)
+    if await _answer_shop_maintenance(callback, session, ui_gate):
+        return
     await callback.answer()
     await state.clear()
     ui, fixed_on, trial_on, custom_on, wholesale_on, *_rest = await _shop_kind_flags(
         session, db_user
     )
+    await _record_shop_funnel(session, db_user, "shop_open", ui=ui)
     if not any((fixed_on, trial_on, custom_on, wholesale_on)):
         text = format_message(
             "🛒 فروشگاه",
@@ -208,6 +266,8 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 async def shop_kind_fixed(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
 ):
+    if await _answer_shop_maintenance(callback, session):
+        return
     await callback.answer()
     ui, fixed_on, *_rest, fixed_plans, _trial = await _shop_kind_flags(session, db_user)
     if not fixed_on:
@@ -229,6 +289,8 @@ async def shop_kind_fixed(
 async def shop_kind_trial(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
 ):
+    if await _answer_shop_maintenance(callback, session):
+        return
     ui, _fixed, trial_on, *_rest, _fixed_plans, trial_plans = await _shop_kind_flags(
         session, db_user
     )
@@ -252,6 +314,8 @@ async def shop_kind_trial(
 async def shop_kind_custom(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ):
+    if await _answer_shop_maintenance(callback, session):
+        return
     await custom_start(callback, session, state)
 
 
@@ -259,6 +323,8 @@ async def shop_kind_custom(
 async def shop_kind_wholesale(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext
 ):
+    if await _answer_shop_maintenance(callback, session):
+        return
     await wholesale_start(callback, session, state)
 
 
@@ -270,6 +336,8 @@ async def custom_noop(callback: CallbackQuery):
 @router.callback_query(F.data == "shop:custom")
 async def custom_start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
+    if await _answer_shop_maintenance(callback, session, ui):
+        return
     if not await _custom_gate(session, ui, state):
         await callback.answer(
             "پلن دلخواه در دسترس نیست (پلنی تعریف نشده یا غیرفعال است).",
@@ -534,6 +602,8 @@ async def _notify_new_order(bot, session, order, db_user, plan_name: str | None)
 @router.callback_query(F.data == "shop:custom:buy")
 async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     ui = await get_all_settings(session)
+    if await _answer_shop_maintenance(callback, session, ui):
+        return
     if not await _custom_available_for_users(session, ui):
         await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
         return
@@ -560,6 +630,7 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         return
     await state.clear()
     await callback.answer()
+    await _record_shop_funnel(session, db_user, "pay_start", ui=ui, order_id=order.id)
 
     if order.amount <= 0:
         from app.services.orders import deliver_order, revert_failed_free_delivery
@@ -608,6 +679,8 @@ async def wholesale_noop(callback: CallbackQuery):
 @router.callback_query(F.data == "shop:wholesale")
 async def wholesale_start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     ui = await get_all_settings(session)
+    if await _answer_shop_maintenance(callback, session, ui):
+        return
     if not on(ui.get("wholesale_enabled")):
         await callback.answer("فروش عمده فعال نیست", show_alert=True)
         return
@@ -874,6 +947,8 @@ async def wholesale_buy(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
 ):
     ui = await get_all_settings(session)
+    if await _answer_shop_maintenance(callback, session, ui):
+        return
     if not on(ui.get("wholesale_enabled")):
         await callback.answer("فروش عمده فعال نیست", show_alert=True)
         return
@@ -902,6 +977,9 @@ async def wholesale_buy(
     await state.set_state(None)
     await state.update_data(wholesale_plan_id=None, wholesale_qty=None)
     await callback.answer()
+    await _record_shop_funnel(
+        session, db_user, "pay_start", ui=ui, plan_id=plan_id, order_id=order.id
+    )
     plan = await get_catalog_plan(session, plan_id)
     plan_name = plan.name if plan else "پلن"
     text = format_message(
@@ -918,14 +996,17 @@ async def wholesale_buy(
 
 
 @router.callback_query(F.data.startswith("shop:plan:"))
-async def shop_plan(callback: CallbackQuery, session: AsyncSession):
+async def shop_plan(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     ui = await get_all_settings(session)
+    if await _answer_shop_maintenance(callback, session, ui):
+        return
     plan_id = int(callback.data.split(":")[-1])
     plan = await get_catalog_plan(session, plan_id)
     if not plan:
         await callback.answer("پلن پیدا نشد", show_alert=True)
         return
     await callback.answer()
+    await _record_shop_funnel(session, db_user, "plan_view", ui=ui, plan_id=plan.id)
     limit = f"{plan.data_limit_gb:g} گیگ" if plan.data_limit_gb is not None else "نامحدود"
     from app.services.formatting import info_block, kv_line
 
@@ -945,6 +1026,8 @@ async def shop_plan(callback: CallbackQuery, session: AsyncSession):
 @router.callback_query(F.data.startswith("shop:buy:"))
 async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     ui = await get_all_settings(session)
+    if await _answer_shop_maintenance(callback, session, ui):
+        return
     plan_id = int(callback.data.split(":")[-1])
     plan = await get_catalog_plan(session, plan_id)
     if not plan:
@@ -966,6 +1049,9 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         return
 
     await callback.answer()
+    await _record_shop_funnel(
+        session, db_user, "pay_start", ui=ui, plan_id=plan_id, order_id=order.id
+    )
 
     # Free / trial: deliver immediately
     if order.amount <= 0:

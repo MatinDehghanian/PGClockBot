@@ -92,6 +92,8 @@ class BotUser(Base):
         ForeignKey("bot_users.id"), nullable=True
     )
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    staff_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    risk_flags: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # CSV
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     services: Mapped[list["UserService"]] = relationship(
@@ -143,6 +145,7 @@ class Order(Base):
     payment_method: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     discount_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    staff_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     service_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("user_services.id"), nullable=True, index=True
     )
@@ -187,6 +190,9 @@ class UserService(Base):
     remark: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     notified_expire: Mapped[bool] = mapped_column(Boolean, default=False)
     notified_traffic: Mapped[bool] = mapped_column(Boolean, default=False)
+    renew_nudge_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     owner: Mapped["BotUser"] = relationship(
@@ -350,6 +356,9 @@ class ResellerProfile(Base):
     )  # JSON list of PG user ids disabled by suspend
     # After True: shop wallet is SoT; billing_balance is kept as a mirror
     payg_wallet_linked: Mapped[bool] = mapped_column(Boolean, default=False)
+    capacity_warned_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -703,3 +712,60 @@ class LoyaltyTier(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     multiplier_bps: Mapped[int] = mapped_column(Integer, default=10000)  # 10000 = 1.0x
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class DeliveryFailure(Base):
+    """Orders that failed Telegram/PG delivery and need retry."""
+
+    __tablename__ = "delivery_failures"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
+    payment_id: Mapped[Optional[int]] = mapped_column(ForeignKey("payments.id"), nullable=True)
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    error: Mapped[str] = mapped_column(Text, default="")
+    attempts: Mapped[int] = mapped_column(Integer, default=1)
+    last_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ChargeCode(Base):
+    """Wallet gift / charge codes (fixed toman credit)."""
+
+    __tablename__ = "charge_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    amount: Mapped[int] = mapped_column(Integer, default=0)  # toman
+    max_uses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class FunnelEvent(Base):
+    """Lightweight purchase-funnel analytics."""
+
+    __tablename__ = "funnel_events"
+    __table_args__ = (UniqueConstraint("idempotency_key", name="uq_funnel_events_idem"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True, index=True)
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    step: Mapped[str] = mapped_column(String(64), index=True)
+    plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("plans.id"), nullable=True)
+    order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+

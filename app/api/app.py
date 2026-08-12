@@ -2121,9 +2121,18 @@ def create_api_app(lifespan=None) -> FastAPI:
 
             bot, should_close = await open_notify_bot_for_user(session, user)
             try:
-                await send_delivery_to_user(
-                    bot, user.telegram_id, session, payment, order
-                )
+                try:
+                    await send_delivery_to_user(
+                        bot, user.telegram_id, session, payment, order
+                    )
+                except Exception as send_exc:
+                    if order is not None:
+                        from app.services.ux20 import note_delivery_send_failure
+
+                        await note_delivery_send_failure(
+                            session, order=order, payment=payment, error=str(send_exc)
+                        )
+                    raise
                 if payment.is_wallet_topup:
                     await notify_wallet_topup_ok(bot, session, payment, user.telegram_id)
                 elif order:
@@ -2358,9 +2367,18 @@ def create_api_app(lifespan=None) -> FastAPI:
 
                 bot, should_close = await open_notify_bot_for_user(session, user)
                 try:
-                    await send_delivery_to_user(
-                        bot, user.telegram_id, session, payment, order
-                    )
+                    try:
+                        await send_delivery_to_user(
+                            bot, user.telegram_id, session, payment, order
+                        )
+                    except Exception as send_exc:
+                        if order is not None:
+                            from app.services.ux20 import note_delivery_send_failure
+
+                            await note_delivery_send_failure(
+                                session, order=order, payment=payment, error=str(send_exc)
+                            )
+                        raise
                     if payment.is_wallet_topup:
                         await notify_wallet_topup_ok(bot, session, payment, user.telegram_id)
                     elif order:

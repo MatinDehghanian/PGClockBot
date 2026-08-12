@@ -141,7 +141,16 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
     )
     try:
         await send_delivery_to_user(message.bot, db_user.telegram_id, session, payment, order)
-    except Exception:
+    except Exception as send_exc:
+        if order is not None:
+            try:
+                from app.services.ux20 import note_delivery_send_failure
+
+                await note_delivery_send_failure(
+                    session, order=order, payment=payment, error=str(send_exc)
+                )
+            except Exception:
+                pass
         try:
             await message.answer("پرداخت شد ولی ارسال جزئیات سرویس ناموفق بود — از «سرویس‌های من» بررسی کنید.")
         except Exception:
@@ -197,7 +206,19 @@ async def pay_approve(callback: CallbackQuery, session: AsyncSession, db_user: B
     user = await session.get(BotUser, payment.user_id)
     if not user:
         return
-    await send_delivery_to_user(callback.bot, user.telegram_id, session, payment, order)
+    try:
+        await send_delivery_to_user(callback.bot, user.telegram_id, session, payment, order)
+    except Exception as send_exc:
+        if order is not None:
+            try:
+                from app.services.ux20 import note_delivery_send_failure
+
+                await note_delivery_send_failure(
+                    session, order=order, payment=payment, error=str(send_exc)
+                )
+            except Exception:
+                pass
+        return
     try:
         from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok
 

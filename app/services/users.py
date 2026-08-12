@@ -768,6 +768,26 @@ DEFAULT_SETTINGS = {
     "billing_low_balance": "10000",
     "billing_on_empty": "block_provision",
     "billing_tick_minutes": "15",
+    # UX20 ops
+    "shop_maintenance_enabled": "0",
+    "shop_maintenance_text": (
+        "فروشگاه موقتاً در حال به‌روزرسانی است.\n"
+        "تمدید و پشتیبانی فعال است — کمی بعد دوباره سر بزنید."
+    ),
+    "admin_daily_report_enabled": "1",
+    "admin_daily_report_hour": "0",
+    "backup_schedule_enabled": "1",
+    "backup_schedule_hour": "3",
+    "backup_include_env_scheduled": "0",
+    "backup_last_ok_at": "",
+    "backup_last_verify_ok": "",
+    "capacity_warn_pct": "80",
+    "receipt_auto_match_enabled": "1",
+    "receipt_match_window_minutes": "120",
+    "action_center_expire_days": "3",
+    "brand_primary_color": "",
+    "funnel_tracking_enabled": "1",
+    "one_tap_renew_enabled": "1",
 }
 
 # field kinds: text | textarea | toggle | select | number | image
@@ -814,6 +834,12 @@ SETTING_GROUPS = {
             "پیام خوش‌آمد (/start)",
             "textarea",
             "اولین پیامی که کاربر بعد از استارت می‌بیند. متغیر: {name}",
+        ),
+        (
+            "brand_primary_color",
+            "رنگ برند (اختیاری)",
+            "text",
+            "مثلاً #0F766E — برای نماینده روی وب‌پنل اعمال می‌شود",
         ),
     ],
     "متن پیام‌ها": [
@@ -912,6 +938,90 @@ SETTING_GROUPS = {
             "کمتر از چند درصد زمان؟",
             "number",
             "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ از مدت سرویس مانده پیام برود",
+        ),
+    ],
+    "گزارش و عملیات": [
+        (
+            "admin_daily_report_enabled",
+            "گزارش شبانه تلگرام به ادمین",
+            "toggle",
+            "هر شب خلاصه فروش، رسید معلق، تیکت و تحویل ناموفق",
+        ),
+        (
+            "admin_daily_report_hour",
+            "ساعت گزارش (۰–۲۳، UTC)",
+            "number",
+            "مثلاً ۰ = نیمه‌شب UTC",
+        ),
+        (
+            "action_center_expire_days",
+            "پنجره سرویس‌های نزدیک انقضا (روز)",
+            "number",
+            "برای مرکز اقدام داشبورد",
+        ),
+        (
+            "one_tap_renew_enabled",
+            "دکمه تمدید یک‌ضرب در هشدار انقضا",
+            "toggle",
+            "در پیام هشدار انقضا دکمه تمدید سریع نمایش داده شود",
+        ),
+        (
+            "capacity_warn_pct",
+            "آستانه هشدار ظرفیت نماینده (٪)",
+            "number",
+            "مثلاً ۸۰ — قبل از پر شدن سهمیه هشدار داده می‌شود",
+        ),
+        (
+            "funnel_tracking_enabled",
+            "ثبت فانل خرید",
+            "toggle",
+            "مراحل باز کردن فروشگاه تا تحویل برای آمار داشبورد",
+        ),
+    ],
+    "بکاپ زمان‌بندی": [
+        (
+            "backup_schedule_enabled",
+            "بکاپ خودکار شبانه",
+            "toggle",
+            "ساخت بکاپ و بررسی سلامت آرشیو",
+        ),
+        (
+            "backup_schedule_hour",
+            "ساعت بکاپ (۰–۲۳، UTC)",
+            "number",
+            "پیش‌فرض ۳",
+        ),
+        (
+            "backup_include_env_scheduled",
+            "شامل .env در بکاپ خودکار",
+            "toggle",
+            "توکن‌ها و اسرار — فقط اگر مطمئنید",
+        ),
+    ],
+    "حالت تعمیرات و رسید": [
+        (
+            "shop_maintenance_enabled",
+            "حالت تعمیرات فروشگاه",
+            "toggle",
+            "خرید جدید بسته می‌شود؛ تمدید و پشتیبانی باز می‌ماند",
+        ),
+        (
+            "shop_maintenance_text",
+            "متن حالت تعمیرات",
+            "textarea",
+            "پیامی که در ربات به کاربر نشان داده می‌شود",
+        ),
+        (
+            "receipt_auto_match_enabled",
+            "پیشنهاد تطبیق رسیدهای هم‌مبلغ",
+            "toggle",
+            "در صف پرداخت‌ها موارد هم‌مبلغ در بازه زمانی پیشنهاد می‌شود",
+        ),
+        (
+            "receipt_match_window_minutes",
+            "بازه تطبیق رسید (دقیقه)",
+            "number",
+            "مثلاً ۱۲۰",
         ),
     ],
     "QR اشتراک": [
@@ -1029,14 +1139,15 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
         "رمزارز",
         "استارز تلگرام",
         "متن دکمه‌های پرداخت",
+        "حالت تعمیرات و رسید",
     ],
     "supports": ["متن پشتیبانی ربات"],
     "loyalty": ["متن دعوت دوستان"],
     "naming": ["نام‌گذاری سرویس در پاسارگارد"],
     "forcejoin": ["کانال اجباری"],
     "billing": ["مدیریت PAYG"],
-    "notifications": ["هشدار سرویس کاربر"],
-    "backup": [],
+    "notifications": ["هشدار سرویس کاربر", "گزارش و عملیات"],
+    "backup": ["بکاپ زمان‌بندی"],
     "pwa": [],
     "update": [],
     "ssl": [],

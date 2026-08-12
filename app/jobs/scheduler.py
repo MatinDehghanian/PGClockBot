@@ -179,14 +179,32 @@ async def check_expiring_services(bot: Bot) -> None:
                         rem_pct = (remaining / total) * 100
                         if rem_pct <= time_pct:
                             try:
+                                from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+                                renew_kb = None
+                                if on(_ui.get("one_tap_renew_enabled", "1")):
+                                    renew_kb = InlineKeyboardMarkup(
+                                        inline_keyboard=[
+                                            [
+                                                InlineKeyboardButton(
+                                                    text="🔄 تمدید یک‌ضربی",
+                                                    callback_data=f"svc:renew:{svc.id}",
+                                                )
+                                            ]
+                                        ]
+                                    )
                                 await send_bot.send_message(
                                     user.telegram_id,
                                     f"⏰ زمان سرویس <b>{svc.pg_username}</b> به کمتر از "
                                     f"<b>{time_pct}٪</b> رسیده است.\n"
-                                    "از بخش سرویس‌ها تمدید کنید.",
+                                    "از بخش سرویس‌ها تمدید کنید."
+                                    + ("\nیا دکمه زیر را بزنید:" if renew_kb else ""),
                                     parse_mode="HTML",
+                                    reply_markup=renew_kb,
                                 )
                                 svc.notified_expire = True
+                                if renew_kb is not None:
+                                    svc.renew_nudge_sent_at = now
                             except Exception:
                                 logger.debug(
                                     "expire alert send failed tg=%s", user.telegram_id, exc_info=True

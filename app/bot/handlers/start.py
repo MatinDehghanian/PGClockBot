@@ -229,6 +229,18 @@ async def cmd_start(
             reseller_owner_id=reseller_owner_id,
         )
         return
+    if await _handle_start_deeplink(
+        message,
+        session,
+        db_user,
+        state,
+        args,
+        ui=ui,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+        effective_role=role_for_force,
+    ):
+        return
     await render_home(
         message,
         session,
@@ -239,6 +251,223 @@ async def cmd_start(
         ui=ui,
         effective_role=role_for_force,
     )
+
+
+async def _handle_start_deeplink(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    args: str,
+    *,
+    ui: dict,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+    effective_role: str | None = None,
+) -> bool:
+    """Handle UX20 deep-links. Returns True if payload was consumed."""
+    raw = (args or "").strip()
+    if not raw or raw.startswith("ref_") or raw.startswith("sub_"):
+        return False
+    key = raw.split("_", 1)[0].lower()
+    rest = raw[len(key) + 1 :] if "_" in raw else ""
+
+    if key == "wallet":
+        from app.bot.handlers.reply_nav import open_wallet_home
+
+        await render_home(
+            message,
+            session,
+            db_user,
+            seed_reply_kb=True,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            ui=ui,
+            effective_role=effective_role,
+        )
+        await open_wallet_home(message, session, db_user, state, push=True)
+        return True
+
+    if key == "support":
+        from app.bot.handlers.reply_nav import open_support_home
+
+        await render_home(
+            message,
+            session,
+            db_user,
+            seed_reply_kb=True,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            ui=ui,
+            effective_role=effective_role,
+        )
+        await open_support_home(message, session, db_user, state, push=True)
+        return True
+
+    if key == "gift":
+        from app.bot.handlers.wallet import prompt_gift_code, redeem_gift_for_user
+
+        code = rest.strip() or ""
+        # Allow /start gift_CODE as well as bare gift
+        if code:
+            await redeem_gift_for_user(
+                message,
+                session,
+                db_user,
+                code,
+                state=state,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
+        else:
+            await prompt_gift_code(message, state, session)
+        return True
+
+    if key == "renew":
+        await _deeplink_renew(
+            message,
+            session,
+            db_user,
+            state,
+            svc_id=int(rest) if rest.isdigit() else None,
+            ui=ui,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            effective_role=effective_role,
+        )
+        return True
+
+    if key == "config":
+        await _deeplink_config(
+            message,
+            session,
+            db_user,
+            state,
+            svc_id=int(rest) if rest.isdigit() else None,
+            ui=ui,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            effective_role=effective_role,
+        )
+        return True
+
+    return False
+
+
+async def _deeplink_renew(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    *,
+    svc_id: int | None,
+    ui: dict,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+    effective_role: str | None = None,
+) -> None:
+    from app.bot.handlers.reply_nav import open_services_list
+    from app.bot.handlers.services import svc_renew
+    from app.bot.handlers.reply_nav import _SoftCallback
+
+    await render_home(
+        message,
+        session,
+        db_user,
+        seed_reply_kb=True,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+        ui=ui,
+        effective_role=effective_role,
+    )
+    if svc_id is None:
+        # Pick latest service when payload is bare "renew"
+        row = (
+            await session.execute(
+                select(UserService)
+                .where(UserService.bot_user_id == db_user.id)
+                .order_by(UserService.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if not row:
+            await open_services_list(message, session, db_user)
+            await message.answer("سرویسی برای تمدید ندارید — از فروشگاه خرید کنید.")
+            return
+        svc_id = int(row.id)
+    svc = await session.get(UserService, int(svc_id))
+    if not svc or svc.bot_user_id != db_user.id:
+        await open_services_list(message, session, db_user)
+        await message.answer("سرویس پیدا نشد — از لیست یکی را انتخاب کنید.")
+        return
+    bubble = await message.answer("🔄 تمدید سرویس…")
+    cb = _SoftCallback(bubble, f"svc:renew:{svc_id}")
+    try:
+        await svc_renew(cb, session, db_user)
+    except Exception:
+        await message.answer(
+            "برای تمدید از «سرویس‌های من» استفاده کنید.",
+            reply_markup=kb.main_reply_keyboard(
+                effective_role or db_user.role,
+                has_services=True,
+                ui=ui,
+            ),
+        )
+
+
+async def _deeplink_config(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    *,
+    svc_id: int | None,
+    ui: dict,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+    effective_role: str | None = None,
+) -> None:
+    from app.bot.handlers.reply_nav import open_services_list, _SoftCallback
+    from app.bot.handlers.services import svc_link
+
+    await render_home(
+        message,
+        session,
+        db_user,
+        seed_reply_kb=True,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+        ui=ui,
+        effective_role=effective_role,
+    )
+    if svc_id is None:
+        row = (
+            await session.execute(
+                select(UserService)
+                .where(UserService.bot_user_id == db_user.id)
+                .order_by(UserService.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if not row:
+            await open_services_list(message, session, db_user)
+            await message.answer("سرویسی ندارید — پس از خرید، کانفیگ اینجا ارسال می‌شود.")
+            return
+        svc_id = int(row.id)
+    svc = await session.get(UserService, int(svc_id))
+    if not svc or svc.bot_user_id != db_user.id:
+        await open_services_list(message, session, db_user)
+        await message.answer("سرویس پیدا نشد — از لیست یکی را انتخاب کنید.")
+        return
+    bubble = await message.answer("📱 ارسال کانفیگ…")
+    cb = _SoftCallback(bubble, f"svc:link:{svc_id}")
+    try:
+        await svc_link(cb, session, db_user)
+    except Exception:
+        await message.answer(
+            "برای دریافت لینک/QR از «سرویس‌های من» استفاده کنید.",
+            reply_markup=kb.service_actions_reply_keyboard(ui),
+        )
 
 
 @router.callback_query(F.data == "forcejoin:nolink")

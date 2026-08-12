@@ -155,6 +155,12 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             ov = await build_reseller_pg_overview(staff, session=session)
             if ov.get("ready"):
                 pg_limits = ov
+                try:
+                    from app.services.ux20 import maybe_warn_reseller_capacity
+
+                    await maybe_warn_reseller_capacity(session, profile, pg_limits)
+                except Exception:
+                    pass
 
         from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from aiogram import F, Router
+from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -31,6 +32,135 @@ class WalletStates(StatesGroup):
     topup_amount = State()
     choose_method = State()
     waiting_receipt = State()
+    gift_code = State()
+
+
+async def prompt_gift_code(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    intro: str | None = None,
+) -> None:
+    ui = await get_all_settings(session)
+    await state.set_state(WalletStates.gift_code)
+    await message.answer(
+        format_message(
+            "🎁 کد هدیه",
+            intro
+            or "کد شارژ/هدیه را وارد کنید:\n(یا دستور <code>/gift کد</code>)",
+        ),
+        reply_markup=kb.cancel_reply(ui),
+    )
+
+
+async def redeem_gift_for_user(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    code: str,
+    *,
+    state: FSMContext | None = None,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> bool:
+    """Redeem a charge code; returns True on success."""
+    from app.services.ux20 import redeem_charge_code
+
+    try:
+        row, balance = await redeem_charge_code(session, user=db_user, code=code)
+        await session.commit()
+    except ValueError as e:
+        await message.answer(format_message("⚠️ کد هدیه", str(e)))
+        return False
+    except Exception as e:
+        await message.answer(format_message("❌ خطا", str(e)))
+        return False
+    if state is not None:
+        await state.clear()
+    from app.bot.menu_nav import restore_main_reply
+
+    await restore_main_reply(
+        message,
+        session,
+        db_user,
+        text=format_message(
+            "✅ شارژ شد",
+            f"کد <code>{row.code}</code> اعمال شد.\n"
+            f"مبلغ: <b>{format_toman(row.amount, get_settings().currency)}</b>\n"
+            f"موجودی جدید: <b>{format_toman(balance, get_settings().currency)}</b>",
+        ),
+        state=state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    return True
+
+
+@router.message(Command("gift"))
+async def cmd_gift(
+    message: Message,
+    command: CommandObject,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    code = (command.args or "").strip()
+    if code:
+        await redeem_gift_for_user(
+            message,
+            session,
+            db_user,
+            code,
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    await prompt_gift_code(message, state, session)
+
+
+@router.message(WalletStates.gift_code)
+async def wallet_gift_code(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.bot.menu_nav import restore_main_reply
+
+    ui = await get_all_settings(session)
+    if kb.is_cancel_text(message.text) or kb.is_home_text(message.text, ui):
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="لغو شد.",
+            state=state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    code = (message.text or "").strip()
+    if not code:
+        await message.answer(
+            "کد را وارد کنید یا انصراف بزنید.",
+            reply_markup=kb.cancel_reply(ui),
+        )
+        return
+    await redeem_gift_for_user(
+        message,
+        session,
+        db_user,
+        code,
+        state=state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
 
 
 @router.callback_query(F.data == "wallet:home")

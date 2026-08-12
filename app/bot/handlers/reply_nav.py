@@ -210,11 +210,20 @@ async def open_shop_list(
     *,
     push: bool = True,
 ) -> None:
-    from app.bot.handlers.shop import _shop_kind_flags
+    from app.bot.handlers.shop import (
+        _record_shop_funnel,
+        _shop_kind_flags,
+        shop_under_maintenance,
+    )
 
     ui, fixed_on, trial_on, custom_on, wholesale_on, *_rest = await _shop_kind_flags(
         session, db_user
     )
+    maint = await shop_under_maintenance(session, ui)
+    if maint:
+        await message.answer(format_message("🛠 فروشگاه", maint))
+        return
+    await _record_shop_funnel(session, db_user, "shop_open", ui=ui)
     if not any((fixed_on, trial_on, custom_on, wholesale_on)):
         from app.bot.menu_nav import build_main_reply_keyboard
 
