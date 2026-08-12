@@ -224,9 +224,10 @@ class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.0")
-        self.assertEqual(__version__, "5.1.0")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.1")
+        self.assertEqual(__version__, "5.1.1")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"5.1.1"', notes)
         self.assertIn('"5.1.0"', notes)
 
 
