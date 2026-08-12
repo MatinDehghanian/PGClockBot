@@ -515,6 +515,11 @@
       function syncLabel(){
         const opt = sel.options[sel.selectedIndex];
         label.textContent = opt ? opt.textContent : (sel.getAttribute('placeholder') || '—');
+        const tone = (opt && opt.dataset && opt.dataset.tone)
+          ? opt.dataset.tone
+          : (sel.dataset.tone || '');
+        if (tone) wrap.setAttribute('data-tone', tone);
+        else wrap.removeAttribute('data-tone');
         menu.querySelectorAll('[role="option"]').forEach(btn => {
           btn.classList.toggle('active', btn.dataset.value === sel.value);
           btn.setAttribute('aria-selected', btn.dataset.value === sel.value ? 'true' : 'false');
@@ -529,6 +534,7 @@
           btn.type = 'button';
           btn.setAttribute('role', 'option');
           btn.dataset.value = opt.value;
+          if (opt.dataset && opt.dataset.tone) btn.dataset.tone = opt.dataset.tone;
           btn.textContent = opt.textContent;
           if (opt.disabled) btn.disabled = true;
           if (opt.value === sel.value) {
@@ -542,6 +548,8 @@
             ev.stopPropagation();
             if (opt.disabled) return;
             sel.value = opt.value;
+            if (opt.dataset && opt.dataset.tone) sel.dataset.tone = opt.dataset.tone;
+            else delete sel.dataset.tone;
             sel.dispatchEvent(new Event('input', { bubbles: true }));
             sel.dispatchEvent(new Event('change', { bubbles: true }));
             syncLabel();

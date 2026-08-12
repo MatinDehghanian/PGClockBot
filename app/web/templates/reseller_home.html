@@ -244,6 +244,44 @@
   {% endif %}
 </div>
 
+{% if funnel_enabled %}
+{% set funnel = funnel or {} %}
+<section class="home-panel home-panel-neutral" style="margin-top: var(--section-gap)">
+  <div class="home-panel-head">
+    <div class="home-panel-title">
+      <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+      <h2 class="home-panel-h">رفتار کاربر</h2>
+    </div>
+    <div class="home-panel-actions">
+      <a class="btn btn-sm btn-ghost" href="/finance?tab=behavior">جزئیات</a>
+    </div>
+  </div>
+  <p class="muted" style="margin:0 0 var(--space-2);font-size:12px">۷ روز اخیر — از باز کردن فروشگاه تا تحویل</p>
+  <div class="home-panel-grid">
+    <div class="stat">
+      <div class="stat-top"><span>فروشگاه</span></div>
+      <strong>{{ funnel.get('shop_open', 0) | num }}</strong>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>پلن</span></div>
+      <strong>{{ funnel.get('plan_view', 0) | num }}</strong>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>پرداخت</span></div>
+      <strong>{{ funnel.get('pay_start', 0) | num }}</strong>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>رسید</span></div>
+      <strong>{{ funnel.get('receipt', 0) | num }}</strong>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>تحویل</span></div>
+      <strong>{{ funnel.get('delivered', 0) | num }}</strong>
+    </div>
+  </div>
+</section>
+{% endif %}
+
 <div class="card">
   <h2>میانبرها</h2>
   <div class="quick-links">
