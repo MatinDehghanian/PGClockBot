@@ -82,21 +82,48 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
     def test_templates_exist(self):
         root = Path("app/web/templates")
         for name in (
-            "gift_codes.html",
-            "magic_links.html",
-            "funnel.html",
+            "tools.html",
             "home.html",
             "reseller_home.html",
+            "pg_home.html",
             "finance.html",
         ):
             self.assertTrue((root / name).is_file(), name)
 
-    def test_home_has_quick_open_and_action_center(self):
+    def test_home_overview_only_no_pg_open_or_old_shortcuts(self):
         home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
-        self.assertIn("ورود به پاسارگارد", home)
+        self.assertNotIn("ورود به پاسارگارد", home)
+        self.assertNotIn("tools/gift-codes", home)
+        self.assertNotIn("tools/export", home)
+        self.assertNotIn("فانل خرید", home)
         self.assertIn("مرکز اقدام امروز", home)
         self.assertIn("home-pg-health", home)
-        self.assertIn("tools/gift-codes", home)
+        self.assertIn('href="/tools"', home)
+        self.assertIn("مراحل خرید", home)
+
+    def test_pg_home_has_quick_open_in_stats_box(self):
+        html = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        self.assertIn("ورود به پاسارگارد", html)
+        self.assertIn("آمار پنل", html)
+        self.assertIn("pg_external_url", html)
+
+    def test_tools_hub_tabs(self):
+        html = Path("app/web/templates/tools.html").read_text(encoding="utf-8")
+        self.assertIn("لینک‌های سریع", html)
+        self.assertIn("کد هدیه", html)
+        self.assertIn("مراحل خرید", html)
+        self.assertIn("خروجی تنظیمات", html)
+        self.assertNotIn("فانل خرید", html)
+
+    def test_sidebar_has_tools(self):
+        html = Path("app/web/templates/base.html").read_text(encoding="utf-8")
+        self.assertIn('href="/tools"', html)
+        self.assertIn("ابزارها", html)
+
+    def test_settings_no_inline_export(self):
+        html = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
+        self.assertNotIn("/tools/export", html)
+        self.assertNotIn("خروجی / ورودی تنظیمات فروشگاه", html)
 
     def test_finance_delivery_tab(self):
         html = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
@@ -143,6 +170,19 @@ class Ux20RoutesRegistrationTests(unittest.TestCase):
     def test_ux20_pages_registered(self):
         src = Path("app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("register_ux20_pages", src)
+        ux = Path("app/api/ux20_pages.py").read_text(encoding="utf-8")
+        self.assertIn('"/tools"', ux)
+        self.assertIn("tools_hub", ux)
+        self.assertIn('tab=steps', ux)
+
+    def test_settings_backup_no_get_all_settings_shadow(self):
+        """Regression: local import of get_all_settings in backup tab 500'd all settings."""
+        src = Path("app/api/app.py").read_text(encoding="utf-8")
+        # The buggy pattern was a local import inside the backup branch.
+        self.assertNotIn(
+            "from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings",
+            src,
+        )
 
     def test_scheduler_jobs(self):
         src = Path("app/jobs/scheduler.py").read_text(encoding="utf-8")
@@ -184,9 +224,10 @@ class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.0")
-        self.assertEqual(__version__, "5.1.0")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.1")
+        self.assertEqual(__version__, "5.1.1")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"5.1.1"', notes)
         self.assertIn('"5.1.0"', notes)
 
 

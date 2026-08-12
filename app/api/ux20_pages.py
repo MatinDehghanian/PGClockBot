@@ -141,32 +141,97 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             f"/users/{user_id}?ok={quote('یادداشت و ریسک ذخیره شد')}", status_code=303
         )
 
-    @app.get("/tools/gift-codes", response_class=HTMLResponse)
-    async def gift_codes_page(
+    @app.get("/tools", response_class=HTMLResponse)
+    async def tools_hub(
         request: Request,
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.config import get_settings
+        from app.db.models import ResellerProfile
+        from app.services.home_overview import check_bot_connection
+        from app.services.ux20 import funnel_summary
+
         authz = authz_from_staff(staff)
-        if not (is_platform_admin(staff) or can_shop(authz, "orders") or can_shop(authz, "payments")):
+        can_tools = (
+            is_platform_admin(staff)
+            or can_shop(authz, "orders")
+            or can_shop(authz, "payments")
+            or can_shop(authz, "shop_settings")
+        )
+        if not can_tools:
             return RedirectResponse("/home", status_code=303)
+
+        can_export = is_platform_admin(staff) or can_shop(authz, "shop_settings")
+        tab = (request.query_params.get("tab") or "links").strip()
+        if tab not in {"links", "gifts", "steps", "export"}:
+            tab = "links"
+        if tab == "export" and not can_export:
+            tab = "links"
+
         rid = None if is_platform_admin(staff) else shop_owner_id(staff)
-        q = select(ChargeCode).order_by(ChargeCode.id.desc()).limit(200)
-        if rid is None:
-            q = q.where(ChargeCode.reseller_id.is_(None))
+        bot_username = None
+        if rid:
+            profile = (
+                await session.execute(
+                    select(ResellerProfile).where(ResellerProfile.user_id == int(rid))
+                )
+            ).scalar_one_or_none()
+            bot_username = (profile.bot_username if profile else None) or None
+            if not bot_username and profile and profile.bot_token:
+                st = await check_bot_connection(profile.bot_token)
+                bot_username = st.get("username")
         else:
-            q = q.where(ChargeCode.reseller_id == int(rid))
-        codes = list((await session.execute(q)).scalars().all())
+            st = await check_bot_connection(get_settings().bot_token)
+            bot_username = st.get("username")
+
+        links = {
+            "renew": bot_deep_link(bot_username, "renew"),
+            "wallet": bot_deep_link(bot_username, "wallet"),
+            "support": bot_deep_link(bot_username, "support"),
+            "config": bot_deep_link(bot_username, "config"),
+            "gift": bot_deep_link(bot_username, "gift"),
+        }
+        codes: list = []
+        if tab == "gifts":
+            q = select(ChargeCode).order_by(ChargeCode.id.desc()).limit(200)
+            if rid is None:
+                q = q.where(ChargeCode.reseller_id.is_(None))
+            else:
+                q = q.where(ChargeCode.reseller_id == int(rid))
+            codes = list((await session.execute(q)).scalars().all())
+
+        funnel = {}
+        if tab == "steps":
+            funnel = await funnel_summary(session, reseller_id=rid, days=7)
+
         return render(
             request,
-            "gift_codes.html",
+            "tools.html",
             {
                 "staff": staff,
+                "tools_tab": tab,
+                "bot_username": bot_username,
+                "links": links,
                 "codes": codes,
+                "funnel": funnel,
+                "can_export": can_export,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
         )
+
+    @app.get("/tools/gift-codes")
+    async def gift_codes_redirect():
+        return RedirectResponse("/tools?tab=gifts", status_code=303)
+
+    @app.get("/tools/magic-links")
+    async def magic_links_redirect():
+        return RedirectResponse("/tools?tab=links", status_code=303)
+
+    @app.get("/tools/funnel")
+    async def funnel_redirect():
+        return RedirectResponse("/tools?tab=steps", status_code=303)
 
     @app.post("/tools/gift-codes")
     async def gift_codes_create(
@@ -191,12 +256,12 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 code=code or None,
             )
             return RedirectResponse(
-                f"/tools/gift-codes?ok={quote('کد ساخته شد: ' + row.code)}",
+                f"/tools?tab=gifts&ok={quote('کد ساخته شد: ' + row.code)}",
                 status_code=303,
             )
         except Exception as exc:
             return RedirectResponse(
-                f"/tools/gift-codes?err={quote(str(exc) or 'خطا')}",
+                f"/tools?tab=gifts&err={quote(str(exc) or 'خطا')}",
                 status_code=303,
             )
 
@@ -211,14 +276,14 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             await session.execute(select(ChargeCode).where(ChargeCode.id == int(code_id)))
         ).scalar_one_or_none()
         if not row:
-            return RedirectResponse("/tools/gift-codes", status_code=303)
+            return RedirectResponse("/tools?tab=gifts", status_code=303)
         if rid is None and row.reseller_id is not None:
-            return RedirectResponse("/tools/gift-codes", status_code=303)
+            return RedirectResponse("/tools?tab=gifts", status_code=303)
         if rid is not None and int(row.reseller_id or 0) != int(rid):
-            return RedirectResponse("/tools/gift-codes", status_code=303)
+            return RedirectResponse("/tools?tab=gifts", status_code=303)
         row.is_active = not bool(row.is_active)
         await session.commit()
-        return RedirectResponse("/tools/gift-codes?ok=1", status_code=303)
+        return RedirectResponse("/tools?tab=gifts&ok=1", status_code=303)
 
     @app.get("/tools/export")
     async def shop_export(
@@ -260,52 +325,14 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             )
             msg = f"وارد شد: {stats.get('settings', 0)} تنظیمات، {stats.get('plans', 0)} پلن"
             return RedirectResponse(
-                f"/settings?tab=welcome&ok={quote(msg)}",
+                f"/tools?tab=export&ok={quote(msg)}",
                 status_code=303,
             )
         except Exception as exc:
             return RedirectResponse(
-                f"/settings?tab=welcome&err={quote(str(exc) or 'خطای ایمپورت')}",
+                f"/tools?tab=export&err={quote(str(exc) or 'خطای ایمپورت')}",
                 status_code=303,
             )
-
-    @app.get("/tools/magic-links", response_class=HTMLResponse)
-    async def magic_links_page(
-        request: Request,
-        staff: dict = Depends(require_staff),
-        session: AsyncSession = Depends(get_db),
-    ):
-        from app.config import get_settings
-        from app.db.models import ResellerProfile
-        from app.services.home_overview import check_bot_connection
-
-        rid = None if is_platform_admin(staff) else shop_owner_id(staff)
-        bot_username = None
-        if rid:
-            profile = (
-                await session.execute(
-                    select(ResellerProfile).where(ResellerProfile.user_id == int(rid))
-                )
-            ).scalar_one_or_none()
-            bot_username = (profile.bot_username if profile else None) or None
-            if not bot_username and profile and profile.bot_token:
-                st = await check_bot_connection(profile.bot_token)
-                bot_username = st.get("username")
-        else:
-            st = await check_bot_connection(get_settings().bot_token)
-            bot_username = st.get("username")
-        links = {
-            "renew": bot_deep_link(bot_username, "renew"),
-            "wallet": bot_deep_link(bot_username, "wallet"),
-            "support": bot_deep_link(bot_username, "support"),
-            "config": bot_deep_link(bot_username, "config"),
-            "gift": bot_deep_link(bot_username, "gift"),
-        }
-        return render(
-            request,
-            "magic_links.html",
-            {"staff": staff, "bot_username": bot_username, "links": links},
-        )
 
     @app.get("/home/pg-health")
     async def home_pg_health(
@@ -320,22 +347,6 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         else:
             data = await check_pg_connection(reseller_user_id=rid, session=session)
         return JSONResponse(data)
-
-    @app.get("/tools/funnel")
-    async def funnel_page(
-        request: Request,
-        staff: dict = Depends(require_staff),
-        session: AsyncSession = Depends(get_db),
-    ):
-        from app.services.ux20 import funnel_summary
-
-        rid = None if is_platform_admin(staff) else shop_owner_id(staff)
-        summary = await funnel_summary(session, reseller_id=rid, days=7)
-        return render(
-            request,
-            "funnel.html",
-            {"staff": staff, "funnel": summary, "days": 7},
-        )
 
     @app.post("/backup/verify-last")
     async def backup_verify_last(staff: dict = Depends(require_admin), session: AsyncSession = Depends(get_db)):

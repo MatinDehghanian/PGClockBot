@@ -309,6 +309,11 @@ def register_pg_pages(
                         "pg_username": staff_row.pg_username,
                     }
 
+        from app.services.ux20 import resolve_pg_open_url
+
+        pg_external_url = await resolve_pg_open_url(
+            session, is_admin=_is_pg_owner_principal(staff)
+        )
         return render(
             request,
             "pg_home.html",
@@ -322,6 +327,7 @@ def register_pg_pages(
                 active="pg",
                 ticket_alert=ticket_alert,
                 staff_remediation=staff_remediation,
+                pg_external_url=pg_external_url or None,
             ),
         )
 
