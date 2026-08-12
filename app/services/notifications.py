@@ -539,12 +539,12 @@ def _approval_markup(
                     InlineKeyboardButton(
                         text="✅ تأیید",
                         callback_data=f"payrev:ok:{payment_id}",
-                        **style_kwargs(ui, "payment_review_ok", fallback="success"),
+                        **style_kwargs(ui, "confirm", fallback="success"),
                     ),
                     InlineKeyboardButton(
                         text="❌ رد",
                         callback_data=f"payrev:no:{payment_id}",
-                        **style_kwargs(ui, "payment_review_no", fallback="danger"),
+                        **style_kwargs(ui, "reject", fallback="danger"),
                     ),
                 ]
             ]
@@ -556,12 +556,12 @@ def _approval_markup(
                 InlineKeyboardButton(
                     text="✅ تأیید",
                     callback_data=f"ordrev:ok:{order_id}",
-                    **style_kwargs(ui, "order_review_ok", fallback="success"),
+                    **style_kwargs(ui, "confirm", fallback="success"),
                 ),
                 InlineKeyboardButton(
                     text="❌ رد",
                     callback_data=f"ordrev:no:{order_id}",
-                    **style_kwargs(ui, "order_review_no", fallback="danger"),
+                    **style_kwargs(ui, "reject", fallback="danger"),
                 ),
             ],
             [

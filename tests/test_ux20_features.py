@@ -324,21 +324,60 @@ class ButtonStyleTests(unittest.TestCase):
         self.assertIn("btn-color-card", html)
         self.assertIn("<select", html)
         self.assertNotIn("btn-color-swatch", html)
+        self.assertIn("دکمه‌های سراسری", "".join(g for g, _ in grouped_catalog()))
+        self.assertIn("پلن نمایندگی", "".join(g for g, _ in grouped_catalog()))
+        self.assertIn("btn_style_home", DEFAULT_SETTINGS)
+        self.assertIn("btn_style_confirm", DEFAULT_SETTINGS)
+        self.assertIn("btn_style_plan_res_fixed", DEFAULT_SETTINGS)
+        self.assertIn("btn_style_plan_res_payg", DEFAULT_SETTINGS)
+        from app.services.button_styles import get_button_style
+
+        self.assertEqual(get_button_style({}, "rev_ok"), "success")
+        self.assertEqual(get_button_style({}, "order_review_no"), "danger")
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('tab == \'colors\'', settings)
         self.assertNotIn("فانل خرید", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
         self.assertIn("رفتار کاربر", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
+
+    def test_reseller_plan_kind_styles(self):
+        from app.bot.keyboards import admin_plan_kind_keyboard
+        from app.services.button_styles import setting_key
+
+        kb = admin_plan_kind_keyboard("resellers", ui={})
+        fixed, payg = kb.inline_keyboard[0][0], kb.inline_keyboard[1][0]
+        self.assertEqual(fixed.style, "primary")
+        self.assertEqual(payg.style, "primary")
+        custom = {
+            setting_key("plan_res_fixed"): "success",
+            setting_key("plan_res_payg"): "danger",
+        }
+        kb2 = admin_plan_kind_keyboard("resellers", ui=custom)
+        self.assertEqual(kb2.inline_keyboard[0][0].style, "success")
+        self.assertEqual(kb2.inline_keyboard[1][0].style, "danger")
+
+    def test_global_home_back_footer_styles(self):
+        from app.bot.keyboards import Role, main_reply_keyboard, wallet_reply_keyboard
+        from app.services.button_styles import setting_key
+
+        ui = {setting_key("home"): "primary", setting_key("back"): "danger"}
+        main = main_reply_keyboard(Role.USER.value, has_services=False, ui=ui)
+        home_btn = main.keyboard[-1][0]
+        self.assertEqual(home_btn.style, "primary")
+        wallet = wallet_reply_keyboard(ui)
+        back_btn, home_btn2 = wallet.keyboard[-1]
+        self.assertEqual(back_btn.style, "danger")
+        self.assertEqual(home_btn2.style, "primary")
 
 
 class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.5")
-        self.assertEqual(__version__, "5.1.5")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.6")
+        self.assertEqual(__version__, "5.1.6")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"5.1.6"', notes)
         self.assertIn('"5.1.5"', notes)
-        self.assertIn('"5.1.4"', notes)
 
 
 if __name__ == "__main__":
