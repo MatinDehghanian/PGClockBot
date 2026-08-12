@@ -1,0 +1,51 @@
+{# Custom color picker for Telegram button styles (Bot API primary/success/danger). #}
+{% set style_options = [
+  ('', 'سفید', 'default'),
+  ('primary', 'آبی', 'primary'),
+  ('success', 'سبز', 'success'),
+  ('danger', 'قرمز', 'danger'),
+] %}
+<form method="post" action="{{ settings_action|default('/settings?tab=colors') }}" class="settings-form" id="settings-form">
+  <div class="card settings-card">
+    <h2>رنگبندی دکمه‌های تلگرام</h2>
+    <p class="muted update-card-caption">
+      رنگ هر دکمه را جداگانه انتخاب کنید. تلگرام فقط چهار حالت دارد:
+      <strong>سفید</strong> (پیش‌فرض کلاینت)، <strong>آبی</strong>، <strong>سبز</strong> و <strong>قرمز</strong>.
+      مقادیر پیش‌فرض همین‌جا پر شده‌اند؛ روی کلاینت‌های پشتیبانی‌شده دیده می‌شوند.
+    </p>
+  </div>
+
+  {% for group_name, items in button_style_groups %}
+  <div class="card settings-card">
+    <h2>{{ group_name }}</h2>
+    <div class="btn-color-list">
+      {% for item in items %}
+      {% set cur = values.get(item.key, item.default) %}
+      <div class="btn-color-row">
+        <div class="btn-color-meta">
+          <strong>{{ item.label }}</strong>
+        </div>
+        <div class="btn-color-swatches" role="radiogroup" aria-label="{{ item.label }}">
+          {% for opt_val, opt_label, opt_css in style_options %}
+          <label class="btn-color-swatch is-{{ opt_css }} {% if cur == opt_val %}is-selected{% endif %}">
+            <input
+              type="radio"
+              name="s_{{ item.key }}"
+              value="{{ opt_val }}"
+              {% if cur == opt_val %}checked{% endif %}
+            />
+            <span class="btn-color-chip" aria-hidden="true"></span>
+            <span class="btn-color-name">{{ opt_label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="actions sticky-actions">
+    <button class="btn" type="submit">ذخیره رنگبندی</button>
+  </div>
+</form>

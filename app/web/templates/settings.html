@@ -31,6 +31,9 @@
     {% include "_settings_ssl.html" %}
   {% elif tab == 'backup' %}
     {% include "_settings_backup.html" %}
+  {% elif tab == 'colors' %}
+    {% set settings_action = '/settings?tab=colors' %}
+    {% include "_settings_colors.html" %}
   {% elif tab == 'notifications' %}
     {% include "_settings_notifications.html" %}
   {% elif tab == 'bot' %}

@@ -118,6 +118,10 @@
       </div>
     </form>
 
+  {% elif tab == 'colors' %}
+    {% set settings_action = '/shop-settings?tab=colors' %}
+    {% include "_settings_colors.html" %}
+
   {% else %}
     {% if tab == 'forcejoin' %}
       {% include "_forcejoin_admin_notice.html" %}

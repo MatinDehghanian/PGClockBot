@@ -183,13 +183,17 @@ async def check_expiring_services(bot: Bot) -> None:
 
                                 renew_kb = None
                                 if on(_ui.get("one_tap_renew_enabled", "1")):
+                                    from app.services.button_styles import style_kwargs
+
                                     renew_kb = InlineKeyboardMarkup(
                                         inline_keyboard=[
                                             [
                                                 InlineKeyboardButton(
                                                     text="🔄 تمدید یک‌ضربی",
                                                     callback_data=f"svc:renew:{svc.id}",
-                                                    style="primary",
+                                                    **style_kwargs(
+                                                        _ui, "one_tap_renew", fallback="primary"
+                                                    ),
                                                 )
                                             ]
                                         ]

@@ -527,8 +527,11 @@ def _approval_markup(
     *,
     order_id: int | None = None,
     payment_id: int | None = None,
+    ui: dict | None = None,
 ) -> InlineKeyboardMarkup:
     """Review buttons. Prefer payrev (shop + platform can use); ordrev is platform-only."""
+    from app.services.button_styles import style_kwargs
+
     if payment_id is not None:
         return InlineKeyboardMarkup(
             inline_keyboard=[
@@ -536,10 +539,12 @@ def _approval_markup(
                     InlineKeyboardButton(
                         text="✅ تأیید",
                         callback_data=f"payrev:ok:{payment_id}",
+                        **style_kwargs(ui, "payment_review_ok", fallback="success"),
                     ),
                     InlineKeyboardButton(
                         text="❌ رد",
                         callback_data=f"payrev:no:{payment_id}",
+                        **style_kwargs(ui, "payment_review_no", fallback="danger"),
                     ),
                 ]
             ]
@@ -551,10 +556,12 @@ def _approval_markup(
                 InlineKeyboardButton(
                     text="✅ تأیید",
                     callback_data=f"ordrev:ok:{order_id}",
+                    **style_kwargs(ui, "order_review_ok", fallback="success"),
                 ),
                 InlineKeyboardButton(
                     text="❌ رد",
                     callback_data=f"ordrev:no:{order_id}",
+                    **style_kwargs(ui, "order_review_no", fallback="danger"),
                 ),
             ],
             [

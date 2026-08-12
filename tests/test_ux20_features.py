@@ -278,15 +278,55 @@ class ButtonStyleTests(unittest.TestCase):
         self.assertIn("primary", styles)
         self.assertIn("success", styles)
 
+    def test_settings_override_styles(self):
+        from app.bot.keyboards import pay_methods, plan_actions
+        from app.services.button_styles import get_button_style, setting_key
+
+        ui = {setting_key("buy_continue"): "danger", setting_key("pay_wallet"): ""}
+        self.assertEqual(plan_actions(9, ui).inline_keyboard[0][0].style, "danger")
+        self.assertEqual(get_button_style(ui, "pay_wallet"), "")
+        markup = pay_methods(
+            1,
+            {
+                **ui,
+                "pay_wallet_enabled": "1",
+                "btn_pay_wallet": "کیف پول",
+                "btn_cancel": "انصراف",
+            },
+        )
+        wallet_btn = markup.inline_keyboard[0][0]
+        self.assertFalse(getattr(wallet_btn, "style", None))
+
+    def test_colors_tab_wired(self):
+        from app.services.button_styles import BUTTON_STYLE_CATALOG, grouped_catalog
+        from app.services.resellers import RESELLER_SETTINGS_TABS
+        from app.services.users import DEFAULT_SETTINGS, SETTINGS_TABS, keys_for_tab
+
+        self.assertIn(("colors", "رنگبندی"), SETTINGS_TABS)
+        self.assertIn(("colors", "رنگبندی"), RESELLER_SETTINGS_TABS)
+        keys = keys_for_tab("colors")
+        for item in BUTTON_STYLE_CATALOG:
+            k = f"btn_style_{item['id']}"
+            self.assertIn(k, keys)
+            self.assertIn(k, DEFAULT_SETTINGS)
+            self.assertEqual(DEFAULT_SETTINGS[k], item["default"])
+        self.assertTrue(grouped_catalog())
+        html = Path("app/web/templates/_settings_colors.html").read_text(encoding="utf-8")
+        self.assertIn("btn-color-swatch", html)
+        settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('tab == \'colors\'', settings)
+        self.assertNotIn("فانل خرید", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
+        self.assertIn("رفتار کاربر", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
+
 
 class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.3")
-        self.assertEqual(__version__, "5.1.3")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.4")
+        self.assertEqual(__version__, "5.1.4")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"5.1.3"', notes)
+        self.assertIn('"5.1.4"', notes)
         self.assertIn('"5.1.2"', notes)
 
 

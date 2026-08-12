@@ -6951,3 +6951,82 @@ html[data-theme="light"] .sk-bone::after {
   );
 }
 
+
+/* —— Telegram button color picker (settings → رنگبندی) —— */
+.btn-color-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+.btn-color-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border, #ccc) 70%, transparent);
+}
+.btn-color-row:last-child { border-bottom: 0; }
+.btn-color-meta {
+  min-width: min(220px, 100%);
+  flex: 1 1 180px;
+}
+.btn-color-meta strong {
+  font-weight: 600;
+}
+.btn-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 0 1 auto;
+}
+.btn-color-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #d0d5dd);
+  background: var(--surface, #fff);
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  line-height: 1.2;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.btn-color-swatch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.btn-color-chip {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #000 12%, transparent);
+  flex: 0 0 auto;
+}
+.btn-color-swatch.is-default .btn-color-chip {
+  background: linear-gradient(135deg, #f7f7f8, #e8eaed);
+}
+.btn-color-swatch.is-primary .btn-color-chip {
+  background: #2aabee;
+}
+.btn-color-swatch.is-success .btn-color-chip {
+  background: #31b545;
+}
+.btn-color-swatch.is-danger .btn-color-chip {
+  background: #e53935;
+}
+.btn-color-swatch.is-selected,
+.btn-color-swatch:has(input:checked) {
+  border-color: color-mix(in srgb, var(--accent, #0f766e) 55%, var(--border, #ccc));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #0f766e) 18%, transparent);
+  background: color-mix(in srgb, var(--accent, #0f766e) 6%, var(--surface, #fff));
+}
+.btn-color-name { white-space: nowrap; }
+@media (max-width: 640px) {
+  .btn-color-row { align-items: flex-start; }
+  .btn-color-swatches { width: 100%; }
+}

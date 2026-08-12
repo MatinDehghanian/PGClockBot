@@ -939,7 +939,7 @@ async def build_admin_daily_report(session: AsyncSession) -> str:
         f"تیکت باز: <b>{ac.get('tickets', 0)}</b>",
         f"تحویل ناموفق: <b>{ac.get('failures', 0)}</b>",
         "",
-        "فانل امروز:",
+        "رفتار کاربر امروز:",
         f"· شروع پرداخت: {funnel.get('pay_start', 0)}",
         f"· رسید: {funnel.get('receipt', 0)}",
         f"· تحویل: {funnel.get('delivered', 0)}",
