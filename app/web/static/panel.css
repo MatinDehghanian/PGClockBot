@@ -6964,14 +6964,159 @@ html[data-theme="light"] .sk-bone::after {
   border-radius: var(--radius);
   box-sizing: border-box;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
-.btn-color-card > label {
+.btn-color-label {
+  display: block;
   margin: 0;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.btn-color-card > .ui-select {
+  margin-top: 0;
   width: 100%;
 }
-.btn-color-card select {
+.btn-color-card select.btn-color-select {
   width: 100%;
 }
+
+/* Tone-aware select — chip / hamburger-tag look */
+.btn-color-card .ui-select[data-tone] .ui-select-toggle {
+  border-radius: 999px;
+  font-weight: 500;
+  justify-content: space-between;
+  gap: var(--space-1);
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.btn-color-card .ui-select[data-tone] .ui-select-toggle::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: currentColor;
+  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 25%, transparent);
+}
+.btn-color-card .ui-select[data-tone="default"] .ui-select-toggle {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--muted-fg);
+}
+.btn-color-card .ui-select[data-tone="primary"] .ui-select-toggle {
+  background: rgba(42, 171, 238, 0.16);
+  border-color: rgba(42, 171, 238, 0.38);
+  color: #7dd3fc;
+}
+.btn-color-card .ui-select[data-tone="success"] .ui-select-toggle {
+  background: rgba(49, 181, 69, 0.16);
+  border-color: rgba(49, 181, 69, 0.38);
+  color: #86efac;
+}
+.btn-color-card .ui-select[data-tone="danger"] .ui-select-toggle {
+  background: rgba(229, 57, 53, 0.16);
+  border-color: rgba(229, 57, 53, 0.38);
+  color: #fca5a5;
+}
+.btn-color-card .ui-select[data-tone] .ui-select-caret {
+  stroke: currentColor;
+  opacity: 0.85;
+}
+.btn-color-card .ui-select[data-tone].open .ui-select-toggle,
+.btn-color-card .ui-select[data-tone] .ui-select-toggle:hover {
+  filter: brightness(1.06);
+}
+
+/* Menu options — same chip tones */
+.ui-select-menu button[data-tone] {
+  border-radius: 999px;
+  margin: 2px 6px;
+  width: calc(100% - 12px);
+  justify-content: flex-start;
+  gap: var(--space-1);
+  font-weight: 500;
+}
+.ui-select-menu button[data-tone]::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: currentColor;
+}
+.ui-select-menu button[data-tone="default"] {
+  color: var(--muted-fg);
+}
+.ui-select-menu button[data-tone="primary"] {
+  color: #7dd3fc;
+}
+.ui-select-menu button[data-tone="success"] {
+  color: #86efac;
+}
+.ui-select-menu button[data-tone="danger"] {
+  color: #fca5a5;
+}
+.ui-select-menu button[data-tone="default"].active,
+.ui-select-menu button[data-tone="default"]:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.ui-select-menu button[data-tone="primary"].active,
+.ui-select-menu button[data-tone="primary"]:hover {
+  background: rgba(42, 171, 238, 0.14);
+}
+.ui-select-menu button[data-tone="success"].active,
+.ui-select-menu button[data-tone="success"]:hover {
+  background: rgba(49, 181, 69, 0.14);
+}
+.ui-select-menu button[data-tone="danger"].active,
+.ui-select-menu button[data-tone="danger"]:hover {
+  background: rgba(229, 57, 53, 0.14);
+}
+
+html[data-theme="light"] .btn-color-card .ui-select[data-tone="default"] .ui-select-toggle {
+  background: rgba(24, 24, 27, 0.04);
+  border-color: rgba(24, 24, 27, 0.12);
+  color: #52525b;
+}
+html[data-theme="light"] .btn-color-card .ui-select[data-tone="primary"] .ui-select-toggle {
+  background: rgba(14, 165, 233, 0.12);
+  border-color: rgba(14, 165, 233, 0.32);
+  color: #0369a1;
+}
+html[data-theme="light"] .btn-color-card .ui-select[data-tone="success"] .ui-select-toggle {
+  background: rgba(22, 163, 74, 0.12);
+  border-color: rgba(22, 163, 74, 0.32);
+  color: #15803d;
+}
+html[data-theme="light"] .btn-color-card .ui-select[data-tone="danger"] .ui-select-toggle {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: rgba(220, 38, 38, 0.28);
+  color: #b91c1c;
+}
+html[data-theme="light"] .ui-select-menu button[data-tone="default"] { color: #52525b; }
+html[data-theme="light"] .ui-select-menu button[data-tone="primary"] { color: #0369a1; }
+html[data-theme="light"] .ui-select-menu button[data-tone="success"] { color: #15803d; }
+html[data-theme="light"] .ui-select-menu button[data-tone="danger"] { color: #b91c1c; }
+html[data-theme="light"] .ui-select-menu button[data-tone="default"].active,
+html[data-theme="light"] .ui-select-menu button[data-tone="default"]:hover {
+  background: rgba(24, 24, 27, 0.06);
+}
+html[data-theme="light"] .ui-select-menu button[data-tone="primary"].active,
+html[data-theme="light"] .ui-select-menu button[data-tone="primary"]:hover {
+  background: rgba(14, 165, 233, 0.12);
+}
+html[data-theme="light"] .ui-select-menu button[data-tone="success"].active,
+html[data-theme="light"] .ui-select-menu button[data-tone="success"]:hover {
+  background: rgba(22, 163, 74, 0.12);
+}
+html[data-theme="light"] .ui-select-menu button[data-tone="danger"].active,
+html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
+  background: rgba(220, 38, 38, 0.1);
+}
+
 @media (min-width: 768px) {
   .btn-color-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));

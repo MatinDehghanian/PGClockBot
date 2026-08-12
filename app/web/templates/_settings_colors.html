@@ -1,16 +1,16 @@
-{# Telegram button colors — category cards + per-button select tiles. #}
+{# Telegram button colors — category cards + tone-aware selects (tag / drawer style). #}
 {% set style_options = [
-  ('', 'سفید (پیش‌فرض)'),
-  ('primary', 'آبی'),
-  ('success', 'سبز'),
-  ('danger', 'قرمز'),
+  ('', 'سفید (پیش‌فرض)', 'default'),
+  ('primary', 'آبی', 'primary'),
+  ('success', 'سبز', 'success'),
+  ('danger', 'قرمز', 'danger'),
 ] %}
 <form method="post" action="{{ settings_action|default('/settings?tab=colors') }}" class="settings-form" id="settings-form">
   <div class="card settings-card">
     <h2>رنگبندی دکمه‌های تلگرام</h2>
     <p class="muted update-card-caption">
-      برای هر دکمه رنگ را از منوی بازشو انتخاب کنید. تلگرام فقط چهار حالت دارد:
-      سفید (پیش‌فرض کلاینت)، آبی، سبز و قرمز.
+      رنگ هر دکمه را از منوی بازشو انتخاب کنید؛ خود منو به همان رنگ درمی‌آید تا در یک نگاه مشخص باشد.
+      تلگرام فقط سفید، آبی، سبز و قرمز را پشتیبانی می‌کند.
       باکس <strong>دکمه‌های سراسری</strong> رنگ منوی اصلی، بازگشت، انصراف، تأیید و رد را همه‌جا یکدست می‌کند.
     </p>
   </div>
@@ -21,15 +21,23 @@
     <div class="btn-color-grid">
       {% for item in items %}
       {% set cur = values.get(item.key, item.default) %}
+      {% set cur_tone = 'default' if not cur else cur %}
       <div class="btn-color-card">
-        <label>
-          {{ item.label }}
-          <select name="s_{{ item.key }}">
-            {% for opt_val, opt_label in style_options %}
-            <option value="{{ opt_val }}" {% if cur == opt_val %}selected{% endif %}>{{ opt_label }}</option>
-            {% endfor %}
-          </select>
-        </label>
+        <span class="btn-color-label">{{ item.label }}</span>
+        <select
+          name="s_{{ item.key }}"
+          class="btn-color-select"
+          data-tone="{{ cur_tone }}"
+          aria-label="{{ item.label }}"
+        >
+          {% for opt_val, opt_label, opt_tone in style_options %}
+          <option
+            value="{{ opt_val }}"
+            data-tone="{{ opt_tone }}"
+            {% if cur == opt_val %}selected{% endif %}
+          >{{ opt_label }}</option>
+          {% endfor %}
+        </select>
       </div>
       {% endfor %}
     </div>

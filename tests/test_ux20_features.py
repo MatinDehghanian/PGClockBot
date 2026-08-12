@@ -101,6 +101,9 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertIn("مرکز اقدام امروز", home)
         self.assertIn("home-pg-health", home)
         self.assertIn('href="/tools"', home)
+        self.assertIn("رفتار کاربر", home)
+        self.assertIn("home-panel-neutral", home)
+        self.assertIn("funnel_enabled", home)
 
     def test_pg_home_has_quick_open_in_stats_box(self):
         html = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
@@ -142,6 +145,13 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertIn("finance?tab=behavior", html)
         self.assertIn("تحویل ناموفق", html)
         self.assertIn("retry-delivery", html)
+        # Behavior box must be neutral (not bot orange / pg blue).
+        marker = '<h2 class="home-panel-h">رفتار کاربر</h2>'
+        behavior_at = html.find(marker)
+        self.assertGreater(behavior_at, -1)
+        panel_slice = html[max(0, behavior_at - 500) : behavior_at]
+        self.assertIn("home-panel-neutral", panel_slice)
+        self.assertNotIn("home-panel-bot", panel_slice)
 
     def test_finance_delivery_tab(self):
         html = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
@@ -322,8 +332,13 @@ class ButtonStyleTests(unittest.TestCase):
         html = Path("app/web/templates/_settings_colors.html").read_text(encoding="utf-8")
         self.assertIn("btn-color-grid", html)
         self.assertIn("btn-color-card", html)
-        self.assertIn("<select", html)
+        self.assertIn("btn-color-select", html)
+        self.assertIn("data-tone", html)
         self.assertNotIn("btn-color-swatch", html)
+        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn('.btn-color-card .ui-select[data-tone="success"]', css)
+        js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
+        self.assertIn("dataset.tone", js)
         self.assertIn("دکمه‌های سراسری", "".join(g for g, _ in grouped_catalog()))
         self.assertIn("پلن نمایندگی", "".join(g for g, _ in grouped_catalog()))
         self.assertIn("btn_style_home", DEFAULT_SETTINGS)
@@ -373,11 +388,11 @@ class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.6")
-        self.assertEqual(__version__, "5.1.6")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.7")
+        self.assertEqual(__version__, "5.1.7")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"5.1.7"', notes)
         self.assertIn('"5.1.6"', notes)
-        self.assertIn('"5.1.5"', notes)
 
 
 if __name__ == "__main__":

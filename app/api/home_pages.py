@@ -27,6 +27,16 @@ _EMPTY_FUNNEL = {
 _EMPTY_ACTION_CENTER = {"items": [], "has_items": False}
 
 
+async def _safe_funnel(session: AsyncSession, *, reseller_id: int | None):
+    from app.services.ux20 import funnel_summary
+
+    try:
+        return await funnel_summary(session, reseller_id=reseller_id, days=7)
+    except Exception:
+        logger.exception("funnel_summary failed reseller_id=%s", reseller_id)
+        return dict(_EMPTY_FUNNEL)
+
+
 async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None, expire_days: int):
     from app.services.ux20 import build_action_center
 
@@ -157,6 +167,12 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 session, reseller_id=None, expire_days=expire_days
             )
             pg_health = await _safe_pg_health()
+            funnel_enabled = on(ui.get("funnel_tracking_enabled", "1"))
+            funnel = (
+                await _safe_funnel(session, reseller_id=None)
+                if funnel_enabled
+                else dict(_EMPTY_FUNNEL)
+            )
             return render(
                 request,
                 "home.html",
@@ -168,7 +184,8 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "action_center": action_center,
                     "pg_health": pg_health,
                     "shop_maintenance": on(ui.get("shop_maintenance_enabled")),
-                    "funnel_enabled": on(ui.get("funnel_tracking_enabled", "1")),
+                    "funnel_enabled": funnel_enabled,
+                    "funnel": funnel,
                 },
             )
 
@@ -259,6 +276,12 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             session=session if staff.get("pg_admin_username") else None,
         )
         shop_maintenance = on(ui.get("shop_maintenance_enabled"))
+        funnel_enabled = on(ui.get("funnel_tracking_enabled", "1"))
+        funnel = (
+            await _safe_funnel(session, reseller_id=int(rid))
+            if funnel_enabled
+            else dict(_EMPTY_FUNNEL)
+        )
         capacity_warn = False
         try:
             thr = float(ui.get("capacity_warn_pct") or 80)
@@ -286,6 +309,8 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "pg_health": pg_health,
                 "shop_maintenance": shop_maintenance,
                 "capacity_warn": capacity_warn,
+                "funnel_enabled": funnel_enabled,
+                "funnel": funnel,
             },
         )
 
