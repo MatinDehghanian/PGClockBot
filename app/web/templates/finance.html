@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% from "macros.html" import ord_status, pay_status, row_actions, page_title %}
 {% block title %}
-{%- if finance_tab == 'payments' -%}پرداخت‌ها
+{%- if finance_tab == 'behavior' -%}رفتار کاربر
+{%- elif finance_tab == 'payments' -%}پرداخت‌ها
 {%- elif finance_tab == 'delivery' -%}تحویل ناموفق
 {%- else -%}مدیریت مالی
 {%- endif -%}
 {% endblock %}
 {% block content %}
-{% set finance_tab = finance_tab or 'orders' %}
+{% set finance_tab = finance_tab or 'behavior' %}
 <div class="page-head">
   <div>
     {{ page_title('orders', 'مدیریت مالی') }}
@@ -18,6 +19,9 @@
 </div>
 
 <nav class="section-tabs" role="tablist" aria-label="مدیریت مالی">
+  {% if can_orders or can_payments %}
+  <a class="{% if finance_tab=='behavior' %}active{% endif %}" href="/finance?tab=behavior">رفتار کاربر</a>
+  {% endif %}
   {% if can_orders %}
   <a class="{% if finance_tab=='orders' %}active{% endif %}" href="/finance?tab=orders">سفارشات</a>
   {% endif %}
@@ -29,7 +33,41 @@
   {% endif %}
 </nav>
 
-{% if finance_tab == 'orders' and can_orders %}
+{% if finance_tab == 'behavior' and (can_orders or can_payments) %}
+{% set funnel = funnel or {} %}
+<section class="home-panel home-panel-bot">
+  <div class="home-panel-head">
+    <div class="home-panel-title">
+      <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+      <h2 class="home-panel-h">رفتار کاربر</h2>
+    </div>
+  </div>
+  <p class="muted" style="margin:0 0 var(--space-2);font-size:12px">۷ روز اخیر — از باز کردن فروشگاه تا تحویل</p>
+  <div class="home-panel-grid">
+    <div class="stat">
+      <div class="stat-top"><span>فروشگاه</span></div>
+      <strong>{{ funnel.get('shop_open', 0) | num }}</strong>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>پلن</span></div>
+      <strong>{{ funnel.get('plan_view', 0) | num }}</strong>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>پرداخت</span></div>
+      <strong>{{ funnel.get('pay_start', 0) | num }}</strong>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>رسید</span></div>
+      <strong>{{ funnel.get('receipt', 0) | num }}</strong>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>تحویل</span></div>
+      <strong>{{ funnel.get('delivered', 0) | num }}</strong>
+    </div>
+  </div>
+</section>
+
+{% elif finance_tab == 'orders' and can_orders %}
 <div class="card card-flush">
   <form method="get" action="/finance" class="search-bar">
     <input type="hidden" name="tab" value="orders" />

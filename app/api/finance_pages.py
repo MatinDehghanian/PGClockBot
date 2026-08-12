@@ -40,14 +40,16 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         can_billing_settings = staff.get("role") == "admin"
 
         tab = (request.query_params.get("tab") or "").strip()
-        if tab not in {"orders", "payments", "delivery"}:
-            tab = "orders" if can_orders else "payments"
+        if tab not in {"behavior", "orders", "payments", "delivery"}:
+            tab = "behavior" if (can_orders or can_payments) else "payments"
+        if tab == "behavior" and not (can_orders or can_payments):
+            tab = "payments"
         if tab == "orders" and not can_orders:
-            tab = "payments" if can_payments else "delivery"
+            tab = "behavior" if can_payments else "payments"
         if tab == "payments" and not can_payments:
-            tab = "orders" if can_orders else "delivery"
+            tab = "behavior" if can_orders else "orders"
         if tab == "delivery" and not can_orders:
-            tab = "orders" if can_orders else "payments"
+            tab = "behavior" if (can_orders or can_payments) else "payments"
 
         search_q = normalize_search_q(request.query_params.get("q"))
         open_settings = (request.query_params.get("settings") or "").strip()
@@ -86,6 +88,13 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "billing_settings_action": "",
             "finance_pending_action": "",
             "receipt_matches": {},
+            "funnel": {
+                "shop_open": 0,
+                "plan_view": 0,
+                "pay_start": 0,
+                "receipt": 0,
+                "delivered": 0,
+            },
         }
 
         if can_finance_settings:
@@ -123,7 +132,16 @@ def register_finance_pages(app, *, render, require_staff, get_db):
 
         fetch_limit = 500 if search_q else 100
 
-        if tab == "orders" and can_orders:
+        if tab == "behavior" and (can_orders or can_payments):
+            from app.services.ux20 import funnel_summary
+
+            rid = None if is_platform_admin(staff) else shop_owner_id(staff)
+            try:
+                ctx["funnel"] = await funnel_summary(session, reseller_id=rid, days=7)
+            except Exception:
+                pass
+
+        elif tab == "orders" and can_orders:
             q = (
                 select(Order)
                 .options(selectinload(Order.plan), selectinload(Order.user))

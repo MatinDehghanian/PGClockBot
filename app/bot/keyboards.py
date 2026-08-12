@@ -150,15 +150,19 @@ def main_menu(
     for key in _menu_order(ui):
         if key == "shop":
             buttons.append(
-                InlineKeyboardButton(text=_t(ui, "btn_shop"), callback_data="shop:list")
+                InlineKeyboardButton(
+                    text=_t(ui, "btn_shop"),
+                    callback_data="shop:list",
+                    style="primary",
+                )
             )
         elif key == "services" and has_services:
             buttons.append(
-                InlineKeyboardButton(text=_t(ui, "btn_services"), callback_data="svc:list")
+                InlineKeyboardButton(text=_t(ui, "btn_services"), callback_data="svc:list", style="primary")
             )
         elif key == "wallet":
             buttons.append(
-                InlineKeyboardButton(text=_t(ui, "btn_wallet"), callback_data="wallet:home")
+                InlineKeyboardButton(text=_t(ui, "btn_wallet"), callback_data="wallet:home", style="primary")
             )
         elif key == "support":
             contacts = active_support_contacts(
@@ -308,6 +312,87 @@ def _home_label(ui: dict | None = None) -> str:
 
 def _back_label(ui: dict | None = None) -> str:
     return (_t(ui, "btn_back") or BTN_BACK).strip() or BTN_BACK
+
+
+# Bot API 9.4 button colors — used on reply + inline. Keep sparse but visible.
+_REPLY_STYLE_PRIMARY = frozenset(
+    {
+        REPLY_ACTION_SHOP,
+        REPLY_ACTION_SERVICES,
+        REPLY_ACTION_WALLET,
+        REPLY_ACTION_WALLET_TOPUP,
+        REPLY_ACTION_SUPPORT,
+        REPLY_ACTION_SUPPORT_NEW,
+        REPLY_ACTION_PAY_WALLET,
+        REPLY_ACTION_PAY_CARD,
+        REPLY_ACTION_PAY_GATEWAY,
+        REPLY_ACTION_PAY_CRYPTO,
+        REPLY_ACTION_PAY_STARS,
+        REPLY_ACTION_TOPUP_CARD,
+        REPLY_ACTION_TOPUP_GATEWAY,
+        REPLY_ACTION_TOPUP_CRYPTO,
+        REPLY_ACTION_PG_CREATE,
+        "svc_renew",
+        "shop_custom",
+        "shop_wholesale",
+        "res_renew",
+        "res_buy_gb",
+        "res_buy_users",
+        "backup_create",
+        "backup_create_noenv",
+    }
+)
+_REPLY_STYLE_SUCCESS = frozenset(
+    {
+        REPLY_ACTION_LOYALTY,
+        REPLY_ACTION_ADMIN_DASH,
+        REPLY_ACTION_ADMIN_ORDERS,
+        REPLY_ACTION_ADMIN_PAYMENTS,
+        "res_orders",
+        "res_payments",
+        "rev_ok",
+    }
+)
+
+
+def _reply_btn_style(action: str | None, text: str | None = None) -> str | None:
+    """Map reply-keyboard actions to Bot API button styles."""
+    a = (action or "").strip()
+    t = (text or "").strip()
+    if a in _REPLY_STYLE_PRIMARY:
+        return "primary"
+    if a in _REPLY_STYLE_SUCCESS:
+        return "success"
+    if a in {"rev_no"} or t in {"انصراف", "لغو", "cancel"} or (
+        t and "انصراف" in t and "بازگشت" not in t
+    ):
+        return "danger"
+    return None
+
+
+def _kb(text: str, *, action: str | None = None, style: str | None = None) -> KeyboardButton:
+    st = style if style is not None else _reply_btn_style(action, text)
+    if st:
+        return KeyboardButton(text=text, style=st)
+    return KeyboardButton(text=text)
+
+
+def _ikb(
+    text: str,
+    *,
+    callback_data: str | None = None,
+    url: str | None = None,
+    style: str | None = None,
+    **extra,
+) -> InlineKeyboardButton:
+    kwargs: dict = {"text": text, **extra}
+    if callback_data is not None:
+        kwargs["callback_data"] = callback_data
+    if url is not None:
+        kwargs["url"] = url
+    if style:
+        kwargs["style"] = style
+    return InlineKeyboardButton(**kwargs)
 
 
 def _reply_markup(
@@ -681,22 +766,22 @@ def _pack_reply_rows(
     footer_row: list[str] | None = None,
 ) -> list[list[KeyboardButton]]:
     layout = _menu_layout(ui)
-    texts = [t for _, t in entries if (t or "").strip()]
+    items = [(a, t) for a, t in entries if (t or "").strip()]
     rows: list[list[KeyboardButton]] = []
     if layout == "compact":
-        for i in range(0, len(texts), 2):
-            chunk = texts[i : i + 2]
-            rows.append([KeyboardButton(text=x) for x in chunk])
+        for i in range(0, len(items), 2):
+            chunk = items[i : i + 2]
+            rows.append([_kb(t, action=a) for a, t in chunk])
     else:
-        for t in texts:
-            rows.append([KeyboardButton(text=t)])
+        for a, t in items:
+            rows.append([_kb(t, action=a)])
     if footer_row:
-        row = [KeyboardButton(text=t) for t in footer_row if (t or "").strip()]
+        row = [_kb(t) for t in footer_row if (t or "").strip()]
         if row:
             rows.append(row)
     for label in footer or []:
         if label:
-            rows.append([KeyboardButton(text=label)])
+            rows.append([_kb(label)])
     return rows
 
 
@@ -1211,7 +1296,13 @@ def shop_kind_keyboard(
     rows: list[list[InlineKeyboardButton]] = []
     if fixed_on:
         rows.append(
-            [InlineKeyboardButton(text="💎 ثابت", callback_data="shop:kind:fixed")]
+            [
+                InlineKeyboardButton(
+                    text="💎 ثابت",
+                    callback_data="shop:kind:fixed",
+                    style="primary",
+                )
+            ]
         )
     if trial_on:
         rows.append(
@@ -1219,12 +1310,24 @@ def shop_kind_keyboard(
         )
     if custom_on:
         rows.append(
-            [InlineKeyboardButton(text="✨ دلخواه", callback_data="shop:kind:custom")]
+            [
+                InlineKeyboardButton(
+                    text="✨ دلخواه",
+                    callback_data="shop:kind:custom",
+                    style="primary",
+                )
+            ]
         )
     if wholesale_on:
         label = _t(ui, "btn_wholesale") or "📦 فروش عمده"
         rows.append(
-            [InlineKeyboardButton(text=label, callback_data="shop:kind:wholesale")]
+            [
+                InlineKeyboardButton(
+                    text=label,
+                    callback_data="shop:kind:wholesale",
+                    style="primary",
+                )
+            ]
         )
     if not rows:
         rows = [[InlineKeyboardButton(text="پلنی نیست", callback_data="menu:home")]]
@@ -1488,6 +1591,7 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text=_t(ui, "btn_pay_wallet"),
                     callback_data=f"pay:wallet:{order_id}",
+                    style="success",
                 )
             ]
         )
@@ -1497,6 +1601,7 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text=_t(ui, "btn_pay_card"),
                     callback_data=f"pay:card:{order_id}",
+                    style="primary",
                 )
             ]
         )
@@ -1506,6 +1611,7 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text=_t(ui, "btn_pay_gateway"),
                     callback_data=f"pay:gateway:{order_id}",
+                    style="primary",
                 )
             ]
         )
@@ -1515,6 +1621,7 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text=_t(ui, "btn_pay_crypto"),
                     callback_data=f"pay:crypto:{order_id}",
+                    style="primary",
                 )
             ]
         )
@@ -1524,6 +1631,7 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text=_t(ui, "btn_pay_stars"),
                     callback_data=f"pay:stars:{order_id}",
+                    style="primary",
                 )
             ]
         )
@@ -1541,6 +1649,7 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
             InlineKeyboardButton(
                 text=_t(ui, "btn_cancel"),
                 callback_data="menu:home",
+                style="danger",
             )
         ]
     )
@@ -1552,7 +1661,13 @@ def topup_pay_methods(ui: dict | None = None) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if on(_t(ui, "pay_card_enabled")):
         rows.append(
-            [InlineKeyboardButton(text=_t(ui, "btn_pay_card"), callback_data="wtop:card")]
+            [
+                InlineKeyboardButton(
+                    text=_t(ui, "btn_pay_card"),
+                    callback_data="wtop:card",
+                    style="primary",
+                )
+            ]
         )
     if on(_t(ui, "pay_gateway_enabled")):
         rows.append(
@@ -1560,6 +1675,7 @@ def topup_pay_methods(ui: dict | None = None) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text=_t(ui, "btn_pay_gateway"),
                     callback_data="wtop:gateway",
+                    style="primary",
                 )
             ]
         )
@@ -1569,11 +1685,18 @@ def topup_pay_methods(ui: dict | None = None) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text=_t(ui, "btn_pay_crypto"),
                     callback_data="wtop:crypto",
+                    style="primary",
                 )
             ]
         )
     rows.append(
-        [InlineKeyboardButton(text=_t(ui, "btn_cancel"), callback_data="wallet:home")]
+        [
+            InlineKeyboardButton(
+                text=_t(ui, "btn_cancel"),
+                callback_data="wallet:home",
+                style="danger",
+            )
+        ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -2266,7 +2389,7 @@ def cancel_reply(ui: dict | None = None) -> ReplyKeyboardMarkup:
     if label and "انصراف" in label and label != BTN_CANCEL:
         cancel_label = BTN_CANCEL
     return _reply_markup(
-        [[KeyboardButton(text=cancel_label)]],
+        [[_kb(cancel_label, style="danger")]],
         placeholder="مقدار را بفرستید یا انصراف بزنید…",
     )
 

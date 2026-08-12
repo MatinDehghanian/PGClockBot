@@ -168,9 +168,8 @@
       <a href="/broadcast">پیام گروهی</a>
       <a href="/resellers">نماینده‌ها{% if bs.resellers %} ({{ bs.resellers }}){% endif %}</a>
       <a href="/users">کاربرها{% if bs.users %} ({{ bs.users }}){% endif %}</a>
-      <a href="/finance?tab=orders">سفارش‌ها{% if bs.orders %} ({{ bs.orders }}){% endif %}</a>
+      <a href="/finance">مالی{% if bs.orders %} ({{ bs.orders }}){% endif %}</a>
       <a href="/tools">ابزارها</a>
-      <a href="/settings">تنظیمات ربات</a>
       <a href="/settings?tab=update">آپدیت</a>
     </div>
   </div>
@@ -314,40 +313,6 @@
       {% endif %}
     </section>
   </div>
-
-  {% set funnel = funnel or {} %}
-  <section class="home-panel home-panel-bot" style="margin-top:var(--space-3)">
-    <div class="home-panel-head">
-      <div class="home-panel-title">
-        <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
-        <h2 class="home-panel-h">مراحل خرید</h2>
-      </div>
-      <a class="btn btn-sm btn-ghost" href="/tools?tab=steps">جزئیات</a>
-    </div>
-    <p class="muted" style="margin:0 0 var(--space-2);font-size:12px">۷ روز اخیر — از باز کردن فروشگاه تا تحویل</p>
-    <div class="home-panel-grid">
-      <div class="stat">
-        <div class="stat-top"><span>فروشگاه</span></div>
-        <strong>{{ funnel.get('shop_open', 0) | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top"><span>پلن</span></div>
-        <strong>{{ funnel.get('plan_view', 0) | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top"><span>پرداخت</span></div>
-        <strong>{{ funnel.get('pay_start', 0) | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top"><span>رسید</span></div>
-        <strong>{{ funnel.get('receipt', 0) | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top"><span>تحویل</span></div>
-        <strong>{{ funnel.get('delivered', 0) | num }}</strong>
-      </div>
-    </div>
-  </section>
 </div>
 
 <script>
