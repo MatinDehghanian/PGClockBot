@@ -202,24 +202,5 @@
   if (active && window.MutationObserver) {
     new MutationObserver(render).observe(active, {childList:true, subtree:true});
   }
-  // Lightweight purchase flow simulator (welcome → pay → receipt → delivery)
-  const simBtn = document.getElementById('pv-sim-buy');
-  let simStep = -1;
-  if (simBtn && textEl) {
-    const steps = [
-      function(){ return val('welcome_text', values.welcome_text || 'سلام'); },
-      function(){ return 'پلن نمونه — ۱۲۰۰۰۰ تومان\nمدت ۳۰ روز'; },
-      function(){ return val('card_pay_text', values.card_pay_text || 'مبلغ را کارت‌به‌کارت کنید و رسید بفرستید.'); },
-      function(){ return 'رسید دریافت شد — در انتظار تأیید ادمین'; },
-      function(){ return val('purchase_success_text', values.purchase_success_text || 'خرید موفق ✅'); }
-    ];
-    simBtn.addEventListener('click', function(){
-      simStep = (simStep + 1) % steps.length;
-      const t = steps[simStep]();
-      textEl.innerHTML = esc(String(t||'')).replace(/\n/g,'<br>');
-      if (qrCard) qrCard.hidden = simStep !== 4;
-      simBtn.textContent = simStep === 4 ? 'شروع دوباره' : ('مرحله ' + (simStep+1) + '/۵');
-    });
-  }
 })();
 </script>

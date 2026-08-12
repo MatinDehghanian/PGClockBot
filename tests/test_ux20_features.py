@@ -131,6 +131,10 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertIn("خروجی / ورودی تنظیمات فروشگاه", html)
         self.assertIn("/tools/export", html)
         self.assertIn("/tools/import", html)
+        export_at = html.find("خروجی / ورودی تنظیمات فروشگاه")
+        create_at = html.find("backup-create-form")
+        self.assertGreater(export_at, -1)
+        self.assertLess(export_at, create_at)
 
     def test_finance_behavior_tab(self):
         html = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
@@ -148,12 +152,16 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         html = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
         self.assertIn("/plans/{{ p.id }}/clone", html)
 
-    def test_preview_simulator(self):
+    def test_preview_no_purchase_simulator(self):
         html = Path("app/web/templates/_tg_preview_chat.html").read_text(encoding="utf-8")
         js = Path("app/web/templates/_tg_preview_chat_js.html").read_text(encoding="utf-8")
-        self.assertIn("pv-sim-buy", html)
-        self.assertIn("شبیه‌ساز خرید", html)
-        self.assertIn("simStep", js)
+        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertNotIn("pv-sim-buy", html)
+        self.assertNotIn("شبیه‌ساز خرید", html)
+        self.assertNotIn("tg-sim-bar", html)
+        self.assertNotIn("simStep", js)
+        self.assertNotIn("pv-sim-buy", js)
+        self.assertNotIn(".tg-sim-bar", css)
 
     def test_backup_verify_ui(self):
         html = Path("app/web/templates/_settings_backup.html").read_text(encoding="utf-8")
@@ -312,7 +320,10 @@ class ButtonStyleTests(unittest.TestCase):
             self.assertEqual(DEFAULT_SETTINGS[k], item["default"])
         self.assertTrue(grouped_catalog())
         html = Path("app/web/templates/_settings_colors.html").read_text(encoding="utf-8")
-        self.assertIn("btn-color-swatch", html)
+        self.assertIn("btn-color-grid", html)
+        self.assertIn("btn-color-card", html)
+        self.assertIn("<select", html)
+        self.assertNotIn("btn-color-swatch", html)
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('tab == \'colors\'', settings)
         self.assertNotIn("فانل خرید", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
@@ -323,11 +334,11 @@ class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.4")
-        self.assertEqual(__version__, "5.1.4")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.5")
+        self.assertEqual(__version__, "5.1.5")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"5.1.5"', notes)
         self.assertIn('"5.1.4"', notes)
-        self.assertIn('"5.1.2"', notes)
 
 
 if __name__ == "__main__":
