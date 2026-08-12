@@ -788,7 +788,6 @@ DEFAULT_SETTINGS = {
     "receipt_auto_match_enabled": "1",
     "receipt_match_window_minutes": "120",
     "action_center_expire_days": "3",
-    "brand_primary_color": "",
     "funnel_tracking_enabled": "1",
     "one_tap_renew_enabled": "1",
 }
@@ -839,12 +838,6 @@ SETTING_GROUPS = {
             "پیام خوش‌آمد (/start)",
             "textarea",
             "اولین پیامی که کاربر بعد از استارت می‌بیند. متغیر: {name}",
-        ),
-        (
-            "brand_primary_color",
-            "رنگ برند (اختیاری)",
-            "text",
-            "مثلاً #0F766E — برای نماینده روی وب‌پنل اعمال می‌شود",
         ),
     ],
     "متن پیام‌ها": [
@@ -1140,13 +1133,13 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "qr": ["QR اشتراک"],
     "payment": [
         "روش‌های پرداخت",
-        "پاکسازی سفارش‌های معلق",
         "کارت به کارت",
         "درگاه پرداخت",
         "رمزارز",
         "استارز تلگرام",
         "متن دکمه‌های پرداخت",
         "حالت تعمیرات و رسید",
+        "پاکسازی سفارش‌های معلق",
     ],
     "supports": ["متن پشتیبانی ربات"],
     "loyalty": ["متن دعوت دوستان"],

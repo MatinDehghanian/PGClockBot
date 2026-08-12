@@ -66,11 +66,11 @@ class Ux20SettingsCatalogTests(unittest.TestCase):
             "backup_schedule_enabled",
             "capacity_warn_pct",
             "receipt_auto_match_enabled",
-            "brand_primary_color",
             "funnel_tracking_enabled",
             "one_tap_renew_enabled",
         ):
             self.assertIn(key, DEFAULT_SETTINGS)
+        self.assertNotIn("brand_primary_color", DEFAULT_SETTINGS)
         self.assertIn("حالت تعمیرات و رسید", SETTING_GROUPS)
         self.assertIn("گزارش و عملیات", SETTING_GROUPS)
         self.assertIn("بکاپ زمان‌بندی", SETTING_GROUPS)
@@ -152,6 +152,20 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         panel_slice = html[max(0, behavior_at - 500) : behavior_at]
         self.assertIn("home-panel-neutral", panel_slice)
         self.assertNotIn("home-panel-bot", panel_slice)
+
+    def test_settings_icons_distinct(self):
+        macros = Path("app/web/templates/macros.html").read_text(encoding="utf-8")
+        self.assertIn("panel-settings", macros)
+        self.assertIn("bot-settings", macros)
+        base = Path("app/web/templates/base.html").read_text(encoding="utf-8")
+        # Panel settings: sliders; bot settings: robot face (not identical gear).
+        self.assertIn("M4 7h9M17 5v4", base)
+        self.assertIn('rx="2.5"', base)
+        settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn("panel-settings", settings)
+        self.assertIn("bot-settings", settings)
+        self.assertNotIn("brand_primary_color", Path("app/web/templates/base.html").read_text(encoding="utf-8"))
+        self.assertNotIn("brand_primary_color", Path("app/api/app.py").read_text(encoding="utf-8"))
 
     def test_finance_delivery_tab(self):
         html = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
@@ -388,11 +402,11 @@ class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.7")
-        self.assertEqual(__version__, "5.1.7")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.8")
+        self.assertEqual(__version__, "5.1.8")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"5.1.8"', notes)
         self.assertIn('"5.1.7"', notes)
-        self.assertIn('"5.1.6"', notes)
 
 
 if __name__ == "__main__":

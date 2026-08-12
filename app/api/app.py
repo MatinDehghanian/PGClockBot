@@ -163,15 +163,6 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["update"] = upd
     if "tickets_unread" not in ctx:
         ctx["tickets_unread"] = int(getattr(request.state, "panel_tickets_unread", 0) or 0)
-    if "brand_primary_color" not in ctx:
-        brand = ""
-        try:
-            staff = ctx.get("staff") or {}
-            if staff.get("role") == "reseller":
-                brand = (staff.get("brand_primary_color") or "").strip()
-        except Exception:
-            brand = ""
-        ctx["brand_primary_color"] = brand if brand.startswith("#") and len(brand) in (4, 7) else ""
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
 
@@ -380,22 +371,6 @@ def create_api_app(lifespan=None) -> FastAPI:
             resolved = resolve_shop_permissions_from_profile(profile)
             user["permissions"] = list(resolved or [])
             user["bot_user_id"] = int(bot_user_id)
-            try:
-                from app.services.users import get_setting
-
-                brand = (
-                    await get_setting(
-                        session,
-                        "brand_primary_color",
-                        "",
-                        reseller_id=int(bot_user_id),
-                    )
-                    or ""
-                ).strip()
-                if brand.startswith("#") and len(brand) in (4, 7):
-                    user["brand_primary_color"] = brand
-            except Exception:
-                pass
             if profile.pg_admin_username:
                 user["pg_admin_username"] = profile.pg_admin_username
             # Prefer live PG role (same as pg_staff) so limited-role ACL stays in sync
