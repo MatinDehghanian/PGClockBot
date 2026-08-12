@@ -189,6 +189,7 @@ async def check_expiring_services(bot: Bot) -> None:
                                                 InlineKeyboardButton(
                                                     text="🔄 تمدید یک‌ضربی",
                                                     callback_data=f"svc:renew:{svc.id}",
+                                                    style="primary",
                                                 )
                                             ]
                                         ]

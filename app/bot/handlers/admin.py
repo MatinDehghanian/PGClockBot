@@ -288,8 +288,16 @@ def _order_actions(order: Order, payment: Payment | None) -> list[list[InlineKey
     if can_decide and order.status not in {OrderStatus.DELIVERED.value, OrderStatus.REJECTED.value}:
         rows.append(
             [
-                InlineKeyboardButton(text="✅ تأیید", callback_data=f"ordrev:ok:{order.id}"),
-                InlineKeyboardButton(text="❌ رد", callback_data=f"ordrev:no:{order.id}"),
+                InlineKeyboardButton(
+                    text="✅ تأیید",
+                    callback_data=f"ordrev:ok:{order.id}",
+                    style="success",
+                ),
+                InlineKeyboardButton(
+                    text="❌ رد",
+                    callback_data=f"ordrev:no:{order.id}",
+                    style="danger",
+                ),
             ]
         )
     return rows

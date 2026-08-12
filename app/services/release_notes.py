@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "5.1.2": [
+        "رفع Internal Error داشبورد: فیلتر عدد امن شد و ویجت‌های اختیاری دیگر کل صفحه را نمی‌خوابانند",
+        "رنگ دکمه‌های مهم تلگرام (تأیید سبز، رد قرمز، خرید/تمدید/عضو شدم آبی) بدون شلوغی منوها",
+    ],
     "5.1.1": [
         "رفع Internal Error تنظیمات ربات و تنظیمات وب‌پنل (تب بکاپ)",
         "صفحه ابزارها در سایدبار با تب‌های لینک سریع، کد هدیه، مراحل خرید و خروجی تنظیمات",

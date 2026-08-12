@@ -155,14 +155,26 @@ def format_gb(gb: float | int | None) -> str:
 
 
 def format_number(num: int | float | None) -> str:
+    """Format a number for panel templates.
+
+    Must never raise on Jinja ``Undefined`` / bad types — missing template
+    attrs used to 500 whole pages (e.g. dashboard funnel stats).
+    """
     if num is None:
         return "—"
+    try:
+        from jinja2.runtime import Undefined
+
+        if isinstance(num, Undefined):
+            return "—"
+    except Exception:
+        pass
     try:
         if isinstance(num, float) and not num.is_integer():
             return f"{num:,.2f}".replace(",", "٬")
         return f"{int(num):,}".replace(",", "٬")
     except (TypeError, ValueError):
-        return str(num)
+        return "—"
 
 
 def format_uptime(seconds: int | float | None) -> str:

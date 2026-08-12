@@ -1145,6 +1145,7 @@ def force_join_inline_keyboard(
             InlineKeyboardButton(
                 text=_t(ui, "btn_force_join_check"),
                 callback_data="forcejoin:check",
+                style="primary",
             )
         ]
     )
@@ -1403,7 +1404,7 @@ def wholesale_confirm_keyboard(
 ) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✅ تأیید و پرداخت", callback_data="shop:wholesale:buy")],
+            [InlineKeyboardButton(text="✅ تأیید و پرداخت", callback_data="shop:wholesale:buy", style="primary")],
             [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:wholesale:qty")],
         ]
     )
@@ -1448,7 +1449,7 @@ def custom_confirm_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     _ = ui
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🟢✅ ادامه خرید", callback_data="shop:custom:buy")],
+            [InlineKeyboardButton(text="🟢✅ ادامه خرید", callback_data="shop:custom:buy", style="primary")],
             [InlineKeyboardButton(text="✏️ تغییر روز", callback_data="shop:custom:gb:next")],
             [InlineKeyboardButton(text="✏️ تغییر حجم", callback_data="shop:custom")],
         ]
@@ -1460,7 +1461,7 @@ def plan_actions(plan_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
     _ = ui
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🟢✅ ادامه خرید", callback_data=f"shop:buy:{plan_id}")],
+            [InlineKeyboardButton(text="🟢✅ ادامه خرید", callback_data=f"shop:buy:{plan_id}", style="primary")],
         ]
     )
 
@@ -2082,6 +2083,7 @@ def admin_user_actions(
                 InlineKeyboardButton(
                     text="⚠️ تأیید حذف کامل کاربر",
                     callback_data=f"adm:users:del:{user_id}",
+                    style="danger",
                 )
             ]
         )
@@ -2180,8 +2182,16 @@ def order_review(order_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🟢✅ تأیید سفارش", callback_data=f"ordrev:ok:{order_id}"),
-                InlineKeyboardButton(text="🔴❌ رد", callback_data=f"ordrev:no:{order_id}"),
+                InlineKeyboardButton(
+                    text="🟢✅ تأیید سفارش",
+                    callback_data=f"ordrev:ok:{order_id}",
+                    style="success",
+                ),
+                InlineKeyboardButton(
+                    text="🔴❌ رد",
+                    callback_data=f"ordrev:no:{order_id}",
+                    style="danger",
+                ),
             ],
         ]
     )
@@ -2192,8 +2202,16 @@ def payment_review(payment_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🟢✅ تأیید دستی", callback_data=f"payrev:ok:{payment_id}"),
-                InlineKeyboardButton(text="🔴❌ رد", callback_data=f"payrev:no:{payment_id}"),
+                InlineKeyboardButton(
+                    text="🟢✅ تأیید دستی",
+                    callback_data=f"payrev:ok:{payment_id}",
+                    style="success",
+                ),
+                InlineKeyboardButton(
+                    text="🔴❌ رد",
+                    callback_data=f"payrev:no:{payment_id}",
+                    style="danger",
+                ),
             ]
         ]
     )
@@ -2204,8 +2222,16 @@ def reseller_app_review(app_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🟢✅ تأیید", callback_data=f"adm:resapp:ok:{app_id}"),
-                InlineKeyboardButton(text="🔴❌ رد", callback_data=f"adm:resapp:no:{app_id}"),
+                InlineKeyboardButton(
+                    text="🟢✅ تأیید",
+                    callback_data=f"adm:resapp:ok:{app_id}",
+                    style="success",
+                ),
+                InlineKeyboardButton(
+                    text="🔴❌ رد",
+                    callback_data=f"adm:resapp:no:{app_id}",
+                    style="danger",
+                ),
             ],
         ]
     )
