@@ -393,7 +393,7 @@ def _reply_markup(
 ) -> ReplyKeyboardMarkup:
     """Standard reply keyboard — persistent so Telegram shows the 4-square menu icon."""
     return ReplyKeyboardMarkup(
-        keyboard=rows or [[KeyboardButton(text=_home_label())]],
+        keyboard=rows or [[_kb(_home_label(), action=REPLY_ACTION_HOME)]],
         resize_keyboard=True,
         one_time_keyboard=False,
         is_persistent=True,
@@ -714,9 +714,9 @@ def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
 def reseller_hub_main_keyboard(profile=None, ui: dict | None = None) -> ReplyKeyboardMarkup:
     """Primary keyboard for shop owner/staff on their dedicated bot (like admin hub)."""
     entries = _reseller_submenu_entries(profile)
-    rows = _pack_reply_rows(entries, ui, footer=[_home_label(ui)])
+    rows = _pack_reply_rows(entries, ui, footer=[(REPLY_ACTION_HOME, _home_label(ui))])
     return _reply_markup(
-        rows or [[KeyboardButton(text=_home_label(ui))]],
+        rows or [[_kb(_home_label(ui), action=REPLY_ACTION_HOME, ui=ui)]],
         placeholder="پنل مدیریت فروشگاه…",
     )
 
@@ -753,8 +753,8 @@ def _pack_reply_rows(
     entries: list[tuple[str, str]],
     ui: dict | None,
     *,
-    footer: list[str] | None = None,
-    footer_row: list[str] | None = None,
+    footer: list[str | tuple[str, str]] | None = None,
+    footer_row: list[str | tuple[str, str]] | None = None,
 ) -> list[list[KeyboardButton]]:
     layout = _menu_layout(ui)
     items = [(a, t) for a, t in entries if (t or "").strip()]
@@ -766,19 +766,35 @@ def _pack_reply_rows(
     else:
         for a, t in items:
             rows.append([_kb(t, action=a, ui=ui)])
+
+    def _footer_btns(items_in: list[str | tuple[str, str]]) -> list[KeyboardButton]:
+        out: list[KeyboardButton] = []
+        for item in items_in:
+            if isinstance(item, tuple):
+                action, text = item[0], item[1]
+            else:
+                action, text = None, item
+            if (text or "").strip():
+                out.append(_kb(text, action=action, ui=ui))
+        return out
+
     if footer_row:
-        row = [_kb(t, ui=ui) for t in footer_row if (t or "").strip()]
+        row = _footer_btns(list(footer_row))
         if row:
             rows.append(row)
-    for label in footer or []:
-        if label:
-            rows.append([_kb(label, ui=ui)])
+    for item in footer or []:
+        row = _footer_btns([item])
+        if row:
+            rows.append(row)
     return rows
 
 
-def _submenu_footer(ui: dict | None = None) -> list[str]:
+def _submenu_footer(ui: dict | None = None) -> list[tuple[str, str]]:
     """Back (one level) + Main menu — always on submenu keyboards."""
-    return [_back_label(ui), _home_label(ui)]
+    return [
+        (REPLY_ACTION_BACK, _back_label(ui)),
+        (REPLY_ACTION_HOME, _home_label(ui)),
+    ]
 
 
 def main_reply_keyboard(
@@ -791,9 +807,10 @@ def main_reply_keyboard(
 ) -> ReplyKeyboardMarkup:
     """Primary navigation reply keyboard (level 0)."""
     home_label = _home_label(ui)
+    home_footer: list[tuple[str, str]] = [(REPLY_ACTION_HOME, home_label)]
     if role == Role.ADMIN.value and not as_user:
         entries = _reply_admin_entries(ui)
-        rows = _pack_reply_rows(entries, ui, footer=[home_label])
+        rows = _pack_reply_rows(entries, ui, footer=home_footer)
     else:
         # Preview / customer surface — never append staff-only buttons
         map_role = Role.USER.value if as_user else role
@@ -803,7 +820,7 @@ def main_reply_keyboard(
             ui=ui,
             show_reseller_creds=False if as_user else show_reseller_creds,
         )
-        rows = _pack_reply_rows(entries, ui, footer=[home_label])
+        rows = _pack_reply_rows(entries, ui, footer=home_footer)
     return _reply_markup(rows, placeholder="از منوی پایین انتخاب کنید…")
 
 
@@ -863,7 +880,10 @@ def reseller_reply_keyboard(profile=None, ui: dict | None = None) -> ReplyKeyboa
     """Reply-keyboard mirror of reseller panel sections."""
     entries = _reseller_submenu_entries(profile)
     rows = _pack_reply_rows(entries, ui, footer_row=_submenu_footer(ui))
-    return _reply_markup(rows or [[KeyboardButton(text=_home_label(ui))]], placeholder="پنل نماینده…")
+    return _reply_markup(
+        rows or [[_kb(_home_label(ui), action=REPLY_ACTION_HOME, ui=ui)]],
+        placeholder="پنل نماینده…",
+    )
 
 
 def pay_reply_keyboard(order_id: int, ui: dict | None = None) -> ReplyKeyboardMarkup:
@@ -1357,24 +1377,25 @@ def admin_plan_kind_keyboard(
 ) -> InlineKeyboardMarkup:
     """Admin plans — kind step for the chosen audience."""
     aud = (audience or "users").strip()
-    back = (
-        InlineKeyboardButton(
-            text="⬅️ مخاطب",
-            callback_data="adm:plans",
-        )
+    back = _ikb(
+        "⬅️ مخاطب",
+        callback_data="adm:plans",
+        style=_style(ui, "back"),
     )
     if aud == "resellers":
         rows = [
             [
-                InlineKeyboardButton(
-                    text="📦 ثابت (کمیسیون)",
+                _ikb(
+                    "📦 ثابت (کمیسیون)",
                     callback_data="adm:plans:kind:resellers:fixed",
+                    style=_style(ui, "plan_res_fixed", fallback="primary"),
                 )
             ],
             [
-                InlineKeyboardButton(
-                    text="⚡ Pay As You Go",
+                _ikb(
+                    "⚡ Pay As You Go",
                     callback_data="adm:plans:kind:resellers:payg",
+                    style=_style(ui, "plan_res_payg", fallback="primary"),
                 )
             ],
             [back],
@@ -1382,15 +1403,17 @@ def admin_plan_kind_keyboard(
         return InlineKeyboardMarkup(inline_keyboard=rows)
     rows = [
         [
-            InlineKeyboardButton(
-                text="💎 ثابت",
+            _ikb(
+                "💎 ثابت",
                 callback_data="adm:plans:kind:users:fixed",
+                style=_style(ui, "shop_kind_fixed", fallback="primary"),
             )
         ],
         [
-            InlineKeyboardButton(
-                text="✨ دلخواه",
+            _ikb(
+                "✨ دلخواه",
                 callback_data="adm:plans:kind:users:custom",
+                style=_style(ui, "shop_kind_custom", fallback="primary"),
             )
         ],
         [
@@ -1400,9 +1423,10 @@ def admin_plan_kind_keyboard(
             )
         ],
         [
-            InlineKeyboardButton(
-                text=_t(ui, "btn_wholesale") or "📦 فروش عمده",
+            _ikb(
+                _t(ui, "btn_wholesale") or "📦 فروش عمده",
                 callback_data="adm:plans:kind:users:wholesale",
+                style=_style(ui, "shop_kind_wholesale", fallback="primary"),
             )
         ],
         [back],
@@ -2316,12 +2340,12 @@ def order_review(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                 _ikb(
                     "🟢✅ تأیید سفارش",
                     callback_data=f"ordrev:ok:{order_id}",
-                    style=_style(ui, "order_review_ok", fallback="success"),
+                    style=_style(ui, "confirm", fallback="success"),
                 ),
                 _ikb(
                     "🔴❌ رد",
                     callback_data=f"ordrev:no:{order_id}",
-                    style=_style(ui, "order_review_no", fallback="danger"),
+                    style=_style(ui, "reject", fallback="danger"),
                 ),
             ],
         ]
@@ -2336,12 +2360,12 @@ def payment_review(payment_id: int, ui: dict | None = None) -> InlineKeyboardMar
                 _ikb(
                     "🟢✅ تأیید دستی",
                     callback_data=f"payrev:ok:{payment_id}",
-                    style=_style(ui, "payment_review_ok", fallback="success"),
+                    style=_style(ui, "confirm", fallback="success"),
                 ),
                 _ikb(
                     "🔴❌ رد",
                     callback_data=f"payrev:no:{payment_id}",
-                    style=_style(ui, "payment_review_no", fallback="danger"),
+                    style=_style(ui, "reject", fallback="danger"),
                 ),
             ]
         ]
@@ -2356,12 +2380,12 @@ def reseller_app_review(app_id: int, ui: dict | None = None) -> InlineKeyboardMa
                 _ikb(
                     "🟢✅ تأیید",
                     callback_data=f"adm:resapp:ok:{app_id}",
-                    style=_style(ui, "reseller_app_ok", fallback="success"),
+                    style=_style(ui, "confirm", fallback="success"),
                 ),
                 _ikb(
                     "🔴❌ رد",
                     callback_data=f"adm:resapp:no:{app_id}",
-                    style=_style(ui, "reseller_app_no", fallback="danger"),
+                    style=_style(ui, "reject", fallback="danger"),
                 ),
             ],
         ]
@@ -2405,7 +2429,7 @@ def cancel_reply(ui: dict | None = None) -> ReplyKeyboardMarkup:
 def persistent_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
     """Fallback reply keyboard (home only) when role context is unavailable."""
     home = _home_label(ui)
-    return _reply_markup([[KeyboardButton(text=home)]])
+    return _reply_markup([[_kb(home, action=REPLY_ACTION_HOME, ui=ui)]])
 
 
 def is_cancel_text(text: str | None) -> bool:

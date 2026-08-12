@@ -17,8 +17,51 @@ STYLE_OPTIONS: list[tuple[str, str]] = [
 
 VALID_STYLES = frozenset({"", "primary", "success", "danger"})
 
+# Action ids that reuse a global chrome style (confirm / reject / cancel / …).
+STYLE_ALIASES: dict[str, str] = {
+    "rev_ok": "confirm",
+    "rev_no": "reject",
+    "order_review_ok": "confirm",
+    "order_review_no": "reject",
+    "payment_review_ok": "confirm",
+    "payment_review_no": "reject",
+    "reseller_app_ok": "confirm",
+    "reseller_app_no": "reject",
+}
+
 # id must match reply action keys where applicable (shop, services, …).
 BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
+    # Global chrome — one place for consistent nav / confirm / cancel
+    {
+        "id": "home",
+        "label": "منوی اصلی / صفحه اصلی",
+        "group": "دکمه‌های سراسری",
+        "default": "",
+    },
+    {
+        "id": "back",
+        "label": "بازگشت",
+        "group": "دکمه‌های سراسری",
+        "default": "",
+    },
+    {
+        "id": "cancel",
+        "label": "انصراف / لغو",
+        "group": "دکمه‌های سراسری",
+        "default": "danger",
+    },
+    {
+        "id": "confirm",
+        "label": "تأیید",
+        "group": "دکمه‌های سراسری",
+        "default": "success",
+    },
+    {
+        "id": "reject",
+        "label": "رد",
+        "group": "دکمه‌های سراسری",
+        "default": "danger",
+    },
     # Main menu
     {"id": "shop", "label": "خرید اشتراک", "group": "منوی اصلی", "default": "primary"},
     {"id": "services", "label": "سرویس‌های من", "group": "منوی اصلی", "default": "primary"},
@@ -34,14 +77,26 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "support_new", "label": "تیکت جدید", "group": "زیرمنوها", "default": "primary"},
     {"id": "svc_renew", "label": "تمدید سرویس", "group": "زیرمنوها", "default": "primary"},
     {"id": "svc_link", "label": "لینک و QR", "group": "زیرمنوها", "default": ""},
-    {"id": "cancel", "label": "انصراف / لغو", "group": "زیرمنوها", "default": "danger"},
     # Shop flow (inline)
-    {"id": "shop_kind_fixed", "label": "نوع پلن: ثابت", "group": "فروشگاه", "default": "primary"},
-    {"id": "shop_kind_custom", "label": "نوع پلن: دلخواه", "group": "فروشگاه", "default": "primary"},
-    {"id": "shop_kind_wholesale", "label": "نوع پلن: عمده", "group": "فروشگاه", "default": "primary"},
+    {"id": "shop_kind_fixed", "label": "نوع پلن کاربر: ثابت", "group": "فروشگاه", "default": "primary"},
+    {"id": "shop_kind_custom", "label": "نوع پلن کاربر: دلخواه", "group": "فروشگاه", "default": "primary"},
+    {"id": "shop_kind_wholesale", "label": "نوع پلن کاربر: عمده", "group": "فروشگاه", "default": "primary"},
     {"id": "buy_continue", "label": "ادامه خرید / تأیید پلن", "group": "فروشگاه", "default": "primary"},
     {"id": "force_join_check", "label": "عضو شدم (کانال اجباری)", "group": "فروشگاه", "default": "primary"},
     {"id": "one_tap_renew", "label": "تمدید یک‌ضربی (هشدار انقضا)", "group": "فروشگاه", "default": "primary"},
+    # Reseller audience plans (admin)
+    {
+        "id": "plan_res_fixed",
+        "label": "پلن نمایندگی: ثابت",
+        "group": "پلن نمایندگی",
+        "default": "primary",
+    },
+    {
+        "id": "plan_res_payg",
+        "label": "پلن نمایندگی: Pay As You Go",
+        "group": "پلن نمایندگی",
+        "default": "primary",
+    },
     # Payment
     {"id": "pay_wallet", "label": "پرداخت با کیف پول", "group": "پرداخت", "default": "success"},
     {"id": "pay_card", "label": "کارت به کارت", "group": "پرداخت", "default": "primary"},
@@ -52,15 +107,6 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "topup_card", "label": "شارژ — کارت", "group": "پرداخت", "default": "primary"},
     {"id": "topup_gateway", "label": "شارژ — درگاه", "group": "پرداخت", "default": "primary"},
     {"id": "topup_crypto", "label": "شارژ — رمزارز", "group": "پرداخت", "default": "primary"},
-    # Admin review
-    {"id": "rev_ok", "label": "تأیید (کیبورد ادمین)", "group": "بررسی ادمین", "default": "success"},
-    {"id": "rev_no", "label": "رد (کیبورد ادمین)", "group": "بررسی ادمین", "default": "danger"},
-    {"id": "order_review_ok", "label": "تأیید سفارش (اینلاین)", "group": "بررسی ادمین", "default": "success"},
-    {"id": "order_review_no", "label": "رد سفارش (اینلاین)", "group": "بررسی ادمین", "default": "danger"},
-    {"id": "payment_review_ok", "label": "تأیید رسید (اینلاین)", "group": "بررسی ادمین", "default": "success"},
-    {"id": "payment_review_no", "label": "رد رسید (اینلاین)", "group": "بررسی ادمین", "default": "danger"},
-    {"id": "reseller_app_ok", "label": "تأیید درخواست نماینده", "group": "بررسی ادمین", "default": "success"},
-    {"id": "reseller_app_no", "label": "رد درخواست نماینده", "group": "بررسی ادمین", "default": "danger"},
     # Admin menu highlights
     {"id": "adm_dash", "label": "داشبورد ادمین", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_orders", "label": "سفارش‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
@@ -73,11 +119,17 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
 ]
 
 CATALOG_BY_ID: dict[str, dict[str, str]] = {item["id"]: item for item in BUTTON_STYLE_CATALOG}
-CATALOG_IDS: frozenset[str] = frozenset(CATALOG_BY_ID)
+CATALOG_IDS: frozenset[str] = frozenset(CATALOG_BY_ID) | frozenset(STYLE_ALIASES)
+
+
+def resolve_style_id(button_id: str) -> str:
+    """Map aliased actions onto their global chrome setting id."""
+    bid = (button_id or "").strip()
+    return STYLE_ALIASES.get(bid, bid)
 
 
 def setting_key(button_id: str) -> str:
-    return f"btn_style_{button_id}"
+    return f"btn_style_{resolve_style_id(button_id)}"
 
 
 def normalize_style(raw: str | None) -> str:
@@ -94,12 +146,13 @@ def get_button_style(
     fallback: str | None = None,
 ) -> str:
     """Resolve style for a catalog button. Empty string = Telegram default (white)."""
-    key = setting_key(button_id)
+    resolved = resolve_style_id(button_id)
+    key = f"btn_style_{resolved}"
     if ui is not None and key in ui:
         return normalize_style(ui.get(key))
     if fallback is not None:
         return normalize_style(fallback)
-    item = CATALOG_BY_ID.get(button_id)
+    item = CATALOG_BY_ID.get(resolved)
     if item:
         return normalize_style(item["default"])
     return ""
@@ -127,7 +180,7 @@ def style_kwargs(
 
 
 def default_settings() -> dict[str, str]:
-    return {setting_key(item["id"]): item["default"] for item in BUTTON_STYLE_CATALOG}
+    return {f"btn_style_{item['id']}": item["default"] for item in BUTTON_STYLE_CATALOG}
 
 
 def setting_group_fields() -> list[tuple[Any, ...]]:
@@ -137,7 +190,7 @@ def setting_group_fields() -> list[tuple[Any, ...]]:
     for item in BUTTON_STYLE_CATALOG:
         fields.append(
             (
-                setting_key(item["id"]),
+                f"btn_style_{item['id']}",
                 item["label"],
                 "select",
                 item["group"],
@@ -149,7 +202,7 @@ def setting_group_fields() -> list[tuple[Any, ...]]:
 
 def grouped_catalog(*, for_reseller: bool = False) -> list[tuple[str, list[dict[str, str]]]]:
     """Preserve catalog order; group consecutive items by ``group``."""
-    skip_groups = {"بررسی ادمین", "منوی ادمین"} if for_reseller else set()
+    skip_groups = {"منوی ادمین", "پلن نمایندگی"} if for_reseller else set()
     skip_ids = {
         "admin",
         "reseller_apply",
@@ -157,6 +210,8 @@ def grouped_catalog(*, for_reseller: bool = False) -> list[tuple[str, list[dict[
         "adm_dash",
         "adm_orders",
         "adm_payments",
+        "plan_res_fixed",
+        "plan_res_payg",
     } if for_reseller else set()
     groups: list[tuple[str, list[dict[str, str]]]] = []
     current_name = ""
@@ -173,7 +228,7 @@ def grouped_catalog(*, for_reseller: bool = False) -> list[tuple[str, list[dict[
         current_items.append(
             {
                 "id": item["id"],
-                "key": setting_key(item["id"]),
+                "key": f"btn_style_{item['id']}",
                 "label": item["label"],
                 "default": item["default"],
             }
