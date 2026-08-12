@@ -75,6 +75,11 @@
           <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
           <h2 class="home-panel-h">آمار پنل</h2>
         </div>
+        {% if pg_external_url %}
+        <div class="home-panel-actions">
+          <a class="btn btn-sm" href="{{ pg_external_url }}" target="_blank" rel="noopener">ورود به پاسارگارد</a>
+        </div>
+        {% endif %}
       </div>
       <div class="home-panel-grid">
         {% set us = ov.user_stats or {} %}
@@ -166,6 +171,11 @@
         <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
         <h2 class="home-panel-h">آمار پنل</h2>
       </div>
+      {% if pg_external_url %}
+      <div class="home-panel-actions">
+        <a class="btn btn-sm" href="{{ pg_external_url }}" target="_blank" rel="noopener">ورود به پاسارگارد</a>
+      </div>
+      {% endif %}
     </div>
     <div class="home-panel-grid">
       <div class="stat">

@@ -107,11 +107,11 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 staff,
                 unread=getattr(request.state, "panel_tickets_unread", None),
             )
-            from app.services.users import get_all_settings, get_setting, on
+            from app.services.users import get_all_settings, on
             from app.services.ux20 import (
                 build_action_center,
                 check_pg_connection,
-                resolve_pg_open_url,
+                funnel_summary,
             )
 
             ui = await get_all_settings(session, reseller_id=None)
@@ -122,7 +122,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             action_center = await build_action_center(
                 session, reseller_id=None, expire_days=expire_days
             )
-            pg_external_url = await resolve_pg_open_url(session, is_admin=True)
             pg_health = await check_pg_connection()
             return render(
                 request,
@@ -133,10 +132,10 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "update": update,
                     "ticket_alert": ticket_alert,
                     "action_center": action_center,
-                    "pg_external_url": pg_external_url,
                     "pg_health": pg_health,
                     "shop_maintenance": on(ui.get("shop_maintenance_enabled")),
                     "funnel_enabled": on(ui.get("funnel_tracking_enabled", "1")),
+                    "funnel": await funnel_summary(session, reseller_id=None, days=7),
                 },
             )
 
@@ -212,7 +211,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             build_action_center,
             capacity_should_warn,
             check_pg_connection,
-            resolve_pg_open_url,
+            funnel_summary,
         )
 
         ui = await get_all_settings(session, reseller_id=int(rid))
@@ -223,7 +222,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         action_center = await build_action_center(
             session, reseller_id=int(rid), expire_days=expire_days
         )
-        pg_external_url = await resolve_pg_open_url(session, is_admin=False)
         pg_health = await check_pg_connection(
             reseller_user_id=int(rid) if staff.get("pg_admin_username") else None,
             session=session if staff.get("pg_admin_username") else None,
@@ -250,10 +248,10 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "ticket_alert": ticket_alert,
                 "billing_card": billing_card,
                 "action_center": action_center,
-                "pg_external_url": pg_external_url,
                 "pg_health": pg_health,
                 "shop_maintenance": shop_maintenance,
                 "capacity_warn": capacity_warn,
+                "funnel": await funnel_summary(session, reseller_id=int(rid), days=7),
             },
         )
 

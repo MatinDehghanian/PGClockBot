@@ -3062,13 +3062,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["pwa"] = await load_pwa_settings(session)
         elif tab == "backup":
             from app.services.backup import list_backups, read_restore_status, sqlite_db_path
-            from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
 
             ctx["backups"] = list_backups()
             ctx["restore_status"] = read_restore_status()
             ctx["local_version"] = local_version()
             ctx["db_path"] = str(sqlite_db_path())
-            ctx["values"] = await get_all_settings(session)
+            # values already loaded above — do not re-import get_all_settings
+            # (that would shadow the module-level name and 500 every settings tab).
             names = TAB_SETTING_GROUPS.get("backup") or []
             ctx["backup_schedule_groups"] = {
                 name: SETTING_GROUPS[name] for name in names if name in SETTING_GROUPS

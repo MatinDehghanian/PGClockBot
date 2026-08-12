@@ -204,6 +204,12 @@
             <span>باشگاه مشتریان</span>
           </a>
           {% endif %}
+          {% if is_admin or 'orders' in perms or 'payments' in perms or 'shop_settings' in perms or is_reseller %}
+          <a href="/tools" class="nav-item nav-item-bot {% if path.startswith('/tools') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            <span>ابزارها</span>
+          </a>
+          {% endif %}
           {% if is_admin or 'shop_settings' in perms or is_reseller %}
           <a href="{% if is_admin %}/settings{% else %}/shop-settings{% endif %}" class="nav-item nav-item-bot {% if (path.startswith('/settings') and not is_panel_settings) or path.startswith('/shop-settings') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M4.9 7.1l1.6 1.6M17.5 15.3l1.6 1.6M3.5 12h2.2M18.3 12h2.2M4.9 16.9l1.6-1.6M17.5 8.7l1.6-1.6"/></svg>

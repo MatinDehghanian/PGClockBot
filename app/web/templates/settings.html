@@ -93,33 +93,6 @@
         <button class="btn" type="submit">ذخیره تنظیمات</button>
       </div>
     </form>
-    {% if tab == 'welcome' %}
-    <div class="card settings-card" style="margin-top:var(--space-3)">
-      <h2>خروجی / ورودی تنظیمات فروشگاه</h2>
-      <p class="muted update-card-caption">پلن‌ها و متن‌ها/سوییچ‌ها را به‌صورت JSON جابه‌جا کنید.</p>
-      <div class="actions" style="gap:var(--space-2);flex-wrap:wrap">
-        <a class="btn btn-ghost" href="/tools/export">دانلود خروجی</a>
-      </div>
-      <form method="post" action="/tools/import" enctype="multipart/form-data" class="form-stack" style="margin-top:var(--space-2)">
-        <label class="upload-box">
-          <input type="file" name="file" accept=".json,application/json" required />
-          <span class="upload-box-plus" aria-hidden="true">+</span>
-          <span class="upload-box-title">انتخاب فایل JSON</span>
-          <span class="upload-box-hint muted">خروجی قبلی را اینجا رها کنید</span>
-        </label>
-        <label class="ui-switch-row">
-          <span class="ui-switch-copy"><strong>جایگزینی پلن‌های فعلی</strong><small>اگر خاموش باشد فقط اضافه می‌شود</small></span>
-          <span class="ui-switch">
-            <input type="checkbox" name="replace_plans" value="1" />
-            <span class="ui-switch-track" aria-hidden="true"></span>
-          </span>
-        </label>
-        <div class="actions">
-          <button class="btn" type="submit">وارد کردن</button>
-        </div>
-      </form>
-    </div>
-    {% endif %}
   {% endif %}
 
   </div>
