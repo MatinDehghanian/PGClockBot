@@ -211,9 +211,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if tab == "menu":
             ctx.update(_menu_tab_context(values))
         elif tab == "colors":
-            from app.services.button_styles import grouped_catalog
+            from app.services.button_styles import STYLE_OPTIONS, grouped_catalog
 
             ctx["button_style_groups"] = grouped_catalog(for_reseller=True)
+            ctx["style_options"] = STYLE_OPTIONS
         elif tab == "bot":
             token = (profile.bot_token if profile else "") or ""
             ctx["bot_status"] = await _bot_token_status(token)

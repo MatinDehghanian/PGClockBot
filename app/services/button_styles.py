@@ -8,25 +8,18 @@ from __future__ import annotations
 
 from typing import Any
 
-STYLE_OPTIONS: list[tuple[str, str]] = [
-    ("", "سفید (پیش‌فرض)"),
-    ("primary", "آبی"),
-    ("success", "سبز"),
-    ("danger", "قرمز"),
+# value, label, UI tone class (for colors tab selects)
+STYLE_OPTIONS: list[tuple[str, str, str]] = [
+    ("", "سفید", "default"),
+    ("primary", "آبی", "primary"),
+    ("success", "سبز", "success"),
+    ("danger", "قرمز", "danger"),
 ]
 
-VALID_STYLES = frozenset({"", "primary", "success", "danger"})
-
-# Action ids that reuse a global chrome style (confirm / reject / cancel / …).
+# Reply review actions that share global confirm / reject chrome.
 STYLE_ALIASES: dict[str, str] = {
     "rev_ok": "confirm",
     "rev_no": "reject",
-    "order_review_ok": "confirm",
-    "order_review_no": "reject",
-    "payment_review_ok": "confirm",
-    "payment_review_no": "reject",
-    "reseller_app_ok": "confirm",
-    "reseller_app_no": "reject",
 }
 
 # id must match reply action keys where applicable (shop, services, …).
@@ -185,7 +178,7 @@ def default_settings() -> dict[str, str]:
 
 def setting_group_fields() -> list[tuple[Any, ...]]:
     """SETTING_GROUPS entries (select) so keys_for_tab / save stay in sync."""
-    opts = list(STYLE_OPTIONS)
+    opts = [(value, label) for value, label, _tone in STYLE_OPTIONS]
     fields: list[tuple[Any, ...]] = []
     for item in BUTTON_STYLE_CATALOG:
         fields.append(
@@ -236,12 +229,3 @@ def grouped_catalog(*, for_reseller: bool = False) -> list[tuple[str, list[dict[
     if current_items:
         groups.append((current_name, current_items))
     return groups
-
-
-def keys_for_reseller_colors() -> set[str]:
-    """Subset of btn_style_* keys a shop owner may save."""
-    keys: set[str] = set()
-    for _name, items in grouped_catalog(for_reseller=True):
-        for item in items:
-            keys.add(item["key"])
-    return keys

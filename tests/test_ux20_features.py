@@ -362,7 +362,14 @@ class ButtonStyleTests(unittest.TestCase):
         from app.services.button_styles import get_button_style
 
         self.assertEqual(get_button_style({}, "rev_ok"), "success")
-        self.assertEqual(get_button_style({}, "order_review_no"), "danger")
+        self.assertEqual(get_button_style({}, "rev_no"), "danger")
+        from app.services.button_styles import STYLE_OPTIONS
+
+        self.assertEqual(STYLE_OPTIONS[0], ("", "سفید", "default"))
+        self.assertNotIn("پیش‌فرض", "".join(label for _v, label, _t in STYLE_OPTIONS))
+        settings_html = Path("app/web/templates/_settings_colors.html").read_text(encoding="utf-8")
+        self.assertNotIn("پیش‌فرض", settings_html)
+        self.assertIn("style_options", settings_html)
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('tab == \'colors\'', settings)
         self.assertNotIn("فانل خرید", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
@@ -402,11 +409,11 @@ class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.8")
-        self.assertEqual(__version__, "5.1.8")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.9")
+        self.assertEqual(__version__, "5.1.9")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"5.1.9"', notes)
         self.assertIn('"5.1.8"', notes)
-        self.assertIn('"5.1.7"', notes)
 
 
 if __name__ == "__main__":
