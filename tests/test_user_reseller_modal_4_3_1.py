@@ -51,6 +51,12 @@ class PendingOrderCleanupTests(unittest.TestCase):
         keys = keys_for_tab("payment")
         self.assertIn("pending_order_cleanup_enabled", keys)
         self.assertIn("پاکسازی سفارش‌های معلق", TAB_SETTING_GROUPS["payment"])
+        # Auto-cleanup card should sit just above the manual-cancel form (end of payment groups).
+        self.assertEqual(TAB_SETTING_GROUPS["payment"][-1], "پاکسازی سفارش‌های معلق")
+        self.assertLess(
+            TAB_SETTING_GROUPS["payment"].index("روش‌های پرداخت"),
+            TAB_SETTING_GROUPS["payment"].index("پاکسازی سفارش‌های معلق"),
+        )
 
     def test_cancel_helper_and_scheduler(self):
         orders = (ROOT / "app/services/orders.py").read_text(encoding="utf-8")
@@ -89,7 +95,12 @@ class RoleAndReasonUiTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("/users/{{ user.id }}/role", user_body)
-        self.assertNotIn("data-confirm-reason", user_body)
+        user_role = user_body.split("/users/{{ user.id }}/role", 1)[1].split(
+            "</form>", 1
+        )[0]
+        self.assertNotIn("data-confirm-reason", user_role)
+        # Delete keeps reason; role form must not require one.
+        self.assertIn("data-confirm-reason", user_body)
         reseller_body = (ROOT / "app/web/templates/_reseller_edit_body.html").read_text(
             encoding="utf-8"
         )
