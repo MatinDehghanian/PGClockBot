@@ -40,6 +40,12 @@
         <td class="col-actions">
           {% call row_actions() %}
             <a class="btn btn-sm" href="/plans/{{ p.id }}/edit">ویرایش</a>
+            <form method="post" action="/plans/{{ p.id }}/clone"
+                  data-confirm="یک کپی خاموش از این پلن ساخته شود؟"
+                  data-confirm-title="کپی پلن"
+                  data-confirm-label="کپی">
+              <button class="btn btn-ghost btn-sm" type="submit">کپی</button>
+            </form>
             <form method="post" action="/plans/{{ p.id }}/toggle">
               <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
             </form>

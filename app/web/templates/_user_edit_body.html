@@ -9,6 +9,7 @@
         <span dir="ltr" class="mono">{{ user.telegram_id }}</span>
         {% if user.username %}<span>@{{ user.username }}</span>{% endif %}
         {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
+        {% if user.risk_flags %}<span class="badge warn">ریسک</span>{% endif %}
       </p>
     </div>
     <div class="user-edit-wallet-pill" dir="ltr">
@@ -16,6 +17,32 @@
       <strong>{{ format_toman(user.wallet_balance or 0) }}</strong>
     </div>
   </div>
+</section>
+
+<section class="edit-section">
+  <header class="edit-section-head">
+    <h3>یادداشت داخلی و ریسک</h3>
+    <p class="muted">فقط ادمین می‌بیند — برای پشتیبانی و جلوگیری از سوءاستفاده</p>
+  </header>
+  {% set flags = (user.risk_flags or '') %}
+  {% if flags %}
+  <p class="badge warn">ریسک: {{ flags }}</p>
+  {% endif %}
+  <form method="post" action="/users/{{ user.id }}/staff-note" class="form-stack">
+    <label class="form-field">یادداشت داخلی
+      <textarea name="note" rows="3" placeholder="مثلاً دیر کرد، کارت فلان…">{{ user.staff_note or '' }}</textarea>
+    </label>
+    <label class="ui-switch-row">
+      <span class="ui-switch-copy"><strong>پرچم دستی ریسک</strong><small>برای کاربران مشکوک</small></span>
+      <span class="ui-switch">
+        <input type="checkbox" name="risk_manual" value="1"{% if 'manual' in (flags or '').split(',') %} checked{% endif %} />
+        <span class="ui-switch-track" aria-hidden="true"></span>
+      </span>
+    </label>
+    <div class="actions">
+      <button class="btn" type="submit">ذخیره</button>
+    </div>
+  </form>
 </section>
 
 <section class="edit-section">

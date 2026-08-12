@@ -30,6 +30,34 @@
   </div>
   {% endif %}
 
+  {% if shop_maintenance %}
+  <div class="flash warn home-update-banner">
+    <div class="home-update-copy">
+      <strong>فروشگاه در حالت تعمیرات است</strong>
+      <span class="muted">خرید جدید برای کاربران بسته است.</span>
+    </div>
+    <a class="btn btn-sm btn-ghost" href="/finance?tab=orders&settings=payment">تنظیمات</a>
+  </div>
+  {% endif %}
+
+  {% set ac = action_center or {} %}
+  {% if ac.has_items %}
+  <div class="card home-action-card">
+    <h2>مرکز اقدام امروز</h2>
+    <div class="home-action-list">
+      {% for item in ac.items %}
+      <a class="home-action-item tone-{{ item.tone or 'neutral' }}" href="{{ item.href }}">
+        <span class="home-action-copy">
+          <strong>{{ item.title }}</strong>
+          <span class="muted">{{ item.detail }}</span>
+        </span>
+        <span class="btn btn-sm btn-ghost">برو</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   <div class="page-head">
     <div>
       {{ page_title('home', 'داشبورد', 'neutral') }}
@@ -95,6 +123,22 @@
         <span class="badge danger home-conn-badge">قطع</span>
         {% endif %}
       </a>
+      <a class="home-conn {% if (pg_health and pg_health.ok) %}is-ok{% else %}is-err{% endif %}" href="/pg" id="home-pg-health">
+        <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+        <span class="home-conn-text">
+          <span class="home-conn-k">پاسارگارد</span>
+          <span class="home-conn-cap muted" id="home-pg-health-cap">
+            {% if pg_health and pg_health.ok %}{% if pg_health.version %}v{{ pg_health.version }}{% else %}آنلاین{% endif %}
+            {% elif pg_health and pg_health.error %}{{ pg_health.error }}
+            {% else %}—{% endif %}
+          </span>
+        </span>
+        {% if pg_health and pg_health.ok %}
+        <span class="badge ok home-conn-badge" id="home-pg-health-badge">متصل</span>
+        {% else %}
+        <span class="badge danger home-conn-badge" id="home-pg-health-badge">قطع</span>
+        {% endif %}
+      </a>
       <a class="home-conn {% if nodes.overall == 'ok' %}is-ok{% elif nodes.overall == 'err' %}is-err{% elif nodes.overall == 'warn' %}is-warn{% else %}is-neutral{% endif %}" href="/pg/nodes">
         <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
         <span class="home-conn-text">
@@ -125,6 +169,10 @@
       <a href="/resellers">نماینده‌ها{% if bs.resellers %} ({{ bs.resellers }}){% endif %}</a>
       <a href="/users">کاربرها{% if bs.users %} ({{ bs.users }}){% endif %}</a>
       <a href="/finance?tab=orders">سفارش‌ها{% if bs.orders %} ({{ bs.orders }}){% endif %}</a>
+      <a href="/tools/gift-codes">کد هدیه</a>
+      <a href="/tools/magic-links">لینک جادویی</a>
+      <a href="/tools/funnel">فانل خرید</a>
+      <a href="/tools/export">خروجی تنظیمات</a>
       <a href="/settings">تنظیمات ربات</a>
       <a href="/settings?tab=update">آپدیت</a>
     </div>
@@ -203,7 +251,12 @@
           <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
           <h2 class="home-panel-h">پنل پاسارگارد</h2>
         </div>
-        <a class="btn btn-sm btn-ghost" href="/pg">نمای کلی</a>
+        <div class="home-panel-actions">
+          <a class="btn btn-sm btn-ghost" href="/pg">نمای کلی</a>
+          {% if pg_external_url %}
+          <a class="btn btn-sm" href="{{ pg_external_url }}" target="_blank" rel="noopener">ورود به پاسارگارد</a>
+          {% endif %}
+        </div>
       </div>
       {% if pg.ok %}
       <div class="home-panel-grid">

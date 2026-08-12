@@ -2,6 +2,7 @@
 {% from "macros.html" import ord_status, pay_status, row_actions, page_title %}
 {% block title %}
 {%- if finance_tab == 'payments' -%}پرداخت‌ها
+{%- elif finance_tab == 'delivery' -%}تحویل ناموفق
 {%- else -%}مدیریت مالی
 {%- endif -%}
 {% endblock %}
@@ -22,6 +23,9 @@
   {% endif %}
   {% if can_payments %}
   <a class="{% if finance_tab=='payments' %}active{% endif %}" href="/finance?tab=payments">پرداخت‌ها</a>
+  {% endif %}
+  {% if can_orders %}
+  <a class="{% if finance_tab=='delivery' %}active{% endif %}" href="/finance?tab=delivery">تحویل ناموفق</a>
   {% endif %}
 </nav>
 
@@ -62,6 +66,7 @@
           <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}pending{% elif o.status in ['rejected','cancelled','failed'] %}rejected{% else %}neutral{% endif %}">
             {{ ord_status(o.status) }}
           </span>
+          {% if o.staff_note %}<small class="muted" style="display:block">📝 {{ o.staff_note[:60] }}</small>{% endif %}
         </td>
         <td class="col-hide-sm" data-sort-value="{{ o.payment_method or '' }}">{% if o.payment_method=='card' %}کارت{% elif o.payment_method=='wallet' %}کیف پول{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
         <td class="muted col-hide-sm" data-sort-value="{{ o.created_at }}">{{ o.created_at }}</td>
@@ -166,6 +171,9 @@
             <form method="post" action="/payments/{{ p.id }}/approve" data-confirm="این پرداخت تأیید شود؟ در صورت خرید، محصول هم ارسال می‌شود." data-confirm-title="تأیید پرداخت" data-confirm-label="تأیید"><button class="btn btn-ok btn-sm" type="submit">تأیید</button></form>
             <form method="post" action="/payments/{{ p.id }}/reject" data-confirm="این پرداخت رد شود؟" data-confirm-title="رد پرداخت" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-danger btn-sm" type="submit">رد</button></form>
           {% endcall %}
+          {% if (receipt_matches or {}).get(p.id) %}
+          <small class="muted" style="display:block;margin-top:4px">هم‌مبلغ: {% for m in receipt_matches[p.id][:3] %}#{{ m.id }}{% if not loop.last %}، {% endif %}{% endfor %}</small>
+          {% endif %}
           {% else %}
           <span class="muted">—</span>
           {% endif %}
@@ -173,6 +181,47 @@
       </tr>
     {% else %}
       <tr><td colspan="7" class="muted">پرداختی نیست</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+{% elif finance_tab == 'delivery' and can_orders %}
+<div class="card card-flush">
+  <div class="table-wrap">
+  <table class="table-compact" data-sortable>
+    <thead>
+      <tr>
+        <th data-sort-type="num">سفارش</th>
+        <th data-sort-type="text">کاربر</th>
+        <th class="col-hide-sm" data-sort-type="text">خطا</th>
+        <th data-sort-type="num">تلاش</th>
+        <th class="col-actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for f in delivery_failures %}
+      {% set o = (orders_by_id or {}).get(f.order_id) %}
+      {% set uname = (o.user.full_name or o.user.username or o.user_id) if o and o.user else (o.user_id if o else '—') %}
+      <tr>
+        <td class="mono" data-sort-value="{{ f.order_id }}">#{{ f.order_id }}</td>
+        <td data-sort-value="{{ uname }}">{{ uname }}</td>
+        <td class="col-hide-sm muted" data-sort-value="{{ f.error or '' }}">{{ (f.error or '—')[:120] }}</td>
+        <td class="mono" data-sort-value="{{ f.attempts }}">{{ f.attempts }}</td>
+        <td class="col-actions">
+          {% call row_actions() %}
+            <form method="post" action="/orders/{{ f.order_id }}/retry-delivery"
+                  data-confirm="تحویل این سفارش دوباره تلاش شود؟"
+                  data-confirm-title="تلاش مجدد تحویل"
+                  data-confirm-label="تلاش مجدد">
+              <button class="btn btn-ok btn-sm" type="submit">تلاش مجدد</button>
+            </form>
+          {% endcall %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="muted">صف تحویل ناموفق خالی است.</td></tr>
     {% endfor %}
     </tbody>
   </table>

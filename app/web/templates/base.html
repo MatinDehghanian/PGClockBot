@@ -18,6 +18,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/panel.css?v={{ app_version }}" />
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
+  {% if brand_primary_color %}
+  <style>:root { --accent: {{ brand_primary_color }}; --primary: {{ brand_primary_color }}; }</style>
+  {% endif %}
   <script>
   (function () {
     try {

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title, row_actions %}
+{% block title %}کد هدیه{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    {{ page_title('orders', 'کد هدیه / شارژ', 'neutral') }}
+  </div>
+  <a class="btn btn-ghost btn-sm" href="/tools/magic-links">لینک‌های جادویی</a>
+</div>
+
+<div class="card">
+  <h2>ساخت کد جدید</h2>
+  <form method="post" action="/tools/gift-codes" class="form-stack">
+    <div class="settings-grid">
+      <label class="form-field">مبلغ (تومان)
+        <input name="amount" type="number" min="1000" step="1000" required placeholder="50000" />
+      </label>
+      <label class="form-field">سقف استفاده
+        <input name="max_uses" type="number" min="1" value="1" />
+      </label>
+      <label class="form-field">کد سفارشی (اختیاری)
+        <input name="code" dir="ltr" placeholder="خالی = خودکار" />
+      </label>
+      <label class="form-field">یادداشت
+        <input name="note" placeholder="مثلاً کمپین نوروز" />
+      </label>
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit">ساخت کد</button>
+    </div>
+  </form>
+</div>
+
+<div class="card card-flush">
+  <h2>کدهای اخیر</h2>
+  <div class="table-wrap">
+    <table class="table-compact" data-sortable>
+      <thead>
+        <tr>
+          <th data-sort-type="text">کد</th>
+          <th data-sort-type="num">مبلغ</th>
+          <th class="col-hide-sm" data-sort-type="num">مصرف</th>
+          <th data-sort-type="text">وضعیت</th>
+          <th class="col-actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for c in codes %}
+        <tr>
+          <td class="mono" dir="ltr" data-sort-value="{{ c.code }}">{{ c.code }}</td>
+          <td class="mono" data-sort-value="{{ c.amount }}">{{ c.amount | num }}</td>
+          <td class="col-hide-sm" data-sort-value="{{ c.used_count }}">{{ c.used_count }}{% if c.max_uses is not none %}/{{ c.max_uses }}{% endif %}</td>
+          <td data-sort-value="{{ c.is_active }}">{% if c.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+          <td class="col-actions">
+            {% call row_actions() %}
+              <form method="post" action="/tools/gift-codes/{{ c.id }}/toggle">
+                <button class="btn btn-ghost btn-sm" type="submit">{% if c.is_active %}خاموش{% else %}روشن{% endif %}</button>
+              </form>
+            {% endcall %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">هنوز کدی ساخته نشده.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

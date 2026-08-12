@@ -296,6 +296,84 @@ async def cleanup_stale_pending_orders() -> None:
             logger.exception("pending order cleanup failed")
 
 
+async def run_scheduled_backup() -> None:
+    """Nightly backup + archive validation when enabled."""
+    async with SessionLocal() as session:
+        try:
+            from datetime import datetime, timezone
+            from pathlib import Path
+
+            from app.services.backup import create_backup, validate_backup_archive
+            from app.services.users import get_setting, on, set_setting
+
+            if not on(await get_setting(session, "backup_schedule_enabled", "1")):
+                return
+            try:
+                hour = int(await get_setting(session, "backup_schedule_hour", "3") or 3)
+            except Exception:
+                hour = 3
+            now = datetime.now(timezone.utc)
+            if now.hour != max(0, min(23, hour)):
+                return
+            # Dedup same UTC day
+            last = (await get_setting(session, "backup_last_ok_at", "")) or ""
+            day_key = now.strftime("%Y-%m-%d")
+            if last.startswith(day_key):
+                return
+            include_env = on(await get_setting(session, "backup_include_env_scheduled", "0"))
+            meta = create_backup(
+                note="scheduled",
+                include_env=include_env,
+                created_by="scheduler",
+            )
+            path = Path(str(meta.get("path") or ""))
+            ok, err, _ = validate_backup_archive(path)
+            await set_setting(session, "backup_last_verify_ok", "1" if ok else "0")
+            if not ok:
+                logger.warning("scheduled backup verify failed: %s", err)
+            await set_setting(session, "backup_last_ok_at", now.isoformat())
+            await session.commit()
+            logger.info("scheduled backup ok id=%s", meta.get("id"))
+        except Exception:
+            logger.exception("scheduled backup failed")
+
+
+async def run_admin_daily_report(bot: Bot) -> None:
+    """Send nightly ops summary to platform admins."""
+    async with SessionLocal() as session:
+        try:
+            from datetime import datetime, timezone
+
+            from app.config import get_settings
+            from app.services.users import get_setting, on, set_setting
+            from app.services.ux20 import build_admin_daily_report
+
+            if not on(await get_setting(session, "admin_daily_report_enabled", "1")):
+                return
+            try:
+                hour = int(await get_setting(session, "admin_daily_report_hour", "0") or 0)
+            except Exception:
+                hour = 0
+            now = datetime.now(timezone.utc)
+            if now.hour != max(0, min(23, hour)):
+                return
+            day_key = now.strftime("%Y-%m-%d")
+            last = (await get_setting(session, "admin_daily_report_last", "")) or ""
+            if last == day_key:
+                return
+            text = await build_admin_daily_report(session)
+            ids = get_settings().admin_ids or []
+            for aid in ids:
+                try:
+                    await bot.send_message(int(aid), text, parse_mode="HTML")
+                except Exception:
+                    logger.debug("daily report send failed admin=%s", aid, exc_info=True)
+            await set_setting(session, "admin_daily_report_last", day_key)
+            await session.commit()
+        except Exception:
+            logger.exception("admin daily report failed")
+
+
 def start_scheduler(bot: Bot) -> None:
     if scheduler.running:
         return
@@ -324,6 +402,25 @@ def start_scheduler(bot: Bot) -> None:
         "interval",
         hours=1,
         id="pending_order_cleanup",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        run_scheduled_backup,
+        "interval",
+        minutes=30,
+        id="scheduled_backup",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        run_admin_daily_report,
+        "interval",
+        minutes=30,
+        args=[bot],
+        id="admin_daily_report",
         max_instances=1,
         coalesce=True,
         misfire_grace_time=3600,

@@ -776,6 +776,7 @@ DEFAULT_SETTINGS = {
     ),
     "admin_daily_report_enabled": "1",
     "admin_daily_report_hour": "0",
+    "admin_daily_report_last": "",
     "backup_schedule_enabled": "1",
     "backup_schedule_hour": "3",
     "backup_include_env_scheduled": "0",

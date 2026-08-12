@@ -339,6 +339,8 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
 
     @app.post("/backup/verify-last")
     async def backup_verify_last(staff: dict = Depends(require_admin), session: AsyncSession = Depends(get_db)):
+        from pathlib import Path
+
         from app.services.backup import list_backups, validate_backup_archive
 
         backups = list_backups()
@@ -346,19 +348,16 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             return RedirectResponse(
                 f"/settings?tab=backup&err={quote('بکاپی نیست')}", status_code=303
             )
-        path = backups[0].get("path")
-        try:
-            validate_backup_archive(path)
-            await set_setting(session, "backup_last_verify_ok", "1")
-            await session.commit()
+        path = Path(str(backups[0].get("path") or ""))
+        ok, err, _ = validate_backup_archive(path)
+        await set_setting(session, "backup_last_verify_ok", "1" if ok else "0")
+        await session.commit()
+        if ok:
             return RedirectResponse(
                 f"/settings?tab=backup&ok={quote('آخرین بکاپ سالم است')}",
                 status_code=303,
             )
-        except Exception as exc:
-            await set_setting(session, "backup_last_verify_ok", "0")
-            await session.commit()
-            return RedirectResponse(
-                f"/settings?tab=backup&err={quote(str(exc) or 'بکاپ معیوب')}",
-                status_code=303,
-            )
+        return RedirectResponse(
+            f"/settings?tab=backup&err={quote(err or 'بکاپ معیوب')}",
+            status_code=303,
+        )

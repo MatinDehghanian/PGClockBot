@@ -40,12 +40,14 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         can_billing_settings = staff.get("role") == "admin"
 
         tab = (request.query_params.get("tab") or "").strip()
-        if tab not in {"orders", "payments"}:
+        if tab not in {"orders", "payments", "delivery"}:
             tab = "orders" if can_orders else "payments"
         if tab == "orders" and not can_orders:
-            tab = "payments"
+            tab = "payments" if can_payments else "delivery"
         if tab == "payments" and not can_payments:
-            tab = "orders"
+            tab = "orders" if can_orders else "delivery"
+        if tab == "delivery" and not can_orders:
+            tab = "orders" if can_orders else "payments"
 
         search_q = normalize_search_q(request.query_params.get("q"))
         open_settings = (request.query_params.get("settings") or "").strip()
@@ -70,6 +72,8 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "payments_by_order": {},
             "payments": [],
             "payers": {},
+            "delivery_failures": [],
+            "orders_by_id": {},
             "flash_ok": request.query_params.get("ok")
             or ("ذخیره شد." if request.query_params.get("saved") == "1" else None),
             "flash_err": request.query_params.get("err"),
@@ -81,6 +85,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "payment_settings_action": "",
             "billing_settings_action": "",
             "finance_pending_action": "",
+            "receipt_matches": {},
         }
 
         if can_finance_settings:
@@ -227,6 +232,53 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 )
             ctx["payments"] = payments
             ctx["payers"] = payers
+            # Soft receipt match suggestions for pending payments
+            from app.services.users import on as _on
+            from app.services.ux20 import suggest_receipt_matches
+
+            values = ctx.get("values") or {}
+            if _on(values.get("receipt_auto_match_enabled", "1")):
+                try:
+                    window = int(values.get("receipt_match_window_minutes") or 120)
+                except Exception:
+                    window = 120
+                rid_scope = None if is_platform_admin(staff) else shop_owner_id(staff)
+                matches: dict[int, list] = {}
+                for p in payments:
+                    if p.status != "pending" or not p.receipt_file_id:
+                        continue
+                    try:
+                        matches[int(p.id)] = await suggest_receipt_matches(
+                            session,
+                            payment=p,
+                            window_minutes=window,
+                            reseller_id=rid_scope,
+                        )
+                    except Exception:
+                        continue
+                ctx["receipt_matches"] = matches
+
+        elif tab == "delivery" and can_orders:
+            from app.services.ux20 import list_open_delivery_failures
+
+            rid = None if is_platform_admin(staff) else shop_owner_id(staff)
+            if not is_platform_admin(staff) and not rid:
+                ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
+                return render(request, "finance.html", ctx)
+            failures = await list_open_delivery_failures(session, reseller_id=rid)
+            order_ids = [int(f.order_id) for f in failures]
+            orders_by_id: dict[int, Order] = {}
+            if order_ids:
+                for o in (
+                    await session.execute(
+                        select(Order)
+                        .options(selectinload(Order.user), selectinload(Order.plan))
+                        .where(Order.id.in_(order_ids))
+                    )
+                ).scalars().all():
+                    orders_by_id[int(o.id)] = o
+            ctx["delivery_failures"] = failures
+            ctx["orders_by_id"] = orders_by_id
 
         return render(request, "finance.html", ctx)
 

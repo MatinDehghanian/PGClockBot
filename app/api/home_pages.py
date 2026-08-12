@@ -107,6 +107,23 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 staff,
                 unread=getattr(request.state, "panel_tickets_unread", None),
             )
+            from app.services.users import get_all_settings, get_setting, on
+            from app.services.ux20 import (
+                build_action_center,
+                check_pg_connection,
+                resolve_pg_open_url,
+            )
+
+            ui = await get_all_settings(session, reseller_id=None)
+            try:
+                expire_days = int(ui.get("action_center_expire_days") or 3)
+            except Exception:
+                expire_days = 3
+            action_center = await build_action_center(
+                session, reseller_id=None, expire_days=expire_days
+            )
+            pg_external_url = await resolve_pg_open_url(session, is_admin=True)
+            pg_health = await check_pg_connection()
             return render(
                 request,
                 "home.html",
@@ -115,6 +132,11 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "overview": overview,
                     "update": update,
                     "ticket_alert": ticket_alert,
+                    "action_center": action_center,
+                    "pg_external_url": pg_external_url,
+                    "pg_health": pg_health,
+                    "shop_maintenance": on(ui.get("shop_maintenance_enabled")),
+                    "funnel_enabled": on(ui.get("funnel_tracking_enabled", "1")),
                 },
             )
 
@@ -185,6 +207,37 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "mode": "payg",
                     "suspended": profile.billing_suspended_at is not None,
                 }
+        from app.services.users import get_all_settings, on
+        from app.services.ux20 import (
+            build_action_center,
+            capacity_should_warn,
+            check_pg_connection,
+            resolve_pg_open_url,
+        )
+
+        ui = await get_all_settings(session, reseller_id=int(rid))
+        try:
+            expire_days = int(ui.get("action_center_expire_days") or 3)
+        except Exception:
+            expire_days = 3
+        action_center = await build_action_center(
+            session, reseller_id=int(rid), expire_days=expire_days
+        )
+        pg_external_url = await resolve_pg_open_url(session, is_admin=False)
+        pg_health = await check_pg_connection(
+            reseller_user_id=int(rid) if staff.get("pg_admin_username") else None,
+            session=session if staff.get("pg_admin_username") else None,
+        )
+        shop_maintenance = on(ui.get("shop_maintenance_enabled"))
+        capacity_warn = False
+        try:
+            thr = float(ui.get("capacity_warn_pct") or 80)
+        except Exception:
+            thr = 80.0
+        if pg_limits:
+            capacity_warn = capacity_should_warn(
+                [pg_limits.get("users"), pg_limits.get("traffic")], thr
+            )
         return render(
             request,
             "reseller_home.html",
@@ -196,6 +249,11 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "bot": bot,
                 "ticket_alert": ticket_alert,
                 "billing_card": billing_card,
+                "action_center": action_center,
+                "pg_external_url": pg_external_url,
+                "pg_health": pg_health,
+                "shop_maintenance": shop_maintenance,
+                "capacity_warn": capacity_warn,
             },
         )
 

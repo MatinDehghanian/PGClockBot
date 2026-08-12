@@ -163,6 +163,15 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["update"] = upd
     if "tickets_unread" not in ctx:
         ctx["tickets_unread"] = int(getattr(request.state, "panel_tickets_unread", 0) or 0)
+    if "brand_primary_color" not in ctx:
+        brand = ""
+        try:
+            staff = ctx.get("staff") or {}
+            if staff.get("role") == "reseller":
+                brand = (staff.get("brand_primary_color") or "").strip()
+        except Exception:
+            brand = ""
+        ctx["brand_primary_color"] = brand if brand.startswith("#") and len(brand) in (4, 7) else ""
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
 
@@ -371,6 +380,22 @@ def create_api_app(lifespan=None) -> FastAPI:
             resolved = resolve_shop_permissions_from_profile(profile)
             user["permissions"] = list(resolved or [])
             user["bot_user_id"] = int(bot_user_id)
+            try:
+                from app.services.users import get_setting
+
+                brand = (
+                    await get_setting(
+                        session,
+                        "brand_primary_color",
+                        "",
+                        reseller_id=int(bot_user_id),
+                    )
+                    or ""
+                ).strip()
+                if brand.startswith("#") and len(brand) in (4, 7):
+                    user["brand_primary_color"] = brand
+            except Exception:
+                pass
             if profile.pg_admin_username:
                 user["pg_admin_username"] = profile.pg_admin_username
             # Prefer live PG role (same as pg_staff) so limited-role ACL stays in sync
@@ -731,6 +756,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         app,
         render=render,
         require_staff=require_staff,
+        get_db=get_db,
+    )
+    from app.api.ux20_pages import register_ux20_pages
+    register_ux20_pages(
+        app,
+        render=render,
+        require_staff=require_staff,
+        require_admin=require_admin,
         get_db=get_db,
     )
     register_shop_settings(
@@ -3029,11 +3062,17 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["pwa"] = await load_pwa_settings(session)
         elif tab == "backup":
             from app.services.backup import list_backups, read_restore_status, sqlite_db_path
+            from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
 
             ctx["backups"] = list_backups()
             ctx["restore_status"] = read_restore_status()
             ctx["local_version"] = local_version()
             ctx["db_path"] = str(sqlite_db_path())
+            ctx["values"] = await get_all_settings(session)
+            names = TAB_SETTING_GROUPS.get("backup") or []
+            ctx["backup_schedule_groups"] = {
+                name: SETTING_GROUPS[name] for name in names if name in SETTING_GROUPS
+            }
         elif tab == "bot":
             from app.services.setup_wizard import current_setup_values
 
