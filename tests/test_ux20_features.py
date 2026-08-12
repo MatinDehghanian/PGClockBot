@@ -96,23 +96,25 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertNotIn("tools/gift-codes", home)
         self.assertNotIn("tools/export", home)
         self.assertNotIn("فانل خرید", home)
+        self.assertNotIn("مراحل خرید", home)
+        self.assertNotIn('href="/settings"', home)
         self.assertIn("مرکز اقدام امروز", home)
         self.assertIn("home-pg-health", home)
         self.assertIn('href="/tools"', home)
-        self.assertIn("مراحل خرید", home)
 
     def test_pg_home_has_quick_open_in_stats_box(self):
         html = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
         self.assertIn("ورود به پاسارگارد", html)
         self.assertIn("آمار پنل", html)
         self.assertIn("pg_external_url", html)
+        self.assertIn("btn-sm btn-ghost", html)
 
     def test_tools_hub_tabs(self):
         html = Path("app/web/templates/tools.html").read_text(encoding="utf-8")
         self.assertIn("لینک‌های سریع", html)
         self.assertIn("کد هدیه", html)
-        self.assertIn("مراحل خرید", html)
-        self.assertIn("خروجی تنظیمات", html)
+        self.assertNotIn("مراحل خرید", html)
+        self.assertNotIn("خروجی تنظیمات", html)
         self.assertNotIn("فانل خرید", html)
 
     def test_sidebar_has_tools(self):
@@ -122,8 +124,20 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
 
     def test_settings_no_inline_export(self):
         html = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
-        self.assertNotIn("/tools/export", html)
         self.assertNotIn("خروجی / ورودی تنظیمات فروشگاه", html)
+
+    def test_backup_has_export_import(self):
+        html = Path("app/web/templates/_settings_backup.html").read_text(encoding="utf-8")
+        self.assertIn("خروجی / ورودی تنظیمات فروشگاه", html)
+        self.assertIn("/tools/export", html)
+        self.assertIn("/tools/import", html)
+
+    def test_finance_behavior_tab(self):
+        html = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
+        self.assertIn("رفتار کاربر", html)
+        self.assertIn("finance?tab=behavior", html)
+        self.assertIn("تحویل ناموفق", html)
+        self.assertIn("retry-delivery", html)
 
     def test_finance_delivery_tab(self):
         html = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
@@ -173,7 +187,8 @@ class Ux20RoutesRegistrationTests(unittest.TestCase):
         ux = Path("app/api/ux20_pages.py").read_text(encoding="utf-8")
         self.assertIn('"/tools"', ux)
         self.assertIn("tools_hub", ux)
-        self.assertIn('tab=steps', ux)
+        self.assertIn("tab=behavior", ux)
+        self.assertIn("settings?tab=backup", ux)
 
     def test_settings_backup_no_get_all_settings_shadow(self):
         """Regression: local import of get_all_settings in backup tab 500'd all settings."""
@@ -255,16 +270,24 @@ class ButtonStyleTests(unittest.TestCase):
         self.assertEqual(pno.style, "danger")
         self.assertEqual(plan_actions(3).inline_keyboard[0][0].style, "primary")
 
+    def test_reply_keyboard_styles(self):
+        from app.bot.keyboards import Role, main_reply_keyboard
+
+        kb = main_reply_keyboard(Role.USER.value, has_services=True, ui={})
+        styles = {b.style for row in kb.keyboard for b in row}
+        self.assertIn("primary", styles)
+        self.assertIn("success", styles)
+
 
 class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.2")
-        self.assertEqual(__version__, "5.1.2")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.3")
+        self.assertEqual(__version__, "5.1.3")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"5.1.3"', notes)
         self.assertIn('"5.1.2"', notes)
-        self.assertIn('"5.1.1"', notes)
 
 
 if __name__ == "__main__":

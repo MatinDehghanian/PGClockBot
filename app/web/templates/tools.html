@@ -12,10 +12,6 @@
 <nav class="section-tabs" role="tablist" aria-label="ابزارها">
   <a class="{% if tools_tab=='links' %}active{% endif %}" href="/tools?tab=links">لینک‌های سریع</a>
   <a class="{% if tools_tab=='gifts' %}active{% endif %}" href="/tools?tab=gifts">کد هدیه</a>
-  <a class="{% if tools_tab=='steps' %}active{% endif %}" href="/tools?tab=steps">مراحل خرید</a>
-  {% if can_export %}
-  <a class="{% if tools_tab=='export' %}active{% endif %}" href="/tools?tab=export">خروجی تنظیمات</a>
-  {% endif %}
 </nav>
 
 {% if tools_tab == 'links' %}
@@ -109,62 +105,6 @@ document.querySelectorAll('[data-copy]').forEach(function(btn){
       </tbody>
     </table>
   </div>
-</div>
-
-{% elif tools_tab == 'steps' %}
-{% set funnel = funnel or {} %}
-<div class="card">
-  <h2>مراحل خرید — ۷ روز اخیر</h2>
-  <p class="muted">ببینید کاربران از باز کردن فروشگاه تا تحویل کجا متوقف می‌شوند.</p>
-  <div class="home-panel-grid">
-    <div class="stat">
-      <div class="stat-top"><span>باز کردن فروشگاه</span></div>
-      <strong>{{ funnel.get('shop_open', 0) | num }}</strong>
-    </div>
-    <div class="stat">
-      <div class="stat-top"><span>مشاهده پلن</span></div>
-      <strong>{{ funnel.get('plan_view', 0) | num }}</strong>
-    </div>
-    <div class="stat">
-      <div class="stat-top"><span>شروع پرداخت</span></div>
-      <strong>{{ funnel.get('pay_start', 0) | num }}</strong>
-    </div>
-    <div class="stat">
-      <div class="stat-top"><span>رسید / تأیید</span></div>
-      <strong>{{ funnel.get('receipt', 0) | num }}</strong>
-    </div>
-    <div class="stat">
-      <div class="stat-top"><span>تحویل</span></div>
-      <strong>{{ funnel.get('delivered', 0) | num }}</strong>
-    </div>
-  </div>
-</div>
-
-{% elif tools_tab == 'export' %}
-<div class="card">
-  <h2>خروجی / ورودی تنظیمات فروشگاه</h2>
-  <p class="muted update-card-caption">پلن‌ها و متن‌ها/سوییچ‌ها را به‌صورت JSON جابه‌جا کنید.</p>
-  <div class="actions" style="gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-2)">
-    <a class="btn btn-ghost" href="/tools/export">دانلود خروجی</a>
-  </div>
-  <form method="post" action="/tools/import" enctype="multipart/form-data" class="form-stack">
-    <label class="upload-box">
-      <input type="file" name="file" accept=".json,application/json" required />
-      <span class="upload-box-plus" aria-hidden="true">+</span>
-      <span class="upload-box-title">انتخاب فایل JSON</span>
-      <span class="upload-box-hint muted">خروجی قبلی را اینجا رها کنید</span>
-    </label>
-    <label class="ui-switch-row">
-      <span class="ui-switch-copy"><strong>جایگزینی پلن‌های فعلی</strong><small>اگر خاموش باشد فقط اضافه می‌شود</small></span>
-      <span class="ui-switch">
-        <input type="checkbox" name="replace_plans" value="1" />
-        <span class="ui-switch-track" aria-hidden="true"></span>
-      </span>
-    </label>
-    <div class="actions">
-      <button class="btn" type="submit">وارد کردن</button>
-    </div>
-  </form>
 </div>
 {% endif %}
 {% endblock %}

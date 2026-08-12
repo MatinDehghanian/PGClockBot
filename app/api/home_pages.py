@@ -39,16 +39,6 @@ async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None,
         return dict(_EMPTY_ACTION_CENTER)
 
 
-async def _safe_funnel(session: AsyncSession, *, reseller_id: int | None):
-    from app.services.ux20 import funnel_summary
-
-    try:
-        return await funnel_summary(session, reseller_id=reseller_id, days=7)
-    except Exception:
-        logger.exception("funnel_summary failed reseller_id=%s", reseller_id)
-        return dict(_EMPTY_FUNNEL)
-
-
 async def _safe_pg_health(*, reseller_user_id: int | None = None, session: AsyncSession | None = None):
     from app.services.ux20 import check_pg_connection
 
@@ -179,7 +169,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "pg_health": pg_health,
                     "shop_maintenance": on(ui.get("shop_maintenance_enabled")),
                     "funnel_enabled": on(ui.get("funnel_tracking_enabled", "1")),
-                    "funnel": await _safe_funnel(session, reseller_id=None),
                 },
             )
 
@@ -297,7 +286,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "pg_health": pg_health,
                 "shop_maintenance": shop_maintenance,
                 "capacity_warn": capacity_warn,
-                "funnel": await _safe_funnel(session, reseller_id=int(rid)),
             },
         )
 

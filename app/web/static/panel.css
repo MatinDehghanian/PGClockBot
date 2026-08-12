@@ -6169,11 +6169,12 @@ html[data-theme="light"] .setup-progress span.done {
 }
 @media (max-width: 640px) {
   .home-panel-actions {
-    width: 100%;
-    justify-content: stretch;
+    width: auto;
+    justify-content: flex-end;
   }
   .home-panel-actions .btn {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
+    width: auto;
     justify-content: center;
   }
   .home-action-item {

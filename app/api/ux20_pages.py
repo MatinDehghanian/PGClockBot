@@ -150,7 +150,6 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         from app.config import get_settings
         from app.db.models import ResellerProfile
         from app.services.home_overview import check_bot_connection
-        from app.services.ux20 import funnel_summary
 
         authz = authz_from_staff(staff)
         can_tools = (
@@ -164,9 +163,11 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
 
         can_export = is_platform_admin(staff) or can_shop(authz, "shop_settings")
         tab = (request.query_params.get("tab") or "links").strip()
-        if tab not in {"links", "gifts", "steps", "export"}:
-            tab = "links"
-        if tab == "export" and not can_export:
+        if tab in {"steps", "funnel"}:
+            return RedirectResponse("/finance?tab=behavior", status_code=303)
+        if tab == "export":
+            return RedirectResponse("/settings?tab=backup", status_code=303)
+        if tab not in {"links", "gifts"}:
             tab = "links"
 
         rid = None if is_platform_admin(staff) else shop_owner_id(staff)
@@ -201,19 +202,6 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 q = q.where(ChargeCode.reseller_id == int(rid))
             codes = list((await session.execute(q)).scalars().all())
 
-        funnel = {
-            "shop_open": 0,
-            "plan_view": 0,
-            "pay_start": 0,
-            "receipt": 0,
-            "delivered": 0,
-        }
-        if tab == "steps":
-            try:
-                funnel = await funnel_summary(session, reseller_id=rid, days=7)
-            except Exception:
-                pass
-
         return render(
             request,
             "tools.html",
@@ -223,7 +211,6 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 "bot_username": bot_username,
                 "links": links,
                 "codes": codes,
-                "funnel": funnel,
                 "can_export": can_export,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
@@ -240,7 +227,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
 
     @app.get("/tools/funnel")
     async def funnel_redirect():
-        return RedirectResponse("/tools?tab=steps", status_code=303)
+        return RedirectResponse("/finance?tab=behavior", status_code=303)
 
     @app.post("/tools/gift-codes")
     async def gift_codes_create(
@@ -334,12 +321,12 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             )
             msg = f"وارد شد: {stats.get('settings', 0)} تنظیمات، {stats.get('plans', 0)} پلن"
             return RedirectResponse(
-                f"/tools?tab=export&ok={quote(msg)}",
+                f"/settings?tab=backup&ok={quote(msg)}",
                 status_code=303,
             )
         except Exception as exc:
             return RedirectResponse(
-                f"/tools?tab=export&err={quote(str(exc) or 'خطای ایمپورت')}",
+                f"/settings?tab=backup&err={quote(str(exc) or 'خطای ایمپورت')}",
                 status_code=303,
             )
 
