@@ -798,10 +798,10 @@ DEFAULT_SETTINGS.update(button_style_defaults())
 # Tabs for /settings?tab=... (order matches product IA)
 SETTINGS_TABS: list[tuple[str, str]] = [
     ("welcome", "خوش‌آمد و هویت"),
-    ("appearance", "ظاهر ربات"),
+    ("appearance", "هویت ربات"),
     ("messages", "متن پیام‌ها"),
     ("buttons", "متن دکمه‌ها"),
-    ("colors", "رنگبندی"),
+    ("colors", "رنگبندی دکمه‌ها"),
     ("menu", "منوی بات"),
     ("qr", "QR اشتراک"),
     ("naming", "نام‌گذاری سرویس"),

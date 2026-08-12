@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "5.1.9": [
+        "رنگبندی: برچسب «پیش‌فرض» از گزینه سفید حذف شد",
+        "پاکسازی کد مرده رنگبندی (آپشن‌های تکراری، alias بلااستفاده، تابع reseller colors)",
+        "تب «رنگبندی» → «رنگبندی دکمه‌ها»؛ تب «ظاهر ربات» → «هویت ربات»",
+        "در رنگبندی دکمه‌ها: برچسب پلن نمایندگی Pay As You Go → PAYG",
+    ],
     "5.1.8": [
         "تنظیمات پرداخت: باکس پاکسازی سفارش‌های معلق بالاتر از حذف دستی قرار گرفت",
         "حذف کامل «رنگ برند نماینده» از تنظیمات و وب‌پنل",

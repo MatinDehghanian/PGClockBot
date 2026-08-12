@@ -323,7 +323,7 @@ def _back_label(ui: dict | None = None) -> str:
 
 
 # Bot API 9.4 button colors — defaults live in app.services.button_styles;
-# panel tab «رنگبندی» overrides via btn_style_* settings.
+# panel tab «رنگبندی دکمه‌ها» overrides via btn_style_* settings.
 _STYLE_AUTO = object()
 
 
@@ -339,7 +339,7 @@ def _reply_btn_style(
     if a in CATALOG_IDS:
         return style_or_none(ui, a)
     t = (text or "").strip()
-    if a in {"rev_no"} or t in {"انصراف", "لغو", "cancel"} or (
+    if t in {"انصراف", "لغو", "cancel"} or (
         t and "انصراف" in t and "بازگشت" not in t
     ):
         return style_or_none(ui, "cancel", fallback="danger")

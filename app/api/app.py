@@ -3017,9 +3017,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         if tab == "menu":
             ctx.update(_menu_tab_context(values))
         elif tab == "colors":
-            from app.services.button_styles import grouped_catalog
+            from app.services.button_styles import STYLE_OPTIONS, grouped_catalog
 
             ctx["button_style_groups"] = grouped_catalog()
+            ctx["style_options"] = STYLE_OPTIONS
         elif tab == "notifications":
             prefs = await get_notify_prefs(session)
             ctx["notify_prefs"] = prefs
