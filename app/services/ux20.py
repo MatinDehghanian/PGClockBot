@@ -269,7 +269,8 @@ async def build_action_center(
         "tickets": tickets,
         "failures": failures,
         "expiring": expiring,
-        "items": items,
+        # Key must NOT be named ``items`` — Jinja ``ac.items`` resolves to dict.items().
+        "entries": items,
         "has_items": bool(items),
     }
 

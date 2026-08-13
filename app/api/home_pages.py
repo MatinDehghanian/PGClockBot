@@ -24,7 +24,7 @@ _EMPTY_FUNNEL = {
     "receipt": 0,
     "delivered": 0,
 }
-_EMPTY_ACTION_CENTER = {"items": [], "has_items": False}
+_EMPTY_ACTION_CENTER = {"entries": [], "has_items": False}
 
 
 async def _payg_risk_strip(session: AsyncSession) -> dict:

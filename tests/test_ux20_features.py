@@ -280,7 +280,8 @@ class Ux20AsyncServiceTests(unittest.IsolatedAsyncioTestCase):
 
         session.execute = AsyncMock(side_effect=_exec)
         out = await build_action_center(session, reseller_id=None, expire_days=3)
-        self.assertIn("items", out)
+        self.assertIn("entries", out)
+        self.assertNotIn("items", out)
         self.assertFalse(out["has_items"])
 
 
@@ -457,10 +458,10 @@ class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.2.4")
-        self.assertEqual(__version__, "5.2.4")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.2.5")
+        self.assertEqual(__version__, "5.2.5")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"5.2.4"', notes)
+        self.assertIn('"5.2.5"', notes)
         self.assertIn('"5.2.1"', notes)
 
 

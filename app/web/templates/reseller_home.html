@@ -43,7 +43,7 @@
 <div class="card home-action-card">
   <h2>مرکز اقدام امروز</h2>
   <div class="home-action-list">
-    {% for item in ac.items %}
+    {% for item in ac.entries %}
     <a class="home-action-item tone-{{ item.tone or 'neutral' }}" href="{{ item.href }}">
       <span class="home-action-copy">
         <strong>{{ item.title }}</strong>
