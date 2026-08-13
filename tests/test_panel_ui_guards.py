@@ -306,8 +306,8 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
     def test_block_button_is_warn_update_is_ok(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
         self.assertIn("btn-warn", users)
-        home = (ROOT / "app/web/templates/home.html").read_text(encoding="utf-8")
-        self.assertRegex(home, r'btn-ok[^>]*>\s*آپدیت\s*<')
+        inbox = (ROOT / "app/web/templates/inbox.html").read_text(encoding="utf-8")
+        self.assertRegex(inbox, r'btn-ok[^>]*>\s*آپدیت\s*<')
         upd = (ROOT / "app/web/templates/_settings_update.html").read_text(encoding="utf-8")
         self.assertIn('id="upd-start"', upd)
         self.assertIn("btn-ok", upd)

@@ -6166,6 +6166,217 @@ html[data-theme="light"] .setup-progress span.done {
 .home-conn-card {
   padding: var(--card-pad);
 }
+
+/* —— Home portals (bot orange / PG blue) —— */
+.home-portal-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-bottom: var(--section-gap);
+}
+.home-portal {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 72px;
+  padding: var(--space-2) var(--card-pad);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  text-decoration: none !important;
+  color: inherit !important;
+  box-sizing: border-box;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
+}
+.home-portal:hover { transform: translateY(-1px); }
+.home-portal:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
+  outline-offset: 2px;
+}
+.home-portal-bot {
+  background: color-mix(in srgb, var(--brand) 12%, var(--card));
+  border-color: color-mix(in srgb, var(--brand) 42%, var(--border));
+}
+.home-portal-bot:hover {
+  background: color-mix(in srgb, var(--brand) 18%, var(--card));
+  border-color: color-mix(in srgb, var(--brand) 55%, var(--border));
+}
+.home-portal-bot:focus-visible {
+  outline-color: color-mix(in srgb, var(--brand) 55%, transparent);
+}
+.home-portal-pg {
+  background: color-mix(in srgb, var(--primary) 12%, var(--card));
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+}
+.home-portal-pg:hover {
+  background: color-mix(in srgb, var(--primary) 18%, var(--card));
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+}
+.home-portal-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border-radius: 14px;
+}
+.home-portal-bot .home-portal-ico {
+  background: color-mix(in srgb, var(--brand) 22%, transparent);
+  color: var(--brand-fg);
+}
+.home-portal-pg .home-portal-ico {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+  color: var(--primary-fg);
+}
+.home-portal-ico svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.home-portal-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.home-portal-copy strong {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.home-portal-copy .muted {
+  font-size: 12px;
+  line-height: 1.35;
+}
+.home-portal-go {
+  flex: 0 0 auto;
+  font-size: 16px;
+  opacity: 0.55;
+}
+.home-portal-bot .home-portal-go { color: var(--brand-fg); }
+.home-portal-pg .home-portal-go { color: var(--primary-fg); }
+
+/* —— Period sales —— */
+.home-periods-card { margin-bottom: var(--section-gap); }
+.home-periods-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+  margin: 0 0 var(--space-2);
+}
+.home-periods-head h2 {
+  margin: 0;
+  font-size: var(--title-size);
+  font-weight: 600;
+}
+.home-periods-head .muted {
+  margin: 0;
+  font-size: 12px;
+}
+.home-period-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.home-period {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  min-width: 0;
+}
+.home-period-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-fg);
+  padding-bottom: var(--space-0);
+  border-bottom: 1px solid var(--border);
+}
+.home-period-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+}
+.home-period-metrics > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.home-period-metrics dt {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted-fg);
+  font-weight: 500;
+}
+.home-period-metrics dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.home-action-empty {
+  margin: 0;
+  font-size: 13px;
+}
+html[data-theme="light"] .home-portal-bot {
+  background: color-mix(in srgb, var(--brand) 8%, #fff);
+}
+html[data-theme="light"] .home-portal-pg {
+  background: color-mix(in srgb, var(--primary) 8%, #fff);
+}
+html[data-theme="light"] .home-period {
+  background: rgba(0, 0, 0, 0.02);
+}
+@media (max-width: 900px) {
+  .home-period-grid { grid-template-columns: 1fr; }
+  .home-period-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  /* Portals stay side-by-side on mobile (first row) */
+  .home-portal-row {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-1);
+  }
+  .home-portal {
+    min-height: 64px;
+    padding: var(--space-1_5) var(--space-1_5);
+    gap: var(--space-1);
+  }
+  .home-portal-ico {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+  }
+  .home-portal-ico svg {
+    width: 17px;
+    height: 17px;
+  }
+  .home-portal-copy strong {
+    font-size: 12.5px;
+  }
+  .home-portal-copy .muted {
+    display: none;
+  }
+  .home-period-metrics { grid-template-columns: 1fr 1fr; }
+}
+
 .home-dash > .card > h2,
 .home-conn-card > h2 {
   margin: 0;
@@ -6193,6 +6404,9 @@ html[data-theme="light"] .setup-progress span.done {
   font-size: 0.75rem;
 }
 
+.home-action-card {
+  margin-bottom: var(--section-gap);
+}
 .home-action-card h2 {
   margin: 0 0 var(--space-2);
   font-size: var(--title-size);
@@ -6214,9 +6428,14 @@ html[data-theme="light"] .setup-progress span.done {
   background: rgba(255, 255, 255, 0.03);
   color: inherit;
   text-decoration: none;
+  transition: background var(--motion-fast) var(--ease-standard);
 }
 .home-action-item:hover {
   background: rgba(255, 255, 255, 0.07);
+}
+.home-action-item:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
+  outline-offset: 2px;
 }
 .home-action-copy {
   display: flex;
