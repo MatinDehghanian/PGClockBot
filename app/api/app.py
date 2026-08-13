@@ -1028,11 +1028,15 @@ def create_api_app(lifespan=None) -> FastAPI:
         if is_setup_complete():
             return RedirectResponse("/", status_code=303)
         begin_setup()
+        from app.services.security_policy import is_placeholder_bot_token
+
         token = (bot_token or "").strip()
         uname = (bot_username or "").strip().lstrip("@")
         ids_raw = (admin_ids or "").strip()
         if not token:
             return _setup_page(request, step=2, err="توکن ربات الزامی است.")
+        if is_placeholder_bot_token(token):
+            return _setup_page(request, step=2, err="توکن ربات نامعتبر است — یک توکن واقعی از BotFather وارد کنید.")
         if not uname:
             return _setup_page(request, step=2, err="نام کاربری ربات الزامی است.")
         try:
