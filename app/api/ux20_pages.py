@@ -158,7 +158,17 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        rid = None if is_platform_admin(staff) else shop_owner_id(staff)
+        authz = authz_from_staff(staff)
+        admin_scope = is_platform_admin(staff)
+        if not (
+            admin_scope or can_shop(authz, "orders") or can_shop(authz, "plans")
+        ):
+            return RedirectResponse("/home", status_code=303)
+        rid = None if admin_scope else shop_owner_id(staff)
+        if not admin_scope and rid is None:
+            # No shop context (e.g. pg_staff) — must never toggle platform or
+            # any other shop's gift/charge codes.
+            return RedirectResponse("/home", status_code=303)
         row = (
             await session.execute(select(ChargeCode).where(ChargeCode.id == int(code_id)))
         ).scalar_one_or_none()
