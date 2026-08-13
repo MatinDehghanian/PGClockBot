@@ -71,6 +71,16 @@ class UserEditUiTests(unittest.TestCase):
         app = Path("app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("register_user_pages", app)
 
+    def test_users_list_risk_dot_and_search_pad(self):
+        users = Path("app/web/templates/users.html").read_text(encoding="utf-8")
+        self.assertIn("risk-dot", users)
+        self.assertIn("u.risk_flags", users)
+        self.assertIn("cell-name", users)
+        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn(".risk-dot", css)
+        self.assertIn(".card.card-flush > .search-bar:first-child", css)
+        self.assertIn("padding-top: var(--card-pad)", css)
+
     def test_reseller_edit_wallet_balance_column(self):
         src = Path("app/web/templates/_reseller_edit_body.html").read_text(encoding="utf-8")
         self.assertIn("wallet_txs", src)
