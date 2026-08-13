@@ -57,16 +57,27 @@ def classify_pg_admin_dict(admin: dict | None) -> Literal["ok", "disabled", "mis
 
 
 async def fetch_pg_admin_gate(pg_username: str) -> tuple[PgAdminGate, dict | None]:
-    """Live-check PasarGuard for this admin. Network errors → ``unreachable``."""
+    """Live-check PasarGuard for this admin. Network errors → ``unreachable``.
+
+    Uses ``get_admin_gate`` (not the plain ``get_admin``) because the latter
+    swallows every lookup exception internally and returns ``None`` both when
+    the admin was genuinely deleted (404) and when PasarGuard was merely
+    unreachable (timeout/5xx) — which used to make a temporary PasarGuard
+    outage permanently revoke a legitimate pg_staff web account.
+    """
     uname = _norm_pg(pg_username)
     if not uname:
         return "missing", None
     from app.services.pasarguard import get_pg
 
     try:
-        admin = await get_pg().get_admin(uname)
+        network_gate, admin = await get_pg().get_admin_gate(uname)
     except Exception:
         return "unreachable", None
+    if network_gate == "unreachable":
+        return "unreachable", None
+    if network_gate == "missing":
+        return "missing", None
     return classify_pg_admin_dict(admin), admin
 
 

@@ -471,12 +471,31 @@ class PasarGuardClient:
         Prefer direct by-username endpoints first — limited roles often cannot
         list ``/api/admins`` even when they can read their own account.
         """
+        _gate, admin = await self.get_admin_gate(username)
+        return admin
+
+    async def get_admin_gate(self, username: str) -> tuple[str, dict | None]:
+        """Like ``get_admin`` but distinguishes *confirmed missing* (a clean
+        404 from every lookup path) from *unreachable* (any network/timeout/
+        5xx error along the way).
+
+        Callers (e.g. the pg_staff web-access gate) must never treat a
+        temporary PasarGuard outage as proof the admin was deleted — doing so
+        would permanently revoke a legitimate staff member's web access just
+        because PasarGuard was briefly down. Returns ``(gate, admin)`` where
+        ``gate`` is one of ``"ok"``, ``"missing"``, ``"unreachable"``.
+        """
         username = (username or "").strip()
         if not username:
-            return None
+            return "missing", None
         from urllib.parse import quote
 
         enc = quote(username, safe="")
+        saw_transport_error = False
+
+        def _not_found(exc: Exception) -> bool:
+            return isinstance(exc, PasarGuardError) and exc.status_code == 404
+
         for path in (
             f"/api/admin/by-username/{enc}",
             f"/api/admin/{enc}",
@@ -491,26 +510,29 @@ class PasarGuardClient:
                     got = str(data.get("username") or "").strip()
                     if got and got.lower() != username.lower():
                         continue
-                    return data
-            except Exception:
-                pass
+                    return "ok", data
+            except Exception as exc:
+                if not _not_found(exc):
+                    saw_transport_error = True
         try:
             data = await self.request("GET", "/api/admins", params={"username": username, "limit": 20})
             admins = as_list(data, "admins")
             for a in admins:
                 if str(a.get("username") or "").lower() == username.lower():
-                    return a
+                    return "ok", a
             if len(admins) == 1:
-                return admins[0]
-        except Exception:
-            pass
+                return "ok", admins[0]
+        except Exception as exc:
+            if not _not_found(exc):
+                saw_transport_error = True
         try:
             for a in await self.get_admins():
                 if str(a.get("username") or "").lower() == username.lower():
-                    return a
-        except Exception:
-            pass
-        return None
+                    return "ok", a
+        except Exception as exc:
+            if not _not_found(exc):
+                saw_transport_error = True
+        return ("unreachable" if saw_transport_error else "missing"), None
 
     async def get_admin_roles(self) -> list[dict]:
         """Pasarguard admin roles (owner-defined access levels)."""
