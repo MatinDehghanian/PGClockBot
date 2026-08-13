@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "5.2.11": [
+        "رفع Not Found بعد از ذخیره یادداشت داخلی و ریسک کاربر (بازگشت به مودال ویرایش)",
+        "اعتبارسنجی فرم‌ها به فارسی با حاشیه قرمز به‌جای پیام انگلیسی مرورگر",
+        "نقطه زرد ریسک کنار نام کاربر در لیست کاربران",
+        "فاصله یکدست بالای باکس جستجو وقتی داخل کارت تیتر نیست",
+    ],
     "5.2.10": [
         "بازگشت داشبورد به ظاهر و رفتار v5.2.8 (لغو Pulse v5.2.9)",
         "ریستور از نقطهٔ cursor/restore-before-home-pulse-5b2d",
