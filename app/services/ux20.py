@@ -616,7 +616,12 @@ async def suggest_receipt_matches(
     window_minutes: int = 120,
     reseller_id: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Soft-match other pending payments with same amount in time window."""
+    """Soft-match other pending payments with same amount in time window.
+
+    Tenant-scoped: a reseller (``reseller_id`` set) must only ever see matches
+    that belong to their own shop (order tenant or payer's shop membership).
+    Platform scope (``reseller_id is None``) only sees platform-level payments.
+    """
     window_minutes = max(5, min(24 * 60, int(window_minutes or 120)))
     created = payment.created_at or _utcnow()
     if created.tzinfo is None:
@@ -625,6 +630,7 @@ async def suggest_receipt_matches(
     hi = created + timedelta(minutes=window_minutes)
     q = (
         select(Payment)
+        .join(BotUser, BotUser.id == Payment.user_id)
         .options(selectinload(Payment.order))
         .where(
             Payment.id != int(payment.id),
@@ -634,18 +640,21 @@ async def suggest_receipt_matches(
             Payment.created_at <= hi,
         )
         .order_by(Payment.created_at.desc())
-        .limit(5)
     )
-    rows = list((await session.execute(q)).scalars().all())
+    if reseller_id is None:
+        # Platform scope: only payers with no shop membership at all.
+        q = q.where(BotUser.reseller_id.is_(None))
+    else:
+        rid = int(reseller_id)
+        q = q.join(Order, Order.id == Payment.order_id, isouter=True).where(
+            or_(
+                and_(Payment.is_wallet_topup.is_(True), BotUser.reseller_id == rid),
+                and_(Payment.is_wallet_topup.is_(False), Order.reseller_id == rid),
+            )
+        )
+    rows = list((await session.execute(q.limit(5))).scalars().all())
     out = []
     for p in rows:
-        if reseller_id is None:
-            if p.order and p.order.reseller_id is not None and not p.is_wallet_topup:
-                continue
-        else:
-            if not p.order or int(p.order.reseller_id or 0) != int(reseller_id):
-                # also allow wallet topups of shop users via join — skip soft filter here
-                pass
         out.append(
             {
                 "id": p.id,
