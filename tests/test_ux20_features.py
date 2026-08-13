@@ -490,11 +490,11 @@ class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.2.11")
-        self.assertEqual(__version__, "5.2.11")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.2.12")
+        self.assertEqual(__version__, "5.2.12")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"5.2.12"', notes)
         self.assertIn('"5.2.11"', notes)
-        self.assertIn('"5.2.10"', notes)
         self.assertIn('"5.2.8"', notes)
 
     def test_bot_tickets_controllable_from_panel(self):

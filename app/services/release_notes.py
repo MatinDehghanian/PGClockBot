@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "5.2.12": [
+        "تأیید حذف کاربر: هشدار که پیام دوباره به ربات = ساخت حساب جدید خالی برای همان تلگرام",
+        "تست اثبات: حذف سخت واقعی است؛ بازآمدن کاربر از get_or_create ربات است نه شکست حذف",
+    ],
     "5.2.11": [
         "رفع Not Found بعد از ذخیره یادداشت داخلی و ریسک کاربر (بازگشت به مودال ویرایش)",
         "اعتبارسنجی فرم‌ها به فارسی با حاشیه قرمز به‌جای پیام انگلیسی مرورگر",
