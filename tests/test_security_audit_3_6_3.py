@@ -34,9 +34,34 @@ class WebShopOrderIsolationTests(unittest.TestCase):
         self.assertIn('order.reseller_id and staff.get("role") == "admin"', src)
 
     def test_orders_list_platform_scoped(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        # After is_platform_admin branch filters reseller_id IS NULL
-        self.assertIn("q = q.where(Order.reseller_id.is_(None))", src)
+        # Orders listing has since moved from app/api/app.py into the
+        # dedicated finance page module — check both known locations so this
+        # doesn't silently bit-rot into a brittle no-op on the next move, and
+        # actually assert the platform-admin branch filters reseller_id IS NULL.
+        candidates = [
+            ROOT / "app/api/finance_pages.py",
+            ROOT / "app/api/app.py",
+        ]
+        found = False
+        for path in candidates:
+            if not path.is_file():
+                continue
+            src = path.read_text(encoding="utf-8")
+            idx = src.find("is_platform_admin(staff):")
+            while idx != -1:
+                window = src[idx : idx + 400]
+                if "Order.reseller_id.is_(None)" in window:
+                    found = True
+                    break
+                idx = src.find("is_platform_admin(staff):", idx + 1)
+            if found:
+                break
+        self.assertTrue(
+            found,
+            "expected an is_platform_admin() branch immediately followed by "
+            "Order.reseller_id.is_(None) filtering in one of: "
+            + ", ".join(str(p) for p in candidates),
+        )
 
     def test_pending_receipt_needs_payments_perm(self):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")

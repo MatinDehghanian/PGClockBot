@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.pg_staff_access import (
     classify_staff_cohort,
@@ -217,8 +217,34 @@ class NoConversionContracts(unittest.TestCase):
     def test_no_owner_fallback_in_staff_pg(self):
         src = Path("app/api/pg_pages.py").read_text(encoding="utf-8")
         fn = src[src.find("async def _staff_pg") : src.find("async def _assert_owned_user")]
-        self.assertEqual(fn.count("return get_pg(), True"), 1)
         self.assertIn("get_pg_for_staff", fn)
+
+
+class StaffPgAsOwnerContractTests(unittest.IsolatedAsyncioTestCase):
+    """Behavioral replacement for the old brittle source-string assertion:
+    pg_staff must never get ``as_owner=True`` out of ``_staff_pg``, regardless
+    of the exact wording of the admin branch (which legitimately changed for
+    Hybrid Owner support — admin's ``as_owner`` now reflects the real
+    ``pg_is_owner`` flag instead of being hardcoded ``True``).
+    """
+
+    async def test_pg_staff_never_gets_as_owner_true(self):
+        from app.api.pg_pages import _staff_pg
+
+        with patch(
+            "app.services.pasarguard.get_pg_for_staff",
+            new=AsyncMock(return_value=MagicMock()),
+        ):
+            _client, as_owner = await _staff_pg(
+                AsyncMock(),
+                {
+                    "role": "pg_staff",
+                    "pg_admin_username": "s1",
+                    "pg_staff_id": 9,
+                    "pg_is_owner": True,
+                },
+            )
+        self.assertFalse(as_owner)
 
     def test_admins_template_badges_and_checkbox(self):
         tpl = Path("app/web/templates/pg_admins.html").read_text(encoding="utf-8")
