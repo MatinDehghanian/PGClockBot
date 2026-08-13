@@ -25,6 +25,44 @@ _EMPTY_FUNNEL = {
     "delivered": 0,
 }
 _EMPTY_ACTION_CENTER = {"entries": [], "has_items": False}
+# Probe not run — templates must show «—» / neutral, never fake «قطع».
+_UNCHECKED_CONN = {"ok": None, "error": None, "version": None, "unchecked": True}
+
+
+def _unchecked_overview():
+    from app.services.home_overview import empty_home_overview
+
+    ov = empty_home_overview()
+    ov["bot"] = {
+        "ok": None,
+        "error": None,
+        "username": None,
+        "name": None,
+        "unchecked": True,
+    }
+    ov["nodes"] = {
+        "ok": None,
+        "error": None,
+        "nodes": [],
+        "total": 0,
+        "connected": 0,
+        "warn": 0,
+        "error_count": 0,
+        "overall": "neutral",
+        "unchecked": True,
+    }
+    ov["pg_summary"] = {
+        "ok": None,
+        "error": None,
+        "admins": 0,
+        "groups": 0,
+        "hosts": 0,
+        "nodes": 0,
+        "users": None,
+        "version": None,
+        "unchecked": True,
+    }
+    return ov
 
 
 async def _payg_risk_strip(session: AsyncSession) -> dict:
@@ -45,6 +83,9 @@ async def _payg_risk_strip(session: AsyncSession) -> dict:
     try:
         threshold = await get_low_balance_threshold(session)
     except Exception:
+        from app.services.db_safe import rollback_quiet
+
+        await rollback_quiet(session)
         threshold = 0
     out["threshold"] = int(threshold or 0)
     try:
@@ -60,6 +101,9 @@ async def _payg_risk_strip(session: AsyncSession) -> dict:
         )
     except Exception:
         logger.exception("payg risk: list profiles failed")
+        from app.services.db_safe import rollback_quiet
+
+        await rollback_quiet(session)
         return out
 
     user_ids = [int(p.user_id) for p in profiles if p.user_id]
@@ -221,58 +265,76 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        try:
-            return await _home_dashboard_inner(request, staff, session, render)
-        except Exception:
-            logger.exception("home_dashboard fatal; serving fail-soft shell")
-            from app.services.db_safe import rollback_quiet
-            from app.services.home_overview import empty_home_overview
+        """Build context fail-soft; render outside so template bugs stay diagnosable 500s.
 
+        Never invent «قطع» for Bot/PG/Nodes when data load failed — use unchecked
+        + dashboard_degraded banner instead (false-disconnected regression).
+        """
+        from app.services.db_safe import rollback_quiet
+
+        try:
+            result = await _home_dashboard_context(request, staff, session)
+        except Exception:
+            logger.exception("home_dashboard data build failed; serving degraded shell")
             await rollback_quiet(session)
-            # Minimal page so login→/home never dead-ends on a single server quirk.
-            if is_platform_admin(staff):
-                return render(
-                    request,
-                    "home.html",
-                    {
-                        "staff": staff,
-                        "overview": empty_home_overview(),
-                        "update": None,
-                        "ticket_alert": None,
-                        "action_center": dict(_EMPTY_ACTION_CENTER),
-                        "pg_health": {"ok": False, "error": "بارگذاری ناقص", "version": None},
-                        "shop_maintenance": False,
-                        "funnel_enabled": False,
-                        "funnel": dict(_EMPTY_FUNNEL),
-                        "payg_risk": {
-                            "suspended": [],
-                            "low": [],
-                            "threshold": 0,
-                            "has_items": False,
-                        },
-                    },
-                )
-            return render(
-                request,
-                "reseller_home.html",
+            result = _degraded_home_shell(staff)
+        if isinstance(result, RedirectResponse):
+            return result
+        template, ctx = result
+        # Render is intentionally outside the data try/except: Jinja/KeyError must
+        # hit the global handler with a ref=, not paint fake connection failures.
+        return render(request, template, ctx)
+
+    def _degraded_home_shell(staff: dict) -> tuple[str, dict]:
+        if is_platform_admin(staff):
+            return (
+                "home.html",
                 {
                     "staff": staff,
-                    "stats": empty_shop_stats(),
-                    "pg_limits": None,
-                    "bot_setup_needed": False,
-                    "bot": {"ok": False, "error": "بارگذاری ناقص", "username": None, "name": None},
+                    "overview": _unchecked_overview(),
+                    "update": None,
                     "ticket_alert": None,
-                    "billing_card": None,
                     "action_center": dict(_EMPTY_ACTION_CENTER),
-                    "pg_health": {"ok": False, "error": "بارگذاری ناقص", "version": None},
+                    "pg_health": dict(_UNCHECKED_CONN),
                     "shop_maintenance": False,
-                    "capacity_warn": False,
                     "funnel_enabled": False,
                     "funnel": dict(_EMPTY_FUNNEL),
+                    "payg_risk": {
+                        "suspended": [],
+                        "low": [],
+                        "threshold": 0,
+                        "has_items": False,
+                    },
+                    "dashboard_degraded": True,
                 },
             )
+        return (
+            "reseller_home.html",
+            {
+                "staff": staff,
+                "stats": empty_shop_stats(),
+                "pg_limits": None,
+                "bot_setup_needed": False,
+                "bot": {
+                    "ok": None,
+                    "error": None,
+                    "username": None,
+                    "name": None,
+                    "unchecked": True,
+                },
+                "ticket_alert": None,
+                "billing_card": None,
+                "action_center": dict(_EMPTY_ACTION_CENTER),
+                "pg_health": dict(_UNCHECKED_CONN),
+                "shop_maintenance": False,
+                "capacity_warn": False,
+                "funnel_enabled": False,
+                "funnel": dict(_EMPTY_FUNNEL),
+                "dashboard_degraded": True,
+            },
+        )
 
-    async def _home_dashboard_inner(request, staff, session, render):
+    async def _home_dashboard_context(request, staff, session):
         # Platform admin: server + both panels.
         if is_platform_admin(staff):
             from app.services.db_safe import recover_session, rollback_quiet
@@ -332,8 +394,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 logger.exception("payg risk strip failed")
                 await rollback_quiet(session)
                 payg_risk = {"suspended": [], "low": [], "threshold": 0, "has_items": False}
-            return render(
-                request,
+            return (
                 "home.html",
                 {
                     "staff": staff,
@@ -346,6 +407,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "funnel_enabled": funnel_enabled,
                     "funnel": funnel,
                     "payg_risk": payg_risk,
+                    "dashboard_degraded": False,
                 },
             )
 
@@ -499,8 +561,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 )
             except Exception:
                 capacity_warn = False
-        return render(
-            request,
+        return (
             "reseller_home.html",
             {
                 "staff": staff,
@@ -516,6 +577,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "capacity_warn": capacity_warn,
                 "funnel_enabled": funnel_enabled,
                 "funnel": funnel,
+                "dashboard_degraded": False,
             },
         )
 

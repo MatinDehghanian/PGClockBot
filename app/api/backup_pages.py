@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 from urllib.parse import quote
 
-from fastapi import Depends, File, Form, UploadFile
+from fastapi import Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
 from app.services.backup import (
+    clear_idle_restore_status,
     create_backup,
     delete_backup,
     get_backup_path,
@@ -16,6 +17,27 @@ from app.services.backup import (
     save_uploaded_backup,
     start_restore_async,
 )
+
+
+def _wants_json(request: Request) -> bool:
+    accept = (request.headers.get("accept") or "").lower()
+    xrw = (request.headers.get("x-requested-with") or "").lower()
+    return "application/json" in accept or xrw in {"xmlhttprequest", "fetch"}
+
+
+def _status_payload() -> dict:
+    st = resolve_stale_restore_status()
+    try:
+        from app.runtime import BOOT_ID, PID
+        from app.services.updates import local_version
+
+        st = dict(st)
+        st["boot_id"] = BOOT_ID
+        st["pid"] = PID
+        st["current_version"] = local_version()
+    except Exception:
+        pass
+    return st
 
 
 def register_backup_pages(app, *, render, require_admin, get_db):
@@ -26,8 +48,11 @@ def register_backup_pages(app, *, render, require_admin, get_db):
     @app.get("/backup/status")
     async def backup_status(staff: dict = Depends(require_admin)):
         """JSON progress for restore (and last known status) — polled by settings UI."""
-        st = resolve_stale_restore_status()
-        return JSONResponse(st)
+        return JSONResponse(_status_payload())
+
+    @app.post("/backup/clear")
+    async def backup_clear(staff: dict = Depends(require_admin)):
+        return JSONResponse({"ok": True, "status": clear_idle_restore_status()})
 
     @app.post("/backup/create")
     async def backup_create(
@@ -87,25 +112,39 @@ def register_backup_pages(app, *, render, require_admin, get_db):
 
     @app.post("/backup/restore/{backup_id}")
     async def backup_restore(
+        request: Request,
         backup_id: str,
         staff: dict = Depends(require_admin),
         restore_env: str = Form(""),
         confirm: str = Form(""),
     ):
         confirm_ok = (confirm or "").strip().upper() in {"1", "YES", "ON", "TRUE", "RESTORE"}
-        if not confirm_ok:
-            return JSONResponse(
-                {"ok": False, "error": "تأیید ریستور انجام نشد"},
-                status_code=400,
+        wants_json = _wants_json(request)
+
+        def err(msg: str, *, code: int = 400, status=None):
+            if wants_json:
+                body = {"ok": False, "error": msg}
+                if status is not None:
+                    body["status"] = status
+                return JSONResponse(body, status_code=code)
+            return RedirectResponse(
+                "/settings?tab=backup&err=" + quote(msg),
+                status_code=303,
             )
+
+        if not confirm_ok:
+            return err("تأیید ریستور انجام نشد")
         path = get_backup_path(backup_id)
         if not path:
-            return JSONResponse({"ok": False, "error": "بکاپ یافت نشد"}, status_code=404)
+            return err("بکاپ یافت نشد", code=404)
         st = resolve_stale_restore_status()
         if st.get("state") == "running":
-            return JSONResponse(
-                {"ok": False, "error": "یک عملیات ریستور در حال اجراست", "status": st},
-                status_code=409,
+            return err("یک عملیات ریستور در حال اجراست", code=409, status=st)
+        if st.get("awaiting_restart"):
+            return err(
+                "ریستور قبلی در انتظار راه‌اندازی مجدد است",
+                code=409,
+                status=st,
             )
         # Release DB connections before swapping the file
         from app.db.session import engine
@@ -119,8 +158,18 @@ def register_backup_pages(app, *, render, require_admin, get_db):
             actor=f"web:{staff.get('username') or 'admin'}",
         )
         if not result.get("ok"):
-            return JSONResponse(result, status_code=409)
-        return JSONResponse(result)
+            if wants_json:
+                return JSONResponse(result, status_code=409)
+            return err(result.get("error") or "شروع ریستور ممکن نشد", code=409)
+
+        if wants_json:
+            return JSONResponse(result)
+
+        # Progressive enhancement: classic form POST — land on backup tab with ops UI.
+        return RedirectResponse(
+            "/settings?tab=backup&restore=1",
+            status_code=303,
+        )
 
     @app.post("/backup/upload")
     async def backup_upload(

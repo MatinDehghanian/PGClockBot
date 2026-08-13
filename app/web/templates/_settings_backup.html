@@ -1,5 +1,5 @@
 {% set st = restore_status or {} %}
-{% set restore_ops = st.state == 'running' or st.awaiting_restart or st.state == 'error' %}
+{% set restore_ops = st.state == 'running' or st.awaiting_restart or st.state == 'error' or st.restart_required %}
 <div class="card settings-card">
   <h2>خروجی / ورودی تنظیمات فروشگاه</h2>
   <p class="muted update-card-caption">پلن‌ها و متن‌ها/سوییچ‌ها را به‌صورت JSON جابه‌جا کنید (جدا از بکاپ کامل ZIP).</p>
@@ -130,6 +130,7 @@
 <div class="card settings-card" id="backup-restore-root"
      data-running="{{ '1' if st.state == 'running' else '0' }}"
      data-awaiting-restart="{{ '1' if st.awaiting_restart else '0' }}"
+     data-restart-required="{{ '1' if st.restart_required else '0' }}"
      data-pre-boot="{{ st.pre_boot_id or '' }}"
      data-show-ops="{{ '1' if restore_ops else '0' }}">
   <h2>ریستور بکاپ</h2>
@@ -390,7 +391,7 @@
 
     if (waitingRestart) {
       if (!d.awaiting_restart && d.state !== 'running') {
-        if (d.state === 'error') {
+        if (d.state === 'error' || d.restart_required) {
           waitingRestart = false;
           showRestoreOps(true);
           setFormBusy(restoreForm, false);
@@ -414,7 +415,7 @@
       return;
     }
 
-    if (d.state === 'running' || d.state === 'error') showRestoreOps(true);
+    if (d.state === 'running' || d.state === 'error' || d.restart_required) showRestoreOps(true);
 
     const pct = Number(d.percent || 0);
     if (fill) fill.style.width = pct + '%';
@@ -431,11 +432,15 @@
       setFormBusy(restoreForm, true, 'در حال ریستور…');
       setFormBusy(createForm, true);
       showOp('ریستور در حال اجرا', d.message || 'لطفاً صبر کنید…', 'warn');
-    } else if (d.state === 'error') {
+    } else if (d.state === 'error' || d.restart_required) {
       setFormBusy(restoreForm, false);
       setFormBusy(createForm, false);
       setBlockLeave(false);
-      showOp('ریستور ناموفق', d.message || d.error || 'خطای ناشناخته', 'err');
+      showOp(
+        d.restart_required ? 'ری‌استارت دستی لازم است' : 'ریستور ناموفق',
+        d.message || d.error || 'خطای ناشناخته',
+        'err'
+      );
       clearInterval(pollTimer);
       pollTimer = null;
     } else if (d.state === 'done' && !d.awaiting_restart) {
@@ -531,6 +536,7 @@
         const res = await fetch(action, {
           method: 'POST',
           credentials: 'same-origin',
+          headers: { 'Accept': 'application/json', 'X-Requested-With': 'fetch' },
           body,
         });
         const data = await res.json();

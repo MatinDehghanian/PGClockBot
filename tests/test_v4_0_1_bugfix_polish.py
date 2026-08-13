@@ -70,6 +70,7 @@ class BackupStatusEndpoint(unittest.TestCase):
         src = (ROOT / "app/api/backup_pages.py").read_text(encoding="utf-8")
         self.assertIn("start_restore_async", src)
         self.assertIn("JSONResponse", src)
+        self.assertIn("_wants_json", src)
         self.assertNotIn("/login?restarting", src)
 
 

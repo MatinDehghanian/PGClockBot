@@ -54,6 +54,7 @@ RESTORE_STEPS = [
 ]
 
 _RESTORE_THREAD: threading.Thread | None = None
+_STATUS_LOCK = threading.RLock()
 AWAITING_RESTART_TIMEOUT_SEC = 12 * 60
 STALE_RUNNING_TIMEOUT_SEC = 20 * 60
 SQLITE_DB_MEMBER = "data/bot.db"
@@ -536,31 +537,46 @@ def _default_restore_status() -> dict[str, Any]:
         "db_engine": None,
         "error": None,
         "awaiting_restart": False,
+        "restart_required": False,
         "pre_boot_id": None,
     }
 
 
+def _replace_restore_status(data: dict[str, Any]) -> dict[str, Any]:
+    """Overwrite restore status entirely (does not merge)."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with _STATUS_LOCK:
+        payload = _default_restore_status()
+        payload.update(data)
+        tmp = RESTORE_STATUS_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(RESTORE_STATUS_FILE)
+        return payload
+
+
 def _set_restore_status(payload: dict[str, Any]) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    cur = _default_restore_status()
-    if RESTORE_STATUS_FILE.exists():
-        try:
-            existing = json.loads(RESTORE_STATUS_FILE.read_text(encoding="utf-8"))
-            if isinstance(existing, dict):
-                cur.update(existing)
-        except Exception:
-            pass
-    cur.update(payload)
-    tmp = RESTORE_STATUS_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cur, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(RESTORE_STATUS_FILE)
+    with _STATUS_LOCK:
+        cur = _default_restore_status()
+        if RESTORE_STATUS_FILE.exists():
+            try:
+                existing = json.loads(RESTORE_STATUS_FILE.read_text(encoding="utf-8"))
+                if isinstance(existing, dict):
+                    cur.update(existing)
+            except Exception:
+                pass
+        cur.update(payload)
+        tmp = RESTORE_STATUS_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cur, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(RESTORE_STATUS_FILE)
 
 
 def read_restore_status() -> dict[str, Any]:
     if not RESTORE_STATUS_FILE.exists():
         return _default_restore_status()
     try:
-        data = json.loads(RESTORE_STATUS_FILE.read_text(encoding="utf-8"))
+        with _STATUS_LOCK:
+            data = json.loads(RESTORE_STATUS_FILE.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             return _default_restore_status()
         base = _default_restore_status()
@@ -570,14 +586,26 @@ def read_restore_status() -> dict[str, Any]:
         return _default_restore_status()
 
 
+def clear_idle_restore_status() -> dict[str, Any]:
+    """Reset progress UI when nothing active remains (after ?ok= success flash)."""
+    st = read_restore_status()
+    if st.get("state") == "running" and _restore_thread_alive():
+        return st
+    if st.get("awaiting_restart") and _restore_thread_alive():
+        return st
+    return _replace_restore_status(_default_restore_status())
+
+
 def _set_restore_step(key: str, message: str | None = None, **extra: Any) -> None:
     meta = next((s for s in RESTORE_STEPS if s[0] == key), None)
     if not meta:
         _set_restore_status({"step_key": key, "message": message or key, **extra})
         return
+    # Mid-flight steps stay running; only done/restart finals use _finish_*.
+    running = key not in {"done"}
     _set_restore_status(
         {
-            "state": "running" if key not in {"done", "restart"} else "done",
+            "state": "running" if running else "done",
             "step_key": key,
             "step": meta[1],
             "percent": meta[2],
@@ -587,7 +615,13 @@ def _set_restore_step(key: str, message: str | None = None, **extra: Any) -> Non
     )
 
 
-def _finish_restore_ok(message: str, *, awaiting_restart: bool = False, **extra: Any) -> None:
+def _finish_restore_ok(
+    message: str,
+    *,
+    awaiting_restart: bool = False,
+    restart_required: bool = False,
+    **extra: Any,
+) -> None:
     pre_boot = None
     if awaiting_restart:
         try:
@@ -596,19 +630,28 @@ def _finish_restore_ok(message: str, *, awaiting_restart: bool = False, **extra:
             pre_boot = BOOT_ID
         except Exception:
             pre_boot = None
-    key = "restart" if awaiting_restart else "done"
+    if restart_required:
+        key = "restart"
+        state = "error"
+    elif awaiting_restart:
+        key = "restart"
+        state = "done"
+    else:
+        key = "done"
+        state = "done"
     meta = next((s for s in RESTORE_STEPS if s[0] == key), RESTORE_STEPS[-1])
     _set_restore_status(
         {
-            "state": "done",
+            "state": state,
             "step_key": key,
             "step": meta[1],
             "percent": meta[2],
             "message": message,
             "finished_at": _now_iso(),
             "awaiting_restart": bool(awaiting_restart),
+            "restart_required": bool(restart_required),
             "pre_boot_id": pre_boot,
-            "error": None,
+            "error": message if restart_required else None,
             **extra,
         }
     )
@@ -629,6 +672,7 @@ def _finish_restore_error(err: Exception | str, **extra: Any) -> None:
             "error": msg,
             "finished_at": _now_iso(),
             "awaiting_restart": False,
+            "restart_required": False,
             **extra,
         }
     )
@@ -678,25 +722,15 @@ def resolve_stale_restore_status() -> dict[str, Any]:
             cur_boot = None
         restarted = bool(pre_boot and cur_boot and str(pre_boot) != str(cur_boot))
         if restarted:
-            _set_restore_status(
-                {
-                    "state": "idle",
-                    "awaiting_restart": False,
-                    "pre_boot_id": None,
-                    "message": "",
-                    "percent": 0,
-                    "step_key": "",
-                    "step": "",
-                }
-            )
-            return read_restore_status()
+            return clear_idle_restore_status()
         if age is not None and age >= AWAITING_RESTART_TIMEOUT_SEC:
             _set_restore_status(
                 {
                     "state": "error",
                     "awaiting_restart": False,
-                    "message": "راه‌اندازی مجدد طولانی شد. سرویس را دستی بررسی کنید.",
-                    "error": "راه‌اندازی مجدد طولانی شد. سرویس را دستی بررسی کنید.",
+                    "restart_required": True,
+                    "message": "راه‌اندازی مجدد طولانی شد. یک‌بار: sudo systemctl restart pgclockbot",
+                    "error": "راه‌اندازی مجدد طولانی شد. یک‌بار: sudo systemctl restart pgclockbot",
                     "finished_at": _now_iso(),
                 }
             )
@@ -713,13 +747,19 @@ def _do_restore_thread(
     actor: str,
 ) -> None:
     try:
-        restore_backup(
+        result = restore_backup(
             zip_path,
             restore_env=restore_env,
             safety_backup=safety_backup,
             restart=restart,
             actor=actor,
         )
+        if not result.get("ok"):
+            # restore_backup already wrote error status when it failed mid-flight;
+            # early validate failure must still finish the status file.
+            st = read_restore_status()
+            if st.get("state") == "running":
+                _finish_restore_error(result.get("error") or "ریستور ناموفق", actor=actor)
     except Exception as e:
         _finish_restore_error(e)
 
@@ -736,10 +776,16 @@ def start_restore_async(
     with _lock:
         if _restore_thread_alive():
             return {"ok": False, "error": "یک عملیات ریستور در حال اجراست"}
-        st = read_restore_status()
+        st = resolve_stale_restore_status()
         if st.get("state") == "running":
             return {"ok": False, "error": "یک عملیات ریستور در حال اجراست"}
-        _set_restore_status(
+        if st.get("awaiting_restart"):
+            return {
+                "ok": False,
+                "error": "ریستور قبلی در انتظار راه‌اندازی مجدد است. تا پایان صبر کنید یا سرویس را دستی ری‌استارت کنید.",
+                "status": st,
+            }
+        _replace_restore_status(
             {
                 "state": "running",
                 "percent": 0,
@@ -753,6 +799,7 @@ def start_restore_async(
                 "safety_id": None,
                 "error": None,
                 "awaiting_restart": False,
+                "restart_required": False,
                 "pre_boot_id": None,
             }
         )
@@ -786,16 +833,19 @@ def restore_backup(
     """
     ok, err, manifest = validate_backup_archive(zip_path)
     if not ok or not manifest:
+        _finish_restore_error(err or "بکاپ نامعتبر", actor=actor, source=str(zip_path))
         return {"ok": False, "error": err}
 
     with _lock:
+        started = _now_iso()
         _set_restore_step(
             "validate",
             "در حال بررسی بکاپ…",
-            started_at=_now_iso(),
             actor=actor,
             source=str(zip_path),
         )
+        # Preserve true op start (do not rewrite on every step).
+        _set_restore_status({"started_at": started})
         safety_id = None
         try:
             # Keep a private copy so safety-backup pruning cannot delete the source zip.
@@ -808,7 +858,6 @@ def restore_backup(
                     _set_restore_step(
                         "safety",
                         "پشتیبان ایمنی قبل از ریستور…",
-                        started_at=_now_iso(),
                         actor=actor,
                     )
                     safety = create_backup(
@@ -849,7 +898,6 @@ def restore_backup(
                 _set_restore_step(
                     "db",
                     "بازیابی دیتابیس…",
-                    started_at=_now_iso(),
                     actor=actor,
                     safety_id=safety_id,
                     db_engine=archive_engine,
@@ -895,7 +943,6 @@ def restore_backup(
                 _set_restore_step(
                     "uploads",
                     "بازیابی فایل‌های آپلود…",
-                    started_at=_now_iso(),
                     actor=actor,
                     safety_id=safety_id,
                 )
@@ -924,8 +971,7 @@ def restore_backup(
                     _set_restore_step(
                         "env",
                         "بازیابی تنظیمات .env…",
-                        started_at=_now_iso(),
-                        actor=actor,
+                            actor=actor,
                         safety_id=safety_id,
                     )
                     env_dest = ROOT_DIR / ".env"
@@ -966,6 +1012,17 @@ def restore_backup(
                     safety_id=safety_id,
                     source=str(zip_path),
                 )
+            elif restart:
+                # Data restored but auto-restart unavailable — do not claim clean success.
+                _finish_restore_ok(
+                    "ریستور داده انجام شد؛ ریستارت خودکار ممکن نشد. "
+                    "یک‌بار روی سرور: sudo systemctl restart pgclockbot",
+                    restart_required=True,
+                    actor=actor,
+                    safety_id=safety_id,
+                    source=str(zip_path),
+                )
+                result["restart_required"] = True
             else:
                 _finish_restore_ok(
                     "ریستور موفق",
