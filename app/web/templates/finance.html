@@ -74,14 +74,16 @@
           <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}pending{% elif o.status in ['rejected','cancelled','failed'] %}rejected{% else %}neutral{% endif %}">
             {{ ord_status(o.status) }}
           </span>
-          {% if o.staff_note %}<small class="muted" style="display:block">📝 {{ o.staff_note[:60] }}</small>{% endif %}
         </td>
         <td class="col-hide-sm" data-sort-value="{{ o.payment_method or '' }}">{% if o.payment_method=='card' %}کارت{% elif o.payment_method=='wallet' %}کیف پول{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
         <td class="muted col-hide-sm" data-sort-value="{{ o.created_at }}">{{ o.created_at }}</td>
         <td class="col-actions">
+          {% set has_receipt = pay and pay.receipt_file_id and not (pay.receipt_file_id|string).startswith('stars:') %}
+          {% set can_act = (pay and pay.status == 'pending') or o.status in ['paid','awaiting_approval','pending','awaiting_receipt','rejected'] %}
+          {% if has_receipt or can_act %}
           {% call row_actions() %}
-            {% if pay and pay.receipt_file_id and not (pay.receipt_file_id|string).startswith('stars:') %}
-            <a class="btn btn-ghost btn-sm" href="/payments/{{ pay.id }}/receipt" target="_blank" rel="noopener">مشاهده رسید</a>
+            {% if has_receipt %}
+            <button type="button" class="btn btn-ghost btn-sm" data-receipt-open="/payments/{{ pay.id }}/receipt">مشاهده رسید</button>
             {% endif %}
             {% if pay and pay.status == 'pending' %}
               <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="این سفارش تأیید و محصول ارسال شود؟" data-confirm-title="تأیید سفارش" data-confirm-label="تأیید">
@@ -120,14 +122,10 @@
                 <button class="btn btn-ghost btn-sm" type="submit">لغو</button>
               </form>
             {% endif %}
-            <form method="post" action="/orders/{{ o.id }}/staff-note" class="finance-note-form">
-              <label class="form-field">
-                <span>یادداشت داخلی</span>
-                <textarea name="note" rows="2" maxlength="2000" placeholder="مثلاً کارت فلان، پیگیری…">{{ o.staff_note or '' }}</textarea>
-              </label>
-              <button class="btn btn-sm" type="submit">ذخیره یادداشت</button>
-            </form>
           {% endcall %}
+          {% else %}
+          <span class="muted">—</span>
+          {% endif %}
         </td>
       </tr>
     {% else %}
@@ -172,9 +170,9 @@
             {{ pay_status(p.status) }}
           </span>
           {% if p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:') %}
-          <a class="receipt-thumb-link" href="/payments/{{ p.id }}/receipt" target="_blank" rel="noopener" title="مشاهده رسید">
+          <button type="button" class="receipt-thumb-link" data-receipt-open="/payments/{{ p.id }}/receipt" title="مشاهده رسید">
             <img class="receipt-thumb" src="/payments/{{ p.id }}/receipt" alt="رسید" loading="lazy" />
-          </a>
+          </button>
           {% endif %}
         </td>
         <td class="col-hide-sm" data-sort-value="{{ p.order_id or 0 }}">{{ p.order_id or "—" }}</td>
@@ -182,7 +180,7 @@
           {% if p.status == 'pending' or (p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:')) %}
           {% call row_actions() %}
             {% if p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:') %}
-            <a class="btn btn-ghost btn-sm" href="/payments/{{ p.id }}/receipt" target="_blank" rel="noopener">مشاهده رسید</a>
+            <button type="button" class="btn btn-ghost btn-sm" data-receipt-open="/payments/{{ p.id }}/receipt">مشاهده رسید</button>
             {% endif %}
             {% if p.status == 'pending' %}
             <form method="post" action="/payments/{{ p.id }}/approve" data-confirm="این پرداخت تأیید شود؟ در صورت خرید، محصول هم ارسال می‌شود." data-confirm-title="تأیید پرداخت" data-confirm-label="تأیید"><button class="btn btn-ok btn-sm" type="submit">تأیید</button></form>
@@ -250,4 +248,51 @@
 {% if can_finance_settings %}
   {% include "_modal_finance_settings.html" %}
 {% endif %}
+
+<div class="ui-modal" id="modal-receipt" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel ui-modal-panel-receipt" role="dialog" aria-modal="true" aria-labelledby="receipt-modal-title">
+    <div class="ui-modal-head">
+      <h2 id="receipt-modal-title">رسید پرداخت</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="receipt-modal-body">
+      <div class="receipt-modal-frame">
+        <img id="receipt-modal-img" class="receipt-modal-img" alt="رسید پرداخت" />
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  const modal = document.getElementById('modal-receipt');
+  const img = document.getElementById('receipt-modal-img');
+  if (!modal || !img) return;
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('[data-receipt-open]');
+    if (!btn) return;
+    e.preventDefault();
+    const url = btn.getAttribute('data-receipt-open');
+    if (!url) return;
+    img.removeAttribute('src');
+    img.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
+    if (window.openModal) window.openModal('modal-receipt');
+    else {
+      modal.hidden = false;
+      modal.classList.add('open');
+    }
+  });
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal.querySelector('.ui-modal-backdrop')) {
+      img.removeAttribute('src');
+    }
+  });
+  const closer = modal.querySelector('[data-modal-close].icon-btn');
+  if (closer) {
+    closer.addEventListener('click', function () {
+      img.removeAttribute('src');
+    });
+  }
+})();
+</script>
 {% endblock %}

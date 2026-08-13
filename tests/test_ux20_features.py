@@ -149,17 +149,20 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertIn("تحویل ناموفق", html)
         self.assertIn("retry-delivery", html)
         self.assertIn('_funnel_panel.html', html)
-        self.assertIn("staff-note", html)
-        self.assertIn("finance-note-form", html)
-        self.assertIn("/payments/{{ p.id }}/receipt", html)
+        self.assertNotIn("staff-note", html)
+        self.assertNotIn("finance-note-form", html)
+        self.assertIn("data-receipt-open", html)
+        self.assertIn("modal-receipt", html)
         self.assertIn("receipt-thumb", html)
-        # Shared panel: neutral chrome + conversion / abandon blocks.
+        # Shared panel: neutral chrome + conversion / abandon blocks + icons.
         panel = Path("app/web/templates/_funnel_panel.html").read_text(encoding="utf-8")
         self.assertIn("home-panel-neutral", panel)
         self.assertNotIn("home-panel-bot", panel)
         self.assertIn("rates", panel)
         self.assertIn("abandoned_plans", panel)
         self.assertIn("پلن‌های رهاشده", panel)
+        self.assertIn("stat-ico", panel)
+        self.assertGreater(panel.count("stat-ico"), 4)
 
     def test_settings_icons_distinct(self):
         macros = Path("app/web/templates/macros.html").read_text(encoding="utf-8")
@@ -207,7 +210,7 @@ class Ux20ModelsMigrationTests(unittest.TestCase):
 
         self.assertTrue(hasattr(models.BotUser, "staff_note"))
         self.assertTrue(hasattr(models.BotUser, "risk_flags"))
-        self.assertTrue(hasattr(models.Order, "staff_note"))
+        self.assertFalse(hasattr(models.Order, "staff_note"))
         self.assertTrue(hasattr(models.UserService, "renew_nudge_sent_at"))
         self.assertTrue(hasattr(models.ResellerProfile, "capacity_warned_at"))
         self.assertTrue(hasattr(models, "DeliveryFailure"))
@@ -382,6 +385,19 @@ class ButtonStyleTests(unittest.TestCase):
         self.assertIn("style_options", settings_html)
         self.assertIn("پلن نمایندگی: PAYG", "".join(item["label"] for item in BUTTON_STYLE_CATALOG))
         self.assertNotIn("Pay As You Go", "".join(item["label"] for item in BUTTON_STYLE_CATALOG))
+        # Expanded catalog covers user/admin/reseller reply hubs.
+        ids = {item["id"] for item in BUTTON_STYLE_CATALOG}
+        for needed in (
+            "shop_kind_trial",
+            "adm_tickets",
+            "pg_stats",
+            "res_dash",
+            "loy_referral",
+            "wallet_tx",
+            "backup_create",
+        ):
+            self.assertIn(needed, ids)
+        self.assertGreaterEqual(len(BUTTON_STYLE_CATALOG), 100)
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('tab == \'colors\'', settings)
         self.assertIn("'colors'", settings)
@@ -389,14 +405,17 @@ class ButtonStyleTests(unittest.TestCase):
         preview_js = Path("app/web/templates/_tg_preview_chat_js.html").read_text(encoding="utf-8")
         self.assertIn("tab === 'colors'", preview_js)
         self.assertIn("styleTone", preview_js)
+        self.assertIn("hasOwnProperty.call(values", preview_js)
         self.assertIn('data-tone', preview_js)
         self.assertIn('.tg-key[data-tone="success"]', css)
+        self.assertIn("receipt-modal-frame", css)
         admin_py = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
         self.assertIn('_style(ui, "confirm"', admin_py)
         self.assertIn('_style(ui, "reject"', admin_py)
         self.assertNotIn('style="success"', admin_py.split("def _order_actions", 1)[1].split("\n\n", 1)[0])
         self.assertNotIn("فانل خرید", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
         self.assertIn("رفتار کاربر", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
+        self.assertNotIn("/orders/{order_id}/staff-note", Path("app/api/ux20_pages.py").read_text(encoding="utf-8"))
 
     def test_reseller_plan_kind_styles(self):
         from app.bot.keyboards import admin_plan_kind_keyboard
@@ -432,11 +451,11 @@ class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.2.0")
-        self.assertEqual(__version__, "5.2.0")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.2.1")
+        self.assertEqual(__version__, "5.2.1")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"5.2.1"', notes)
         self.assertIn('"5.2.0"', notes)
-        self.assertIn('"5.1.9"', notes)
 
 
 if __name__ == "__main__":
