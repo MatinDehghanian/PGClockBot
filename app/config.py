@@ -121,6 +121,12 @@ class Settings(BaseSettings):
     public_base_url: str = Field(default="", alias="PUBLIC_BASE_URL")
     # When 1, trust X-Forwarded-For / X-Forwarded-Proto (only behind a real reverse proxy)
     trust_proxy: bool = Field(default=False, alias="TRUST_PROXY")
+    # Number of reverse-proxy hops in front of this app that are trusted to append
+    # their own hop to X-Forwarded-For. The client IP is read from the Nth entry
+    # counted from the RIGHT (the entry appended by your own proxy), never the
+    # left-most entry (which is fully attacker-controlled). Default is a single
+    # reverse proxy (e.g. nginx) directly in front of the app.
+    trust_proxy_hops: int = Field(default=1, alias="TRUST_PROXY_HOPS")
 
     currency: str = Field(default="تومان", alias="CURRENCY")
     default_locale: str = Field(default="fa", alias="DEFAULT_LOCALE")
@@ -156,6 +162,15 @@ class Settings(BaseSettings):
             return value
         s = _clean_str(value).lower()
         return s in {"1", "true", "yes", "on"}
+
+    @field_validator("trust_proxy_hops", mode="before")
+    @classmethod
+    def parse_trust_proxy_hops(cls, value: object) -> int:
+        try:
+            n = int(str(value).strip())
+        except (TypeError, ValueError):
+            return 1
+        return max(1, min(10, n))
 
     @field_validator("pg_base_url", mode="after")
     @classmethod

@@ -193,12 +193,26 @@ SESSION_MAX_AGE = 60 * 60 * 24 * 7
 
 
 def _client_ip(request: Request) -> str:
-    # Trust X-Forwarded-For only when explicitly enabled (behind a real reverse proxy).
+    """Best-effort real client IP, resistant to X-Forwarded-For spoofing.
+
+    X-Forwarded-For is fully attacker-controlled except for the hop(s) your
+    own trusted reverse proxy appends. Reading the LEFT-most entry (the
+    classic mistake) lets any client claim to be any IP — including
+    loopback/private ranges, which would bypass login lockouts and the
+    setup-wizard local-IP auto-open gate. Instead we read the entry counted
+    from the RIGHT that corresponds to ``trust_proxy_hops`` (default: a
+    single reverse proxy directly in front of the app).
+    """
     try:
-        if get_settings().trust_proxy:
-            fwd = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
-            if fwd:
-                return fwd
+        settings = get_settings()
+        if settings.trust_proxy:
+            raw = request.headers.get("x-forwarded-for") or ""
+            parts = [p.strip() for p in raw.split(",") if p.strip()]
+            hops = max(1, int(getattr(settings, "trust_proxy_hops", 1) or 1))
+            if len(parts) >= hops:
+                candidate = parts[-hops]
+                if candidate:
+                    return candidate
     except Exception:
         pass
     if request.client and request.client.host:
