@@ -23,8 +23,83 @@ _EMPTY_FUNNEL = {
     "pay_start": 0,
     "receipt": 0,
     "delivered": 0,
+    "rates": {},
+    "abandoned_plans": [],
 }
 _EMPTY_ACTION_CENTER = {"items": [], "has_items": False}
+
+
+async def _payg_risk_strip(session: AsyncSession) -> dict:
+    """Platform-admin strip: suspended + low-balance PAYG resellers."""
+    from app.db.models import ResellerProfile
+    from app.services.billing import (
+        BILLING_MODE_PAYG,
+        get_low_balance_threshold,
+        payg_available_balance,
+    )
+
+    out: dict = {
+        "suspended": [],
+        "low": [],
+        "threshold": 0,
+        "has_items": False,
+    }
+    try:
+        threshold = await get_low_balance_threshold(session)
+    except Exception:
+        threshold = 0
+    out["threshold"] = int(threshold or 0)
+    try:
+        profiles = list(
+            (
+                await session.execute(
+                    select(ResellerProfile).where(
+                        ResellerProfile.is_active.is_(True),
+                        ResellerProfile.billing_mode == BILLING_MODE_PAYG,
+                    )
+                )
+            ).scalars().all()
+        )
+    except Exception:
+        logger.exception("payg risk: list profiles failed")
+        return out
+
+    user_ids = [int(p.user_id) for p in profiles if p.user_id]
+    users = {}
+    if user_ids:
+        users = {
+            int(u.id): u
+            for u in (
+                await session.execute(select(BotUser).where(BotUser.id.in_(user_ids)))
+            ).scalars().all()
+        }
+
+    for profile in profiles:
+        uid = int(profile.user_id)
+        user = users.get(uid)
+        label = (
+            (user.full_name or user.username or str(uid)) if user else str(uid)
+        )
+        item = {"user_id": uid, "label": label, "balance": 0}
+        if getattr(profile, "billing_suspended_at", None):
+            try:
+                item["balance"] = await payg_available_balance(session, profile)
+            except Exception:
+                item["balance"] = int(getattr(profile, "billing_balance", 0) or 0)
+            out["suspended"].append(item)
+            continue
+        try:
+            bal = await payg_available_balance(session, profile)
+        except Exception:
+            bal = int(getattr(profile, "billing_balance", 0) or 0)
+        item["balance"] = bal
+        if out["threshold"] > 0 and bal <= out["threshold"]:
+            out["low"].append(item)
+
+    out["suspended"].sort(key=lambda x: x["balance"])
+    out["low"].sort(key=lambda x: x["balance"])
+    out["has_items"] = bool(out["suspended"] or out["low"])
+    return out
 
 
 async def _safe_funnel(session: AsyncSession, *, reseller_id: int | None):
@@ -173,6 +248,11 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 if funnel_enabled
                 else dict(_EMPTY_FUNNEL)
             )
+            try:
+                payg_risk = await _payg_risk_strip(session)
+            except Exception:
+                logger.exception("payg risk strip failed")
+                payg_risk = {"suspended": [], "low": [], "threshold": 0, "has_items": False}
             return render(
                 request,
                 "home.html",
@@ -186,6 +266,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "shop_maintenance": on(ui.get("shop_maintenance_enabled")),
                     "funnel_enabled": funnel_enabled,
                     "funnel": funnel,
+                    "payg_risk": payg_risk,
                 },
             )
 

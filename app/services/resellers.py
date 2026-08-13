@@ -313,7 +313,7 @@ def normalize_reseller_billing_mode(raw: str | None) -> str:
 def reseller_billing_mode_label(mode: str | None) -> str:
     from app.services.billing import BILLING_MODE_PAYG
 
-    return "Pay As You Go" if normalize_reseller_billing_mode(mode) == BILLING_MODE_PAYG else "ثابت (کمیسیون)"
+    return "PAYG" if normalize_reseller_billing_mode(mode) == BILLING_MODE_PAYG else "ثابت (کمیسیون)"
 
 
 def reseller_plan_mode_of(plan: ResellerPlan | None) -> str:
@@ -761,7 +761,7 @@ def format_credentials_message(creds: dict) -> str:
         lines.append(f"📦 <b>پلن</b>\n{plan_name}")
         lines.append("")
     if billing == "payg":
-        lines.append("💳 <b>نوع</b>\nPay As You Go")
+        lines.append("💳 <b>نوع</b>\nPAYG")
     else:
         lines.append(f"💰 <b>کمیسیون</b>\n{commission}٪")
     lines.append("")

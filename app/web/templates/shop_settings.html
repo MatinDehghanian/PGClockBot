@@ -11,7 +11,7 @@
 
 {{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path) }}
 
-<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance'] %}has-preview{% endif %}">
+<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','colors'] %}has-preview{% endif %}">
   <div class="settings-main">
 
   {% if tab == 'notifications' %}
@@ -148,7 +148,7 @@
 
   {% if tab == 'appearance' %}
   {% include "_tg_preview_appearance.html" %}
-  {% elif tab in ['menu','welcome','messages','buttons','qr'] %}
+  {% elif tab in ['menu','welcome','messages','buttons','qr','colors'] %}
   {% include "_tg_preview_chat.html" %}
   {% endif %}
 </div>
@@ -156,7 +156,7 @@
 {% if tab == 'appearance' %}
 {% include "_tg_preview_appearance_js.html" %}
 {% endif %}
-{% if tab in ['menu','welcome','messages','buttons','qr'] %}
+{% if tab in ['menu','welcome','messages','buttons','qr','colors'] %}
 {% include "_tg_preview_chat_js.html" %}
 {% endif %}
 {% if tab == 'menu' %}

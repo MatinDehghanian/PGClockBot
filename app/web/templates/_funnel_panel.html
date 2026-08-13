@@ -1,0 +1,74 @@
+{# Shared «رفتار کاربر» panel — expects funnel dict from funnel_summary.
+   Optional: funnel_details_href, funnel_show_abandon (default true on finance). #}
+{% set funnel = funnel or {} %}
+{% set rates = funnel.get('rates') or {} %}
+{% set abandon = funnel.get('abandoned_plans') or [] %}
+{% set show_abandon = funnel_show_abandon if funnel_show_abandon is defined else false %}
+<section class="home-panel home-panel-neutral{% if funnel_extra_class %} {{ funnel_extra_class }}{% endif %}">
+  <div class="home-panel-head">
+    <div class="home-panel-title">
+      <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+      <h2 class="home-panel-h">رفتار کاربر</h2>
+    </div>
+    {% if funnel_details_href %}
+    <div class="home-panel-actions">
+      <a class="btn btn-sm btn-ghost" href="{{ funnel_details_href }}">جزئیات</a>
+    </div>
+    {% endif %}
+  </div>
+  <p class="muted funnel-panel-caption">
+    ۷ روز اخیر — از باز کردن فروشگاه تا تحویل
+    {% if rates.get('overall') is not none %}
+    · تبدیل کل <b dir="ltr">{{ rates.get('overall') }}٪</b>
+    {% endif %}
+  </p>
+  <div class="home-panel-grid">
+    <div class="stat">
+      <div class="stat-top"><span>فروشگاه</span></div>
+      <strong>{{ funnel.get('shop_open', 0) | num }}</strong>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>پلن</span></div>
+      <strong>{{ funnel.get('plan_view', 0) | num }}</strong>
+      {% if rates.get('plan_view') is not none %}<small class="muted">{{ rates.get('plan_view') }}٪ از فروشگاه</small>{% endif %}
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>پرداخت</span></div>
+      <strong>{{ funnel.get('pay_start', 0) | num }}</strong>
+      {% if rates.get('pay_start') is not none %}<small class="muted">{{ rates.get('pay_start') }}٪ از پلن</small>{% endif %}
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>رسید</span></div>
+      <strong>{{ funnel.get('receipt', 0) | num }}</strong>
+      {% if rates.get('receipt') is not none %}<small class="muted">{{ rates.get('receipt') }}٪ از پرداخت</small>{% endif %}
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>تحویل</span></div>
+      <strong>{{ funnel.get('delivered', 0) | num }}</strong>
+      {% if rates.get('delivered') is not none %}<small class="muted">{{ rates.get('delivered') }}٪ از رسید</small>{% endif %}
+    </div>
+  </div>
+  {% if show_abandon and abandon %}
+  <div class="funnel-abandon">
+    <div class="funnel-abandon-head">
+      <span class="funnel-abandon-title">پلن‌های رهاشده</span>
+      <span class="muted">بازدید بدون شروع پرداخت</span>
+    </div>
+    <ul class="funnel-abandon-list">
+      {% for row in abandon %}
+      <li>
+        <span class="funnel-abandon-name">{{ row.name }}</span>
+        <span class="funnel-abandon-meta muted">
+          <span dir="ltr">{{ row.views | num }}</span> بازدید
+          ·
+          <span dir="ltr">{{ row.pays | num }}</span> پرداخت
+          {% if row.conv_pct is not none %}
+          · <b dir="ltr">{{ row.conv_pct }}٪</b>
+          {% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</section>

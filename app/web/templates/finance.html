@@ -34,38 +34,8 @@
 </nav>
 
 {% if finance_tab == 'behavior' and (can_orders or can_payments) %}
-{% set funnel = funnel or {} %}
-<section class="home-panel home-panel-neutral">
-  <div class="home-panel-head">
-    <div class="home-panel-title">
-      <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
-      <h2 class="home-panel-h">رفتار کاربر</h2>
-    </div>
-  </div>
-  <p class="muted" style="margin:0 0 var(--space-2);font-size:12px">۷ روز اخیر — از باز کردن فروشگاه تا تحویل</p>
-  <div class="home-panel-grid">
-    <div class="stat">
-      <div class="stat-top"><span>فروشگاه</span></div>
-      <strong>{{ funnel.get('shop_open', 0) | num }}</strong>
-    </div>
-    <div class="stat">
-      <div class="stat-top"><span>پلن</span></div>
-      <strong>{{ funnel.get('plan_view', 0) | num }}</strong>
-    </div>
-    <div class="stat">
-      <div class="stat-top"><span>پرداخت</span></div>
-      <strong>{{ funnel.get('pay_start', 0) | num }}</strong>
-    </div>
-    <div class="stat">
-      <div class="stat-top"><span>رسید</span></div>
-      <strong>{{ funnel.get('receipt', 0) | num }}</strong>
-    </div>
-    <div class="stat">
-      <div class="stat-top"><span>تحویل</span></div>
-      <strong>{{ funnel.get('delivered', 0) | num }}</strong>
-    </div>
-  </div>
-</section>
+{% set funnel_show_abandon = true %}
+{% include "_funnel_panel.html" %}
 
 {% elif finance_tab == 'orders' and can_orders %}
 <div class="card card-flush">
@@ -109,10 +79,11 @@
         <td class="col-hide-sm" data-sort-value="{{ o.payment_method or '' }}">{% if o.payment_method=='card' %}کارت{% elif o.payment_method=='wallet' %}کیف پول{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
         <td class="muted col-hide-sm" data-sort-value="{{ o.created_at }}">{{ o.created_at }}</td>
         <td class="col-actions">
-          {% if o.status in ['delivered', 'cancelled'] %}
-            <span class="muted">{% if o.status == 'delivered' %}تحویل{% else %}—{% endif %}</span>
-          {% elif pay and pay.status == 'pending' %}
-            {% call row_actions() %}
+          {% call row_actions() %}
+            {% if pay and pay.receipt_file_id and not (pay.receipt_file_id|string).startswith('stars:') %}
+            <a class="btn btn-ghost btn-sm" href="/payments/{{ pay.id }}/receipt" target="_blank" rel="noopener">مشاهده رسید</a>
+            {% endif %}
+            {% if pay and pay.status == 'pending' %}
               <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="این سفارش تأیید و محصول ارسال شود؟" data-confirm-title="تأیید سفارش" data-confirm-label="تأیید">
                 <button class="btn btn-ok btn-sm" type="submit">تأیید</button>
               </form>
@@ -122,9 +93,7 @@
               <form method="post" action="/orders/{{ o.id }}/cancel" data-confirm="این سفارش لغو شود؟" data-confirm-title="لغو سفارش" data-confirm-warn="1" data-confirm-label="لغو">
                 <button class="btn btn-ghost btn-sm" type="submit">لغو</button>
               </form>
-            {% endcall %}
-          {% elif o.status in ['paid','awaiting_approval'] %}
-            {% call row_actions() %}
+            {% elif o.status in ['paid','awaiting_approval'] %}
               <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="سفارش تأیید و تحویل شود؟" data-confirm-title="تأیید و تحویل" data-confirm-label="تأیید و تحویل">
                 <button class="btn btn-ok btn-sm" type="submit">تأیید و تحویل</button>
               </form>
@@ -136,9 +105,7 @@
                 <button class="btn btn-ghost btn-sm" type="submit">لغو</button>
               </form>
               {% endif %}
-            {% endcall %}
-          {% elif o.status in ['pending','awaiting_receipt'] %}
-            {% call row_actions() %}
+            {% elif o.status in ['pending','awaiting_receipt'] %}
               <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="بدون رسید تأیید و سرویس برای کاربر ارسال شود؟" data-confirm-title="تأیید سفارش" data-confirm-label="تأیید">
                 <button class="btn btn-ok btn-sm" type="submit">تأیید</button>
               </form>
@@ -148,16 +115,19 @@
               <form method="post" action="/orders/{{ o.id }}/cancel" data-confirm="این سفارش لغو شود؟" data-confirm-title="لغو سفارش" data-confirm-warn="1" data-confirm-label="لغو">
                 <button class="btn btn-ghost btn-sm" type="submit">لغو</button>
               </form>
-            {% endcall %}
-          {% elif o.status == 'rejected' %}
-            {% call row_actions() %}
+            {% elif o.status == 'rejected' %}
               <form method="post" action="/orders/{{ o.id }}/cancel" data-confirm="این سفارش لغو شود؟" data-confirm-title="لغو سفارش" data-confirm-warn="1" data-confirm-label="لغو">
                 <button class="btn btn-ghost btn-sm" type="submit">لغو</button>
               </form>
-            {% endcall %}
-          {% else %}
-            <span class="muted">—</span>
-          {% endif %}
+            {% endif %}
+            <form method="post" action="/orders/{{ o.id }}/staff-note" class="finance-note-form">
+              <label class="form-field">
+                <span>یادداشت داخلی</span>
+                <textarea name="note" rows="2" maxlength="2000" placeholder="مثلاً کارت فلان، پیگیری…">{{ o.staff_note or '' }}</textarea>
+              </label>
+              <button class="btn btn-sm" type="submit">ذخیره یادداشت</button>
+            </form>
+          {% endcall %}
         </td>
       </tr>
     {% else %}
@@ -201,15 +171,25 @@
           <span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}approved{% else %}rejected{% endif %}">
             {{ pay_status(p.status) }}
           </span>
+          {% if p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:') %}
+          <a class="receipt-thumb-link" href="/payments/{{ p.id }}/receipt" target="_blank" rel="noopener" title="مشاهده رسید">
+            <img class="receipt-thumb" src="/payments/{{ p.id }}/receipt" alt="رسید" loading="lazy" />
+          </a>
+          {% endif %}
         </td>
         <td class="col-hide-sm" data-sort-value="{{ p.order_id or 0 }}">{{ p.order_id or "—" }}</td>
         <td class="col-actions">
-          {% if p.status == 'pending' %}
+          {% if p.status == 'pending' or (p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:')) %}
           {% call row_actions() %}
+            {% if p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:') %}
+            <a class="btn btn-ghost btn-sm" href="/payments/{{ p.id }}/receipt" target="_blank" rel="noopener">مشاهده رسید</a>
+            {% endif %}
+            {% if p.status == 'pending' %}
             <form method="post" action="/payments/{{ p.id }}/approve" data-confirm="این پرداخت تأیید شود؟ در صورت خرید، محصول هم ارسال می‌شود." data-confirm-title="تأیید پرداخت" data-confirm-label="تأیید"><button class="btn btn-ok btn-sm" type="submit">تأیید</button></form>
             <form method="post" action="/payments/{{ p.id }}/reject" data-confirm="این پرداخت رد شود؟" data-confirm-title="رد پرداخت" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-danger btn-sm" type="submit">رد</button></form>
+            {% endif %}
           {% endcall %}
-          {% if (receipt_matches or {}).get(p.id) %}
+          {% if p.status == 'pending' and (receipt_matches or {}).get(p.id) %}
           <small class="muted" style="display:block;margin-top:4px">هم‌مبلغ: {% for m in receipt_matches[p.id][:3] %}#{{ m.id }}{% if not loop.last %}، {% endif %}{% endfor %}</small>
           {% endif %}
           {% else %}

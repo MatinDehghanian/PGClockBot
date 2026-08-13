@@ -40,6 +40,28 @@
   </div>
   {% endif %}
 
+  {% set pr = payg_risk or {} %}
+  {% if pr.has_items %}
+    {% if pr.suspended %}
+    <div class="flash err home-update-banner">
+      <div class="home-update-copy">
+        <strong>{{ pr.suspended|length }} نماینده PAYG مسدود</strong>
+        <span class="muted">{% for r in pr.suspended[:3] %}{{ r.label }}{% if not loop.last %}، {% endif %}{% endfor %}{% if pr.suspended|length > 3 %}…{% endif %}</span>
+      </div>
+      <a class="btn btn-sm btn-ghost" href="/resellers">نمایندگان</a>
+    </div>
+    {% endif %}
+    {% if pr.low %}
+    <div class="flash warn home-update-banner">
+      <div class="home-update-copy">
+        <strong>{{ pr.low|length }} نماینده PAYG با موجودی پایین</strong>
+        <span class="muted">آستانه {{ pr.threshold | num }} — {% for r in pr.low[:3] %}{{ r.label }} ({{ r.balance | num }}){% if not loop.last %}، {% endif %}{% endfor %}{% if pr.low|length > 3 %}…{% endif %}</span>
+      </div>
+      <a class="btn btn-sm btn-ghost" href="/resellers">نمایندگان</a>
+    </div>
+    {% endif %}
+  {% endif %}
+
   {% set ac = action_center or {} %}
   {% if ac.has_items %}
   <div class="card home-action-card">
@@ -315,41 +337,9 @@
   </div>
 
   {% if funnel_enabled %}
-  {% set funnel = funnel or {} %}
-  <section class="home-panel home-panel-neutral" style="margin-top: var(--section-gap)">
-    <div class="home-panel-head">
-      <div class="home-panel-title">
-        <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
-        <h2 class="home-panel-h">رفتار کاربر</h2>
-      </div>
-      <div class="home-panel-actions">
-        <a class="btn btn-sm btn-ghost" href="/finance?tab=behavior">جزئیات</a>
-      </div>
-    </div>
-    <p class="muted" style="margin:0 0 var(--space-2);font-size:12px">۷ روز اخیر — از باز کردن فروشگاه تا تحویل</p>
-    <div class="home-panel-grid">
-      <div class="stat">
-        <div class="stat-top"><span>فروشگاه</span></div>
-        <strong>{{ funnel.get('shop_open', 0) | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top"><span>پلن</span></div>
-        <strong>{{ funnel.get('plan_view', 0) | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top"><span>پرداخت</span></div>
-        <strong>{{ funnel.get('pay_start', 0) | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top"><span>رسید</span></div>
-        <strong>{{ funnel.get('receipt', 0) | num }}</strong>
-      </div>
-      <div class="stat">
-        <div class="stat-top"><span>تحویل</span></div>
-        <strong>{{ funnel.get('delivered', 0) | num }}</strong>
-      </div>
-    </div>
-  </section>
+  {% set funnel_details_href = '/finance?tab=behavior' %}
+  {% set funnel_extra_class = 'funnel-panel-home' %}
+  {% include "_funnel_panel.html" %}
   {% endif %}
 </div>
 

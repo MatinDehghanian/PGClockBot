@@ -52,8 +52,15 @@
   function esc(s){
     return String(s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
   }
-  function btn(label){
-    return '<button type="button" class="tg-key">'+esc(label)+'</button>';
+  function styleTone(id, fallback){
+    const raw = val('btn_style_' + id, values['btn_style_' + id] || fallback || '');
+    const t = String(raw || '').trim().toLowerCase();
+    if (t === 'primary' || t === 'success' || t === 'danger') return t;
+    return 'default';
+  }
+  function btn(label, tone){
+    const t = tone || 'default';
+    return '<button type="button" class="tg-key" data-tone="'+esc(t)+'">'+esc(label)+'</button>';
   }
   function menuOrder(){
     const mo = document.getElementById('menu_order');
@@ -81,24 +88,31 @@
       .replaceAll('{holder}','نام دارنده')
       .replaceAll('{url}','https://example.com/sub/demo');
   }
-  function renderReplyKeys(labels, opts){
+  function renderReplyKeys(items, opts){
     if (!keysEl) return;
     opts = opts || {};
+    // items: string[] or {label,tone}[]
+    const norm = (items || []).map(function(it){
+      if (typeof it === 'string') return {label: it, tone: 'default'};
+      return {label: it.label, tone: it.tone || 'default'};
+    }).filter(function(it){ return it.label; });
     const home = val('btn_menu_home', values.btn_menu_home || '🏠 منوی اصلی');
     const back = val('btn_back', values.btn_back || '⬅️ بازگشت');
+    const homeTone = styleTone('home', '');
+    const backTone = styleTone('back', '');
     const compact = menuLayout() === 'compact';
     let html = '';
     if (compact) {
-      for (let i=0;i<labels.length;i+=2){
-        html += '<div class="tg-key-row">'+btn(labels[i])+(labels[i+1]?btn(labels[i+1]):'')+'</div>';
+      for (let i=0;i<norm.length;i+=2){
+        html += '<div class="tg-key-row">'+btn(norm[i].label, norm[i].tone)+(norm[i+1]?btn(norm[i+1].label, norm[i+1].tone):'')+'</div>';
       }
     } else {
-      html = labels.map(l => '<div class="tg-key-row">'+btn(l)+'</div>').join('');
+      html = norm.map(function(it){ return '<div class="tg-key-row">'+btn(it.label, it.tone)+'</div>'; }).join('');
     }
     if (opts.submenu) {
-      html += '<div class="tg-key-row tg-key-nav">'+btn(back)+btn(home)+'</div>';
+      html += '<div class="tg-key-row tg-key-nav">'+btn(back, backTone)+btn(home, homeTone)+'</div>';
     } else if (home) {
-      html += '<div class="tg-key-row tg-key-home">'+btn(home)+'</div>';
+      html += '<div class="tg-key-row tg-key-home">'+btn(home, homeTone)+'</div>';
     }
     keysEl.innerHTML = html;
   }
@@ -140,6 +154,11 @@
       }
       if (qrCap) qrCap.textContent = cap;
       applyQrBackground();
+    } else if (tab === 'colors') {
+      text = 'پیش‌نمایش رنگ دکمه‌های منوی اصلی و سراسری.\nبا تغییر منوی هر دکمه، رنگ کیبورد همین‌جا عوض می‌شود.';
+      showKeys = true;
+      const hint = document.getElementById('pv-hint');
+      if (hint) hint.textContent = 'پیش‌نمایش زنده رنگ دکمه‌ها — سفید / آبی / سبز / قرمز مطابق تلگرام.';
     }
     if (showKeys) {
       const order = menuOrder();
@@ -163,10 +182,28 @@
         map.reseller_apply = val('btn_reseller_apply', map.reseller_apply);
         map.miniapp = val('btn_miniapp', map.miniapp);
       }
-  // miniapp is WebApp (inline only) — skip on reply keyboard preview
-  // Static menus/submenus → reply keyboard; dynamic entity lists stay inline under messages.
-  const labels = order.filter(k => k !== 'miniapp').map(k => map[k]).filter(Boolean);
-  renderReplyKeys(labels);
+      // miniapp is WebApp (inline only) — skip on reply keyboard preview
+      // Static menus/submenus → reply keyboard; dynamic entity lists stay inline under messages.
+      const styleMap = {
+        shop: 'shop',
+        services: 'services',
+        wallet: 'wallet',
+        support: 'support',
+        loyalty: 'loyalty',
+        referral: 'loyalty',
+        reseller_apply: 'reseller_apply',
+      };
+      const defaults = {
+        shop: 'primary', services: 'primary', wallet: 'primary',
+        support: 'primary', loyalty: 'success', reseller_apply: '',
+      };
+      const labels = order.filter(k => k !== 'miniapp').map(function(k){
+        const label = map[k];
+        if (!label) return null;
+        const sid = styleMap[k] || k;
+        return {label: label, tone: styleTone(sid, defaults[sid] || '')};
+      }).filter(Boolean);
+      renderReplyKeys(labels);
     } else if (keysEl) {
       keysEl.innerHTML = '';
     }

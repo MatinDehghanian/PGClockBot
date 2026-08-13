@@ -101,9 +101,13 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertIn("مرکز اقدام امروز", home)
         self.assertIn("home-pg-health", home)
         self.assertIn('href="/tools"', home)
-        self.assertIn("رفتار کاربر", home)
-        self.assertIn("home-panel-neutral", home)
+        self.assertIn('_funnel_panel.html', home)
         self.assertIn("funnel_enabled", home)
+        self.assertIn("payg_risk", home)
+        self.assertIn("نماینده PAYG", home)
+        panel = Path("app/web/templates/_funnel_panel.html").read_text(encoding="utf-8")
+        self.assertIn("رفتار کاربر", panel)
+        self.assertIn("home-panel-neutral", panel)
 
     def test_pg_home_has_quick_open_in_stats_box(self):
         html = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
@@ -141,17 +145,21 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
 
     def test_finance_behavior_tab(self):
         html = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
-        self.assertIn("رفتار کاربر", html)
         self.assertIn("finance?tab=behavior", html)
         self.assertIn("تحویل ناموفق", html)
         self.assertIn("retry-delivery", html)
-        # Behavior box must be neutral (not bot orange / pg blue).
-        marker = '<h2 class="home-panel-h">رفتار کاربر</h2>'
-        behavior_at = html.find(marker)
-        self.assertGreater(behavior_at, -1)
-        panel_slice = html[max(0, behavior_at - 500) : behavior_at]
-        self.assertIn("home-panel-neutral", panel_slice)
-        self.assertNotIn("home-panel-bot", panel_slice)
+        self.assertIn('_funnel_panel.html', html)
+        self.assertIn("staff-note", html)
+        self.assertIn("finance-note-form", html)
+        self.assertIn("/payments/{{ p.id }}/receipt", html)
+        self.assertIn("receipt-thumb", html)
+        # Shared panel: neutral chrome + conversion / abandon blocks.
+        panel = Path("app/web/templates/_funnel_panel.html").read_text(encoding="utf-8")
+        self.assertIn("home-panel-neutral", panel)
+        self.assertNotIn("home-panel-bot", panel)
+        self.assertIn("rates", panel)
+        self.assertIn("abandoned_plans", panel)
+        self.assertIn("پلن‌های رهاشده", panel)
 
     def test_settings_icons_distinct(self):
         macros = Path("app/web/templates/macros.html").read_text(encoding="utf-8")
@@ -376,6 +384,17 @@ class ButtonStyleTests(unittest.TestCase):
         self.assertNotIn("Pay As You Go", "".join(item["label"] for item in BUTTON_STYLE_CATALOG))
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('tab == \'colors\'', settings)
+        self.assertIn("'colors'", settings)
+        self.assertIn("has-preview", settings)
+        preview_js = Path("app/web/templates/_tg_preview_chat_js.html").read_text(encoding="utf-8")
+        self.assertIn("tab === 'colors'", preview_js)
+        self.assertIn("styleTone", preview_js)
+        self.assertIn('data-tone', preview_js)
+        self.assertIn('.tg-key[data-tone="success"]', css)
+        admin_py = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
+        self.assertIn('_style(ui, "confirm"', admin_py)
+        self.assertIn('_style(ui, "reject"', admin_py)
+        self.assertNotIn('style="success"', admin_py.split("def _order_actions", 1)[1].split("\n\n", 1)[0])
         self.assertNotIn("فانل خرید", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
         self.assertIn("رفتار کاربر", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
 
@@ -413,11 +432,11 @@ class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.1.9")
-        self.assertEqual(__version__, "5.1.9")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.2.0")
+        self.assertEqual(__version__, "5.2.0")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"5.2.0"', notes)
         self.assertIn('"5.1.9"', notes)
-        self.assertIn('"5.1.8"', notes)
 
 
 if __name__ == "__main__":

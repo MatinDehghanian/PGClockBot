@@ -26,9 +26,9 @@ class CredentialsMessageV412Tests(unittest.TestCase):
             }
         )
         self.assertIn("طلایی PAYG", text)
-        self.assertIn("Pay As You Go", text)
+        self.assertIn("PAYG", text)
         plan_idx = text.find("طلایی PAYG")
-        type_idx = text.find("Pay As You Go")
+        type_idx = text.find("PAYG")
         self.assertLess(plan_idx, type_idx)
         self.assertIn("<b>ورود یکپارچه</b>", text)
         self.assertIn("<b>آدرس وب‌پنل</b>", text)

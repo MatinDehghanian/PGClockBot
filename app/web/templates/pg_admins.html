@@ -378,7 +378,7 @@
             <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }} / گیگ{% elif p.commission_percent is not none %} · کمیسیون {{ p.commission_percent }}٪{% endif %}</option>
             {% endfor %}
           </select>
-          <small class="muted">ثابت یا Pay As You Go — حالت پرداخت و نرخ از همین پلن می‌آید</small>
+          <small class="muted">ثابت یا PAYG — حالت پرداخت و نرخ از همین پلن می‌آید</small>
         </label>
         <div class="ui-switch-section">
           <span class="ui-switch-section-title">سطح دسترسی پنل ربات (وب = بات)</span>

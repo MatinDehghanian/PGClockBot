@@ -896,7 +896,7 @@ SETTING_GROUPS = {
             "billing_enabled",
             "فعال‌سازی PAYG",
             "toggle",
-            "فقط روی نمایندگان Pay As You Go اثر دارد؛ Fixed دست‌نخورده می‌ماند",
+            "فقط روی نمایندگان PAYG اثر دارد؛ Fixed دست‌نخورده می‌ماند",
         ),
         (
             "billing_low_balance",

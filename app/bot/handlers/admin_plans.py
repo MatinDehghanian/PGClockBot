@@ -414,7 +414,7 @@ async def send_reseller_plans_list(
 ) -> None:
     all_plans = await list_reseller_plans(session)
     plans = [p for p in all_plans if reseller_plan_mode_of(p) == kind]
-    label = "Pay As You Go" if kind == "payg" else "ثابت (کمیسیون)"
+    label = "PAYG" if kind == "payg" else "ثابت (کمیسیون)"
     if not plans:
         body = "هنوز پلنی در این دسته نیست."
     else:
@@ -476,7 +476,7 @@ async def open_add_kind_action(
         )
         return
     if audience == "resellers" and kind in {"fixed", "payg"}:
-        label = "Pay As You Go" if kind == "payg" else "ثابت (کمیسیون)"
+        label = "PAYG" if kind == "payg" else "ثابت (کمیسیون)"
         await state.set_state(AdminPlansStates.res_plan_name)
         await state.update_data(res_plan_mode=kind)
         await message.answer(
@@ -515,7 +515,7 @@ async def _rerender_plans_screen(
     elif aud == "resellers" and kind in {"fixed", "payg"}:
         all_plans = await list_reseller_plans(session)
         plans = [p for p in all_plans if reseller_plan_mode_of(p) == kind]
-        label = "Pay As You Go" if kind == "payg" else "ثابت (کمیسیون)"
+        label = "PAYG" if kind == "payg" else "ثابت (کمیسیون)"
         body = (
             "هنوز پلنی در این دسته نیست."
             if not plans
@@ -1834,7 +1834,7 @@ async def _show_resplan_add_groups(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     selected = [int(x) for x in (data.get("res_plan_groups") or [])]
     mode = data.get("res_plan_mode") or "fixed"
-    label = "Pay As You Go" if mode == "payg" else "ثابت (کمیسیون)"
+    label = "PAYG" if mode == "payg" else "ثابت (کمیسیون)"
     try:
         groups = await get_pg().get_groups_simple()
     except Exception:

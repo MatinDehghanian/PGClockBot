@@ -39,7 +39,7 @@
         <label class="form-field">حالت پرداخت
           <select name="billing_mode" class="select-block">
             <option value="fixed" {% if (profile.billing_mode or 'fixed') == 'fixed' %}selected{% endif %}>ثابت (کمیسیون)</option>
-            <option value="payg" {% if profile.billing_mode == 'payg' %}selected{% endif %}>Pay As You Go</option>
+            <option value="payg" {% if profile.billing_mode == 'payg' %}selected{% endif %}>PAYG</option>
           </select>
         </label>
       </div>

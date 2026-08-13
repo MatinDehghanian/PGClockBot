@@ -561,9 +561,16 @@ async def record_funnel_event(
         await session.rollback()
 
 
+def _funnel_pct(num: int, den: int) -> int | None:
+    if den <= 0:
+        return None
+    return int(round(100.0 * max(0, num) / den))
+
+
 async def funnel_summary(
     session: AsyncSession, *, reseller_id: int | None = None, days: int = 7
-) -> dict[str, int]:
+) -> dict[str, Any]:
+    """Step counts + conversion rates + top abandoned plans (7d default)."""
     since = _utcnow() - timedelta(days=max(1, min(90, days)))
     q = select(FunnelEvent.step, func.count()).where(FunnelEvent.created_at >= since)
     if reseller_id is None:
@@ -572,12 +579,12 @@ async def funnel_summary(
         q = q.where(FunnelEvent.reseller_id == int(reseller_id))
     q = q.group_by(FunnelEvent.step)
     rows = (await session.execute(q)).all()
-    out = {s: 0 for s in FUNNEL_STEPS}
+    out: dict[str, Any] = {s: 0 for s in FUNNEL_STEPS}
     for step, cnt in rows:
         if step in out:
             out[step] = int(cnt or 0)
     # Fallback derive from orders when funnel empty
-    if not any(out.values()):
+    if not any(out[s] for s in FUNNEL_STEPS):
         oq = select(Order.status, func.count()).where(Order.created_at >= since)
         if reseller_id is None:
             oq = oq.where(Order.reseller_id.is_(None))
@@ -604,6 +611,92 @@ async def funnel_summary(
                 out["receipt"] += n
             if st == OrderStatus.DELIVERED.value:
                 out["delivered"] += n
+
+    shop = int(out["shop_open"] or 0)
+    plan = int(out["plan_view"] or 0)
+    pay = int(out["pay_start"] or 0)
+    receipt = int(out["receipt"] or 0)
+    delivered = int(out["delivered"] or 0)
+    # Step rate vs previous; overall = delivered / shop_open (or pay_start if shop empty)
+    base = shop or pay or 0
+    out["rates"] = {
+        "plan_view": _funnel_pct(plan, shop) if shop else None,
+        "pay_start": _funnel_pct(pay, plan or shop) if (plan or shop) else None,
+        "receipt": _funnel_pct(receipt, pay) if pay else None,
+        "delivered": _funnel_pct(delivered, receipt or pay) if (receipt or pay) else None,
+        "overall": _funnel_pct(delivered, base) if base else None,
+    }
+    out["abandoned_plans"] = await _abandoned_plans(
+        session, reseller_id=reseller_id, since=since
+    )
+    return out
+
+
+async def _abandoned_plans(
+    session: AsyncSession,
+    *,
+    reseller_id: int | None,
+    since: datetime,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    """Plans with the largest gap between plan_view and pay_start."""
+    def _scope(q):
+        if reseller_id is None:
+            return q.where(FunnelEvent.reseller_id.is_(None))
+        return q.where(FunnelEvent.reseller_id == int(reseller_id))
+
+    views_q = (
+        select(FunnelEvent.plan_id, func.count())
+        .where(
+            FunnelEvent.created_at >= since,
+            FunnelEvent.step == "plan_view",
+            FunnelEvent.plan_id.is_not(None),
+        )
+        .group_by(FunnelEvent.plan_id)
+    )
+    pays_q = (
+        select(FunnelEvent.plan_id, func.count())
+        .where(
+            FunnelEvent.created_at >= since,
+            FunnelEvent.step == "pay_start",
+            FunnelEvent.plan_id.is_not(None),
+        )
+        .group_by(FunnelEvent.plan_id)
+    )
+    views = {int(pid): int(n or 0) for pid, n in (await session.execute(_scope(views_q))).all() if pid}
+    pays = {int(pid): int(n or 0) for pid, n in (await session.execute(_scope(pays_q))).all() if pid}
+    if not views:
+        return []
+    ranked: list[tuple[int, int, int, int]] = []
+    for pid, v in views.items():
+        p = pays.get(pid, 0)
+        drop = max(0, v - p)
+        if drop <= 0 and p >= v:
+            continue
+        ranked.append((drop, v, p, pid))
+    ranked.sort(key=lambda t: (-t[0], -t[1], t[3]))
+    top = ranked[: max(1, min(10, limit))]
+    if not top:
+        return []
+    plan_ids = [pid for *_rest, pid in top]
+    names = {
+        int(p.id): (p.name or f"#{p.id}")
+        for p in (
+            await session.execute(select(Plan).where(Plan.id.in_(plan_ids)))
+        ).scalars().all()
+    }
+    out: list[dict[str, Any]] = []
+    for drop, v, p, pid in top:
+        out.append(
+            {
+                "plan_id": pid,
+                "name": names.get(pid, f"#{pid}"),
+                "views": v,
+                "pays": p,
+                "drop": drop,
+                "conv_pct": _funnel_pct(p, v),
+            }
+        )
     return out
 
 
