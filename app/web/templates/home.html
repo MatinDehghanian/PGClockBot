@@ -95,7 +95,7 @@
             <circle class="home-gauge-val" cx="60" cy="60" r="52" pathLength="100" />
           </svg>
           <div class="home-gauge-center">
-            <strong id="home-cpu-val">{% if host.cpu_percent is not none %}{{ '%.0f'|format(host.cpu_percent) }}٪{% else %}—{% endif %}</strong>
+            <strong id="home-cpu-val">{% if host.cpu_percent is number %}{{ '%.0f'|format(host.cpu_percent) }}٪{% else %}—{% endif %}</strong>
             <span>CPU</span>
           </div>
         </div>
@@ -114,7 +114,7 @@
             <circle class="home-gauge-val" cx="60" cy="60" r="52" pathLength="100" />
           </svg>
           <div class="home-gauge-center">
-            <strong id="home-mem-val">{% if host.memory_percent is not none %}{{ '%.0f'|format(host.memory_percent) }}٪{% else %}—{% endif %}</strong>
+            <strong id="home-mem-val">{% if host.memory_percent is number %}{{ '%.0f'|format(host.memory_percent) }}٪{% else %}—{% endif %}</strong>
             <span>RAM</span>
           </div>
         </div>

@@ -224,7 +224,18 @@ async def resolve_platform_pg_capabilities(
 
 async def enrich_platform_admin_staff(user: dict) -> dict:
     """Attach live PG ACL onto a web Owner / platform-admin staff dict."""
-    caps = await resolve_platform_pg_capabilities()
+    import logging
+
+    try:
+        caps = await resolve_platform_pg_capabilities()
+    except Exception:
+        logging.getLogger(__name__).exception("enrich_platform_admin_staff probe failed")
+        # Fail closed: shop Owner keeps panel access; PG menus stay empty.
+        out = enrich_staff_pg_from_role(dict(user), [], None)
+        out["pg_is_owner"] = False
+        out["pg_capabilities_ok"] = False
+        out["pg_capabilities_error"] = "بررسی دسترسی پاسارگارد ناموفق"
+        return out
     features = list(caps.get("features") or [])
     role = caps.get("role") if isinstance(caps.get("role"), dict) else None
     out = enrich_staff_pg_from_role(user, features, role)

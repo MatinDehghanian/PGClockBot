@@ -10,7 +10,7 @@ from typing import Optional
 from urllib.parse import parse_qsl, quote
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, BadTimeSignature, URLSafeTimedSerializer
@@ -442,6 +442,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             else:
                 request.state.panel_tickets_unread = await sidebar_unread_count(session, user)
         except Exception:
+            from app.services.db_safe import rollback_quiet
+
+            await rollback_quiet(session)
             request.state.panel_tickets_unread = 0
         return user
 
@@ -704,6 +707,37 @@ def create_api_app(lifespan=None) -> FastAPI:
                     return RedirectResponse(path, status_code=303)
             return RedirectResponse("/home", status_code=303)
         return RedirectResponse("/home", status_code=303)
+
+    @app.exception_handler(Exception)
+    async def _unhandled(request: Request, exc: Exception):
+        """Last-resort HTML/JSON 500 — log server-side only; never echo secrets/traces."""
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "unhandled error method=%s path=%s", request.method, request.url.path
+        )
+        accept = (request.headers.get("accept") or "").lower()
+        wants_json = (
+            "application/json" in accept
+            or request.url.path.startswith("/home/metrics")
+            or request.url.path.startswith("/api")
+            or request.url.path.endswith(".json")
+        )
+        if wants_json:
+            return JSONResponse({"detail": "خطای داخلی سرور"}, status_code=500)
+        return HTMLResponse(
+            "<!DOCTYPE html><html lang='fa' dir='rtl'><head><meta charset='utf-8'/>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'/>"
+            "<title>خطای داخلی</title></head><body style='font-family:Tahoma,sans-serif;"
+            "max-width:28rem;margin:4rem auto;padding:0 1rem;line-height:1.8;color:#18181b;"
+            "text-align:center'>"
+            "<h1 style='font-size:1.35rem'>خطای داخلی سرور</h1>"
+            "<p style='color:#52525b'>مشکلی پیش آمد. چند لحظه دیگر دوباره تلاش کنید.</p>"
+            "<p><a href='/home' style='color:#2563eb'>بازگشت به داشبورد</a>"
+            " · <a href='/logout' style='color:#2563eb'>خروج</a></p>"
+            "</body></html>",
+            status_code=500,
+        )
 
     register_home_pages(
         app,
@@ -1424,17 +1458,34 @@ def create_api_app(lifespan=None) -> FastAPI:
         bot_setup_needed = False
 
         if is_platform_admin(staff):
+            from app.services.db_safe import rollback_quiet
             from app.services.home_overview import bot_panel_summary
 
-            summary = await bot_panel_summary(session)
-            plans_count = (
-                await session.scalar(
-                    select(func.count())
-                    .select_from(Plan)
-                    .where(Plan.is_active.is_(True), Plan.owner_reseller_id.is_(None))
+            try:
+                summary = await bot_panel_summary(session)
+            except Exception:
+                await rollback_quiet(session)
+                summary = {
+                    "users": 0,
+                    "orders": 0,
+                    "services": 0,
+                    "pending": 0,
+                    "revenue": 0,
+                    "tickets": 0,
+                    "resellers": 0,
+                }
+            try:
+                plans_count = (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(Plan)
+                        .where(Plan.is_active.is_(True), Plan.owner_reseller_id.is_(None))
+                    )
+                    or 0
                 )
-                or 0
-            )
+            except Exception:
+                await rollback_quiet(session)
+                plans_count = 0
             stats = {
                 "users": summary["users"],
                 "orders": summary["orders"],
@@ -1445,32 +1496,37 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "tickets": summary["tickets"],
             }
             # Hard shop isolation: platform dashboard never lists tenant shop traffic
-            recent_payments = list(
-                (
-                    await session.execute(
-                        select(Payment)
-                        .outerjoin(Order, Order.id == Payment.order_id)
-                        .where(
-                            or_(
-                                Payment.is_wallet_topup.is_(True),
-                                Order.reseller_id.is_(None),
+            try:
+                recent_payments = list(
+                    (
+                        await session.execute(
+                            select(Payment)
+                            .outerjoin(Order, Order.id == Payment.order_id)
+                            .where(
+                                or_(
+                                    Payment.is_wallet_topup.is_(True),
+                                    Order.reseller_id.is_(None),
+                                )
                             )
+                            .order_by(Payment.id.desc())
+                            .limit(6)
                         )
-                        .order_by(Payment.id.desc())
-                        .limit(6)
-                    )
-                ).scalars().all()
-            )
-            recent_orders = list(
-                (
-                    await session.execute(
-                        select(Order)
-                        .where(Order.reseller_id.is_(None))
-                        .order_by(Order.id.desc())
-                        .limit(6)
-                    )
-                ).scalars().all()
-            )
+                    ).scalars().all()
+                )
+                recent_orders = list(
+                    (
+                        await session.execute(
+                            select(Order)
+                            .where(Order.reseller_id.is_(None))
+                            .order_by(Order.id.desc())
+                            .limit(6)
+                        )
+                    ).scalars().all()
+                )
+            except Exception:
+                await rollback_quiet(session)
+                recent_payments = []
+                recent_orders = []
             return render(
                 request,
                 "dashboard.html",

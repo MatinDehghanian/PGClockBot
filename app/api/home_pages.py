@@ -101,16 +101,19 @@ async def _payg_risk_strip(session: AsyncSession) -> dict:
 
 
 async def _safe_funnel(session: AsyncSession, *, reseller_id: int | None):
+    from app.services.db_safe import rollback_quiet
     from app.services.ux20 import funnel_summary
 
     try:
         return await funnel_summary(session, reseller_id=reseller_id, days=7)
     except Exception:
         logger.exception("funnel_summary failed reseller_id=%s", reseller_id)
+        await rollback_quiet(session)
         return dict(_EMPTY_FUNNEL)
 
 
 async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None, expire_days: int):
+    from app.services.db_safe import rollback_quiet
     from app.services.ux20 import build_action_center
 
     try:
@@ -119,10 +122,12 @@ async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None,
         )
     except Exception:
         logger.exception("action_center failed reseller_id=%s", reseller_id)
+        await rollback_quiet(session)
         return dict(_EMPTY_ACTION_CENTER)
 
 
 async def _safe_pg_health(*, reseller_user_id: int | None = None, session: AsyncSession | None = None):
+    from app.services.db_safe import rollback_quiet
     from app.services.ux20 import check_pg_connection
 
     try:
@@ -131,6 +136,7 @@ async def _safe_pg_health(*, reseller_user_id: int | None = None, session: Async
         )
     except Exception:
         logger.exception("pg_health failed reseller_user_id=%s", reseller_user_id)
+        await rollback_quiet(session)
         return {"ok": False, "error": "بررسی اتصال ناموفق", "version": None}
 
 async def _reseller_shop_stats(session: AsyncSession, rid: int) -> dict[str, int]:
@@ -210,7 +216,15 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
     ):
         # Platform admin: server + both panels.
         if is_platform_admin(staff):
-            overview = await build_home_overview(session)
+            from app.services.db_safe import rollback_quiet
+            from app.services.home_overview import empty_home_overview
+
+            try:
+                overview = await build_home_overview(session)
+            except Exception:
+                logger.exception("build_home_overview failed")
+                await rollback_quiet(session)
+                overview = empty_home_overview()
             update = None
             try:
                 from app.services.updates import check_github_update
@@ -220,17 +234,23 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 update = None
             from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
 
-            ticket_alert = await panel_ticket_dashboard_alert(
-                session,
-                staff,
-                unread=getattr(request.state, "panel_tickets_unread", None),
-            )
+            try:
+                ticket_alert = await panel_ticket_dashboard_alert(
+                    session,
+                    staff,
+                    unread=getattr(request.state, "panel_tickets_unread", None),
+                )
+            except Exception:
+                logger.exception("panel_ticket_dashboard_alert failed")
+                await rollback_quiet(session)
+                ticket_alert = None
             from app.services.users import get_all_settings, on
 
             try:
                 ui = await get_all_settings(session, reseller_id=None)
             except Exception:
                 logger.exception("home get_all_settings failed")
+                await rollback_quiet(session)
                 ui = {}
             try:
                 expire_days = int(ui.get("action_center_expire_days") or 3)
@@ -250,6 +270,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 payg_risk = await _payg_risk_strip(session)
             except Exception:
                 logger.exception("payg risk strip failed")
+                await rollback_quiet(session)
                 payg_risk = {"suspended": [], "low": [], "threshold": 0, "has_items": False}
             return render(
                 request,
@@ -342,6 +363,9 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             ui = await get_all_settings(session, reseller_id=int(rid))
         except Exception:
             logger.exception("reseller home get_all_settings failed rid=%s", rid)
+            from app.services.db_safe import rollback_quiet
+
+            await rollback_quiet(session)
             ui = {}
         try:
             expire_days = int(ui.get("action_center_expire_days") or 3)
