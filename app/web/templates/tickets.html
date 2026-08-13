@@ -75,26 +75,30 @@
 {% if show_tg %}
 <section class="ticket-tg-section">
   <h2 class="section-title">تیکت‌های کاربران ربات</h2>
-  <p class="muted page-sub">تیکت‌های پشتیبانی کاربران تلگرام (فقط مشاهده)</p>
+  <p class="muted page-sub">پشتیبانی کاربران تلگرام — پاسخ از همین‌جا مثل تلگرام برای کاربر ارسال می‌شود</p>
   <div class="card card-flush">
     <div class="table-wrap">
     <table>
-      <thead><tr><th>#</th><th>کاربر</th><th>موضوع</th><th>وضعیت</th><th>زمان</th></tr></thead>
+      <thead><tr><th>#</th><th>کاربر</th><th>موضوع</th><th>وضعیت</th><th>زمان</th><th></th></tr></thead>
       <tbody>
-      {% for t in tg_tickets %}
+      {% for row in tg_rows %}
+        {% set t = row.ticket %}
         <tr>
           <td class="mono">{{ t.id }}</td>
-          <td>{{ t.user_id }}</td>
+          <td>{{ row.user_label }}</td>
           <td>{{ t.subject }}</td>
           <td>
             <span class="badge {% if t.status=='open' %}open{% elif t.status=='closed' %}neutral{% else %}answered{% endif %}">
               {{ tkt_status(t.status) }}
             </span>
           </td>
-          <td class="muted mono" dir="ltr">{{ t.created_at }}</td>
+          <td class="muted mono" dir="ltr">{{ t.updated_at or t.created_at }}</td>
+          <td>
+            <a class="btn btn-sm btn-ghost" href="/tickets?tg={{ t.id }}">مشاهده</a>
+          </td>
         </tr>
       {% else %}
-        <tr><td colspan="5" class="muted">تیکت کاربری نیست</td></tr>
+        <tr><td colspan="6" class="muted">تیکت کاربری نیست</td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -226,6 +230,63 @@
       </form>
       {% endif %}
     </div>
+  </div>
+</div>
+{% endif %}
+
+{% if active_tg_ticket %}
+{% set t = active_tg_ticket %}
+<div class="ui-modal open" id="modal-tg-ticket-view" data-modal-escape-href="/tickets">
+  <div class="ui-modal-backdrop" data-modal-close-nav="/tickets"></div>
+  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="tg-ticket-view-title">
+    <div class="ui-modal-head">
+      <div>
+        <h2 id="tg-ticket-view-title">تیکت ربات #{{ t.id }}</h2>
+        <p class="muted ticket-view-sub">{{ t.subject }}</p>
+      </div>
+      <a class="icon-btn" href="/tickets" aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+    </div>
+
+    <div class="ticket-meta">
+      <span class="badge {% if t.status=='open' %}open{% elif t.status=='closed' %}neutral{% else %}answered{% endif %}">{{ tkt_status(t.status) }}</span>
+      <span class="muted">کاربر: {{ active_tg_user_label }}</span>
+    </div>
+
+    <div class="ticket-thread" id="tg-ticket-thread">
+      {% for m in t.messages %}
+      <article class="ticket-msg {% if m.is_staff %}ticket-msg--owner{% else %}ticket-msg--opener{% endif %}">
+        <header class="ticket-msg-head">
+          <strong>{% if m.is_staff %}پشتیبانی{% else %}کاربر{% endif %}</strong>
+          <span class="muted mono" dir="ltr">{{ m.created_at }}</span>
+        </header>
+        {% if m.body %}<p class="ticket-msg-body">{{ m.body }}</p>{% endif %}
+      </article>
+      {% else %}
+      <p class="muted">پیامی ثبت نشده.</p>
+      {% endfor %}
+    </div>
+
+    {% if t.status != 'closed' %}
+    <form method="post" action="/tickets/bot/{{ t.id }}/reply" class="form-stack ticket-reply">
+      <label class="form-field">پاسخ (ارسال به تلگرام کاربر)
+        <textarea name="body" rows="3" required placeholder="متن پاسخ…"></textarea>
+      </label>
+      <div class="actions">
+        <button type="submit" class="btn">ارسال پاسخ</button>
+      </div>
+    </form>
+    <div class="ticket-status-actions">
+      <form method="post" action="/tickets/bot/{{ t.id }}/close"
+            data-confirm="تیکت بسته شود؟"
+            data-confirm-title="بستن تیکت ربات"
+            data-confirm-warn="1"
+            data-confirm-label="بستن تیکت">
+        <button type="submit" class="btn btn-sm btn-ghost">بستن تیکت</button>
+      </form>
+    </div>
+    {% else %}
+    <p class="muted ticket-closed-note">این تیکت بسته شده است.</p>
+    {% endif %}
   </div>
 </div>
 {% endif %}

@@ -49,6 +49,9 @@
       </div>
     </form>
 
+  {% elif tab == 'links' %}
+    {% include "_settings_links.html" %}
+
   {% elif tab == 'appearance' %}
     {% set settings_action = '/shop-settings?tab=appearance' %}
     {% include "_settings_appearance.html" %}

@@ -1067,24 +1067,38 @@
       } catch (err) {}
     });
 
-    /* Copy helpers (subscription links, etc.) */
+    /* Copy helpers (subscription links, etc.) — data-copy holds the text to copy */
     function markCopied(btn) {
       if (!btn) return;
-      const prevText = btn.getAttribute('data-copy-label') || btn.textContent;
-      btn.setAttribute('data-copy-label', prevText);
+      const idle = btn.dataset.copyIdle
+        || ((btn.getAttribute('data-copy-label') || '').trim() && btn.getAttribute('data-copy-label') !== 'کپی شد'
+            ? btn.getAttribute('data-copy-label')
+            : null)
+        || (((btn.textContent || '').trim() && (btn.textContent || '').trim() !== 'کپی شد')
+            ? (btn.textContent || '').trim()
+            : 'کپی');
+      btn.dataset.copyIdle = idle;
       btn.textContent = 'کپی شد';
       btn.classList.add('btn-ok', 'is-copied');
-      setTimeout(() => {
-        btn.textContent = prevText;
+      if (btn._copyTimer) clearTimeout(btn._copyTimer);
+      btn._copyTimer = setTimeout(() => {
+        btn.textContent = btn.dataset.copyIdle || 'کپی';
         btn.classList.remove('btn-ok', 'is-copied');
-      }, 1200);
+      }, 1400);
     }
     document.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-copy]');
       if (!btn) return;
+      // Prefer explicit copy text; optional data-copy-from="#inputId" for input values
       e.preventDefault();
-      const text = btn.getAttribute('data-copy') || '';
-      if (!text) {
+      e.stopPropagation();
+      let text = (btn.getAttribute('data-copy') || '').trim();
+      const fromSel = btn.getAttribute('data-copy-from');
+      if (fromSel) {
+        const el = document.querySelector(fromSel);
+        if (el) text = (el.value != null ? el.value : (el.textContent || '')).trim();
+      }
+      if (!text || text === '—') {
         alert('لینکی موجود نیست');
         return;
       }

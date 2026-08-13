@@ -6124,6 +6124,12 @@ html[data-theme="light"] .setup-progress span.done {
   align-items: center;
   justify-content: flex-end;
 }
+.backup-health-tag {
+  margin-inline-start: var(--space-1);
+  vertical-align: middle;
+  font-size: 0.75rem;
+}
+
 .home-action-card h2 {
   margin: 0 0 var(--space-2);
   font-size: var(--title-size);

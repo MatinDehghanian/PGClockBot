@@ -1,0 +1,24 @@
+<div class="card settings-card">
+  <h2>لینک‌های سریع ربات</h2>
+  {% if bot_username %}
+  <p class="muted update-card-caption">
+    ربات: <span dir="ltr">@{{ bot_username }}</span> — لینک را برای کاربر بفرستید تا مستقیم وارد همان بخش شود.
+  </p>
+  {% else %}
+  <p class="flash warn">یوزرنیم ربات مشخص نیست — اول اتصال ربات را در تب «ربات و اتصال» درست کنید.</p>
+  {% endif %}
+  <div class="form-stack">
+    {% for key, label in [('renew','تمدید'),('wallet','کیف پول'),('support','پشتیبانی'),('config','دریافت مجدد کانفیگ'),('gift','کد هدیه')] %}
+    <label class="form-field">{{ label }}
+      <div class="home-panel-actions">
+        <input dir="ltr" readonly value="{{ links.get(key) or '—' }}" id="ml-{{ key }}" />
+        {% if links.get(key) %}
+        <button type="button" class="btn btn-ghost btn-sm"
+                data-copy="{{ links.get(key) }}"
+                data-copy-idle="کپی">کپی</button>
+        {% endif %}
+      </div>
+    </label>
+    {% endfor %}
+  </div>
+</div>

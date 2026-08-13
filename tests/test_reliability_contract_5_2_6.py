@@ -21,10 +21,11 @@ class JinjaDictKeyContract(unittest.TestCase):
     )
 
     def test_home_templates_use_entries_not_items(self):
-        for name in ("home.html", "reseller_home.html"):
+        for name in ("home.html", "reseller_home.html", "inbox.html"):
             tpl = (ROOT / "app/web/templates" / name).read_text(encoding="utf-8")
-            self.assertIn("ac.entries", tpl, msg=name)
             self.assertNotIn("ac.items", tpl, msg=name)
+        inbox = (ROOT / "app/web/templates/inbox.html").read_text(encoding="utf-8")
+        self.assertIn("ac.entries", inbox)
 
     def test_action_center_payload_key_is_entries(self):
         src = (ROOT / "app/services/ux20.py").read_text(encoding="utf-8")
@@ -32,9 +33,9 @@ class JinjaDictKeyContract(unittest.TestCase):
         self.assertIn("Key must NOT be named ``items``", src)
 
     def test_empty_action_center_uses_entries(self):
-        src = (ROOT / "app/api/home_pages.py").read_text(encoding="utf-8")
-        self.assertIn('_EMPTY_ACTION_CENTER = {"entries": [], "has_items": False}', src)
-        self.assertNotIn('"items": []', src.split("_EMPTY_ACTION_CENTER")[1][:120])
+        src = (ROOT / "app/services/panel_inbox.py").read_text(encoding="utf-8")
+        self.assertIn('_EMPTY_ACTION = {"entries": [], "has_items": False}', src)
+        self.assertNotIn('"items": []', src)
 
 
 class HomeDegradedNoFakeDisconnect(unittest.TestCase):

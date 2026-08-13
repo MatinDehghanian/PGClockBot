@@ -33,7 +33,88 @@ _OK_FLASH = {
     "created": "تیکت ثبت شد",
     "replied": "پاسخ ثبت شد",
     "status": "وضعیت تیکت به‌روز شد",
+    "tg_replied": "پاسخ به کاربر در تلگرام ارسال شد",
+    "tg_closed": "تیکت کاربر بسته شد",
 }
+
+
+def _staff_can_manage_bot_tickets(staff: dict) -> bool:
+    if is_platform_admin(staff):
+        return True
+    return staff.get("role") == "reseller" and "tickets" in (staff.get("permissions") or [])
+
+
+async def _bot_ticket_in_scope(session: AsyncSession, staff: dict, ticket: Ticket) -> bool:
+    """Tenant isolation for Telegram Ticket rows."""
+    user = await session.get(BotUser, int(ticket.user_id))
+    if is_platform_admin(staff):
+        return ticket.reseller_id is None and (user is None or user.reseller_id is None)
+    rid = shop_owner_id(staff)
+    if not rid:
+        return False
+    if ticket.reseller_id is not None:
+        return int(ticket.reseller_id) == int(rid)
+    return bool(user and user.reseller_id is not None and int(user.reseller_id) == int(rid))
+
+
+def _bot_user_label(user: BotUser | None, user_id: int) -> str:
+    if not user:
+        return str(user_id)
+    name = (user.full_name or "").strip()
+    uname = (user.username or "").strip()
+    if name and uname:
+        return f"{name} (@{uname})"
+    if name:
+        return name
+    if uname:
+        return f"@{uname}"
+    if user.telegram_id:
+        return str(user.telegram_id)
+    return str(user_id)
+
+
+async def _staff_sender_tg(session: AsyncSession, staff: dict) -> int:
+    uid = staff.get("bot_user_id")
+    if not uid:
+        return 0
+    try:
+        row = await session.get(BotUser, int(uid))
+    except Exception:
+        return 0
+    if row and row.telegram_id:
+        return int(row.telegram_id)
+    return 0
+
+
+async def _notify_bot_ticket_staff_reply(
+    session: AsyncSession,
+    ticket: Ticket,
+    body: str,
+    *,
+    actor_name: str | None = None,
+) -> None:
+    """Send staff reply to the Telegram user (same path as in-bot ticket reply)."""
+    from app.bot import create_bot
+    from app.services.notifications import notify_ticket_message
+
+    bot = create_bot()
+    try:
+        await notify_ticket_message(
+            bot,
+            session,
+            ticket_id=int(ticket.id),
+            subject=ticket.subject,
+            body=body,
+            from_staff=True,
+            ticket_user_id=int(ticket.user_id),
+            actor_name=actor_name,
+            ticket_reseller_id=ticket.reseller_id,
+        )
+    finally:
+        try:
+            await bot.session.close()
+        except Exception:
+            pass
 
 
 def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db) -> None:
@@ -43,49 +124,28 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
         view: int | None = None,
+        tg: int | None = None,
         new: int | None = None,
     ):
         if not can_access_panel_tickets(staff):
             return RedirectResponse("/home", status_code=303)
 
+        from app.services import tickets as bot_tickets
+
         panel_tickets = await list_tickets(session, staff, limit=150)
         tg_tickets: list[Ticket] = []
-        show_tg = False
-        if is_platform_admin(staff):
-            show_tg = True
-            tg_tickets = list(
-                (
-                    await session.execute(
-                        select(Ticket)
-                        .join(BotUser, BotUser.id == Ticket.user_id)
-                        .where(
-                            Ticket.reseller_id.is_(None),
-                            BotUser.reseller_id.is_(None),
-                        )
-                        .order_by(Ticket.id.desc())
-                        .limit(100)
-                    )
-                )
-                .scalars()
-                .all()
-            )
-        elif staff.get("role") == "reseller" and "tickets" in (staff.get("permissions") or []):
-            show_tg = True
-            rid = shop_owner_id(staff)
-            if rid:
-                from sqlalchemy import or_
-
+        tg_users: dict[int, BotUser] = {}
+        show_tg = _staff_can_manage_bot_tickets(staff)
+        if show_tg:
+            if is_platform_admin(staff):
                 tg_tickets = list(
                     (
                         await session.execute(
                             select(Ticket)
-                            .outerjoin(BotUser, BotUser.id == Ticket.user_id)
+                            .join(BotUser, BotUser.id == Ticket.user_id)
                             .where(
-                                or_(
-                                    Ticket.reseller_id == rid,
-                                    (Ticket.reseller_id.is_(None))
-                                    & (BotUser.reseller_id == rid),
-                                )
+                                Ticket.reseller_id.is_(None),
+                                BotUser.reseller_id.is_(None),
                             )
                             .order_by(Ticket.id.desc())
                             .limit(100)
@@ -94,6 +154,36 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                     .scalars()
                     .all()
                 )
+            else:
+                rid = shop_owner_id(staff)
+                if rid:
+                    from sqlalchemy import or_
+
+                    tg_tickets = list(
+                        (
+                            await session.execute(
+                                select(Ticket)
+                                .outerjoin(BotUser, BotUser.id == Ticket.user_id)
+                                .where(
+                                    or_(
+                                        Ticket.reseller_id == rid,
+                                        (Ticket.reseller_id.is_(None))
+                                        & (BotUser.reseller_id == rid),
+                                    )
+                                )
+                                .order_by(Ticket.id.desc())
+                                .limit(100)
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+            uids = {int(t.user_id) for t in tg_tickets if t.user_id}
+            if uids:
+                rows = (
+                    await session.execute(select(BotUser).where(BotUser.id.in_(uids)))
+                ).scalars().all()
+                tg_users = {int(u.id): u for u in rows}
 
         active_ticket = None
         if view is not None:
@@ -101,14 +191,22 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             if active_ticket is not None:
                 changed = await mark_viewed(session, staff, active_ticket)
                 if changed:
-                    # Sync list-row flags in memory — no second list query
                     for row in panel_tickets:
                         if row.id == active_ticket.id:
                             row.answered_unread = active_ticket.answered_unread
                             row.owner_unread = active_ticket.owner_unread
                             break
 
-        # Derive from the list we already loaded (middleware skips COUNT on /tickets)
+        active_tg_ticket = None
+        active_tg_user = None
+        if tg is not None and show_tg:
+            active_tg_ticket = await bot_tickets.get_ticket(session, int(tg))
+            if active_tg_ticket is not None:
+                if not await _bot_ticket_in_scope(session, staff, active_tg_ticket):
+                    active_tg_ticket = None
+                else:
+                    active_tg_user = await session.get(BotUser, int(active_tg_ticket.user_id))
+
         tickets_unread = unread_from_tickets(panel_tickets, staff)
         request.state.panel_tickets_unread = tickets_unread
 
@@ -126,12 +224,26 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             staff.get("role") == "reseller" and "shop_settings" in (staff.get("permissions") or [])
         )
 
+        tg_rows = [
+            {
+                "ticket": t,
+                "user_label": _bot_user_label(tg_users.get(int(t.user_id)), int(t.user_id)),
+            }
+            for t in tg_tickets
+        ]
+
         ctx = {
             "staff": staff,
             "panel_tickets": panel_tickets,
             "tg_tickets": tg_tickets,
+            "tg_rows": tg_rows,
             "show_tg": show_tg,
             "active_ticket": active_ticket,
+            "active_tg_ticket": active_tg_ticket,
+            "active_tg_user": active_tg_user,
+            "active_tg_user_label": _bot_user_label(
+                active_tg_user, int(active_tg_ticket.user_id) if active_tg_ticket else 0
+            ),
             "open_new": bool(new),
             "status_labels": STATUS_LABELS,
             "priority_labels": PRIORITY_LABELS,
@@ -287,6 +399,74 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
         except Exception as exc:
             return RedirectResponse(
                 f"/tickets?err={quote(str(exc))}&view={ticket_id}",
+                status_code=303,
+            )
+
+    @app.post("/tickets/bot/{ticket_id}/reply")
+    async def tickets_bot_reply(
+        ticket_id: int,
+        staff: dict = Depends(require_staff),
+        session: AsyncSession = Depends(get_db),
+        body: str = Form(""),
+    ):
+        from app.services import tickets as bot_tickets
+
+        if not _staff_can_manage_bot_tickets(staff):
+            return RedirectResponse("/tickets?err=" + quote("دسترسی ندارید"), status_code=303)
+        text = (body or "").strip()
+        if not text:
+            return RedirectResponse(
+                f"/tickets?err={quote('متن پاسخ خالی است')}&tg={ticket_id}",
+                status_code=303,
+            )
+        ticket = await bot_tickets.get_ticket(session, int(ticket_id))
+        if not ticket or not await _bot_ticket_in_scope(session, staff, ticket):
+            return RedirectResponse("/tickets?err=" + quote("تیکت یافت نشد"), status_code=303)
+        try:
+            sender_tg = await _staff_sender_tg(session, staff)
+            await bot_tickets.reply_ticket(
+                session, ticket, text, sender_tg, is_staff=True
+            )
+        except Exception as exc:
+            return RedirectResponse(
+                f"/tickets?err={quote(str(exc))}&tg={ticket_id}",
+                status_code=303,
+            )
+        try:
+            await _notify_bot_ticket_staff_reply(
+                session,
+                ticket,
+                text,
+                actor_name=staff.get("username") or staff.get("role"),
+            )
+        except Exception:
+            # Reply is persisted; Telegram delivery failure should not roll back UX.
+            pass
+        return RedirectResponse(
+            f"/tickets?ok=tg_replied&tg={ticket_id}", status_code=303
+        )
+
+    @app.post("/tickets/bot/{ticket_id}/close")
+    async def tickets_bot_close(
+        ticket_id: int,
+        staff: dict = Depends(require_staff),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services import tickets as bot_tickets
+
+        if not _staff_can_manage_bot_tickets(staff):
+            return RedirectResponse("/tickets?err=" + quote("دسترسی ندارید"), status_code=303)
+        ticket = await bot_tickets.get_ticket(session, int(ticket_id))
+        if not ticket or not await _bot_ticket_in_scope(session, staff, ticket):
+            return RedirectResponse("/tickets?err=" + quote("تیکت یافت نشد"), status_code=303)
+        try:
+            await bot_tickets.close_ticket(session, ticket)
+            return RedirectResponse(
+                f"/tickets?ok=tg_closed&tg={ticket_id}", status_code=303
+            )
+        except Exception as exc:
+            return RedirectResponse(
+                f"/tickets?err={quote(str(exc))}&tg={ticket_id}",
                 status_code=303,
             )
 

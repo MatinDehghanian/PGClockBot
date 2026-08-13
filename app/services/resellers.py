@@ -43,6 +43,7 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("buttons", "متن دکمه‌ها"),
     ("colors", "رنگبندی دکمه‌ها"),
     ("menu", "منوی بات"),
+    ("links", "لینک‌های سریع"),
     ("qr", "QR اشتراک"),
     ("forcejoin", "کانال اجباری"),
     ("naming", "نام‌گذاری سرویس"),

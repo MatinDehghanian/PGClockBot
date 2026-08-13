@@ -734,6 +734,38 @@ def bot_deep_link(bot_username: str | None, payload: str) -> str | None:
     return f"https://t.me/{uname}?start={quote(payload)}"
 
 
+async def build_magic_links_context(session: AsyncSession, staff: dict) -> dict[str, Any]:
+    """Username + deep links for settings «لینک‌های سریع» tab."""
+    from app.config import get_settings
+    from app.db.models import ResellerProfile
+    from app.services.home_overview import check_bot_connection
+    from app.services.shop_scope import is_platform_admin, shop_owner_id
+
+    rid = None if is_platform_admin(staff) else shop_owner_id(staff)
+    bot_username = None
+    if rid:
+        profile = (
+            await session.execute(
+                select(ResellerProfile).where(ResellerProfile.user_id == int(rid))
+            )
+        ).scalar_one_or_none()
+        bot_username = (profile.bot_username if profile else None) or None
+        if not bot_username and profile and profile.bot_token:
+            st = await check_bot_connection(profile.bot_token)
+            bot_username = st.get("username")
+    else:
+        st = await check_bot_connection(get_settings().bot_token)
+        bot_username = st.get("username")
+    links = {
+        "renew": bot_deep_link(bot_username, "renew"),
+        "wallet": bot_deep_link(bot_username, "wallet"),
+        "support": bot_deep_link(bot_username, "support"),
+        "config": bot_deep_link(bot_username, "config"),
+        "gift": bot_deep_link(bot_username, "gift"),
+    }
+    return {"bot_username": bot_username, "links": links}
+
+
 async def export_shop_bundle(
     session: AsyncSession, *, reseller_id: int | None = None
 ) -> dict[str, Any]:

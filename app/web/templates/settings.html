@@ -38,6 +38,8 @@
     {% include "_settings_notifications.html" %}
   {% elif tab == 'bot' %}
     {% include "_settings_bot.html" %}
+  {% elif tab == 'links' %}
+    {% include "_settings_links.html" %}
   {% elif tab == 'forcejoin' %}
     {% include "_forcejoin_admin_notice.html" %}
     <form method="post" action="/settings?tab=forcejoin" enctype="multipart/form-data" class="settings-form" id="settings-form">

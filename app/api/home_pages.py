@@ -24,7 +24,6 @@ _EMPTY_FUNNEL = {
     "receipt": 0,
     "delivered": 0,
 }
-_EMPTY_ACTION_CENTER = {"entries": [], "has_items": False}
 # Probe not run — templates must show «—» / neutral, never fake «قطع».
 _UNCHECKED_CONN = {"ok": None, "error": None, "version": None, "unchecked": True}
 
@@ -65,92 +64,6 @@ def _unchecked_overview():
     return ov
 
 
-async def _payg_risk_strip(session: AsyncSession) -> dict:
-    """Platform-admin strip: suspended + low-balance PAYG resellers."""
-    from app.db.models import ResellerProfile
-    from app.services.billing import (
-        BILLING_MODE_PAYG,
-        get_low_balance_threshold,
-        payg_available_balance,
-    )
-
-    out: dict = {
-        "suspended": [],
-        "low": [],
-        "threshold": 0,
-        "has_items": False,
-    }
-    try:
-        threshold = await get_low_balance_threshold(session)
-    except Exception:
-        from app.services.db_safe import rollback_quiet
-
-        await rollback_quiet(session)
-        threshold = 0
-    out["threshold"] = int(threshold or 0)
-    try:
-        profiles = list(
-            (
-                await session.execute(
-                    select(ResellerProfile).where(
-                        ResellerProfile.is_active.is_(True),
-                        ResellerProfile.billing_mode == BILLING_MODE_PAYG,
-                    )
-                )
-            ).scalars().all()
-        )
-    except Exception:
-        logger.exception("payg risk: list profiles failed")
-        from app.services.db_safe import rollback_quiet
-
-        await rollback_quiet(session)
-        return out
-
-    user_ids = [int(p.user_id) for p in profiles if p.user_id]
-    users = {}
-    if user_ids:
-        try:
-            users = {
-                int(u.id): u
-                for u in (
-                    await session.execute(select(BotUser).where(BotUser.id.in_(user_ids)))
-                ).scalars().all()
-            }
-        except Exception:
-            logger.exception("payg risk: load users failed")
-            from app.services.db_safe import rollback_quiet
-
-            await rollback_quiet(session)
-            users = {}
-
-    for profile in profiles:
-        uid = int(profile.user_id)
-        user = users.get(uid)
-        label = (
-            (user.full_name or user.username or str(uid)) if user else str(uid)
-        )
-        item = {"user_id": uid, "label": label, "balance": 0}
-        if getattr(profile, "billing_suspended_at", None):
-            try:
-                item["balance"] = await payg_available_balance(session, profile)
-            except Exception:
-                item["balance"] = int(getattr(profile, "billing_balance", 0) or 0)
-            out["suspended"].append(item)
-            continue
-        try:
-            bal = await payg_available_balance(session, profile)
-        except Exception:
-            bal = int(getattr(profile, "billing_balance", 0) or 0)
-        item["balance"] = bal
-        if out["threshold"] > 0 and bal <= out["threshold"]:
-            out["low"].append(item)
-
-    out["suspended"].sort(key=lambda x: x["balance"])
-    out["low"].sort(key=lambda x: x["balance"])
-    out["has_items"] = bool(out["suspended"] or out["low"])
-    return out
-
-
 async def _safe_funnel(session: AsyncSession, *, reseller_id: int | None):
     from app.services.db_safe import rollback_quiet
     from app.services.ux20 import funnel_summary
@@ -161,20 +74,6 @@ async def _safe_funnel(session: AsyncSession, *, reseller_id: int | None):
         logger.exception("funnel_summary failed reseller_id=%s", reseller_id)
         await rollback_quiet(session)
         return dict(_EMPTY_FUNNEL)
-
-
-async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None, expire_days: int):
-    from app.services.db_safe import rollback_quiet
-    from app.services.ux20 import build_action_center
-
-    try:
-        return await build_action_center(
-            session, reseller_id=reseller_id, expire_days=expire_days
-        )
-    except Exception:
-        logger.exception("action_center failed reseller_id=%s", reseller_id)
-        await rollback_quiet(session)
-        return dict(_EMPTY_ACTION_CENTER)
 
 
 async def _safe_pg_health(*, reseller_user_id: int | None = None, session: AsyncSession | None = None):
@@ -259,6 +158,17 @@ async def _reseller_shop_stats(session: AsyncSession, rid: int) -> dict[str, int
 
 
 def register_home_pages(app, *, render, require_admin, require_staff, get_db):
+    @app.get("/inbox", response_class=HTMLResponse)
+    async def inbox_page(
+        request: Request,
+        staff: dict = Depends(require_staff),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.panel_inbox import build_inbox_context
+
+        ctx = await build_inbox_context(session, request, staff)
+        return render(request, "inbox.html", ctx)
+
     @app.get("/home", response_class=HTMLResponse)
     async def home_dashboard(
         request: Request,
@@ -292,19 +202,9 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 {
                     "staff": staff,
                     "overview": _unchecked_overview(),
-                    "update": None,
-                    "ticket_alert": None,
-                    "action_center": dict(_EMPTY_ACTION_CENTER),
                     "pg_health": dict(_UNCHECKED_CONN),
-                    "shop_maintenance": False,
                     "funnel_enabled": False,
                     "funnel": dict(_EMPTY_FUNNEL),
-                    "payg_risk": {
-                        "suspended": [],
-                        "low": [],
-                        "threshold": 0,
-                        "has_items": False,
-                    },
                     "dashboard_degraded": True,
                 },
             )
@@ -322,12 +222,8 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "name": None,
                     "unchecked": True,
                 },
-                "ticket_alert": None,
                 "billing_card": None,
-                "action_center": dict(_EMPTY_ACTION_CENTER),
                 "pg_health": dict(_UNCHECKED_CONN),
-                "shop_maintenance": False,
-                "capacity_warn": False,
                 "funnel_enabled": False,
                 "funnel": dict(_EMPTY_FUNNEL),
                 "dashboard_degraded": True,
@@ -347,25 +243,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 logger.exception("build_home_overview failed")
                 await rollback_quiet(session)
                 overview = empty_home_overview()
-            update = None
-            try:
-                from app.services.updates import check_github_update
-
-                update = await check_github_update(force=False)
-            except Exception:
-                update = None
-            from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
-
-            try:
-                ticket_alert = await panel_ticket_dashboard_alert(
-                    session,
-                    staff,
-                    unread=getattr(request.state, "panel_tickets_unread", None),
-                )
-            except Exception:
-                logger.exception("panel_ticket_dashboard_alert failed")
-                await rollback_quiet(session)
-                ticket_alert = None
             from app.services.users import get_all_settings, on
 
             try:
@@ -374,13 +251,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 logger.exception("home get_all_settings failed")
                 await rollback_quiet(session)
                 ui = {}
-            try:
-                expire_days = int(ui.get("action_center_expire_days") or 3)
-            except Exception:
-                expire_days = 3
-            action_center = await _safe_action_center(
-                session, reseller_id=None, expire_days=expire_days
-            )
             pg_health = await _safe_pg_health()
             funnel_enabled = on(ui.get("funnel_tracking_enabled", "1"))
             funnel = (
@@ -388,25 +258,14 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 if funnel_enabled
                 else dict(_EMPTY_FUNNEL)
             )
-            try:
-                payg_risk = await _payg_risk_strip(session)
-            except Exception:
-                logger.exception("payg risk strip failed")
-                await rollback_quiet(session)
-                payg_risk = {"suspended": [], "low": [], "threshold": 0, "has_items": False}
             return (
                 "home.html",
                 {
                     "staff": staff,
                     "overview": overview,
-                    "update": update,
-                    "ticket_alert": ticket_alert,
-                    "action_center": action_center,
                     "pg_health": pg_health,
-                    "shop_maintenance": on(ui.get("shop_maintenance_enabled")),
                     "funnel_enabled": funnel_enabled,
                     "funnel": funnel,
-                    "payg_risk": payg_risk,
                     "dashboard_degraded": False,
                 },
             )
@@ -489,18 +348,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 await rollback_quiet(session)
                 pg_limits = None
 
-        from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
-
-        try:
-            ticket_alert = await panel_ticket_dashboard_alert(
-                session,
-                staff,
-                unread=getattr(request.state, "panel_tickets_unread", None),
-            )
-        except Exception:
-            logger.exception("reseller home ticket alert failed rid=%s", rid)
-            await rollback_quiet(session)
-            ticket_alert = None
         billing_card = None
         if profile is not None:
             from app.services.billing import is_billing_enabled, is_payg
@@ -523,7 +370,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 await rollback_quiet(session)
                 billing_card = None
         from app.services.users import get_all_settings, on
-        from app.services.ux20 import capacity_should_warn
 
         try:
             ui = await get_all_settings(session, reseller_id=int(rid))
@@ -531,36 +377,16 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             logger.exception("reseller home get_all_settings failed rid=%s", rid)
             await rollback_quiet(session)
             ui = {}
-        try:
-            expire_days = int(ui.get("action_center_expire_days") or 3)
-        except Exception:
-            expire_days = 3
-        action_center = await _safe_action_center(
-            session, reseller_id=int(rid), expire_days=expire_days
-        )
         pg_health = await _safe_pg_health(
             reseller_user_id=int(rid) if staff.get("pg_admin_username") else None,
             session=session if staff.get("pg_admin_username") else None,
         )
-        shop_maintenance = on(ui.get("shop_maintenance_enabled"))
         funnel_enabled = on(ui.get("funnel_tracking_enabled", "1"))
         funnel = (
             await _safe_funnel(session, reseller_id=int(rid))
             if funnel_enabled
             else dict(_EMPTY_FUNNEL)
         )
-        capacity_warn = False
-        try:
-            thr = float(ui.get("capacity_warn_pct") or 80)
-        except Exception:
-            thr = 80.0
-        if pg_limits:
-            try:
-                capacity_warn = capacity_should_warn(
-                    [pg_limits.get("users"), pg_limits.get("traffic")], thr
-                )
-            except Exception:
-                capacity_warn = False
         return (
             "reseller_home.html",
             {
@@ -569,12 +395,8 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "pg_limits": pg_limits,
                 "bot_setup_needed": bot_setup_needed,
                 "bot": bot,
-                "ticket_alert": ticket_alert,
                 "billing_card": billing_card,
-                "action_center": action_center,
                 "pg_health": pg_health,
-                "shop_maintenance": shop_maintenance,
-                "capacity_warn": capacity_warn,
                 "funnel_enabled": funnel_enabled,
                 "funnel": funnel,
                 "dashboard_degraded": False,

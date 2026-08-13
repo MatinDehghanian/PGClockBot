@@ -82,13 +82,18 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
     def test_templates_exist(self):
         root = Path("app/web/templates")
         for name in (
-            "tools.html",
             "home.html",
             "reseller_home.html",
             "pg_home.html",
             "finance.html",
+            "_settings_links.html",
+            "inbox.html",
         ):
             self.assertTrue((root / name).is_file(), name)
+        self.assertFalse((root / "tools.html").is_file())
+        self.assertFalse((root / "_home_inbox.html").is_file())
+        self.assertFalse((root / "gift_codes.html").is_file())
+        self.assertFalse((root / "magic_links.html").is_file())
 
     def test_home_overview_only_no_pg_open_or_old_shortcuts(self):
         home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
@@ -97,37 +102,62 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertNotIn("tools/export", home)
         self.assertNotIn("فانل خرید", home)
         self.assertNotIn("مراحل خرید", home)
-        self.assertNotIn('href="/settings"', home)
-        self.assertIn("مرکز اقدام امروز", home)
+        self.assertNotIn('href="/tools"', home)
+        self.assertNotIn("_home_inbox.html", home)
+        self.assertNotIn("مرکز اقدام امروز", home)
         self.assertIn("home-pg-health", home)
-        self.assertIn('href="/tools"', home)
+        self.assertIn("settings?tab=links", home)
         self.assertIn('_funnel_panel.html', home)
         self.assertIn("funnel_enabled", home)
-        self.assertIn("payg_risk", home)
-        self.assertIn("نماینده PAYG", home)
         panel = Path("app/web/templates/_funnel_panel.html").read_text(encoding="utf-8")
         self.assertIn("رفتار کاربر", panel)
         self.assertIn("home-panel-neutral", panel)
 
-    def test_pg_home_has_quick_open_in_stats_box(self):
+    def test_inbox_page_and_sidebar(self):
+        inbox = Path("app/web/templates/inbox.html").read_text(encoding="utf-8")
+        self.assertIn("مرکز اقدام امروز", inbox)
+        self.assertIn("اعلان‌ها و مرکز اقدام", inbox)
+        self.assertIn("نماینده PAYG", inbox)
+        self.assertIn("payg_risk", inbox)
+        self.assertIn("ac.entries", inbox)
+        self.assertNotIn("bot_token", inbox)
+        self.assertNotIn("webhook_secret", inbox)
+        base = Path("app/web/templates/base.html").read_text(encoding="utf-8")
+        self.assertIn('href="/inbox"', base)
+        self.assertIn("inbox_alert", base)
+        self.assertIn("nav-dot", base)
+        # Inbox sits between dashboard and panel settings in both admin/reseller blocks
+        home_at = base.find('href="/home"')
+        inbox_at = base.find('href="/inbox"')
+        self.assertGreater(inbox_at, home_at)
+        home_src = Path("app/api/home_pages.py").read_text(encoding="utf-8")
+        self.assertIn('"/inbox"', home_src)
+        self.assertIn("build_inbox_context", home_src)
         html = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
         self.assertIn("ورود به پاسارگارد", html)
         self.assertIn("آمار پنل", html)
         self.assertIn("pg_external_url", html)
         self.assertIn("btn-sm btn-ghost", html)
 
-    def test_tools_hub_tabs(self):
-        html = Path("app/web/templates/tools.html").read_text(encoding="utf-8")
-        self.assertIn("لینک‌های سریع", html)
-        self.assertIn("کد هدیه", html)
-        self.assertNotIn("مراحل خرید", html)
-        self.assertNotIn("خروجی تنظیمات", html)
-        self.assertNotIn("فانل خرید", html)
+    def test_links_moved_to_bot_settings(self):
+        tabs = Path("app/services/users.py").read_text(encoding="utf-8")
+        self.assertIn('("links", "لینک‌های سریع")', tabs)
+        links = Path("app/web/templates/_settings_links.html").read_text(encoding="utf-8")
+        self.assertIn("لینک‌های سریع ربات", links)
+        self.assertIn("data-copy=", links)
 
-    def test_sidebar_has_tools(self):
+    def test_gifts_on_plans_page(self):
+        html = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
+        self.assertIn("modal-gift-codes", html)
+        self.assertIn("کد هدیه", html)
+
+    def test_sidebar_no_tools_nav(self):
         html = Path("app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn('href="/tools"', html)
-        self.assertIn("ابزارها", html)
+        self.assertNotIn(">ابزارها<", html)
+        self.assertNotIn('href="/tools"', html)
+        ux = Path("app/api/ux20_pages.py").read_text(encoding="utf-8")
+        self.assertNotIn('"/tools"', ux)
+        self.assertNotIn("tools_hub", ux)
 
     def test_settings_no_inline_export(self):
         html = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
@@ -136,8 +166,9 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
     def test_backup_has_export_import(self):
         html = Path("app/web/templates/_settings_backup.html").read_text(encoding="utf-8")
         self.assertIn("خروجی / ورودی تنظیمات فروشگاه", html)
-        self.assertIn("/tools/export", html)
-        self.assertIn("/tools/import", html)
+        self.assertIn("/settings/shop-export", html)
+        self.assertIn("/settings/shop-import", html)
+        self.assertNotIn("/tools/", html)
         export_at = html.find("خروجی / ورودی تنظیمات فروشگاه")
         create_at = html.find("backup-create-form")
         self.assertGreater(export_at, -1)
@@ -234,9 +265,10 @@ class Ux20RoutesRegistrationTests(unittest.TestCase):
         src = Path("app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("register_ux20_pages", src)
         ux = Path("app/api/ux20_pages.py").read_text(encoding="utf-8")
-        self.assertIn('"/tools"', ux)
-        self.assertIn("tools_hub", ux)
-        self.assertIn("tab=behavior", ux)
+        self.assertNotIn('"/tools"', ux)
+        self.assertNotIn("tools_hub", ux)
+        self.assertIn('"/plans/gift-codes"', ux)
+        self.assertIn('"/settings/shop-export"', ux)
         self.assertIn("settings?tab=backup", ux)
 
     def test_settings_backup_no_get_all_settings_shadow(self):
@@ -458,11 +490,29 @@ class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.2.5")
-        self.assertEqual(__version__, "5.2.5")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.2.8")
+        self.assertEqual(__version__, "5.2.8")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"5.2.5"', notes)
+        self.assertIn('"5.2.8"', notes)
+        self.assertIn('"5.2.7"', notes)
         self.assertIn('"5.2.1"', notes)
+
+    def test_bot_tickets_controllable_from_panel(self):
+        src = Path("app/api/panel_tickets_pages.py").read_text(encoding="utf-8")
+        self.assertIn('"/tickets/bot/{ticket_id}/reply"', src)
+        self.assertIn('"/tickets/bot/{ticket_id}/close"', src)
+        self.assertIn("_bot_ticket_in_scope", src)
+        self.assertIn("notify_ticket_message", src)
+        html = Path("app/web/templates/tickets.html").read_text(encoding="utf-8")
+        self.assertIn("تیکت‌های کاربران ربات", html)
+        self.assertIn("/tickets/bot/{{ t.id }}/reply", html)
+        self.assertIn("ارسال به تلگرام کاربر", html)
+
+    def test_export_skips_secrets(self):
+        ux = Path("app/services/ux20.py").read_text(encoding="utf-8")
+        self.assertIn('skip = {"bot_token", "webhook_secret"}', ux)
+        inbox = Path("app/services/panel_inbox.py").read_text(encoding="utf-8")
+        self.assertIn("never includes bot tokens", inbox)
 
 
 if __name__ == "__main__":

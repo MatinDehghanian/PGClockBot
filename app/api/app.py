@@ -164,6 +164,8 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["update"] = upd
     if "tickets_unread" not in ctx:
         ctx["tickets_unread"] = int(getattr(request.state, "panel_tickets_unread", 0) or 0)
+    if "inbox_alert" not in ctx:
+        ctx["inbox_alert"] = bool(getattr(request.state, "panel_inbox_alert", False))
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
 
@@ -469,13 +471,20 @@ def create_api_app(lifespan=None) -> FastAPI:
 
             if should_skip_unread_count(request.url.path, request.method):
                 request.state.panel_tickets_unread = 0
+                request.state.panel_inbox_alert = False
             else:
                 request.state.panel_tickets_unread = await sidebar_unread_count(session, user)
+                from app.services.panel_inbox import sidebar_inbox_has_alerts
+
+                request.state.panel_inbox_alert = await sidebar_inbox_has_alerts(
+                    session, request, user
+                )
         except Exception:
             from app.services.db_safe import rollback_quiet
 
             await rollback_quiet(session)
             request.state.panel_tickets_unread = 0
+            request.state.panel_inbox_alert = False
         from app.services.db_safe import recover_session
 
         await recover_session(session)
@@ -1714,6 +1723,24 @@ def create_api_app(lifespan=None) -> FastAPI:
                 pg_roles = await get_pg().get_admin_roles()
             except Exception:
                 pg_roles = []
+
+        gift_codes: list = []
+        try:
+            from app.db.models import ChargeCode
+
+            if is_platform_admin(staff) or rid:
+                q = select(ChargeCode).order_by(ChargeCode.id.desc()).limit(200)
+                if is_platform_admin(staff):
+                    q = q.where(ChargeCode.reseller_id.is_(None))
+                else:
+                    q = q.where(ChargeCode.reseller_id == int(rid))
+                gift_codes = list((await session.execute(q)).scalars().all())
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception("gift codes load failed on /plans")
+            gift_codes = []
+
         return render(
             request,
             "plans.html",
@@ -1733,6 +1760,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "reseller_plans_err": reseller_plans_err,
                 "feature_perms": feature_perms,
                 "pg_roles": pg_roles,
+                "gift_codes": gift_codes,
+                "open_gifts": request.query_params.get("gifts") in {"1", "true", "yes"},
                 "flash_err": request.query_params.get("err"),
                 "flash_ok": request.query_params.get("ok"),
             },
@@ -3188,6 +3217,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "webhook" if wh_base else "polling"
             )
             ctx["webhook_full_url"] = (wh_base + wh_path) if wh_base else ""
+        elif tab == "links":
+            from app.services.ux20 import build_magic_links_context
+
+            ctx.update(await build_magic_links_context(session, staff))
         elif tab == "ssl":
             from urllib.parse import urlparse
 
