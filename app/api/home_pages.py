@@ -23,8 +23,6 @@ _EMPTY_FUNNEL = {
     "pay_start": 0,
     "receipt": 0,
     "delivered": 0,
-    "rates": {},
-    "abandoned_plans": [],
 }
 _EMPTY_ACTION_CENTER = {"items": [], "has_items": False}
 

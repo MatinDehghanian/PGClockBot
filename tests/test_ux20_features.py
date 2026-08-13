@@ -154,15 +154,21 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertIn("data-receipt-open", html)
         self.assertIn("modal-receipt", html)
         self.assertIn("receipt-thumb", html)
-        # Shared panel: neutral chrome + conversion / abandon blocks + icons.
+        # Shared panel: neutral chrome + count stats with icons (no rates/abandon).
         panel = Path("app/web/templates/_funnel_panel.html").read_text(encoding="utf-8")
         self.assertIn("home-panel-neutral", panel)
         self.assertNotIn("home-panel-bot", panel)
-        self.assertIn("rates", panel)
-        self.assertIn("abandoned_plans", panel)
-        self.assertIn("پلن‌های رهاشده", panel)
+        self.assertNotIn("rates", panel)
+        self.assertNotIn("abandoned_plans", panel)
+        self.assertNotIn("پلن‌های رهاشده", panel)
+        self.assertNotIn("٪", panel)
+        self.assertNotIn("تبدیل", panel)
         self.assertIn("stat-ico", panel)
-        self.assertGreater(panel.count("stat-ico"), 4)
+        self.assertEqual(panel.count("stat-ico"), 5)
+        ux = Path("app/services/ux20.py").read_text(encoding="utf-8")
+        self.assertNotIn("_funnel_pct", ux)
+        self.assertNotIn("_abandoned_plans", ux)
+        self.assertNotIn("abandoned_plans", ux)
 
     def test_settings_icons_distinct(self):
         macros = Path("app/web/templates/macros.html").read_text(encoding="utf-8")
@@ -451,11 +457,11 @@ class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "5.2.1")
-        self.assertEqual(__version__, "5.2.1")
+        self.assertEqual(Path("VERSION").read_text().strip(), "5.2.2")
+        self.assertEqual(__version__, "5.2.2")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"5.2.2"', notes)
         self.assertIn('"5.2.1"', notes)
-        self.assertIn('"5.2.0"', notes)
 
 
 if __name__ == "__main__":
