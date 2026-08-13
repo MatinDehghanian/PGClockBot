@@ -2,19 +2,74 @@
 
 from __future__ import annotations
 
+import logging
 from urllib.parse import quote, urlencode
 
+import httpx
 from fastapi import Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, Order, Payment
+from app.db.models import BotUser, Order, Payment, ResellerProfile
 from app.services.authz import authz_from_staff, can_shop
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
+
+logger = logging.getLogger(__name__)
+
+
+async def _payment_bot_token(session: AsyncSession, payment: Payment) -> str:
+    """Resolve Telegram bot token that owns this receipt file_id."""
+    from app.config import get_settings
+
+    if payment.order_id:
+        order = await session.get(Order, int(payment.order_id))
+        if order and order.reseller_id:
+            profile = (
+                await session.execute(
+                    select(ResellerProfile).where(
+                        ResellerProfile.user_id == int(order.reseller_id)
+                    )
+                )
+            ).scalar_one_or_none()
+            token = ((profile.bot_token if profile else None) or "").strip()
+            if token:
+                return token
+    return (get_settings().bot_token or "").strip()
+
+
+async def _fetch_telegram_file(token: str, file_id: str) -> tuple[bytes, str] | None:
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        meta = await client.get(
+            f"https://api.telegram.org/bot{token}/getFile",
+            params={"file_id": file_id},
+        )
+        data = meta.json() if meta.status_code == 200 else {}
+        if not data.get("ok"):
+            return None
+        path = ((data.get("result") or {}).get("file_path") or "").strip()
+        if not path or ".." in path:
+            return None
+        file_resp = await client.get(
+            f"https://api.telegram.org/file/bot{token}/{path}"
+        )
+        if file_resp.status_code != 200 or not file_resp.content:
+            return None
+        ctype = (file_resp.headers.get("content-type") or "").split(";")[0].strip()
+        if not ctype or ctype == "application/octet-stream":
+            lower = path.lower()
+            if lower.endswith(".png"):
+                ctype = "image/png"
+            elif lower.endswith(".webp"):
+                ctype = "image/webp"
+            elif lower.endswith(".gif"):
+                ctype = "image/gif"
+            else:
+                ctype = "image/jpeg"
+        return file_resp.content, ctype
 
 
 def _groups_for_tab(tab: str) -> tuple[list[str], dict]:
@@ -313,3 +368,54 @@ def register_finance_pages(app, *, render, require_staff, get_db):
 
     app.add_api_route("/orders", _legacy_finance_redirect("orders"), methods=["GET"], response_class=HTMLResponse)
     app.add_api_route("/payments", _legacy_finance_redirect("payments"), methods=["GET"], response_class=HTMLResponse)
+
+    @app.get("/payments/{payment_id}/receipt")
+    async def payment_receipt(
+        payment_id: int,
+        staff: dict = Depends(require_staff),
+        session: AsyncSession = Depends(get_db),
+    ):
+        authz = authz_from_staff(staff)
+        if not can_shop(authz, "payments"):
+            return RedirectResponse("/home", status_code=303)
+        payment = await session.get(Payment, int(payment_id))
+        if not payment:
+            return Response(status_code=404, content="رسید یافت نشد")
+        file_id = (payment.receipt_file_id or "").strip()
+        if not file_id or file_id.startswith("stars:"):
+            return Response(status_code=404, content="رسید تصویری نیست")
+
+        # Scope: platform admin sees platform wallet topups + non-reseller orders;
+        # shop staff only their reseller's order payments.
+        if is_platform_admin(staff):
+            if payment.order_id:
+                order = await session.get(Order, int(payment.order_id))
+                if order and order.reseller_id:
+                    return Response(status_code=403, content="دسترسی ندارید")
+        else:
+            rid = shop_owner_id(staff)
+            if not rid or not payment.order_id:
+                return Response(status_code=403, content="دسترسی ندارید")
+            order = await session.get(Order, int(payment.order_id))
+            if not order or int(order.reseller_id or 0) != int(rid):
+                return Response(status_code=403, content="دسترسی ندارید")
+
+        token = await _payment_bot_token(session, payment)
+        if not token:
+            return Response(status_code=503, content="توکن ربات تنظیم نشده")
+        try:
+            fetched = await _fetch_telegram_file(token, file_id)
+        except Exception:
+            logger.exception("receipt getFile failed payment_id=%s", payment_id)
+            fetched = None
+        if not fetched:
+            return Response(status_code=502, content="دریافت رسید از تلگرام ناموفق بود")
+        body, ctype = fetched
+        return Response(
+            content=body,
+            media_type=ctype,
+            headers={
+                "Cache-Control": "private, max-age=300",
+                "Content-Disposition": f'inline; filename="receipt-{payment_id}"',
+            },
+        )

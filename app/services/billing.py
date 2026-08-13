@@ -368,7 +368,7 @@ class PaygWalletGate:
         have = format_toman(self.wallet)
         more = format_toman(self.shortfall)
         return (
-            "برای خرید سرویس Pay As You Go، موجودی کیف پول باید بیشتر از "
+            "برای خرید سرویس PAYG، موجودی کیف پول باید بیشتر از "
             f"دو برابر آستانه هشدار PAYG باشد.\n"
             f"حداقل لازم: <b>{need}</b>\n"
             f"موجودی فعلی: <b>{have}</b>\n"
@@ -550,7 +550,7 @@ async def credit_topup(
     if profile is None:
         raise ValueError("نماینده یافت نشد")
     if not is_payg(profile):
-        raise ValueError("شارژ Billing فقط برای حالت Pay As You Go است")
+        raise ValueError("شارژ Billing فقط برای حالت PAYG است")
 
     existing = await _find_by_idempotency(session, key)
     if existing:

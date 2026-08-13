@@ -45,7 +45,7 @@ class ListActiveFilterTests(unittest.TestCase):
             pg_group_ids="1,2",
         )
         body2 = format_reseller_plan_apply_detail(payg, currency="تومان")
-        self.assertIn("Pay As You Go", body2)
+        self.assertIn("PAYG", body2)
         self.assertIn("نرخ مصرف", body2)
         self.assertIn("گروه‌های پاسارگارد", body2)
         self.assertNotIn("کمیسیون", body2)
@@ -78,7 +78,7 @@ class WebSplitTests(unittest.TestCase):
         self.assertIn('id="reseller-plans-fixed"', html)
         self.assertIn('id="reseller-plans-payg"', html)
         self.assertIn("ثابت (کمیسیون)", html)
-        self.assertIn("Pay As You Go", html)
+        self.assertIn("PAYG", html)
         self.assertIn("payg_reseller_plans", html)
         self.assertIn("fixed_reseller_plans", html)
 
@@ -93,8 +93,8 @@ class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "4.10.9")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.9")
+        self.assertEqual(__version__, "5.2.0")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "5.2.0")
 
 
 if __name__ == "__main__":

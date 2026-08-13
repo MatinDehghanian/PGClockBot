@@ -541,7 +541,7 @@ async def open_reseller_apply(message: Message, session: AsyncSession, db_user: 
         ],
         [
             InlineKeyboardButton(
-                text=f"⚡ Pay As You Go — {payg_n} پلن",
+                text=f"⚡ PAYG — {payg_n} پلن",
                 callback_data="resapply:mode:payg",
             )
         ],
@@ -551,7 +551,7 @@ async def open_reseller_apply(message: Message, session: AsyncSession, db_user: 
             "🤝 درخواست نمایندگی",
             "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
             "• <b>ثابت</b> — کمیسیون روی فروش\n"
-            "• <b>Pay As You Go</b> — پرداخت بر اساس مصرف ترافیک",
+            "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک",
         ),
         reply_markup=main_kb,
     )

@@ -570,7 +570,7 @@ def _admin_plans_add_type_entries(audience: str, ui: dict | None = None) -> list
     if audience == "resellers":
         return [
             (REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED, "📦 ثابت (کمیسیون)"),
-            (REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG, "⚡ Pay As You Go"),
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG, "⚡ PAYG"),
         ]
     return [
         (REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED, "💎 ثابت"),
@@ -1393,7 +1393,7 @@ def admin_plan_kind_keyboard(
             ],
             [
                 _ikb(
-                    "⚡ Pay As You Go",
+                    "⚡ PAYG",
                     callback_data="adm:plans:kind:resellers:payg",
                     style=_style(ui, "plan_res_payg", fallback="primary"),
                 )
@@ -1938,7 +1938,7 @@ def admin_plans_add_type_keyboard(audience: str, ui: dict | None = None) -> Inli
                 ],
                 [
                     InlineKeyboardButton(
-                        text="⚡ Pay As You Go",
+                        text="⚡ PAYG",
                         callback_data="adm:plans:add:resellers:payg",
                     )
                 ],
@@ -2210,6 +2210,7 @@ def admin_user_actions(
     is_blocked: bool,
     role: str | None = None,
     confirm_delete: bool = False,
+    ui: dict | None = None,
 ) -> InlineKeyboardMarkup:
     block_label = "🔓 رفع مسدودی" if is_blocked else "🚫 مسدود کردن"
     rows: list[list[InlineKeyboardButton]] = [
@@ -2235,15 +2236,21 @@ def admin_user_actions(
     if confirm_delete:
         rows.append(
             [
-                InlineKeyboardButton(
-                    text="⚠️ تأیید حذف کامل کاربر",
+                _ikb(
+                    "⚠️ تأیید حذف کامل کاربر",
                     callback_data=f"adm:users:del:{user_id}",
-                    style="danger",
+                    style=_style(ui, "reject", fallback="danger"),
                 )
             ]
         )
         rows.append(
-            [InlineKeyboardButton(text="⬅️ انصراف", callback_data=f"adm:users:view:{user_id}")]
+            [
+                _ikb(
+                    "⬅️ انصراف",
+                    callback_data=f"adm:users:view:{user_id}",
+                    style=_style(ui, "cancel", fallback="danger"),
+                )
+            ]
         )
     else:
         rows.append(

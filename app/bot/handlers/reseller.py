@@ -74,7 +74,7 @@ async def _resapply_mode_keyboard(session: AsyncSession, ui: dict) -> InlineKeyb
         ],
         [
             InlineKeyboardButton(
-                text=f"⚡ Pay As You Go — {payg_n} پلن",
+                text=f"⚡ PAYG — {payg_n} پلن",
                 callback_data="resapply:mode:payg",
             )
         ],
@@ -430,7 +430,7 @@ async def res_billing(
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
     if not is_payg(profile):
-        await callback.answer("این فروشگاه Pay As You Go نیست", show_alert=True)
+        await callback.answer("این فروشگاه PAYG نیست", show_alert=True)
         return
     await callback.answer()
     enabled = await is_billing_enabled(session)
@@ -679,7 +679,7 @@ async def resapply_home(
                 "🤝 درخواست نمایندگی",
                 "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
                 "• <b>ثابت</b> — کمیسیون روی فروش\n"
-                "• <b>Pay As You Go</b> — پرداخت بر اساس مصرف ترافیک\n\n"
+                "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک\n\n"
                 "بعد از انتخاب نوع، پلن‌های همان دسته نمایش داده می‌شود.",
             ),
             reply_markup=await _resapply_mode_keyboard(session, ui),

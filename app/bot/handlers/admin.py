@@ -275,7 +275,9 @@ async def adm_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         await callback.message.edit_text(text, reply_markup=None)
 
 
-def _order_actions(order: Order, payment: Payment | None) -> list[list[InlineKeyboardButton]]:
+def _order_actions(
+    order: Order, payment: Payment | None, ui: dict | None = None
+) -> list[list[InlineKeyboardButton]]:
     rows: list[list[InlineKeyboardButton]] = []
     # Shop-tenant orders are never actionable by platform admin
     if order.reseller_id:
@@ -288,15 +290,15 @@ def _order_actions(order: Order, payment: Payment | None) -> list[list[InlineKey
     if can_decide and order.status not in {OrderStatus.DELIVERED.value, OrderStatus.REJECTED.value}:
         rows.append(
             [
-                InlineKeyboardButton(
-                    text="✅ تأیید",
+                kb._ikb(
+                    "✅ تأیید",
                     callback_data=f"ordrev:ok:{order.id}",
-                    style="success",
+                    style=kb._style(ui, "confirm", fallback="success"),
                 ),
-                InlineKeyboardButton(
-                    text="❌ رد",
+                kb._ikb(
+                    "❌ رد",
                     callback_data=f"ordrev:no:{order.id}",
-                    style="danger",
+                    style=kb._style(ui, "reject", fallback="danger"),
                 ),
             ]
         )
@@ -368,7 +370,8 @@ async def adm_order_view(callback: CallbackQuery, session: AsyncSession, db_user
     )
     if pay:
         text += f"پرداخت: #{pay.id} ({pay.status})\n"
-    rows = _order_actions(order, pay)
+    ui = await get_all_settings(session)
+    rows = _order_actions(order, pay, ui)
     rows.append([InlineKeyboardButton(text="⬅️ لیست سفارش‌ها", callback_data="adm:orders")])
     if callback.message:
         await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
@@ -1532,10 +1535,11 @@ async def adm_users_search(
         f"سرویس‌ها: {svc_count}\n"
         f"مسدود: {blocked}"
     )
+    ui = await get_all_settings(session)
     await message.answer(
         text,
         reply_markup=kb.admin_user_actions(
-            user.id, is_blocked=user.is_blocked, role=user.role
+            user.id, is_blocked=user.is_blocked, role=user.role, ui=ui
         ),
     )
 
@@ -1564,11 +1568,13 @@ async def _render_user_card(
     )
     if confirm_delete:
         text += "\n\n⚠️ <b>حذف کامل برگشت‌ناپذیر است</b> (سفارش‌ها، سرویس‌ها، تیکت‌ها)."
+    ui = await get_all_settings(session)
     markup = kb.admin_user_actions(
         user.id,
         is_blocked=user.is_blocked,
         role=user.role,
         confirm_delete=confirm_delete,
+        ui=ui,
     )
     if edit:
         try:
