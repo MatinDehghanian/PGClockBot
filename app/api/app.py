@@ -306,7 +306,13 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     async def get_db():
         async with SessionLocal() as session:
-            yield session
+            try:
+                yield session
+            except Exception:
+                from app.services.db_safe import rollback_quiet
+
+                await rollback_quiet(session)
+                raise
 
     def get_session_user(request: Request) -> Optional[dict]:
         cookie = request.cookies.get("session")
@@ -446,6 +452,9 @@ def create_api_app(lifespan=None) -> FastAPI:
 
             await rollback_quiet(session)
             request.state.panel_tickets_unread = 0
+        from app.services.db_safe import recover_session
+
+        await recover_session(session)
         return user
 
     async def require_admin(

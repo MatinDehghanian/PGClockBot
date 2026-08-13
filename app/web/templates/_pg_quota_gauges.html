@@ -28,7 +28,7 @@
       <circle class="home-gauge-val" cx="60" cy="60" r="52" pathLength="100" />
     </svg>
     <div class="home-gauge-center">
-      {% if meter.has_limit and meter.remain_pct is not none %}
+      {% if meter.has_limit and meter.remain_pct is number %}
       <strong>{{ '%.0f'|format(meter.remain_pct) }}٪</strong>
       <span>مانده</span>
       {% else %}

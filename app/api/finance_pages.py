@@ -263,13 +263,14 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         fetch_limit = 500 if search_q else 100
 
         if tab == "behavior" and (can_orders or can_payments):
-            from app.services.ux20 import funnel_summary
+            from app.api.home_pages import _EMPTY_FUNNEL, _safe_funnel
+            from app.services.db_safe import recover_session
 
+            await recover_session(session)
             rid = None if is_platform_admin(staff) else shop_owner_id(staff)
-            try:
-                ctx["funnel"] = await funnel_summary(session, reseller_id=rid, days=7)
-            except Exception:
-                pass
+            ctx["funnel"] = await _safe_funnel(session, reseller_id=rid) or dict(
+                _EMPTY_FUNNEL
+            )
 
         elif tab == "orders" and can_orders:
             q = (
@@ -411,30 +412,40 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                             reseller_id=rid_scope,
                         )
                     except Exception:
+                        from app.services.db_safe import rollback_quiet
+
+                        await rollback_quiet(session)
                         continue
                 ctx["receipt_matches"] = matches
 
         elif tab == "delivery" and can_orders:
+            from app.services.db_safe import rollback_quiet
             from app.services.ux20 import list_open_delivery_failures
 
             rid = None if is_platform_admin(staff) else shop_owner_id(staff)
             if not is_platform_admin(staff) and not rid:
                 ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
                 return render(request, "finance.html", ctx)
-            failures = await list_open_delivery_failures(session, reseller_id=rid)
-            order_ids = [int(f.order_id) for f in failures]
-            orders_by_id: dict[int, Order] = {}
-            if order_ids:
-                for o in (
-                    await session.execute(
-                        select(Order)
-                        .options(selectinload(Order.user), selectinload(Order.plan))
-                        .where(Order.id.in_(order_ids))
-                    )
-                ).scalars().all():
-                    orders_by_id[int(o.id)] = o
-            ctx["delivery_failures"] = failures
-            ctx["orders_by_id"] = orders_by_id
+            try:
+                failures = await list_open_delivery_failures(session, reseller_id=rid)
+                order_ids = [int(f.order_id) for f in failures]
+                orders_by_id: dict[int, Order] = {}
+                if order_ids:
+                    for o in (
+                        await session.execute(
+                            select(Order)
+                            .options(selectinload(Order.user), selectinload(Order.plan))
+                            .where(Order.id.in_(order_ids))
+                        )
+                    ).scalars().all():
+                        orders_by_id[int(o.id)] = o
+                ctx["delivery_failures"] = failures
+                ctx["orders_by_id"] = orders_by_id
+            except Exception:
+                logger.exception("delivery failures tab failed")
+                await rollback_quiet(session)
+                ctx["delivery_failures"] = []
+                ctx["orders_by_id"] = {}
 
         return render(request, "finance.html", ctx)
 

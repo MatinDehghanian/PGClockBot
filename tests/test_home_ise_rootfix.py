@@ -114,6 +114,39 @@ class SafeHelpersRollbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(out["shop_open"], 0)
         session.rollback.assert_awaited()
 
+    async def test_finance_behavior_uses_safe_funnel(self):
+        src = Path("app/api/finance_pages.py").read_text(encoding="utf-8")
+        self.assertIn("_safe_funnel", src)
+        self.assertNotIn(
+            "ctx[\"funnel\"] = await funnel_summary",
+            src,
+        )
+        self.assertIn("rollback_quiet", src)
+        self.assertIn("list_open_delivery_failures", src)
+
+    async def test_funnel_page_uses_shared_panel(self):
+        page = Path("app/web/templates/funnel.html").read_text(encoding="utf-8")
+        self.assertIn('_funnel_panel.html', page)
+        self.assertNotIn("رها می‌کنند", page)
+
+    async def test_pg_quota_gauge_uses_number_test(self):
+        src = Path("app/web/templates/_pg_quota_gauges.html").read_text(encoding="utf-8")
+        self.assertIn("remain_pct is number", src)
+        self.assertNotIn("remain_pct is not none", src)
+
+
+class RecoverSessionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_recover_heals_pending_rollback(self):
+        from sqlalchemy.exc import PendingRollbackError
+
+        from app.services.db_safe import recover_session
+
+        session = AsyncMock()
+        session.connection = AsyncMock(side_effect=PendingRollbackError())
+        session.rollback = AsyncMock()
+        await recover_session(session)
+        session.rollback.assert_awaited()
+
 
 class EnrichAdminFailClosedTests(unittest.IsolatedAsyncioTestCase):
     async def test_probe_exception_keeps_admin_session(self):

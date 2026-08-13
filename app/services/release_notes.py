@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
     "5.2.3": [
-        "رفع ریشه‌ای Internal Server Error داشبورد/ورود ادمین: بازیابی سشن DB پس از خطای جزئی، ایزوله کردن overview، و جلوگیری از کرش قالب روی متریک‌های ناقص",
-        "سخت‌سازی load_web_admin و enrich پاسارگارد بدون نشتی جزئیات خطا به کلاینت",
-        "صفحه خطای ۵۰۰ عمومی بدون traceback/secret",
+        "رفع ریشه‌ای Internal Server Error داشبورد/ورود/مالی برای همه نقش‌ها: بازیابی سشن DB، ایزوله overview و رفتار کاربر",
+        "تب رفتار کاربر / تحویل ناموفق و داشبورد نماینده دیگر با خطای جزئی ۵۰۰ نمی‌شوند",
+        "سخت‌سازی web_admin و enrich پاسارگارد؛ صفحه ۵۰۰ عمومی بدون نشتی traceback/secret",
     ],
     "5.2.2": [
         "حذف نرخ تبدیل و پلن‌های رهاشده از رفتار کاربر — فقط شمارش مراحل",
