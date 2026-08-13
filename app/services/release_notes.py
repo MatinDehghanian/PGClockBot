@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "5.3.1": [
+        "مودال بستن تیکت وب‌پنل و تلگرام یکدست؛ دکمه بستن سمت چپ",
+        "موبایل: دکمه بستن و ذخیره وضعیت تیکت فول‌عرض",
+    ],
     "5.3.0": [
         "داشبورد فروش: موبایل ۱ ستون، متوسط ۲ ستون، تبلت/دسکتاپ ۳ ستون (بر اساس عرض کارت)",
         "حذف عبارت «تقویم تهران» از زیرتیتر فروش",
