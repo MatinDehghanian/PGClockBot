@@ -377,6 +377,10 @@ def _ensure_indexes(sync_conn) -> None:
         "CREATE INDEX IF NOT EXISTS ix_orders_service_id ON orders (service_id)",
         "CREATE INDEX IF NOT EXISTS ix_payments_order_id ON payments (order_id)",
         "CREATE INDEX IF NOT EXISTS ix_discount_codes_code ON discount_codes (code)",
+        # Every reseller-scoped user query (bot "my customers", dashboards,
+        # tenant-isolation filters) hits this column — see security audit note
+        # on multi-tenant scale.
+        "CREATE INDEX IF NOT EXISTS ix_bot_users_reseller_id ON bot_users (reseller_id)",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_referral_reason "
         "ON wallet_transactions (user_id, reason) WHERE reason LIKE 'referral:%'",
     )

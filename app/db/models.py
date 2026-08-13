@@ -89,7 +89,7 @@ class BotUser(Base):
         ForeignKey("bot_users.id"), nullable=True
     )
     reseller_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("bot_users.id"), nullable=True
+        ForeignKey("bot_users.id"), nullable=True, index=True
     )
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
     staff_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
