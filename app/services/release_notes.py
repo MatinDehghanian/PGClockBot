@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "5.2.4": [
+        "رفع ورود روی سرورهایی که بعد از v5.2.3 هنوز ۵۰۰ می‌دادند: _panel_redirect و WEB_SECRET دیگر پنل را نمی‌ترکانند",
+        "داشبورد با پوسته fail-soft؛ صفحه ۵۰۰ با کد پیگیری (ref) بدون نشتی جزئیات",
+    ],
     "5.2.3": [
         "رفع ریشه‌ای Internal Server Error داشبورد/ورود/مالی برای همه نقش‌ها: بازیابی سشن DB، ایزوله overview و رفتار کاربر",
         "تب رفتار کاربر / تحویل ناموفق و داشبورد نماینده دیگر با خطای جزئی ۵۰۰ نمی‌شوند",

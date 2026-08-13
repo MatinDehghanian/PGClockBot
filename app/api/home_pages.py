@@ -221,6 +221,58 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
+        try:
+            return await _home_dashboard_inner(request, staff, session, render)
+        except Exception:
+            logger.exception("home_dashboard fatal; serving fail-soft shell")
+            from app.services.db_safe import rollback_quiet
+            from app.services.home_overview import empty_home_overview
+
+            await rollback_quiet(session)
+            # Minimal page so login→/home never dead-ends on a single server quirk.
+            if is_platform_admin(staff):
+                return render(
+                    request,
+                    "home.html",
+                    {
+                        "staff": staff,
+                        "overview": empty_home_overview(),
+                        "update": None,
+                        "ticket_alert": None,
+                        "action_center": dict(_EMPTY_ACTION_CENTER),
+                        "pg_health": {"ok": False, "error": "بارگذاری ناقص", "version": None},
+                        "shop_maintenance": False,
+                        "funnel_enabled": False,
+                        "funnel": dict(_EMPTY_FUNNEL),
+                        "payg_risk": {
+                            "suspended": [],
+                            "low": [],
+                            "threshold": 0,
+                            "has_items": False,
+                        },
+                    },
+                )
+            return render(
+                request,
+                "reseller_home.html",
+                {
+                    "staff": staff,
+                    "stats": empty_shop_stats(),
+                    "pg_limits": None,
+                    "bot_setup_needed": False,
+                    "bot": {"ok": False, "error": "بارگذاری ناقص", "username": None, "name": None},
+                    "ticket_alert": None,
+                    "billing_card": None,
+                    "action_center": dict(_EMPTY_ACTION_CENTER),
+                    "pg_health": {"ok": False, "error": "بارگذاری ناقص", "version": None},
+                    "shop_maintenance": False,
+                    "capacity_warn": False,
+                    "funnel_enabled": False,
+                    "funnel": dict(_EMPTY_FUNNEL),
+                },
+            )
+
+    async def _home_dashboard_inner(request, staff, session, render):
         # Platform admin: server + both panels.
         if is_platform_admin(staff):
             from app.services.db_safe import recover_session, rollback_quiet

@@ -431,15 +431,38 @@ def update_env_keys(updates: dict[str, str | int | None]) -> Path:
 
 
 def ensure_web_secret() -> str:
-    """Return current WEB_SECRET, generating and persisting one if missing."""
+    """Return current WEB_SECRET, generating and persisting one if missing.
+
+    Must never raise: a failure here 500s every signed session (login included).
+    If ``.env`` is not writable, keep a process-local secret so the panel stays up.
+    """
+    import logging
+
     from app.services.security_policy import PLACEHOLDER_SECRETS, is_placeholder_secret
 
-    secret = (_env_get("WEB_SECRET") or "").strip()
-    if is_placeholder_secret(secret) or secret in PLACEHOLDER_SECRETS:
-        secret = secrets.token_hex(32)
+    log = logging.getLogger(__name__)
+    try:
+        secret = (_env_get("WEB_SECRET") or "").strip()
+    except Exception:
+        log.exception("reading WEB_SECRET failed")
+        secret = ""
+    if not (is_placeholder_secret(secret) or secret in PLACEHOLDER_SECRETS):
+        return secret
+    secret = secrets.token_hex(32)
+    try:
         update_env_keys({"WEB_SECRET": secret})
         return secret
-    return secret
+    except Exception:
+        log.exception("persisting WEB_SECRET failed; using in-memory secret for this process")
+        # Best-effort: keep serving signed cookies until ops fixes .env permissions.
+        try:
+            import os
+
+            os.environ["WEB_SECRET"] = secret
+            get_settings.cache_clear()
+        except Exception:
+            pass
+        return secret
 
 
 def normalize_webhook_path(raw: str | None) -> str:
@@ -573,7 +596,11 @@ def default_http_panel_url(*, web_port: int | str | None = None) -> str:
         port_s = str(int(port or 9000))
     except (TypeError, ValueError):
         port_s = "9000"
-    return f"http://{detect_server_ip()}:{port_s}"
+    try:
+        ip = (detect_server_ip() or "").strip() or "127.0.0.1"
+    except Exception:
+        ip = "127.0.0.1"
+    return f"http://{ip}:{port_s}"
 
 
 def setup_finish_login_url() -> str:
