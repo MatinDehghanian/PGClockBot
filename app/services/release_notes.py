@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "5.2.6": [
+        "ریستور بکاپ مثل آپدیت: نوار پیشرفت، مراحل، پیام موفقیت و ری‌استارت",
+        "داشبورد دیگر با خطای جزئی «قطع» جعلی نشان نمی‌دهد — بنر بارگذاری ناقص + بررسی‌نشده",
+        "سخت‌سازی وضعیت ریستور: restart_required، قفل وضعیت، clear بعد از موفقیت، مسیر بدون JS",
+    ],
     "5.2.5": [
         "رفع قطع شدن جعلی وضعیت اتصال در داشبورد وقتی مرکز اقدام آیتم داشت (باگ Jinja ac.items)",
     ],
