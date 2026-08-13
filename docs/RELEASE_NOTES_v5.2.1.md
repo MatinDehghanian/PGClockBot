@@ -12,6 +12,7 @@
 - Behavior stats use the same **`stat-ico`** language as other home panels.
 - Chat live preview applies saved **button colors on every preview tab** (fixed empty-string → default bug).
 - Colors catalog expanded (~115 buttons) so reply hubs (admin / reseller / PG / loyalty / backup / …) are colorable; trial plan kind wired.
+- **Security:** receipt proxy never cross-uses platform↔reseller bot tokens; platform payment list excludes reseller-tenant topups; path/type/size hardened; `Cache-Control: private, no-store`.
 
 ## Deploy
 

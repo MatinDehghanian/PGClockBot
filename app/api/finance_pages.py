@@ -8,7 +8,7 @@ from urllib.parse import quote, urlencode
 import httpx
 from fastapi import Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -21,27 +21,63 @@ from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_setti
 logger = logging.getLogger(__name__)
 
 
-async def _payment_bot_token(session: AsyncSession, payment: Payment) -> str:
-    """Resolve Telegram bot token that owns this receipt file_id."""
+async def _payment_bot_token(
+    session: AsyncSession,
+    payment: Payment,
+    *,
+    order: Order | None,
+    payer_reseller_id: int | None,
+) -> str:
+    """Resolve Telegram bot token that owns this receipt file_id.
+
+    Never cross tenants: reseller receipts use only that shop's bot token;
+    platform receipts use only the platform bot token (no fallback either way).
+    """
     from app.config import get_settings
 
-    if payment.order_id:
-        order = await session.get(Order, int(payment.order_id))
-        if order and order.reseller_id:
-            profile = (
-                await session.execute(
-                    select(ResellerProfile).where(
-                        ResellerProfile.user_id == int(order.reseller_id)
-                    )
+    if order is not None and order.reseller_id:
+        profile = (
+            await session.execute(
+                select(ResellerProfile).where(
+                    ResellerProfile.user_id == int(order.reseller_id)
                 )
-            ).scalar_one_or_none()
-            token = ((profile.bot_token if profile else None) or "").strip()
-            if token:
-                return token
+            )
+        ).scalar_one_or_none()
+        return ((profile.bot_token if profile else None) or "").strip()
+
+    if payer_reseller_id:
+        profile = (
+            await session.execute(
+                select(ResellerProfile).where(
+                    ResellerProfile.user_id == int(payer_reseller_id)
+                )
+            )
+        ).scalar_one_or_none()
+        return ((profile.bot_token if profile else None) or "").strip()
+
     return (get_settings().bot_token or "").strip()
 
 
+def _safe_telegram_file_path(raw: str | None) -> str | None:
+    """Normalize Telegram getFile path; reject traversal / absolute / non-file paths."""
+    import re
+
+    path = (raw or "").strip().lstrip("/")
+    if not path:
+        return None
+    if ".." in path or "\\" in path:
+        return None
+    if path.startswith(("http:", "https:", "file:")):
+        return None
+    if any(ord(ch) < 32 for ch in path):
+        return None
+    if not re.match(r"^[A-Za-z0-9_./-]+$", path):
+        return None
+    return path
+
+
 async def _fetch_telegram_file(token: str, file_id: str) -> tuple[bytes, str] | None:
+    """Download a Telegram file. Returns image bytes only (receipt photos)."""
     async with httpx.AsyncClient(timeout=20.0) as client:
         meta = await client.get(
             f"https://api.telegram.org/bot{token}/getFile",
@@ -50,15 +86,18 @@ async def _fetch_telegram_file(token: str, file_id: str) -> tuple[bytes, str] | 
         data = meta.json() if meta.status_code == 200 else {}
         if not data.get("ok"):
             return None
-        path = ((data.get("result") or {}).get("file_path") or "").strip()
-        if not path or ".." in path:
+        path = _safe_telegram_file_path(((data.get("result") or {}).get("file_path") or ""))
+        if not path:
             return None
         file_resp = await client.get(
             f"https://api.telegram.org/file/bot{token}/{path}"
         )
         if file_resp.status_code != 200 or not file_resp.content:
             return None
-        ctype = (file_resp.headers.get("content-type") or "").split(";")[0].strip()
+        # Cap size — receipts are photos, not arbitrary dumps.
+        if len(file_resp.content) > 15 * 1024 * 1024:
+            return None
+        ctype = (file_resp.headers.get("content-type") or "").split(";")[0].strip().lower()
         if not ctype or ctype == "application/octet-stream":
             lower = path.lower()
             if lower.endswith(".png"):
@@ -69,7 +108,43 @@ async def _fetch_telegram_file(token: str, file_id: str) -> tuple[bytes, str] | 
                 ctype = "image/gif"
             else:
                 ctype = "image/jpeg"
+        if not ctype.startswith("image/"):
+            return None
         return file_resp.content, ctype
+
+
+async def _authorize_receipt_access(
+    session: AsyncSession,
+    staff: dict,
+    payment: Payment,
+) -> tuple[Order | None, int | None] | None:
+    """Return (order, payer_reseller_id) if staff may view this receipt, else None.
+
+    Platform admins: only platform-scoped payments (no reseller order / no reseller payer).
+    Shop staff: only payments for their shop (order.reseller_id or payer.reseller_id).
+    """
+    order: Order | None = None
+    if payment.order_id:
+        order = await session.get(Order, int(payment.order_id))
+
+    payer_reseller_id: int | None = None
+    if payment.user_id:
+        payer = await session.get(BotUser, int(payment.user_id))
+        if payer and payer.reseller_id:
+            payer_reseller_id = int(payer.reseller_id)
+
+    order_rid = int(order.reseller_id) if order and order.reseller_id else None
+    tenant_rid = order_rid or payer_reseller_id
+
+    if is_platform_admin(staff):
+        if tenant_rid:
+            return None
+        return order, payer_reseller_id
+
+    rid = shop_owner_id(staff)
+    if not rid or not tenant_rid or int(tenant_rid) != int(rid):
+        return None
+    return order, payer_reseller_id
 
 
 def _groups_for_tab(tab: str) -> tuple[list[str], dict]:
@@ -248,13 +323,21 @@ def register_finance_pages(app, *, render, require_staff, get_db):
 
         elif tab == "payments" and can_payments:
             if is_platform_admin(staff):
+                # Platform scope only — never list reseller-tenant wallet topups/orders.
                 q = (
                     select(Payment)
                     .outerjoin(Order, Order.id == Payment.order_id)
+                    .outerjoin(BotUser, BotUser.id == Payment.user_id)
                     .where(
                         or_(
-                            Payment.is_wallet_topup.is_(True),
-                            Order.reseller_id.is_(None),
+                            and_(
+                                Payment.is_wallet_topup.is_(True),
+                                BotUser.reseller_id.is_(None),
+                            ),
+                            and_(
+                                Payment.is_wallet_topup.is_(False),
+                                Order.reseller_id.is_(None),
+                            ),
                         )
                     )
                     .order_by(Payment.id.desc())
@@ -385,22 +468,17 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         if not file_id or file_id.startswith("stars:"):
             return Response(status_code=404, content="رسید تصویری نیست")
 
-        # Scope: platform admin sees platform wallet topups + non-reseller orders;
-        # shop staff only their reseller's order payments.
-        if is_platform_admin(staff):
-            if payment.order_id:
-                order = await session.get(Order, int(payment.order_id))
-                if order and order.reseller_id:
-                    return Response(status_code=403, content="دسترسی ندارید")
-        else:
-            rid = shop_owner_id(staff)
-            if not rid or not payment.order_id:
-                return Response(status_code=403, content="دسترسی ندارید")
-            order = await session.get(Order, int(payment.order_id))
-            if not order or int(order.reseller_id or 0) != int(rid):
-                return Response(status_code=403, content="دسترسی ندارید")
+        scoped = await _authorize_receipt_access(session, staff, payment)
+        if scoped is None:
+            return Response(status_code=403, content="دسترسی ندارید")
+        order, payer_reseller_id = scoped
 
-        token = await _payment_bot_token(session, payment)
+        token = await _payment_bot_token(
+            session,
+            payment,
+            order=order,
+            payer_reseller_id=payer_reseller_id,
+        )
         if not token:
             return Response(status_code=503, content="توکن ربات تنظیم نشده")
         try:
@@ -415,7 +493,8 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             content=body,
             media_type=ctype,
             headers={
-                "Cache-Control": "private, max-age=300",
+                "Cache-Control": "private, no-store",
                 "Content-Disposition": f'inline; filename="receipt-{payment_id}"',
+                "X-Content-Type-Options": "nosniff",
             },
         )
