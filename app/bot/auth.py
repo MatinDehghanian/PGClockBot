@@ -72,6 +72,27 @@ async def can_platform_pg_action(db_user: BotUser | None, resource: str, action:
     return can_pg_action(authz_from_staff(staff), resource, action)
 
 
+async def platform_pg_quota_staff() -> dict:
+    """Staff-shaped dict for the env PG admin, usable with ``app.services.pg_quota``.
+
+    Bot PG tools are platform-admin-only, so unlike the web panel (which
+    always threads a full ``staff`` dict through ``pg_quota``), bot handlers
+    had no way to run the same max_users / data-cap pre-check. This mirrors
+    the same Hybrid-Owner-aware probe used for menu/action gating so a
+    limited env PasarGuard account gets a friendly Persian quota message
+    from the bot too, instead of only PasarGuard's raw rejection.
+    """
+    from app.services.pg_access import resolve_platform_pg_capabilities
+
+    caps = await resolve_platform_pg_capabilities()
+    return {
+        "role": "admin",
+        "pg_is_owner": bool(caps.get("pg_is_owner")),
+        "pg_admin_username": caps.get("username"),
+        "pg_role_id": caps.get("pg_role_id"),
+    }
+
+
 async def filtered_pg_reply_keyboard(db_user: BotUser | None = None, ui: dict | None = None):
     """Reply keyboard for PasarGuard submenu clamped to env PG role."""
     from app.bot import keyboards as kb

@@ -17,6 +17,7 @@ from app.bot.auth import (
     can_platform_pg_action,
     can_platform_pg_page,
     filtered_pg_reply_keyboard,
+    platform_pg_quota_staff,
 )
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.tg_utils import safe_edit_text
@@ -30,6 +31,7 @@ from app.services.pasarguard import (
     user_group_ids,
     user_subscription_url,
 )
+from app.services.pg_quota import PgQuotaError, assert_can_create_user
 
 router = Router(name="admin_pg_users")
 
@@ -667,6 +669,11 @@ async def pg_create_username(message: Message, state: FSMContext, db_user: BotUs
             await message.answer("تمپلیت انتخاب نشده.", reply_markup=await filtered_pg_reply_keyboard(db_user))
             return
         try:
+            await assert_can_create_user(await platform_pg_quota_staff(), from_template=True)
+        except PgQuotaError as qe:
+            await message.answer(f"❌ {qe.message}")
+            return
+        try:
             user = await get_pg().create_user_from_template(
                 {
                     "username": uname,
@@ -755,6 +762,16 @@ async def pg_create_days(message: Message, state: FSMContext, db_user: BotUser):
         payload["data_limit"] = 0
     if days <= 0:
         payload["expire"] = 0
+    try:
+        await assert_can_create_user(
+            await platform_pg_quota_staff(),
+            data_limit=data_limit if gb > 0 else None,
+            expire_ts=expire_ts if days > 0 else None,
+            from_template=False,
+        )
+    except PgQuotaError as qe:
+        await message.answer(f"❌ {qe.message}")
+        return
     try:
         user = await get_pg().create_user(payload)
     except Exception as e:

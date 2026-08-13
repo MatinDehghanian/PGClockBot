@@ -60,6 +60,10 @@ tests/test_pg_groups_inbound_tag_allowlist.py
 tests/test_bot_pg_action_matrix.py
 tests/test_plans_catalog_hybrid_owner_scope.py
 tests/test_hybrid_owner_pg_clamp.py
+tests/test_hybrid_owner_quota_gate.py
+
+# --- Multi-tenant scale / performance hardening ---
+tests/test_bot_users_reseller_id_index.py
 
 # --- Setup wizard / secrets-at-rest / infra hardening ---
 tests/test_setup_gate_install_url.py

@@ -257,12 +257,25 @@ async def _load_admin_and_role(staff: dict) -> tuple[dict, dict | None]:
 
 
 def staff_needs_quota_check(staff: dict) -> bool:
-    """Owner web admin (role=admin) acts as sudo — no PG capacity gate.
+    """Full platform Owner (true PasarGuard sudo) acts as sudo — no PG capacity gate.
+
+    A *Hybrid* Owner — ``role="admin"`` whose ``.env`` PasarGuard account is
+    itself a limited admin (``pg_is_owner`` explicitly ``False``, set by
+    ``pg_access.enrich_platform_admin_staff``) — must be checked exactly like
+    any other restricted admin. Skipping the check for every ``role="admin"``
+    used to mean a Hybrid Owner would only discover their own max_users /
+    data-cap by PasarGuard's raw rejection instead of the same friendly
+    Persian message resellers/pg_staff already get.
 
     Any non-admin staff must be checked — even when ``pg_admin_username`` is
-    missing (that case fails closed in ``_load_admin_and_role``).
+    missing (that case fails closed in ``_load_admin_and_role``). Missing/
+    unset ``pg_is_owner`` (legacy/unenriched staff dict, or a genuine
+    non-Hybrid single-owner deployment) still defaults to sudo, preserving
+    prior behavior for the common case.
     """
-    return staff.get("role") != "admin"
+    if staff.get("role") != "admin":
+        return True
+    return staff.get("pg_is_owner") is False
 
 
 async def assert_can_create_user(
