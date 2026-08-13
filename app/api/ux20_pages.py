@@ -6,7 +6,7 @@ import json
 from urllib.parse import quote
 
 from fastapi import Depends, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -115,51 +115,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             f"/users/{user_id}?ok={quote('یادداشت و ریسک ذخیره شد')}", status_code=303
         )
 
-    @app.get("/tools", response_class=HTMLResponse)
-    async def tools_hub(
-        request: Request,
-        staff: dict = Depends(require_staff),
-        session: AsyncSession = Depends(get_db),
-    ):
-        """Legacy hub — features moved to settings/plans; keep redirects for bookmarks."""
-        authz = authz_from_staff(staff)
-        can_tools = (
-            is_platform_admin(staff)
-            or can_shop(authz, "orders")
-            or can_shop(authz, "payments")
-            or can_shop(authz, "shop_settings")
-            or can_shop(authz, "plans")
-        )
-        if not can_tools:
-            return RedirectResponse("/home", status_code=303)
-
-        tab = (request.query_params.get("tab") or "").strip()
-        if tab in {"steps", "funnel"}:
-            return RedirectResponse("/finance?tab=behavior", status_code=303)
-        if tab == "export":
-            return RedirectResponse("/settings?tab=backup", status_code=303)
-        if tab == "gifts":
-            return RedirectResponse("/plans?gifts=1", status_code=303)
-        # Default / links → bot settings (reseller shop-settings)
-        if is_platform_admin(staff):
-            return RedirectResponse("/settings?tab=links", status_code=303)
-        return RedirectResponse("/shop-settings?tab=links", status_code=303)
-
-    @app.get("/tools/gift-codes")
-    async def gift_codes_redirect():
-        return RedirectResponse("/plans?gifts=1", status_code=303)
-
-    @app.get("/tools/magic-links")
-    async def magic_links_redirect(staff: dict = Depends(require_staff)):
-        if is_platform_admin(staff):
-            return RedirectResponse("/settings?tab=links", status_code=303)
-        return RedirectResponse("/shop-settings?tab=links", status_code=303)
-
-    @app.get("/tools/funnel")
-    async def funnel_redirect():
-        return RedirectResponse("/finance?tab=behavior", status_code=303)
-
-    @app.post("/tools/gift-codes")
+    @app.post("/plans/gift-codes")
     async def gift_codes_create(
         amount: int = Form(...),
         max_uses: int = Form(1),
@@ -195,7 +151,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 status_code=303,
             )
 
-    @app.post("/tools/gift-codes/{code_id}/toggle")
+    @app.post("/plans/gift-codes/{code_id}/toggle")
     async def gift_codes_toggle(
         code_id: int,
         staff: dict = Depends(require_staff),
@@ -215,7 +171,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         await session.commit()
         return RedirectResponse("/plans?gifts=1&ok=1", status_code=303)
 
-    @app.get("/tools/export")
+    @app.get("/settings/shop-export")
     async def shop_export(
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
@@ -233,7 +189,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             },
         )
 
-    @app.post("/tools/import")
+    @app.post("/settings/shop-import")
     async def shop_import(
         request: Request,
         file: UploadFile = File(...),
@@ -254,13 +210,23 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 replace_plans=(replace_plans or "").strip() in {"1", "on", "true"},
             )
             msg = f"وارد شد: {stats.get('settings', 0)} تنظیمات، {stats.get('plans', 0)} پلن"
+            if is_platform_admin(staff):
+                return RedirectResponse(
+                    f"/settings?tab=backup&ok={quote(msg)}",
+                    status_code=303,
+                )
             return RedirectResponse(
-                f"/settings?tab=backup&ok={quote(msg)}",
+                f"/shop-settings?ok={quote(msg)}",
                 status_code=303,
             )
         except Exception as exc:
+            if is_platform_admin(staff):
+                return RedirectResponse(
+                    f"/settings?tab=backup&err={quote(str(exc) or 'خطای ایمپورت')}",
+                    status_code=303,
+                )
             return RedirectResponse(
-                f"/settings?tab=backup&err={quote(str(exc) or 'خطای ایمپورت')}",
+                f"/shop-settings?err={quote(str(exc) or 'خطای ایمپورت')}",
                 status_code=303,
             )
 

@@ -4,9 +4,9 @@
   <h2>خروجی / ورودی تنظیمات فروشگاه</h2>
   <p class="muted update-card-caption">پلن‌ها و متن‌ها/سوییچ‌ها را به‌صورت JSON جابه‌جا کنید (جدا از بکاپ کامل ZIP).</p>
   <div class="actions" style="gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-2)">
-    <a class="btn btn-ghost" href="/tools/export">دانلود خروجی JSON</a>
+    <a class="btn btn-ghost" href="/settings/shop-export">دانلود خروجی JSON</a>
   </div>
-  <form method="post" action="/tools/import" enctype="multipart/form-data" class="form-stack">
+  <form method="post" action="/settings/shop-import" enctype="multipart/form-data" class="form-stack">
     <label class="upload-box">
       <input type="file" name="file" accept=".json,application/json" required />
       <span class="upload-box-plus" aria-hidden="true">+</span>

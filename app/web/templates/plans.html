@@ -592,7 +592,7 @@
       <h2 id="gift-codes-title">کد هدیه / شارژ</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <form method="post" action="/tools/gift-codes" class="form-stack">
+    <form method="post" action="/plans/gift-codes" class="form-stack">
       <div class="settings-grid">
         <label class="form-field">مبلغ (تومان)
           <input name="amount" type="number" min="1000" step="1000" required placeholder="50000" />
@@ -632,7 +632,7 @@
             <td class="col-hide-sm">{{ c.used_count }}{% if c.max_uses is not none %}/{{ c.max_uses }}{% endif %}</td>
             <td>{% if c.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
             <td class="col-actions">
-              <form method="post" action="/tools/gift-codes/{{ c.id }}/toggle">
+              <form method="post" action="/plans/gift-codes/{{ c.id }}/toggle">
                 <button class="btn btn-ghost btn-sm" type="submit">{% if c.is_active %}خاموش{% else %}روشن{% endif %}</button>
               </form>
             </td>

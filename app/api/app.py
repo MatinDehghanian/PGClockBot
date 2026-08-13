@@ -164,6 +164,8 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["update"] = upd
     if "tickets_unread" not in ctx:
         ctx["tickets_unread"] = int(getattr(request.state, "panel_tickets_unread", 0) or 0)
+    if "inbox_alert" not in ctx:
+        ctx["inbox_alert"] = bool(getattr(request.state, "panel_inbox_alert", False))
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
 
@@ -469,13 +471,20 @@ def create_api_app(lifespan=None) -> FastAPI:
 
             if should_skip_unread_count(request.url.path, request.method):
                 request.state.panel_tickets_unread = 0
+                request.state.panel_inbox_alert = False
             else:
                 request.state.panel_tickets_unread = await sidebar_unread_count(session, user)
+                from app.services.panel_inbox import sidebar_inbox_has_alerts
+
+                request.state.panel_inbox_alert = await sidebar_inbox_has_alerts(
+                    session, request, user
+                )
         except Exception:
             from app.services.db_safe import rollback_quiet
 
             await rollback_quiet(session)
             request.state.panel_tickets_unread = 0
+            request.state.panel_inbox_alert = False
         from app.services.db_safe import recover_session
 
         await recover_session(session)

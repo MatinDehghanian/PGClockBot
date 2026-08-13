@@ -1111,18 +1111,6 @@
       }
     });
 
-    /* Empty dashboard inbox must stay collapsed / non-interactive */
-    document.addEventListener('click', (e) => {
-      const emptyInbox = e.target.closest('.home-inbox[data-empty="1"]');
-      if (!emptyInbox) return;
-      e.preventDefault();
-    });
-    document.querySelectorAll('.home-inbox[data-empty="1"]').forEach((el) => {
-      el.addEventListener('toggle', () => {
-        if (el.open) el.open = false;
-      });
-    });
-
     /* Upload box file name preview */
     document.addEventListener('change', (e) => {
       const input = e.target;
