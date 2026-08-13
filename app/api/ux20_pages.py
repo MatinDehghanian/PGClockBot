@@ -111,9 +111,10 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         user.risk_flags = serialize_risk_flags(flags)
         await refresh_user_risk(session, user)
         await session.commit()
-        return RedirectResponse(
-            f"/users/{user_id}?ok={quote('یادداشت و ریسک ذخیره شد')}", status_code=303
-        )
+        # Users UI is list + edit modal — there is no GET /users/{id}
+        from app.api.user_pages import _redirect_user
+
+        return _redirect_user(user_id, ok="یادداشت و ریسک ذخیره شد")
 
     @app.post("/plans/gift-codes")
     async def gift_codes_create(
