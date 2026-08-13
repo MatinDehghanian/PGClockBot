@@ -60,7 +60,9 @@
     <form class="auth-form setup-step" data-step="2" method="post" action="/setup/bot" hidden novalidate>
       <h2 class="setup-title">۲ · ربات تلگرام</h2>
       <label>توکن ربات (BOT_TOKEN)
-        <input name="bot_token" value="{{ values.BOT_TOKEN or '' }}" required autocomplete="off" dir="ltr" />
+        <input name="bot_token" value="" {{ 'required' if not has_bot_token else '' }} autocomplete="off" dir="ltr"
+               placeholder="{{ '•••••••••• (برای تغییر، مقدار جدید وارد کنید)' if has_bot_token else '' }}" />
+        {% if has_bot_token %}<small class="muted">قبلاً ذخیره شده — برای حفظ همان توکن، این فیلد را خالی بگذارید.</small>{% endif %}
       </label>
       <label>نام کاربری ربات (بدون @)
         <input name="bot_username" value="{{ values.BOT_USERNAME or '' }}" required autocomplete="off" dir="ltr" placeholder="MyShopBot" />
@@ -88,7 +90,9 @@
         <small class="muted">یوزر ورود API پاسارگارد</small>
       </label>
       <label>رمز پاسارگارد
-        <input name="pg_password" type="password" value="{{ values.PG_PASSWORD or '' }}" required autocomplete="off" dir="ltr" />
+        <input name="pg_password" type="password" value="" {{ 'required' if not has_pg_password else '' }} autocomplete="off" dir="ltr"
+               placeholder="{{ '•••••••••• (برای تغییر، مقدار جدید وارد کنید)' if has_pg_password else '' }}" />
+        {% if has_pg_password %}<small class="muted">قبلاً ذخیره شده — برای حفظ همان رمز، این فیلد را خالی بگذارید.</small>{% endif %}
       </label>
       <label>پورت وب‌پنل (WEB_PORT)
         <input name="web_port" value="{{ values.WEB_PORT or '9000' }}" required dir="ltr" />
@@ -139,6 +143,8 @@
   if (isNaN(step) || step < 0) step = 0;
   if ({{ 'true' if show_done else 'false' }}) step = 4;
   if (step > 4) step = 4;
+  const hasBotToken = {{ 'true' if has_bot_token else 'false' }};
+  const hasPgPassword = {{ 'true' if has_pg_password else 'false' }};
 
   const captions = {
     0: 'راه‌اندازی اولیه پنل',
@@ -224,7 +230,7 @@
   const botForm = document.querySelector('form[data-step="2"]');
   if (botForm) {
     botForm.addEventListener('submit', (e) => {
-      if (!filled(botForm.bot_token)) {
+      if (!filled(botForm.bot_token) && !hasBotToken) {
         e.preventDefault();
         showErr('توکن ربات الزامی است.');
         return;
@@ -260,7 +266,7 @@
         showErr('نام کاربری پاسارگارد را وارد کنید.');
         return;
       }
-      if (!filled(otherForm.pg_password)) {
+      if (!filled(otherForm.pg_password) && !hasPgPassword) {
         e.preventDefault();
         showErr('رمز پاسارگارد را وارد کنید.');
         return;

@@ -965,11 +965,27 @@ def create_api_app(lifespan=None) -> FastAPI:
     def _setup_page(request: Request, *, step: int = 0, err: str | None = None, ok: str | None = None, show_done: bool = False):
         begin_setup()
         values = current_setup_values()
+        from app.services.security_policy import is_placeholder_bot_token
+
+        has_bot_token = bool((values.get("BOT_TOKEN") or "").strip()) and not is_placeholder_bot_token(
+            values.get("BOT_TOKEN")
+        )
+        has_pg_password = bool((values.get("PG_PASSWORD") or "").strip())
+        # Never echo live secrets back into the HTML source — a re-run of the
+        # wizard (e.g. to change one unrelated field) must not require
+        # re-typing the bot token / PG password, but it also must not leak
+        # them in the page source. Leave both blank; the empty-field-keeps-
+        # previous-value logic lives in setup_bot()/setup_other().
+        display_values = dict(values)
+        display_values["BOT_TOKEN"] = ""
+        display_values["PG_PASSWORD"] = ""
         return render(
             request,
             "setup.html",
             {
-                "values": values,
+                "values": display_values,
+                "has_bot_token": has_bot_token,
+                "has_pg_password": has_pg_password,
                 "initial_step": step,
                 "show_done": show_done,
                 "flash_err": err or request.query_params.get("err"),
@@ -1034,7 +1050,13 @@ def create_api_app(lifespan=None) -> FastAPI:
         uname = (bot_username or "").strip().lstrip("@")
         ids_raw = (admin_ids or "").strip()
         if not token:
-            return _setup_page(request, step=2, err="توکن ربات الزامی است.")
+            # Wizard never re-displays the saved token (see _setup_page) — an
+            # empty submit here means "keep the existing one", not "clear it".
+            existing = (current_setup_values().get("BOT_TOKEN") or "").strip()
+            if existing and not is_placeholder_bot_token(existing):
+                token = existing
+            else:
+                return _setup_page(request, step=2, err="توکن ربات الزامی است.")
         if is_placeholder_bot_token(token):
             return _setup_page(request, step=2, err="توکن ربات نامعتبر است — یک توکن واقعی از BotFather وارد کنید.")
         if not uname:
@@ -1074,7 +1096,13 @@ def create_api_app(lifespan=None) -> FastAPI:
         if not (pg_username or "").strip():
             return _setup_page(request, step=3, err="نام کاربری پاسارگارد الزامی است.")
         if not (pg_password or "").strip():
-            return _setup_page(request, step=3, err="رمز پاسارگارد الزامی است.")
+            # Wizard never re-displays the saved password (see _setup_page) —
+            # an empty submit here means "keep the existing one".
+            existing_pw = (current_setup_values().get("PG_PASSWORD") or "").strip()
+            if existing_pw:
+                pg_password = existing_pw
+            else:
+                return _setup_page(request, step=3, err="رمز پاسارگارد الزامی است.")
         port = (web_port or "9000").strip()
         try:
             port_n = int(port)
