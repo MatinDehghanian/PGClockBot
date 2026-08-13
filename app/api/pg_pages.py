@@ -1062,6 +1062,13 @@ def register_pg_pages(
             return RedirectResponse(f"/pg/groups?err={_q('حداقل یک اینباند انتخاب کنید')}", status_code=303)
         try:
             pg, _as_owner = await _staff_pg(session, staff)
+            # The form submits raw tag strings — never trust them as-is. Only
+            # accept tags that actually exist on this admin's own inbounds
+            # (see _inbound_tags docstring / audit item on inbound tag spoofing).
+            valid_tags = set(_inbound_tags(await pg.get_inbounds()))
+            tags = [t for t in tags if t in valid_tags]
+            if not tags:
+                return RedirectResponse(f"/pg/groups?err={_q('اینباند انتخاب‌شده نامعتبر است')}", status_code=303)
             await pg.create_group({"name": name.strip(), "inbound_tags": tags})
         except Exception as e:
             return RedirectResponse(f"/pg/groups?err={_q(e)}", status_code=303)
@@ -1090,6 +1097,9 @@ def register_pg_pages(
         disabled = bool(form.get("is_disabled"))
         try:
             pg, _as_owner = await _staff_pg(session, staff)
+            # Same inbound-tag allow-list guard as group creation.
+            valid_tags = set(_inbound_tags(await pg.get_inbounds()))
+            tags = [t for t in tags if t in valid_tags]
             await pg.modify_group(
                 group_id,
                 {"name": name.strip(), "inbound_tags": tags, "is_disabled": disabled},
