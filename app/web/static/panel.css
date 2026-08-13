@@ -333,10 +333,17 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   font-weight: 600;
 }
 .nav-item-label {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--space-0);
+  flex: 1 1 auto;
   min-width: 0;
+}
+.nav-item-label > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .nav-dot {
   display: inline-block;
@@ -346,6 +353,8 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   background: #f59e0b;
   box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.22);
   flex: 0 0 auto;
+  /* Opposite side of the title: left in RTL, right in LTR */
+  margin-inline-start: auto;
 }
 /* Risk indicator beside user name in lists */
 .cell-name {
