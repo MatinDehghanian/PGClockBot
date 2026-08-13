@@ -264,7 +264,83 @@ async def pg_home_bundle() -> tuple[dict[str, Any], dict[str, Any]]:
     return summary, nodes_status
 
 
+def _empty_host() -> dict[str, Any]:
+    return {
+        "ok": False,
+        "cpu_percent": None,
+        "cpu_cores": None,
+        "memory_percent": None,
+        "memory_used": None,
+        "memory_total": None,
+        "memory_used_text": "—",
+        "memory_total_text": "—",
+        "memory_ratio_text": "—",
+        "cpu_tone": "neutral",
+        "mem_tone": "neutral",
+    }
+
+
+def _empty_bot() -> dict[str, Any]:
+    return {"ok": False, "error": None, "username": None, "name": None}
+
+
+def _empty_bot_summary() -> dict[str, Any]:
+    return {
+        "users": 0,
+        "orders": 0,
+        "services": 0,
+        "pending": 0,
+        "revenue": 0,
+        "tickets": 0,
+        "resellers": 0,
+    }
+
+
+def _empty_pg_summary() -> dict[str, Any]:
+    return {
+        "ok": False,
+        "error": None,
+        "admins": 0,
+        "groups": 0,
+        "hosts": 0,
+        "nodes": 0,
+        "users": None,
+        "version": None,
+    }
+
+
+def _empty_nodes() -> dict[str, Any]:
+    return {
+        "ok": False,
+        "error": None,
+        "nodes": [],
+        "total": 0,
+        "connected": 0,
+        "warn": 0,
+        "error_count": 0,
+        "overall": "neutral",
+    }
+
+
+def empty_home_overview() -> dict[str, Any]:
+    """Fail-soft shell so ``home.html`` never sees missing keys / Undefined."""
+    return {
+        "host": _empty_host(),
+        "bot": _empty_bot(),
+        "nodes": _empty_nodes(),
+        "bot_summary": _empty_bot_summary(),
+        "pg_summary": _empty_pg_summary(),
+    }
+
+
 async def build_home_overview(session: AsyncSession) -> dict[str, Any]:
+    """Build admin home payloads; never raise — partial failures return defaults."""
+    import logging
+
+    from app.services.db_safe import rollback_quiet
+
+    log = logging.getLogger(__name__)
+    out = empty_home_overview()
     metrics_task = asyncio.to_thread(host_metrics, wait_cpu=0.0)
     # Platform admin overview only — pass main token explicitly (no silent fallback).
     bot_task = check_bot_connection(current_setup_values().get("BOT_TOKEN"))
@@ -272,20 +348,46 @@ async def build_home_overview(session: AsyncSession) -> dict[str, Any]:
     pg_task = pg_home_bundle()
 
     metrics, bot, bot_sum, pg_pair = await asyncio.gather(
-        metrics_task, bot_task, bot_sum_task, pg_task
+        metrics_task, bot_task, bot_sum_task, pg_task, return_exceptions=True
     )
-    pg_sum, nodes = pg_pair
 
-    cpu = metrics.get("cpu_percent")
-    mem_pct = metrics.get("memory_percent")
-    return {
-        "host": {
+    if isinstance(metrics, Exception):
+        log.exception("home host_metrics failed: %s", metrics)
+    elif isinstance(metrics, dict):
+        cpu = metrics.get("cpu_percent")
+        mem_pct = metrics.get("memory_percent")
+        out["host"] = {
+            **_empty_host(),
             **metrics,
             "cpu_tone": _tone_class(cpu if isinstance(cpu, (int, float)) else None),
             "mem_tone": _tone_class(mem_pct if isinstance(mem_pct, (int, float)) else None),
-        },
-        "bot": bot,
-        "nodes": nodes,
-        "bot_summary": bot_sum,
-        "pg_summary": pg_sum,
-    }
+        }
+
+    if isinstance(bot, Exception):
+        log.exception("home bot probe failed: %s", bot)
+        out["bot"] = {**_empty_bot(), "error": "بررسی ربات ناموفق"}
+    elif isinstance(bot, dict):
+        out["bot"] = bot
+
+    if isinstance(bot_sum, Exception):
+        log.exception("home bot_panel_summary failed: %s", bot_sum)
+        await rollback_quiet(session)
+        out["bot_summary"] = _empty_bot_summary()
+    elif isinstance(bot_sum, dict):
+        out["bot_summary"] = bot_sum
+
+    if isinstance(pg_pair, Exception):
+        log.exception("home pg_home_bundle failed: %s", pg_pair)
+        out["pg_summary"] = {
+            **_empty_pg_summary(),
+            "error": "اتصال به پاسارگارد برقرار نشد",
+        }
+        out["nodes"] = {**_empty_nodes(), "overall": "err", "error": out["pg_summary"]["error"]}
+    elif isinstance(pg_pair, tuple) and len(pg_pair) == 2:
+        pg_sum, nodes = pg_pair
+        if isinstance(pg_sum, dict):
+            out["pg_summary"] = pg_sum
+        if isinstance(nodes, dict):
+            out["nodes"] = nodes
+
+    return out

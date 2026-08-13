@@ -71,7 +71,19 @@ def save_web_admin(username: str, password: str) -> Path:
 def load_web_admin() -> dict[str, str]:
     _ensure_data_dir()
     if AUTH_FILE.exists():
-        data = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
+        try:
+            raw = AUTH_FILE.read_text(encoding="utf-8")
+            data = json.loads(raw)
+        except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
+            # Corrupt file must never 500 login / session checks — fail closed.
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "web_admin.json unreadable; treating as unset credentials"
+            )
+            return {"username": "admin", "password": "", "token": ""}
+        if not isinstance(data, dict):
+            return {"username": "admin", "password": "", "token": ""}
         username = _clean_secret(str(data.get("username", "admin")))
         password = _clean_secret(str(data.get("password", "")))
         token = _clean_secret(str(data.get("token", "")))
@@ -82,11 +94,17 @@ def load_web_admin() -> dict[str, str]:
             or not token
             or not _is_bcrypt_hash(password)
         ):
-            save_web_admin(username, password)
-            data = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
-            username = _clean_secret(str(data.get("username", "admin")))
-            password = _clean_secret(str(data.get("password", "")))
-            token = _clean_secret(str(data.get("token", "")))
+            try:
+                save_web_admin(username, password)
+                data = json.loads(AUTH_FILE.read_text(encoding="utf-8"))
+                username = _clean_secret(str(data.get("username", "admin")))
+                password = _clean_secret(str(data.get("password", "")))
+                token = _clean_secret(str(data.get("token", "")))
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).exception("web_admin auto-repair failed")
+                return {"username": username or "admin", "password": "", "token": ""}
         return {"username": username or "admin", "password": password, "token": token}
 
     # Fallback for old installs: migrate from .env once (never import example placeholders)
@@ -98,14 +116,23 @@ def load_web_admin() -> dict[str, str]:
     user = _clean_secret(settings.web_admin_user) or "admin"
     password = _clean_secret(settings.web_admin_password)
     if password and not is_placeholder_password(password):
-        save_web_admin(user, password)
-        return load_web_admin()
+        try:
+            save_web_admin(user, password)
+            return load_web_admin()
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception("web_admin migrate-from-env failed")
+            return {"username": user, "password": "", "token": ""}
     return {"username": "admin", "password": "", "token": ""}
 
 
 def admin_session_version() -> str:
     """Opaque value that changes whenever admin credentials are rewritten."""
-    return (load_web_admin().get("token") or "").strip()
+    try:
+        return (load_web_admin().get("token") or "").strip()
+    except Exception:
+        return ""
 
 
 def verify_web_admin(username: str, password: str) -> bool:

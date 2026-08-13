@@ -65,12 +65,19 @@ async def _payg_risk_strip(session: AsyncSession) -> dict:
     user_ids = [int(p.user_id) for p in profiles if p.user_id]
     users = {}
     if user_ids:
-        users = {
-            int(u.id): u
-            for u in (
-                await session.execute(select(BotUser).where(BotUser.id.in_(user_ids)))
-            ).scalars().all()
-        }
+        try:
+            users = {
+                int(u.id): u
+                for u in (
+                    await session.execute(select(BotUser).where(BotUser.id.in_(user_ids)))
+                ).scalars().all()
+            }
+        except Exception:
+            logger.exception("payg risk: load users failed")
+            from app.services.db_safe import rollback_quiet
+
+            await rollback_quiet(session)
+            users = {}
 
     for profile in profiles:
         uid = int(profile.user_id)
@@ -101,16 +108,19 @@ async def _payg_risk_strip(session: AsyncSession) -> dict:
 
 
 async def _safe_funnel(session: AsyncSession, *, reseller_id: int | None):
+    from app.services.db_safe import rollback_quiet
     from app.services.ux20 import funnel_summary
 
     try:
         return await funnel_summary(session, reseller_id=reseller_id, days=7)
     except Exception:
         logger.exception("funnel_summary failed reseller_id=%s", reseller_id)
+        await rollback_quiet(session)
         return dict(_EMPTY_FUNNEL)
 
 
 async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None, expire_days: int):
+    from app.services.db_safe import rollback_quiet
     from app.services.ux20 import build_action_center
 
     try:
@@ -119,10 +129,12 @@ async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None,
         )
     except Exception:
         logger.exception("action_center failed reseller_id=%s", reseller_id)
+        await rollback_quiet(session)
         return dict(_EMPTY_ACTION_CENTER)
 
 
 async def _safe_pg_health(*, reseller_user_id: int | None = None, session: AsyncSession | None = None):
+    from app.services.db_safe import rollback_quiet
     from app.services.ux20 import check_pg_connection
 
     try:
@@ -131,6 +143,7 @@ async def _safe_pg_health(*, reseller_user_id: int | None = None, session: Async
         )
     except Exception:
         logger.exception("pg_health failed reseller_user_id=%s", reseller_user_id)
+        await rollback_quiet(session)
         return {"ok": False, "error": "بررسی اتصال ناموفق", "version": None}
 
 async def _reseller_shop_stats(session: AsyncSession, rid: int) -> dict[str, int]:
@@ -210,7 +223,16 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
     ):
         # Platform admin: server + both panels.
         if is_platform_admin(staff):
-            overview = await build_home_overview(session)
+            from app.services.db_safe import recover_session, rollback_quiet
+            from app.services.home_overview import empty_home_overview
+
+            await recover_session(session)
+            try:
+                overview = await build_home_overview(session)
+            except Exception:
+                logger.exception("build_home_overview failed")
+                await rollback_quiet(session)
+                overview = empty_home_overview()
             update = None
             try:
                 from app.services.updates import check_github_update
@@ -220,17 +242,23 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 update = None
             from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
 
-            ticket_alert = await panel_ticket_dashboard_alert(
-                session,
-                staff,
-                unread=getattr(request.state, "panel_tickets_unread", None),
-            )
+            try:
+                ticket_alert = await panel_ticket_dashboard_alert(
+                    session,
+                    staff,
+                    unread=getattr(request.state, "panel_tickets_unread", None),
+                )
+            except Exception:
+                logger.exception("panel_ticket_dashboard_alert failed")
+                await rollback_quiet(session)
+                ticket_alert = None
             from app.services.users import get_all_settings, on
 
             try:
                 ui = await get_all_settings(session, reseller_id=None)
             except Exception:
                 logger.exception("home get_all_settings failed")
+                await rollback_quiet(session)
                 ui = {}
             try:
                 expire_days = int(ui.get("action_center_expire_days") or 3)
@@ -250,6 +278,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 payg_risk = await _payg_risk_strip(session)
             except Exception:
                 logger.exception("payg risk strip failed")
+                await rollback_quiet(session)
                 payg_risk = {"suspended": [], "low": [], "threshold": 0, "has_items": False}
             return render(
                 request,
@@ -277,14 +306,34 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
 
         from app.config import get_settings
         from app.db.models import ResellerProfile
+        from app.services.db_safe import recover_session, rollback_quiet
         from app.services.home_overview import check_bot_connection
         from app.services.resellers import bot_needs_setup
 
-        profile = (
-            await session.execute(select(ResellerProfile).where(ResellerProfile.user_id == int(rid)))
-        ).scalar_one_or_none()
+        await recover_session(session)
+
+        try:
+            profile = (
+                await session.execute(
+                    select(ResellerProfile).where(ResellerProfile.user_id == int(rid))
+                )
+            ).scalar_one_or_none()
+        except Exception:
+            logger.exception("reseller home profile load failed rid=%s", rid)
+            await rollback_quiet(session)
+            profile = None
+
         bot_setup_needed = bot_needs_setup(profile)
-        stats = await _reseller_shop_stats(session, int(rid)) if not bot_setup_needed else empty_shop_stats()
+        try:
+            stats = (
+                await _reseller_shop_stats(session, int(rid))
+                if not bot_setup_needed
+                else empty_shop_stats()
+            )
+        except Exception:
+            logger.exception("reseller home stats failed rid=%s", rid)
+            await rollback_quiet(session)
+            stats = empty_shop_stats()
         # Tenant bot only — never probe platform BOT_TOKEN (empty must stay unset).
         bot_token = ((profile.bot_token if profile else None) or "").strip()
         main_token = (get_settings().bot_token or "").strip()
@@ -296,45 +345,69 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "name": None,
             }
         else:
-            bot = await check_bot_connection(bot_token)
+            try:
+                bot = await check_bot_connection(bot_token)
+            except Exception:
+                logger.exception("reseller home bot probe failed rid=%s", rid)
+                bot = {
+                    "ok": False,
+                    "error": "بررسی ربات ناموفق",
+                    "username": None,
+                    "name": None,
+                }
 
         pg_limits = None
         if staff.get("pg_admin_username"):
             from app.services.pg_overview import build_reseller_pg_overview
 
-            ov = await build_reseller_pg_overview(staff, session=session)
-            if ov.get("ready"):
-                pg_limits = ov
-                try:
-                    from app.services.ux20 import maybe_warn_reseller_capacity
+            try:
+                ov = await build_reseller_pg_overview(staff, session=session)
+                if ov.get("ready"):
+                    pg_limits = ov
+                    try:
+                        from app.services.ux20 import maybe_warn_reseller_capacity
 
-                    await maybe_warn_reseller_capacity(session, profile, pg_limits)
-                except Exception:
-                    pass
+                        await maybe_warn_reseller_capacity(session, profile, pg_limits)
+                    except Exception:
+                        await rollback_quiet(session)
+            except Exception:
+                logger.exception("reseller home pg overview failed rid=%s", rid)
+                await rollback_quiet(session)
+                pg_limits = None
 
         from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
 
-        ticket_alert = await panel_ticket_dashboard_alert(
-            session,
-            staff,
-            unread=getattr(request.state, "panel_tickets_unread", None),
-        )
+        try:
+            ticket_alert = await panel_ticket_dashboard_alert(
+                session,
+                staff,
+                unread=getattr(request.state, "panel_tickets_unread", None),
+            )
+        except Exception:
+            logger.exception("reseller home ticket alert failed rid=%s", rid)
+            await rollback_quiet(session)
+            ticket_alert = None
         billing_card = None
         if profile is not None:
             from app.services.billing import is_billing_enabled, is_payg
             from app.services.formatting import format_toman
 
-            if is_payg(profile) and await is_billing_enabled(session):
-                from app.services.billing import ensure_payg_shop_wallet
+            try:
+                if is_payg(profile) and await is_billing_enabled(session):
+                    from app.services.billing import ensure_payg_shop_wallet
 
-                _u, bal = await ensure_payg_shop_wallet(session, profile)
-                await session.commit()
-                billing_card = {
-                    "balance": int(bal),
-                    "balance_fa": format_toman(int(bal)),
-                    "mode": "payg",
-                    "suspended": profile.billing_suspended_at is not None,
-                }
+                    _u, bal = await ensure_payg_shop_wallet(session, profile)
+                    await session.commit()
+                    billing_card = {
+                        "balance": int(bal),
+                        "balance_fa": format_toman(int(bal)),
+                        "mode": "payg",
+                        "suspended": profile.billing_suspended_at is not None,
+                    }
+            except Exception:
+                logger.exception("reseller home billing card failed rid=%s", rid)
+                await rollback_quiet(session)
+                billing_card = None
         from app.services.users import get_all_settings, on
         from app.services.ux20 import capacity_should_warn
 
@@ -342,6 +415,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             ui = await get_all_settings(session, reseller_id=int(rid))
         except Exception:
             logger.exception("reseller home get_all_settings failed rid=%s", rid)
+            await rollback_quiet(session)
             ui = {}
         try:
             expire_days = int(ui.get("action_center_expire_days") or 3)
