@@ -188,25 +188,35 @@ async def build_inbox_context(
         await rollback_quiet(session)
         ticket_alert = None
 
-    rid = None if is_platform_admin(staff) else shop_owner_id(staff)
+    # NOTE: shop_owner_id() returns None both for the platform admin AND for a
+    # non-admin session with no shop (e.g. pg_staff). Those two must never be
+    # conflated — a scopeless non-admin must get empty/default data, never the
+    # platform-wide settings/action-center (see app.services.shop_scope docstring).
+    admin_scope = is_platform_admin(staff)
+    rid = None if admin_scope else shop_owner_id(staff)
+    has_scope = admin_scope or rid is not None
+
     ui: dict = {}
-    try:
-        ui = await get_all_settings(session, reseller_id=int(rid) if rid else None)
-    except Exception:
-        logger.exception("inbox get_all_settings failed")
-        await rollback_quiet(session)
-        ui = {}
+    if has_scope:
+        try:
+            ui = await get_all_settings(session, reseller_id=int(rid) if rid else None)
+        except Exception:
+            logger.exception("inbox get_all_settings failed")
+            await rollback_quiet(session)
+            ui = {}
 
     try:
         expire_days = int(ui.get("action_center_expire_days") or 3)
     except Exception:
         expire_days = 3
 
-    action_center = await _safe_action_center(
-        session,
-        reseller_id=int(rid) if rid else None,
-        expire_days=expire_days,
-    )
+    action_center = dict(_EMPTY_ACTION)
+    if has_scope:
+        action_center = await _safe_action_center(
+            session,
+            reseller_id=int(rid) if rid else None,
+            expire_days=expire_days,
+        )
 
     shop_maintenance = on(ui.get("shop_maintenance_enabled"))
     capacity_warn = False
