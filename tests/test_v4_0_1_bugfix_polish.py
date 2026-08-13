@@ -45,7 +45,7 @@ class BackupStatusEndpoint(unittest.TestCase):
     def test_status_route_registered(self):
         src = (ROOT / "app/api/backup_pages.py").read_text(encoding="utf-8")
         self.assertIn('"/backup/status"', src)
-        self.assertIn("read_restore_status", src)
+        self.assertIn("resolve_stale_restore_status", src)
 
     def test_skip_unread_includes_backup_status(self):
         src = (ROOT / "app/services/panel_tickets.py").read_text(encoding="utf-8")
@@ -54,8 +54,23 @@ class BackupStatusEndpoint(unittest.TestCase):
     def test_backup_template_has_progress_ui(self):
         tpl = (ROOT / "app/web/templates/_settings_backup.html").read_text(encoding="utf-8")
         self.assertIn("/backup/status", tpl)
-        self.assertIn("data-busy-label", tpl)
+        self.assertIn("backup-restore-fill", tpl)
+        self.assertIn("backup-restore-steps", tpl)
+        self.assertIn("progress-wrap", tpl)
         self.assertIn("در حال ریستور", tpl)
+
+    def test_backup_restore_async_service(self):
+        src = (ROOT / "app/services/backup.py").read_text(encoding="utf-8")
+        self.assertIn("start_restore_async", src)
+        self.assertIn("RESTORE_STEPS", src)
+        self.assertIn("awaiting_restart", src)
+        self.assertIn("percent", src)
+
+    def test_backup_restore_returns_json(self):
+        src = (ROOT / "app/api/backup_pages.py").read_text(encoding="utf-8")
+        self.assertIn("start_restore_async", src)
+        self.assertIn("JSONResponse", src)
+        self.assertNotIn("/login?restarting", src)
 
 
 class UxCopyConsistency(unittest.TestCase):

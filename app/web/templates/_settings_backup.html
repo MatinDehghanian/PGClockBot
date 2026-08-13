@@ -1,4 +1,5 @@
 {% set st = restore_status or {} %}
+{% set restore_ops = st.state == 'running' or st.awaiting_restart or st.state == 'error' %}
 <div class="card settings-card">
   <h2>خروجی / ورودی تنظیمات فروشگاه</h2>
   <p class="muted update-card-caption">پلن‌ها و متن‌ها/سوییچ‌ها را به‌صورت JSON جابه‌جا کنید (جدا از بکاپ کامل ZIP).</p>
@@ -119,12 +120,51 @@
   </div>
 </form>
 
-{% if st.state and st.state != 'idle' %}
+{% if st.state and st.state != 'idle' and not restore_ops %}
 <div class="flash {% if st.state == 'error' %}err{% elif st.state == 'done' %}ok{% else %}warn{% endif %}">
   وضعیت ریستور: {{ st.message or st.state }}
   {% if st.safety_id %}<br/><small>بکاپ ایمنی: <code>{{ st.safety_id }}</code></small>{% endif %}
 </div>
 {% endif %}
+
+<div class="card settings-card" id="backup-restore-root"
+     data-running="{{ '1' if st.state == 'running' else '0' }}"
+     data-awaiting-restart="{{ '1' if st.awaiting_restart else '0' }}"
+     data-pre-boot="{{ st.pre_boot_id or '' }}"
+     data-show-ops="{{ '1' if restore_ops else '0' }}">
+  <h2>ریستور بکاپ</h2>
+  <p class="muted update-card-caption">
+    بعد از تأیید، مراحل بازیابی اینجا نمایش داده می‌شود — مشابه آپدیت پنل.
+  </p>
+  <div id="backup-restore-ops" class="update-ops" {% if not restore_ops %}hidden{% endif %}>
+    <div class="flash warn update-stay-warn" id="backup-restore-stay-warn" role="status">
+      تا پایان عملیات از این صفحه خارج نشوید و رفرش نکنید؛ ممکن است چند دقیقه طول بکشد.
+    </div>
+    <div class="progress-wrap" aria-label="نوار پیشرفت ریستور">
+      <div class="progress-bar">
+        <div class="progress-fill" id="backup-restore-fill" style="width: {{ (st.percent or 0) if restore_ops else 0 }}%"></div>
+      </div>
+      <div class="progress-meta">
+        <span id="backup-restore-step-label">{% if restore_ops %}{{ st.step or st.message or 'در حال ریستور…' }}{% else %}آماده{% endif %}</span>
+        <strong id="backup-restore-percent">{{ (st.percent or 0) if restore_ops else 0 }}٪</strong>
+      </div>
+    </div>
+    <p class="muted" id="backup-restore-state" style="margin:var(--space-2) 0 0">
+      {% if restore_ops %}{{ st.message or '' }}{% endif %}
+    </p>
+    {% if st.safety_id %}<small class="muted" id="backup-restore-safety">بکاپ ایمنی: <code>{{ st.safety_id }}</code></small>{% else %}
+    <small class="muted" id="backup-restore-safety" hidden></small>{% endif %}
+    <ol class="update-steps" id="backup-restore-steps">
+      <li data-step="validate"><span class="step-dot" aria-hidden="true"></span>بررسی بکاپ</li>
+      <li data-step="safety"><span class="step-dot" aria-hidden="true"></span>پشتیبان ایمنی</li>
+      <li data-step="db"><span class="step-dot" aria-hidden="true"></span>بازیابی دیتابیس</li>
+      <li data-step="uploads"><span class="step-dot" aria-hidden="true"></span>بازیابی فایل‌ها</li>
+      <li data-step="env"><span class="step-dot" aria-hidden="true"></span>بازیابی .env</li>
+      <li data-step="restart"><span class="step-dot" aria-hidden="true"></span>راه‌اندازی مجدد سرویس</li>
+      <li data-step="done"><span class="step-dot" aria-hidden="true"></span>تمام شد</li>
+    </ol>
+  </div>
+</div>
 
 <div class="card settings-card">
   <h2>بکاپ‌های ذخیره‌شده</h2>
@@ -171,7 +211,7 @@
       <h2 id="backup-restore-title">تأیید ریستور بکاپ</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <form method="post" action="/backup/restore/0" class="form-stack" id="backup-restore-form" data-busy-label="در حال ریستور…">
+    <form method="post" action="/backup/restore/0" class="form-stack" id="backup-restore-form">
       <input type="hidden" name="confirm" value="1" />
       <p class="muted">
         همه داده‌های فعلی با بکاپ
@@ -204,17 +244,46 @@
 </div>
 <script>
 (function () {
-  const form = document.getElementById('backup-restore-form');
+  const createForm = document.getElementById('backup-create-form');
+  const uploadForm = document.getElementById('backup-upload-form');
+  const restoreForm = document.getElementById('backup-restore-form');
+  const restoreModal = document.getElementById('modal-backup-restore');
+  const restoreRoot = document.getElementById('backup-restore-root');
+  const restoreOps = document.getElementById('backup-restore-ops');
   const nameEl = document.getElementById('backup-restore-name');
   const envEl = document.getElementById('backup-restore-env');
+  const restoreBtn = document.getElementById('backup-restore-btn');
   const statusBox = document.getElementById('backup-op-status');
   const statusTitle = document.getElementById('backup-op-title');
   const statusMsg = document.getElementById('backup-op-msg');
+  const fill = document.getElementById('backup-restore-fill');
+  const percentEl = document.getElementById('backup-restore-percent');
+  const stepLabel = document.getElementById('backup-restore-step-label');
+  const stateEl = document.getElementById('backup-restore-state');
+  const safetyEl = document.getElementById('backup-restore-safety');
+  const stepsRoot = document.getElementById('backup-restore-steps');
   let pollTimer = null;
+  let waitingRestart = false;
+  let sawDown = false;
+  let restartStartedAt = 0;
+  let baselineBoot = null;
+  let baselinePid = null;
+  let blockLeave = false;
+  const STEP_ORDER = ['validate', 'safety', 'db', 'uploads', 'env', 'restart', 'done'];
+  const RESTART_MSG = 'سرویس در حال راه‌اندازی مجدد است — ممکن است چند دقیقه طول بکشد. از صفحه خارج نشوید و رفرش نکنید.';
+  const STAY_WARN = 'لطفاً تا پایان عملیات از این صفحه خارج نشوید و صفحه را رفرش نکنید.';
+
+  function setBlockLeave(on) { blockLeave = !!on; }
+  window.addEventListener('beforeunload', function (e) {
+    if (!blockLeave) return;
+    e.preventDefault();
+    e.returnValue = STAY_WARN;
+    return STAY_WARN;
+  });
 
   function setFormBusy(f, busy, label) {
     if (!f) return;
-    const btn = f.querySelector('button[type="submit"]');
+    const btn = f.querySelector('button[type="submit"], button[type="button"].btn-danger');
     if (btn) {
       btn.disabled = !!busy;
       if (busy && label) {
@@ -234,30 +303,192 @@
     if (statusMsg) statusMsg.textContent = msg || '';
   }
 
+  function showRestoreOps(on) {
+    if (restoreOps) restoreOps.hidden = !on;
+    if (restoreRoot) restoreRoot.dataset.showOps = on ? '1' : '0';
+    if (!on) setBlockLeave(false);
+  }
+
+  function markSteps(stepKey) {
+    if (!stepsRoot) return;
+    const idx = STEP_ORDER.indexOf(stepKey);
+    stepsRoot.querySelectorAll('li[data-step]').forEach(function (li) {
+      const key = li.getAttribute('data-step');
+      const i = STEP_ORDER.indexOf(key);
+      li.classList.remove('done', 'current');
+      if (idx < 0) return;
+      if (i < idx) li.classList.add('done');
+      else if (i === idx) li.classList.add('current');
+    });
+  }
+
+  function markRestartUi(extra) {
+    showRestoreOps(true);
+    setBlockLeave(true);
+    setFormBusy(restoreForm, true, 'در حال راه‌اندازی مجدد…');
+    setFormBusy(createForm, true);
+    if (stepLabel) stepLabel.textContent = 'راه‌اندازی مجدد سرویس';
+    if (stateEl) stateEl.textContent = extra || RESTART_MSG;
+    if (fill) fill.style.width = '98%';
+    if (percentEl) percentEl.textContent = '۹۸٪';
+    markSteps('restart');
+  }
+
+  async function probeHealth() {
+    try {
+      const r = await fetch('/health/detail?_=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' });
+      if (!r.ok) return null;
+      return await r.json();
+    } catch (_) { return null; }
+  }
+
+  function processChanged(h) {
+    if (!h) return false;
+    if (baselineBoot && h.boot_id && String(h.boot_id) !== baselineBoot) return true;
+    if (baselinePid && h.pid && Number(h.pid) !== baselinePid) return true;
+    return false;
+  }
+
+  function finishReload() {
+    waitingRestart = false;
+    setBlockLeave(false);
+    showRestoreOps(false);
+    clearInterval(pollTimer);
+    pollTimer = null;
+    setTimeout(function () {
+      const url = new URL(location.href);
+      url.searchParams.set('tab', 'backup');
+      url.searchParams.set('ok', 'ریستور با موفقیت انجام شد');
+      location.href = url.pathname + '?' + url.searchParams.toString();
+    }, 400);
+  }
+
+  async function beginWaitingRestart(st) {
+    if (waitingRestart) return;
+    waitingRestart = true;
+    sawDown = false;
+    restartStartedAt = Date.now();
+    markRestartUi();
+    if (st && st.pre_boot_id) baselineBoot = String(st.pre_boot_id);
+    const h0 = await probeHealth();
+    if (!baselineBoot && h0 && h0.boot_id) baselineBoot = String(h0.boot_id);
+    if (h0 && h0.pid) baselinePid = Number(h0.pid);
+    if (st && st.pre_boot_id && h0 && processChanged(h0)) {
+      finishReload();
+      return;
+    }
+    startPoll();
+  }
+
   function applyRestoreStatus(d) {
     if (!d || !d.state || d.state === 'idle') return;
+    if (d.safety_id && safetyEl) {
+      safetyEl.hidden = false;
+      safetyEl.innerHTML = 'بکاپ ایمنی: <code>' + d.safety_id + '</code>';
+    }
+    if (d.pre_boot_id && !baselineBoot) baselineBoot = String(d.pre_boot_id);
+
+    if (waitingRestart) {
+      if (!d.awaiting_restart && d.state !== 'running') {
+        if (d.state === 'error') {
+          waitingRestart = false;
+          showRestoreOps(true);
+          setFormBusy(restoreForm, false);
+          setFormBusy(createForm, false);
+          if (stateEl) stateEl.textContent = d.message || d.error || 'خطا';
+          clearInterval(pollTimer);
+          pollTimer = null;
+          return;
+        }
+        if (d.state === 'idle' || d.state === 'done') {
+          finishReload();
+          return;
+        }
+      }
+      markRestartUi();
+      return;
+    }
+
+    if (d.awaiting_restart) {
+      beginWaitingRestart(d);
+      return;
+    }
+
+    if (d.state === 'running' || d.state === 'error') showRestoreOps(true);
+
+    const pct = Number(d.percent || 0);
+    if (fill) fill.style.width = pct + '%';
+    if (percentEl) percentEl.textContent = pct + '٪';
+    const stepKey = d.step_key || '';
+    if (stepLabel) {
+      stepLabel.textContent = d.step || d.message || (d.state === 'running' ? 'در حال ریستور…' : 'آماده');
+    }
+    if (stateEl) stateEl.textContent = d.message || '';
+    if (stepKey) markSteps(stepKey);
+
     if (d.state === 'running') {
+      setBlockLeave(true);
+      setFormBusy(restoreForm, true, 'در حال ریستور…');
+      setFormBusy(createForm, true);
       showOp('ریستور در حال اجرا', d.message || 'لطفاً صبر کنید…', 'warn');
-      setFormBusy(form, true, 'در حال ریستور…');
-      setFormBusy(document.getElementById('backup-create-form'), true);
     } else if (d.state === 'error') {
+      setFormBusy(restoreForm, false);
+      setFormBusy(createForm, false);
+      setBlockLeave(false);
       showOp('ریستور ناموفق', d.message || d.error || 'خطای ناشناخته', 'err');
-      setFormBusy(form, false);
-      setFormBusy(document.getElementById('backup-create-form'), false);
-      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    } else if (d.state === 'done') {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    } else if (d.state === 'done' && !d.awaiting_restart) {
+      setFormBusy(restoreForm, false);
+      setFormBusy(createForm, false);
       showOp('ریستور انجام شد', d.message || 'موفق', 'ok');
-      setFormBusy(form, false);
-      setFormBusy(document.getElementById('backup-create-form'), false);
-      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      clearInterval(pollTimer);
+      pollTimer = null;
     }
   }
 
   async function pollStatus() {
+    if (waitingRestart) {
+      const elapsed = Date.now() - restartStartedAt;
+      const h = await probeHealth();
+      if (!h) {
+        sawDown = true;
+        markRestartUi(elapsed > 180000 ? (RESTART_MSG + ' در صورت نیاز: sudo systemctl restart pgclockbot') : RESTART_MSG);
+        return;
+      }
+      const changed = processChanged(h);
+      if (!changed && !sawDown) {
+        markRestartUi('منتظر راه‌اندازی مجدد…');
+        try {
+          const res = await fetch('/backup/status', { credentials: 'same-origin', cache: 'no-store' });
+          if (res.ok) {
+            const data = await res.json();
+            if (!data.awaiting_restart) applyRestoreStatus(data);
+          }
+        } catch (_) {}
+        return;
+      }
+      if (!changed && sawDown) {
+        markRestartUi('سرویس برگشت؛ در حال تأیید…');
+        return;
+      }
+      if (changed) {
+        finishReload();
+        return;
+      }
+      markRestartUi();
+      return;
+    }
     try {
       const res = await fetch('/backup/status', { credentials: 'same-origin', cache: 'no-store' });
       if (!res.ok) return;
-      applyRestoreStatus(await res.json());
+      const data = await res.json();
+      applyRestoreStatus(data);
+      if (data.state === 'running' || data.awaiting_restart) return;
+      if (data.state === 'error' || (data.state === 'done' && !data.awaiting_restart)) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
     } catch (_) {}
   }
 
@@ -265,32 +496,80 @@
     if (pollTimer) return;
     pollTimer = setInterval(function () {
       if (!document.hidden) pollStatus();
-    }, 1200);
+    }, 1500);
     pollStatus();
   }
 
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && pollTimer) pollStatus();
+  });
+
   document.addEventListener('click', function (e) {
     const btn = e.target.closest('[data-modal-open="modal-backup-restore"]');
-    if (!btn || !form) return;
+    if (!btn || !restoreForm) return;
     const id = btn.getAttribute('data-backup-id') || '';
-    form.action = '/backup/restore/' + id;
+    restoreForm.action = '/backup/restore/' + id;
     if (nameEl) nameEl.textContent = btn.getAttribute('data-backup-name') || '—';
     if (envEl) envEl.checked = btn.getAttribute('data-backup-env') === '1';
   });
 
-  ['backup-create-form', 'backup-upload-form', 'backup-restore-form'].forEach(function (id) {
+  if (restoreForm) {
+    restoreForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const action = restoreForm.action || '';
+      if (!action || action.endsWith('/0')) return;
+      showRestoreOps(true);
+      setFormBusy(restoreForm, true, 'شروع ریستور…');
+      setBlockLeave(true);
+      waitingRestart = false;
+      sawDown = false;
+      baselineBoot = null;
+      baselinePid = null;
+      if (restoreModal) restoreModal.hidden = true;
+      try {
+        const body = new FormData(restoreForm);
+        const res = await fetch(action, {
+          method: 'POST',
+          credentials: 'same-origin',
+          body,
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          if (stateEl) stateEl.textContent = data.error || 'شروع ریستور ممکن نشد';
+          setFormBusy(restoreForm, false);
+          setBlockLeave(false);
+          showOp('ریستور ناموفق', data.error || 'شروع ریستور ممکن نشد', 'err');
+          return;
+        }
+        if (data.status) applyRestoreStatus(data.status);
+        startPoll();
+      } catch (err) {
+        if (stateEl) stateEl.textContent = 'خطا در شروع ریستور';
+        setFormBusy(restoreForm, false);
+        setBlockLeave(false);
+        showOp('خطا', 'خطا در شروع ریستور', 'err');
+      }
+    });
+  }
+
+  ['backup-create-form', 'backup-upload-form'].forEach(function (id) {
     const f = document.getElementById(id);
     if (!f) return;
     f.addEventListener('submit', function () {
       const label = f.getAttribute('data-busy-label') || 'در حال انجام…';
       setFormBusy(f, true, label);
       showOp('عملیات در حال اجرا', label, 'warn');
-      if (id === 'backup-restore-form') startPoll();
     });
   });
 
-  {% if st.state == 'running' %}
-  startPoll();
-  {% endif %}
+  if (!new URLSearchParams(location.search).get('ok') && restoreRoot && restoreRoot.dataset.awaitingRestart === '1') {
+    beginWaitingRestart({
+      pre_boot_id: restoreRoot.dataset.preBoot || '',
+    });
+  }
+  if (restoreRoot && restoreRoot.dataset.running === '1') {
+    startPoll();
+    if ('{{ st.step_key or "" }}') markSteps('{{ st.step_key or "validate" }}');
+  }
 })();
 </script>

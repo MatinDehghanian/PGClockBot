@@ -12,9 +12,9 @@ from app.services.backup import (
     create_backup,
     delete_backup,
     get_backup_path,
-    read_restore_status,
-    restore_backup,
+    resolve_stale_restore_status,
     save_uploaded_backup,
+    start_restore_async,
 )
 
 
@@ -26,7 +26,7 @@ def register_backup_pages(app, *, render, require_admin, get_db):
     @app.get("/backup/status")
     async def backup_status(staff: dict = Depends(require_admin)):
         """JSON progress for restore (and last known status) — polled by settings UI."""
-        st = read_restore_status() or {"state": "idle"}
+        st = resolve_stale_restore_status()
         return JSONResponse(st)
 
     @app.post("/backup/create")
@@ -94,22 +94,24 @@ def register_backup_pages(app, *, render, require_admin, get_db):
     ):
         confirm_ok = (confirm or "").strip().upper() in {"1", "YES", "ON", "TRUE", "RESTORE"}
         if not confirm_ok:
-            return RedirectResponse(
-                "/settings?tab=backup&err=" + quote("تأیید ریستور انجام نشد"),
-                status_code=303,
+            return JSONResponse(
+                {"ok": False, "error": "تأیید ریستور انجام نشد"},
+                status_code=400,
             )
         path = get_backup_path(backup_id)
         if not path:
-            return RedirectResponse(
-                "/settings?tab=backup&err=" + quote("بکاپ یافت نشد"),
-                status_code=303,
+            return JSONResponse({"ok": False, "error": "بکاپ یافت نشد"}, status_code=404)
+        st = resolve_stale_restore_status()
+        if st.get("state") == "running":
+            return JSONResponse(
+                {"ok": False, "error": "یک عملیات ریستور در حال اجراست", "status": st},
+                status_code=409,
             )
         # Release DB connections before swapping the file
         from app.db.session import engine
 
         await engine.dispose()
-        result = await asyncio.to_thread(
-            restore_backup,
+        result = start_restore_async(
             path,
             restore_env=str(restore_env) in {"1", "on", "true", "yes"},
             safety_backup=True,
@@ -117,20 +119,8 @@ def register_backup_pages(app, *, render, require_admin, get_db):
             actor=f"web:{staff.get('username') or 'admin'}",
         )
         if not result.get("ok"):
-            return RedirectResponse(
-                "/settings?tab=backup&err=" + quote(result.get("error") or "ریستور ناموفق"),
-                status_code=303,
-            )
-        msg = "ریستور انجام شد"
-        if result.get("safety_id"):
-            msg += f" · بکاپ ایمنی: {result['safety_id']}"
-        if result.get("restart_scheduled"):
-            msg += " · در حال ری‌استارت سرویس…"
-            return RedirectResponse(
-                "/login?restarting=1&ok=" + quote(msg),
-                status_code=303,
-            )
-        return RedirectResponse("/settings?tab=backup&ok=" + quote(msg), status_code=303)
+            return JSONResponse(result, status_code=409)
+        return JSONResponse(result)
 
     @app.post("/backup/upload")
     async def backup_upload(

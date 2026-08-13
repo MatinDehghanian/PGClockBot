@@ -42,6 +42,20 @@ MANIFEST_NAME = "manifest.json"
 MAX_BACKUPS = 20
 RESTORE_STATUS_FILE = DATA_DIR / "backup_restore.json"
 MAGIC = "pgclock-backup-v1"
+
+RESTORE_STEPS = [
+    ("validate", "بررسی بکاپ", 10),
+    ("safety", "پشتیبان ایمنی", 25),
+    ("db", "بازیابی دیتابیس", 55),
+    ("uploads", "بازیابی فایل‌ها", 75),
+    ("env", "بازیابی .env", 90),
+    ("restart", "راه‌اندازی مجدد سرویس", 98),
+    ("done", "تمام شد", 100),
+]
+
+_RESTORE_THREAD: threading.Thread | None = None
+AWAITING_RESTART_TIMEOUT_SEC = 12 * 60
+STALE_RUNNING_TIMEOUT_SEC = 20 * 60
 SQLITE_DB_MEMBER = "data/bot.db"
 POSTGRES_DUMP_MEMBER = "data/postgres.dump"
 
@@ -507,20 +521,255 @@ def _prune_old_backups() -> None:
             pass
 
 
+def _default_restore_status() -> dict[str, Any]:
+    return {
+        "state": "idle",  # idle | running | done | error
+        "percent": 0,
+        "step": "",
+        "step_key": "",
+        "message": "",
+        "started_at": None,
+        "finished_at": None,
+        "actor": None,
+        "source": None,
+        "safety_id": None,
+        "db_engine": None,
+        "error": None,
+        "awaiting_restart": False,
+        "pre_boot_id": None,
+    }
+
+
 def _set_restore_status(payload: dict[str, Any]) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    cur = _default_restore_status()
+    if RESTORE_STATUS_FILE.exists():
+        try:
+            existing = json.loads(RESTORE_STATUS_FILE.read_text(encoding="utf-8"))
+            if isinstance(existing, dict):
+                cur.update(existing)
+        except Exception:
+            pass
+    cur.update(payload)
     tmp = RESTORE_STATUS_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.write_text(json.dumps(cur, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(RESTORE_STATUS_FILE)
 
 
 def read_restore_status() -> dict[str, Any]:
     if not RESTORE_STATUS_FILE.exists():
-        return {"state": "idle"}
+        return _default_restore_status()
     try:
-        return json.loads(RESTORE_STATUS_FILE.read_text(encoding="utf-8"))
+        data = json.loads(RESTORE_STATUS_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return _default_restore_status()
+        base = _default_restore_status()
+        base.update(data)
+        return base
     except Exception:
-        return {"state": "idle"}
+        return _default_restore_status()
+
+
+def _set_restore_step(key: str, message: str | None = None, **extra: Any) -> None:
+    meta = next((s for s in RESTORE_STEPS if s[0] == key), None)
+    if not meta:
+        _set_restore_status({"step_key": key, "message": message or key, **extra})
+        return
+    _set_restore_status(
+        {
+            "state": "running" if key not in {"done", "restart"} else "done",
+            "step_key": key,
+            "step": meta[1],
+            "percent": meta[2],
+            "message": message or meta[1],
+            **extra,
+        }
+    )
+
+
+def _finish_restore_ok(message: str, *, awaiting_restart: bool = False, **extra: Any) -> None:
+    pre_boot = None
+    if awaiting_restart:
+        try:
+            from app.runtime import BOOT_ID
+
+            pre_boot = BOOT_ID
+        except Exception:
+            pre_boot = None
+    key = "restart" if awaiting_restart else "done"
+    meta = next((s for s in RESTORE_STEPS if s[0] == key), RESTORE_STEPS[-1])
+    _set_restore_status(
+        {
+            "state": "done",
+            "step_key": key,
+            "step": meta[1],
+            "percent": meta[2],
+            "message": message,
+            "finished_at": _now_iso(),
+            "awaiting_restart": bool(awaiting_restart),
+            "pre_boot_id": pre_boot,
+            "error": None,
+            **extra,
+        }
+    )
+
+
+def _finish_restore_error(err: Exception | str, **extra: Any) -> None:
+    msg = str(err)
+    if isinstance(err, Exception):
+        log.exception("restore_backup failed")
+    else:
+        log.error("restore failed: %s", msg)
+    _set_restore_status(
+        {
+            "state": "error",
+            "step_key": "error",
+            "step": "خطا",
+            "message": msg,
+            "error": msg,
+            "finished_at": _now_iso(),
+            "awaiting_restart": False,
+            **extra,
+        }
+    )
+
+
+def _restore_thread_alive() -> bool:
+    t = _RESTORE_THREAD
+    return bool(t is not None and t.is_alive())
+
+
+def _parse_iso(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).timestamp()
+    except Exception:
+        return None
+
+
+def _restore_age_seconds(iso_ts: str | None) -> float | None:
+    ts = _parse_iso(iso_ts)
+    if ts is None:
+        return None
+    return max(0.0, datetime.now(timezone.utc).timestamp() - ts)
+
+
+def resolve_stale_restore_status() -> dict[str, Any]:
+    """Recover stuck backup_restore.json so the restore UI stays usable."""
+    st = read_restore_status()
+    if st.get("state") == "running":
+        if _restore_thread_alive():
+            return st
+        age = _restore_age_seconds(st.get("started_at")) or _restore_age_seconds(st.get("finished_at"))
+        if age is None or age >= 30:
+            _finish_restore_error("عملیات ریستور ناتمام ماند. دوباره تلاش کنید.")
+            return read_restore_status()
+        return st
+
+    if st.get("awaiting_restart"):
+        age = _restore_age_seconds(st.get("finished_at")) or _restore_age_seconds(st.get("started_at"))
+        pre_boot = st.get("pre_boot_id")
+        try:
+            from app.runtime import BOOT_ID
+
+            cur_boot = BOOT_ID
+        except Exception:
+            cur_boot = None
+        restarted = bool(pre_boot and cur_boot and str(pre_boot) != str(cur_boot))
+        if restarted:
+            _set_restore_status(
+                {
+                    "state": "idle",
+                    "awaiting_restart": False,
+                    "pre_boot_id": None,
+                    "message": "",
+                    "percent": 0,
+                    "step_key": "",
+                    "step": "",
+                }
+            )
+            return read_restore_status()
+        if age is not None and age >= AWAITING_RESTART_TIMEOUT_SEC:
+            _set_restore_status(
+                {
+                    "state": "error",
+                    "awaiting_restart": False,
+                    "message": "راه‌اندازی مجدد طولانی شد. سرویس را دستی بررسی کنید.",
+                    "error": "راه‌اندازی مجدد طولانی شد. سرویس را دستی بررسی کنید.",
+                    "finished_at": _now_iso(),
+                }
+            )
+            return read_restore_status()
+    return st
+
+
+def _do_restore_thread(
+    zip_path: Path,
+    *,
+    restore_env: bool,
+    safety_backup: bool,
+    restart: bool,
+    actor: str,
+) -> None:
+    try:
+        restore_backup(
+            zip_path,
+            restore_env=restore_env,
+            safety_backup=safety_backup,
+            restart=restart,
+            actor=actor,
+        )
+    except Exception as e:
+        _finish_restore_error(e)
+
+
+def start_restore_async(
+    zip_path: Path,
+    *,
+    restore_env: bool = True,
+    safety_backup: bool = True,
+    restart: bool = True,
+    actor: str = "panel",
+) -> dict[str, Any]:
+    global _RESTORE_THREAD
+    with _lock:
+        if _restore_thread_alive():
+            return {"ok": False, "error": "یک عملیات ریستور در حال اجراست"}
+        st = read_restore_status()
+        if st.get("state") == "running":
+            return {"ok": False, "error": "یک عملیات ریستور در حال اجراست"}
+        _set_restore_status(
+            {
+                "state": "running",
+                "percent": 0,
+                "step_key": "",
+                "step": "",
+                "message": "شروع ریستور…",
+                "started_at": _now_iso(),
+                "finished_at": None,
+                "actor": actor,
+                "source": str(zip_path),
+                "safety_id": None,
+                "error": None,
+                "awaiting_restart": False,
+                "pre_boot_id": None,
+            }
+        )
+        _RESTORE_THREAD = threading.Thread(
+            target=_do_restore_thread,
+            args=(zip_path,),
+            kwargs={
+                "restore_env": restore_env,
+                "safety_backup": safety_backup,
+                "restart": restart,
+                "actor": actor,
+            },
+            name="backup-restore",
+            daemon=True,
+        )
+        _RESTORE_THREAD.start()
+    return {"ok": True, "status": read_restore_status()}
 
 
 def restore_backup(
@@ -540,15 +789,12 @@ def restore_backup(
         return {"ok": False, "error": err}
 
     with _lock:
-        _set_restore_status(
-            {
-                "state": "running",
-                "step": "validate",
-                "message": "در حال بررسی بکاپ…",
-                "started_at": _now_iso(),
-                "actor": actor,
-                "source": str(zip_path),
-            }
+        _set_restore_step(
+            "validate",
+            "در حال بررسی بکاپ…",
+            started_at=_now_iso(),
+            actor=actor,
+            source=str(zip_path),
         )
         safety_id = None
         try:
@@ -559,14 +805,11 @@ def restore_backup(
                 shutil.copy2(zip_path, source_copy)
 
                 if safety_backup:
-                    _set_restore_status(
-                        {
-                            "state": "running",
-                            "step": "safety",
-                            "message": "پشتیبان ایمنی قبل از ریستور…",
-                            "started_at": _now_iso(),
-                            "actor": actor,
-                        }
+                    _set_restore_step(
+                        "safety",
+                        "پشتیبان ایمنی قبل از ریستور…",
+                        started_at=_now_iso(),
+                        actor=actor,
                     )
                     safety = create_backup(
                         note=f"safety before restore from {zip_path.name}",
@@ -603,16 +846,13 @@ def restore_backup(
                 if archive_engine == "postgresql" and not extracted_pg.is_file():
                     raise FileNotFoundError("postgres.dump در بکاپ نیست")
 
-                _set_restore_status(
-                    {
-                        "state": "running",
-                        "step": "db",
-                        "message": "بازیابی دیتابیس…",
-                        "started_at": _now_iso(),
-                        "actor": actor,
-                        "safety_id": safety_id,
-                        "db_engine": archive_engine,
-                    }
+                _set_restore_step(
+                    "db",
+                    "بازیابی دیتابیس…",
+                    started_at=_now_iso(),
+                    actor=actor,
+                    safety_id=safety_id,
+                    db_engine=archive_engine,
                 )
                 DATA_DIR.mkdir(parents=True, exist_ok=True)
                 if archive_engine == "postgresql":
@@ -652,15 +892,12 @@ def restore_backup(
                         dest.unlink(missing_ok=True)
 
                 # uploads + private attachments: replace trees
-                _set_restore_status(
-                    {
-                        "state": "running",
-                        "step": "uploads",
-                        "message": "بازیابی فایل‌های آپلود…",
-                        "started_at": _now_iso(),
-                        "actor": actor,
-                        "safety_id": safety_id,
-                    }
+                _set_restore_step(
+                    "uploads",
+                    "بازیابی فایل‌های آپلود…",
+                    started_at=_now_iso(),
+                    actor=actor,
+                    safety_id=safety_id,
                 )
                 for tree_name in ("uploads", "private"):
                     tree_src = tmp_root / "data" / tree_name
@@ -684,15 +921,12 @@ def restore_backup(
                 env_restored = False
                 env_src = tmp_root / "env" / ".env"
                 if restore_env and env_src.is_file():
-                    _set_restore_status(
-                        {
-                            "state": "running",
-                            "step": "env",
-                            "message": "بازیابی تنظیمات .env…",
-                            "started_at": _now_iso(),
-                            "actor": actor,
-                            "safety_id": safety_id,
-                        }
+                    _set_restore_step(
+                        "env",
+                        "بازیابی تنظیمات .env…",
+                        started_at=_now_iso(),
+                        actor=actor,
+                        safety_id=safety_id,
                     )
                     env_dest = ROOT_DIR / ".env"
                     bak = ROOT_DIR / f".env.bak.restore.{_utcnow_stamp()}"
@@ -722,32 +956,26 @@ def restore_backup(
                     reason="backup restore",
                 )
 
-            _set_restore_status(
-                {
-                    "state": "done",
-                    "step": "done",
-                    "message": "ریستور موفق — سرویس در حال راه‌اندازی مجدد است"
-                    if result["restart_scheduled"]
-                    else "ریستور موفق",
-                    "finished_at": _now_iso(),
-                    "actor": actor,
-                    "safety_id": safety_id,
-                    "source": str(zip_path),
-                }
-            )
+            if result["restart_scheduled"]:
+                _finish_restore_ok(
+                    "ریستور انجام شد — سرویس در حال راه‌اندازی مجدد است. "
+                    "ممکن است چند دقیقه طول بکشد؛ از صفحه خارج نشوید و رفرش نکنید. "
+                    "صفحه به‌صورت خودکار تازه می‌شود.",
+                    awaiting_restart=True,
+                    actor=actor,
+                    safety_id=safety_id,
+                    source=str(zip_path),
+                )
+            else:
+                _finish_restore_ok(
+                    "ریستور موفق",
+                    actor=actor,
+                    safety_id=safety_id,
+                    source=str(zip_path),
+                )
             return result
         except Exception as e:
-            log.exception("restore_backup failed")
-            _set_restore_status(
-                {
-                    "state": "error",
-                    "step": "error",
-                    "message": str(e),
-                    "finished_at": _now_iso(),
-                    "actor": actor,
-                    "safety_id": safety_id,
-                }
-            )
+            _finish_restore_error(e, actor=actor, safety_id=safety_id)
             return {"ok": False, "error": str(e), "safety_id": safety_id}
 
 
