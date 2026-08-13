@@ -356,7 +356,7 @@ async def pg_user_link(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:pg:reset:"))
 async def pg_reset(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="update"):
         return
     uid = int(callback.data.split(":")[-1])
     try:
@@ -374,7 +374,7 @@ async def pg_reset(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:pg:dis:"))
 async def pg_dis(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="update"):
         return
     uid = int(callback.data.split(":")[-1])
     try:
@@ -392,7 +392,7 @@ async def pg_dis(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:pg:en:"))
 async def pg_en(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="update"):
         return
     uid = int(callback.data.split(":")[-1])
     try:
@@ -410,7 +410,7 @@ async def pg_en(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:pg:rev:"))
 async def pg_rev(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="update"):
         return
     uid = int(callback.data.split(":")[-1])
     try:
@@ -428,7 +428,7 @@ async def pg_rev(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:delask$"))
 async def pg_user_del_ask(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="delete"):
         return
     uid = int(callback.data.split(":")[3])
     await callback.answer()
@@ -450,7 +450,7 @@ async def pg_user_del_ask(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:del$"))
 async def pg_user_del(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="delete"):
         return
     uid = int(callback.data.split(":")[3])
     try:
@@ -472,7 +472,7 @@ async def pg_user_del(callback: CallbackQuery, state: FSMContext, db_user: BotUs
 
 @router.callback_query(F.data == "adm:pg:create")
 async def pg_create_menu(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="create"):
         return
     await callback.answer()
     await state.clear()
@@ -493,7 +493,7 @@ async def pg_create_menu(callback: CallbackQuery, state: FSMContext, db_user: Bo
 
 @router.callback_query(F.data == "adm:pg:create:tpl")
 async def pg_create_tpl_pick(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="create"):
         return
     await callback.answer()
     await state.update_data(pg_create_mode="template", pg_template_id=None, pg_selected_groups=[])
@@ -532,7 +532,7 @@ async def pg_create_tpl_pick(callback: CallbackQuery, state: FSMContext, db_user
 
 @router.callback_query(F.data.startswith("adm:pg:settpl:"))
 async def pg_create_tpl_chosen(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="create"):
         return
     tid = int(callback.data.split(":")[-1])
     await callback.answer()
@@ -547,7 +547,7 @@ async def pg_create_tpl_chosen(callback: CallbackQuery, state: FSMContext, db_us
 
 @router.callback_query(F.data == "adm:pg:create:custom")
 async def pg_create_custom_groups(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="create"):
         return
     await callback.answer()
     await state.update_data(pg_create_mode="custom", pg_template_id=None, pg_selected_groups=[])
@@ -612,7 +612,7 @@ async def _show_create_group_picker(callback: CallbackQuery, state: FSMContext) 
 
 @router.callback_query(F.data.startswith("adm:pg:toggrp:"))
 async def pg_create_toggrp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="create"):
         return
     gid = int(callback.data.split(":")[-1])
     data = await state.get_data()
@@ -628,7 +628,7 @@ async def pg_create_toggrp(callback: CallbackQuery, state: FSMContext, db_user: 
 
 @router.callback_query(F.data == "adm:pg:grpdone")
 async def pg_create_grpdone(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="create"):
         return
     data = await state.get_data()
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
@@ -646,7 +646,7 @@ async def pg_create_grpdone(callback: CallbackQuery, state: FSMContext, db_user:
 
 @router.message(PgUserStates.create_username)
 async def pg_create_username(message: Message, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, message=message):
+    if not await _require_users(db_user, message=message, action="create"):
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
@@ -693,7 +693,7 @@ async def pg_create_username(message: Message, state: FSMContext, db_user: BotUs
 
 @router.message(PgUserStates.create_gb)
 async def pg_create_gb(message: Message, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, message=message):
+    if not await _require_users(db_user, message=message, action="create"):
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
@@ -718,7 +718,7 @@ async def pg_create_gb(message: Message, state: FSMContext, db_user: BotUser):
 
 @router.message(PgUserStates.create_days)
 async def pg_create_days(message: Message, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, message=message):
+    if not await _require_users(db_user, message=message, action="create"):
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
@@ -773,7 +773,7 @@ async def pg_create_days(message: Message, state: FSMContext, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:edit$"))
 async def pg_user_edit_menu(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="update"):
         return
     uid = int(callback.data.split(":")[3])
     await callback.answer()
@@ -788,7 +788,7 @@ async def pg_user_edit_menu(callback: CallbackQuery, state: FSMContext, db_user:
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:ed:name$"))
 async def pg_edit_name_ask(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="update"):
         return
     uid = int(callback.data.split(":")[3])
     await callback.answer()
@@ -803,7 +803,7 @@ async def pg_edit_name_ask(callback: CallbackQuery, state: FSMContext, db_user: 
 
 @router.message(PgUserStates.edit_username)
 async def pg_edit_name_save(message: Message, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, message=message):
+    if not await _require_users(db_user, message=message, action="update"):
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
@@ -837,7 +837,7 @@ async def pg_edit_name_save(message: Message, state: FSMContext, db_user: BotUse
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:ed:gb$"))
 async def pg_edit_gb_ask(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="update"):
         return
     uid = int(callback.data.split(":")[3])
     await callback.answer()
@@ -852,7 +852,7 @@ async def pg_edit_gb_ask(callback: CallbackQuery, state: FSMContext, db_user: Bo
 
 @router.message(PgUserStates.edit_gb)
 async def pg_edit_gb_save(message: Message, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, message=message):
+    if not await _require_users(db_user, message=message, action="update"):
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
@@ -892,7 +892,7 @@ async def pg_edit_gb_save(message: Message, state: FSMContext, db_user: BotUser)
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:ed:days$"))
 async def pg_edit_days_ask(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="update"):
         return
     uid = int(callback.data.split(":")[3])
     await callback.answer()
@@ -907,7 +907,7 @@ async def pg_edit_days_ask(callback: CallbackQuery, state: FSMContext, db_user: 
 
 @router.message(PgUserStates.edit_days)
 async def pg_edit_days_save(message: Message, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, message=message):
+    if not await _require_users(db_user, message=message, action="update"):
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
@@ -948,7 +948,7 @@ async def pg_edit_days_save(message: Message, state: FSMContext, db_user: BotUse
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:ed:grps$"))
 async def pg_edit_groups_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="update"):
         return
     uid = int(callback.data.split(":")[3])
     await callback.answer()
@@ -963,7 +963,7 @@ async def pg_edit_groups_start(callback: CallbackQuery, state: FSMContext, db_us
 
 @router.callback_query(F.data.startswith("adm:pg:edgrp:"))
 async def pg_edit_toggrp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="update"):
         return
     gid = int(callback.data.split(":")[-1])
     data = await state.get_data()
@@ -979,7 +979,7 @@ async def pg_edit_toggrp(callback: CallbackQuery, state: FSMContext, db_user: Bo
 
 @router.callback_query(F.data == "adm:pg:edgrpdone")
 async def pg_edit_grpdone(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+    if not await _require_users(db_user, callback=callback, action="update"):
         return
     data = await state.get_data()
     uid = int(data.get("pg_edit_uid") or 0)

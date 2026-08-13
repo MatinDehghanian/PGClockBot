@@ -192,7 +192,7 @@ async def pg_node_detail(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:pg:recon:"))
 async def pg_recon(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback):
+    if not await _require_nodes(db_user, callback=callback, action="reconnect"):
         return
     try:
         node_id = int(callback.data.split(":")[-1])
@@ -208,7 +208,7 @@ async def pg_recon(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data == "adm:pg:nreconall")
 async def pg_recon_all(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback):
+    if not await _require_nodes(db_user, callback=callback, action="reconnect"):
         return
     try:
         await get_pg().reconnect_all_nodes()
@@ -219,7 +219,7 @@ async def pg_recon_all(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:pg:nsync:"))
 async def pg_node_sync(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback):
+    if not await _require_nodes(db_user, callback=callback, action="reconnect"):
         return
     try:
         node_id = int(callback.data.split(":")[-1])
@@ -235,7 +235,7 @@ async def pg_node_sync(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:nresetask:\d+$"))
 async def pg_node_reset_ask(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback):
+    if not await _require_nodes(db_user, callback=callback, action="update"):
         return
     nid = int(callback.data.split(":")[-1])
     await callback.answer()
@@ -259,7 +259,7 @@ async def pg_node_reset_ask(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:nreset:\d+$"))
 async def pg_node_reset(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback):
+    if not await _require_nodes(db_user, callback=callback, action="update"):
         return
     node_id = int(callback.data.split(":")[-1])
     try:
@@ -282,7 +282,7 @@ async def pg_node_reset(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:ntog:\d+$"))
 async def pg_node_toggle(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback):
+    if not await _require_nodes(db_user, callback=callback, action="update"):
         return
     node_id = int(callback.data.split(":")[-1])
     try:
@@ -305,7 +305,7 @@ async def pg_node_toggle(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:ndelask:\d+$"))
 async def pg_node_del_ask(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback):
+    if not await _require_nodes(db_user, callback=callback, action="delete"):
         return
     nid = int(callback.data.split(":")[-1])
     await callback.answer()
@@ -329,7 +329,7 @@ async def pg_node_del_ask(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.regexp(r"^adm:pg:ndel:\d+$"))
 async def pg_node_delete(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback):
+    if not await _require_nodes(db_user, callback=callback, action="delete"):
         return
     node_id = int(callback.data.split(":")[-1])
     try:
@@ -346,7 +346,7 @@ async def pg_node_delete(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data == "adm:pg:ncreate")
 async def pg_node_create_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback):
+    if not await _require_nodes(db_user, callback=callback, action="create"):
         return
     await state.set_state(PgNodeStates.create_name)
     await state.update_data(node_create={})
@@ -370,7 +370,7 @@ async def pg_node_create_name(message: Message, state: FSMContext, db_user: BotU
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
         await state.clear()
         return
-    if not await _require_nodes(db_user, message=message):
+    if not await _require_nodes(db_user, message=message, action="create"):
         await state.clear()
         return
     name = (message.text or "").strip()
@@ -390,7 +390,7 @@ async def pg_node_create_address(message: Message, state: FSMContext, db_user: B
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
         await state.clear()
         return
-    if not await _require_nodes(db_user, message=message):
+    if not await _require_nodes(db_user, message=message, action="create"):
         await state.clear()
         return
     address = (message.text or "").strip()
@@ -413,7 +413,7 @@ async def pg_node_create_port(message: Message, state: FSMContext, db_user: BotU
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
         await state.clear()
         return
-    if not await _require_nodes(db_user, message=message):
+    if not await _require_nodes(db_user, message=message, action="create"):
         await state.clear()
         return
     raw = (message.text or "").strip()
@@ -442,7 +442,7 @@ async def pg_node_create_port(message: Message, state: FSMContext, db_user: BotU
 
 @router.callback_query(F.data.startswith("adm:pg:nconn:"))
 async def pg_node_create_conn(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback):
+    if not await _require_nodes(db_user, callback=callback, action="create"):
         return
     conn = callback.data.rsplit(":", 1)[-1]
     if conn not in {"grpc", "rest"}:
@@ -475,7 +475,7 @@ async def pg_node_create_core(message: Message, state: FSMContext, db_user: BotU
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
         await state.clear()
         return
-    if not await _require_nodes(db_user, message=message):
+    if not await _require_nodes(db_user, message=message, action="create"):
         await state.clear()
         return
     raw = (message.text or "").strip()
@@ -497,7 +497,7 @@ async def pg_node_create_api_key(message: Message, state: FSMContext, db_user: B
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
         await state.clear()
         return
-    if not await _require_nodes(db_user, message=message):
+    if not await _require_nodes(db_user, message=message, action="create"):
         await state.clear()
         return
     raw = (message.text or "").strip()
@@ -518,7 +518,7 @@ async def pg_node_create_server_ca(message: Message, state: FSMContext, db_user:
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
         await state.clear()
         return
-    if not await _require_nodes(db_user, message=message):
+    if not await _require_nodes(db_user, message=message, action="create"):
         await state.clear()
         return
     raw = (message.text or "").strip()
