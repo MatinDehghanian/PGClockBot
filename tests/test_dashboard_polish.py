@@ -69,13 +69,15 @@ class DashboardPolishSourceTests(unittest.TestCase):
         home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
         dash = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
         reseller_home = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
+        ops = Path("app/web/templates/_home_ops.html").read_text(encoding="utf-8")
+        self.assertIn("_home_ops.html", home)
+        self.assertIn("_home_ops.html", reseller_home)
+        self.assertIn("home-portal-bot", ops)
+        self.assertIn("home-portal-pg", ops)
         for cls in ("home-panels", "home-panel-bot", "home-panel-grid"):
-            self.assertIn(cls, home)
             self.assertIn(cls, dash)
-            self.assertIn(cls, reseller_home)
-        self.assertIn("home-panel-pg", home)
-        self.assertIn("home-panel-pg", reseller_home)
-        self.assertNotIn("home-panel-pg", dash)
+        self.assertNotIn("home-panel-bot", home)
+        self.assertNotIn("home-panel-pg", home)
 
     def test_templates_use_ratio_text(self):
         gauges = Path("app/web/templates/_pg_quota_gauges.html").read_text(encoding="utf-8")

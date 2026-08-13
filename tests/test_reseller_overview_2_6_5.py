@@ -25,10 +25,12 @@ class ResellerNavSplitTests(unittest.TestCase):
 
     def test_reseller_home_has_bot_and_pg_panels(self):
         home = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
-        self.assertIn("home-panel-bot", home)
-        self.assertIn("home-panel-pg", home)
+        self.assertIn("_home_ops.html", home)
         self.assertIn("pg_limits", home)
-        self.assertIn('href="/dashboard"', home)
+        self.assertIn("home-quota-card", home)
+        ops = Path("app/web/templates/_home_ops.html").read_text(encoding="utf-8")
+        self.assertIn("'/dashboard'", ops)
+        self.assertIn("portal_bot_href = '/dashboard'", home)
         self.assertIn("page_title('home', 'داشبورد', 'neutral')", home)
         self.assertIn("home-conn-card", home)
         self.assertIn("وضعیت اتصال", home)

@@ -87,10 +87,11 @@ class WiringTests(unittest.TestCase):
         self.assertGreater(else_i, setup_i)
         self.assertGreater(panels_i, else_i)
         self.assertNotIn('class="meter"', dash)
-        # Web dashboard for reseller keeps bot + PG panels
+        # Web dashboard for reseller: portals + periods + optional PG quota
         home = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
-        self.assertIn("home-panel-bot", home)
-        self.assertIn("home-panel-pg", home)
+        self.assertIn("_home_ops.html", home)
+        self.assertIn("pg_limits", home)
+        self.assertIn("home-quota-card", home)
         self.assertNotIn("pg_limits.time", home)
         self.assertNotIn('class="meter"', home)
 
@@ -128,8 +129,8 @@ class WiringTests(unittest.TestCase):
         self.assertIn("muted", src[src.find("home-mem-hint") - 80 : src.find("home-mem-hint")])
         self.assertNotIn("home-gauge-amount", src)
         self.assertNotIn("home-gauge-center-quiet", src)
-        # PG dashboard boxes: users + admins first (no templates slot)
-        self.assertIn(">ادمین‌ها</span>", src)
+        # PG admin counts live on /pg overview, not the slim home dash
+        self.assertIn("_home_ops.html", src)
         self.assertNotIn(">تمپلیت‌ها</span>", src)
 
     def test_base_nav_web_panel_for_all(self):

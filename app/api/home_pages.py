@@ -64,6 +64,16 @@ def _unchecked_overview():
     return ov
 
 
+_EMPTY_ACTION = {
+    "pending": 0,
+    "tickets": 0,
+    "failures": 0,
+    "expiring": 0,
+    "entries": [],
+    "has_items": False,
+}
+
+
 async def _safe_funnel(session: AsyncSession, *, reseller_id: int | None):
     from app.services.db_safe import rollback_quiet
     from app.services.ux20 import funnel_summary
@@ -74,6 +84,32 @@ async def _safe_funnel(session: AsyncSession, *, reseller_id: int | None):
         logger.exception("funnel_summary failed reseller_id=%s", reseller_id)
         await rollback_quiet(session)
         return dict(_EMPTY_FUNNEL)
+
+
+async def _safe_periods(session: AsyncSession, *, reseller_id: int | None):
+    from app.services.db_safe import rollback_quiet
+    from app.services.home_overview import empty_period_stats, shop_period_stats
+
+    try:
+        return await shop_period_stats(session, reseller_id=reseller_id)
+    except Exception:
+        logger.exception("shop_period_stats failed reseller_id=%s", reseller_id)
+        await rollback_quiet(session)
+        return empty_period_stats()
+
+
+async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None, expire_days: int = 3):
+    from app.services.db_safe import rollback_quiet
+    from app.services.ux20 import build_action_center
+
+    try:
+        return await build_action_center(
+            session, reseller_id=reseller_id, expire_days=expire_days
+        )
+    except Exception:
+        logger.exception("action_center failed reseller_id=%s", reseller_id)
+        await rollback_quiet(session)
+        return dict(_EMPTY_ACTION)
 
 
 async def _safe_pg_health(*, reseller_user_id: int | None = None, session: AsyncSession | None = None):
@@ -196,6 +232,10 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         return render(request, template, ctx)
 
     def _degraded_home_shell(staff: dict) -> tuple[str, dict]:
+        from app.services.home_overview import empty_period_stats
+
+        periods = empty_period_stats()
+        action = dict(_EMPTY_ACTION)
         if is_platform_admin(staff):
             return (
                 "home.html",
@@ -205,6 +245,8 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "pg_health": dict(_UNCHECKED_CONN),
                     "funnel_enabled": False,
                     "funnel": dict(_EMPTY_FUNNEL),
+                    "periods": periods,
+                    "action_center": action,
                     "dashboard_degraded": True,
                 },
             )
@@ -226,6 +268,8 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "pg_health": dict(_UNCHECKED_CONN),
                 "funnel_enabled": False,
                 "funnel": dict(_EMPTY_FUNNEL),
+                "periods": periods,
+                "action_center": action,
                 "dashboard_degraded": True,
             },
         )
@@ -258,6 +302,14 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 if funnel_enabled
                 else dict(_EMPTY_FUNNEL)
             )
+            try:
+                expire_days = int(ui.get("action_center_expire_days") or 3)
+            except (TypeError, ValueError):
+                expire_days = 3
+            periods = await _safe_periods(session, reseller_id=None)
+            action_center = await _safe_action_center(
+                session, reseller_id=None, expire_days=expire_days
+            )
             return (
                 "home.html",
                 {
@@ -266,6 +318,8 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "pg_health": pg_health,
                     "funnel_enabled": funnel_enabled,
                     "funnel": funnel,
+                    "periods": periods,
+                    "action_center": action_center,
                     "dashboard_degraded": False,
                 },
             )
@@ -387,6 +441,14 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             if funnel_enabled
             else dict(_EMPTY_FUNNEL)
         )
+        try:
+            expire_days = int(ui.get("action_center_expire_days") or 3)
+        except (TypeError, ValueError):
+            expire_days = 3
+        periods = await _safe_periods(session, reseller_id=int(rid))
+        action_center = await _safe_action_center(
+            session, reseller_id=int(rid), expire_days=expire_days
+        )
         return (
             "reseller_home.html",
             {
@@ -399,6 +461,8 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "pg_health": pg_health,
                 "funnel_enabled": funnel_enabled,
                 "funnel": funnel,
+                "periods": periods,
+                "action_center": action_center,
                 "dashboard_degraded": False,
             },
         )

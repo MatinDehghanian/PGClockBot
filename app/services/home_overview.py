@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 from sqlalchemy import func, select
@@ -21,6 +23,8 @@ from app.db.models import (
 from app.services.host_metrics import host_metrics
 from app.services.pasarguard import get_pg
 from app.services.setup_wizard import current_setup_values
+
+_TEHRAN = ZoneInfo("Asia/Tehran")
 
 _ERR_NODE = frozenset({"error", "offline", "unhealthy", "disabled", "disconnected"})
 _OK_NODE = frozenset({"connected", "online", "healthy", "active"})
@@ -282,6 +286,107 @@ def _empty_host() -> dict[str, Any]:
 
 def _empty_bot() -> dict[str, Any]:
     return {"ok": False, "error": None, "username": None, "name": None}
+
+
+def empty_period_bucket() -> dict[str, int]:
+    return {
+        "orders": 0,
+        "delivered": 0,
+        "revenue": 0,
+        "new_users": 0,
+    }
+
+
+def empty_period_stats() -> dict[str, Any]:
+    return {
+        "day": empty_period_bucket(),
+        "week": empty_period_bucket(),
+        "month": empty_period_bucket(),
+    }
+
+
+def _period_since_utc() -> dict[str, datetime]:
+    """Today / last-7-days / last-30-days anchored on Asia/Tehran midnight."""
+    now_local = datetime.now(_TEHRAN)
+    day_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = day_start - timedelta(days=6)
+    month_start = day_start - timedelta(days=29)
+    return {
+        "day": day_start.astimezone(timezone.utc),
+        "week": week_start.astimezone(timezone.utc),
+        "month": month_start.astimezone(timezone.utc),
+    }
+
+
+async def shop_period_stats(
+    session: AsyncSession, *, reseller_id: int | None = None
+) -> dict[str, Any]:
+    """Sales-ish totals for امروز / ۷ روز / ۳۰ روز (shop-scoped)."""
+    starts = _period_since_utc()
+    out = empty_period_stats()
+
+    for key, since in starts.items():
+        if reseller_id is None:
+            scope_orders = Order.reseller_id.is_(None)
+            scope_users = BotUser.reseller_id.is_(None)
+        else:
+            rid = int(reseller_id)
+            scope_orders = Order.reseller_id == rid
+            scope_users = BotUser.reseller_id == rid
+
+        orders_n = int(
+            (
+                await session.execute(
+                    select(func.count())
+                    .select_from(Order)
+                    .where(Order.created_at >= since, scope_orders)
+                )
+            ).scalar()
+            or 0
+        )
+        delivered_n = int(
+            (
+                await session.execute(
+                    select(func.count())
+                    .select_from(Order)
+                    .where(
+                        Order.created_at >= since,
+                        Order.status == "delivered",
+                        scope_orders,
+                    )
+                )
+            ).scalar()
+            or 0
+        )
+        revenue_n = int(
+            (
+                await session.execute(
+                    select(func.coalesce(func.sum(Order.amount), 0)).where(
+                        Order.created_at >= since,
+                        Order.status == "delivered",
+                        scope_orders,
+                    )
+                )
+            ).scalar()
+            or 0
+        )
+        users_n = int(
+            (
+                await session.execute(
+                    select(func.count())
+                    .select_from(BotUser)
+                    .where(BotUser.created_at >= since, scope_users)
+                )
+            ).scalar()
+            or 0
+        )
+        out[key] = {
+            "orders": orders_n,
+            "delivered": delivered_n,
+            "revenue": revenue_n,
+            "new_users": users_n,
+        }
+    return out
 
 
 def _empty_bot_summary() -> dict[str, Any]:
