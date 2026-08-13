@@ -704,7 +704,7 @@ def as_list(data: Any, *keys: str) -> list[dict]:
 
 
 _pg: Optional[PasarGuardClient] = None
-_pg_reseller_cache: dict[int, PasarGuardClient] = {}
+_pg_reseller_cache: dict[tuple[int, str], PasarGuardClient] = {}
 _pg_staff_cache: dict[str, PasarGuardClient] = {}
 
 
@@ -735,9 +735,6 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
     from app.services.secret_box import decrypt_secret
 
     rid = int(reseller_user_id)
-    cached = _pg_reseller_cache.get(rid)
-    if cached is not None and cached._token:
-        return cached
 
     profile = (
         await session.execute(select(ResellerProfile).where(ResellerProfile.user_id == rid))
@@ -746,6 +743,17 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
         raise PasarGuardError(
             "ادمین پاسارگارد برای این نماینده تعریف نشده — عملیات فروشگاه ممکن نیست"
         )
+
+    # Cache key includes the PG admin username: if an operator re-links this
+    # reseller to a different PasarGuard admin, the old cached client (still
+    # authenticated as the previous admin) must never be reused — it would
+    # silently keep acting under the wrong PasarGuard identity/permissions.
+    uname = str(profile.pg_admin_username).strip().lower()
+    cache_key = (rid, uname)
+    cached = _pg_reseller_cache.get(cache_key)
+    if cached is not None and cached._token:
+        return cached
+
     password = decrypt_secret(profile.pg_admin_password_enc)
     if not password:
         raise PasarGuardError(
@@ -758,7 +766,11 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
         password=password,
     )
     await client.ensure_token()
-    _pg_reseller_cache[rid] = client
+    # Drop any stale entry for this reseller under a different (old) admin
+    # username so it can never be resurrected/reused.
+    for stale_key in [k for k in _pg_reseller_cache if k[0] == rid and k != cache_key]:
+        _pg_reseller_cache.pop(stale_key, None)
+    _pg_reseller_cache[cache_key] = client
     return client
 
 

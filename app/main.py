@@ -273,9 +273,17 @@ def main() -> None:
     if not creds.get("password") or not is_setup_complete():
         setup_url = persist_setup_entry_url(entry.rstrip("/"))
         if setup_url:
+            from app.services.setup_wizard import SETUP_ENTRY_FILE
+
+            # Never write the one-time gate token itself into logs — logs are
+            # often shipped to aggregators / broader-read files than the
+            # 0600 hint file persist_setup_entry_url() already wrote.
             logger.warning(
-                "First-run wizard — one-time setup URL (15 min): %s",
-                setup_url,
+                "First-run wizard ready (valid 15 min) — read the one-time "
+                "setup URL from %s (root/owner-only) or open %s and use the "
+                "printed gate token.",
+                SETUP_ENTRY_FILE,
+                entry,
             )
     else:
         logger.info(
