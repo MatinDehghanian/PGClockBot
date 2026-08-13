@@ -64,6 +64,15 @@ touch data or permissions that don't belong to them) and secret handling.
   pull request, so a future patch can never silently reintroduce one of
   these issues.
 
+## UI polish (bundled from #255)
+
+- Ticket status `<select>` inside the support modal is full width on mobile.
+- Removed the repaint "ghost gap" that flashed above the section tabs after a
+  click (dropped `translateY`/`scale` transitions on `.section-tabs`).
+- Gift code and "add plan" actions sit side by side in a 2-column grid on
+  mobile instead of wrapping awkwardly.
+- Dashboard shortcut chevrons are now true vertically-centered SVG icons.
+
 ## Compatibility
 
 - No database migration required. Existing encrypted PasarGuard passwords
