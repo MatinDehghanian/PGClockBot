@@ -803,6 +803,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("buttons", "متن دکمه‌ها"),
     ("colors", "رنگبندی دکمه‌ها"),
     ("menu", "منوی بات"),
+    ("links", "لینک‌های سریع"),
     ("qr", "QR اشتراک"),
     ("naming", "نام‌گذاری سرویس"),
     ("forcejoin", "کانال اجباری"),

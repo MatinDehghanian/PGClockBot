@@ -220,6 +220,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             ctx["bot_status"] = await _bot_token_status(token)
             ctx["bot_token_masked"] = ("••••" + token[-6:]) if len(token) > 8 else ("••••" if token else "")
             ctx["bot_username"] = (profile.bot_username if profile else "") or ""
+        elif tab == "links":
+            from app.services.ux20 import build_magic_links_context
+
+            ctx.update(await build_magic_links_context(session, staff))
         elif tab == "appearance":
             from app.services.bot_appearance import load_appearance_context
 

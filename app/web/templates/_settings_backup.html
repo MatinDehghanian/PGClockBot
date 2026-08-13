@@ -57,11 +57,6 @@
       {% if values.get('backup_last_ok_at') %}
       <div><span class="muted">آخرین بکاپ خودکار</span> <strong class="mono" dir="ltr">{{ values.get('backup_last_ok_at') }}</strong></div>
       {% endif %}
-      {% if values.get('backup_last_verify_ok') == '1' %}
-      <div><span class="muted">بررسی سلامت</span> <strong class="badge ok">سالم</strong></div>
-      {% elif values.get('backup_last_verify_ok') == '0' %}
-      <div><span class="muted">بررسی سلامت</span> <strong class="badge danger">ناموفق</strong></div>
-      {% endif %}
     </div>
 
     <div id="backup-op-status" class="flash warn" {% if not st.state or st.state == 'idle' or st.state == 'done' %}hidden{% endif %}>
@@ -89,16 +84,6 @@
   </div>
     <div class="actions sticky-actions">
     <button class="btn" type="submit" id="backup-create-btn">ساخت بکاپ جدید</button>
-  </div>
-</form>
-
-<form method="post" action="/backup/verify-last" class="settings-form">
-  <div class="card settings-card">
-    <h2>بررسی سلامت آخرین بکاپ</h2>
-    <p class="muted update-card-caption">آرشیو آخرین بکاپ را بدون ریستور تست می‌کند (ZIP + manifest).</p>
-  </div>
-  <div class="actions sticky-actions">
-    <button class="btn btn-ghost" type="submit">بررسی آخرین بکاپ</button>
   </div>
 </form>
 
@@ -177,6 +162,15 @@
     <div class="snap-row" style="flex-wrap:wrap;gap: var(--space-1)">
       <div style="flex:1;min-width:220px">
         <strong>{{ b.filename }}</strong>
+        {% if loop.first %}
+          {% if values.get('backup_last_verify_ok') == '1' %}
+          <span class="badge ok backup-health-tag" title="آخرین بررسی سلامت موفق بود">سالم</span>
+          {% elif values.get('backup_last_verify_ok') == '0' %}
+          <span class="badge danger backup-health-tag" title="آخرین بررسی سلامت ناموفق بود">ناموفق</span>
+          {% else %}
+          <span class="badge neutral backup-health-tag" title="هنوز بررسی نشده">بررسی‌نشده</span>
+          {% endif %}
+        {% endif %}
         <small class="muted" style="display:block">
           {{ b.created_at }} · {{ b.size_human }} · v{{ b.app_version }}
           {% if b.include_env %} · شامل .env{% endif %}
@@ -185,6 +179,11 @@
         {% if b.sha256 %}<small class="mono muted" dir="ltr">sha256: {{ b.sha256[:16] }}…</small>{% endif %}
       </div>
       <div style="display:flex;flex-wrap:wrap;gap: var(--space-1);align-items:center">
+        {% if loop.first %}
+        <form method="post" action="/backup/verify-last" style="display:inline">
+          <button class="btn btn-ghost btn-sm" type="submit" title="بررسی ZIP و manifest آخرین بکاپ">بررسی سلامت</button>
+        </form>
+        {% endif %}
         <a class="btn btn-ghost btn-sm" href="/backup/download/{{ b.id }}">دانلود</a>
         <form method="post" action="/backup/delete/{{ b.id }}"
               data-confirm="این بکاپ حذف شود؟"

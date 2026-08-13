@@ -16,7 +16,6 @@ from app.services.authz import authz_from_staff, can_shop
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.ux20 import (
-    bot_deep_link,
     create_charge_code,
     export_shop_bundle,
     import_shop_bundle,
@@ -122,83 +121,39 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.config import get_settings
-        from app.db.models import ResellerProfile
-        from app.services.home_overview import check_bot_connection
-
+        """Legacy hub — features moved to settings/plans; keep redirects for bookmarks."""
         authz = authz_from_staff(staff)
         can_tools = (
             is_platform_admin(staff)
             or can_shop(authz, "orders")
             or can_shop(authz, "payments")
             or can_shop(authz, "shop_settings")
+            or can_shop(authz, "plans")
         )
         if not can_tools:
             return RedirectResponse("/home", status_code=303)
 
-        can_export = is_platform_admin(staff) or can_shop(authz, "shop_settings")
-        tab = (request.query_params.get("tab") or "links").strip()
+        tab = (request.query_params.get("tab") or "").strip()
         if tab in {"steps", "funnel"}:
             return RedirectResponse("/finance?tab=behavior", status_code=303)
         if tab == "export":
             return RedirectResponse("/settings?tab=backup", status_code=303)
-        if tab not in {"links", "gifts"}:
-            tab = "links"
-
-        rid = None if is_platform_admin(staff) else shop_owner_id(staff)
-        bot_username = None
-        if rid:
-            profile = (
-                await session.execute(
-                    select(ResellerProfile).where(ResellerProfile.user_id == int(rid))
-                )
-            ).scalar_one_or_none()
-            bot_username = (profile.bot_username if profile else None) or None
-            if not bot_username and profile and profile.bot_token:
-                st = await check_bot_connection(profile.bot_token)
-                bot_username = st.get("username")
-        else:
-            st = await check_bot_connection(get_settings().bot_token)
-            bot_username = st.get("username")
-
-        links = {
-            "renew": bot_deep_link(bot_username, "renew"),
-            "wallet": bot_deep_link(bot_username, "wallet"),
-            "support": bot_deep_link(bot_username, "support"),
-            "config": bot_deep_link(bot_username, "config"),
-            "gift": bot_deep_link(bot_username, "gift"),
-        }
-        codes: list = []
         if tab == "gifts":
-            q = select(ChargeCode).order_by(ChargeCode.id.desc()).limit(200)
-            if rid is None:
-                q = q.where(ChargeCode.reseller_id.is_(None))
-            else:
-                q = q.where(ChargeCode.reseller_id == int(rid))
-            codes = list((await session.execute(q)).scalars().all())
-
-        return render(
-            request,
-            "tools.html",
-            {
-                "staff": staff,
-                "tools_tab": tab,
-                "bot_username": bot_username,
-                "links": links,
-                "codes": codes,
-                "can_export": can_export,
-                "flash_ok": request.query_params.get("ok"),
-                "flash_err": request.query_params.get("err"),
-            },
-        )
+            return RedirectResponse("/plans?gifts=1", status_code=303)
+        # Default / links → bot settings (reseller shop-settings)
+        if is_platform_admin(staff):
+            return RedirectResponse("/settings?tab=links", status_code=303)
+        return RedirectResponse("/shop-settings?tab=links", status_code=303)
 
     @app.get("/tools/gift-codes")
     async def gift_codes_redirect():
-        return RedirectResponse("/tools?tab=gifts", status_code=303)
+        return RedirectResponse("/plans?gifts=1", status_code=303)
 
     @app.get("/tools/magic-links")
-    async def magic_links_redirect():
-        return RedirectResponse("/tools?tab=links", status_code=303)
+    async def magic_links_redirect(staff: dict = Depends(require_staff)):
+        if is_platform_admin(staff):
+            return RedirectResponse("/settings?tab=links", status_code=303)
+        return RedirectResponse("/shop-settings?tab=links", status_code=303)
 
     @app.get("/tools/funnel")
     async def funnel_redirect():
@@ -214,7 +169,11 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         session: AsyncSession = Depends(get_db),
     ):
         authz = authz_from_staff(staff)
-        if not (is_platform_admin(staff) or can_shop(authz, "orders")):
+        if not (
+            is_platform_admin(staff)
+            or can_shop(authz, "orders")
+            or can_shop(authz, "plans")
+        ):
             return RedirectResponse("/home", status_code=303)
         rid = None if is_platform_admin(staff) else shop_owner_id(staff)
         try:
@@ -227,12 +186,12 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 code=code or None,
             )
             return RedirectResponse(
-                f"/tools?tab=gifts&ok={quote('کد ساخته شد: ' + row.code)}",
+                f"/plans?gifts=1&ok={quote('کد ساخته شد: ' + row.code)}",
                 status_code=303,
             )
         except Exception as exc:
             return RedirectResponse(
-                f"/tools?tab=gifts&err={quote(str(exc) or 'خطا')}",
+                f"/plans?gifts=1&err={quote(str(exc) or 'خطا')}",
                 status_code=303,
             )
 
@@ -247,14 +206,14 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             await session.execute(select(ChargeCode).where(ChargeCode.id == int(code_id)))
         ).scalar_one_or_none()
         if not row:
-            return RedirectResponse("/tools?tab=gifts", status_code=303)
+            return RedirectResponse("/plans?gifts=1", status_code=303)
         if rid is None and row.reseller_id is not None:
-            return RedirectResponse("/tools?tab=gifts", status_code=303)
+            return RedirectResponse("/plans?gifts=1", status_code=303)
         if rid is not None and int(row.reseller_id or 0) != int(rid):
-            return RedirectResponse("/tools?tab=gifts", status_code=303)
+            return RedirectResponse("/plans?gifts=1", status_code=303)
         row.is_active = not bool(row.is_active)
         await session.commit()
-        return RedirectResponse("/tools?tab=gifts&ok=1", status_code=303)
+        return RedirectResponse("/plans?gifts=1&ok=1", status_code=303)
 
     @app.get("/tools/export")
     async def shop_export(

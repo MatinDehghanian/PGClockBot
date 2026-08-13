@@ -7,7 +7,10 @@
   <div>
     {{ page_title('plans', 'پلن‌ها') }}
   </div>
-  <button type="button" class="btn" id="btn-add-plan" data-modal-open="modal-plan-unified">افزودن پلن</button>
+  <div class="page-head-actions" style="display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center">
+    <button type="button" class="btn btn-ghost" data-modal-open="modal-gift-codes">کد هدیه</button>
+    <button type="button" class="btn" id="btn-add-plan" data-modal-open="modal-plan-unified">افزودن پلن</button>
+  </div>
 </div>
 
 {# flash_ok / flash_err rendered once in base.html #}
@@ -579,6 +582,67 @@
       </form>
     </div>
     {% endif %}
+  </div>
+</div>
+
+<div class="ui-modal{% if open_gifts %} open{% endif %}" id="modal-gift-codes" {% if not open_gifts %}hidden{% endif %}>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="gift-codes-title">
+    <div class="ui-modal-head">
+      <h2 id="gift-codes-title">کد هدیه / شارژ</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form method="post" action="/tools/gift-codes" class="form-stack">
+      <div class="settings-grid">
+        <label class="form-field">مبلغ (تومان)
+          <input name="amount" type="number" min="1000" step="1000" required placeholder="50000" />
+        </label>
+        <label class="form-field">سقف استفاده
+          <input name="max_uses" type="number" min="1" value="1" />
+        </label>
+        <label class="form-field">کد سفارشی (اختیاری)
+          <input name="code" dir="ltr" placeholder="خالی = خودکار" />
+        </label>
+        <label class="form-field">یادداشت
+          <input name="note" placeholder="مثلاً کمپین نوروز" />
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit">ساخت کد</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>بستن</button>
+      </div>
+    </form>
+    <h3 class="section-title" style="margin-top:var(--space-3)">کدهای اخیر</h3>
+    <div class="table-wrap">
+      <table class="table-compact">
+        <thead>
+          <tr>
+            <th>کد</th>
+            <th>مبلغ</th>
+            <th class="col-hide-sm">مصرف</th>
+            <th>وضعیت</th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for c in gift_codes or [] %}
+          <tr>
+            <td class="mono" dir="ltr">{{ c.code }}</td>
+            <td class="mono">{{ c.amount | num }}</td>
+            <td class="col-hide-sm">{{ c.used_count }}{% if c.max_uses is not none %}/{{ c.max_uses }}{% endif %}</td>
+            <td>{% if c.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+            <td class="col-actions">
+              <form method="post" action="/tools/gift-codes/{{ c.id }}/toggle">
+                <button class="btn btn-ghost btn-sm" type="submit">{% if c.is_active %}خاموش{% else %}روشن{% endif %}</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="muted">هنوز کدی ساخته نشده.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 

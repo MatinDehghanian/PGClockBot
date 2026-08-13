@@ -1714,6 +1714,24 @@ def create_api_app(lifespan=None) -> FastAPI:
                 pg_roles = await get_pg().get_admin_roles()
             except Exception:
                 pg_roles = []
+
+        gift_codes: list = []
+        try:
+            from app.db.models import ChargeCode
+
+            if is_platform_admin(staff) or rid:
+                q = select(ChargeCode).order_by(ChargeCode.id.desc()).limit(200)
+                if is_platform_admin(staff):
+                    q = q.where(ChargeCode.reseller_id.is_(None))
+                else:
+                    q = q.where(ChargeCode.reseller_id == int(rid))
+                gift_codes = list((await session.execute(q)).scalars().all())
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception("gift codes load failed on /plans")
+            gift_codes = []
+
         return render(
             request,
             "plans.html",
@@ -1733,6 +1751,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "reseller_plans_err": reseller_plans_err,
                 "feature_perms": feature_perms,
                 "pg_roles": pg_roles,
+                "gift_codes": gift_codes,
+                "open_gifts": request.query_params.get("gifts") in {"1", "true", "yes"},
                 "flash_err": request.query_params.get("err"),
                 "flash_ok": request.query_params.get("ok"),
             },
@@ -3188,6 +3208,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "webhook" if wh_base else "polling"
             )
             ctx["webhook_full_url"] = (wh_base + wh_path) if wh_base else ""
+        elif tab == "links":
+            from app.services.ux20 import build_magic_links_context
+
+            ctx.update(await build_magic_links_context(session, staff))
         elif tab == "ssl":
             from urllib.parse import urlparse
 
