@@ -195,6 +195,43 @@ class PanelRedirectAndSecretTests(unittest.TestCase):
         self.assertNotEqual(secret, "change-me")
         self.assertGreaterEqual(len(secret), 32)
 
+    def test_home_action_center_entries_render(self):
+        """Jinja ``ac.items`` would call dict.items — must use ``entries`` key."""
+        from jinja2 import Environment, DictLoader
+
+        from app.services.formatting import format_number
+
+        # Snippet mirrors home.html action-center loop.
+        tpl = (
+            "{% set ac = action_center or {} %}"
+            "{% if ac.has_items %}"
+            "{% for item in ac.entries %}{{ item.title }};{% endfor %}"
+            "{% endif %}"
+        )
+        env = Environment(loader=DictLoader({"t": tpl}))
+        env.filters["num"] = format_number
+        html = env.get_template("t").render(
+            action_center={
+                "has_items": True,
+                "entries": [
+                    {
+                        "title": "۲ رسید",
+                        "detail": "x",
+                        "href": "/finance",
+                        "tone": "warn",
+                    }
+                ],
+            }
+        )
+        self.assertIn("۲ رسید", html)
+        # Guard against regressing to ac.items (dict method).
+        home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
+        reseller = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
+        self.assertIn("ac.entries", home)
+        self.assertIn("ac.entries", reseller)
+        self.assertNotIn("for item in ac.items", home)
+        self.assertNotIn("for item in ac.items", reseller)
+
 
 if __name__ == "__main__":
     unittest.main()

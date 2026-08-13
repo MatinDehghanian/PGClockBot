@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "5.2.5": [
+        "رفع قطع شدن جعلی وضعیت اتصال در داشبورد وقتی مرکز اقدام آیتم داشت (باگ Jinja ac.items)",
+    ],
     "5.2.4": [
         "رفع ورود روی سرورهایی که بعد از v5.2.3 هنوز ۵۰۰ می‌دادند: _panel_redirect و WEB_SECRET دیگر پنل را نمی‌ترکانند",
         "داشبورد با پوسته fail-soft؛ صفحه ۵۰۰ با کد پیگیری (ref) بدون نشتی جزئیات",
