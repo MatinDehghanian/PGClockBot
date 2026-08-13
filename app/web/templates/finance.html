@@ -34,7 +34,6 @@
 </nav>
 
 {% if finance_tab == 'behavior' and (can_orders or can_payments) %}
-{% set funnel_show_abandon = true %}
 {% include "_funnel_panel.html" %}
 
 {% elif finance_tab == 'orders' and can_orders %}

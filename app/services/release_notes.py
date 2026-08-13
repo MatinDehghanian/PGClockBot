@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "5.2.2": [
+        "حذف نرخ تبدیل و پلن‌های رهاشده از رفتار کاربر — فقط شمارش مراحل",
+    ],
     "5.2.1": [
         "حذف کامل یادداشت سفارش از مالی و مدل",
         "رسید پرداخت در مودال گرد داخل وب‌پنل باز می‌شود",

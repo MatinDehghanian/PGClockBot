@@ -7129,53 +7129,13 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   }
 }
 
-/* —— Funnel / رفتار کاربر enrichments —— */
+/* —— Funnel / رفتار کاربر —— */
 .funnel-panel-home { margin-top: var(--section-gap); }
 .funnel-panel-caption {
   margin: 0 0 var(--space-2);
   font-size: 12px;
   line-height: 1.45;
 }
-.funnel-panel-caption b { color: var(--foreground); font-weight: 600; }
-.funnel-abandon {
-  margin-top: var(--space-3);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--border);
-}
-.funnel-abandon-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-1) var(--space-2);
-  margin-bottom: var(--space-1);
-}
-.funnel-abandon-title {
-  font-size: var(--title-size);
-  font-weight: 600;
-}
-.funnel-abandon-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--space-1);
-}
-.funnel-abandon-list li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-1) var(--space-2);
-  padding: var(--space-1) 0;
-}
-.funnel-abandon-name {
-  font-weight: 600;
-  font-size: 13px;
-}
-.funnel-abandon-meta {
-  font-size: 12px;
-}
-.funnel-abandon-meta b { color: var(--foreground); font-weight: 600; }
 
 /* —— Finance receipt thumb —— */
 .receipt-thumb-link {
