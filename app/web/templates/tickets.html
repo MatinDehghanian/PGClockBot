@@ -220,7 +220,7 @@
         <button type="submit" class="btn btn-sm">ذخیره وضعیت</button>
       </form>
       {% elif t.status != 'closed' %}
-      <form method="post" action="/tickets/panel/{{ t.id }}/status"
+      <form method="post" action="/tickets/panel/{{ t.id }}/status" class="ticket-close-form"
             data-confirm="تیکت بسته شود؟"
             data-confirm-title="بستن تیکت"
             data-confirm-warn="1"
@@ -276,9 +276,9 @@
       </div>
     </form>
     <div class="ticket-status-actions">
-      <form method="post" action="/tickets/bot/{{ t.id }}/close"
+      <form method="post" action="/tickets/bot/{{ t.id }}/close" class="ticket-close-form"
             data-confirm="تیکت بسته شود؟"
-            data-confirm-title="بستن تیکت ربات"
+            data-confirm-title="بستن تیکت"
             data-confirm-warn="1"
             data-confirm-label="بستن تیکت">
         <button type="submit" class="btn btn-sm btn-ghost">بستن تیکت</button>
