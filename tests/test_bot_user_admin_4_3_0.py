@@ -71,6 +71,23 @@ class UserEditUiTests(unittest.TestCase):
         app = Path("app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("register_user_pages", app)
 
+    def test_staff_note_redirects_to_users_edit_modal(self):
+        """Saving staff note must reopen /users?edit=… — GET /users/{id} does not exist."""
+        ux = Path("app/api/ux20_pages.py").read_text(encoding="utf-8")
+        self.assertIn('/users/{user_id}/staff-note', ux)
+        self.assertIn("_redirect_user", ux)
+        self.assertNotIn('f"/users/{user_id}?ok=', ux)
+        self.assertIn("یادداشت داخلی و ریسک", Path("app/web/templates/_user_edit_body.html").read_text(encoding="utf-8"))
+
+    def test_panel_persian_form_validation(self):
+        js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
+        self.assertIn("setupPanelFormValidation", js)
+        self.assertIn("پر کردن این فیلد الزامی است.", js)
+        self.assertIn("panelValidateForm", js)
+        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn(".form-field.is-invalid", css)
+        self.assertIn(".field-error", css)
+
     def test_reseller_edit_wallet_balance_column(self):
         src = Path("app/web/templates/_reseller_edit_body.html").read_text(encoding="utf-8")
         self.assertIn("wallet_txs", src)

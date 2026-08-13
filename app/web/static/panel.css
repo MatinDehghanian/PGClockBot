@@ -1204,6 +1204,34 @@ label.form-field > .ui-select,
 .form-row select {
   margin-top: 0;
 }
+/* Custom Persian validation — red border + message (replaces English HTML5 tooltips) */
+.form-field.is-invalid > input,
+.form-field.is-invalid > select,
+.form-field.is-invalid > textarea,
+.form-field.is-invalid > .pw-field input,
+.form-field.is-invalid > .ui-select,
+label.form-field.is-invalid > input,
+label.form-field.is-invalid > select,
+label.form-field.is-invalid > textarea,
+.pw-field.is-invalid input,
+.image-setting.is-invalid input,
+.image-setting.is-invalid .file-label,
+.image-setting.is-invalid .upload-box,
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: var(--destructive) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--destructive) 35%, transparent);
+}
+.field-error {
+  display: block;
+  margin: 0;
+  order: 20;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--destructive-fg);
+}
 .checks { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); margin-top: var(--space-1); }
 .checks label {
   display: inline-flex; align-items: center; gap: var(--space-1); margin: 0;

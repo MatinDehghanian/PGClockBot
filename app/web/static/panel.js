@@ -1409,6 +1409,206 @@
       });
     })();
 
+    /* Persian form validation — no English HTML5 tooltips; red borders + FA messages */
+    (function setupPanelFormValidation(){
+      const MSG = {
+        valueMissing: 'پر کردن این فیلد الزامی است.',
+        typeMismatch: 'مقدار واردشده معتبر نیست.',
+        patternMismatch: 'فرمت واردشده صحیح نیست.',
+        tooShort: 'متن واردشده کوتاه‌تر از حد مجاز است.',
+        tooLong: 'متن واردشده طولانی‌تر از حد مجاز است.',
+        rangeUnderflow: 'مقدار کمتر از حد مجاز است.',
+        rangeOverflow: 'مقدار بیشتر از حد مجاز است.',
+        stepMismatch: 'مقدار با گام مجاز هم‌خوانی ندارد.',
+        badInput: 'مقدار واردشده معتبر نیست.',
+        customError: 'مقدار واردشده معتبر نیست.',
+      };
+
+      function skipForm(form){
+        if (!(form instanceof HTMLFormElement)) return true;
+        if (form.getAttribute('data-panel-validate') === '0') return true;
+        return false;
+      }
+
+      function ensureNovalidate(root){
+        (root || document).querySelectorAll('form').forEach((form) => {
+          if (skipForm(form)) return;
+          form.setAttribute('novalidate', '');
+        });
+      }
+
+      function fieldWrap(el){
+        return (
+          el.closest('.form-field, label.form-field, .pw-field, .image-setting, .ui-switch-row') ||
+          el.parentElement
+        );
+      }
+
+      function clearFieldError(el){
+        if (!el) return;
+        el.removeAttribute('aria-invalid');
+        if (typeof el.setCustomValidity === 'function') {
+          try { el.setCustomValidity(''); } catch (_) {}
+        }
+        const wrap = fieldWrap(el);
+        if (!wrap) return;
+        wrap.classList.remove('is-invalid');
+        wrap.querySelectorAll(':scope > .field-error').forEach((n) => n.remove());
+      }
+
+      function showFieldError(el, message){
+        if (!el) return;
+        clearFieldError(el);
+        el.setAttribute('aria-invalid', 'true');
+        const wrap = fieldWrap(el);
+        if (wrap) {
+          wrap.classList.add('is-invalid');
+          const err = document.createElement('small');
+          err.className = 'field-error';
+          err.setAttribute('role', 'alert');
+          err.textContent = message || MSG.customError;
+          wrap.appendChild(err);
+        }
+      }
+
+      function clearFormErrors(form){
+        form.querySelectorAll('[aria-invalid="true"]').forEach(clearFieldError);
+        form.querySelectorAll('.is-invalid').forEach((wrap) => {
+          wrap.classList.remove('is-invalid');
+          wrap.querySelectorAll(':scope > .field-error').forEach((n) => n.remove());
+        });
+      }
+
+      function isValidateControl(el){
+        if (!(el instanceof HTMLElement)) return false;
+        if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
+          return false;
+        }
+        if (el.disabled) return false;
+        const type = (el.getAttribute('type') || '').toLowerCase();
+        if (type === 'hidden' || type === 'submit' || type === 'button' || type === 'reset' || type === 'image') {
+          return false;
+        }
+        if (el.closest('[hidden]')) return false;
+        const form = el.form;
+        if (form && el.closest('form') !== form) return false;
+        return true;
+      }
+
+      function normalizeDigitsLocal(raw){
+        if (typeof window.normalizePanelNumberText === 'function') {
+          return window.normalizePanelNumberText(raw);
+        }
+        return String(raw == null ? '' : raw);
+      }
+
+      function messageFromValidity(el){
+        const v = el.validity;
+        if (!v || v.valid) return null;
+        if (v.valueMissing) return MSG.valueMissing;
+        if (v.typeMismatch) return MSG.typeMismatch;
+        if (v.patternMismatch) return MSG.patternMismatch;
+        if (v.tooShort) return MSG.tooShort;
+        if (v.tooLong) return MSG.tooLong;
+        if (v.rangeUnderflow) return MSG.rangeUnderflow;
+        if (v.rangeOverflow) return MSG.rangeOverflow;
+        if (v.stepMismatch) return MSG.stepMismatch;
+        if (v.badInput) return MSG.badInput;
+        if (v.customError) return (el.validationMessage && el.validationMessage.trim()) || MSG.customError;
+        return MSG.customError;
+      }
+
+      function validateWasNumber(el){
+        const raw = String(el.value == null ? '' : el.value).trim();
+        const required = el.required || el.hasAttribute('required');
+        if (!raw) return required ? MSG.valueMissing : null;
+        const n = Number(normalizeDigitsLocal(raw));
+        if (!Number.isFinite(n)) return MSG.badInput;
+        const minAttr = el.getAttribute('min');
+        const maxAttr = el.getAttribute('max');
+        if (minAttr != null && minAttr !== '' && n < Number(minAttr)) {
+          return MSG.rangeUnderflow + ' (حداقل ' + minAttr + ')';
+        }
+        if (maxAttr != null && maxAttr !== '' && n > Number(maxAttr)) {
+          return MSG.rangeOverflow + ' (حداکثر ' + maxAttr + ')';
+        }
+        return null;
+      }
+
+      function validateControl(el){
+        if (!isValidateControl(el)) return null;
+        if (el.dataset && el.dataset.wasNumber === '1') {
+          return validateWasNumber(el);
+        }
+        if (typeof el.checkValidity === 'function' && !el.checkValidity()) {
+          return messageFromValidity(el);
+        }
+        return null;
+      }
+
+      function validateForm(form){
+        if (skipForm(form)) return true;
+        ensureNovalidate(form.parentElement || document);
+        clearFormErrors(form);
+        const controls = Array.from(form.elements || []).filter(isValidateControl);
+        let firstInvalid = null;
+        controls.forEach((el) => {
+          const msg = validateControl(el);
+          if (!msg) return;
+          showFieldError(el, msg);
+          if (!firstInvalid) firstInvalid = el;
+        });
+        if (firstInvalid) {
+          try { firstInvalid.focus({ preventScroll: false }); } catch (_) {
+            try { firstInvalid.focus(); } catch (__) {}
+          }
+          return false;
+        }
+        return true;
+      }
+
+      window.panelValidateForm = validateForm;
+
+      ensureNovalidate(document);
+      document.addEventListener('panel:dom-ready', (e) => {
+        ensureNovalidate((e.detail && e.detail.root) || document);
+      });
+
+      document.addEventListener('input', (e) => {
+        const t = e.target;
+        if (!isValidateControl(t)) return;
+        if (t.getAttribute('aria-invalid') === 'true' || (fieldWrap(t) && fieldWrap(t).classList.contains('is-invalid'))) {
+          clearFieldError(t);
+        }
+      }, true);
+      document.addEventListener('change', (e) => {
+        const t = e.target;
+        if (!isValidateControl(t)) return;
+        if (t.getAttribute('aria-invalid') === 'true' || (fieldWrap(t) && fieldWrap(t).classList.contains('is-invalid'))) {
+          clearFieldError(t);
+        }
+      }, true);
+
+      document.addEventListener('submit', (e) => {
+        const form = e.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        if (skipForm(form)) return;
+        /* Normalize digits before constraint checks (Persian/Arabic numerals) */
+        if (typeof window.normalizePanelNumberText === 'function') {
+          form.querySelectorAll('input').forEach((el) => {
+            if (!(el instanceof HTMLInputElement)) return;
+            if (el.dataset && (el.dataset.wasNumber === '1' || el.dataset.normalizeDigits === '1')) {
+              const next = window.normalizePanelNumberText(el.value);
+              if (next !== el.value) el.value = next;
+            }
+          });
+        }
+        if (validateForm(form)) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }, true);
+    })();
+
     /* Shared confirm modal — replaces native confirm()/prompt() for panel mutations.
        Reason field is RENDERED only when requireReason=true (delete user/reseller/admin).
        Never leave a hidden .form-field in the DOM — author CSS display:flex beats [hidden]. */
