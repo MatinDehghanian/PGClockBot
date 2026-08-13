@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "5.2.14": [
+        "داشبورد: شورت‌کات نارنجی نمای کلی ربات و آبی نمای کلی پاسارگارد (کنار هم)",
+        "آمار فروش امروز / ۷ روز / ۳۰ روز (تقویم تهران) روی داشبورد",
+        "صف کار (مرکز اقدام) زیر آمار دوره‌ای؛ گیج CPU/RAM و وضعیت اتصال حفظ شد",
+    ],
     "5.2.13": [
         "نقطه چشمک‌زن اعلان/پشتیبانی در سایدبار سمت مقابل تیتر (در RTL چپ ردیف)",
     ],
