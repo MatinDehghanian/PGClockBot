@@ -1317,7 +1317,13 @@ def shop_kind_keyboard(
         )
     if trial_on:
         rows.append(
-            [InlineKeyboardButton(text="🎁 تست", callback_data="shop:kind:trial")]
+            [
+                _ikb(
+                    "🎁 تست",
+                    callback_data="shop:kind:trial",
+                    style=_style(ui, "shop_kind_trial", fallback="primary"),
+                )
+            ]
         )
     if custom_on:
         rows.append(
@@ -1417,9 +1423,10 @@ def admin_plan_kind_keyboard(
             )
         ],
         [
-            InlineKeyboardButton(
-                text="🎁 تست",
+            _ikb(
+                "🎁 تست",
                 callback_data="adm:plans:kind:users:trial",
+                style=_style(ui, "shop_kind_trial", fallback="primary"),
             )
         ],
         [

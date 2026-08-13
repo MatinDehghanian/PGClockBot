@@ -53,8 +53,17 @@
     return String(s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
   }
   function styleTone(id, fallback){
-    const raw = val('btn_style_' + id, values['btn_style_' + id] || fallback || '');
-    const t = String(raw || '').trim().toLowerCase();
+    var key = 'btn_style_' + id;
+    var raw;
+    if (form) {
+      var el = form.querySelector('[name="s_' + key + '"]');
+      if (el) raw = el.value;
+    }
+    if (raw === undefined || raw === null) {
+      if (Object.prototype.hasOwnProperty.call(values, key)) raw = values[key];
+      else raw = (fallback === undefined || fallback === null) ? '' : fallback;
+    }
+    var t = String(raw || '').trim().toLowerCase();
     if (t === 'primary' || t === 'success' || t === 'danger') return t;
     return 'default';
   }

@@ -84,31 +84,6 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 status_code=303,
             )
 
-    @app.post("/orders/{order_id}/staff-note")
-    async def orders_staff_note(
-        order_id: int,
-        note: str = Form(""),
-        staff: dict = Depends(require_staff),
-        session: AsyncSession = Depends(get_db),
-    ):
-        authz = authz_from_staff(staff)
-        if not (is_platform_admin(staff) or can_shop(authz, "orders")):
-            return RedirectResponse("/home", status_code=303)
-        order = (
-            await session.execute(select(Order).where(Order.id == int(order_id)))
-        ).scalar_one_or_none()
-        if not order:
-            return RedirectResponse("/finance?tab=orders", status_code=303)
-        if not is_platform_admin(staff):
-            rid = shop_owner_id(staff)
-            if not rid or int(order.reseller_id or 0) != int(rid):
-                return RedirectResponse("/home", status_code=303)
-        order.staff_note = (note or "").strip()[:2000] or None
-        await session.commit()
-        return RedirectResponse(
-            f"/finance?tab=orders&ok={quote('یادداشت ذخیره شد')}", status_code=303
-        )
-
     @app.post("/users/{user_id}/staff-note")
     async def users_staff_note(
         user_id: int,

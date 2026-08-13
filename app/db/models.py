@@ -145,7 +145,6 @@ class Order(Base):
     payment_method: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     discount_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    staff_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     service_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("user_services.id"), nullable=True, index=True
     )

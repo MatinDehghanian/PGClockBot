@@ -4012,7 +4012,8 @@ form.settings-form > .actions.sticky-actions,
   display: flex;
   gap: var(--space-1);
 }
-.tg-key-home .tg-key {
+.tg-key-home .tg-key:not([data-tone]),
+.tg-key-home .tg-key[data-tone=""] {
   background: linear-gradient(180deg, #3d6f9a, #2a4f72);
 }
 .tg-key {
@@ -7176,15 +7177,18 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 }
 .funnel-abandon-meta b { color: var(--foreground); font-weight: 600; }
 
-/* —— Finance receipt thumb + staff note —— */
+/* —— Finance receipt thumb —— */
 .receipt-thumb-link {
   display: inline-block;
   margin-top: var(--space-1);
-  border-radius: 10px;
+  padding: 0;
+  border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--border);
   line-height: 0;
   vertical-align: middle;
+  background: transparent;
+  cursor: pointer;
 }
 .receipt-thumb {
   width: 44px;
@@ -7192,32 +7196,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   object-fit: cover;
   display: block;
   background: var(--background);
-}
-.finance-note-form {
-  display: grid;
-  gap: var(--space-1);
-  padding-top: var(--space-1);
-  margin-top: var(--space-1);
-  border-top: 1px solid var(--border);
-}
-.finance-note-form .form-field {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted-fg);
-}
-.finance-note-form textarea {
-  width: 100%;
-  min-height: 56px;
-  resize: vertical;
-  font: inherit;
-  font-size: 14px;
-  color: var(--foreground);
-  background: var(--background);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: var(--space-1);
+  border-radius: 11px;
 }
 
 /* —— Telegram preview button tones (Bot API colors) —— */
@@ -7239,4 +7218,32 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 }
 .tg-key-home .tg-key[data-tone="default"] {
   background: linear-gradient(180deg, #5a6570, #3d4650);
+}
+
+
+/* —— Receipt image modal —— */
+.ui-modal-panel-receipt {
+  width: min(520px, calc(100vw - 2 * var(--space-3)));
+  max-width: 520px;
+}
+.receipt-modal-body {
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+.receipt-modal-frame {
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--background);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+  max-height: min(70vh, 640px);
+}
+.receipt-modal-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(70vh, 640px);
+  object-fit: contain;
+  border-radius: calc(var(--radius) - 2px);
 }
