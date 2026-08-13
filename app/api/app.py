@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -240,18 +241,27 @@ def _cookie_secure(request: Request) -> bool:
 
 
 def _panel_redirect(request: Request, path: str, *, status_code: int = 303) -> RedirectResponse:
-    """Redirect using HTTP until HTTPS is live; then use the public HTTPS base."""
-    from app.services.ssl_certs import https_is_active, public_panel_base_url
+    """Redirect using HTTP until HTTPS is live; then use the public HTTPS base.
 
+    Must never raise — a failure here 500s login/logout landing for every role.
+    """
     if not path.startswith("/"):
         path = "/" + path
-    if https_is_active():
-        base = public_panel_base_url().rstrip("/")
-        if base:
-            return RedirectResponse(f"{base}{path}", status_code=status_code)
-    host = (request.headers.get("host") or request.url.netloc or "").strip()
-    if host:
-        return RedirectResponse(f"http://{host}{path}", status_code=status_code)
+    try:
+        from app.services.ssl_certs import https_is_active, public_panel_base_url
+
+        if https_is_active():
+            base = (public_panel_base_url() or "").rstrip("/")
+            if base:
+                return RedirectResponse(f"{base}{path}", status_code=status_code)
+    except Exception:
+        logging.getLogger(__name__).exception("_panel_redirect https probe failed")
+    try:
+        host = (request.headers.get("host") or getattr(request.url, "netloc", None) or "").strip()
+        if host:
+            return RedirectResponse(f"http://{host}{path}", status_code=status_code)
+    except Exception:
+        logging.getLogger(__name__).exception("_panel_redirect host fallback failed")
     return RedirectResponse(path, status_code=status_code)
 
 
@@ -302,6 +312,13 @@ def create_api_app(lifespan=None) -> FastAPI:
     def get_signer() -> URLSafeTimedSerializer:
         # Never fall back to a hardcoded secret — forgeable sessions otherwise
         secret = ensure_web_secret()
+        if not secret:
+            # Last resort ephemeral secret (process lifetime) — better than 500.
+            import logging
+            import secrets as _secrets
+
+            logging.getLogger(__name__).error("WEB_SECRET empty after ensure; using ephemeral")
+            secret = _secrets.token_hex(32)
         return URLSafeTimedSerializer(secret, salt="pgclock-session")
 
     async def get_db():
@@ -322,11 +339,18 @@ def create_api_app(lifespan=None) -> FastAPI:
             data = get_signer().loads(cookie, max_age=SESSION_MAX_AGE)
         except (BadSignature, BadTimeSignature):
             return None
+        except Exception:
+            logging.getLogger(__name__).exception("get_session_user signer/load failed")
+            return None
         if not isinstance(data, dict):
             return None
         # Admin sessions bind to web_admin.json token — password/username change revokes them
         if data.get("role") == "admin":
-            expected = admin_session_version()
+            try:
+                expected = admin_session_version()
+            except Exception:
+                logging.getLogger(__name__).exception("admin_session_version failed")
+                return None
             if not expected or data.get("sv") != expected:
                 return None
         return data
@@ -720,10 +744,14 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception):
         """Last-resort HTML/JSON 500 — log server-side only; never echo secrets/traces."""
-        import logging
+        import uuid
 
+        ref = uuid.uuid4().hex[:8]
         logging.getLogger(__name__).exception(
-            "unhandled error method=%s path=%s", request.method, request.url.path
+            "unhandled error ref=%s method=%s path=%s",
+            ref,
+            request.method,
+            request.url.path,
         )
         accept = (request.headers.get("accept") or "").lower()
         wants_json = (
@@ -733,7 +761,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             or request.url.path.endswith(".json")
         )
         if wants_json:
-            return JSONResponse({"detail": "خطای داخلی سرور"}, status_code=500)
+            return JSONResponse(
+                {"detail": "خطای داخلی سرور", "ref": ref}, status_code=500
+            )
         return HTMLResponse(
             "<!DOCTYPE html><html lang='fa' dir='rtl'><head><meta charset='utf-8'/>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'/>"
@@ -742,7 +772,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             "text-align:center'>"
             "<h1 style='font-size:1.35rem'>خطای داخلی سرور</h1>"
             "<p style='color:#52525b'>مشکلی پیش آمد. چند لحظه دیگر دوباره تلاش کنید.</p>"
-            "<p><a href='/home' style='color:#2563eb'>بازگشت به داشبورد</a>"
+            f"<p style='color:#a1a1aa;font-size:13px' dir='ltr'>ref {ref}</p>"
+            "<p><a href='/login' style='color:#2563eb'>صفحه ورود</a>"
             " · <a href='/logout' style='color:#2563eb'>خروج</a></p>"
             "</body></html>",
             status_code=500,
@@ -1422,16 +1453,32 @@ def create_api_app(lifespan=None) -> FastAPI:
                 else:
                     home = "/logout"
         resp = _panel_redirect(request, home)
+        try:
+            cookie_val = get_signer().dumps(payload)
+        except Exception:
+            logging.getLogger(__name__).exception("session cookie sign failed")
+            return render(
+                request,
+                "login.html",
+                {
+                    "error": "ورود انجام شد ولی ذخیره نشست ناموفق بود. WEB_SECRET یا دسترسی نوشتن .env را بررسی کنید.",
+                    "username": typed_user,
+                },
+                status_code=500,
+            )
         resp.set_cookie(
             "session",
-            get_signer().dumps(payload),
+            cookie_val,
             httponly=True,
             samesite="lax",
             secure=_cookie_secure(request),
             max_age=60 * 60 * 24 * 7,
             path="/",
         )
-        revoke_setup_gate()
+        try:
+            revoke_setup_gate()
+        except Exception:
+            logging.getLogger(__name__).exception("revoke_setup_gate failed")
         resp.delete_cookie("setup_gate", path="/")
         return resp
 

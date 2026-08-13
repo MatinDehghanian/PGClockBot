@@ -163,5 +163,38 @@ class EnrichAdminFailClosedTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(out.get("pg_permissions") or [], [])
 
 
+class PanelRedirectAndSecretTests(unittest.TestCase):
+    def test_panel_redirect_never_raises_on_ssl_failure(self):
+        from app.api.app import _panel_redirect
+
+        class Req:
+            headers = {"host": "panel.example"}
+            url = type("U", (), {"netloc": "panel.example", "scheme": "http"})()
+
+        with patch(
+            "app.services.ssl_certs.https_is_active",
+            side_effect=RuntimeError("ssl boom"),
+        ):
+            resp = _panel_redirect(Req(), "/home")
+        self.assertEqual(resp.status_code, 303)
+        self.assertIn("/home", resp.headers.get("location", ""))
+
+    def test_ensure_web_secret_survives_env_write_failure(self):
+        from app.services import setup_wizard
+
+        with (
+            patch.object(setup_wizard, "_env_get", return_value="change-me"),
+            patch.object(
+                setup_wizard,
+                "update_env_keys",
+                side_effect=OSError("read-only fs"),
+            ),
+        ):
+            secret = setup_wizard.ensure_web_secret()
+        self.assertTrue(secret)
+        self.assertNotEqual(secret, "change-me")
+        self.assertGreaterEqual(len(secret), 32)
+
+
 if __name__ == "__main__":
     unittest.main()

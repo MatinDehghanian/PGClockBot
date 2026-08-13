@@ -146,23 +146,34 @@ def job_running() -> bool:
 
 def https_is_active() -> bool:
     """True only when TLS is enabled and cert files are present on disk."""
-    meta = read_meta()
-    return bool(meta.get("ssl_enabled")) and cert_files_exist()
+    try:
+        meta = read_meta()
+        return bool(meta.get("ssl_enabled")) and cert_files_exist()
+    except Exception:
+        logger.exception("https_is_active failed")
+        return False
 
 
 def public_panel_base_url() -> str:
     """Canonical panel base URL — HTTPS when active, else HTTP+IP."""
-    if https_is_active():
-        meta = read_meta()
-        base = (meta.get("public_https") or "").strip().rstrip("/")
-        if base:
-            return base
-        domain = normalize_domain(meta.get("domain") or "")
-        if domain:
-            return public_https_url(domain).rstrip("/")
-    from app.services.setup_wizard import default_http_panel_url
+    try:
+        if https_is_active():
+            meta = read_meta()
+            base = (meta.get("public_https") or "").strip().rstrip("/")
+            if base:
+                return base
+            domain = normalize_domain(meta.get("domain") or "")
+            if domain:
+                return public_https_url(domain).rstrip("/")
+    except Exception:
+        logger.exception("public_panel_base_url https branch failed")
+    try:
+        from app.services.setup_wizard import default_http_panel_url
 
-    return default_http_panel_url().rstrip("/")
+        return default_http_panel_url().rstrip("/")
+    except Exception:
+        logger.exception("public_panel_base_url http fallback failed")
+        return ""
 
 
 def public_https_url(domain: str | None = None) -> str:
