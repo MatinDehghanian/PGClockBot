@@ -42,6 +42,19 @@ if _engine_info.is_sqlite:
         cursor = dbapi_conn.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
+        # bot.db holds encrypted PasarGuard passwords, session data, etc.
+        # DATA_DIR is already 0700, but pin the file itself too — belt and
+        # suspenders against e.g. a misconfigured backup/export tool that
+        # copies files with looser default permissions.
+        try:
+            if _engine_info.sqlite_path and _engine_info.sqlite_path.exists():
+                os.chmod(_engine_info.sqlite_path, 0o600)
+                for suffix in ("-wal", "-shm", "-journal"):
+                    side = _engine_info.sqlite_path.with_name(_engine_info.sqlite_path.name + suffix)
+                    if side.exists():
+                        os.chmod(side, 0o600)
+        except OSError:
+            pass
 
 
 def _tables_exist(sync_conn) -> bool:
