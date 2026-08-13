@@ -26,8 +26,11 @@ class HomeDashShiftSurfaceTests(unittest.TestCase):
         self.assertIn(".home-portal-bot", css)
         self.assertIn(".home-period-grid", css)
         self.assertIn("@container home-periods", css)
-        self.assertIn("align-self: center", css[css.find(".home-portal-go") : css.find(".home-portal-go") + 280])
+        go = css[css.find(".home-portal-go") : css.find(".home-portal-go") + 420]
+        self.assertIn("place-items: center", go)
+        self.assertIn("home-portal-go svg", css)
         self.assertNotIn("تقویم تهران", ops)
+        self.assertIn("<svg viewBox=\"0 0 24 24\"><path d=\"M15 6l-6 6 6 6\"/></svg>", ops)
         self.assertIn("var(--brand)", css[css.find(".home-portal-bot") : css.find(".home-portal-bot") + 400])
         home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
         self.assertIn("_home_ops.html", home)
