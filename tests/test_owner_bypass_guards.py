@@ -77,6 +77,7 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
         session.commit = AsyncMock()
         session.execute = AsyncMock(
             side_effect=[
+                MagicMock(scalar_one_or_none=MagicMock(return_value=None)),  # prior-delivery dedup check
                 MagicMock(rowcount=1),  # atomic DELIVERING claim
                 MagicMock(scalar_one=MagicMock(return_value=order)),  # reload
                 MagicMock(scalar_one_or_none=MagicMock(return_value=SimpleNamespace(
@@ -160,6 +161,7 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
         session.refresh = AsyncMock()
         session.execute = AsyncMock(
             side_effect=[
+                MagicMock(scalar_one_or_none=MagicMock(return_value=None)),  # prior-delivery dedup check
                 MagicMock(rowcount=1),  # atomic DELIVERING claim
                 MagicMock(scalar_one=MagicMock(return_value=order)),
                 MagicMock(scalar_one_or_none=MagicMock(return_value=profile)),
@@ -182,10 +184,10 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
                 "app.services.orders.assert_provision_create",
                 new=AsyncMock(),
             ),
-            patch(
-                "app.services.orders.UserService",
-                side_effect=lambda **kw: SimpleNamespace(id=1, **kw),
-            ),
+            # NOTE: UserService itself must stay the real ORM class here — the
+            # delivery path now runs a `select(UserService)` idempotency check
+            # before creating a new service record, and SQLAlchemy's select()
+            # rejects a Mock/lambda in place of a real mapped class.
             patch("app.services.orders.extract_sub_token", return_value="tok"),
         ):
             result = await deliver_order(session, order)
