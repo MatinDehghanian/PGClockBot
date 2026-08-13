@@ -70,6 +70,26 @@ def plan_belongs_to_staff(plan: Plan | None, staff: dict | None) -> bool:
     return int(plan.owner_reseller_id or 0) == rid
 
 
+def _admin_pg_unrestricted(staff: dict | None) -> bool:
+    """True for a genuine platform Owner whose env PasarGuard account has no
+    group/template restriction.
+
+    ``role == "admin"`` alone is not enough: a Hybrid Owner setup may point
+    the platform ``.env`` PG credentials at a *limited* PasarGuard admin
+    (``pg_is_owner`` is explicitly ``False`` in that case, set by
+    ``pg_access.enrich_platform_admin_staff``). Such an account must go
+    through the exact same ``allowed_group_ids`` / ``allowed_template_ids``
+    filtering as any other role — otherwise a platform admin's own
+    PasarGuard-side group restriction (e.g. only groups 1 and 2) would be
+    silently ignored in the web panel. Missing key (unenriched / legacy
+    staff dict, or non-Hybrid single-owner deployments) defaults to True to
+    preserve prior behavior.
+    """
+    if not staff or staff.get("role") != "admin":
+        return False
+    return bool(staff.get("pg_is_owner", True))
+
+
 def _allowed_id_set(raw) -> set[int] | None:
     """None = no restriction; empty set = nothing allowed."""
     if raw is None:
@@ -92,7 +112,7 @@ def filter_templates_for_staff(
     - trust_client_scope True (reseller own-token lists) → keep items
     - trust_client_scope False → fail closed ``[]`` (no unrestricted owner lists)
     """
-    if not staff or staff.get("role") == "admin":
+    if not staff or _admin_pg_unrestricted(staff):
         return items
     if trust_client_scope is None:
         from app.services.pg_read import trust_pg_list_scope
@@ -113,7 +133,7 @@ def filter_groups_for_staff(
     *,
     trust_client_scope: bool | None = None,
 ) -> list[dict]:
-    if not staff or staff.get("role") == "admin":
+    if not staff or _admin_pg_unrestricted(staff):
         return items
     if trust_client_scope is None:
         from app.services.pg_read import trust_pg_list_scope
@@ -131,7 +151,7 @@ def filter_groups_for_staff(
 def template_allowed_for_staff(staff: dict | None, template_id: int | None) -> bool:
     if template_id is None:
         return False
-    if not staff or staff.get("role") == "admin":
+    if not staff or _admin_pg_unrestricted(staff):
         return True
     access = staff.get("pg_access") or {}
     allowed = _allowed_id_set(access.get("allowed_template_ids"))
@@ -143,7 +163,7 @@ def template_allowed_for_staff(staff: dict | None, template_id: int | None) -> b
 def groups_allowed_for_staff(staff: dict | None, group_ids: list[int]) -> bool:
     if not group_ids:
         return False
-    if not staff or staff.get("role") == "admin":
+    if not staff or _admin_pg_unrestricted(staff):
         return True
     access = staff.get("pg_access") or {}
     allowed = _allowed_id_set(access.get("allowed_group_ids"))
