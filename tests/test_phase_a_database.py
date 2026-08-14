@@ -42,14 +42,14 @@ def _seed_sqlite(db_path: Path) -> str:
     with eng.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO bot_users (id, telegram_id, role, wallet_balance, referral_code, is_blocked) "
-                "VALUES (1, 42, 'admin', 1500, 'ref42', 0)"
+                "INSERT INTO bot_users (id, telegram_id, role, wallet_balance, points_balance, referral_code, is_blocked) "
+                "VALUES (1, 42, 'admin', 1500, 0, 'ref42', 0)"
             )
         )
         conn.execute(
             text(
-                "INSERT INTO bot_users (id, telegram_id, role, wallet_balance, referral_code, is_blocked) "
-                "VALUES (2, 43, 'reseller', 200, 'ref43', 0)"
+                "INSERT INTO bot_users (id, telegram_id, role, wallet_balance, points_balance, referral_code, is_blocked) "
+                "VALUES (2, 43, 'reseller', 200, 0, 'ref43', 0)"
             )
         )
         conn.execute(

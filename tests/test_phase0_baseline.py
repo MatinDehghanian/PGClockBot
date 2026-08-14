@@ -63,8 +63,8 @@ def seeded_sqlite(tmp_path, monkeypatch):
     with eng.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO bot_users (telegram_id, role, wallet_balance, referral_code, is_blocked) "
-                "VALUES (1001, 'admin', 500, 'ref1001', 0)"
+                "INSERT INTO bot_users (telegram_id, role, wallet_balance, points_balance, referral_code, is_blocked) "
+                "VALUES (1001, 'admin', 500, 0, 'ref1001', 0)"
             )
         )
         conn.execute(
