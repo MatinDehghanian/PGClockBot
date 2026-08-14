@@ -71,9 +71,10 @@ class AdminPlanKindFlowTests(unittest.TestCase):
 class VersionTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
+        from app.services.updates import is_same_or_newer
 
-        self.assertEqual(__version__, "4.10.9")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.9")
+        self.assertTrue(is_same_or_newer(__version__, "4.10.9"))
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
 
 
 if __name__ == "__main__":

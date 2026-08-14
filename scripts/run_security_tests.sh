@@ -35,23 +35,12 @@ if [ "$missing" -ne 0 ]; then
   exit 1
 fi
 
-# Pre-existing, unrelated version-pin debt: several older audit test files
-# also assert __version__ equals the version at the time they were written
-# (e.g. "4.10.9"), which drifts on every release bump and has nothing to do
-# with the security behavior those files actually guard. Deselect just those
-# specific stale assertions so this suite stays a clean, trustworthy signal —
-# any other failure here is a real regression, not release-version noise.
-KNOWN_UNRELATED_FAILURES=(
-  "tests/test_cancel_tickets_isolation_3_6_6.py::Version366Tests::test_version"
-  "tests/test_final_audit_2_0_2.py::VersionBumpTests::test_version_is_current"
-  "tests/test_full_audit_3_8_3.py::Version383Tests::test_version"
-  "tests/test_security_audit_3_6_3.py::Version363Tests::test_version"
-  "tests/test_v4_0_8_security_audit_sanitize.py::VersionTests::test_version"
-)
-DESELECT_ARGS=()
-for nodeid in "${KNOWN_UNRELATED_FAILURES[@]}"; do
-  DESELECT_ARGS+=("--deselect" "$nodeid")
-done
+# NOTE: older audit test files used to hard-pin __version__ to the exact
+# version at the time they were written (e.g. "4.10.9"), which drifted on
+# every release bump and had nothing to do with the security behavior those
+# files actually guard. Those assertions were all converted to forward-
+# compatible "is_same_or_newer" checks (2026-08), so no deselect list is
+# needed here anymore — any failure below is a real regression.
 
 echo "Running ${#FILES[@]} security regression test files..."
-python3 -m pytest "${FILES[@]}" "${DESELECT_ARGS[@]}" -q "$@"
+python3 -m pytest "${FILES[@]}" -q "$@"

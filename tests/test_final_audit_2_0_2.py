@@ -165,9 +165,10 @@ class RsetupRemovedTests(unittest.TestCase):
 class VersionBumpTests(unittest.TestCase):
     def test_version_is_current(self):
         from app.version import __version__
+        from app.services.updates import is_same_or_newer
 
-        self.assertEqual(__version__, "4.10.9")
-        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), "4.10.9")
+        self.assertTrue(is_same_or_newer(__version__, "4.10.9"))
+        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), __version__)
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.3.2"', notes)
         self.assertIn('"3.3.1"', notes)

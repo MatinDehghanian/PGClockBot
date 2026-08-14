@@ -12,9 +12,10 @@ class VersionTests(unittest.TestCase):
     def test_version_3_3_2(self):
         from app.services.release_notes import RELEASE_NOTES_FA
         from app.version import __version__
+        from app.services.updates import is_same_or_newer
 
-        self.assertEqual(__version__, "4.10.9")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.9")
+        self.assertTrue(is_same_or_newer(__version__, "4.10.9"))
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
         self.assertIn("3.3.2", RELEASE_NOTES_FA)
         blob = " ".join(RELEASE_NOTES_FA["3.3.2"])
         self.assertIn("ممیزی", blob)
@@ -50,10 +51,12 @@ class DeadCodeRemovedTests(unittest.TestCase):
         self.assertNotIn("require_pg_any", pg_src)
 
     def test_backup_status_route_removed(self):
-        # Route kept intentionally — settings UI polls restore progress as JSON
+        # Route kept intentionally — settings UI polls restore progress as JSON.
+        # The status reader was later renamed to resolve_stale_restore_status()
+        # (adds stale-run detection on top of the original read_restore_status()).
         src = (ROOT / "app/api/backup_pages.py").read_text(encoding="utf-8")
         self.assertIn("/backup/status", src)
-        self.assertIn("read_restore_status", src)
+        self.assertIn("resolve_stale_restore_status", src)
         self.assertIn("JSONResponse", src)
 
 
