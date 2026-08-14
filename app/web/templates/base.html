@@ -28,6 +28,33 @@
     } catch (e) {}
   })();
   </script>
+  <script>
+  /* Real mobile viewport height, measured — not guessed via CSS units.
+     CSS dvh/svh/lvh depend on the browser correctly tracking its own chrome
+     (address bar) state, which some mobile browsers/WebViews report late or
+     incorrectly on first paint, making .shell/.main/.side lay out short (the
+     footer sits above the real screen bottom, .side's background falls short
+     of it — see panel.css .shell comment). Reading window.innerHeight
+     directly and republishing it as --vh sidesteps that: it always reflects
+     the browser's ACTUAL current layout viewport, right now, on every engine.
+     Runs before first paint (this script is in <head>, above panel.css usage)
+     so there is no flash, and keeps listening so rotating the device or the
+     chrome expanding/collapsing later stays correct too — never lock this to
+     a single one-time read. */
+  (function () {
+    function setVh() {
+      try {
+        document.documentElement.style.setProperty("--vh", (window.innerHeight * 0.01) + "px");
+      } catch (e) {}
+    }
+    setVh();
+    window.addEventListener("resize", setVh);
+    window.addEventListener("orientationchange", setVh);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", setVh);
+    }
+  })();
+  </script>
   {% block head %}{% endblock %}
 </head>
 <body>

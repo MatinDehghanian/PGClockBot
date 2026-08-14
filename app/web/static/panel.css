@@ -160,20 +160,25 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
 *::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 999px; }
 
 /* —— Shell: desktop = main + sidebar (physical right for RTL content) —— */
-/* Height uses svh (stable viewport height — chrome always counted as visible),
-   NOT dvh (dynamic viewport height). Mobile browser/WebView chrome (address
-   bar, etc.) is often still expanded on first paint and only collapses after
-   the user's first scroll/gesture. dvh reports the SMALLER pre-collapse value
-   on first paint, so .shell/.main/.side get laid out short — the footer
-   (pinned to the bottom of .main via margin-top:auto) sits above the real
-   screen bottom, and .side's background falls short of the real screen
-   bottom (exposing the darker body background below it) — until the chrome
-   collapses and dvh is recomputed. svh never changes with chrome visibility,
-   so the layout is correct from the very first frame, with no jump on
-   scroll. (Do NOT "fix" this by pinning .site-footer with position:fixed —
-   see tests/test_footer_restore_3_1_3.py; that previously-tried approach
-   fixed the footer's position but left the mismatched .side height glitch
-   permanently visible instead of just being a transient first-paint issue.)
+/* Height cascade: 100vh (universal fallback) → 100dvh (dynamic viewport
+   height, self-correcting but can be briefly short on first paint on mobile
+   WebViews whose chrome/address bar hasn't collapsed yet) → calc(var(--vh)*100)
+   (authoritative once JS runs).
+   --vh is set from the REAL window.innerHeight by an inline script in
+   base.html's <head> (runs before first paint) and kept in sync on
+   resize/orientationchange/visualViewport — see that script's comment for
+   why this measured-JS approach was chosen over the CSS-only svh unit.
+   NEVER replace the dvh/var(--vh) pair with a *static* unit like 100svh:
+   svh always reports the SMALLEST possible viewport (chrome fully expanded)
+   and, unlike dvh, never updates afterwards — layering it after dvh in the
+   cascade permanently pins the short layout instead of letting it
+   self-correct, turning the original *transient* first-paint glitch into a
+   *permanent* one (regression fixed 2026-08, see
+   tests/test_viewport_vh_var_stable_layout.py). Also do NOT "fix" this by
+   pinning .site-footer with position:fixed — see
+   tests/test_footer_restore_3_1_3.py; that previously-tried approach fixed
+   the footer's position but left the mismatched .side height glitch
+   permanently visible instead of just being a transient first-paint issue.
 */
 .shell {
   direction: ltr;
@@ -182,10 +187,10 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   grid-template-areas: "main side";
   height: 100vh;
   height: 100dvh;
-  height: 100svh;
+  height: calc(var(--vh, 1vh) * 100);
   max-height: 100vh;
   max-height: 100dvh;
-  max-height: 100svh;
+  max-height: calc(var(--vh, 1vh) * 100);
   width: 100%;
   background: var(--background);
   overflow: hidden;
@@ -200,7 +205,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   width: var(--side-w);
   height: 100%;
   max-height: 100dvh;
-  max-height: 100svh;
+  max-height: calc(var(--vh, 1vh) * 100);
   position: relative;
   top: 0;
   overflow-x: hidden;
@@ -219,7 +224,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   min-height: 0;
   height: 100%;
   max-height: 100dvh;
-  max-height: 100svh;
+  max-height: calc(var(--vh, 1vh) * 100);
   /* Top / bottom chrome equal: --page-title-gap above content and below footer */
   padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));
   display: flex;
@@ -2093,7 +2098,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 .auth-wrap {
   min-height: 100vh;
   min-height: 100dvh;
-  min-height: 100svh;
+  min-height: calc(var(--vh, 1vh) * 100);
   display: grid;
   place-items: center;
   padding: calc(var(--space-3) + var(--safe-top)) calc(var(--space-2) + var(--safe-right)) calc(var(--space-3) + var(--safe-bottom)) calc(var(--space-2) + var(--safe-left));
@@ -3583,7 +3588,7 @@ form.settings-form > .actions.sticky-actions,
     max-height: none;
     min-height: 100vh;
     min-height: 100dvh;
-    min-height: 100svh;
+    min-height: calc(var(--vh, 1vh) * 100);
     overflow: visible;
     /* Reserve space for fixed mobile topbar */
     padding-top: calc(var(--topbar-h) + var(--safe-top));
@@ -3599,9 +3604,9 @@ form.settings-form > .actions.sticky-actions,
     width: min(300px, 86vw);
     height: calc(100vh - var(--topbar-h) - var(--safe-top));
     height: calc(100dvh - var(--topbar-h) - var(--safe-top));
-    height: calc(100svh - var(--topbar-h) - var(--safe-top));
+    height: calc((var(--vh, 1vh) * 100) - var(--topbar-h) - var(--safe-top));
     max-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
-    max-height: calc(100svh - var(--topbar-h) - var(--safe-top));
+    max-height: calc((var(--vh, 1vh) * 100) - var(--topbar-h) - var(--safe-top));
     z-index: 50;
     transform: translateX(105%);
     transition: transform .2s ease;
@@ -3619,7 +3624,7 @@ form.settings-form > .actions.sticky-actions,
     /* Bottom pad matches .side drawer so site-footer & side-foot share one baseline */
     padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));
     min-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
-    min-height: calc(100svh - var(--topbar-h) - var(--safe-top));
+    min-height: calc((var(--vh, 1vh) * 100) - var(--topbar-h) - var(--safe-top));
     height: auto;
     max-height: none;
     flex: 1 1 auto;
