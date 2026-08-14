@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "6.1.4": [
+        "بازگشت به رفتار ویوپورت/فوتر/سایدبار نسخهٔ ۶.۱.۱ (لغو تغییرات ۶.۱.۲ و ۶.۱.۳)",
+        "ریستور از نقطهٔ cursor/restore-before-viewport-svh-5b2d",
+    ],
     "6.1.3": [
         "رفع نسخهٔ ۶.۱.۲: راه‌حل قبلی (svh) باگ موقت فوتر/سایدبار را دائمی می‌کرد؛ اکنون ارتفاع واقعی ویوپورت با جاوااسکریپت اندازه‌گیری و به‌صورت مداوم به‌روز می‌شود",
     ],
