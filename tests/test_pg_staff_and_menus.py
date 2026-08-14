@@ -48,12 +48,13 @@ class SidebarMenuOrderTests(unittest.TestCase):
         bot_start = src.find("پنل ربات")
         self.assertGreater(bot_start, 0)
         chunk = src[bot_start : src.find("پنل پاسارگارد")]
+        # Orders + payments were later unified into a single "مدیریت مالی"
+        # (Financial Management) sidebar item pointing at /finance.
         markers = [
             ">نمای کلی</span>",
             ">کاربران</span>",
             ">نمایندگان</span>",
-            ">سفارشات</span>",
-            ">پرداخت‌ها</span>",
+            ">مدیریت مالی</span>",
             ">پلن‌ها</span>",
             ">پشتیبانی</span>",
             ">پیام گروهی</span>",

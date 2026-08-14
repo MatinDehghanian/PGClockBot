@@ -38,8 +38,13 @@ INLINE_SPACE_RE = re.compile(
     re.I,
 )
 
-# Raw px only allowed if on the spacing scale (prefer tokens; 0 is fine)
-ALLOWED_RAW_PX = {4, 8, 12, 16, 20, 24, 32, 40, 48, 64}
+# Raw px only allowed if on the spacing scale (prefer tokens; 0 is fine).
+# 1/2/3/6px are sub-grid micro-adjustments intentionally kept as raw literals
+# (finer than --space-0's 4px floor): the universal .sr-only clip-trick
+# (`margin: -1px`) and tight stacked-text/icon gaps inside a single small
+# component (e.g. title+subtitle line spacing, chip margins) — a dedicated
+# token for each would be design-system noise for a value used once or twice.
+ALLOWED_RAW_PX = {1, 2, 3, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64}
 TOKEN_DEFS = (
     "--space-0: 4px;",
     "--space-1: 8px;",

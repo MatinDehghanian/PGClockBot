@@ -11,9 +11,10 @@ ROOT = Path(__file__).resolve().parents[1]
 class Version368Tests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
+        from app.services.updates import is_same_or_newer
 
-        self.assertEqual(__version__, "4.10.9")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.9")
+        self.assertTrue(is_same_or_newer(__version__, "4.10.9"))
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"3.6.8"', notes)
 
@@ -77,7 +78,8 @@ class MiniappShopSuppressionTests(unittest.TestCase):
     def test_seed_shop_safe_menu_order(self):
         src = (ROOT / "app/services/resellers.py").read_text(encoding="utf-8")
         chunk = src.split("async def seed_reseller_shop_settings")[1].split("\nasync def ")[0]
-        self.assertIn("shop,services,wallet,support,referral", chunk)
+        # "referral" menu slot was later renamed to "loyalty" (points program).
+        self.assertIn("shop,services,wallet,support,loyalty", chunk)
         self.assertNotIn("miniapp", chunk.split("value =")[1].split("\n")[0])
 
 

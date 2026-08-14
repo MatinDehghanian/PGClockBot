@@ -58,10 +58,17 @@ class UnreadReuseTests(unittest.TestCase):
         src = (ROOT / "app/api/panel_tickets_pages.py").read_text(encoding="utf-8")
         self.assertIn("unread: int | None = None", src)
         self.assertIn("unread_from_tickets", src)
-        home = (ROOT / "app/api/home_pages.py").read_text(encoding="utf-8")
-        self.assertIn("panel_tickets_unread", home)
+        # pg_home.html kept the dedicated ticket_alert banner, so pg_pages.py
+        # still threads the pre-computed request.state.panel_tickets_unread
+        # into panel_ticket_dashboard_alert() to skip a duplicate query.
         pg = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
         self.assertIn("panel_tickets_unread", pg)
+        # home_pages.py's dashboards (home.html / reseller_home.html) later
+        # replaced the dedicated ticket_alert banner with the generic Action
+        # Center work queue, which counts open tickets itself — no reuse of
+        # panel_tickets_unread there anymore.
+        home = (ROOT / "app/api/home_pages.py").read_text(encoding="utf-8")
+        self.assertIn("build_action_center", home)
 
     def test_unread_from_tickets(self):
         from app.services.panel_tickets import unread_from_tickets

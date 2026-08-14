@@ -28,9 +28,17 @@ class DashboardLinkTests(unittest.TestCase):
         self.assertNotIn('f"/tickets?view={tid}"', src)
 
     def test_templates_use_alert_href(self):
-        for name in ("reseller_home.html", "pg_home.html", "home.html"):
+        # pg_home.html kept the dedicated ticket_alert banner (its own href).
+        pg = (ROOT / "app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        self.assertIn('href="{{ ticket_alert.href }}"', pg)
+        # reseller_home.html / home.html later generalized this into the
+        # Action Center work-queue card, which renders each item's own href
+        # (tickets is one of several entry kinds there) — see _home_ops.html.
+        for name in ("reseller_home.html", "home.html"):
             src = (ROOT / "app/web/templates" / name).read_text(encoding="utf-8")
-            self.assertIn('href="{{ ticket_alert.href }}"', src)
+            self.assertIn('{% include "_home_ops.html" %}', src)
+        ops = (ROOT / "app/web/templates/_home_ops.html").read_text(encoding="utf-8")
+        self.assertIn('href="{{ item.href }}"', ops)
 
 
 class NavDotTests(unittest.TestCase):

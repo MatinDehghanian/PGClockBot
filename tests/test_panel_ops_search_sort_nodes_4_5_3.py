@@ -281,8 +281,15 @@ class PanelTemplateContractTests(unittest.TestCase):
         self.assertIn("data-sort-type", html)
         # Pending (no receipt) still offers approve → deliver
         self.assertIn("o.status in ['pending','awaiting_receipt']", html)
-        # Cancelled: muted dash only — no kebab/actions
-        self.assertIn("o.status in ['delivered', 'cancelled']", html)
+        # Cancelled/delivered: muted dash only — no kebab/actions. The gate
+        # moved into `can_act` (row_actions only renders when has_receipt or
+        # can_act is true), so assert 'cancelled'/'delivered' are excluded
+        # from every status list that unlocks an action form.
+        can_act_line = next(
+            line for line in html.splitlines() if "set can_act" in line
+        )
+        self.assertNotIn("'cancelled'", can_act_line)
+        self.assertNotIn("'delivered'", can_act_line)
         self.assertNotIn("o.status == 'cancelled'\n            {% call row_actions()", html)
 
     def test_payments_search_sort_and_actions(self):

@@ -38,7 +38,10 @@ class ForceJoinCompactTests(unittest.TestCase):
         self.assertIn("display: flex;", row)
         self.assertIn("flex-direction: column;", row)
         wrap = css.split(".force-channel-id-wrap {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("width: 100%;", wrap)
+        # Later switched from a fixed width to a flex-grow shorthand so the
+        # field still fills the row beside its controls inside the flex
+        # container — same "narrow field, controls beside" layout intent.
+        self.assertIn("flex: 1 1 auto;", wrap)
         self.assertIn("btn-danger", js)
         self.assertIn("force-channel-remove", js)
         self.assertIn("force-channel-add", js)

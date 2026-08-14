@@ -17,7 +17,9 @@ class FooterRestore303Tests(unittest.TestCase):
         self.assertNotIn("main-shell", html)
         self.assertNotIn(".main-shell", css)
         main = html.split('<main class="main">', 1)[1].split("</main>", 1)[0]
-        self.assertIn('class="main-body"', main)
+        # Allow additional classes appended later (e.g. "page-surface") —
+        # what matters is the main-body wrapper class is still first/present.
+        self.assertIn('class="main-body', main)
         self.assertIn('class="site-footer"', main)
         self.assertGreater(main.find("site-footer"), main.find("main-body"))
 

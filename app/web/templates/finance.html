@@ -187,7 +187,7 @@
             {% endif %}
           {% endcall %}
           {% if p.status == 'pending' and (receipt_matches or {}).get(p.id) %}
-          <small class="muted" style="display:block;margin-top:4px">هم‌مبلغ: {% for m in receipt_matches[p.id][:3] %}#{{ m.id }}{% if not loop.last %}، {% endif %}{% endfor %}</small>
+          <small class="muted" style="display:block;margin-top:var(--space-0)">هم‌مبلغ: {% for m in receipt_matches[p.id][:3] %}#{{ m.id }}{% if not loop.last %}، {% endif %}{% endfor %}</small>
           {% endif %}
           {% else %}
           <span class="muted">—</span>

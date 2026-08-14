@@ -116,13 +116,24 @@ class TemplateNavTests(unittest.TestCase):
         self.assertIn("پشتیبانی", chunk)
 
     def test_dashboard_answered_banner(self):
-        rh = (ROOT / "app/web/templates/reseller_home.html").read_text(encoding="utf-8")
+        # pg_home.html (PasarGuard-only dashboard) still has its own dedicated
+        # ticket_alert banner. reseller_home.html / home.html later folded the
+        # same "you have an answered ticket" nudge into the generic Action
+        # Center work-queue card (_home_ops.html) alongside receipts/expiring
+        # services/failed deliveries — same underlying open-ticket count
+        # (see ux20.build_action_center), different presentation.
         pg = (ROOT / "app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        self.assertIn("ticket_alert", pg)
+        self.assertIn("flash warn home-update-banner", pg)
+        self.assertIn(">مشاهده</a>", pg)
+
+        rh = (ROOT / "app/web/templates/reseller_home.html").read_text(encoding="utf-8")
         home = (ROOT / "app/web/templates/home.html").read_text(encoding="utf-8")
-        for src in (rh, pg, home):
-            self.assertIn("ticket_alert", src)
-            self.assertIn("flash warn home-update-banner", src)
-            self.assertIn(">مشاهده</a>", src)
+        home_ops = (ROOT / "app/web/templates/_home_ops.html").read_text(encoding="utf-8")
+        for src in (rh, home):
+            self.assertIn('{% include "_home_ops.html" %}', src)
+        self.assertIn("ac.entries", home_ops)
+        self.assertIn("item.href", home_ops)
 
     def test_macros_panel_labels(self):
         macros = (ROOT / "app/web/templates/macros.html").read_text(encoding="utf-8")

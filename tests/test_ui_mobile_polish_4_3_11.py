@@ -36,7 +36,8 @@ class RadiusTokensTests(unittest.TestCase):
         self.assertIn("border-radius: var(--control-radius);", btn)
         fields = CSS.split("input, select, textarea {", 1)[1].split("}", 1)[0]
         self.assertIn("border-radius: var(--control-radius);", fields)
-        tabs = CSS.split(".section-tabs a {", 1)[1].split("}", 1)[0]
+        # Later gained a button-based tab variant sharing the same rule block.
+        tabs = CSS.split(".section-tabs a,\n.section-tabs .tab-btn {", 1)[1].split("}", 1)[0]
         self.assertIn("border-radius: var(--control-radius);", tabs)
         shortcuts = CSS.split(".quick-links a {", 1)[1].split("}", 1)[0]
         self.assertIn("border-radius: var(--control-radius);", shortcuts)
@@ -132,8 +133,13 @@ class DeleteReasonBoxTests(unittest.TestCase):
         self.assertIn("data-confirm-reason", RESELLERS)
         self.assertIn("/resellers/{{ u.id }}/delete", RESELLERS)
         self.assertIn("data-confirm-reason", RESELLER_BODY)
-        # Role / block forms must not force reason box
-        self.assertNotIn("data-confirm-reason", USER_BODY)
+        # _user_edit_body.html later gained its own delete-user form (parity
+        # with _reseller_edit_body.html), so it legitimately carries
+        # data-confirm-reason too now — but only on that delete form, never
+        # on the role-change / block forms sharing the same template.
+        self.assertIn("/users/{{ user.id }}/delete", USER_BODY)
+        role_form = USER_BODY.split("/users/{{ user.id }}/role", 1)[1].split("</form>", 1)[0]
+        self.assertNotIn("data-confirm-reason", role_form)
         block = USERS.split("/users/{{ u.id }}/block", 1)[1].split("</form>", 1)[0]
         self.assertNotIn("data-confirm-reason", block)
 
@@ -297,7 +303,7 @@ class VersionBumpTests(unittest.TestCase):
             tuple(int(x) for x in __version__.split(".")), (4, 5, 0)
         )
         self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), "4.10.9"
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__
         )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"4.5.0"', notes)
