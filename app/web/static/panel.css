@@ -6077,6 +6077,13 @@ html[data-theme="light"] .setup-progress span.done {
   color: var(--foreground);
   max-width: 100%;
 }
+/* Number then unit (LTR run), pinned to the inline-end / visual right in RTL */
+.pg-metric-val-rate {
+  width: 100%;
+  justify-content: flex-end;
+  text-align: right;
+  unicode-bidi: isolate;
+}
 .pg-live-rate .pg-metric-val {
   font-size: 22px;
 }
@@ -6094,6 +6101,8 @@ html[data-theme="light"] .setup-progress span.done {
 .pg-live-rate > small.muted {
   font-size: 11px;
   line-height: 1.3;
+  text-align: right;
+  width: 100%;
 }
 .pg-node-board {
   width: 100%;
@@ -6101,6 +6110,39 @@ html[data-theme="light"] .setup-progress span.done {
 }
 .pg-node-board-empty {
   margin: 0;
+}
+/* Node picker tabs — settings-tab chrome, PG blue active (not brand orange) */
+.pg-node-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-0);
+  width: 100%;
+  max-width: 100%;
+}
+.pg-node-tabs .tab-btn {
+  flex: 0 0 auto;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pg-node-tabs .tab-btn.active,
+.pg-node-tabs .tab-btn.active:hover,
+.pg-node-tabs .tab-btn.active:active {
+  background: color-mix(in srgb, #3d8fd1 18%, transparent);
+  color: #8ec5ef;
+  border-color: color-mix(in srgb, #3d8fd1 42%, var(--border));
+  font-weight: 600;
+}
+html[data-theme="light"] .pg-node-tabs .tab-btn.active,
+html[data-theme="light"] .pg-node-tabs .tab-btn.active:hover,
+html[data-theme="light"] .pg-node-tabs .tab-btn.active:active {
+  background: color-mix(in srgb, #3d8fd1 14%, #fff);
+  color: #1d4ed8;
+  border-color: color-mix(in srgb, #3d8fd1 40%, var(--border));
 }
 .pg-node-grid {
   display: grid;
@@ -6121,6 +6163,9 @@ html[data-theme="light"] .setup-progress span.done {
   min-width: 0;
   width: 100%;
   box-sizing: border-box;
+}
+.pg-node-tile[hidden] {
+  display: none !important;
 }
 .pg-node-tile-head {
   display: flex;
@@ -6162,8 +6207,9 @@ html[data-theme="light"] .setup-progress span.done {
   background: color-mix(in srgb, var(--muted) 35%, var(--bg-card));
   box-sizing: border-box;
 }
-.pg-node-metric-span {
-  grid-column: 1 / -1;
+/* CPU + RAM share a row on wide viewports */
+.pg-node-metric-res {
+  grid-column: auto;
 }
 .pg-node-metric-head {
   display: flex;
@@ -6216,14 +6262,18 @@ html[data-theme="light"] .setup-progress span.done {
   max-width: 100%;
   border-radius: inherit;
   background: var(--ok-fg);
-  transition: width .35s ease, background .25s ease;
+  opacity: 0.62;
+  transition: width .35s ease, background .25s ease, opacity .25s ease;
 }
+/* Same tone ladder as host gauge rings */
 .pg-node-meter-ok .pg-node-meter-fill { background: var(--ok-fg); }
 .pg-node-meter-warn .pg-node-meter-fill { background: var(--warn-fg); }
+.pg-node-meter-caution .pg-node-meter-fill { background: var(--caution-fg, #fb923c); }
 .pg-node-meter-err .pg-node-meter-fill { background: var(--destructive-fg); }
 .pg-node-meter-neutral .pg-node-meter-fill {
   background: color-mix(in srgb, var(--muted-fg) 55%, transparent);
 }
+/* Percent on the bar — no chip; fill stays translucent so text stays readable */
 .pg-node-meter-pct {
   position: absolute;
   inset-inline: 0;
@@ -6239,19 +6289,13 @@ html[data-theme="light"] .setup-progress span.done {
   color: var(--foreground);
   pointer-events: none;
   line-height: 1;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-card) 72%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  z-index: 1;
 }
 html[data-theme="light"] .pg-node-tile {
   background: color-mix(in srgb, #fff 55%, var(--bg-card));
 }
 html[data-theme="light"] .pg-node-metric {
   background: color-mix(in srgb, var(--muted) 40%, #fff);
-}
-html[data-theme="light"] .pg-node-meter-pct {
-  background: color-mix(in srgb, #fff 82%, transparent);
 }
 .home-gauges {
   display: grid;
@@ -7078,6 +7122,7 @@ html[data-theme="light"] .home-gauge.is-exhausted {
   .pg-live-rates { gap: var(--space-1); }
   .pg-live-rate .pg-metric-val { font-size: 18px; }
   .pg-node-metrics { grid-template-columns: 1fr 1fr; }
+  .pg-node-metric-res { grid-column: 1 / -1; }
   .home-gauge {
     flex-direction: column;
     align-items: center;
