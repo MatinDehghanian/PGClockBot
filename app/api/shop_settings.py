@@ -211,9 +211,9 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if tab == "menu":
             ctx.update(_menu_tab_context(values))
         elif tab == "colors":
-            from app.services.button_styles import STYLE_OPTIONS, grouped_catalog
+            from app.services.button_styles import STYLE_OPTIONS, sectioned_catalog
 
-            ctx["button_style_groups"] = grouped_catalog(for_reseller=True)
+            ctx["button_style_sections"] = sectioned_catalog(for_reseller=True)
             ctx["style_options"] = STYLE_OPTIONS
         elif tab == "bot":
             token = (profile.bot_token if profile else "") or ""
@@ -345,6 +345,11 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if tab == "menu":
             known = known | {"menu_order"}
             known.discard("show_reseller_apply")
+        if tab == "colors":
+            # ACL: shop may only persist reseller-allowed btn_style_* (no admin leak).
+            from app.services.button_styles import allowed_style_setting_keys
+
+            known = known & allowed_style_setting_keys(for_reseller=True)
 
         payload: dict[str, str] = {}
         for key in TOGGLE_KEYS:
@@ -400,6 +405,13 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         # (shop notify prefs go through /shop-notifications with an ACL allowlist).
         for k in list(payload.keys()):
             if str(k).startswith("notify_"):
+                payload.pop(k, None)
+        # Never allow admin-only btn_style_* smuggling into ResellerSetting.
+        from app.services.button_styles import allowed_style_setting_keys
+
+        allowed_btn = allowed_style_setting_keys(for_reseller=True)
+        for k in list(payload.keys()):
+            if str(k).startswith("btn_style_") and k not in allowed_btn:
                 payload.pop(k, None)
         from app.services.users import set_settings_bulk
 

@@ -117,8 +117,21 @@ def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _back_row(label: str, cb: str) -> list[InlineKeyboardButton]:
-    return [InlineKeyboardButton(text=label, callback_data=cb)]
+def _kind_btn_style(ui: dict | None, kind: str) -> str | None:
+    from app.services.button_styles import plan_kind_style_id
+
+    sid = plan_kind_style_id(kind)
+    if not sid:
+        return None
+    return kb._style(ui, sid, fallback="primary")
+
+
+def _ib(text: str, cb: str, style: str | None = None) -> InlineKeyboardButton:
+    return kb._ikb(text, callback_data=cb, style=style)
+
+
+def _back_row(label: str, cb: str, style: str | None = None) -> list[InlineKeyboardButton]:
+    return [_ib(label, cb, style=style)]
 
 
 async def _persist(session: AsyncSession) -> None:
@@ -211,7 +224,7 @@ async def send_resellers_plans_overview(message: Message, session: AsyncSession)
     )
     await message.answer(
         text,
-        reply_markup=kb.admin_resellers_plans_overview_keyboard(fixed, payg),
+        reply_markup=kb.admin_resellers_plans_overview_keyboard(fixed, payg, ui=await get_all_settings(session)),
     )
 
 
@@ -242,6 +255,7 @@ async def send_add_plan_type_picker(
 async def send_users_fixed_list(message: Message, session: AsyncSession) -> None:
     from app.bot.handlers.admin import _plan_line
 
+    ui = await get_all_settings(session)
     result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
     plans = list(result.scalars().all())
     fixed = [p for p in plans if not p.is_trial]
@@ -253,40 +267,33 @@ async def send_users_fixed_list(message: Message, session: AsyncSession) -> None
         f"📦 <b>پلن‌های ثابت</b>\n\n{body}",
         reply_markup=kb.admin_plans_list_keyboard(
             plans,
+            ui,
             back_callback=BACK_USERS_KIND,
+            kind="fixed",
         ),
     )
 
 
 async def _build_custom_screen(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
     ui = await get_all_settings(session)
+    st = _kind_btn_style(ui, "custom")
     rows: list[list[InlineKeyboardButton]] = [
         [
-            InlineKeyboardButton(
-                text=f"{'✅' if on(ui.get('custom_plan_enabled')) else '⬜️'} فعال در فروشگاه",
-                callback_data="adm:plans:tog:custom_plan_enabled",
+            _ib(
+                f"{'✅' if on(ui.get('custom_plan_enabled')) else '⬜️'} فعال در فروشگاه",
+                "adm:plans:tog:custom_plan_enabled",
+                st,
             )
         ],
     ]
     for key, label, kind in CUSTOM_PRICE:
         if kind == "toggle":
             mark = "✅" if on(ui.get(key)) else "⬜️"
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"{mark} {label}",
-                        callback_data=f"adm:plans:tog:{key}",
-                    )
-                ]
-            )
+            rows.append([_ib(f"{mark} {label}", f"adm:plans:tog:{key}", st)])
         else:
-            rows.append(
-                [InlineKeyboardButton(text=label, callback_data=f"adm:plans:edit:{key}")]
-            )
-    rows.append(
-        [InlineKeyboardButton(text="🔗 اتصال پاسارگارد", callback_data="adm:plans:custom:pg")]
-    )
-    rows.append(_back_row("⬅️ پلن‌های کاربران", BACK_USERS_KIND))
+            rows.append([_ib(label, f"adm:plans:edit:{key}", st)])
+    rows.append([_ib("🔗 اتصال پاسارگارد", "adm:plans:custom:pg", st)])
+    rows.append(_back_row("⬅️ پلن‌های کاربران", BACK_USERS_KIND, kb._style(ui, "back")))
     tpl = (ui.get("custom_plan_template_id") or "").strip()
     groups = (ui.get("custom_plan_group_ids") or "").strip()
     link = f"تمپلیت #{tpl}" if tpl else (f"گروه {groups}" if groups else "بدون اتصال")
@@ -327,19 +334,21 @@ async def _build_trial_screen(session: AsyncSession) -> tuple[str, InlineKeyboar
         )
     else:
         body = "هنوز ساخته نشده."
+    st = _kind_btn_style(ui, "trial")
     rows = [
         [
-            InlineKeyboardButton(
-                text=f"{'✅' if on(ui.get('trial_enabled')) else '⬜️'} نمایش در فروشگاه",
-                callback_data="adm:plans:tog:trial_enabled",
+            _ib(
+                f"{'✅' if on(ui.get('trial_enabled')) else '⬜️'} نمایش در فروشگاه",
+                "adm:plans:tog:trial_enabled",
+                st,
             )
         ],
-        [InlineKeyboardButton(text="نام", callback_data="adm:plans:trial:name")],
-        [InlineKeyboardButton(text="مدت (روز)", callback_data="adm:plans:trial:days")],
-        [InlineKeyboardButton(text="حجم (گیگ)", callback_data="adm:plans:trial:gb")],
-        [InlineKeyboardButton(text="تمپلیت پاسارگارد", callback_data="adm:plans:trial:tpl")],
-        [InlineKeyboardButton(text="گروه پاسارگارد", callback_data="adm:plans:trial:grp")],
-        _back_row("⬅️ پلن‌های کاربران", BACK_USERS_KIND),
+        [_ib("نام", "adm:plans:trial:name", st)],
+        [_ib("مدت (روز)", "adm:plans:trial:days", st)],
+        [_ib("حجم (گیگ)", "adm:plans:trial:gb", st)],
+        [_ib("تمپلیت پاسارگارد", "adm:plans:trial:tpl", st)],
+        [_ib("گروه پاسارگارد", "adm:plans:trial:grp", st)],
+        _back_row("⬅️ پلن‌های کاربران", BACK_USERS_KIND, kb._style(ui, "back")),
     ]
     return f"🧪 <b>پلن تست</b>\n\n{body}", _kb(rows)
 
@@ -351,6 +360,7 @@ async def send_users_trial(message: Message, session: AsyncSession) -> None:
 
 async def _build_wholesale_screen(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
     ui = await get_all_settings(session)
+    st = _kind_btn_style(ui, "wholesale")
     tiers = parse_wholesale_tiers(ui.get("wholesale_tiers"))
     tier_lines = (
         "\n".join(f"از {t['min']} عدد → {t['percent']}٪" for t in tiers)
@@ -359,41 +369,22 @@ async def _build_wholesale_screen(session: AsyncSession) -> tuple[str, InlineKey
     )
     rows: list[list[InlineKeyboardButton]] = [
         [
-            InlineKeyboardButton(
-                text=f"{'✅' if on(ui.get('wholesale_enabled')) else '⬜️'} فعال در فروشگاه",
-                callback_data="adm:plans:tog:wholesale_enabled",
+            _ib(
+                f"{'✅' if on(ui.get('wholesale_enabled')) else '⬜️'} فعال در فروشگاه",
+                "adm:plans:tog:wholesale_enabled",
+                st,
             )
         ],
-        [
-            InlineKeyboardButton(
-                text="حداقل تعداد",
-                callback_data="adm:plans:edit:wholesale_min_qty",
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="حداکثر تعداد",
-                callback_data="adm:plans:edit:wholesale_max_qty",
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="متن دکمه ربات",
-                callback_data="adm:plans:edit:btn_wholesale",
-            )
-        ],
-        [InlineKeyboardButton(text="➕ پله تخفیف", callback_data="adm:plans:wholesale:add_tier")],
+        [_ib("حداقل تعداد", "adm:plans:edit:wholesale_min_qty", st)],
+        [_ib("حداکثر تعداد", "adm:plans:edit:wholesale_max_qty", st)],
+        [_ib("متن دکمه ربات", "adm:plans:edit:btn_wholesale", st)],
+        [_ib("➕ پله تخفیف", "adm:plans:wholesale:add_tier", st)],
     ]
     for i, t in enumerate(tiers[:6]):
         rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"🗑 پله {t['min']}→{t['percent']}٪",
-                    callback_data=f"adm:plans:wholesale:del:{i}",
-                )
-            ]
+            [_ib(f"🗑 پله {t['min']}→{t['percent']}٪", f"adm:plans:wholesale:del:{i}", st)]
         )
-    rows.append(_back_row("⬅️ پلن‌های کاربران", BACK_USERS_KIND))
+    rows.append(_back_row("⬅️ پلن‌های کاربران", BACK_USERS_KIND, kb._style(ui, "back")))
     text = (
         "📦 <b>فروش عمده</b>\n"
         f"{wholesale_description(ui)}\n\n"
@@ -427,6 +418,7 @@ async def send_reseller_plans_list(
         f"🤝 <b>پلن‌های نماینده — {label}</b>\n\n{body}",
         reply_markup=kb.admin_reseller_plans_list_keyboard(
             plans,
+            await get_all_settings(session),
             mode=kind,
             back_callback=BACK_RESELLERS_KIND,
             add_callback=f"adm:resplan:add:{kind}",
@@ -528,6 +520,7 @@ async def _rerender_plans_screen(
             f"🤝 <b>پلن‌های نماینده — {label}</b>\n\n{body}",
             reply_markup=kb.admin_reseller_plans_list_keyboard(
                 plans,
+                await get_all_settings(session),
                 mode=kind,
                 back_callback=BACK_RESELLERS_KIND,
                 add_callback=f"adm:resplan:add:{kind}",

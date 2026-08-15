@@ -426,8 +426,10 @@ class ButtonStyleTests(unittest.TestCase):
         settings_html = Path("app/web/templates/_settings_colors.html").read_text(encoding="utf-8")
         self.assertNotIn("پیش‌فرض", settings_html)
         self.assertIn("style_options", settings_html)
-        self.assertIn("پلن نمایندگی: PAYG", "".join(item["label"] for item in BUTTON_STYLE_CATALOG))
-        self.assertNotIn("Pay As You Go", "".join(item["label"] for item in BUTTON_STYLE_CATALOG))
+        self.assertIn("button_style_sections", settings_html)
+        labels = "".join(item["label"] for item in BUTTON_STYLE_CATALOG)
+        self.assertIn("نوع پلن نمایندگی: PAYG", labels)
+        self.assertNotIn("Pay As You Go", labels)
         # Expanded catalog covers user/admin/reseller reply hubs.
         ids = {item["id"] for item in BUTTON_STYLE_CATALOG}
         for needed in (

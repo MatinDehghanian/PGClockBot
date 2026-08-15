@@ -86,24 +86,44 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "support_list", "label": "تیکت‌های من", "group": "زیرمنوها", "default": ""},
     {"id": "svc_refresh", "label": "رفرش وضعیت سرویس", "group": "زیرمنوها", "default": ""},
     {"id": "miniapp", "label": "مینی‌اپ (منوی اصلی)", "group": "زیرمنوها", "default": "primary"},
-    # Shop flow (inline)
-    {"id": "shop_kind_fixed", "label": "نوع پلن کاربر: ثابت", "group": "فروشگاه", "default": "primary"},
-    {"id": "shop_kind_custom", "label": "نوع پلن کاربر: دلخواه", "group": "فروشگاه", "default": "primary"},
-    {"id": "shop_kind_wholesale", "label": "نوع پلن کاربر: عمده", "group": "فروشگاه", "default": "primary"},
-    {"id": "shop_kind_trial", "label": "نوع پلن کاربر: تست", "group": "فروشگاه", "default": "primary"},
+    # Shop flow (inline) — submenu plan rows inherit the matching kind color
+    {
+        "id": "shop_kind_fixed",
+        "label": "نوع پلن کاربر: ثابت (زیرمنو هم همین رنگ)",
+        "group": "فروشگاه",
+        "default": "primary",
+    },
+    {
+        "id": "shop_kind_custom",
+        "label": "نوع پلن کاربر: دلخواه (زیرمنو هم همین رنگ)",
+        "group": "فروشگاه",
+        "default": "primary",
+    },
+    {
+        "id": "shop_kind_wholesale",
+        "label": "نوع پلن کاربر: عمده (زیرمنو هم همین رنگ)",
+        "group": "فروشگاه",
+        "default": "primary",
+    },
+    {
+        "id": "shop_kind_trial",
+        "label": "نوع پلن کاربر: تست (زیرمنو هم همین رنگ)",
+        "group": "فروشگاه",
+        "default": "primary",
+    },
     {"id": "buy_continue", "label": "ادامه خرید / تأیید پلن", "group": "فروشگاه", "default": "primary"},
     {"id": "force_join_check", "label": "عضو شدم (کانال اجباری)", "group": "فروشگاه", "default": "primary"},
     {"id": "one_tap_renew", "label": "تمدید یک‌ضربی (هشدار انقضا)", "group": "فروشگاه", "default": "primary"},
-    # Reseller audience plans (admin)
+    # Reseller audience plans (admin configures kinds; submenu rows inherit these colors)
     {
         "id": "plan_res_fixed",
-        "label": "پلن نمایندگی: ثابت",
+        "label": "نوع پلن نمایندگی: ثابت (زیرمنو هم همین رنگ)",
         "group": "پلن نمایندگی",
         "default": "primary",
     },
     {
         "id": "plan_res_payg",
-        "label": "پلن نمایندگی: PAYG",
+        "label": "نوع پلن نمایندگی: PAYG (زیرمنو هم همین رنگ)",
         "group": "پلن نمایندگی",
         "default": "primary",
     },
@@ -122,15 +142,10 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "loy_points", "label": "امتیاز من", "group": "باشگاه مشتریان", "default": ""},
     {"id": "loy_rewards", "label": "جوایز باشگاه", "group": "باشگاه مشتریان", "default": ""},
     {"id": "loy_history", "label": "تاریخچه باشگاه", "group": "باشگاه مشتریان", "default": ""},
-    # Admin menu highlights
+    # ── Admin hub (platform bot only) ──────────────────────────────────────────
     {"id": "adm_dash", "label": "داشبورد ادمین", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_orders", "label": "سفارش‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_payments", "label": "رسیدها (ادمین)", "group": "منوی ادمین", "default": "success"},
-    {"id": "res_orders", "label": "سفارش‌ها (نماینده)", "group": "منوی ادمین", "default": "success"},
-    {"id": "res_payments", "label": "رسیدها (نماینده)", "group": "منوی ادمین", "default": "success"},
-    {"id": "res_renew", "label": "تمدید ظرفیت نماینده", "group": "منوی ادمین", "default": "primary"},
-    {"id": "res_buy_gb", "label": "خرید حجم نماینده", "group": "منوی ادمین", "default": "primary"},
-    {"id": "res_buy_users", "label": "خرید کاربر نماینده", "group": "منوی ادمین", "default": "primary"},
     {"id": "adm_tickets", "label": "تیکت‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_plans", "label": "پلن‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_users", "label": "کاربران (ادمین)", "group": "منوی ادمین", "default": "success"},
@@ -182,13 +197,18 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "bc_aud_users", "label": "همگانی: کاربران", "group": "پیام همگانی", "default": ""},
     {"id": "bc_aud_resellers", "label": "همگانی: نمایندگان", "group": "پیام همگانی", "default": ""},
     {"id": "bc_aud_admins", "label": "همگانی: ادمین‌ها", "group": "پیام همگانی", "default": ""},
-    # Reseller hub
+    # ── Reseller hub (shop bot / reseller panel) ────────────────────────────
     {"id": "res_dash", "label": "خانه نماینده", "group": "منوی نماینده", "default": "success"},
     {"id": "res_users", "label": "مشتریان نماینده", "group": "منوی نماینده", "default": "success"},
     {"id": "res_billing", "label": "کیف پول PAYG", "group": "منوی نماینده", "default": "success"},
     {"id": "res_stats", "label": "آمار و کمیسیون", "group": "منوی نماینده", "default": "success"},
+    {"id": "res_orders", "label": "سفارش‌ها (نماینده)", "group": "منوی نماینده", "default": "success"},
+    {"id": "res_payments", "label": "رسیدها (نماینده)", "group": "منوی نماینده", "default": "success"},
     {"id": "res_plans", "label": "پلن‌های فروش", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_plan_add", "label": "افزودن پلن نماینده", "group": "منوی نماینده", "default": "primary"},
+    {"id": "res_renew", "label": "تمدید ظرفیت نماینده", "group": "منوی نماینده", "default": "primary"},
+    {"id": "res_buy_gb", "label": "خرید حجم نماینده", "group": "منوی نماینده", "default": "primary"},
+    {"id": "res_buy_users", "label": "خرید کاربر نماینده", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_tickets", "label": "تیکت‌های مشتریان", "group": "منوی نماینده", "default": "success"},
     {"id": "res_loyalty", "label": "باشگاه مشتریان (نماینده)", "group": "منوی نماینده", "default": "success"},
     {"id": "res_settings", "label": "تنظیمات فروشگاه", "group": "منوی نماینده", "default": ""},
@@ -285,39 +305,94 @@ def setting_group_fields() -> list[tuple[Any, ...]]:
     return fields
 
 
+# Groups only the platform owner may color (never shown/saved for shop resellers).
+ADMIN_ONLY_GROUPS: frozenset[str] = frozenset(
+    {
+        "منوی ادمین",
+        "پلن نمایندگی",
+        "پاسارگارد",
+        "تنظیمات ادمین",
+        "بکاپ",
+        "پیام همگانی",
+        "باشگاه ادمین",
+    }
+)
+
+# Groups that belong to the reseller hub (shown separately from admin in the panel).
+RESELLER_HUB_GROUPS: frozenset[str] = frozenset({"منوی نماینده", "تنظیمات نماینده"})
+
+# Shared customer / shop chrome (both owner and reseller may color these).
+SHARED_GROUPS: frozenset[str] = frozenset(
+    {
+        "دکمه‌های سراسری",
+        "منوی اصلی",
+        "زیرمنوها",
+        "فروشگاه",
+        "پرداخت",
+        "باشگاه مشتریان",
+    }
+)
+
+# Map plan-kind screen keys → catalog style id (submenu rows inherit this color).
+PLAN_KIND_STYLE_IDS: dict[str, str] = {
+    "fixed": "shop_kind_fixed",
+    "custom": "shop_kind_custom",
+    "trial": "shop_kind_trial",
+    "wholesale": "shop_kind_wholesale",
+    "res_fixed": "plan_res_fixed",
+    "payg": "plan_res_payg",
+}
+
+
+def plan_kind_style_id(kind: str | None) -> str | None:
+    """Resolve a plan-kind key to the catalog button id whose color submenus inherit."""
+    k = (kind or "").strip().lower()
+    if k in {"resellers:fixed", "reseller_fixed", "fixed_res"}:
+        k = "res_fixed"
+    if k in {"resellers:payg", "reseller_payg"}:
+        k = "payg"
+    return PLAN_KIND_STYLE_IDS.get(k)
+
+
+def catalog_item_allowed_for_reseller(item: dict[str, str]) -> bool:
+    """Whether a catalog row may appear / be saved on the shop colors tab."""
+    bid = item["id"]
+    if item["group"] in ADMIN_ONLY_GROUPS:
+        return False
+    if bid.startswith("adm_") or bid.startswith("pg_") or bid.startswith("backup_"):
+        return False
+    if bid.startswith("bc_"):
+        return False
+    if bid in {
+        "admin",
+        "reseller_apply",
+        "reseller_creds",
+        "plan_res_fixed",
+        "plan_res_payg",
+        "miniapp",  # platform WebApp only
+    }:
+        return False
+    return True
+
+
+def allowed_style_setting_keys(*, for_reseller: bool = False) -> set[str]:
+    """btn_style_* keys a role may persist — blocks admin-key smuggling into ResellerSetting."""
+    if not for_reseller:
+        return {f"btn_style_{item['id']}" for item in BUTTON_STYLE_CATALOG}
+    return {
+        f"btn_style_{item['id']}"
+        for item in BUTTON_STYLE_CATALOG
+        if catalog_item_allowed_for_reseller(item)
+    }
+
+
 def grouped_catalog(*, for_reseller: bool = False) -> list[tuple[str, list[dict[str, str]]]]:
     """Preserve catalog order; group consecutive items by ``group``."""
-    skip_groups = (
-        {
-            "منوی ادمین",
-            "پلن نمایندگی",
-            "پاسارگارد",
-            "تنظیمات ادمین",
-            "بکاپ",
-            "پیام همگانی",
-            "باشگاه ادمین",
-        }
-        if for_reseller
-        else set()
-    )
-    skip_ids: set[str] = set()
-    if for_reseller:
-        skip_ids = {
-            "admin",
-            "reseller_apply",
-            "reseller_creds",
-            "plan_res_fixed",
-            "plan_res_payg",
-        }
-        for item in BUTTON_STYLE_CATALOG:
-            bid = item["id"]
-            if bid.startswith("adm_"):
-                skip_ids.add(bid)
     groups: list[tuple[str, list[dict[str, str]]]] = []
     current_name = ""
     current_items: list[dict[str, str]] = []
     for item in BUTTON_STYLE_CATALOG:
-        if item["group"] in skip_groups or item["id"] in skip_ids:
+        if for_reseller and not catalog_item_allowed_for_reseller(item):
             continue
         g = item["group"]
         if g != current_name:
@@ -336,3 +411,70 @@ def grouped_catalog(*, for_reseller: bool = False) -> list[tuple[str, list[dict[
     if current_items:
         groups.append((current_name, current_items))
     return groups
+
+
+def sectioned_catalog(
+    *, for_reseller: bool = False
+) -> list[tuple[str, str, str, list[tuple[str, list[dict[str, str]]]]]]:
+    """Group catalog into audience sections for the colors settings UI.
+
+    Returns (section_id, title, caption, groups).
+    """
+    flat = grouped_catalog(for_reseller=for_reseller)
+    if for_reseller:
+        return [
+            (
+                "shop",
+                "رنگ‌بندی فروشگاه شما",
+                "فقط دکمه‌های ربات فروشگاهتان — منوی ادمین اینجا نیست.",
+                flat,
+            )
+        ]
+
+    by_name = {name: items for name, items in flat}
+
+    def _pick(names: list[str]) -> list[tuple[str, list[dict[str, str]]]]:
+        out: list[tuple[str, list[dict[str, str]]]] = []
+        for n in names:
+            if n in by_name:
+                out.append((n, by_name[n]))
+        return out
+
+    shared_names = [
+        "دکمه‌های سراسری",
+        "منوی اصلی",
+        "زیرمنوها",
+        "فروشگاه",
+        "پرداخت",
+        "باشگاه مشتریان",
+    ]
+    admin_names = [
+        "پلن نمایندگی",
+        "منوی ادمین",
+        "باشگاه ادمین",
+        "پاسارگارد",
+        "تنظیمات ادمین",
+        "بکاپ",
+        "پیام همگانی",
+    ]
+    reseller_names = ["منوی نماینده", "تنظیمات نماینده"]
+    return [
+        (
+            "shared",
+            "دکمه‌های مشترک کاربر",
+            "منوی اصلی و جریان خرید — برای همه کاربران ربات اصلی.",
+            _pick(shared_names),
+        ),
+        (
+            "admin",
+            "منوی ادمین — ربات اصلی",
+            "فقط دکمه‌های پنل ادمین روی ربات اصلی. با منوی نماینده قاطی نیست.",
+            _pick(admin_names),
+        ),
+        (
+            "reseller",
+            "منوی نماینده — هاب فروشگاه",
+            "دکمه‌های هاب نماینده (و تنظیمات فروشگاه). جدا از منوی ادمین.",
+            _pick(reseller_names),
+        ),
+    ]

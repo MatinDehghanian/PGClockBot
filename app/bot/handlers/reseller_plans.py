@@ -60,11 +60,15 @@ async def _staff_ctx(profile: ResellerProfile) -> dict:
     }
 
 
-def _plans_kb(plans: list[Plan]) -> InlineKeyboardMarkup:
+async def _plans_kb(
+    session: AsyncSession, plans: list[Plan], *, reseller_id: int | None = None
+) -> InlineKeyboardMarkup:
     """Dynamic plan rows only — static «پلن جدید» lives on reply keyboard."""
     from app.bot.keyboards import reseller_plans_list_keyboard
+    from app.services.users import get_all_settings
 
-    return reseller_plans_list_keyboard(plans)
+    ui = await get_all_settings(session, reseller_id=reseller_id)
+    return reseller_plans_list_keyboard(plans, ui)
 
 
 def _plan_item_kb(plan: Plan) -> InlineKeyboardMarkup:
@@ -131,7 +135,7 @@ async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     else:
         text += f"تعداد: {len(plans)}"
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=_plans_kb(plans))
+        await safe_edit_text(callback.message, text, reply_markup=await _plans_kb(session, plans, reseller_id=owner_id))
 
 
 @router.callback_query(F.data == "res:plan:webhint")
@@ -230,7 +234,7 @@ async def res_plan_delete(callback: CallbackQuery, session: AsyncSession, db_use
         await safe_edit_text(
             callback.message,
             "پلن حذف شد.\n💎 <b>پلن‌های فروش</b>",
-            reply_markup=_plans_kb(plans),
+            reply_markup=await _plans_kb(session, plans, reseller_id=owner_id),
         )
 
 
@@ -483,7 +487,7 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
         await safe_edit_text(
             callback.message,
             f"✅ پلن «{plan.name}» ساخته شد.\n" + _plan_text(plan),
-            reply_markup=_plans_kb(plans),
+            reply_markup=await _plans_kb(session, plans, reseller_id=owner_id),
         )
 
 
@@ -547,5 +551,5 @@ async def res_plan_save_tpl(callback: CallbackQuery, state: FSMContext, session:
         await safe_edit_text(
             callback.message,
             f"✅ پلن «{plan.name}» ساخته شد.\n" + _plan_text(plan),
-            reply_markup=_plans_kb(plans),
+            reply_markup=await _plans_kb(session, plans, reseller_id=owner_id),
         )
