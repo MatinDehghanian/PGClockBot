@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "6.1.5": [
+        "نصب اولیه: دکمه ورود به پنل همیشه با http باز می‌شود (قبل از SSL)",
+        "رفع نمایش به‌هم‌ریختهٔ «فایل .env» در هشدار پایان ویزارد نصب",
+    ],
     "6.1.4": [
         "بازگشت به رفتار ویوپورت/فوتر/سایدبار نسخهٔ ۶.۱.۱ (لغو تغییرات ۶.۱.۲ و ۶.۱.۳)",
         "ریستور از نقطهٔ cursor/restore-before-viewport-svh-5b2d",
