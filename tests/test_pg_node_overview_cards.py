@@ -118,11 +118,11 @@ class PgOverviewSurfaceTests(unittest.TestCase):
         self.assertIn(".pg-live-rates", css)
         self.assertIn(".pg-metric-unit", css)
         self.assertIn(".pg-metric-val-rate", css)
-        self.assertIn("direction: rtl", css[css.find(".pg-metric-val-rate") : css.find(".pg-metric-val-rate") + 500])
-        self.assertIn("justify-content: flex-start", css[css.find(".pg-metric-val-rate") : css.find(".pg-metric-val-rate") + 500])
-        # Must NOT force LTR on the whole rate (puts unit at the right edge)
-        rate_block = css[css.find(".pg-metric-val-rate") : css.find(".pg-metric-val-rate") + 900]
-        self.assertNotIn("direction: ltr;\n  unicode-bidi: isolate;\n  text-align: right", rate_block)
+        rate_block = css[css.find(".pg-metric-val-rate") : css.find(".pg-metric-val-rate") + 1200]
+        self.assertIn("flex-direction: row-reverse", rate_block)
+        self.assertIn(".pg-node-metric .pg-metric-val-rate", css)
+        # row-reverse keeps num at the physical right regardless of parent dir
+        self.assertIn("row-reverse", rate_block)
         self.assertIn(".pg-node-meter", css)
         self.assertIn(".pg-node-tabs", css)
         self.assertIn(".pg-node-metric-res", css)
