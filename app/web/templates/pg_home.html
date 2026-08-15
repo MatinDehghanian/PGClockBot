@@ -183,7 +183,10 @@
         </span>
         <span>آپلود زنده</span>
       </div>
-      <strong class="stat-value byte-size" dir="ltr" data-pg-live-up>{{ (live.rate_up_text if live else none) or '—' }}</strong>
+      <strong class="pg-metric-val" dir="ltr" data-pg-live-up>
+        <span class="pg-metric-num" data-pg-live-up-num>{{ (live.rate_up_num if live else none) or '—' }}</span>
+        {% if live and live.rate_up_unit %}<span class="pg-metric-unit" data-pg-live-up-unit>{{ live.rate_up_unit }}</span>{% else %}<span class="pg-metric-unit" data-pg-live-up-unit></span>{% endif %}
+      </strong>
       <small class="muted">مجموع همه نودها</small>
     </article>
     <article class="pg-live-rate">
@@ -193,7 +196,10 @@
         </span>
         <span>دانلود زنده</span>
       </div>
-      <strong class="stat-value byte-size" dir="ltr" data-pg-live-down>{{ (live.rate_down_text if live else none) or '—' }}</strong>
+      <strong class="pg-metric-val" dir="ltr" data-pg-live-down>
+        <span class="pg-metric-num" data-pg-live-down-num>{{ (live.rate_down_num if live else none) or '—' }}</span>
+        {% if live and live.rate_down_unit %}<span class="pg-metric-unit" data-pg-live-down-unit>{{ live.rate_down_unit }}</span>{% else %}<span class="pg-metric-unit" data-pg-live-down-unit></span>{% endif %}
+      </strong>
       <small class="muted">مجموع همه نودها</small>
     </article>
   </div>
@@ -272,73 +278,106 @@
       {% endfor %}
     </div>
   </section>
-</div>
 
 {% if is_admin %}
-<section class="home-panel pg-node-board" aria-label="نودها">
-  <div class="home-panel-head">
-    <div class="home-panel-title">
-      <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
-      <h2 class="home-panel-h">نودها</h2>
+  <section class="home-panel home-panel-pg pg-node-board" aria-label="نودها">
+    <div class="home-panel-head">
+      <div class="home-panel-title">
+        <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
+        <h2 class="home-panel-h">نودها</h2>
+      </div>
     </div>
-  </div>
-  {% if not ov_nodes %}
-  <p class="muted pg-node-board-empty">نودی نیست.</p>
-  {% else %}
-  <div class="pg-node-grid" data-pg-node-grid>
-    {% for n in ov_nodes %}
-    <article class="pg-node-tile" data-pg-node-tile data-node-id="{{ n.get('id') if n.get('id') is not none else '' }}">
-      <div class="pg-node-tile-head">
-        <div class="pg-node-tile-title">
-          <strong class="pg-node-name">{{ n.get('name') or '—' }}</strong>
-          {% if n.get('id') is not none %}
-          <span class="muted mono pg-node-id" dir="ltr">#{{ n.get('id') }}</span>
-          {% endif %}
+    {% if not ov_nodes %}
+    <p class="muted pg-node-board-empty">نودی نیست.</p>
+    {% else %}
+    <div class="pg-node-grid" data-pg-node-grid>
+      {% for n in ov_nodes %}
+      {% set cpu_p = n.get('cpu_percent') if n.get('cpu_percent') is not none else 0 %}
+      {% set mem_p = n.get('mem_percent') if n.get('mem_percent') is not none else 0 %}
+      {% set tup = n.get('traffic_up') or {} %}
+      {% set tdn = n.get('traffic_down') or {} %}
+      {% set rup = n.get('rate_up_parts') or {} %}
+      {% set rdn = n.get('rate_down_parts') or {} %}
+      <article class="pg-node-tile" data-pg-node-tile data-node-id="{{ n.get('id') if n.get('id') is not none else '' }}">
+        <div class="pg-node-tile-head">
+          <div class="pg-node-tile-title">
+            <strong class="pg-node-name">{{ n.get('name') or '—' }}</strong>
+            {% if n.get('id') is not none %}
+            <span class="muted mono pg-node-id" dir="ltr">#{{ n.get('id') }}</span>
+            {% endif %}
+          </div>
+          {% set sk = (n.get('status_kind') or 'neutral') %}
+          <span class="badge {% if sk == 'ok' %}connected{% elif sk == 'warn' %}connecting{% elif sk == 'err' %}danger{% else %}neutral{% endif %}" data-pg-node-status>
+            {{ n.get('status') or '—' }}
+          </span>
         </div>
-        {% set sk = (n.get('status_kind') or 'neutral') %}
-        <span class="badge {% if sk == 'ok' %}connected{% elif sk == 'warn' %}connecting{% elif sk == 'err' %}danger{% else %}neutral{% endif %}" data-pg-node-status>
-          {{ n.get('status') or '—' }}
-        </span>
-      </div>
-      <div class="pg-node-metrics">
-        <div class="pg-node-metric">
-          <span>پردازنده</span>
-          <strong class="stat-value" dir="ltr" data-pg-node-cpu>{{ n.get('cpu_text') or '—' }}</strong>
+        <div class="pg-node-metrics">
+          <div class="pg-node-metric pg-node-metric-span">
+            <div class="pg-node-metric-head">
+              <span>پردازنده</span>
+              <span class="muted pg-node-metric-meta" data-pg-node-cpu-meta>{% if n.get('cpu_cores_text') %}{{ n.get('cpu_cores_text') }}{% endif %}</span>
+            </div>
+            <div class="pg-node-meter pg-node-meter-{{ n.get('cpu_tone') or 'neutral' }}" style="--p: {{ cpu_p }}" data-pg-node-cpu-meter>
+              <div class="pg-node-meter-track" aria-hidden="true"><i class="pg-node-meter-fill"></i></div>
+              <span class="pg-node-meter-pct" dir="ltr" data-pg-node-cpu>{{ n.get('cpu_text') or '—' }}</span>
+            </div>
+          </div>
+          <div class="pg-node-metric pg-node-metric-span">
+            <div class="pg-node-metric-head">
+              <span>حافظه</span>
+              <span class="muted pg-node-metric-meta num-ratio" data-pg-node-mem-meta>{% if n.get('mem_ratio_text') and n.get('mem_ratio_text') != '—' %}{{ n.get('mem_ratio_text') }}{% endif %}</span>
+            </div>
+            <div class="pg-node-meter pg-node-meter-{{ n.get('mem_tone') or 'neutral' }}" style="--p: {{ mem_p }}" data-pg-node-mem-meter>
+              <div class="pg-node-meter-track" aria-hidden="true"><i class="pg-node-meter-fill"></i></div>
+              <span class="pg-node-meter-pct" dir="ltr" data-pg-node-mem>{{ n.get('mem_text') or '—' }}</span>
+            </div>
+          </div>
+          <div class="pg-node-metric">
+            <span>آپلود</span>
+            <strong class="pg-metric-val" dir="ltr" data-pg-node-up>
+              <span class="pg-metric-num" data-pg-node-up-num>{{ tup.get('num') or '—' }}</span>
+              <span class="pg-metric-unit" data-pg-node-up-unit>{{ tup.get('unit') or '' }}</span>
+            </strong>
+          </div>
+          <div class="pg-node-metric">
+            <span>دانلود</span>
+            <strong class="pg-metric-val" dir="ltr" data-pg-node-down>
+              <span class="pg-metric-num" data-pg-node-down-num>{{ tdn.get('num') or '—' }}</span>
+              <span class="pg-metric-unit" data-pg-node-down-unit>{{ tdn.get('unit') or '' }}</span>
+            </strong>
+          </div>
+          <div class="pg-node-metric">
+            <span>نرخ آپلود</span>
+            <strong class="pg-metric-val" dir="ltr" data-pg-node-rate-up>
+              <span class="pg-metric-num" data-pg-node-rate-up-num>{{ rup.get('num') or '—' }}</span>
+              <span class="pg-metric-unit" data-pg-node-rate-up-unit>{{ rup.get('unit') or '' }}</span>
+            </strong>
+          </div>
+          <div class="pg-node-metric">
+            <span>نرخ دانلود</span>
+            <strong class="pg-metric-val" dir="ltr" data-pg-node-rate-down>
+              <span class="pg-metric-num" data-pg-node-rate-down-num>{{ rdn.get('num') or '—' }}</span>
+              <span class="pg-metric-unit" data-pg-node-rate-down-unit>{{ rdn.get('unit') or '' }}</span>
+            </strong>
+          </div>
         </div>
-        <div class="pg-node-metric">
-          <span>حافظه</span>
-          <strong class="stat-value" dir="ltr" data-pg-node-mem>{{ n.get('mem_text') or '—' }}</strong>
-          <small class="muted num-ratio" data-pg-node-mem-hint>{% if n.get('mem_ratio_text') and n.get('mem_ratio_text') != '—' %}{{ n.get('mem_ratio_text') }}{% endif %}</small>
-        </div>
-        <div class="pg-node-metric">
-          <span>آپلود</span>
-          <strong class="stat-value byte-size" dir="ltr" data-pg-node-up>{{ n.get('traffic_up_text') or '—' }}</strong>
-        </div>
-        <div class="pg-node-metric">
-          <span>دانلود</span>
-          <strong class="stat-value byte-size" dir="ltr" data-pg-node-down>{{ n.get('traffic_down_text') or '—' }}</strong>
-        </div>
-        <div class="pg-node-metric">
-          <span>نرخ آپلود</span>
-          <strong class="stat-value byte-size" dir="ltr" data-pg-node-rate-up>{{ n.get('rate_up_text') or '—' }}</strong>
-        </div>
-        <div class="pg-node-metric">
-          <span>نرخ دانلود</span>
-          <strong class="stat-value byte-size" dir="ltr" data-pg-node-rate-down>{{ n.get('rate_down_text') or '—' }}</strong>
-        </div>
-      </div>
-    </article>
-    {% endfor %}
-  </div>
-  {% endif %}
-</section>
+      </article>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+{% endif %}
+</div>
+{% if is_admin %}
 <script>
 (function () {
   var liveRoot = document.querySelector('[data-pg-nodes-live][data-metrics-url]');
   var hostRoot = document.querySelector('[data-host-gauges]');
   var url = (liveRoot && liveRoot.getAttribute('data-metrics-url')) || '/pg/metrics';
-  var liveUp = document.querySelector('[data-pg-live-up]');
-  var liveDown = document.querySelector('[data-pg-live-down]');
+  var liveUpNum = document.querySelector('[data-pg-live-up-num]');
+  var liveUpUnit = document.querySelector('[data-pg-live-up-unit]');
+  var liveDownNum = document.querySelector('[data-pg-live-down-num]');
+  var liveDownUnit = document.querySelector('[data-pg-live-down-unit]');
   var grid = document.querySelector('[data-pg-node-grid]');
   var cpuEl = hostRoot && hostRoot.querySelector('[data-host-cpu-val]');
   var memEl = hostRoot && hostRoot.querySelector('[data-host-mem-val]');
@@ -356,7 +395,20 @@
     if (n == null || isNaN(n)) return '—';
     return Math.round(n) + '٪';
   }
-
+  function setParts(numEl, unitEl, parts) {
+    var p = parts || {};
+    if (numEl) numEl.textContent = (p.num != null && p.num !== '') ? p.num : '—';
+    if (unitEl) unitEl.textContent = p.unit || '';
+  }
+  function setMeter(tile, kind, pct, text, tone) {
+    var box = tile.querySelector('[data-pg-node-' + kind + '-meter]');
+    if (!box) return;
+    var p = (pct == null || isNaN(pct)) ? 0 : Math.max(0, Math.min(100, Number(pct)));
+    box.style.setProperty('--p', String(p));
+    box.className = 'pg-node-meter pg-node-meter-' + (tone || 'neutral');
+    var pctEl = box.querySelector('[data-pg-node-' + kind + ']');
+    if (pctEl) pctEl.textContent = text || '—';
+  }
   function badgeClass(kind) {
     if (kind === 'ok') return 'badge connected';
     if (kind === 'warn') return 'badge connecting';
@@ -370,17 +422,16 @@
       st.textContent = n.status || '—';
       st.className = badgeClass(n.status_kind || 'neutral');
     }
-    var set = function (sel, val) {
-      var el = tile.querySelector(sel);
-      if (el && val != null) el.textContent = val;
-    };
-    set('[data-pg-node-cpu]', n.cpu_text);
-    set('[data-pg-node-mem]', n.mem_text);
-    set('[data-pg-node-mem-hint]', n.mem_ratio_text && n.mem_ratio_text !== '—' ? n.mem_ratio_text : '');
-    set('[data-pg-node-up]', n.traffic_up_text);
-    set('[data-pg-node-down]', n.traffic_down_text);
-    set('[data-pg-node-rate-up]', n.rate_up_text);
-    set('[data-pg-node-rate-down]', n.rate_down_text);
+    var cpuMeta = tile.querySelector('[data-pg-node-cpu-meta]');
+    if (cpuMeta) cpuMeta.textContent = n.cpu_cores_text || '';
+    var memMeta = tile.querySelector('[data-pg-node-mem-meta]');
+    if (memMeta) memMeta.textContent = (n.mem_ratio_text && n.mem_ratio_text !== '—') ? n.mem_ratio_text : '';
+    setMeter(tile, 'cpu', n.cpu_percent, n.cpu_text, n.cpu_tone);
+    setMeter(tile, 'mem', n.mem_percent, n.mem_text, n.mem_tone);
+    setParts(tile.querySelector('[data-pg-node-up-num]'), tile.querySelector('[data-pg-node-up-unit]'), n.traffic_up);
+    setParts(tile.querySelector('[data-pg-node-down-num]'), tile.querySelector('[data-pg-node-down-unit]'), n.traffic_down);
+    setParts(tile.querySelector('[data-pg-node-rate-up-num]'), tile.querySelector('[data-pg-node-rate-up-unit]'), n.rate_up_parts);
+    setParts(tile.querySelector('[data-pg-node-rate-down-num]'), tile.querySelector('[data-pg-node-rate-down-unit]'), n.rate_down_parts);
   }
   async function tickNodes() {
     if (document.hidden) return;
@@ -403,8 +454,10 @@
       setGauge(cpuGauge, d.cpu_percent, d.cpu_tone);
       setGauge(memGauge, d.memory_percent, d.mem_tone);
       if (d.live) {
-        if (liveUp && d.live.rate_up_text) liveUp.textContent = d.live.rate_up_text;
-        if (liveDown && d.live.rate_down_text) liveDown.textContent = d.live.rate_down_text;
+        if (liveUpNum) liveUpNum.textContent = d.live.rate_up_num || '—';
+        if (liveUpUnit) liveUpUnit.textContent = d.live.rate_up_unit || '';
+        if (liveDownNum) liveDownNum.textContent = d.live.rate_down_num || '—';
+        if (liveDownUnit) liveDownUnit.textContent = d.live.rate_down_unit || '';
       }
       if (grid && Array.isArray(d.nodes)) {
         d.nodes.forEach(function (n) {
@@ -422,6 +475,7 @@
   });
 })();
 </script>
+
 {% endif %}
 {% endif %}
 {% endblock %}

@@ -10,11 +10,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class FormatBytesRateTests(unittest.TestCase):
     def test_rate_suffix(self):
-        from app.services.formatting import format_bytes_rate
+        from app.services.formatting import format_bytes_rate, format_bytes_rate_parts
 
         self.assertEqual(format_bytes_rate(None), "—")
         self.assertIn("/ثانیه", format_bytes_rate(1024))
         self.assertNotEqual(format_bytes_rate(0), "نامحدود")
+        num, unit = format_bytes_rate_parts(1024)
+        self.assertEqual(num, "1")
+        self.assertEqual(unit, "کیلوبایت/ثانیه")
+        self.assertEqual(format_bytes_rate_parts(None), ("—", ""))
 
 
 class NodeOverviewBuilderTests(unittest.TestCase):
@@ -47,21 +51,28 @@ class NodeOverviewBuilderTests(unittest.TestCase):
         self.assertEqual(len(ov["nodes"]), 2)
         n1 = ov["nodes"][0]
         self.assertEqual(n1["cpu_percent"], 41.2)
+        self.assertEqual(n1["cpu_cores_text"], "4 هسته")
         self.assertAlmostEqual(n1["mem_percent"], 25.0, places=0)
         self.assertEqual(n1["status_kind"], "ok")
         self.assertEqual(ov["live"]["rate_up"], 242)
         self.assertEqual(ov["live"]["rate_down"], 121)
         self.assertIn("/ثانیه", ov["live"]["rate_up_text"])
+        self.assertTrue(ov["live"]["rate_up_num"])
+        self.assertIn("/ثانیه", ov["live"]["rate_up_unit"])
+        self.assertEqual(n1["rate_up_parts"]["num"], ov["nodes"][0]["rate_up_parts"]["num"])
 
         payload = nodes_overview_json(ov)
         self.assertIn("live", payload)
         self.assertIn("nodes", payload)
+        self.assertIn("rate_up_num", payload["live"])
+        self.assertIn("rate_up_parts", payload["nodes"][0])
+        self.assertIn("cpu_cores_text", payload["nodes"][0])
         # No raw secrets / unrelated keys
         dumped = str(payload)
         self.assertNotIn("server_ca", dumped)
         self.assertNotIn("api_key", dumped)
         self.assertNotIn("mem_used", dumped)  # absolute bytes not in poll JSON
-        self.assertEqual(payload["nodes"][0]["traffic_up_text"], n1["traffic_up_text"])
+        self.assertEqual(payload["nodes"][0]["traffic_up"]["num"], n1["traffic_up"]["num"])
 
     def test_missing_realtime_shows_dashes(self):
         from app.services.node_traffic import build_nodes_overview
@@ -71,6 +82,7 @@ class NodeOverviewBuilderTests(unittest.TestCase):
         self.assertEqual(card["cpu_text"], "—")
         self.assertEqual(card["mem_text"], "—")
         self.assertEqual(card["rate_up_text"], "—")
+        self.assertEqual(card["rate_up_parts"]["num"], "—")
         self.assertEqual(card["status_kind"], "err")
         self.assertIsNone(ov["live"]["rate_up"])
 
@@ -88,15 +100,22 @@ class PgOverviewSurfaceTests(unittest.TestCase):
     def test_pg_home_has_node_tiles_not_simple_table(self):
         pg = (ROOT / "app/web/templates/pg_home.html").read_text(encoding="utf-8")
         self.assertIn("pg-node-tile", pg)
-        self.assertIn("data-pg-live-up", pg)
+        self.assertIn("data-pg-live-up-num", pg)
+        self.assertIn("pg-metric-unit", pg)
+        self.assertIn("pg-node-meter", pg)
         self.assertIn("data-pg-node-grid", pg)
         self.assertNotIn("table-compact", pg)
         self.assertIn("/pg/metrics", pg)
+        # Node board shares home-panels width with stats
+        self.assertIn("home-panel-pg pg-node-board", pg)
 
     def test_css_node_board(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".pg-node-tile", css)
         self.assertIn(".pg-live-rates", css)
+        self.assertIn(".pg-metric-unit", css)
+        self.assertIn(".pg-node-meter", css)
+        self.assertIn(".pg-node-metric-span", css)
 
     def test_metrics_route_fetches_nodes_and_owner_guard(self):
         src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
