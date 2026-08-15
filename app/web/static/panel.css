@@ -7668,10 +7668,11 @@ html[data-theme="light"] .sk-bone::after {
   margin: 0 0 calc(var(--space-2) - var(--section-gap));
   min-width: 0;
 }
-/* Keep full section-gap from the card ABOVE (do not pull toward previous box) */
+/* Extra top gap beyond form section-gap — clearer boundary from previous card
+   (same idea as .edit-section / .edit-section-sub / .card-subhead space-3 rhythm) */
 .settings-card + .btn-color-section-head,
 .card + .btn-color-section-head {
-  margin-top: 0;
+  margin-top: var(--space-2);
 }
 .btn-color-section-head > h2 {
   margin: 0;
