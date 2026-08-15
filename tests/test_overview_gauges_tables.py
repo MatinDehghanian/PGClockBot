@@ -90,10 +90,13 @@ class OverviewSurfaceTests(unittest.TestCase):
         # Title↔caption unit matches .card (flex gap space-2 + pull space-1)
         self.assertIn("gap: var(--space-2)", chunk)
         self.assertIn("margin-top: calc(-1 * var(--space-1))", chunk)
-        # Closer to cards BELOW than to the previous card ABOVE
-        # (form gap is section-gap; pull down with negative margin-bottom)
+        # Closer to cards BELOW; extra space-2 above form gap for clearer boundary
         self.assertIn("calc(var(--space-2) - var(--section-gap))", chunk)
         self.assertIn("margin: 0 0 calc(var(--space-2) - var(--section-gap))", chunk)
+        self.assertIn(
+            ".settings-card + .btn-color-section-head,\n.card + .btn-color-section-head {\n  margin-top: var(--space-2);",
+            css,
+        )
 
     def test_table_col_id_css_and_headers(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
