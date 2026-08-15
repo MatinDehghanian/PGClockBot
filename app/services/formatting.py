@@ -73,34 +73,55 @@ def format_bytes(num: int | float | None, *, precision: int | None = None) -> st
     unit renders on the visual left of the number run — do not wrap the whole
     string in dir=ltr.
     """
+    amount, unit = format_bytes_parts(num, precision=precision)
+    if not unit:
+        return amount
+    return f"{amount} {unit}"
+
+
+def format_bytes_parts(
+    num: int | float | None, *, precision: int | None = None
+) -> tuple[str, str]:
+    """Split size into ``(amount, unit)`` for large-number / small-unit UI.
+
+    ``None`` → («نامحدود», «»). Invalid → («—», «»).
+    """
     if num is None:
-        return "نامحدود"
+        return "نامحدود", ""
     try:
         n = float(num)
     except (TypeError, ValueError):
-        return "—"
+        return "—", ""
     if n < 0:
         n = abs(n)
     div, label = _pick_byte_unit(n)
     if div == 1.0:
-        return f"{int(round(n))} {label}"
-    return f"{_fmt_unit_amount(n / div, precision=precision)} {label}"
+        return f"{int(round(n))}", label
+    return _fmt_unit_amount(n / div, precision=precision), label
 
 
 def format_bytes_rate(num: int | float | None, *, precision: int | None = None) -> str:
     """Throughput label: «۱۰ مگ/ثانیه». Missing/invalid → «—» (not «نامحدود»)."""
+    amount, unit = format_bytes_rate_parts(num, precision=precision)
+    if not unit:
+        return amount
+    return f"{amount} {unit}"
+
+
+def format_bytes_rate_parts(
+    num: int | float | None, *, precision: int | None = None
+) -> tuple[str, str]:
+    """Split rate into ``(amount, «مگ/ثانیه»)`` for display hierarchy."""
     if num is None:
-        return "—"
+        return "—", ""
     try:
-        n = float(num)
+        float(num)
     except (TypeError, ValueError):
-        return "—"
-    if n < 0:
-        n = abs(n)
-    size = format_bytes(n, precision=precision)
-    if size in {"نامحدود", "—"}:
-        return "—"
-    return f"{size}/ثانیه"
+        return "—", ""
+    amount, unit = format_bytes_parts(num, precision=precision)
+    if amount in {"نامحدود", "—"} or not unit:
+        return "—", ""
+    return amount, f"{unit}/ثانیه"
 
 
 def format_bytes_ratio(

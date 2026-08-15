@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services.formatting import format_bytes, format_bytes_rate
+from app.services.formatting import format_bytes, format_bytes_parts, format_bytes_rate, format_bytes_rate_parts
 from app.services.host_gauges import tone_class
 from app.services.host_metrics import format_memory_ratio
 from app.services.pasarguard import as_list
@@ -204,15 +204,30 @@ def enrich_nodes_with_traffic(nodes: list | None, realtime: Any = None) -> list[
         n["_traffic_up"] = uplink
         n["_traffic_down"] = downlink
         n["_traffic_total"] = total
+        up_amt, up_unit = format_bytes_parts(uplink) if uplink is not None else ("—", "")
+        down_amt, down_unit = (
+            format_bytes_parts(downlink) if downlink is not None else ("—", "")
+        )
+        tot_amt, tot_unit = format_bytes_parts(total) if total is not None else ("—", "")
+        n["_traffic_up_num"], n["_traffic_up_unit"] = up_amt, up_unit
+        n["_traffic_down_num"], n["_traffic_down_unit"] = down_amt, down_unit
+        n["_traffic_total_num"], n["_traffic_total_unit"] = tot_amt, tot_unit
         n["_traffic_up_text"] = format_bytes(uplink) if uplink is not None else "—"
         n["_traffic_down_text"] = format_bytes(downlink) if downlink is not None else "—"
         n["_traffic_total_text"] = format_bytes(total) if total is not None else "—"
         n["_rate_up"] = rate_up
         n["_rate_down"] = rate_down
+        rate_up_amt, rate_up_unit = format_bytes_rate_parts(rate_up)
+        rate_down_amt, rate_down_unit = format_bytes_rate_parts(rate_down)
+        n["_rate_up_num"], n["_rate_up_unit"] = rate_up_amt, rate_up_unit
+        n["_rate_down_num"], n["_rate_down_unit"] = rate_down_amt, rate_down_unit
         n["_rate_up_text"] = format_bytes_rate(rate_up)
         n["_rate_down_text"] = format_bytes_rate(rate_down)
         n["_cpu_percent"] = cpu
         n["_cpu_cores"] = cpu_cores if isinstance(cpu_cores, int) and cpu_cores > 0 else None
+        n["_cpu_cores_text"] = (
+            f"{n['_cpu_cores']} هسته" if n["_cpu_cores"] is not None else ""
+        )
         n["_cpu_text"] = _fmt_pct(cpu)
         n["_cpu_tone"] = tone_class(cpu)
         n["_mem_percent"] = mem_pct
@@ -239,6 +254,10 @@ def _sum_optional(values: list[int | None]) -> int | None:
     return sum(present)
 
 
+def _metric_parts(amount: str, unit: str) -> dict[str, str]:
+    return {"num": amount or "—", "unit": unit or ""}
+
+
 def node_overview_card(node: dict) -> dict[str, Any]:
     """Lean, sanitized card payload for PG overview SSR + /pg/metrics poll."""
     try:
@@ -249,6 +268,18 @@ def node_overview_card(node: dict) -> dict[str, Any]:
     # Cap name length for JSON surface (display only)
     if len(name) > 80:
         name = name[:77] + "…"
+    rate_up_parts = _metric_parts(
+        str(node.get("_rate_up_num") or "—"), str(node.get("_rate_up_unit") or "")
+    )
+    rate_down_parts = _metric_parts(
+        str(node.get("_rate_down_num") or "—"), str(node.get("_rate_down_unit") or "")
+    )
+    traffic_up_parts = _metric_parts(
+        str(node.get("_traffic_up_num") or "—"), str(node.get("_traffic_up_unit") or "")
+    )
+    traffic_down_parts = _metric_parts(
+        str(node.get("_traffic_down_num") or "—"), str(node.get("_traffic_down_unit") or "")
+    )
     return {
         "id": nid,
         "name": name,
@@ -257,16 +288,21 @@ def node_overview_card(node: dict) -> dict[str, Any]:
         "cpu_percent": node.get("_cpu_percent"),
         "cpu_text": node.get("_cpu_text") or "—",
         "cpu_tone": node.get("_cpu_tone") or "neutral",
+        "cpu_cores_text": node.get("_cpu_cores_text") or "",
         "mem_percent": node.get("_mem_percent"),
         "mem_text": node.get("_mem_text") or "—",
         "mem_ratio_text": node.get("_mem_ratio_text") or "—",
         "mem_tone": node.get("_mem_tone") or "neutral",
         "traffic_up_text": node.get("_traffic_up_text") or "—",
         "traffic_down_text": node.get("_traffic_down_text") or "—",
+        "traffic_up": traffic_up_parts,
+        "traffic_down": traffic_down_parts,
         "rate_up": node.get("_rate_up"),
         "rate_down": node.get("_rate_down"),
         "rate_up_text": node.get("_rate_up_text") or "—",
         "rate_down_text": node.get("_rate_down_text") or "—",
+        "rate_up_parts": rate_up_parts,
+        "rate_down_parts": rate_down_parts,
     }
 
 
@@ -276,6 +312,8 @@ def build_nodes_overview(nodes: list | None, realtime: Any = None) -> dict[str, 
     cards = [node_overview_card(n) for n in enriched]
     rate_up = _sum_optional([n.get("_rate_up") for n in enriched])
     rate_down = _sum_optional([n.get("_rate_down") for n in enriched])
+    up_num, up_unit = format_bytes_rate_parts(rate_up)
+    down_num, down_unit = format_bytes_rate_parts(rate_down)
     return {
         "nodes": cards,
         "live": {
@@ -283,6 +321,10 @@ def build_nodes_overview(nodes: list | None, realtime: Any = None) -> dict[str, 
             "rate_down": rate_down,
             "rate_up_text": format_bytes_rate(rate_up),
             "rate_down_text": format_bytes_rate(rate_down),
+            "rate_up_num": up_num,
+            "rate_up_unit": up_unit,
+            "rate_down_num": down_num,
+            "rate_down_unit": down_unit,
         },
     }
 
@@ -303,20 +345,23 @@ def nodes_overview_json(overview: dict[str, Any]) -> dict[str, Any]:
                 "cpu_percent": card.get("cpu_percent"),
                 "cpu_text": card.get("cpu_text"),
                 "cpu_tone": card.get("cpu_tone"),
+                "cpu_cores_text": card.get("cpu_cores_text") or "",
                 "mem_percent": card.get("mem_percent"),
                 "mem_text": card.get("mem_text"),
                 "mem_ratio_text": card.get("mem_ratio_text"),
                 "mem_tone": card.get("mem_tone"),
-                "traffic_up_text": card.get("traffic_up_text"),
-                "traffic_down_text": card.get("traffic_down_text"),
-                "rate_up_text": card.get("rate_up_text"),
-                "rate_down_text": card.get("rate_down_text"),
+                "traffic_up": card.get("traffic_up") or {"num": "—", "unit": ""},
+                "traffic_down": card.get("traffic_down") or {"num": "—", "unit": ""},
+                "rate_up_parts": card.get("rate_up_parts") or {"num": "—", "unit": ""},
+                "rate_down_parts": card.get("rate_down_parts") or {"num": "—", "unit": ""},
             }
         )
     return {
         "live": {
-            "rate_up_text": live.get("rate_up_text") or "—",
-            "rate_down_text": live.get("rate_down_text") or "—",
+            "rate_up_num": live.get("rate_up_num") or "—",
+            "rate_up_unit": live.get("rate_up_unit") or "",
+            "rate_down_num": live.get("rate_down_num") or "—",
+            "rate_down_unit": live.get("rate_down_unit") or "",
         },
         "nodes": nodes_out,
     }
