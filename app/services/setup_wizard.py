@@ -605,7 +605,33 @@ def default_http_panel_url(*, web_port: int | str | None = None) -> str:
 
 def setup_finish_login_url() -> str:
     """Login URL after wizard — always HTTP+IP until HTTPS is live."""
-    return default_http_panel_url().rstrip("/") + "/login"
+    return default_http_panel_url().rstrip("/") + "/login?restarting=1"
+
+
+def force_http_login_url(url: str) -> str:
+    """Normalize a wizard finish target to http://…/login (no https)."""
+    raw = (url or "").strip()
+    if not raw:
+        return setup_finish_login_url()
+    try:
+        from urllib.parse import urlparse, urlunparse
+
+        p = urlparse(raw)
+        if p.scheme.lower() == "https":
+            p = p._replace(scheme="http")
+        elif not p.scheme:
+            return setup_finish_login_url()
+        if p.scheme.lower() != "http":
+            return setup_finish_login_url()
+        path = p.path or "/login"
+        if not path.rstrip("/").endswith("/login"):
+            path = path.rstrip("/") + "/login"
+        q = p.query
+        if "restarting=" not in q:
+            q = (q + "&" if q else "") + "restarting=1"
+        return urlunparse((p.scheme, p.netloc, path, "", q, ""))
+    except Exception:
+        return setup_finish_login_url()
 
 
 def panel_url_hint(public_base: str = "", web_port: str = "9000") -> str:

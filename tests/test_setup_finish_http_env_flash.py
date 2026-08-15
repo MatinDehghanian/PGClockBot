@@ -1,0 +1,59 @@
+"""Setup finish: HTTP login + readable .env flash copy."""
+
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class SetupFinishHttpTests(unittest.TestCase):
+    def test_finish_login_url_is_http_with_restarting(self):
+        from app.services.setup_wizard import setup_finish_login_url
+
+        with patch("app.services.setup_wizard.detect_server_ip", return_value="91.107.149.20"), patch(
+            "app.config.get_settings"
+        ) as gs:
+            gs.return_value.web_port = 9000
+            url = setup_finish_login_url()
+        self.assertTrue(url.startswith("http://"), url)
+        self.assertNotIn("https://", url)
+        self.assertIn("/login", url)
+        self.assertIn("restarting=1", url)
+
+    def test_force_http_strips_https(self):
+        from app.services.setup_wizard import force_http_login_url
+
+        with patch("app.services.setup_wizard.detect_server_ip", return_value="10.0.0.2"), patch(
+            "app.config.get_settings"
+        ) as gs:
+            gs.return_value.web_port = 9000
+            out = force_http_login_url("https://evil.example/login")
+        self.assertTrue(out.startswith("http://"), out)
+        self.assertNotIn("https://", out)
+        self.assertIn("evil.example", out)
+
+    def test_template_wraps_flash_and_forces_http_nav(self):
+        html = (ROOT / "app/web/templates/setup.html").read_text(encoding="utf-8")
+        self.assertIn('class="flash-copy"', html)
+        self.assertIn('class="env-fname" dir="ltr"', html)
+        self.assertIn("setup-finish-form", html)
+        self.assertIn("window.location.replace", html)
+        self.assertIn("base.protocol = 'http:'", html)
+        self.assertIn("finish_login_url", html)
+
+    def test_css_isolates_env_fname(self):
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn("code.env-fname", css)
+        self.assertIn("unicode-bidi: isolate", css)
+
+    def test_setup_page_passes_finish_login_url(self):
+        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        self.assertIn('"finish_login_url": setup_finish_login_url()', src)
+        self.assertIn("force_http_login_url", src)
+
+
+if __name__ == "__main__":
+    unittest.main()

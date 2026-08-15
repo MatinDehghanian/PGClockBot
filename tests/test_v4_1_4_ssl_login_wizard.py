@@ -48,7 +48,7 @@ class WizardFinishUrlTests(unittest.TestCase):
         ) as gs:
             gs.return_value.web_port = 9000
             url = setup_finish_login_url()
-        self.assertEqual(url, "http://203.0.113.10:9000/login")
+        self.assertEqual(url, "http://203.0.113.10:9000/login?restarting=1")
 
     def test_wizard_panel_url_is_http_ip(self):
         from app.services.setup_wizard import wizard_panel_url_hint

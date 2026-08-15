@@ -126,10 +126,13 @@
         </div>
       </div>
       <div class="flash warn">
-        فایل <code>.env</code> را امن نگه دارید. با زدن دکمه زیر، پنل و ربات به‌صورت خودکار ری‌استارت می‌شوند.
+        <div class="flash-copy">
+          فایل <code class="env-fname" dir="ltr">.env</code> را امن نگه دارید. با زدن دکمه زیر، پنل و ربات به‌صورت خودکار ری‌استارت می‌شوند.
+        </div>
       </div>
-      <form method="post" action="/setup/finish">
-        <button class="btn" type="submit" style="width:100%">ورود به پنل</button>
+      <form method="post" action="/setup/finish" id="setup-finish-form">
+        <input type="hidden" name="next" id="setup-finish-next" value="{{ finish_login_url }}" />
+        <button class="btn" type="submit" style="width:100%" id="setup-enter-panel">ورود به پنل</button>
       </form>
     </div>
 
@@ -324,6 +327,44 @@
       }
     });
   });
+
+  /* Finish → navigate with the displayed HTTP panel URL (SSL not ready yet). */
+  const finishForm = document.getElementById('setup-finish-form');
+  if (finishForm) {
+    finishForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const btn = document.getElementById('setup-enter-panel');
+      if (btn) btn.disabled = true;
+      const panelEl = document.getElementById('panel-url');
+      const shown = (panelEl && panelEl.textContent || '').trim();
+      let loginUrl = '';
+      try {
+        const base = new URL(shown || '{{ finish_login_url }}');
+        base.protocol = 'http:';
+        if (!/\/login\/?$/i.test(base.pathname)) {
+          base.pathname = (base.pathname.replace(/\/?$/, '/') + 'login').replace(/\/{2,}/g, '/');
+        }
+        base.search = 'restarting=1';
+        base.hash = '';
+        loginUrl = base.href;
+      } catch (_) {
+        loginUrl = '{{ finish_login_url }}';
+      }
+      const next = document.getElementById('setup-finish-next');
+      if (next) next.value = loginUrl;
+      const body = new URLSearchParams();
+      body.set('next', loginUrl);
+      fetch(finishForm.action, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+        redirect: 'manual',
+      }).catch(function () {}).finally(function () {
+        window.location.replace(loginUrl);
+      });
+    });
+  }
 
   showStep(step);
 })();

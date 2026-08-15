@@ -2240,6 +2240,16 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   width: 100%;
   margin: 0;
 }
+/* Keep ".env" as one LTR token inside RTL flash copy (flex must not split it) */
+.flash-copy code.env-fname,
+code.env-fname {
+  unicode-bidi: isolate;
+  direction: ltr;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  padding: 0 0.2em;
+}
 /* Auth/form error blocks only — never override compact .badge chips */
 .error:not(.badge) {
   background: rgba(239, 68, 68, 0.1);
