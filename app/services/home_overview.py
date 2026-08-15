@@ -23,8 +23,6 @@ from app.db.models import (
 from app.services.pasarguard import get_pg
 from app.services.setup_wizard import current_setup_values
 
-# host_metrics imported only by legacy helpers / tests via host_gauges
-
 _TEHRAN = ZoneInfo("Asia/Tehran")
 
 _ERR_NODE = frozenset({"error", "offline", "unhealthy", "disabled", "disconnected"})

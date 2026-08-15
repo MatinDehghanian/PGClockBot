@@ -470,8 +470,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
     @app.get("/home/metrics")
     async def home_metrics_json(staff: dict = Depends(require_admin)):
         """Kept for older clients; gauges now live on bot overview (/dashboard/metrics)."""
-        from app.services.host_gauges import gauges_json, local_host_gauges
-
         host = await asyncio.to_thread(local_host_gauges, wait_cpu=0.0)
         if host.get("cpu_percent") is None:
             host = await asyncio.to_thread(local_host_gauges, wait_cpu=0.12)
