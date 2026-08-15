@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "6.1.11": [
+        "رنگبندی دکمه‌ها: تیتر/کپشن دسته به باکس‌های پایین نزدیک‌تر شد (جدا از باکس بالایی)",
+    ],
     "6.1.10": [
         "نمای کلی پاسارگارد: واحد نرخ (کیلوبایت/ثانیه و…) کوچک‌تر از عدد؛ نوار درصد برای CPU/RAM نود",
         "کارت نود تمام‌عرض هم‌تراز سایر باکس‌ها؛ هسته و مقدار رم کنار تیتر؛ هر متریک در باکس داخلی",
