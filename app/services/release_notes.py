@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "6.1.9": [
+        "رنگبندی دکمه‌ها: فاصله تیتر و کپشن دسته‌ها هم‌تراز با سایر کارت‌های تنظیمات",
+    ],
     "6.1.8": [
         "نمای کلی پاسارگارد: کارت متریک برای هر نود (CPU، RAM، آپلود/دانلود، نرخ زنده)",
         "زیر گیج سرور PG: مجموع نرخ زنده آپلود/دانلود همه نودها؛ پایش یکپارچه /pg/metrics",

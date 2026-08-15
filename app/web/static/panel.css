@@ -7508,21 +7508,38 @@ html[data-theme="light"] .sk-bone::after {
 
 
 /* —— Telegram button color settings (settings → رنگبندی) —— */
-/* Section heads: title + caption only (no accent box) — spacing matches settings cards */
+/* Section heads: same title↔caption unit as .card h2 + .update-card-caption */
 .btn-color-section-head {
-  margin: 0 0 var(--section-gap);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  /* Match card-internal caption→content (space-2); pair with rule below for above */
+  margin: 0 0 var(--space-2);
   min-width: 0;
+}
+/* Previous settings-card already has margin-bottom: section-gap — net space-2 above */
+.settings-card + .btn-color-section-head,
+.card + .btn-color-section-head {
+  margin-top: calc(var(--space-2) - var(--section-gap));
 }
 .btn-color-section-head > h2 {
   margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.35;
+  font-size: var(--title-size);
+  font-weight: 600;
+  line-height: 1.5;
   color: var(--foreground);
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
 }
 .btn-color-section-head > .update-card-caption,
 .btn-color-section-head > p.muted {
-  margin: calc(-1 * var(--space-1)) 0 0;
+  margin: 0;
+  /* Same pull as .card h2 + .update-card-caption (net title↔caption = space-1) */
+  margin-top: calc(-1 * var(--space-1));
   line-height: 1.5;
   font-size: 12px;
   color: var(--muted-fg);
@@ -7531,7 +7548,8 @@ html[data-theme="light"] .sk-bone::after {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-.btn-color-section-head + .settings-card {
+.btn-color-section-head + .settings-card,
+.btn-color-section-head + .card {
   margin-top: 0;
 }
 .btn-color-grid {

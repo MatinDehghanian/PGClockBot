@@ -84,8 +84,15 @@ class OverviewSurfaceTests(unittest.TestCase):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn("btn-color-section-head", html)
         self.assertIn("btn-color-section-head", css)
-        self.assertNotIn("border-inline-start", css[css.find("btn-color-section-head") : css.find("btn-color-section-head") + 600])
+        chunk = css[css.find("btn-color-section-head") : css.find("btn-color-section-head") + 1200]
+        self.assertNotIn("border-inline-start", chunk)
         self.assertNotIn("ادمین · ", css)
+        # Title↔caption unit matches .card (flex gap space-2 + pull space-1)
+        self.assertIn("gap: var(--space-2)", chunk)
+        self.assertIn("margin-top: calc(-1 * var(--space-1))", chunk)
+        # Equal space-2 above/below relative to neighboring settings cards
+        self.assertIn("calc(var(--space-2) - var(--section-gap))", chunk)
+        self.assertIn("margin: 0 0 var(--space-2)", chunk)
 
     def test_table_col_id_css_and_headers(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
