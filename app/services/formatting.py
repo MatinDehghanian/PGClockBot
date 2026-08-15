@@ -136,30 +136,59 @@ def format_bytes_ratio(
     Number run first, unit once at the end of the string. Web CSS uses RTL so
     «گیگ» sits on the visual left; never put dir=ltr on the whole cell.
     """
+    parts = format_bytes_ratio_parts(used, limit, precision=precision)
+    if not parts.get("unit"):
+        if parts.get("used") == "—" and parts.get("total") == "—":
+            return "—"
+        if parts.get("total") in {"", None} and parts.get("used"):
+            return str(parts["used"])
+        return "—"
+    used_s = parts.get("used") or "0"
+    total_s = parts.get("total") or "—"
+    return f"{used_s}{joiner}{total_s} {parts['unit']}"
+
+
+def format_bytes_ratio_parts(
+    used: int | float | None,
+    limit: int | float | None,
+    *,
+    precision: int | None = None,
+) -> dict[str, str]:
+    """Split ratio into ``{used, total, unit}`` for num/unit UI hierarchy."""
+    empty = {"used": "—", "total": "—", "unit": ""}
     if limit is None:
-        return format_bytes(used, precision=precision)
+        amt, unit = format_bytes_parts(used, precision=precision)
+        return {"used": amt, "total": "", "unit": unit}
     try:
         u = float(used or 0)
         lim = float(limit)
     except (TypeError, ValueError):
-        return "—"
+        return empty
     if lim <= 0:
-        # Unlimited ceiling — unit once at the end: «5 / ∞ گیگ»
         if u <= 0:
-            return f"0{joiner}∞ بایت"
+            return {"used": "0", "total": "∞", "unit": "بایت"}
         div, label = _pick_byte_unit(u)
         if div == 1.0:
-            return f"{int(round(u))}{joiner}∞ {label}"
-        left = _fmt_unit_amount(u / div, precision=precision)
-        return f"{left}{joiner}∞ {label}"
+            return {"used": f"{int(round(u))}", "total": "∞", "unit": label}
+        return {
+            "used": _fmt_unit_amount(u / div, precision=precision),
+            "total": "∞",
+            "unit": label,
+        }
     if u < 0:
         u = abs(u)
     div, label = _pick_byte_unit(max(u, lim))
     if div == 1.0:
-        return f"{int(round(u))}{joiner}{int(round(lim))} {label}"
-    left = _fmt_unit_amount(u / div, precision=precision)
-    right = _fmt_unit_amount(lim / div, precision=precision)
-    return f"{left}{joiner}{right} {label}"
+        return {
+            "used": f"{int(round(u))}",
+            "total": f"{int(round(lim))}",
+            "unit": label,
+        }
+    return {
+        "used": _fmt_unit_amount(u / div, precision=precision),
+        "total": _fmt_unit_amount(lim / div, precision=precision),
+        "unit": label,
+    }
 
 
 def format_count_ratio(used: int | float | None, limit: int | float | None) -> str:
