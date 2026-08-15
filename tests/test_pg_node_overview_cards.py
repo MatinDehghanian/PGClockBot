@@ -1,0 +1,112 @@
+"""PG overview node cards + live aggregate rates; ACL & sanitization."""
+
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class FormatBytesRateTests(unittest.TestCase):
+    def test_rate_suffix(self):
+        from app.services.formatting import format_bytes_rate
+
+        self.assertEqual(format_bytes_rate(None), "—")
+        self.assertIn("/ثانیه", format_bytes_rate(1024))
+        self.assertNotEqual(format_bytes_rate(0), "نامحدود")
+
+
+class NodeOverviewBuilderTests(unittest.TestCase):
+    def test_realtime_cpu_ram_and_speeds(self):
+        from app.services.node_traffic import build_nodes_overview, nodes_overview_json
+
+        nodes = [
+            {"id": 1, "name": "de-1", "status": "connected", "uplink": 1000, "downlink": 2000},
+            {"id": 2, "name": "tr-1", "status": "connected", "uplink": 500, "downlink": 700},
+        ]
+        rt = {
+            "1": {
+                "cpu_usage": 41.2,
+                "cpu_cores": 4,
+                "mem_used": 2 * 1024**3,
+                "mem_total": 8 * 1024**3,
+                "incoming_bandwidth_speed": 111,
+                "outgoing_bandwidth_speed": 222,
+            },
+            "2": {
+                "cpu_usage": 10,
+                "mem_used": 1 * 1024**3,
+                "mem_total": 4 * 1024**3,
+                "incoming_bandwidth_speed": 10,
+                "outgoing_bandwidth_speed": 20,
+            },
+            "3": None,  # disconnected / missing
+        }
+        ov = build_nodes_overview(nodes, rt)
+        self.assertEqual(len(ov["nodes"]), 2)
+        n1 = ov["nodes"][0]
+        self.assertEqual(n1["cpu_percent"], 41.2)
+        self.assertAlmostEqual(n1["mem_percent"], 25.0, places=0)
+        self.assertEqual(n1["status_kind"], "ok")
+        self.assertEqual(ov["live"]["rate_up"], 242)
+        self.assertEqual(ov["live"]["rate_down"], 121)
+        self.assertIn("/ثانیه", ov["live"]["rate_up_text"])
+
+        payload = nodes_overview_json(ov)
+        self.assertIn("live", payload)
+        self.assertIn("nodes", payload)
+        # No raw secrets / unrelated keys
+        dumped = str(payload)
+        self.assertNotIn("server_ca", dumped)
+        self.assertNotIn("api_key", dumped)
+        self.assertNotIn("mem_used", dumped)  # absolute bytes not in poll JSON
+        self.assertEqual(payload["nodes"][0]["traffic_up_text"], n1["traffic_up_text"])
+
+    def test_missing_realtime_shows_dashes(self):
+        from app.services.node_traffic import build_nodes_overview
+
+        ov = build_nodes_overview([{"id": 9, "name": "x", "status": "disabled"}], None)
+        card = ov["nodes"][0]
+        self.assertEqual(card["cpu_text"], "—")
+        self.assertEqual(card["mem_text"], "—")
+        self.assertEqual(card["rate_up_text"], "—")
+        self.assertEqual(card["status_kind"], "err")
+        self.assertIsNone(ov["live"]["rate_up"])
+
+    def test_enrich_still_supports_nodes_page(self):
+        from app.services.node_traffic import enrich_nodes_with_traffic
+
+        out = enrich_nodes_with_traffic(
+            [{"id": 7, "name": "x"}],
+            {"nodes": [{"node_id": 7, "upload": 10, "download": 20}]},
+        )
+        self.assertEqual(out[0]["_traffic_total"], 30)
+
+
+class PgOverviewSurfaceTests(unittest.TestCase):
+    def test_pg_home_has_node_tiles_not_simple_table(self):
+        pg = (ROOT / "app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        self.assertIn("pg-node-tile", pg)
+        self.assertIn("data-pg-live-up", pg)
+        self.assertIn("data-pg-node-grid", pg)
+        self.assertNotIn("table-compact", pg)
+        self.assertIn("/pg/metrics", pg)
+
+    def test_css_node_board(self):
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn(".pg-node-tile", css)
+        self.assertIn(".pg-live-rates", css)
+
+    def test_metrics_route_fetches_nodes_and_owner_guard(self):
+        src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
+        chunk = src.split("async def pg_host_metrics_json")[1][:1200]
+        self.assertIn("_is_pg_owner_principal(staff)", chunk)
+        self.assertIn("status_code=403", chunk)
+        self.assertIn("get_nodes_realtime", chunk)
+        self.assertIn("nodes_overview_json", chunk)
+        self.assertIn("build_nodes_overview", chunk)
+
+
+if __name__ == "__main__":
+    unittest.main()

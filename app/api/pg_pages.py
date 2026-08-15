@@ -213,20 +213,24 @@ def register_pg_pages(
         err = None
         stats_rows: list[tuple[str, str]] = []
         nodes = []
+        nodes_overview = None
         counts = {"admins": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0}
         reseller_overview = None
         host_gauges = None
         try:
             if _is_pg_owner_principal(staff):
                 from app.services.host_gauges import gauges_from_pg_system_stats
+                from app.services.node_traffic import build_nodes_overview
 
                 pg = get_pg()
-                raw, nodes, admins, groups, hosts = await asyncio.gather(
+                # Full nodes (uplink/downlink) + realtime (CPU/RAM/speeds) for owner overview
+                raw, nodes, admins, groups, hosts, realtime = await asyncio.gather(
                     pg.get_system_stats(),
-                    pg.get_nodes_simple(),
+                    pg.get_nodes(),
                     pg.get_admins_simple(),
                     pg.get_groups_simple(),
                     pg.get_hosts(),
+                    pg.get_nodes_realtime(),
                     return_exceptions=True,
                 )
                 if isinstance(raw, dict):
@@ -270,6 +274,13 @@ def register_pg_pages(
                 elif isinstance(raw, Exception):
                     err = str(raw)
                 nodes = nodes if isinstance(nodes, list) else []
+                rt = realtime if not isinstance(realtime, Exception) else None
+                try:
+                    nodes_overview = build_nodes_overview(nodes, rt)
+                    nodes = nodes_overview.get("nodes") or []
+                except Exception:
+                    nodes_overview = build_nodes_overview(nodes, None)
+                    nodes = nodes_overview.get("nodes") or []
                 counts["nodes"] = len(nodes)
                 counts["admins"] = len(admins) if isinstance(admins, list) else 0
                 counts["groups"] = len(groups) if isinstance(groups, list) else 0
@@ -333,6 +344,7 @@ def register_pg_pages(
                 staff_remediation=staff_remediation,
                 pg_external_url=pg_external_url or None,
                 host_gauges=host_gauges,
+                nodes_overview=nodes_overview,
             ),
         )
 
@@ -340,19 +352,32 @@ def register_pg_pages(
     async def pg_host_metrics_json(
         staff: dict = Depends(require_pg_perm("pg_overview")),
     ):
-        """PasarGuard host CPU/RAM — owner principal only (never reseller/pg_staff)."""
+        """PG host CPU/RAM + node live rates — owner principal only (never reseller/pg_staff)."""
         from fastapi.responses import JSONResponse
 
         from app.services.host_gauges import empty_host_gauges, gauges_from_pg_system_stats, gauges_json
+        from app.services.node_traffic import build_nodes_overview, nodes_overview_json
 
         if not _is_pg_owner_principal(staff):
             return JSONResponse({"detail": "forbidden"}, status_code=403)
+        pg = get_pg()
         try:
-            raw = await get_pg().get_system_stats()
+            raw, nodes_raw, realtime = await asyncio.gather(
+                pg.get_system_stats(),
+                pg.get_nodes(),
+                pg.get_nodes_realtime(),
+                return_exceptions=True,
+            )
             host = gauges_from_pg_system_stats(raw if isinstance(raw, dict) else None)
+            nodes_list = nodes_raw if isinstance(nodes_raw, list) else []
+            rt = realtime if not isinstance(realtime, Exception) else None
+            overview = build_nodes_overview(nodes_list, rt)
         except Exception:
             host = empty_host_gauges()
-        return JSONResponse(gauges_json(host))
+            overview = build_nodes_overview([], None)
+        payload = gauges_json(host)
+        payload.update(nodes_overview_json(overview))
+        return JSONResponse(payload)
 
     # ---- VPN users ----
     @app.get("/pg/users", response_class=HTMLResponse)

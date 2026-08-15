@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "6.1.8": [
+        "نمای کلی پاسارگارد: کارت متریک برای هر نود (CPU، RAM، آپلود/دانلود، نرخ زنده)",
+        "زیر گیج سرور PG: مجموع نرخ زنده آپلود/دانلود همه نودها؛ پایش یکپارچه /pg/metrics",
+        "امنیت: متریک نودها فقط برای مالک پاسارگارد؛ JSON سفید‌لیست بدون نشتی فیلد خام API",
+    ],
     "6.1.7": [
         "گیج CPU/RAM از داشبورد به نمای کلی ربات و پاسارگارد منتقل شد (لود سبک‌تر /home)",
         "حذف دسترسی سریع از نمای کلی ربات و پاسارگارد؛ تمیزکاری بخش‌بندی رنگبندی دکمه‌ها",
