@@ -7604,14 +7604,14 @@ html[data-theme="light"] .sk-bone::after {
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-2);
-  /* Match card-internal caption→content (space-2); pair with rule below for above */
-  margin: 0 0 var(--space-2);
+  /* Form uses gap: section-gap — pull toward the group cards BELOW */
+  margin: 0 0 calc(var(--space-2) - var(--section-gap));
   min-width: 0;
 }
-/* Previous settings-card already has margin-bottom: section-gap — net space-2 above */
+/* Keep full section-gap from the card ABOVE (do not pull toward previous box) */
 .settings-card + .btn-color-section-head,
 .card + .btn-color-section-head {
-  margin-top: calc(var(--space-2) - var(--section-gap));
+  margin-top: 0;
 }
 .btn-color-section-head > h2 {
   margin: 0;
