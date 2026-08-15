@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "6.1.15": [
+        "رفع اساسی ترتیب نرخ ترافیک: عدد سمت راست، واحد سمت چپ (الگوی byte-size پنل؛ بدون dir=ltr روی کل مقدار)",
+    ],
     "6.1.14": [
         "رنگبندی دکمه‌ها: فاصلهٔ بالای تیتر/کپشن دسته کمی بیشتر برای مرزبندی واضح‌تر با باکس قبلی",
     ],

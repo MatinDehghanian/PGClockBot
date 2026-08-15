@@ -6077,27 +6077,45 @@ html[data-theme="light"] .setup-progress span.done {
   color: var(--foreground);
   max-width: 100%;
 }
-/* Force «342 کیلوبایت/ثانیه» (num then unit), one line, right-aligned in RTL panel */
+/*
+  Rate values in RTL panel — same principle as .byte-size:
+  logical «200 کیلوبایت/ثانیه», number on the visual RIGHT (RTL start),
+  unit on the LEFT. Never use dir=ltr on the whole value (that puts the
+  unit at the right edge so RTL readers see unit-first).
+*/
 .pg-metric-val-rate {
-  display: block;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: flex-start; /* RTL: pack from the right */
+  align-items: baseline;
+  gap: 0.35em;
   width: 100%;
-  direction: ltr;
+  direction: rtl;
   unicode-bidi: isolate;
   text-align: right;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.pg-metric-val-rate .pg-metric-num,
-.pg-metric-val-rate .pg-metric-unit {
+.pg-metric-val-rate .pg-metric-num {
   display: inline;
-  vertical-align: baseline;
+  /* Digits stay LTR; flex RTL placement keeps this on the right */
+  direction: ltr;
+  unicode-bidi: isolate;
+  order: 0;
+  flex: 0 0 auto;
 }
 .pg-metric-val-rate .pg-metric-unit {
-  margin-inline-start: 0.35em;
-  /* Isolate Persian unit so bidi does not pull it before the number */
-  unicode-bidi: isolate;
+  display: inline;
   direction: rtl;
+  unicode-bidi: isolate;
+  order: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
 }
 .pg-live-rate .pg-metric-val {
   font-size: 22px;

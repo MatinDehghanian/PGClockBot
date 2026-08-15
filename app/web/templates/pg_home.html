@@ -183,9 +183,9 @@
         </span>
         <span>آپلود زنده</span>
       </div>
-      <strong class="pg-metric-val pg-metric-val-rate" dir="ltr" data-pg-live-up>
+      <strong class="pg-metric-val pg-metric-val-rate" data-pg-live-up>
         <span class="pg-metric-num" data-pg-live-up-num>{{ (live.rate_up_num if live else none) or '—' }}</span>
-        {% if live and live.rate_up_unit %}<span class="pg-metric-unit" dir="rtl" data-pg-live-up-unit>{{ live.rate_up_unit }}</span>{% else %}<span class="pg-metric-unit" dir="rtl" data-pg-live-up-unit></span>{% endif %}
+        {% if live and live.rate_up_unit %}<span class="pg-metric-unit" data-pg-live-up-unit>{{ live.rate_up_unit }}</span>{% else %}<span class="pg-metric-unit" data-pg-live-up-unit></span>{% endif %}
       </strong>
       <small class="muted">مجموع همه نودها</small>
     </article>
@@ -196,9 +196,9 @@
         </span>
         <span>دانلود زنده</span>
       </div>
-      <strong class="pg-metric-val pg-metric-val-rate" dir="ltr" data-pg-live-down>
+      <strong class="pg-metric-val pg-metric-val-rate" data-pg-live-down>
         <span class="pg-metric-num" data-pg-live-down-num>{{ (live.rate_down_num if live else none) or '—' }}</span>
-        {% if live and live.rate_down_unit %}<span class="pg-metric-unit" dir="rtl" data-pg-live-down-unit>{{ live.rate_down_unit }}</span>{% else %}<span class="pg-metric-unit" dir="rtl" data-pg-live-down-unit></span>{% endif %}
+        {% if live and live.rate_down_unit %}<span class="pg-metric-unit" data-pg-live-down-unit>{{ live.rate_down_unit }}</span>{% else %}<span class="pg-metric-unit" data-pg-live-down-unit></span>{% endif %}
       </strong>
       <small class="muted">مجموع همه نودها</small>
     </article>
@@ -357,30 +357,30 @@
           </div>
           <div class="pg-node-metric">
             <span>آپلود</span>
-            <strong class="pg-metric-val pg-metric-val-rate" dir="ltr" data-pg-node-up>
+            <strong class="pg-metric-val pg-metric-val-rate" data-pg-node-up>
               <span class="pg-metric-num" data-pg-node-up-num>{{ tup.get('num') or '—' }}</span>
-              <span class="pg-metric-unit" dir="rtl" data-pg-node-up-unit>{{ tup.get('unit') or '' }}</span>
+              <span class="pg-metric-unit" data-pg-node-up-unit>{{ tup.get('unit') or '' }}</span>
             </strong>
           </div>
           <div class="pg-node-metric">
             <span>دانلود</span>
-            <strong class="pg-metric-val pg-metric-val-rate" dir="ltr" data-pg-node-down>
+            <strong class="pg-metric-val pg-metric-val-rate" data-pg-node-down>
               <span class="pg-metric-num" data-pg-node-down-num>{{ tdn.get('num') or '—' }}</span>
-              <span class="pg-metric-unit" dir="rtl" data-pg-node-down-unit>{{ tdn.get('unit') or '' }}</span>
+              <span class="pg-metric-unit" data-pg-node-down-unit>{{ tdn.get('unit') or '' }}</span>
             </strong>
           </div>
           <div class="pg-node-metric">
             <span>نرخ آپلود</span>
-            <strong class="pg-metric-val pg-metric-val-rate" dir="ltr" data-pg-node-rate-up>
+            <strong class="pg-metric-val pg-metric-val-rate" data-pg-node-rate-up>
               <span class="pg-metric-num" data-pg-node-rate-up-num>{{ rup.get('num') or '—' }}</span>
-              <span class="pg-metric-unit" dir="rtl" data-pg-node-rate-up-unit>{{ rup.get('unit') or '' }}</span>
+              <span class="pg-metric-unit" data-pg-node-rate-up-unit>{{ rup.get('unit') or '' }}</span>
             </strong>
           </div>
           <div class="pg-node-metric">
             <span>نرخ دانلود</span>
-            <strong class="pg-metric-val pg-metric-val-rate" dir="ltr" data-pg-node-rate-down>
+            <strong class="pg-metric-val pg-metric-val-rate" data-pg-node-rate-down>
               <span class="pg-metric-num" data-pg-node-rate-down-num>{{ rdn.get('num') or '—' }}</span>
-              <span class="pg-metric-unit" dir="rtl" data-pg-node-rate-down-unit>{{ rdn.get('unit') or '' }}</span>
+              <span class="pg-metric-unit" data-pg-node-rate-down-unit>{{ rdn.get('unit') or '' }}</span>
             </strong>
           </div>
         </div>
