@@ -102,7 +102,10 @@ class PgOverviewSurfaceTests(unittest.TestCase):
         self.assertIn("pg-node-tile", pg)
         self.assertIn("data-pg-live-up-num", pg)
         self.assertIn("pg-metric-unit", pg)
+        self.assertIn("pg-metric-val-rate", pg)
         self.assertIn("pg-node-meter", pg)
+        self.assertIn("pg-node-tabs", pg)
+        self.assertIn("data-pg-node-tab", pg)
         self.assertIn("data-pg-node-grid", pg)
         self.assertNotIn("table-compact", pg)
         self.assertIn("/pg/metrics", pg)
@@ -114,8 +117,17 @@ class PgOverviewSurfaceTests(unittest.TestCase):
         self.assertIn(".pg-node-tile", css)
         self.assertIn(".pg-live-rates", css)
         self.assertIn(".pg-metric-unit", css)
+        self.assertIn(".pg-metric-val-rate", css)
+        self.assertIn("justify-content: flex-end", css)
         self.assertIn(".pg-node-meter", css)
-        self.assertIn(".pg-node-metric-span", css)
+        self.assertIn(".pg-node-tabs", css)
+        self.assertIn(".pg-node-metric-res", css)
+        # Percent label has no chip box
+        start = css.find(".pg-node-meter-pct")
+        body = css[start : start + 450].split("{", 1)[1].split("}", 1)[0]
+        self.assertNotIn("padding:", body)
+        self.assertNotIn("border:", body)
+        self.assertNotIn("background:", body)
 
     def test_metrics_route_fetches_nodes_and_owner_guard(self):
         src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")

@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "6.1.12": [
+        "نمای کلی PG: نرخ آپلود/دانلود راست‌چین (عدد + واحد)؛ تب نودها با استایل آبی",
+        "CPU/RAM نود در دسکتاپ دو ستون؛ نوار درصد بدون باکس؛ رنگ نوار بر اساس درصد",
+    ],
     "6.1.11": [
         "رنگبندی دکمه‌ها: تیتر/کپشن دسته به باکس‌های پایین نزدیک‌تر شد (جدا از باکس بالایی)",
     ],
