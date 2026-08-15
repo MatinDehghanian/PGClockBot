@@ -31,15 +31,17 @@ class BotOverviewDashboardTests(unittest.TestCase):
 
 class RamMetaStyleTests(unittest.TestCase):
     def test_ram_hint_matches_cpu_cores_muted(self):
-        home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
-        cpu = home.split('data-metric="cpu"')[1].split("data-metric=")[0]
-        mem = home.split('data-metric="mem"')[1].split("</article>")[0]
+        gauges = Path("app/web/templates/_host_resource_gauges.html").read_text(encoding="utf-8")
+        cpu = gauges.split('data-metric="cpu"')[1].split("data-metric=")[0]
+        mem = gauges.split('data-metric="mem"')[1].split("</article>")[0]
         self.assertIn('class="muted"', cpu)
-        self.assertIn('id="home-mem-hint"', mem)
-        self.assertIn("muted", mem.split("home-mem-hint")[0].split("<")[-1])
+        self.assertIn("data-host-mem-hint", mem)
+        self.assertIn("muted", mem.split("data-host-mem-hint")[0].split("<")[-1])
         self.assertIn("num-ratio", mem)
         self.assertNotIn("home-gauge-amount", mem)
         self.assertNotIn("<strong", mem.split("home-gauge-meta")[1])
+        home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
+        self.assertNotIn("data-metric=\"mem\"", home)
 
     def test_ram_ltr_forced_right_on_desktop(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")

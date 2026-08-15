@@ -15,14 +15,14 @@
 
   {% if button_style_sections %}
     {% for section_id, section_title, section_caption, section_groups in button_style_sections %}
-    <div class="card settings-card btn-color-section" data-section="{{ section_id }}">
+    <div class="btn-color-section-head" data-section="{{ section_id }}">
       <h2>{{ section_title }}</h2>
       {% if section_caption %}
       <p class="muted update-card-caption">{{ section_caption }}</p>
       {% endif %}
     </div>
     {% for group_name, items in section_groups %}
-    <div class="card settings-card btn-color-group" data-section="{{ section_id }}">
+    <div class="card settings-card">
       <h2>{{ group_name }}</h2>
       <div class="btn-color-grid">
         {% for item in items %}

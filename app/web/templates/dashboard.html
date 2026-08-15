@@ -25,6 +25,13 @@
 </div>
 {% else %}
 
+{% if host_gauges %}
+{% set host = host_gauges %}
+{% set metrics_url = '/dashboard/metrics' %}
+{% set aria_label = 'منابع سرور ربات' %}
+{% include "_host_resource_gauges.html" %}
+{% endif %}
+
 <div class="home-panels">
   <section class="home-panel home-panel-bot">
     <div class="home-panel-head">
@@ -95,29 +102,6 @@
   </section>
 </div>
 
-{% if can_payments or can_orders or can_tickets or can_plans or can_shop %}
-<div class="card">
-  <h2>دسترسی سریع</h2>
-  <div class="quick-links">
-    {% if can_payments %}
-    <a href="/finance?tab=payments">پرداخت‌ها{% if stats.pending %} ({{ stats.pending }}){% endif %}</a>
-    {% endif %}
-    {% if can_orders %}
-    <a href="/finance?tab=orders">سفارش‌ها</a>
-    {% endif %}
-    {% if can_tickets %}
-    <a href="/tickets">پشتیبانی{% if stats.tickets %} ({{ stats.tickets }}){% endif %}</a>
-    {% endif %}
-    {% if can_plans %}
-    <a class="desk-only" href="/plans">پلن‌ها</a>
-    {% endif %}
-    {% if can_shop %}
-    <a href="/shop-settings">تنظیمات ربات</a>
-    {% endif %}
-  </div>
-</div>
-{% endif %}
-
 {% if can_payments or can_orders %}
 <div class="dash-cols">
   {% if can_payments %}
@@ -126,18 +110,18 @@
     {% if recent_payments %}
     <div class="table-wrap">
       <table class="table-compact">
-        <thead><tr><th>#</th><th>مبلغ</th><th>وضعیت</th><th>نوع</th></tr></thead>
+        <thead><tr><th class="col-id">#</th><th class="col-amount">مبلغ</th><th class="col-status">وضعیت</th><th class="col-type">نوع</th></tr></thead>
         <tbody>
         {% for p in recent_payments %}
           <tr>
-            <td class="mono">{{ p.id }}</td>
-            <td class="mono">{{ p.amount | num }}</td>
-            <td>
+            <td class="mono col-id">{{ p.id }}</td>
+            <td class="mono col-amount">{{ p.amount | num }}</td>
+            <td class="col-status">
               <span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}approved{% else %}rejected{% endif %}">
                 {{ pay_status(p.status) }}
               </span>
             </td>
-            <td>{% if p.is_wallet_topup %}شارژ کیف{% else %}خرید{% endif %}</td>
+            <td class="col-type">{% if p.is_wallet_topup %}شارژ کیف{% else %}خرید{% endif %}</td>
           </tr>
         {% endfor %}
         </tbody>
@@ -155,13 +139,13 @@
     {% if recent_orders %}
     <div class="table-wrap">
       <table class="table-compact">
-        <thead><tr><th>#</th><th>مبلغ</th><th>وضعیت</th></tr></thead>
+        <thead><tr><th class="col-id">#</th><th class="col-amount">مبلغ</th><th class="col-status">وضعیت</th></tr></thead>
         <tbody>
         {% for o in recent_orders %}
           <tr>
-            <td class="mono">{{ o.id }}</td>
-            <td class="mono">{{ o.amount | num }}</td>
-            <td>
+            <td class="mono col-id">{{ o.id }}</td>
+            <td class="mono col-amount">{{ o.amount | num }}</td>
+            <td class="col-status">
               <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}pending{% elif o.status in ['rejected','cancelled'] %}rejected{% else %}neutral{% endif %}">
                 {{ ord_status(o.status) }}
               </span>

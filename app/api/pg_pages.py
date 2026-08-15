@@ -215,8 +215,11 @@ def register_pg_pages(
         nodes = []
         counts = {"admins": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0}
         reseller_overview = None
+        host_gauges = None
         try:
             if _is_pg_owner_principal(staff):
+                from app.services.host_gauges import gauges_from_pg_system_stats
+
                 pg = get_pg()
                 raw, nodes, admins, groups, hosts = await asyncio.gather(
                     pg.get_system_stats(),
@@ -227,6 +230,7 @@ def register_pg_pages(
                     return_exceptions=True,
                 )
                 if isinstance(raw, dict):
+                    host_gauges = gauges_from_pg_system_stats(raw)
                     # Keys already shown in the merged overview counts — skip duplicates
                     _count_dup_keys = {
                         "total_user",
@@ -328,8 +332,27 @@ def register_pg_pages(
                 ticket_alert=ticket_alert,
                 staff_remediation=staff_remediation,
                 pg_external_url=pg_external_url or None,
+                host_gauges=host_gauges,
             ),
         )
+
+    @app.get("/pg/metrics")
+    async def pg_host_metrics_json(
+        staff: dict = Depends(require_pg_perm("pg_overview")),
+    ):
+        """PasarGuard host CPU/RAM — owner principal only (never reseller/pg_staff)."""
+        from fastapi.responses import JSONResponse
+
+        from app.services.host_gauges import empty_host_gauges, gauges_from_pg_system_stats, gauges_json
+
+        if not _is_pg_owner_principal(staff):
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
+        try:
+            raw = await get_pg().get_system_stats()
+            host = gauges_from_pg_system_stats(raw if isinstance(raw, dict) else None)
+        except Exception:
+            host = empty_host_gauges()
+        return JSONResponse(gauges_json(host))
 
     # ---- VPN users ----
     @app.get("/pg/users", response_class=HTMLResponse)

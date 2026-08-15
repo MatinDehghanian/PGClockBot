@@ -20,9 +20,10 @@ from app.db.models import (
     Ticket,
     UserService,
 )
-from app.services.host_metrics import host_metrics
 from app.services.pasarguard import get_pg
 from app.services.setup_wizard import current_setup_values
+
+# host_metrics imported only by legacy helpers / tests via host_gauges
 
 _TEHRAN = ZoneInfo("Asia/Tehran")
 
@@ -439,34 +440,24 @@ def empty_home_overview() -> dict[str, Any]:
 
 
 async def build_home_overview(session: AsyncSession) -> dict[str, Any]:
-    """Build admin home payloads; never raise — partial failures return defaults."""
+    """Build admin home payloads; never raise — partial failures return defaults.
+
+    Host CPU/RAM live on bot/PG overviews now — skipped here for a faster /home.
+    """
     import logging
 
     from app.services.db_safe import rollback_quiet
 
     log = logging.getLogger(__name__)
     out = empty_home_overview()
-    metrics_task = asyncio.to_thread(host_metrics, wait_cpu=0.0)
     # Platform admin overview only — pass main token explicitly (no silent fallback).
     bot_task = check_bot_connection(current_setup_values().get("BOT_TOKEN"))
     bot_sum_task = bot_panel_summary(session)
     pg_task = pg_home_bundle()
 
-    metrics, bot, bot_sum, pg_pair = await asyncio.gather(
-        metrics_task, bot_task, bot_sum_task, pg_task, return_exceptions=True
+    bot, bot_sum, pg_pair = await asyncio.gather(
+        bot_task, bot_sum_task, pg_task, return_exceptions=True
     )
-
-    if isinstance(metrics, Exception):
-        log.exception("home host_metrics failed: %s", metrics)
-    elif isinstance(metrics, dict):
-        cpu = metrics.get("cpu_percent")
-        mem_pct = metrics.get("memory_percent")
-        out["host"] = {
-            **_empty_host(),
-            **metrics,
-            "cpu_tone": _tone_class(cpu if isinstance(cpu, (int, float)) else None),
-            "mem_tone": _tone_class(mem_pct if isinstance(mem_pct, (int, float)) else None),
-        }
 
     if isinstance(bot, Exception):
         log.exception("home bot probe failed: %s", bot)
