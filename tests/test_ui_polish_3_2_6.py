@@ -77,7 +77,9 @@ class PgOverviewMergeTests(unittest.TestCase):
         admin = src.split("{% else %}", 1)[1]
         self.assertIn("home-panel home-panel-pg", admin)
         self.assertIn("آمار پنل", admin)
-        self.assertIn("دسترسی سریع", admin)
+        self.assertNotIn("دسترسی سریع", admin)
+        self.assertIn("_host_resource_gauges.html", admin)
+        self.assertIn("/pg/metrics", admin)
         self.assertNotIn('class="stats-grid"', admin)
         self.assertNotIn("pg-stats-panel", admin)
         self.assertIn("counts.users", admin)

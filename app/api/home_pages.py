@@ -11,8 +11,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, Payment, PaymentStatus, Plan, Ticket, UserService
-from app.services.host_metrics import host_metrics
-from app.services.home_overview import _tone_class, build_home_overview
+from app.services.host_gauges import gauges_json, local_host_gauges
+from app.services.home_overview import build_home_overview
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
 
 logger = logging.getLogger(__name__)
@@ -469,20 +469,8 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
 
     @app.get("/home/metrics")
     async def home_metrics_json(staff: dict = Depends(require_admin)):
-        # Reuse prior CPU sample when polling (wait_cpu=0); sample off the event loop.
-        metrics = await asyncio.to_thread(host_metrics, wait_cpu=0.0)
-        if metrics.get("cpu_percent") is None:
-            metrics = await asyncio.to_thread(host_metrics, wait_cpu=0.12)
-        cpu = metrics.get("cpu_percent")
-        mem_pct = metrics.get("memory_percent")
-        return JSONResponse(
-            {
-                "cpu_percent": cpu,
-                "memory_percent": mem_pct,
-                "memory_used_text": metrics.get("memory_used_text"),
-                "memory_total_text": metrics.get("memory_total_text"),
-                "memory_ratio_text": metrics.get("memory_ratio_text"),
-                "cpu_tone": _tone_class(cpu if isinstance(cpu, (int, float)) else None),
-                "mem_tone": _tone_class(mem_pct if isinstance(mem_pct, (int, float)) else None),
-            }
-        )
+        """Kept for older clients; gauges now live on bot overview (/dashboard/metrics)."""
+        host = await asyncio.to_thread(local_host_gauges, wait_cpu=0.0)
+        if host.get("cpu_percent") is None:
+            host = await asyncio.to_thread(local_host_gauges, wait_cpu=0.12)
+        return JSONResponse(gauges_json(host))

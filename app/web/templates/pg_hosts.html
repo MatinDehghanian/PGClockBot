@@ -17,7 +17,7 @@
   {% else %}
   <div class="table-wrap">
   <table class="table-compact">
-    <thead><tr><th>شناسه</th><th>عنوان</th><th class="col-hide-sm">آدرس</th><th class="col-hide-sm">پورت</th><th class="col-hide-sm">اینباند</th><th>وضعیت</th><th class="col-actions"></th></tr></thead>
+    <thead><tr><th class="col-id">شناسه</th><th class="col-name">عنوان</th><th class="col-hide-sm col-address">آدرس</th><th class="col-hide-sm col-id">پورت</th><th class="col-hide-sm col-text">اینباند</th><th class="col-status">وضعیت</th><th class="col-actions"></th></tr></thead>
     <tbody>
     {% for h in hosts %}
       {% set addr = h.get('address') %}

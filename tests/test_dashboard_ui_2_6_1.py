@@ -57,14 +57,18 @@ class SidebarHoverTests(unittest.TestCase):
 
 class RamRingTests(unittest.TestCase):
     def test_percent_centered_in_ring(self):
-        home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
+        gauges = Path("app/web/templates/_host_resource_gauges.html").read_text(encoding="utf-8")
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        # mem percent id is inside home-gauge-center (not quiet)
-        center = home.split('data-metric="mem"')[1].split("home-gauge-meta")[0]
-        self.assertIn('id="home-mem-val"', center)
+        center = gauges.split('data-metric="mem"')[1].split("home-gauge-meta")[0]
+        self.assertIn("data-host-mem-val", center)
         self.assertIn("home-gauge-center", center)
-        self.assertNotIn("home-gauge-center-quiet", home)
+        self.assertNotIn("home-gauge-center-quiet", gauges)
         self.assertIn(".home-gauge-center strong", css)
+        dash = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
+        self.assertIn("_host_resource_gauges.html", dash)
+        self.assertIn("/dashboard/metrics", dash)
+        home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
+        self.assertNotIn("home-gauge", home)
 
 
 if __name__ == "__main__":

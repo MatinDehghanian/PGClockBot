@@ -31,10 +31,6 @@ class HomeOverviewFailSoftTests(unittest.IsolatedAsyncioTestCase):
         session = AsyncMock()
         with (
             patch(
-                "app.services.home_overview.host_metrics",
-                side_effect=RuntimeError("metrics boom"),
-            ),
-            patch(
                 "app.services.home_overview.check_bot_connection",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("bot boom"),

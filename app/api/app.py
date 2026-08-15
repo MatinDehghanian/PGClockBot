@@ -780,6 +780,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         wants_json = (
             "application/json" in accept
             or request.url.path.startswith("/home/metrics")
+            or request.url.path.startswith("/dashboard/metrics")
+            or request.url.path.startswith("/pg/metrics")
             or request.url.path.startswith("/api")
             or request.url.path.endswith(".json")
         )
@@ -1577,10 +1579,21 @@ def create_api_app(lifespan=None) -> FastAPI:
         recent_payments: list = []
         recent_orders: list = []
         bot_setup_needed = False
+        host_gauges = None
 
         if is_platform_admin(staff):
+            import asyncio
+
             from app.services.db_safe import rollback_quiet
             from app.services.home_overview import bot_panel_summary
+            from app.services.host_gauges import local_host_gauges
+
+            try:
+                host_gauges = await asyncio.to_thread(local_host_gauges, wait_cpu=0.0)
+            except Exception:
+                from app.services.host_gauges import empty_host_gauges
+
+                host_gauges = empty_host_gauges()
 
             try:
                 summary = await bot_panel_summary(session)
@@ -1657,6 +1670,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     "recent_payments": recent_payments,
                     "recent_orders": recent_orders,
                     "bot_setup_needed": False,
+                    "host_gauges": host_gauges,
                 },
             )
 
@@ -1723,8 +1737,23 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "recent_payments": recent_payments,
                 "recent_orders": recent_orders,
                 "bot_setup_needed": bot_setup_needed,
+                "host_gauges": host_gauges,
             },
         )
+
+    @app.get("/dashboard/metrics")
+    async def dashboard_host_metrics_json(staff: dict = Depends(require_admin)):
+        """Local bot-server CPU/RAM for the bot overview gauges (platform admin only)."""
+        import asyncio
+
+        from fastapi.responses import JSONResponse
+
+        from app.services.host_gauges import gauges_json, local_host_gauges
+
+        host = await asyncio.to_thread(local_host_gauges, wait_cpu=0.0)
+        if host.get("cpu_percent") is None:
+            host = await asyncio.to_thread(local_host_gauges, wait_cpu=0.12)
+        return JSONResponse(gauges_json(host))
 
     @app.get("/plans", response_class=HTMLResponse)
     async def plans_page(

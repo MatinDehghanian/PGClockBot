@@ -5043,6 +5043,39 @@ td.byte-size {
   max-height: 48px;
 }
 .cell-tight { white-space: nowrap; }
+/* Compact ID / status / amount — leave room for names & long text */
+th.col-id,
+td.col-id {
+  width: 1%;
+  max-width: 4.5rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+th.col-status,
+td.col-status,
+th.col-amount,
+td.col-amount,
+th.col-time,
+td.col-time,
+th.col-type,
+td.col-type {
+  width: 1%;
+  white-space: nowrap;
+}
+th.col-name,
+td.col-name,
+th.col-user,
+td.col-user,
+th.col-text,
+td.col-text,
+th.col-subject,
+td.col-subject,
+th.col-address,
+td.col-address {
+  width: auto;
+  min-width: 7rem;
+  max-width: 22rem;
+}
 .col-actions { width: 1%; white-space: nowrap; text-align: end; vertical-align: middle; }
 .row-actions {
   position: relative;
@@ -7345,25 +7378,31 @@ html[data-theme="light"] .sk-bone::after {
 
 
 /* —— Telegram button color settings (settings → رنگبندی) —— */
-.btn-color-section[data-section="admin"] {
-  border-inline-start: 3px solid var(--primary, #3b82f6);
+/* Section heads: title + caption only (no accent box) — spacing matches settings cards */
+.btn-color-section-head {
+  margin: 0 0 var(--section-gap);
+  min-width: 0;
 }
-.btn-color-section[data-section="reseller"] {
-  border-inline-start: 3px solid var(--success, #22c55e);
+.btn-color-section-head > h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--foreground);
 }
-.btn-color-section[data-section="shop"],
-.btn-color-section[data-section="shared"] {
-  border-inline-start: 3px solid var(--border);
+.btn-color-section-head > .update-card-caption,
+.btn-color-section-head > p.muted {
+  margin: calc(-1 * var(--space-1)) 0 0;
+  line-height: 1.5;
+  font-size: 12px;
+  color: var(--muted-fg);
+  font-weight: 400;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
-.btn-color-group[data-section="admin"] > h2::before {
-  content: "ادمین · ";
-  opacity: 0.55;
-  font-weight: 500;
-}
-.btn-color-group[data-section="reseller"] > h2::before {
-  content: "نماینده · ";
-  opacity: 0.55;
-  font-weight: 500;
+.btn-color-section-head + .settings-card {
+  margin-top: 0;
 }
 .btn-color-grid {
   display: grid;

@@ -85,7 +85,8 @@ class ButtonColorsAclTests(unittest.TestCase):
         self.assertIn("sectioned_catalog()", src)
         html = (ROOT / "app/web/templates/_settings_colors.html").read_text(encoding="utf-8")
         self.assertIn("button_style_sections", html)
-        self.assertIn("btn-color-section", html)
+        self.assertIn("btn-color-section-head", html)
+        self.assertNotIn("btn-color-section[", html)
         self.assertIn("زیرمنوی همان نوع", html)
 
 

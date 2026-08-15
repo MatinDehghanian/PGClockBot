@@ -164,6 +164,12 @@
   {% endif %}
 
 {% else %}
+{% if host_gauges %}
+{% set host = host_gauges %}
+{% set metrics_url = '/pg/metrics' %}
+{% set aria_label = 'منابع سرور پاسارگارد' %}
+{% include "_host_resource_gauges.html" %}
+{% endif %}
 <div class="home-panels">
   <section class="home-panel home-panel-pg">
     <div class="home-panel-head">
@@ -238,18 +244,6 @@
   </section>
 </div>
 
-<div class="card">
-  <h2>دسترسی سریع</h2>
-  <div class="quick-links">
-    <a href="/pg/users">کاربران{% if counts.users %} ({{ counts.users }}){% endif %}</a>
-    <a href="/pg/admins">ادمین‌ها{% if counts.admins %} ({{ counts.admins }}){% endif %}</a>
-    <a href="/pg/nodes">نودها{% if counts.nodes %} ({{ counts.nodes }}){% endif %}</a>
-    <a href="/pg/groups">گروه‌ها</a>
-    <a href="/pg/hosts">هاست‌ها</a>
-    <a class="desk-only" href="/pg/templates">تمپلیت</a>
-  </div>
-</div>
-
 {% if nodes is defined %}
 <div class="card card-flush">
   <h2>نودها</h2>
@@ -258,13 +252,13 @@
   {% else %}
   <div class="table-wrap">
   <table class="table-compact">
-    <thead><tr><th>شناسه</th><th>نام</th><th>وضعیت</th></tr></thead>
+    <thead><tr><th class="col-id">شناسه</th><th class="col-name">نام</th><th class="col-status">وضعیت</th></tr></thead>
     <tbody>
     {% for n in nodes %}
       <tr>
-        <td class="mono">{{ n.get('id') }}</td>
-        <td>{{ n.get('name') or n.get('address') or '—' }}</td>
-        <td>
+        <td class="mono col-id">{{ n.get('id') }}</td>
+        <td class="col-name">{{ n.get('name') or n.get('address') or '—' }}</td>
+        <td class="col-status">
           {% set st = (n.get('status') or n.get('connection_status') or '')|string|lower %}
           <span class="badge {% if st in ['connected','online','healthy'] %}connected{% elif 'connect' in st %}connecting{% elif st in ['error','offline','unhealthy','disabled'] %}danger{% else %}neutral{% endif %}">
             {{ n.get('status') or n.get('connection_status') or '—' }}
