@@ -27,12 +27,19 @@ class PlansHeadActionsMobileTests(unittest.TestCase):
         self.assertIn("کد هدیه", head)
         self.assertIn("افزودن پلن", head)
 
-    def test_mobile_grid_keeps_two_cols(self):
+    def test_page_head_actions_hug_label_width(self):
+        """Opposite-title buttons size like «افزودن نماینده» — not stretched grid cells."""
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn(
-            ".page-head > .page-head-actions {\n    display: grid;\n    grid-template-columns: repeat(2, minmax(0, 1fr));",
-            css,
-        )
+        mobile = css.split("@media (max-width: 900px)", 1)[1]
+        block = mobile.split(".page-head > .page-head-actions {", 1)[1].split("}", 1)[0]
+        self.assertIn("display: flex", block)
+        self.assertNotIn("display: grid", block)
+        self.assertNotIn("minmax(0, 1fr)", block)
+        self.assertIn("padding-inline: var(--space-2)", css)
+        # Direct page-head btn and wrapped actions share content width
+        self.assertIn(".page-head > .page-head-actions > .btn", css)
+        hug = css.split(".page-head > .page-head-actions > .btn", 1)[1][:280]
+        self.assertIn("width: auto", hug)
 
 
 class TicketStatusFullWidthTests(unittest.TestCase):

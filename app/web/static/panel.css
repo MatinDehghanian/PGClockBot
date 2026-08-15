@@ -1648,19 +1648,48 @@ a.btn.btn-ghost:hover {
   margin-top: var(--space-2);
   align-items: center;
 }
-/* Keep header actions on the title row (don't inherit .actions margin-top) */
+/* Keep header actions on the title row (don't inherit .actions margin-top).
+   Width hugs label like «افزودن نماینده» — never stretch short titles. */
 .page-head > .actions,
 .page-head > .page-head-actions,
-.page-head > .btn {
+.page-head > .btn,
+.page-head > a.btn {
   margin-top: 0;
   flex: 0 0 auto;
   align-self: center;
+  width: auto;
+  max-width: 100%;
 }
 .page-head-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-1);
+}
+.page-head > .btn,
+.page-head > a.btn,
+.page-head > .actions > .btn,
+.page-head > .actions > a.btn,
+.page-head > .page-head-actions > .btn,
+.page-head > .page-head-actions > a.btn,
+.page-head > .actions > form > .btn,
+.page-head > .page-head-actions > form > .btn {
+  width: auto;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  /* Same horizontal inset as «افزودن نماینده» (.btn default) */
+  padding-inline: var(--space-2);
+  box-sizing: border-box;
+}
+.page-head > .actions > form,
+.page-head > .page-head-actions > form {
+  display: flex;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+  margin: 0;
 }
 .page-head > div:has(> .page-title) {
   flex: 1 1 0%;
@@ -3647,17 +3676,19 @@ form.settings-form > .actions.sticky-actions,
     width: auto;
     flex: 0 0 auto;
     margin-top: 0;
+    max-width: 100%;
   }
+  /* Match direct «افزودن نماینده» sizing — content width, not equal-column stretch */
   .page-head > .actions,
   .page-head > .page-head-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-1);
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: stretch;
-    max-width: min(100%, 22rem);
+    justify-content: flex-end;
+    gap: var(--space-1);
     width: auto;
-    flex: 1 1 auto;
+    max-width: 100%;
+    flex: 0 1 auto;
   }
   .page-head > .actions > .btn,
   .page-head > .actions > a.btn,
@@ -3665,13 +3696,10 @@ form.settings-form > .actions.sticky-actions,
   .page-head > .page-head-actions > .btn,
   .page-head > .page-head-actions > a.btn,
   .page-head > .page-head-actions > form {
-    width: 100%;
+    width: auto;
     max-width: 100%;
     min-width: 0;
-  }
-  .page-head > .actions > :last-child:nth-child(odd),
-  .page-head > .page-head-actions > :last-child:nth-child(odd) {
-    grid-column: 1 / -1;
+    flex: 0 0 auto;
   }
   .page-head > .actions > form,
   .page-head > .page-head-actions > form {
@@ -3679,8 +3707,9 @@ form.settings-form > .actions.sticky-actions,
   }
   .page-head > .actions > form > .btn,
   .page-head > .page-head-actions > form > .btn {
-    width: 100%;
+    width: auto;
     justify-content: center;
+    padding-inline: var(--space-2);
   }
   .page-head > .page-head-actions > form {
     display: flex;
@@ -3692,6 +3721,7 @@ form.settings-form > .actions.sticky-actions,
     width: auto;
     max-width: 100%;
     justify-content: center;
+    padding-inline: var(--space-2);
   }
   .pg-head {
     margin-top: 0;
