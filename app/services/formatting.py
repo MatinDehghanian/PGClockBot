@@ -87,6 +87,22 @@ def format_bytes(num: int | float | None, *, precision: int | None = None) -> st
     return f"{_fmt_unit_amount(n / div, precision=precision)} {label}"
 
 
+def format_bytes_rate(num: int | float | None, *, precision: int | None = None) -> str:
+    """Throughput label: «۱۰ مگ/ثانیه». Missing/invalid → «—» (not «نامحدود»)."""
+    if num is None:
+        return "—"
+    try:
+        n = float(num)
+    except (TypeError, ValueError):
+        return "—"
+    if n < 0:
+        n = abs(n)
+    size = format_bytes(n, precision=precision)
+    if size in {"نامحدود", "—"}:
+        return "—"
+    return f"{size}/ثانیه"
+
+
 def format_bytes_ratio(
     used: int | float | None,
     limit: int | float | None,

@@ -166,10 +166,40 @@
 {% else %}
 {% if host_gauges %}
 {% set host = host_gauges %}
-{% set metrics_url = '/pg/metrics' %}
+{% set metrics_url = '' %}
 {% set aria_label = 'منابع سرور پاسارگارد' %}
 {% include "_host_resource_gauges.html" %}
 {% endif %}
+
+{% set ov_nodes = (nodes_overview.nodes if nodes_overview else nodes) if (nodes_overview or nodes is defined) else [] %}
+{% set live = (nodes_overview.live if nodes_overview else none) %}
+{% if host_gauges or live %}
+<section class="pg-nodes-live" aria-label="ترافیک زنده نودها" data-pg-nodes-live data-metrics-url="/pg/metrics">
+  <div class="pg-live-rates" aria-label="مجموع نرخ زنده همه نودها">
+    <article class="pg-live-rate">
+      <div class="pg-live-rate-top">
+        <span class="stat-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 19V5M12 5l-4 4M12 5l4 4"/></svg>
+        </span>
+        <span>آپلود زنده</span>
+      </div>
+      <strong class="stat-value byte-size" dir="ltr" data-pg-live-up>{{ (live.rate_up_text if live else none) or '—' }}</strong>
+      <small class="muted">مجموع همه نودها</small>
+    </article>
+    <article class="pg-live-rate">
+      <div class="pg-live-rate-top">
+        <span class="stat-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M12 19l-4-4M12 19l4-4"/></svg>
+        </span>
+        <span>دانلود زنده</span>
+      </div>
+      <strong class="stat-value byte-size" dir="ltr" data-pg-live-down>{{ (live.rate_down_text if live else none) or '—' }}</strong>
+      <small class="muted">مجموع همه نودها</small>
+    </article>
+  </div>
+</section>
+{% endif %}
+
 <div class="home-panels">
   <section class="home-panel home-panel-pg">
     <div class="home-panel-head">
@@ -244,33 +274,154 @@
   </section>
 </div>
 
-{% if nodes is defined %}
-<div class="card card-flush">
-  <h2>نودها</h2>
-  {% if not nodes %}
-  <p class="muted">نودی نیست.</p>
+{% if is_admin %}
+<section class="home-panel pg-node-board" aria-label="نودها">
+  <div class="home-panel-head">
+    <div class="home-panel-title">
+      <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
+      <h2 class="home-panel-h">نودها</h2>
+    </div>
+  </div>
+  {% if not ov_nodes %}
+  <p class="muted pg-node-board-empty">نودی نیست.</p>
   {% else %}
-  <div class="table-wrap">
-  <table class="table-compact">
-    <thead><tr><th class="col-id">شناسه</th><th class="col-name">نام</th><th class="col-status">وضعیت</th></tr></thead>
-    <tbody>
-    {% for n in nodes %}
-      <tr>
-        <td class="mono col-id">{{ n.get('id') }}</td>
-        <td class="col-name">{{ n.get('name') or n.get('address') or '—' }}</td>
-        <td class="col-status">
-          {% set st = (n.get('status') or n.get('connection_status') or '')|string|lower %}
-          <span class="badge {% if st in ['connected','online','healthy'] %}connected{% elif 'connect' in st %}connecting{% elif st in ['error','offline','unhealthy','disabled'] %}danger{% else %}neutral{% endif %}">
-            {{ n.get('status') or n.get('connection_status') or '—' }}
-          </span>
-        </td>
-      </tr>
+  <div class="pg-node-grid" data-pg-node-grid>
+    {% for n in ov_nodes %}
+    <article class="pg-node-tile" data-pg-node-tile data-node-id="{{ n.get('id') if n.get('id') is not none else '' }}">
+      <div class="pg-node-tile-head">
+        <div class="pg-node-tile-title">
+          <strong class="pg-node-name">{{ n.get('name') or '—' }}</strong>
+          {% if n.get('id') is not none %}
+          <span class="muted mono pg-node-id" dir="ltr">#{{ n.get('id') }}</span>
+          {% endif %}
+        </div>
+        {% set sk = (n.get('status_kind') or 'neutral') %}
+        <span class="badge {% if sk == 'ok' %}connected{% elif sk == 'warn' %}connecting{% elif sk == 'err' %}danger{% else %}neutral{% endif %}" data-pg-node-status>
+          {{ n.get('status') or '—' }}
+        </span>
+      </div>
+      <div class="pg-node-metrics">
+        <div class="pg-node-metric">
+          <span>پردازنده</span>
+          <strong class="stat-value" dir="ltr" data-pg-node-cpu>{{ n.get('cpu_text') or '—' }}</strong>
+        </div>
+        <div class="pg-node-metric">
+          <span>حافظه</span>
+          <strong class="stat-value" dir="ltr" data-pg-node-mem>{{ n.get('mem_text') or '—' }}</strong>
+          <small class="muted num-ratio" data-pg-node-mem-hint>{% if n.get('mem_ratio_text') and n.get('mem_ratio_text') != '—' %}{{ n.get('mem_ratio_text') }}{% endif %}</small>
+        </div>
+        <div class="pg-node-metric">
+          <span>آپلود</span>
+          <strong class="stat-value byte-size" dir="ltr" data-pg-node-up>{{ n.get('traffic_up_text') or '—' }}</strong>
+        </div>
+        <div class="pg-node-metric">
+          <span>دانلود</span>
+          <strong class="stat-value byte-size" dir="ltr" data-pg-node-down>{{ n.get('traffic_down_text') or '—' }}</strong>
+        </div>
+        <div class="pg-node-metric">
+          <span>نرخ آپلود</span>
+          <strong class="stat-value byte-size" dir="ltr" data-pg-node-rate-up>{{ n.get('rate_up_text') or '—' }}</strong>
+        </div>
+        <div class="pg-node-metric">
+          <span>نرخ دانلود</span>
+          <strong class="stat-value byte-size" dir="ltr" data-pg-node-rate-down>{{ n.get('rate_down_text') or '—' }}</strong>
+        </div>
+      </div>
+    </article>
     {% endfor %}
-    </tbody>
-  </table>
   </div>
   {% endif %}
-</div>
+</section>
+<script>
+(function () {
+  var liveRoot = document.querySelector('[data-pg-nodes-live][data-metrics-url]');
+  var hostRoot = document.querySelector('[data-host-gauges]');
+  var url = (liveRoot && liveRoot.getAttribute('data-metrics-url')) || '/pg/metrics';
+  var liveUp = document.querySelector('[data-pg-live-up]');
+  var liveDown = document.querySelector('[data-pg-live-down]');
+  var grid = document.querySelector('[data-pg-node-grid]');
+  var cpuEl = hostRoot && hostRoot.querySelector('[data-host-cpu-val]');
+  var memEl = hostRoot && hostRoot.querySelector('[data-host-mem-val]');
+  var memHint = hostRoot && hostRoot.querySelector('[data-host-mem-hint]');
+  var coresEl = hostRoot && hostRoot.querySelector('[data-host-cpu-cores]');
+  var cpuGauge = hostRoot && hostRoot.querySelector('[data-metric="cpu"]');
+  var memGauge = hostRoot && hostRoot.querySelector('[data-metric="mem"]');
+  function setGauge(article, pct, tone) {
+    if (!article) return;
+    var ring = article.querySelector('.home-gauge-ring');
+    if (ring && pct != null) ring.style.setProperty('--p', String(pct));
+    article.className = 'home-gauge home-gauge-' + (tone || 'neutral');
+  }
+  function fmtPct(n) {
+    if (n == null || isNaN(n)) return '—';
+    return Math.round(n) + '٪';
+  }
+
+  function badgeClass(kind) {
+    if (kind === 'ok') return 'badge connected';
+    if (kind === 'warn') return 'badge connecting';
+    if (kind === 'err') return 'badge danger';
+    return 'badge neutral';
+  }
+  function applyNode(tile, n) {
+    if (!tile || !n) return;
+    var st = tile.querySelector('[data-pg-node-status]');
+    if (st) {
+      st.textContent = n.status || '—';
+      st.className = badgeClass(n.status_kind || 'neutral');
+    }
+    var set = function (sel, val) {
+      var el = tile.querySelector(sel);
+      if (el && val != null) el.textContent = val;
+    };
+    set('[data-pg-node-cpu]', n.cpu_text);
+    set('[data-pg-node-mem]', n.mem_text);
+    set('[data-pg-node-mem-hint]', n.mem_ratio_text && n.mem_ratio_text !== '—' ? n.mem_ratio_text : '');
+    set('[data-pg-node-up]', n.traffic_up_text);
+    set('[data-pg-node-down]', n.traffic_down_text);
+    set('[data-pg-node-rate-up]', n.rate_up_text);
+    set('[data-pg-node-rate-down]', n.rate_down_text);
+  }
+  async function tickNodes() {
+    if (document.hidden) return;
+    try {
+      var r = await fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now(), {
+        cache: 'no-store',
+        credentials: 'same-origin'
+      });
+      if (!r.ok) return;
+      var d = await r.json();
+      if (cpuEl) cpuEl.textContent = fmtPct(d.cpu_percent);
+      if (memEl) memEl.textContent = fmtPct(d.memory_percent);
+      if (memHint && (d.memory_ratio_text || (d.memory_used_text && d.memory_total_text))) {
+        memHint.textContent = d.memory_ratio_text || (d.memory_used_text + ' / ' + d.memory_total_text);
+      }
+      if (coresEl && d.cpu_cores) {
+        coresEl.hidden = false;
+        coresEl.textContent = d.cpu_cores + ' هسته';
+      }
+      setGauge(cpuGauge, d.cpu_percent, d.cpu_tone);
+      setGauge(memGauge, d.memory_percent, d.mem_tone);
+      if (d.live) {
+        if (liveUp && d.live.rate_up_text) liveUp.textContent = d.live.rate_up_text;
+        if (liveDown && d.live.rate_down_text) liveDown.textContent = d.live.rate_down_text;
+      }
+      if (grid && Array.isArray(d.nodes)) {
+        d.nodes.forEach(function (n) {
+          if (n == null || n.id == null) return;
+          var tile = grid.querySelector('[data-pg-node-tile][data-node-id="' + String(n.id) + '"]');
+          applyNode(tile, n);
+        });
+      }
+    } catch (e) {}
+  }
+  setInterval(tickNodes, 5000);
+  setTimeout(tickNodes, 2500);
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) tickNodes();
+  });
+})();
+</script>
 {% endif %}
 {% endif %}
 {% endblock %}
