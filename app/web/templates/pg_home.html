@@ -312,6 +312,8 @@
       {% set tdn = n.get('traffic_down') or {} %}
       {% set rup = n.get('rate_up_parts') or {} %}
       {% set rdn = n.get('rate_down_parts') or {} %}
+      {% set ccores = n.get('cpu_cores_parts') or {} %}
+      {% set mparts = n.get('mem_parts') or {} %}
       {% set nid = n.get('id') if n.get('id') is not none else loop.index0 %}
       <article
         class="pg-node-tile"
@@ -338,7 +340,10 @@
           <div class="pg-node-metric pg-node-metric-res">
             <div class="pg-node-metric-head">
               <span>پردازنده</span>
-              <span class="muted pg-node-metric-meta" data-pg-node-cpu-meta>{% if n.get('cpu_cores_text') %}{{ n.get('cpu_cores_text') }}{% endif %}</span>
+              <span class="muted pg-node-metric-meta" data-pg-node-cpu-meta{% if not ccores.get('num') %} hidden{% endif %}>
+                <span class="pg-metric-num" data-pg-node-cpu-cores-num>{{ ccores.get('num') or '' }}</span>
+                <span class="pg-metric-unit" data-pg-node-cpu-cores-unit>{{ ccores.get('unit') or '' }}</span>
+              </span>
             </div>
             <div class="pg-node-meter pg-node-meter-{{ n.get('cpu_tone') or 'neutral' }}" style="--p: {{ cpu_p }}" data-pg-node-cpu-meter>
               <div class="pg-node-meter-track" aria-hidden="true"><i class="pg-node-meter-fill"></i></div>
@@ -348,7 +353,14 @@
           <div class="pg-node-metric pg-node-metric-res">
             <div class="pg-node-metric-head">
               <span>حافظه</span>
-              <span class="muted pg-node-metric-meta num-ratio" data-pg-node-mem-meta>{% if n.get('mem_ratio_text') and n.get('mem_ratio_text') != '—' %}{{ n.get('mem_ratio_text') }}{% endif %}</span>
+              <span class="muted pg-node-metric-meta" data-pg-node-mem-meta{% if not mparts.get('unit') %} hidden{% endif %}>
+                <span class="pg-metric-num" dir="ltr" data-pg-node-mem-nums>
+                  <span data-pg-node-mem-used>{{ mparts.get('used') or '' }}</span>
+                  <span class="pg-metric-sep" aria-hidden="true"> / </span>
+                  <span data-pg-node-mem-total>{{ mparts.get('total') or '' }}</span>
+                </span>
+                <span class="pg-metric-unit" data-pg-node-mem-unit>{{ mparts.get('unit') or '' }}</span>
+              </span>
             </div>
             <div class="pg-node-meter pg-node-meter-{{ n.get('mem_tone') or 'neutral' }}" style="--p: {{ mem_p }}" data-pg-node-mem-meter>
               <div class="pg-node-meter-track" aria-hidden="true"><i class="pg-node-meter-fill"></i></div>
@@ -439,6 +451,16 @@
     if (kind === 'err') return 'badge danger';
     return 'badge neutral';
   }
+  function setMetaParts(wrap, visible, applyFn) {
+    if (!wrap) return;
+    if (!visible) {
+      wrap.hidden = true;
+      applyFn(wrap);
+      return;
+    }
+    wrap.hidden = false;
+    applyFn(wrap);
+  }
   function applyNode(tile, n) {
     if (!tile || !n) return;
     var st = tile.querySelector('[data-pg-node-status]');
@@ -447,9 +469,23 @@
       st.className = badgeClass(n.status_kind || 'neutral');
     }
     var cpuMeta = tile.querySelector('[data-pg-node-cpu-meta]');
-    if (cpuMeta) cpuMeta.textContent = n.cpu_cores_text || '';
+    var cp = n.cpu_cores_parts || {};
+    setMetaParts(cpuMeta, !!(cp.num && cp.unit), function (wrap) {
+      var numEl = wrap.querySelector('[data-pg-node-cpu-cores-num]');
+      var unitEl = wrap.querySelector('[data-pg-node-cpu-cores-unit]');
+      if (numEl) numEl.textContent = cp.num || '';
+      if (unitEl) unitEl.textContent = cp.unit || '';
+    });
     var memMeta = tile.querySelector('[data-pg-node-mem-meta]');
-    if (memMeta) memMeta.textContent = (n.mem_ratio_text && n.mem_ratio_text !== '—') ? n.mem_ratio_text : '';
+    var mp = n.mem_parts || {};
+    setMetaParts(memMeta, !!mp.unit, function (wrap) {
+      var usedEl = wrap.querySelector('[data-pg-node-mem-used]');
+      var totEl = wrap.querySelector('[data-pg-node-mem-total]');
+      var unitEl = wrap.querySelector('[data-pg-node-mem-unit]');
+      if (usedEl) usedEl.textContent = mp.used || '';
+      if (totEl) totEl.textContent = mp.total || '';
+      if (unitEl) unitEl.textContent = mp.unit || '';
+    });
     setMeter(tile, 'cpu', n.cpu_percent, n.cpu_text, n.cpu_tone);
     setMeter(tile, 'mem', n.mem_percent, n.mem_text, n.mem_tone);
     setParts(tile.querySelector('[data-pg-node-up-num]'), tile.querySelector('[data-pg-node-up-unit]'), n.traffic_up);

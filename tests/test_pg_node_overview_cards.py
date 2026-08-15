@@ -52,7 +52,12 @@ class NodeOverviewBuilderTests(unittest.TestCase):
         n1 = ov["nodes"][0]
         self.assertEqual(n1["cpu_percent"], 41.2)
         self.assertEqual(n1["cpu_cores_text"], "4 هسته")
+        self.assertEqual(n1["cpu_cores_parts"]["num"], "4")
+        self.assertEqual(n1["cpu_cores_parts"]["unit"], "هسته")
         self.assertAlmostEqual(n1["mem_percent"], 25.0, places=0)
+        self.assertEqual(n1["mem_parts"]["used"], "2.0")
+        self.assertEqual(n1["mem_parts"]["total"], "8.0")
+        self.assertEqual(n1["mem_parts"]["unit"], "گیگ")
         self.assertEqual(n1["status_kind"], "ok")
         self.assertEqual(ov["live"]["rate_up"], 242)
         self.assertEqual(ov["live"]["rate_down"], 121)
@@ -67,6 +72,8 @@ class NodeOverviewBuilderTests(unittest.TestCase):
         self.assertIn("rate_up_num", payload["live"])
         self.assertIn("rate_up_parts", payload["nodes"][0])
         self.assertIn("cpu_cores_text", payload["nodes"][0])
+        self.assertEqual(payload["nodes"][0]["cpu_cores_parts"]["num"], "4")
+        self.assertEqual(payload["nodes"][0]["mem_parts"]["unit"], "گیگ")
         # No raw secrets / unrelated keys
         dumped = str(payload)
         self.assertNotIn("server_ca", dumped)
@@ -119,10 +126,12 @@ class PgOverviewSurfaceTests(unittest.TestCase):
         self.assertIn(".pg-metric-unit", css)
         self.assertIn(".pg-metric-val-rate", css)
         rate_block = css[css.find(".pg-metric-val-rate") : css.find(".pg-metric-val-rate") + 1200]
-        self.assertIn("flex-direction: row-reverse", rate_block)
+        self.assertIn("direction: rtl", rate_block)
+        self.assertNotIn("row-reverse", rate_block)
         self.assertIn(".pg-node-metric .pg-metric-val-rate", css)
-        # row-reverse keeps num at the physical right regardless of parent dir
-        self.assertIn("row-reverse", rate_block)
+        meta_block = css[css.find(".pg-node-metric-meta") : css.find(".pg-node-metric-meta") + 900]
+        self.assertIn("direction: rtl", meta_block)
+        self.assertNotIn("direction: ltr", meta_block.split("{", 1)[1].split("}", 1)[0])
         self.assertIn(".pg-node-meter", css)
         self.assertIn(".pg-node-tabs", css)
         self.assertIn(".pg-node-metric-res", css)
@@ -132,6 +141,16 @@ class PgOverviewSurfaceTests(unittest.TestCase):
         self.assertNotIn("padding:", body)
         self.assertNotIn("border:", body)
         self.assertNotIn("background:", body)
+
+    def test_pg_home_node_meta_parts(self):
+        pg = (ROOT / "app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        self.assertIn("data-pg-node-cpu-cores-num", pg)
+        self.assertIn("data-pg-node-cpu-cores-unit", pg)
+        self.assertIn("data-pg-node-mem-used", pg)
+        self.assertIn("data-pg-node-mem-total", pg)
+        self.assertIn("data-pg-node-mem-unit", pg)
+        self.assertIn("cpu_cores_parts", pg)
+        self.assertIn("mem_parts", pg)
 
     def test_metrics_route_fetches_nodes_and_owner_guard(self):
         src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")

@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services.formatting import format_bytes, format_bytes_parts, format_bytes_rate, format_bytes_rate_parts
+from app.services.formatting import (
+    format_bytes,
+    format_bytes_parts,
+    format_bytes_rate,
+    format_bytes_rate_parts,
+    format_bytes_ratio_parts,
+)
 from app.services.host_gauges import tone_class
 from app.services.host_metrics import format_memory_ratio
 from app.services.pasarguard import as_list
@@ -225,20 +231,31 @@ def enrich_nodes_with_traffic(nodes: list | None, realtime: Any = None) -> list[
         n["_rate_down_text"] = format_bytes_rate(rate_down)
         n["_cpu_percent"] = cpu
         n["_cpu_cores"] = cpu_cores if isinstance(cpu_cores, int) and cpu_cores > 0 else None
-        n["_cpu_cores_text"] = (
-            f"{n['_cpu_cores']} هسته" if n["_cpu_cores"] is not None else ""
-        )
+        if n["_cpu_cores"] is not None:
+            n["_cpu_cores_num"] = str(n["_cpu_cores"])
+            n["_cpu_cores_unit"] = "هسته"
+            n["_cpu_cores_text"] = f"{n['_cpu_cores_num']} {n['_cpu_cores_unit']}"
+        else:
+            n["_cpu_cores_num"] = ""
+            n["_cpu_cores_unit"] = ""
+            n["_cpu_cores_text"] = ""
         n["_cpu_text"] = _fmt_pct(cpu)
         n["_cpu_tone"] = tone_class(cpu)
         n["_mem_percent"] = mem_pct
         n["_mem_used"] = mem_used
         n["_mem_total"] = mem_total
         n["_mem_text"] = _fmt_pct(mem_pct)
-        n["_mem_ratio_text"] = (
-            format_memory_ratio(mem_used, mem_total)
-            if mem_used is not None and mem_total
-            else "—"
-        )
+        if mem_used is not None and mem_total:
+            mem_parts = format_bytes_ratio_parts(mem_used, mem_total, precision=1)
+            n["_mem_used_num"] = str(mem_parts.get("used") or "—")
+            n["_mem_total_num"] = str(mem_parts.get("total") or "—")
+            n["_mem_unit"] = str(mem_parts.get("unit") or "")
+            n["_mem_ratio_text"] = format_memory_ratio(mem_used, mem_total)
+        else:
+            n["_mem_used_num"] = ""
+            n["_mem_total_num"] = ""
+            n["_mem_unit"] = ""
+            n["_mem_ratio_text"] = "—"
         n["_mem_tone"] = tone_class(mem_pct)
         status = n.get("status") or n.get("connection_status") or ""
         n["_status"] = status
@@ -280,6 +297,21 @@ def node_overview_card(node: dict) -> dict[str, Any]:
     traffic_down_parts = _metric_parts(
         str(node.get("_traffic_down_num") or "—"), str(node.get("_traffic_down_unit") or "")
     )
+    cpu_cores_parts = _metric_parts(
+        str(node.get("_cpu_cores_num") or ""), str(node.get("_cpu_cores_unit") or "")
+    )
+    if cpu_cores_parts["num"] in {"", "—"} and not cpu_cores_parts["unit"]:
+        cpu_cores_parts = {"num": "", "unit": ""}
+    mem_used_num = str(node.get("_mem_used_num") or "")
+    mem_total_num = str(node.get("_mem_total_num") or "")
+    mem_unit = str(node.get("_mem_unit") or "")
+    mem_parts = {
+        "used": mem_used_num or "—",
+        "total": mem_total_num or "—",
+        "unit": mem_unit,
+    }
+    if not mem_unit and mem_used_num in {"", "—"}:
+        mem_parts = {"used": "", "total": "", "unit": ""}
     return {
         "id": nid,
         "name": name,
@@ -289,9 +321,11 @@ def node_overview_card(node: dict) -> dict[str, Any]:
         "cpu_text": node.get("_cpu_text") or "—",
         "cpu_tone": node.get("_cpu_tone") or "neutral",
         "cpu_cores_text": node.get("_cpu_cores_text") or "",
+        "cpu_cores_parts": cpu_cores_parts,
         "mem_percent": node.get("_mem_percent"),
         "mem_text": node.get("_mem_text") or "—",
         "mem_ratio_text": node.get("_mem_ratio_text") or "—",
+        "mem_parts": mem_parts,
         "mem_tone": node.get("_mem_tone") or "neutral",
         "traffic_up_text": node.get("_traffic_up_text") or "—",
         "traffic_down_text": node.get("_traffic_down_text") or "—",
@@ -346,9 +380,11 @@ def nodes_overview_json(overview: dict[str, Any]) -> dict[str, Any]:
                 "cpu_text": card.get("cpu_text"),
                 "cpu_tone": card.get("cpu_tone"),
                 "cpu_cores_text": card.get("cpu_cores_text") or "",
+                "cpu_cores_parts": card.get("cpu_cores_parts") or {"num": "", "unit": ""},
                 "mem_percent": card.get("mem_percent"),
                 "mem_text": card.get("mem_text"),
                 "mem_ratio_text": card.get("mem_ratio_text"),
+                "mem_parts": card.get("mem_parts") or {"used": "", "total": "", "unit": ""},
                 "mem_tone": card.get("mem_tone"),
                 "traffic_up": card.get("traffic_up") or {"num": "—", "unit": ""},
                 "traffic_down": card.get("traffic_down") or {"num": "—", "unit": ""},

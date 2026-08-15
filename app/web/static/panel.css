@@ -6078,28 +6078,25 @@ html[data-theme="light"] .setup-progress span.done {
   max-width: 100%;
 }
 /*
-  Rate / byte values — number on the visual RIGHT, unit on its LEFT
-  (RTL reading: «200 کیلوبایت/ثانیه»).
-
-  Use row-reverse + direction:ltr so placement does NOT depend on the page
-  or parent direction (node metric boxes were still flipping under plain
-  direction:rtl flex).
+  Rate / byte values — same principle as .byte-size:
+  logical «200 کیلوبایت/ثانیه»; number on the visual RIGHT, unit on the LEFT.
+  Never force dir=ltr on the whole value (that puts the unit at the right edge).
 */
 .pg-metric-val-rate,
 .pg-live-rate .pg-metric-val-rate,
 .pg-node-metric .pg-metric-val-rate {
   display: flex !important;
-  flex-direction: row-reverse; /* DOM [num][unit] → num at physical right */
+  flex-direction: row;
   flex-wrap: nowrap !important;
-  justify-content: flex-start; /* pack toward main-start = right */
+  justify-content: flex-start; /* RTL: pack from the right */
   align-items: baseline;
   gap: 0.35em;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  direction: ltr;
+  direction: rtl;
   unicode-bidi: isolate;
-  text-align: start;
+  text-align: right;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6268,16 +6265,46 @@ html[data-theme="light"] .pg-node-tabs .tab-btn.active:active {
   font-weight: 500;
   line-height: 1.3;
 }
+/* Cores / RAM meta — same num→unit RTL placement as rates (not dir=ltr). */
 .pg-node-metric-meta {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 0.22em;
   font-size: 11px;
   line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 65%;
-  text-align: left;
+  direction: rtl;
+  unicode-bidi: isolate;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.pg-node-metric-meta .pg-metric-num {
   direction: ltr;
   unicode-bidi: isolate;
+  flex: 0 0 auto;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.pg-node-metric-meta .pg-metric-num .pg-metric-sep {
+  opacity: 0.55;
+  font-weight: 600;
+}
+.pg-node-metric-meta .pg-metric-unit {
+  direction: rtl;
+  unicode-bidi: isolate;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.92em;
+  font-weight: 550;
+  color: var(--muted-fg);
 }
 .pg-node-metric .pg-metric-val {
   font-size: 16px;
