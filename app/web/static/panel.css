@@ -6228,18 +6228,21 @@ html[data-theme="light"] .setup-progress span.done {
   position: absolute;
   inset-inline: 0;
   top: 50%;
-  transform: translateY(-50%);
+  left: 50%;
+  right: auto;
+  transform: translate(-50%, -50%);
   text-align: center;
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
   color: var(--foreground);
-  text-shadow:
-    0 0 6px color-mix(in srgb, var(--bg-card) 85%, transparent),
-    0 1px 0 color-mix(in srgb, var(--bg-card) 70%, transparent);
   pointer-events: none;
   line-height: 1;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
 }
 html[data-theme="light"] .pg-node-tile {
   background: color-mix(in srgb, #fff 55%, var(--bg-card));
@@ -6248,9 +6251,7 @@ html[data-theme="light"] .pg-node-metric {
   background: color-mix(in srgb, var(--muted) 40%, #fff);
 }
 html[data-theme="light"] .pg-node-meter-pct {
-  text-shadow:
-    0 0 6px rgba(255, 255, 255, 0.9),
-    0 1px 0 rgba(255, 255, 255, 0.75);
+  background: color-mix(in srgb, #fff 82%, transparent);
 }
 .home-gauges {
   display: grid;
