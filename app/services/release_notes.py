@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "6.1.13": [
+        "رفع ترتیب نمایش نرخ ترافیک: همیشه «عدد واحد» (مثلاً ۳۴۲ کیلوبایت/ثانیه) نه برعکس",
+    ],
     "6.1.12": [
         "نمای کلی PG: نرخ آپلود/دانلود راست‌چین (عدد + واحد)؛ تب نودها با استایل آبی",
         "CPU/RAM نود در دسکتاپ دو ستون؛ نوار درصد بدون باکس؛ رنگ نوار بر اساس درصد",
