@@ -40,7 +40,7 @@ class HttpUntilSslTests(unittest.TestCase):
         ) as gs:
             gs.return_value.web_port = 9000
             url = setup_finish_login_url()
-        self.assertEqual(url, "http://10.0.0.1:9000/login")
+        self.assertEqual(url, "http://10.0.0.1:9000/login?restarting=1")
 
 
 if __name__ == "__main__":

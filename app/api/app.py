@@ -992,6 +992,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "flash_ok": ok or request.query_params.get("ok"),
                 "flash_warn": request.query_params.get("pg_warn"),
                 "panel_url": wizard_panel_url_hint(values.get("WEB_PORT", "9000")),
+                "finish_login_url": setup_finish_login_url(),
                 "bot_username": (values.get("BOT_USERNAME") or "").lstrip("@"),
             },
         )
@@ -1161,13 +1162,22 @@ def create_api_app(lifespan=None) -> FastAPI:
         return RedirectResponse("/setup?step=4", status_code=303)
 
     @app.post("/setup/finish")
-    async def setup_finish():
+    async def setup_finish(request: Request):
         mark_setup_complete()
         ensure_web_secret()
         from app.services.service_control import schedule_panel_restart
+        from app.services.setup_wizard import force_http_login_url
 
         schedule_panel_restart(delay_sec=2.5, reason="setup wizard finished")
-        return RedirectResponse(setup_finish_login_url(), status_code=303)
+        # Prefer an explicit next from the wizard page (matches the displayed
+        # panel URL). Always coerce to http — SSL is not ready on first entry.
+        next_url = ""
+        try:
+            form = await request.form()
+            next_url = str(form.get("next") or "").strip()
+        except Exception:
+            next_url = ""
+        return RedirectResponse(force_http_login_url(next_url), status_code=303)
 
     @app.get("/", response_class=HTMLResponse)
     async def root(request: Request):
