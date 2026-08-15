@@ -1,7 +1,7 @@
-# PGClockBot v6.1.17 — Release Notes
+# PGClockBot v6.1.18 — Release Notes
 
-**Tag:** `v6.1.17`  
-**App version:** `6.1.17`
+**Tag:** `v6.1.18`  
+**App version:** `6.1.18`
 
 ---
 
@@ -14,5 +14,5 @@
 
 ## Deploy
 
-In-panel update to `6.1.17`. Hard-refresh (`Ctrl+Shift+R`) so `panel.css`
+In-panel update to `6.1.18`. Hard-refresh (`Ctrl+Shift+R`) so `panel.css`
 cache clears.
