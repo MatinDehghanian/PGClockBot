@@ -6077,12 +6077,27 @@ html[data-theme="light"] .setup-progress span.done {
   color: var(--foreground);
   max-width: 100%;
 }
-/* Number then unit (LTR run), pinned to the inline-end / visual right in RTL */
+/* Force «342 کیلوبایت/ثانیه» (num then unit), one line, right-aligned in RTL panel */
 .pg-metric-val-rate {
+  display: block;
   width: 100%;
-  justify-content: flex-end;
-  text-align: right;
+  direction: ltr;
   unicode-bidi: isolate;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pg-metric-val-rate .pg-metric-num,
+.pg-metric-val-rate .pg-metric-unit {
+  display: inline;
+  vertical-align: baseline;
+}
+.pg-metric-val-rate .pg-metric-unit {
+  margin-inline-start: 0.35em;
+  /* Isolate Persian unit so bidi does not pull it before the number */
+  unicode-bidi: isolate;
+  direction: rtl;
 }
 .pg-live-rate .pg-metric-val {
   font-size: 22px;
