@@ -50,6 +50,7 @@ async def _plans_flow_reply_kb(state: FSMContext) -> ReplyKeyboardMarkup:
 
 
 async def _render_plans_list(callback: CallbackQuery, session: AsyncSession) -> None:
+    ui = await get_all_settings(session)
     result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
     plans = list(result.scalars().all())
     fixed = [p for p in plans if not p.is_trial]
@@ -65,7 +66,9 @@ async def _render_plans_list(callback: CallbackQuery, session: AsyncSession) -> 
             text,
             reply_markup=kb.admin_plans_list_keyboard(
                 plans,
+                ui,
                 back_callback="adm:plans:aud:users",
+                kind="fixed",
             ),
         )
 
@@ -128,58 +131,80 @@ async def _plan_detail_text(p: Plan) -> str:
     )
 
 
-def _plan_detail_keyboard(p: Plan) -> InlineKeyboardMarkup:
-    """Plan link/toggle/edit actions — list nav via inline back."""
+def _plan_detail_keyboard(p: Plan, ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Plan link/toggle/edit actions — inherit fixed/trial kind color."""
     pid = p.id
+    kind_id = "shop_kind_trial" if getattr(p, "is_trial", False) else "shop_kind_fixed"
+    st = kb._style(ui, kind_id, fallback="primary")
     rows = [
-        [InlineKeyboardButton(text="✏️ نام", callback_data=f"adm:plan:edit:name:{pid}")],
-        [InlineKeyboardButton(text="✏️ قیمت", callback_data=f"adm:plan:edit:price:{pid}")],
-        [InlineKeyboardButton(text="✏️ مدت (روز)", callback_data=f"adm:plan:edit:days:{pid}")],
-        [InlineKeyboardButton(text="✏️ حجم (گیگ)", callback_data=f"adm:plan:edit:gb:{pid}")],
-        [InlineKeyboardButton(text="✏️ توضیح", callback_data=f"adm:plan:edit:desc:{pid}")],
-        [InlineKeyboardButton(text="✏️ ترتیب نمایش", callback_data=f"adm:plan:edit:sort:{pid}")],
-        [InlineKeyboardButton(text="✏️ پیشوند نام", callback_data=f"adm:plan:edit:prefix:{pid}")],
-        [InlineKeyboardButton(text="✏️ پسوند نام", callback_data=f"adm:plan:edit:suffix:{pid}")],
+        [kb._ikb("✏️ نام", callback_data=f"adm:plan:edit:name:{pid}", style=st)],
+        [kb._ikb("✏️ قیمت", callback_data=f"adm:plan:edit:price:{pid}", style=st)],
+        [kb._ikb("✏️ مدت (روز)", callback_data=f"adm:plan:edit:days:{pid}", style=st)],
+        [kb._ikb("✏️ حجم (گیگ)", callback_data=f"adm:plan:edit:gb:{pid}", style=st)],
+        [kb._ikb("✏️ توضیح", callback_data=f"adm:plan:edit:desc:{pid}", style=st)],
+        [kb._ikb("✏️ ترتیب نمایش", callback_data=f"adm:plan:edit:sort:{pid}", style=st)],
+        [kb._ikb("✏️ پیشوند نام", callback_data=f"adm:plan:edit:prefix:{pid}", style=st)],
+        [kb._ikb("✏️ پسوند نام", callback_data=f"adm:plan:edit:suffix:{pid}", style=st)],
         [
-            InlineKeyboardButton(
-                text="⏸ خاموش" if p.is_active else "▶️ روشن",
+            kb._ikb(
+                "⏸ خاموش" if p.is_active else "▶️ روشن",
                 callback_data=f"adm:plan:toggle:{p.id}",
+                style=st,
             )
         ],
         [
-            InlineKeyboardButton(
-                text="📋 اتصال به تمپلیت",
+            kb._ikb(
+                "📋 اتصال به تمپلیت",
                 callback_data=f"adm:plan:picktpl:{p.id}",
+                style=st,
             )
         ],
         [
-            InlineKeyboardButton(
-                text="📁 اتصال به گروه",
+            kb._ikb(
+                "📁 اتصال به گروه",
                 callback_data=f"adm:plan:pickgrp:{p.id}",
+                style=st,
             )
         ],
     ]
     if p.pg_template_id or p.pg_group_ids:
         rows.append(
             [
-                InlineKeyboardButton(
-                    text="🧹 حذف اتصال پاسارگارد",
+                kb._ikb(
+                    "🧹 حذف اتصال پاسارگارد",
                     callback_data=f"adm:plan:clearlink:{p.id}",
+                    style=st,
                 )
             ]
         )
     rows.append(
         [
-            InlineKeyboardButton(
-                text="🗑 حذف پلن",
+            kb._ikb(
+                "🗑 حذف پلن",
                 callback_data=f"adm:plan:delask:{p.id}",
+                style=_style_danger(ui),
             )
         ]
     )
     rows.append(
-        [InlineKeyboardButton(text="⬅️ پلن‌های کاربران", callback_data="adm:plans:aud:users")]
+        [
+            kb._ikb(
+                "⬅️ پلن‌های کاربران",
+                callback_data="adm:plans:aud:users",
+                style=kb._style(ui, "back"),
+            )
+        ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _style_danger(ui: dict | None) -> str | None:
+    return kb._style(ui, "reject", fallback="danger")
+
+
+async def _plan_detail_markup(session: AsyncSession, plan: Plan) -> InlineKeyboardMarkup:
+    ui = await get_all_settings(session)
+    return _plan_detail_keyboard(plan, ui)
 
 router = Router(name="admin")
 
@@ -598,7 +623,7 @@ async def adm_plan_view(callback: CallbackQuery, session: AsyncSession, db_user:
     if callback.message:
         await callback.message.edit_text(
             await _plan_detail_text(plan),
-            reply_markup=_plan_detail_keyboard(plan),
+            reply_markup=await _plan_detail_markup(session, plan),
         )
 
 
@@ -686,7 +711,7 @@ async def adm_plan_edit_save(
     await message.answer("ذخیره شد ✅", reply_markup=await _plans_flow_reply_kb(state))
     await message.answer(
         await _plan_detail_text(plan),
-        reply_markup=_plan_detail_keyboard(plan),
+        reply_markup=await _plan_detail_markup(session, plan),
     )
 
 
@@ -1016,7 +1041,7 @@ async def adm_plan_set_tpl(
             await safe_edit_text(
                 callback.message,
                 text,
-                reply_markup=_plan_detail_keyboard(plan),
+                reply_markup=await _plan_detail_markup(session, plan),
             )
         return
     plan = await session.get(Plan, plan_id)
@@ -1032,7 +1057,7 @@ async def adm_plan_set_tpl(
         await safe_edit_text(
             callback.message,
             await _plan_detail_text(plan),
-            reply_markup=_plan_detail_keyboard(plan),
+            reply_markup=await _plan_detail_markup(session, plan),
         )
 
 
@@ -1085,7 +1110,7 @@ async def adm_plan_grp_done(
             await safe_edit_text(
                 callback.message,
                 text,
-                reply_markup=_plan_detail_keyboard(plan),
+                reply_markup=await _plan_detail_markup(session, plan),
             )
         return
     plan = await session.get(Plan, plan_id)
@@ -1101,7 +1126,7 @@ async def adm_plan_grp_done(
         await safe_edit_text(
             callback.message,
             await _plan_detail_text(plan),
-            reply_markup=_plan_detail_keyboard(plan),
+            reply_markup=await _plan_detail_markup(session, plan),
         )
 
 
@@ -1121,7 +1146,7 @@ async def adm_plan_clear_link(callback: CallbackQuery, session: AsyncSession, db
     if callback.message:
         await callback.message.edit_text(
             await _plan_detail_text(plan),
-            reply_markup=_plan_detail_keyboard(plan),
+            reply_markup=await _plan_detail_markup(session, plan),
         )
 
 
@@ -1143,7 +1168,7 @@ async def plan_toggle(callback: CallbackQuery, session: AsyncSession, db_user: B
         try:
             await callback.message.edit_text(
                 await _plan_detail_text(plan),
-                reply_markup=_plan_detail_keyboard(plan),
+                reply_markup=await _plan_detail_markup(session, plan),
             )
             return
         except Exception:

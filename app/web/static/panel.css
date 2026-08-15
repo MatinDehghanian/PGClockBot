@@ -7345,6 +7345,26 @@ html[data-theme="light"] .sk-bone::after {
 
 
 /* —— Telegram button color settings (settings → رنگبندی) —— */
+.btn-color-section[data-section="admin"] {
+  border-inline-start: 3px solid var(--primary, #3b82f6);
+}
+.btn-color-section[data-section="reseller"] {
+  border-inline-start: 3px solid var(--success, #22c55e);
+}
+.btn-color-section[data-section="shop"],
+.btn-color-section[data-section="shared"] {
+  border-inline-start: 3px solid var(--border);
+}
+.btn-color-group[data-section="admin"] > h2::before {
+  content: "ادمین · ";
+  opacity: 0.55;
+  font-weight: 500;
+}
+.btn-color-group[data-section="reseller"] > h2::before {
+  content: "نماینده · ";
+  opacity: 0.55;
+  font-weight: 500;
+}
 .btn-color-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

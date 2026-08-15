@@ -281,6 +281,7 @@ async def shop_kind_fixed(
                 fixed_plans,
                 ui,
                 back_callback="shop:list",
+                kind="fixed",
             ),
         )
 
@@ -306,6 +307,7 @@ async def shop_kind_trial(
                 trial_plans,
                 ui,
                 back_callback="shop:list",
+                kind="trial",
             ),
         )
 

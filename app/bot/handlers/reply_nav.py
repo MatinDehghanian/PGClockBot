@@ -897,6 +897,9 @@ async def open_reseller_plans_hub(
     if not has_bot_perm(profile, "plans"):
         await message.answer("دسترسی پلن ندارید.")
         return
+    from app.services.users import get_all_settings
+
+    ui = await get_all_settings(session, reseller_id=owner_id)
     await nav.show_nav_keyboard(
         message,
         session,
@@ -920,7 +923,7 @@ async def open_reseller_plans_hub(
         body = f"تعداد: {len(plans)}"
     await message.answer(
         f"📦 <b>لیست پلن‌ها</b>\n\n{body}",
-        reply_markup=kb.reseller_plans_list_keyboard(plans),
+        reply_markup=kb.reseller_plans_list_keyboard(plans, ui),
     )
 
 

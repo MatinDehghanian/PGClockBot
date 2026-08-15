@@ -426,8 +426,10 @@ class ButtonStyleTests(unittest.TestCase):
         settings_html = Path("app/web/templates/_settings_colors.html").read_text(encoding="utf-8")
         self.assertNotIn("پیش‌فرض", settings_html)
         self.assertIn("style_options", settings_html)
-        self.assertIn("پلن نمایندگی: PAYG", "".join(item["label"] for item in BUTTON_STYLE_CATALOG))
-        self.assertNotIn("Pay As You Go", "".join(item["label"] for item in BUTTON_STYLE_CATALOG))
+        self.assertIn("button_style_sections", settings_html)
+        labels = "".join(item["label"] for item in BUTTON_STYLE_CATALOG)
+        self.assertIn("نوع پلن نمایندگی: PAYG", labels)
+        self.assertNotIn("Pay As You Go", labels)
         # Expanded catalog covers user/admin/reseller reply hubs.
         ids = {item["id"] for item in BUTTON_STYLE_CATALOG}
         for needed in (
@@ -494,9 +496,10 @@ class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "6.1.5")
-        self.assertEqual(__version__, "6.1.5")
+        self.assertEqual(Path("VERSION").read_text().strip(), "6.1.6")
+        self.assertEqual(__version__, "6.1.6")
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn('"6.1.6"', notes)
         self.assertIn('"6.1.5"', notes)
         self.assertIn('"6.1.4"', notes)
         self.assertIn('"6.1.1"', notes)

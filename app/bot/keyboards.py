@@ -1007,8 +1007,11 @@ def reseller_plans_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup
     return _reply_markup(rows, placeholder="پلن‌های فروشگاه…")
 
 
-def reseller_plans_list_keyboard(plans: list) -> InlineKeyboardMarkup:
-    """Dynamic plan rows only (static chrome on reseller_plans_reply_keyboard)."""
+def reseller_plans_list_keyboard(
+    plans: list, ui: dict | None = None
+) -> InlineKeyboardMarkup:
+    """Dynamic plan rows inherit shop fixed-kind color."""
+    kind_style = _style(ui, "shop_kind_fixed", fallback="primary")
     rows: list[list[InlineKeyboardButton]] = []
     for p in plans[:20]:
         flag = "✅" if getattr(p, "is_active", True) else "⏸"
@@ -1016,14 +1019,21 @@ def reseller_plans_list_keyboard(plans: list) -> InlineKeyboardMarkup:
         price = getattr(p, "price", 0) or 0
         label = f"{flag} {name} · {price:,}"
         rows.append(
-            [InlineKeyboardButton(text=label, callback_data=f"res:plan:view:{p.id}")]
+            [
+                _ikb(
+                    label,
+                    callback_data=f"res:plan:view:{p.id}",
+                    style=kind_style,
+                )
+            ]
         )
     if not rows:
         rows.append(
             [
-                InlineKeyboardButton(
-                    text="پلنی نیست — از کیبورد «پلن جدید»",
+                _ikb(
+                    "پلنی نیست — از کیبورد «پلن جدید»",
                     callback_data="res:plans",
+                    style=kind_style,
                 )
             ]
         )
@@ -1351,26 +1361,29 @@ def shop_kind_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def admin_plan_audience_keyboard() -> InlineKeyboardMarkup:
+def admin_plan_audience_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     """Admin plans — audience step (users vs resellers)."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(
-                    text="👥 کاربران",
+                _ikb(
+                    "👥 کاربران",
                     callback_data="adm:plans:aud:users",
+                    style=_style(ui, "adm_plans_aud_users", fallback="primary"),
                 )
             ],
             [
-                InlineKeyboardButton(
-                    text="🤝 نمایندگان",
+                _ikb(
+                    "🤝 نمایندگان",
                     callback_data="adm:plans:aud:resellers",
+                    style=_style(ui, "adm_plans_aud_resellers", fallback="primary"),
                 )
             ],
             [
-                InlineKeyboardButton(
-                    text="⬅️ بازگشت",
+                _ikb(
+                    "⬅️ بازگشت",
                     callback_data="adm:home",
+                    style=_style(ui, "back"),
                 )
             ],
         ]
@@ -1448,26 +1461,41 @@ def plans_keyboard(
     custom_enabled: bool = False,
     wholesale_enabled: bool = False,
     back_callback: str = "shop:list",
+    kind: str | None = None,
 ) -> InlineKeyboardMarkup:
-    """Plan name rows; optional inline back to kind picker."""
+    """Plan name rows inherit the selected plan-kind color; optional inline back."""
+    from app.services.button_styles import plan_kind_style_id
+
     _ = custom_enabled, wholesale_enabled  # call-site compat
+    style_id = plan_kind_style_id(kind) or "shop_kind_fixed"
+    kind_style = _style(ui, style_id, fallback="primary")
     rows = [
         [
-            InlineKeyboardButton(
-                text=f"{'🎁' if p.is_trial else '💎'} {p.name} — {p.price:,} ت".replace(",", "٬"),
+            _ikb(
+                f"{'🎁' if p.is_trial else '💎'} {p.name} — {p.price:,} ت".replace(",", "٬"),
                 callback_data=f"shop:plan:{p.id}",
+                style=kind_style,
             )
         ]
         for p in plans
     ]
     if not rows:
-        rows = [[InlineKeyboardButton(text="پلنی نیست", callback_data=back_callback)]]
+        rows = [
+            [
+                _ikb(
+                    "پلنی نیست",
+                    callback_data=back_callback,
+                    style=kind_style,
+                )
+            ]
+        ]
     if back_callback:
         rows.append(
             [
-                InlineKeyboardButton(
-                    text=_t(ui, "btn_back"),
+                _ikb(
+                    _t(ui, "btn_back"),
                     callback_data=back_callback,
+                    style=_style(ui, "back"),
                 )
             ]
         )
@@ -1480,25 +1508,35 @@ def wholesale_plans_keyboard(
     *,
     back_callback: str = "shop:kind:wholesale",
 ) -> InlineKeyboardMarkup:
-    """Wholesale plan names + inline back to kind picker."""
-    _ = ui
+    """Wholesale plan names inherit shop_kind_wholesale color + inline back."""
+    kind_style = _style(ui, "shop_kind_wholesale", fallback="primary")
     rows = [
         [
-            InlineKeyboardButton(
-                text=f"💎 {p.name} — {p.price:,} ت".replace(",", "٬"),
+            _ikb(
+                f"💎 {p.name} — {p.price:,} ت".replace(",", "٬"),
                 callback_data=f"shop:wholesale:plan:{p.id}",
+                style=kind_style,
             )
         ]
         for p in plans
     ]
     if not rows:
-        rows = [[InlineKeyboardButton(text="پلنی نیست", callback_data=back_callback)]]
+        rows = [
+            [
+                _ikb(
+                    "پلنی نیست",
+                    callback_data=back_callback,
+                    style=kind_style,
+                )
+            ]
+        ]
     if back_callback:
         rows.append(
             [
-                InlineKeyboardButton(
-                    text=_t(ui, "btn_back"),
+                _ikb(
+                    _t(ui, "btn_back"),
                     callback_data=back_callback,
+                    style=_style(ui, "back"),
                 )
             ]
         )
@@ -1511,15 +1549,34 @@ def wholesale_qty_keyboard(
     *,
     plan_id: int,
 ) -> InlineKeyboardMarkup:
+    kind_style = _style(ui, "shop_kind_wholesale", fallback="primary")
     rows: list[list[InlineKeyboardButton]] = [
         [
-            InlineKeyboardButton(text="➖", callback_data="shop:wholesale:qty:-"),
-            InlineKeyboardButton(text=f"{qty} عدد", callback_data="shop:wholesale:noop"),
-            InlineKeyboardButton(text="➕", callback_data="shop:wholesale:qty:+"),
+            _ikb("➖", callback_data="shop:wholesale:qty:-", style=kind_style),
+            _ikb(f"{qty} عدد", callback_data="shop:wholesale:noop", style=kind_style),
+            _ikb("➕", callback_data="shop:wholesale:qty:+", style=kind_style),
         ],
-        [InlineKeyboardButton(text="✏️ ورود دستی تعداد", callback_data="shop:wholesale:qty:input")],
-        [InlineKeyboardButton(text="ادامه ← تأیید", callback_data="shop:wholesale:confirm")],
-        [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="shop:kind:wholesale")],
+        [
+            _ikb(
+                "✏️ ورود دستی تعداد",
+                callback_data="shop:wholesale:qty:input",
+                style=kind_style,
+            )
+        ],
+        [
+            _ikb(
+                "ادامه ← تأیید",
+                callback_data="shop:wholesale:confirm",
+                style=_style(ui, "buy_continue", fallback="primary") or kind_style,
+            )
+        ],
+        [
+            _ikb(
+                _t(ui, "btn_back"),
+                callback_data="shop:kind:wholesale",
+                style=_style(ui, "back"),
+            )
+        ],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1829,6 +1886,10 @@ def admin_users_plans_overview_keyboard(
     trial_on = on((ui or {}).get("trial_enabled"))
     custom_on = on((ui or {}).get("custom_plan_enabled"))
     wholesale_on = on((ui or {}).get("wholesale_enabled"))
+    fixed_style = _style(ui, "shop_kind_fixed", fallback="primary")
+    trial_style = _style(ui, "shop_kind_trial", fallback="primary")
+    custom_style = _style(ui, "shop_kind_custom", fallback="primary")
+    wholesale_style = _style(ui, "shop_kind_wholesale", fallback="primary")
     rows: list[list[InlineKeyboardButton]] = []
     fixed = [p for p in plans if not getattr(p, "is_trial", False)]
     for p in fixed[:12]:
@@ -1839,18 +1900,20 @@ def admin_users_plans_overview_keyboard(
         name = (getattr(p, "name", "") or "")[:22]
         rows.append(
             [
-                InlineKeyboardButton(
-                    text=f"{flag} 💎 {name}{warn}"[:60],
+                _ikb(
+                    f"{flag} 💎 {name}{warn}"[:60],
                     callback_data=f"adm:plan:view:{p.id}",
+                    style=fixed_style,
                 )
             ]
         )
     if not fixed:
         rows.append(
             [
-                InlineKeyboardButton(
-                    text="پلن ثابتی نیست — «افزودن پلن» از کیبورد",
+                _ikb(
+                    "پلن ثابتی نیست — «افزودن پلن» از کیبورد",
                     callback_data="adm:plans:noop",
+                    style=fixed_style,
                 )
             ]
         )
@@ -1859,37 +1922,51 @@ def admin_users_plans_overview_keyboard(
     trial_hint = f" · {trial.name}" if trial else ""
     rows.append(
         [
-            InlineKeyboardButton(
-                text=f"{trial_flag} 🎁 تست{trial_hint}"[:60],
+            _ikb(
+                f"{trial_flag} 🎁 تست{trial_hint}"[:60],
                 callback_data="adm:plans:kind:users:trial",
+                style=trial_style,
             )
         ]
     )
     rows.append(
         [
-            InlineKeyboardButton(
-                text=f"{'✅' if custom_on else '⏸'} ✨ دلخواه",
+            _ikb(
+                f"{'✅' if custom_on else '⏸'} ✨ دلخواه",
                 callback_data="adm:plans:kind:users:custom",
+                style=custom_style,
             )
         ]
     )
     rows.append(
         [
-            InlineKeyboardButton(
-                text=f"{'✅' if wholesale_on else '⏸'} {wholesale_label}"[:60],
+            _ikb(
+                f"{'✅' if wholesale_on else '⏸'} {wholesale_label}"[:60],
                 callback_data="adm:plans:kind:users:wholesale",
+                style=wholesale_style,
             )
         ]
     )
-    rows.append([InlineKeyboardButton(text="⬅️ مخاطب پلن", callback_data="adm:plans")])
+    rows.append(
+        [
+            _ikb(
+                "⬅️ مخاطب پلن",
+                callback_data="adm:plans",
+                style=_style(ui, "back"),
+            )
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def admin_resellers_plans_overview_keyboard(
     fixed_plans: list,
     payg_plans: list,
+    ui: dict | None = None,
 ) -> InlineKeyboardMarkup:
     """All reseller subscription plans inline — add via reply keyboard «افزودن پلن»."""
+    fixed_style = _style(ui, "plan_res_fixed", fallback="primary")
+    payg_style = _style(ui, "plan_res_payg", fallback="primary")
     rows: list[list[InlineKeyboardButton]] = []
     for p in fixed_plans[:10]:
         flag = "✅" if getattr(p, "is_active", True) else "⏸"
@@ -1897,9 +1974,10 @@ def admin_resellers_plans_overview_keyboard(
         pct = int(getattr(p, "commission_percent", 0) or 0)
         rows.append(
             [
-                InlineKeyboardButton(
-                    text=f"{flag} 📦 {name} · {pct}٪"[:60],
+                _ikb(
+                    f"{flag} 📦 {name} · {pct}٪"[:60],
                     callback_data=f"adm:resplan:view:{p.id}",
+                    style=fixed_style,
                 )
             ]
         )
@@ -1910,22 +1988,32 @@ def admin_resellers_plans_overview_keyboard(
         extra = f" · {rate:,} ت/گیگ".replace(",", "٬") if rate else ""
         rows.append(
             [
-                InlineKeyboardButton(
-                    text=f"{flag} ⚡ {name}{extra}"[:60],
+                _ikb(
+                    f"{flag} ⚡ {name}{extra}"[:60],
                     callback_data=f"adm:resplan:view:{p.id}",
+                    style=payg_style,
                 )
             ]
         )
     if not fixed_plans and not payg_plans:
         rows.append(
             [
-                InlineKeyboardButton(
-                    text="پلنی نیست — «افزودن پلن» از کیبورد",
+                _ikb(
+                    "پلنی نیست — «افزودن پلن» از کیبورد",
                     callback_data="adm:plans:noop",
+                    style=fixed_style,
                 )
             ]
         )
-    rows.append([InlineKeyboardButton(text="⬅️ مخاطب پلن", callback_data="adm:plans")])
+    rows.append(
+        [
+            _ikb(
+                "⬅️ مخاطب پلن",
+                callback_data="adm:plans",
+                style=_style(ui, "back"),
+            )
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -1973,11 +2061,18 @@ def admin_plans_add_type_keyboard(audience: str, ui: dict | None = None) -> Inli
 
 def admin_plans_list_keyboard(
     plans: list,
+    ui: dict | None = None,
     *,
     back_callback: str = "adm:plans:aud:users",
     add_callback: str = "adm:plan:add",
+    kind: str = "fixed",
 ) -> InlineKeyboardMarkup:
-    """User fixed-plan rows + inline add/back."""
+    """User fixed-plan rows inherit plan-kind color + inline add/back."""
+    from app.services.button_styles import plan_kind_style_id
+
+    _ = add_callback
+    style_id = plan_kind_style_id(kind) or "shop_kind_fixed"
+    kind_style = _style(ui, style_id, fallback="primary")
     rows: list[list[InlineKeyboardButton]] = []
     for p in plans[:12]:
         if getattr(p, "is_trial", False):
@@ -1987,38 +2082,50 @@ def admin_plans_list_keyboard(
             warn = " ⚠️"
         rows.append(
             [
-                InlineKeyboardButton(
-                    text=f"{'✅' if p.is_active else '⏸'} #{p.id} {p.name}{warn}"[:60],
+                _ikb(
+                    f"{'✅' if p.is_active else '⏸'} #{p.id} {p.name}{warn}"[:60],
                     callback_data=f"adm:plan:view:{p.id}",
+                    style=kind_style,
                 )
             ]
         )
     if not rows:
         rows.append(
             [
-                InlineKeyboardButton(
-                    text="پلنی نیست — «افزودن پلن» از کیبورد",
+                _ikb(
+                    "پلنی نیست — «افزودن پلن» از کیبورد",
                     callback_data="adm:plans:noop",
+                    style=kind_style,
                 )
             ]
         )
     if back_callback:
         rows.append(
-            [InlineKeyboardButton(text="⬅️ پلن‌های کاربران", callback_data=back_callback)]
+            [
+                _ikb(
+                    "⬅️ پلن‌های کاربران",
+                    callback_data=back_callback,
+                    style=_style(ui, "back"),
+                )
+            ]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def admin_reseller_plans_list_keyboard(
     plans: list,
+    ui: dict | None = None,
     *,
     mode: str,
     back_callback: str = "adm:plans:aud:resellers",
     add_callback: str = "adm:resplan:add:fixed",
 ) -> InlineKeyboardMarkup:
-    """Platform reseller subscription plans (fixed or PAYG)."""
-    rows: list[list[InlineKeyboardButton]] = []
+    """Platform reseller subscription plans (fixed or PAYG) inherit kind color."""
+    _ = add_callback
     mode_key = (mode or "fixed").strip().lower()
+    style_id = "plan_res_payg" if mode_key == "payg" else "plan_res_fixed"
+    kind_style = _style(ui, style_id, fallback="primary")
+    rows: list[list[InlineKeyboardButton]] = []
     for p in plans[:12]:
         flag = "✅" if getattr(p, "is_active", True) else "⏸"
         name = (getattr(p, "name", "") or "")[:22]
@@ -2029,9 +2136,10 @@ def admin_reseller_plans_list_keyboard(
             extra = f" · {int(getattr(p, 'commission_percent', 0) or 0)}٪"
         rows.append(
             [
-                InlineKeyboardButton(
-                    text=f"{flag} {name}{extra}"[:60],
+                _ikb(
+                    f"{flag} {name}{extra}"[:60],
                     callback_data=f"adm:resplan:view:{p.id}",
+                    style=kind_style,
                 )
             ]
         )
@@ -2039,15 +2147,22 @@ def admin_reseller_plans_list_keyboard(
         label = "PAYG" if mode_key == "payg" else "ثابت"
         rows.append(
             [
-                InlineKeyboardButton(
-                    text=f"پلنی نیست — «افزودن پلن» از کیبورد",
+                _ikb(
+                    f"پلنی نیست — «افزودن پلن» از کیبورد",
                     callback_data="adm:plans:noop",
+                    style=kind_style,
                 )
             ]
         )
     if back_callback:
         rows.append(
-            [InlineKeyboardButton(text="⬅️ پلن‌های نمایندگان", callback_data=back_callback)]
+            [
+                _ikb(
+                    "⬅️ پلن‌های نمایندگان",
+                    callback_data=back_callback,
+                    style=_style(ui, "back"),
+                )
+            ]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
