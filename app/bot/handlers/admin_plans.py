@@ -46,6 +46,7 @@ class AdminPlansStates(StatesGroup):
     res_plan_price = State()
     res_plan_commission = State()
     res_plan_rate_gb = State()
+    res_plan_addon_amount = State()
     res_plan_link = State()
     res_plan_role = State()
     res_plan_edit_field = State()
@@ -213,7 +214,7 @@ async def send_users_plans_overview(message: Message, session: AsyncSession) -> 
 
 async def send_resellers_plans_overview(message: Message, session: AsyncSession) -> None:
     """Reseller subscription plans — all rows inline like web /plans."""
-    from app.services.pg_admin_subscription import is_subscription_plan
+    from app.services.pg_admin_subscription import is_addon_plan, is_subscription_plan
 
     all_plans = await list_reseller_plans(session)
     fixed = [
@@ -226,16 +227,18 @@ async def send_resellers_plans_overview(message: Message, session: AsyncSession)
         for p in all_plans
         if reseller_plan_mode_of(p) == "payg" and is_subscription_plan(p)
     ]
+    addons = [p for p in all_plans if is_addon_plan(p)]
     text = (
         "🤝 <b>پلن‌های نمایندگان</b>\n"
         "━━━━━━━━━━━━\n"
-        f"ثابت (کمیسیون): <b>{len(fixed)}</b> · PAYG: <b>{len(payg)}</b>\n"
-        "روی هر پلن بزنید — «افزودن پلن» از کیبورد پایین.\n"
-        "بسته‌های حجم/کاربر را از پنل وب (/plans) مدیریت کنید."
+        f"اشتراک ثابت: <b>{len(fixed)}</b> · PAYG: <b>{len(payg)}</b> · بسته: <b>{len(addons)}</b>\n"
+        "روی هر پلن بزنید — «افزودن پلن» از کیبورد پایین."
     )
     await message.answer(
         text,
-        reply_markup=kb.admin_resellers_plans_overview_keyboard(fixed, payg, ui=await get_all_settings(session)),
+        reply_markup=kb.admin_resellers_plans_overview_keyboard(
+            fixed, payg, ui=await get_all_settings(session), addon_plans=addons
+        ),
     )
 
 
@@ -417,6 +420,31 @@ async def send_reseller_plans_list(
     from app.services.pg_admin_subscription import is_subscription_plan
 
     all_plans = await list_reseller_plans(session)
+    if kind in {"addon_volume", "addon_users"}:
+        plans = [p for p in all_plans if str(getattr(p, "plan_kind", "")) == kind]
+        label = "بسته حجم" if kind == "addon_volume" else "بسته کاربر"
+        if not plans:
+            body = "هنوز بسته‌ای در این دسته نیست."
+        else:
+            cards = [
+                format_reseller_plan_apply_detail(p, currency=get_settings().currency)
+                for p in plans[:10]
+            ]
+            body = "\n\n".join(cards)
+        await message.answer(
+            f"🎁 <b>پلن‌های نماینده — {label}</b>\n"
+            "بدون گروه/نقش/نام‌گذاری سرویس.\n\n"
+            f"{body}",
+            reply_markup=kb.admin_reseller_plans_list_keyboard(
+                plans,
+                await get_all_settings(session),
+                mode=kind,
+                back_callback=BACK_RESELLERS_KIND,
+                add_callback=f"adm:plans:add:resellers:{kind}",
+            ),
+        )
+        return
+
     plans = [
         p
         for p in all_plans
@@ -457,7 +485,7 @@ async def open_kind_screen(
         await send_users_trial(message, session)
     elif audience == "users" and kind == "wholesale":
         await send_users_wholesale(message, session)
-    elif audience == "resellers" and kind in {"fixed", "payg"}:
+    elif audience == "resellers" and kind in {"fixed", "payg", "addon_volume", "addon_users"}:
         await send_reseller_plans_list(message, session, kind)
     else:
         await message.answer("نوع پلن نامعتبر است.")
@@ -485,11 +513,22 @@ async def open_add_kind_action(
         )
         return
     if audience == "resellers" and kind in {"fixed", "payg"}:
-        label = "PAYG" if kind == "payg" else "ثابت (کمیسیون)"
+        label = "اشتراک PAYG" if kind == "payg" else "اشتراک ثابت"
         await state.set_state(AdminPlansStates.res_plan_name)
-        await state.update_data(res_plan_mode=kind)
+        await state.update_data(res_plan_mode=kind, res_plan_kind="subscription")
         await message.answer(
             f"➕ <b>پلن {label}</b>\nنام پلن نمایندگی:",
+            reply_markup=kb.cancel_reply(),
+        )
+        return
+    if audience == "resellers" and kind in {"addon_volume", "addon_users"}:
+        label = "بسته حجم" if kind == "addon_volume" else "بسته کاربر"
+        await state.set_state(AdminPlansStates.res_plan_name)
+        await state.update_data(res_plan_mode="fixed", res_plan_kind=kind)
+        await message.answer(
+            f"➕ <b>{label}</b>\n"
+            "بدون گروه/نقش/نام‌گذاری سرویس — فقط برای نمایندگان با اشتراک فعال.\n"
+            "نام بسته:",
             reply_markup=kb.cancel_reply(),
         )
         return
@@ -521,10 +560,22 @@ async def _rerender_plans_screen(
         from app.bot.handlers.admin import _render_plans_list
 
         await _render_plans_list(callback, session)
-    elif aud == "resellers" and kind in {"fixed", "payg"}:
+    elif aud == "resellers" and kind in {"fixed", "payg", "addon_volume", "addon_users"}:
+        from app.services.pg_admin_subscription import is_subscription_plan
+
         all_plans = await list_reseller_plans(session)
-        plans = [p for p in all_plans if reseller_plan_mode_of(p) == kind]
-        label = "PAYG" if kind == "payg" else "ثابت (کمیسیون)"
+        if kind in {"addon_volume", "addon_users"}:
+            plans = [p for p in all_plans if str(getattr(p, "plan_kind", "")) == kind]
+            label = "بسته حجم" if kind == "addon_volume" else "بسته کاربر"
+            add_cb = f"adm:plans:add:resellers:{kind}"
+        else:
+            plans = [
+                p
+                for p in all_plans
+                if reseller_plan_mode_of(p) == kind and is_subscription_plan(p)
+            ]
+            label = "PAYG" if kind == "payg" else "ثابت (کمیسیون)"
+            add_cb = f"adm:resplan:add:{kind}"
         body = (
             "هنوز پلنی در این دسته نیست."
             if not plans
@@ -533,14 +584,15 @@ async def _rerender_plans_screen(
                 for p in plans[:10]
             )
         )
+        title_prefix = "🎁" if kind in {"addon_volume", "addon_users"} else "🤝"
         await callback.message.edit_text(
-            f"🤝 <b>پلن‌های نماینده — {label}</b>\n\n{body}",
+            f"{title_prefix} <b>پلن‌های نماینده — {label}</b>\n\n{body}",
             reply_markup=kb.admin_reseller_plans_list_keyboard(
                 plans,
                 await get_all_settings(session),
                 mode=kind,
                 back_callback=BACK_RESELLERS_KIND,
-                add_callback=f"adm:resplan:add:{kind}",
+                add_callback=add_cb,
             ),
         )
 
@@ -1288,12 +1340,37 @@ def _resplan_detail_text(plan: ResellerPlan) -> str:
 
 
 def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
+    from app.services.pg_admin_subscription import is_addon_plan, is_subscription_plan
+    from app.services.reseller_capacity import plan_allows_buy_extra
+
     mode = reseller_plan_mode_of(plan)
     pid = plan.id
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text="✏️ نام", callback_data=f"adm:resplan:edit:name:{pid}")],
-        [InlineKeyboardButton(text="✏️ قیمت ورود", callback_data=f"adm:resplan:edit:price:{pid}")],
+        [InlineKeyboardButton(text="✏️ قیمت", callback_data=f"adm:resplan:edit:price:{pid}")],
     ]
+    if is_addon_plan(plan):
+        kind = str(getattr(plan, "plan_kind", "") or "")
+        label = "✏️ مقدار حجم" if kind == "addon_volume" else "✏️ تعداد کاربر"
+        field = "addon_gb" if kind == "addon_volume" else "addon_users"
+        rows.append(
+            [InlineKeyboardButton(text=label, callback_data=f"adm:resplan:edit:{field}:{pid}")]
+        )
+        rows.extend(
+            [
+                [InlineKeyboardButton(text="✏️ توضیح", callback_data=f"adm:resplan:edit:desc:{pid}")],
+                [
+                    InlineKeyboardButton(
+                        text="⏸ خاموش" if plan.is_active else "▶️ روشن",
+                        callback_data=f"adm:resplan:toggle:{pid}",
+                    )
+                ],
+                [InlineKeyboardButton(text="🗑 حذف", callback_data=f"adm:resplan:delask:{pid}")],
+                _back_row("⬅️ پلن‌های نمایندگان", "adm:plans:aud:resellers"),
+            ]
+        )
+        return _kb(rows)
+
     if mode == "payg":
         rows.append(
             [InlineKeyboardButton(text="✏️ نرخ / گیگ", callback_data=f"adm:resplan:edit:rate:{pid}")]
@@ -1324,6 +1401,36 @@ def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
                     callback_data=f"adm:resplan:flag:sharepg:{pid}",
                 )
             ],
+        ]
+    )
+    if is_subscription_plan(plan) and mode != "payg":
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=("✅ " if plan.allow_buy_extra else "⬜️ ") + "خرید حجم/کاربر اضافه",
+                    callback_data=f"adm:resplan:flag:buyextra:{pid}",
+                )
+            ]
+        )
+        if plan.allow_buy_extra or plan_allows_buy_extra(plan):
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text="✏️ قیمت گیگ اضافه",
+                        callback_data=f"adm:resplan:edit:extra_gb:{pid}",
+                    )
+                ]
+            )
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text="✏️ قیمت کاربر اضافه",
+                        callback_data=f"adm:resplan:edit:extra_user:{pid}",
+                    )
+                ]
+            )
+    rows.extend(
+        [
             [
                 InlineKeyboardButton(
                     text="⏸ خاموش" if plan.is_active else "▶️ روشن",
@@ -1373,20 +1480,38 @@ async def resplan_toggle(callback: CallbackQuery, session: AsyncSession, db_user
         )
 
 
-@router.callback_query(F.data.regexp(r"^adm:resplan:flag:(pgadmin|sharepg):\d+$"))
+@router.callback_query(F.data.regexp(r"^adm:resplan:flag:(pgadmin|sharepg|buyextra):\d+$"))
 async def resplan_flag_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
+    from app.services.pg_admin_subscription import is_addon_plan, is_subscription_plan
+
     parts = callback.data.split(":")
     flag, pid = parts[3], int(parts[4])
     plan = await session.get(ResellerPlan, pid)
     if not plan:
         await callback.answer("یافت نشد", show_alert=True)
         return
-    if flag == "pgadmin":
+    if is_addon_plan(plan):
+        await callback.answer("برای بسته افزونه این گزینه در دسترس نیست", show_alert=True)
+        return
+    if flag == "buyextra":
+        if not is_subscription_plan(plan) or reseller_plan_mode_of(plan) == "payg":
+            await callback.answer("خرید حجم/کاربر اضافه فقط برای اشتراک ثابت است", show_alert=True)
+            return
+        plan.allow_buy_extra = not bool(plan.allow_buy_extra)
+        if not plan.allow_buy_extra:
+            plan.extra_gb_price = 0
+            plan.extra_user_price = 0
+    elif flag == "pgadmin":
         plan.create_pg_admin = not bool(plan.create_pg_admin)
+        if not plan.create_pg_admin:
+            plan.share_pg_panel_url = False
     else:
+        if not bool(plan.create_pg_admin):
+            await callback.answer("اول ساخت ادمین پنل را فعال کنید", show_alert=True)
+            return
         plan.share_pg_panel_url = not bool(plan.share_pg_panel_url)
     await _persist(session)
     await callback.answer("بروز شد")
@@ -1449,13 +1574,19 @@ async def resplan_del(callback: CallbackQuery, session: AsyncSession, db_user: B
         await _rerender_plans_screen(callback, session, "resellers", mode)
 
 
-@router.callback_query(F.data.regexp(r"^adm:resplan:edit:(name|price|comm|rate|desc|grp|role):\d+$"))
+@router.callback_query(
+    F.data.regexp(
+        r"^adm:resplan:edit:(name|price|comm|rate|desc|grp|role|addon_gb|addon_users|extra_gb|extra_user):\d+$"
+    )
+)
 async def resplan_edit_ask(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
+    from app.services.pg_admin_subscription import is_addon_plan, is_subscription_plan
+
     parts = callback.data.split(":")
     if len(parts) < 5:
         await callback.answer("نامعتبر", show_alert=True)
@@ -1466,12 +1597,27 @@ async def resplan_edit_ask(
         await callback.answer("یافت نشد", show_alert=True)
         return
     mode = reseller_plan_mode_of(plan)
+    kind = str(getattr(plan, "plan_kind", "") or "subscription")
+    list_kind = kind if is_addon_plan(plan) else mode
     await state.update_data(
         resplan_edit_id=plan.id,
         resplan_edit_field=field,
         _adm_plans_aud="resellers",
-        _adm_plans_kind=mode,
+        _adm_plans_kind=list_kind,
     )
+    if field in {"grp", "role"} and is_addon_plan(plan):
+        await callback.answer("برای بسته افزونه گروه/نقش لازم نیست", show_alert=True)
+        return
+    if field in {"extra_gb", "extra_user"}:
+        if is_addon_plan(plan) or mode == "payg" or not is_subscription_plan(plan):
+            await callback.answer("فقط برای اشتراک ثابت با خرید اضافه", show_alert=True)
+            return
+    if field == "addon_gb" and kind != "addon_volume":
+        await callback.answer("فقط برای بسته حجم", show_alert=True)
+        return
+    if field == "addon_users" and kind != "addon_users":
+        await callback.answer("فقط برای بسته کاربر", show_alert=True)
+        return
     if field == "grp":
         selected: list[int] = []
         if plan.pg_group_ids:
@@ -1491,10 +1637,14 @@ async def resplan_edit_ask(
         return
     prompts = {
         "name": "نام جدید:",
-        "price": "قیمت ورود (تومان):",
+        "price": "قیمت بسته (تومان):" if is_addon_plan(plan) else "قیمت ورود (تومان):",
         "comm": "کمیسیون (۰–۱۰۰٪):",
         "rate": "نرخ هر گیگ (تومان):",
         "desc": "توضیح (خالی = حذف):",
+        "addon_gb": "حجم بسته (گیگابایت):",
+        "addon_users": "تعداد کاربر بسته:",
+        "extra_gb": "قیمت هر گیگ اضافه (تومان):",
+        "extra_user": "قیمت هر کاربر اضافه (تومان):",
     }
     if field not in prompts:
         await callback.answer("نامعتبر", show_alert=True)
@@ -1578,10 +1728,15 @@ async def resplan_edit_grp_done(
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
+    from app.services.pg_admin_subscription import is_addon_plan
+
     plan_id = int(callback.data.rsplit(":", 1)[-1])
     plan = await session.get(ResellerPlan, plan_id)
     if not plan:
         await callback.answer("یافت نشد", show_alert=True)
+        return
+    if is_addon_plan(plan):
+        await callback.answer("برای بسته افزونه گروه لازم نیست", show_alert=True)
         return
     selected = [int(x) for x in ((await state.get_data()).get("resplan_edit_groups") or [])]
     if not selected:
@@ -1608,10 +1763,15 @@ async def resplan_perms_screen(
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
+    from app.services.pg_admin_subscription import is_addon_plan
+
     plan_id = int(callback.data.rsplit(":", 1)[-1])
     plan = await session.get(ResellerPlan, plan_id)
     if not plan:
         await callback.answer("یافت نشد", show_alert=True)
+        return
+    if is_addon_plan(plan):
+        await callback.answer("بسته افزونه دسترسی وب/ربات ندارد", show_alert=True)
         return
     active = set(parse_perms(plan.web_permissions or plan.bot_permissions))
     rows: list[list[InlineKeyboardButton]] = []
@@ -1639,12 +1799,17 @@ async def resplan_tog_perm(callback: CallbackQuery, session: AsyncSession, db_us
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
+    from app.services.pg_admin_subscription import is_addon_plan
+
     parts = callback.data.split(":")
     plan_id = int(parts[3])
     key = parts[4]
     plan = await session.get(ResellerPlan, plan_id)
     if not plan:
         await callback.answer("یافت نشد", show_alert=True)
+        return
+    if is_addon_plan(plan):
+        await callback.answer("بسته افزونه دسترسی وب/ربات ندارد", show_alert=True)
         return
     perms = set(parse_perms(plan.web_permissions or plan.bot_permissions))
     if key in perms:
@@ -1696,7 +1861,10 @@ async def resplan_edit_save(
         return
     text = (message.text or "").strip()
     from app.services.billing import sync_plan_billing_rate
+    from app.services.pg_admin_subscription import is_addon_plan
 
+    is_addon = is_addon_plan(plan)
+    is_payg = reseller_plan_mode_of(plan) == "payg"
     try:
         if field == "name":
             if not text:
@@ -1711,6 +1879,26 @@ async def resplan_edit_save(
             plan.price_per_gb = max(0, parse_bot_int(text))
         elif field == "desc":
             plan.description = text or None
+        elif field == "addon_gb":
+            if not is_addon or str(getattr(plan, "plan_kind", "")) != "addon_volume":
+                await message.answer("این فیلد فقط برای بسته حجم است.")
+                return
+            plan.addon_gb = max(1, parse_bot_int(text))
+        elif field == "addon_users":
+            if not is_addon or str(getattr(plan, "plan_kind", "")) != "addon_users":
+                await message.answer("این فیلد فقط برای بسته کاربر است.")
+                return
+            plan.addon_users = max(1, parse_bot_int(text))
+        elif field == "extra_gb":
+            if is_addon or is_payg:
+                await message.answer("این فیلد برای این پلن در دسترس نیست.")
+                return
+            plan.extra_gb_price = max(0, parse_bot_int(text))
+        elif field == "extra_user":
+            if is_addon or is_payg:
+                await message.answer("این فیلد برای این پلن در دسترس نیست.")
+                return
+            plan.extra_user_price = max(0, parse_bot_int(text))
         else:
             await state.clear()
             return
@@ -1768,12 +1956,84 @@ async def resplan_price(message: Message, state: FSMContext, session: AsyncSessi
         return
     await state.update_data(res_plan_price=price)
     data = await state.get_data()
+    plan_kind = str(data.get("res_plan_kind") or "subscription")
+    if plan_kind in {"addon_volume", "addon_users"}:
+        await state.set_state(AdminPlansStates.res_plan_addon_amount)
+        ask = "حجم بسته (گیگ):" if plan_kind == "addon_volume" else "تعداد کاربر بسته:"
+        await message.answer(ask, reply_markup=kb.cancel_reply())
+        return
     if data.get("res_plan_mode") == "payg":
         await state.set_state(AdminPlansStates.res_plan_rate_gb)
         await message.answer("نرخ هر گیگ (تومان):", reply_markup=kb.cancel_reply())
     else:
         await state.set_state(AdminPlansStates.res_plan_commission)
         await message.answer("کمیسیون فروش (۰–۱۰۰٪):", reply_markup=kb.cancel_reply())
+
+
+@router.message(AdminPlansStates.res_plan_addon_amount)
+async def resplan_addon_amount(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
+        await state.set_state(None)
+        await _answer_plans_cancel(message, state, session)
+        return
+    try:
+        amount = max(0, parse_bot_int(message.text))
+    except ValueError:
+        await message.answer("عدد معتبر بفرستید.")
+        return
+    if amount <= 0:
+        await message.answer("مقدار باید بیشتر از صفر باشد.")
+        return
+    data = await state.get_data()
+    plan_kind = str(data.get("res_plan_kind") or "")
+    price = int(data.get("res_plan_price") or 0)
+    if price <= 0:
+        await message.answer("قیمت بسته باید بیشتر از صفر باشد — از اول نام را بفرستید.")
+        await state.set_state(AdminPlansStates.res_plan_name)
+        return
+    addon_gb = amount if plan_kind == "addon_volume" else 0
+    addon_users = amount if plan_kind == "addon_users" else 0
+    from app.services.billing import sync_plan_billing_rate
+
+    plan = ResellerPlan(
+        name=data.get("res_plan_name") or "بسته اضافه",
+        price=price,
+        billing_mode="fixed",
+        commission_percent=0,
+        price_per_gb=0,
+        pg_group_ids=None,
+        plan_kind=plan_kind,
+        duration_days=0,
+        included_gb=0,
+        included_users=0,
+        addon_gb=addon_gb,
+        addon_users=addon_users,
+        renew_pricing_mode="fixed",
+        allow_buy_extra=False,
+        extra_gb_price=0,
+        extra_user_price=0,
+        renew_price=0,
+        can_approve_receipts=False,
+        web_permissions="",
+        bot_permissions="",
+        create_pg_admin=False,
+        create_web_access=False,
+        share_pg_panel_url=False,
+        pg_role_id=None,
+        is_active=True,
+    )
+    session.add(plan)
+    await session.flush()
+    await sync_plan_billing_rate(session, plan)
+    await _persist(session)
+    await state.set_state(None)
+    await _answer_plans_saved(message, state, session, "بسته ذخیره شد ✅")
+    await message.answer(
+        _resplan_detail_text(plan),
+        reply_markup=_resplan_detail_keyboard(plan),
+    )
 
 
 @router.message(AdminPlansStates.res_plan_commission)
@@ -2030,6 +2290,8 @@ async def resplan_edit_set_role(
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
+    from app.services.pg_admin_subscription import is_addon_plan
+
     parts = callback.data.split(":")
     # adm:resplan:edit:setrole:{plan_id}:{role_id}
     if len(parts) < 6:
@@ -2040,6 +2302,9 @@ async def resplan_edit_set_role(
     plan = await session.get(ResellerPlan, plan_id)
     if not plan:
         await callback.answer("یافت نشد", show_alert=True)
+        return
+    if is_addon_plan(plan):
+        await callback.answer("برای بسته افزونه نقش لازم نیست", show_alert=True)
         return
     plan.pg_role_id = role_id
     await _persist(session)
@@ -2075,14 +2340,19 @@ async def _save_reseller_plan(
     role_id = pg_role_id if pg_role_id is not None else data.get("res_plan_role_id")
     if not role_id:
         raise ValueError("pg_role_id required")
+    is_payg = mode == "payg"
     plan = ResellerPlan(
         name=data.get("res_plan_name") or "پلن نماینده",
         price=int(data.get("res_plan_price") or 0),
         billing_mode=mode,
         commission_percent=int(commission_percent or data.get("res_plan_commission") or 0),
-        price_per_gb=int(price_per_gb or data.get("res_plan_rate_gb") or 0) if mode == "payg" else 0,
+        price_per_gb=int(price_per_gb or data.get("res_plan_rate_gb") or 0) if is_payg else 0,
         pg_group_ids=pg_group_ids,
         pg_role_id=int(role_id),
+        plan_kind="subscription",
+        allow_buy_extra=False,
+        extra_gb_price=0,
+        extra_user_price=0,
         web_permissions=DEFAULT_FEATURE_PERMS,
         bot_permissions=DEFAULT_FEATURE_PERMS,
         create_pg_admin=True,

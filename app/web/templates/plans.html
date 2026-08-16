@@ -635,7 +635,11 @@
         <div class="ui-switch-list" id="reseller-provision-switches">
           {{ switch('create_pg_admin', 'ساخت ادمین پاسارگارد هنگام تأیید', checked=true, help='با نقش پاسارگارد پلن؛ برای مالکیت کاربران لازم است') }}
           {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=false, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند') }}
-          {{ switch('allow_buy_extra', 'امکان خرید حجم و کاربر اضافه', checked=false, help='اگر روشن باشد در ربات نماینده گزینه خرید حجم/کاربر نمایش داده می‌شود؛ وگرنه فقط تمدید', id='reseller-allow-buy-extra') }}
+        </div>
+
+        <div id="reseller-buy-extra-block">
+        <div class="ui-switch-list">
+          {{ switch('allow_buy_extra', 'امکان خرید حجم و کاربر اضافه', checked=false, help='فقط اشتراک ثابت — در ربات پله‌های ۱/۵/۱۰… نمایش داده می‌شود؛ برای PAYG لازم نیست', id='reseller-allow-buy-extra') }}
         </div>
 
         <div class="form-row" id="reseller-extra-prices" hidden>
@@ -646,6 +650,7 @@
             <input name="extra_user_price" id="reseller-extra-user-price" type="number" min="0" value="0" />
           </label>
         </div>
+        </div>{# /reseller-buy-extra-block #}
 
         <label class="form-field" id="reseller-role-field">نقش پاسارگارد (الزامی)
           <select name="pg_role_id" id="reseller-pg-role">
@@ -840,12 +845,22 @@
     if ((isPayg || isAddon) && commissionInput) commissionInput.value = '0';
     setVisible(rateField, !isAddon && isPayg);
     setVisible(extras, !isAddon);
+    setVisible(document.getElementById('reseller-buy-extra-block'), !isAddon && !isPayg);
     setVisible(included, !isAddon);
     setVisible(renew, !isAddon);
     setVisible(duration, !isAddon);
     setVisible(addon, isAddon);
     setVisible(addonGb, isVol);
     setVisible(addonUsers, isUsers);
+
+    if (isPayg || isAddon) {
+      const sw = document.querySelector('#reseller-plan-form input[name="allow_buy_extra"]');
+      if (sw) sw.checked = false;
+      const eg = document.getElementById('reseller-extra-gb-price');
+      const eu = document.getElementById('reseller-extra-user-price');
+      if (eg) eg.value = '0';
+      if (eu) eu.value = '0';
+    }
 
     if (roleSel) {
       if (isAddon) {
@@ -867,11 +882,11 @@
     }
     if (hint) {
       if (isVol) {
-        hint.textContent = 'بسته حجم — بدون گروه/نقش/دسترسی؛ فقط برای نمایندگان با اشتراک فعال.';
+        hint.textContent = 'بسته حجم — بدون گروه/نقش/دسترسی/نام‌گذاری سرویس؛ فقط برای نمایندگان با اشتراک فعال.';
       } else if (isUsers) {
-        hint.textContent = 'بسته کاربر — بدون گروه/نقش/دسترسی؛ فقط برای نمایندگان با اشتراک فعال.';
+        hint.textContent = 'بسته کاربر — بدون گروه/نقش/دسترسی/نام‌گذاری سرویس؛ فقط برای نمایندگان با اشتراک فعال.';
       } else if (isPayg) {
-        hint.textContent = 'اشتراک PAYG — نرخ هر گیگ، گروه و نقش پاسارگارد الزامی است.';
+        hint.textContent = 'اشتراک PAYG — نرخ هر گیگ، گروه و نقش پاسارگارد الزامی است؛ خرید حجم/کاربر اضافه لازم نیست.';
       } else {
         hint.textContent = 'اشتراک ثابت — کمیسیون، گروه و نقش پاسارگارد الزامی است.';
       }

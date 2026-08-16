@@ -337,10 +337,35 @@ def format_reseller_plan_apply_detail(plan: ResellerPlan, *, currency: str) -> s
 
     from app.services.billing import BILLING_MODE_PAYG
     from app.services.formatting import format_toman
+    from app.services.pg_admin_subscription import is_addon_plan, plan_kind_of
+
+    desc = html.escape((plan.description or "").strip() or "بدون توضیح")
+    name = html.escape((plan.name or "").strip() or "—")
+    if is_addon_plan(plan):
+        kind = plan_kind_of(plan)
+        if kind == "addon_users":
+            qty = int(getattr(plan, "addon_users", 0) or 0)
+            qty_line = f"تعداد کاربر: <b>+{qty}</b>"
+            kind_label = "بسته کاربر"
+        else:
+            qty = int(getattr(plan, "addon_gb", 0) or 0)
+            qty_line = f"حجم: <b>+{qty} گیگ</b>"
+            kind_label = "بسته حجم"
+        return "\n".join(
+            [
+                f"<b>{name}</b>",
+                desc,
+                "",
+                f"نوع: <b>{kind_label}</b>",
+                qty_line,
+                f"قیمت بسته: <b>{format_toman(plan.price, currency) if plan.price else 'رایگان'}</b>",
+                "بدون گروه/نقش/نام‌گذاری سرویس — فقط برای نمایندگان با اشتراک فعال.",
+            ]
+        )
 
     mode = reseller_plan_mode_of(plan)
-    desc = html.escape((plan.description or "").strip() or "بدون توضیح")
     lines = [
+        f"<b>{name}</b>",
         desc,
         "",
         f"نوع: <b>{reseller_billing_mode_label(mode)}</b>",
@@ -353,6 +378,14 @@ def format_reseller_plan_apply_detail(plan: ResellerPlan, *, currency: str) -> s
         )
     else:
         lines.append(f"کمیسیون: <b>{int(plan.commission_percent or 0)}٪</b>")
+        if bool(getattr(plan, "allow_buy_extra", False)):
+            eg = int(getattr(plan, "extra_gb_price", 0) or 0)
+            eu = int(getattr(plan, "extra_user_price", 0) or 0)
+            lines.append(
+                "خرید اضافه: <b>فعال</b> "
+                f"(گیگ {format_toman(eg, currency) if eg else '—'} · "
+                f"کاربر {format_toman(eu, currency) if eu else '—'})"
+            )
     groups = (getattr(plan, "pg_group_ids", None) or "").strip()
     lines.append(
         f"گروه‌های پاسارگارد: <code>{html.escape(groups) if groups else '—'}</code>"

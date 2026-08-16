@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "6.2.8": [
+        "PAYG: بدون خرید حجم/کاربر اضافه (وب+API+ربات)؛ فقط اشتراک ثابت",
+        "بسته‌های حجم/کاربر: بدون نام‌گذاری سرویس/گروه/نقش؛ پاریتی کامل ویزارد ادمین در ربات",
+    ],
     "6.2.7": [
         "اسکلتون ناوبری بدون تأخیر اجباری؛ نمایش فقط هنگام انتظار سرور بین صفحات",
         "نمای کلی پاسارگارد: فاصله استاندارد باکس نود تا فوتر",

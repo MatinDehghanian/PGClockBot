@@ -1853,6 +1853,8 @@ async def reply_main_nav(
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_WHOLESALE,
         kb.REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED,
         kb.REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG,
+        kb.REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_VOL,
+        kb.REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_USERS,
     }:
         kind_map = {
             kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED: "fixed",
@@ -1861,11 +1863,21 @@ async def reply_main_nav(
             kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_WHOLESALE: "wholesale",
             kb.REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED: "fixed",
             kb.REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG: "payg",
+            kb.REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_VOL: "addon_volume",
+            kb.REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_USERS: "addon_users",
         }
         kind = kind_map[action]
         data = await state.get_data()
         aud = data.get("_adm_plans_aud") or (
-            "resellers" if action in {kb.REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED, kb.REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG} else "users"
+            "resellers"
+            if action
+            in {
+                kb.REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED,
+                kb.REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG,
+                kb.REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_VOL,
+                kb.REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_USERS,
+            }
+            else "users"
         )
         level = await nav.get_nav_level(state)
         if level == nav.NAV_ADMIN_PLANS_ADD_TYPE:

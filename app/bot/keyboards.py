@@ -569,8 +569,10 @@ def _admin_plans_add_type_entries(audience: str, ui: dict | None = None) -> list
     _ = ui
     if audience == "resellers":
         return [
-            (REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED, "📦 ثابت (کمیسیون)"),
-            (REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG, "⚡ PAYG"),
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED, "📦 اشتراک ثابت"),
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG, "⚡ اشتراک PAYG"),
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_VOL, "📦 بسته حجم"),
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_USERS, "👤 بسته کاربر"),
         ]
     return [
         (REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED, "💎 ثابت"),
@@ -594,6 +596,8 @@ REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL = "adm_plans_kind_users_trial"
 REPLY_ACTION_ADM_PLANS_KIND_USERS_WHOLESALE = "adm_plans_kind_users_wholesale"
 REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED = "adm_plans_kind_res_fixed"
 REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG = "adm_plans_kind_res_payg"
+REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_VOL = "adm_plans_kind_res_addon_vol"
+REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_USERS = "adm_plans_kind_res_addon_users"
 
 
 def _reseller_plans_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
@@ -1429,16 +1433,30 @@ def admin_plan_kind_keyboard(
         rows = [
             [
                 _ikb(
-                    "📦 ثابت (کمیسیون)",
+                    "📦 اشتراک ثابت",
                     callback_data="adm:plans:kind:resellers:fixed",
                     style=_style(ui, "plan_res_fixed", fallback="primary"),
                 )
             ],
             [
                 _ikb(
-                    "⚡ PAYG",
+                    "⚡ اشتراک PAYG",
                     callback_data="adm:plans:kind:resellers:payg",
                     style=_style(ui, "plan_res_payg", fallback="primary"),
+                )
+            ],
+            [
+                _ikb(
+                    "📦 بسته حجم",
+                    callback_data="adm:plans:kind:resellers:addon_volume",
+                    style=_style(ui, "plan_res_fixed", fallback="primary"),
+                )
+            ],
+            [
+                _ikb(
+                    "👤 بسته کاربر",
+                    callback_data="adm:plans:kind:resellers:addon_users",
+                    style=_style(ui, "plan_res_fixed", fallback="primary"),
                 )
             ],
             [back],
@@ -1987,10 +2005,13 @@ def admin_resellers_plans_overview_keyboard(
     fixed_plans: list,
     payg_plans: list,
     ui: dict | None = None,
+    addon_plans: list | None = None,
 ) -> InlineKeyboardMarkup:
-    """All reseller subscription plans inline — add via reply keyboard «افزودن پلن»."""
+    """All reseller subscription + addon packs — mirrors web /plans sections."""
     fixed_style = _style(ui, "plan_res_fixed", fallback="primary")
     payg_style = _style(ui, "plan_res_payg", fallback="primary")
+    addon_style = _style(ui, "plan_res_fixed", fallback="primary")
+    addons = addon_plans or []
     rows: list[list[InlineKeyboardButton]] = []
     for p in fixed_plans[:10]:
         flag = "✅" if getattr(p, "is_active", True) else "⏸"
@@ -2019,7 +2040,26 @@ def admin_resellers_plans_overview_keyboard(
                 )
             ]
         )
-    if not fixed_plans and not payg_plans:
+    for p in addons[:10]:
+        flag = "✅" if getattr(p, "is_active", True) else "⏸"
+        name = (getattr(p, "name", "") or "")[:22]
+        kind = str(getattr(p, "plan_kind", "") or "")
+        if kind == "addon_users":
+            qty = int(getattr(p, "addon_users", 0) or 0)
+            tag = f"+{qty} کاربر"
+        else:
+            qty = int(getattr(p, "addon_gb", 0) or 0)
+            tag = f"+{qty} گیگ"
+        rows.append(
+            [
+                _ikb(
+                    f"{flag} 🎁 {name} · {tag}"[:60],
+                    callback_data=f"adm:resplan:view:{p.id}",
+                    style=addon_style,
+                )
+            ]
+        )
+    if not fixed_plans and not payg_plans and not addons:
         rows.append(
             [
                 _ikb(
@@ -2051,14 +2091,26 @@ def admin_plans_add_type_keyboard(audience: str, ui: dict | None = None) -> Inli
             [
                 [
                     InlineKeyboardButton(
-                        text="📦 ثابت (کمیسیون)",
+                        text="📦 اشتراک ثابت",
                         callback_data="adm:plans:add:resellers:fixed",
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        text="⚡ PAYG",
+                        text="⚡ اشتراک PAYG",
                         callback_data="adm:plans:add:resellers:payg",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="📦 بسته حجم",
+                        callback_data="adm:plans:add:resellers:addon_volume",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="👤 بسته کاربر",
+                        callback_data="adm:plans:add:resellers:addon_users",
                     )
                 ],
             ]
@@ -2144,7 +2196,7 @@ def admin_reseller_plans_list_keyboard(
     back_callback: str = "adm:plans:aud:resellers",
     add_callback: str = "adm:resplan:add:fixed",
 ) -> InlineKeyboardMarkup:
-    """Platform reseller subscription plans (fixed or PAYG) inherit kind color."""
+    """Platform reseller subscription / addon packs — inherit kind color."""
     _ = add_callback
     mode_key = (mode or "fixed").strip().lower()
     style_id = "plan_res_payg" if mode_key == "payg" else "plan_res_fixed"
@@ -2156,6 +2208,12 @@ def admin_reseller_plans_list_keyboard(
         if mode_key == "payg":
             rate = int(getattr(p, "price_per_gb", 0) or 0)
             extra = f" · {rate:,} ت/گیگ".replace(",", "٬") if rate else ""
+        elif mode_key == "addon_volume":
+            qty = int(getattr(p, "addon_gb", 0) or 0)
+            extra = f" · +{qty} گیگ"
+        elif mode_key == "addon_users":
+            qty = int(getattr(p, "addon_users", 0) or 0)
+            extra = f" · +{qty} کاربر"
         else:
             extra = f" · {int(getattr(p, 'commission_percent', 0) or 0)}٪"
         rows.append(
@@ -2168,7 +2226,14 @@ def admin_reseller_plans_list_keyboard(
             ]
         )
     if not rows:
-        label = "PAYG" if mode_key == "payg" else "ثابت"
+        if mode_key == "payg":
+            label = "PAYG"
+        elif mode_key == "addon_volume":
+            label = "بسته حجم"
+        elif mode_key == "addon_users":
+            label = "بسته کاربر"
+        else:
+            label = "ثابت"
         rows.append(
             [
                 _ikb(
