@@ -213,14 +213,25 @@ async def send_users_plans_overview(message: Message, session: AsyncSession) -> 
 
 async def send_resellers_plans_overview(message: Message, session: AsyncSession) -> None:
     """Reseller subscription plans — all rows inline like web /plans."""
+    from app.services.pg_admin_subscription import is_subscription_plan
+
     all_plans = await list_reseller_plans(session)
-    fixed = [p for p in all_plans if reseller_plan_mode_of(p) == "fixed"]
-    payg = [p for p in all_plans if reseller_plan_mode_of(p) == "payg"]
+    fixed = [
+        p
+        for p in all_plans
+        if reseller_plan_mode_of(p) == "fixed" and is_subscription_plan(p)
+    ]
+    payg = [
+        p
+        for p in all_plans
+        if reseller_plan_mode_of(p) == "payg" and is_subscription_plan(p)
+    ]
     text = (
         "🤝 <b>پلن‌های نمایندگان</b>\n"
         "━━━━━━━━━━━━\n"
         f"ثابت (کمیسیون): <b>{len(fixed)}</b> · PAYG: <b>{len(payg)}</b>\n"
-        "روی هر پلن بزنید — «افزودن پلن» از کیبورد پایین."
+        "روی هر پلن بزنید — «افزودن پلن» از کیبورد پایین.\n"
+        "بسته‌های حجم/کاربر را از پنل وب (/plans) مدیریت کنید."
     )
     await message.answer(
         text,
@@ -403,8 +414,14 @@ async def send_reseller_plans_list(
     session: AsyncSession,
     kind: str,
 ) -> None:
+    from app.services.pg_admin_subscription import is_subscription_plan
+
     all_plans = await list_reseller_plans(session)
-    plans = [p for p in all_plans if reseller_plan_mode_of(p) == kind]
+    plans = [
+        p
+        for p in all_plans
+        if reseller_plan_mode_of(p) == kind and is_subscription_plan(p)
+    ]
     label = "PAYG" if kind == "payg" else "ثابت (کمیسیون)"
     if not plans:
         body = "هنوز پلنی در این دسته نیست."

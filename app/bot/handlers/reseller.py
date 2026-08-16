@@ -1206,7 +1206,11 @@ async def res_addons(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.pg_admin_subscription import list_addon_plans
+    from app.services.pg_admin_subscription import (
+        get_or_create_subscription,
+        is_subscription_plan,
+        list_addon_plans,
+    )
 
     owner_id, profile, plan, owner = await _capacity_context(
         session,
@@ -1216,6 +1220,26 @@ async def res_addons(
     )
     if not owner_id or not profile or not owner:
         await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    if plan is None or not is_subscription_plan(plan):
+        await callback.answer(
+            "ابتدا باید پلن نمایندگی (اشتراک) خریده باشید",
+            show_alert=True,
+        )
+        return
+    uname = (profile.pg_admin_username or "").strip()
+    if not uname:
+        await callback.answer("ادمین پاسارگارد تنظیم نشده", show_alert=True)
+        return
+    try:
+        sub = await get_or_create_subscription(session, uname)
+    except Exception:
+        sub = None
+    if sub is None or str(getattr(sub, "access_status", "") or "") != "active":
+        await callback.answer(
+            "اشتراک فعال ندارید — ابتدا تمدید کنید",
+            show_alert=True,
+        )
         return
     addons = await list_addon_plans(session)
     if not addons:
@@ -1257,9 +1281,11 @@ async def res_addon_buy(
     from app.services.pg_admin_subscription import (
         apply_addon_plan,
         get_or_create_subscription,
+        is_addon_plan,
+        is_subscription_plan,
     )
 
-    owner_id, profile, _plan, owner = await _capacity_context(
+    owner_id, profile, plan, owner = await _capacity_context(
         session,
         db_user,
         is_reseller_bot=is_reseller_bot,
@@ -1268,13 +1294,19 @@ async def res_addon_buy(
     if not owner_id or not profile or not owner:
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
+    if plan is None or not is_subscription_plan(plan):
+        await callback.answer(
+            "ابتدا باید پلن نمایندگی (اشتراک) خریده باشید",
+            show_alert=True,
+        )
+        return
     try:
         plan_id = int(callback.data.split(":")[-1])
     except ValueError:
         await callback.answer("پلن نامعتبر", show_alert=True)
         return
     addon = await session.get(ResellerPlan, plan_id)
-    if not addon or not addon.is_active:
+    if not addon or not addon.is_active or not is_addon_plan(addon):
         await callback.answer("بسته یافت نشد", show_alert=True)
         return
     uname = (profile.pg_admin_username or "").strip()

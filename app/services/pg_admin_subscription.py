@@ -526,6 +526,8 @@ async def apply_addon_plan(
     kind = plan_kind_of(addon_plan)
     if kind not in {PLAN_KIND_ADDON_VOLUME, PLAN_KIND_ADDON_USERS}:
         raise ValueError("این پلن بستهٔ اضافه نیست")
+    if not bool(getattr(addon_plan, "is_active", False)):
+        raise ValueError("بسته غیرفعال است")
     if sub.access_status != STATUS_ACTIVE:
         raise ValueError("فقط اشتراک فعال می‌تواند بسته اضافه بخرد — ابتدا تمدید کنید")
     if _as_aware(sub.expires_at) is not None and _as_aware(sub.expires_at) <= _utcnow():
