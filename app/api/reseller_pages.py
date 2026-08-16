@@ -84,9 +84,28 @@ def _parse_plan_kind(form) -> str:
     return "subscription"
 
 
+def _is_addon_plan_kind(kind: str | None) -> bool:
+    return str(kind or "").strip().lower() in {"addon_volume", "addon_users"}
+
+
 def _parse_renew_pricing_mode(form) -> str:
     mode = str(form.get("renew_pricing_mode") or "fixed").strip().lower()
     return mode if mode in {"fixed", "from_capacity"} else "fixed"
+
+
+def _addon_fields_from_form(form, plan_kind: str) -> tuple[int, int]:
+    """Validate pack size for addon plans. Raises ValueError on bad size."""
+    addon_gb = _parse_nonneg_int(form, "addon_gb")
+    addon_users = _parse_nonneg_int(form, "addon_users")
+    if plan_kind == "addon_volume":
+        if addon_gb <= 0:
+            raise ValueError("حجم بسته باید بیشتر از صفر باشد")
+        return addon_gb, 0
+    if plan_kind == "addon_users":
+        if addon_users <= 0:
+            raise ValueError("تعداد کاربر بسته باید بیشتر از صفر باشد")
+        return 0, addon_users
+    return 0, 0
 
 
 def _parse_pg_group_ids(form) -> str | None:
@@ -780,6 +799,65 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             price = int(str(form.get("price") or "0").replace(",", "").replace("٬", ""))
         except ValueError:
             price = 0
+        plan_kind = _parse_plan_kind(form)
+        try:
+            sort_order = int(str(form.get("sort_order") or "0") or "0")
+        except ValueError:
+            sort_order = 0
+
+        # Addon packs: capacity-only — no PG groups/role/perms/admin/share/extras.
+        if _is_addon_plan_kind(plan_kind):
+            try:
+                addon_gb, addon_users = _addon_fields_from_form(form, plan_kind)
+            except ValueError as e:
+                return RedirectResponse(
+                    f"/plans?err={_q(str(e))}#reseller-plans", status_code=303
+                )
+            if max(0, price) <= 0:
+                return RedirectResponse(
+                    f"/plans?err={_q('قیمت بسته باید بیشتر از صفر باشد')}#reseller-plans",
+                    status_code=303,
+                )
+            plan = ResellerPlan(
+                name=name,
+                description=str(form.get("description") or "").strip() or None,
+                price=max(0, price),
+                commission_percent=0,
+                billing_mode="fixed",
+                price_per_gb=0,
+                pg_group_ids=None,
+                plan_kind=plan_kind,
+                duration_days=0,
+                included_gb=0,
+                included_users=0,
+                addon_gb=addon_gb,
+                addon_users=addon_users,
+                renew_pricing_mode="fixed",
+                allow_buy_extra=False,
+                extra_gb_price=0,
+                extra_user_price=0,
+                renew_price=0,
+                can_approve_receipts=False,
+                web_permissions="",
+                bot_permissions="",
+                create_pg_admin=False,
+                create_web_access=False,
+                share_pg_panel_url=False,
+                pg_role_id=None,
+                is_active=bool(form.get("is_active", "1")),
+                sort_order=sort_order,
+            )
+            session.add(plan)
+            await session.flush()
+            from app.services.billing import sync_plan_billing_rate
+
+            await sync_plan_billing_rate(session, plan)
+            await session.commit()
+            return RedirectResponse(
+                f"/plans?ok={_q('بسته اضافه ذخیره شد')}#reseller-plans-addons",
+                status_code=303,
+            )
+
         billing_mode = str(form.get("billing_mode") or "fixed").strip().lower()
         if billing_mode not in {"fixed", "payg"}:
             billing_mode = "fixed"
@@ -812,12 +890,12 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             billing_mode=billing_mode,
             price_per_gb=price_per_gb,
             pg_group_ids=pg_group_ids,
-            plan_kind=_parse_plan_kind(form),
+            plan_kind="subscription",
             duration_days=_parse_nonneg_int(form, "duration_days"),
             included_gb=_parse_nonneg_int(form, "included_gb"),
             included_users=_parse_nonneg_int(form, "included_users"),
-            addon_gb=_parse_nonneg_int(form, "addon_gb"),
-            addon_users=_parse_nonneg_int(form, "addon_users"),
+            addon_gb=0,
+            addon_users=0,
             renew_pricing_mode=_parse_renew_pricing_mode(form),
             allow_buy_extra=bool(form.get("allow_buy_extra")),
             extra_gb_price=_parse_nonneg_int(form, "extra_gb_price"),
@@ -831,7 +909,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             share_pg_panel_url=bool(form.get("share_pg_panel_url")),
             pg_role_id=int(pg_role_raw) if pg_role_raw.isdigit() else None,
             is_active=bool(form.get("is_active", "1")),
-            sort_order=int(str(form.get("sort_order") or "0") or "0"),
+            sort_order=sort_order,
         )
         session.add(plan)
         await session.flush()
@@ -910,6 +988,57 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         except ValueError:
             pass
         try:
+            plan.sort_order = int(str(form.get("sort_order") or "0") or "0")
+        except ValueError:
+            pass
+        plan.is_active = bool(form.get("is_active"))
+        plan_kind = _parse_plan_kind(form)
+
+        if _is_addon_plan_kind(plan_kind):
+            try:
+                addon_gb, addon_users = _addon_fields_from_form(form, plan_kind)
+            except ValueError as e:
+                return RedirectResponse(
+                    f"/resellers/plans/{plan_id}/edit?err={_q(str(e))}", status_code=303
+                )
+            if int(plan.price or 0) <= 0:
+                return RedirectResponse(
+                    f"/resellers/plans/{plan_id}/edit?err={_q('قیمت بسته باید بیشتر از صفر باشد')}",
+                    status_code=303,
+                )
+            # Strip subscription-only knobs — addons never provision admins/groups.
+            plan.plan_kind = plan_kind
+            plan.billing_mode = "fixed"
+            plan.commission_percent = 0
+            plan.price_per_gb = 0
+            plan.pg_group_ids = None
+            plan.duration_days = 0
+            plan.included_gb = 0
+            plan.included_users = 0
+            plan.addon_gb = addon_gb
+            plan.addon_users = addon_users
+            plan.renew_pricing_mode = "fixed"
+            plan.allow_buy_extra = False
+            plan.extra_gb_price = 0
+            plan.extra_user_price = 0
+            plan.renew_price = 0
+            plan.can_approve_receipts = False
+            plan.web_permissions = ""
+            plan.bot_permissions = ""
+            plan.create_pg_admin = False
+            plan.create_web_access = False
+            plan.share_pg_panel_url = False
+            plan.pg_role_id = None
+            from app.services.billing import sync_plan_billing_rate
+
+            await sync_plan_billing_rate(session, plan)
+            await session.commit()
+            return RedirectResponse(
+                f"/plans?ok={_q('بسته اضافه ذخیره شد')}#reseller-plans-addons",
+                status_code=303,
+            )
+
+        try:
             plan.commission_percent = int(str(form.get("commission_percent") or "0"))
         except ValueError:
             pass
@@ -931,10 +1060,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             plan.commission_percent = max(0, min(100, int(plan.commission_percent or 0)))
             plan.price_per_gb = 0
             plan.pg_group_ids = pg_group_ids
-        try:
-            plan.sort_order = int(str(form.get("sort_order") or "0") or "0")
-        except ValueError:
-            pass
         perms = _feature_perms_from_form(form)
         plan.web_permissions = perms
         plan.bot_permissions = perms
@@ -945,14 +1070,14 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         plan.extra_gb_price = _parse_nonneg_int(form, "extra_gb_price")
         plan.extra_user_price = _parse_nonneg_int(form, "extra_user_price")
         plan.renew_price = _parse_nonneg_int(form, "renew_price")
-        plan.plan_kind = _parse_plan_kind(form)
+        plan.plan_kind = "subscription"
         plan.duration_days = _parse_nonneg_int(form, "duration_days")
         plan.included_gb = _parse_nonneg_int(form, "included_gb")
         plan.included_users = _parse_nonneg_int(form, "included_users")
-        plan.addon_gb = _parse_nonneg_int(form, "addon_gb")
-        plan.addon_users = _parse_nonneg_int(form, "addon_users")
+        plan.addon_gb = 0
+        plan.addon_users = 0
         plan.renew_pricing_mode = _parse_renew_pricing_mode(form)
-        plan.is_active = bool(form.get("is_active"))
+        plan.create_web_access = True
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         if not pg_role_raw.isdigit():
             return RedirectResponse(

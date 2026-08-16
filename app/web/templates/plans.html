@@ -127,16 +127,18 @@
 </div>
 
 {% if is_platform_admin %}
-{% set payg_reseller_plans = reseller_plans | selectattr('billing_mode', 'equalto', 'payg') | list %}
-{% set fixed_reseller_plans = reseller_plans | rejectattr('billing_mode', 'equalto', 'payg') | list %}
+{% set addon_reseller_plans = reseller_plans | selectattr('plan_kind', 'in', ['addon_volume', 'addon_users']) | list %}
+{% set subscription_reseller_plans = reseller_plans | rejectattr('plan_kind', 'in', ['addon_volume', 'addon_users']) | list %}
+{% set payg_reseller_plans = subscription_reseller_plans | selectattr('billing_mode', 'equalto', 'payg') | list %}
+{% set fixed_reseller_plans = subscription_reseller_plans | rejectattr('billing_mode', 'equalto', 'payg') | list %}
 <div class="card card-flush" id="reseller-plans">
   <h2>پلن‌های نمایندگان</h2>
-  <p class="muted update-card-caption">دو دسته جدا: <b>ثابت (کمیسیون)</b> و <b>PAYG</b>. در ربات کاربر اول نوع را انتخاب می‌کند، بعد پلن همان دسته.</p>
+  <p class="muted update-card-caption">اشتراک (ثابت / PAYG) برای ورود نمایندگی؛ بسته‌های حجم/کاربر فقط برای نمایندگانی که قبلاً پلن خریده‌اند.</p>
   {% if reseller_plans_err %}
   <div class="flash warn">{{ reseller_plans_err }}</div>
   {% endif %}
 
-  <h3 id="reseller-plans-fixed" class="card-subhead">📦 ثابت (کمیسیون)</h3>
+  <h3 id="reseller-plans-fixed" class="card-subhead">📦 اشتراک ثابت (کمیسیون)</h3>
   <div class="table-wrap">
   <table class="table-compact">
     <thead>
@@ -172,13 +174,13 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="muted">پلن ثابت نیست — از «افزودن پلن» با نوع ثابت بسازید.</td></tr>
+      <tr><td colspan="5" class="muted">پلن اشتراک ثابت نیست — از «افزودن پلن» با مخاطب نمایندگان بسازید.</td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
 
-  <h3 id="reseller-plans-payg" class="card-subhead">⚡ PAYG</h3>
+  <h3 id="reseller-plans-payg" class="card-subhead">⚡ اشتراک PAYG</h3>
   <div class="table-wrap">
   <table class="table-compact">
     <thead>
@@ -221,6 +223,51 @@
     </tbody>
   </table>
   </div>
+
+  <h3 id="reseller-plans-addons" class="card-subhead">📦 بسته‌های حجم / کاربر</h3>
+  <p class="muted update-card-caption">فقط در منوی نمایندگانی که قبلاً اشتراک خریده‌اند دیده می‌شود — بدون گروه، نقش یا دسترسی اضافه.</p>
+  <div class="table-wrap">
+  <table class="table-compact">
+    <thead>
+      <tr>
+        <th>نام</th>
+        <th>نوع</th>
+        <th>مقدار</th>
+        <th>قیمت</th>
+        <th>وضعیت</th>
+        <th class="col-actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for p in addon_reseller_plans %}
+      <tr>
+        <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
+        <td>{% if p.plan_kind == 'addon_users' %}کاربر{% else %}حجم{% endif %}</td>
+        <td class="mono">{% if p.plan_kind == 'addon_users' %}+{{ p.addon_users or 0 }} کاربر{% else %}+{{ p.addon_gb or 0 }} گیگ{% endif %}</td>
+        <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
+        <td>{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+        <td class="col-actions">
+          {% call row_actions() %}
+            <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>
+            <form method="post" action="/resellers/plans/{{ p.id }}/toggle">
+              <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
+            </form>
+            <form method="post" action="/resellers/plans/{{ p.id }}/delete"
+                  data-confirm="این بسته حذف شود؟"
+                  data-confirm-title="تأیید حذف"
+                  data-confirm-danger="1"
+                  data-confirm-label="حذف">
+              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+            </form>
+          {% endcall %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="muted">بسته اضافه نیست — مخاطب پلن: نمایندگان → نوع: بسته حجم/کاربر.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
 </div>
 {% endif %}
 
@@ -233,8 +280,8 @@
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
 
-    <div class="form-row" style="margin-bottom: var(--space-2)" data-ui-select-watch>
-      <label class="form-field">مخاطب
+    <div class="form-stack" style="margin-bottom: var(--space-2)" data-ui-select-watch>
+      <label class="form-field">مخاطب پلن
         <select id="plan-audience">
           <option value="users">کاربران</option>
           {% if is_platform_admin %}
@@ -499,14 +546,16 @@
     <div id="panel-reseller" class="plan-panel" hidden>
       <form method="post" action="/resellers/plans" class="form-stack" id="reseller-plan-form">
         <input type="hidden" name="billing_mode" id="reseller-billing-mode" value="fixed" />
+        <input type="hidden" name="plan_kind" id="reseller-plan-kind" value="subscription" />
         <p class="muted update-card-caption" id="reseller-mode-hint">نوع پلن را از بالا انتخاب کنید — فیلدهای مخصوص همان نوع نمایش داده می‌شود.</p>
         <div class="form-row">
           <label class="form-field">نام
-            <input name="name" required placeholder="نمایندگی نقره‌ای" />
+            <input name="name" required placeholder="نمایندگی نقره‌ای" id="reseller-plan-name" />
           </label>
-          <label class="form-field">قیمت ورود (تومان)
-            <input name="price" type="number" value="0" />
-            <small class="muted">هزینه خرید پکیج نمایندگی — ۰ = رایگان؛ فقط تأیید ادمین</small>
+          <label class="form-field">
+            <span id="reseller-price-label">قیمت ورود (تومان)</span>
+            <input name="price" type="number" value="0" id="reseller-plan-price" />
+            <small class="muted" id="reseller-price-hint">هزینه خرید پکیج نمایندگی — ۰ = رایگان؛ فقط تأیید ادمین</small>
           </label>
           <label class="form-field" id="reseller-commission-field">کمیسیون ٪
             <input name="commission_percent" id="reseller-commission-input" type="number" min="0" max="100" value="0" />
@@ -525,15 +574,8 @@
           <textarea name="description" rows="2"></textarea>
         </label>
 
-        <div class="form-row">
-          <label class="form-field">نوع پلن
-            <select name="plan_kind" id="reseller-plan-kind">
-              <option value="subscription" selected>اشتراک (نمایندگی)</option>
-              <option value="addon_volume">بسته فقط حجم</option>
-              <option value="addon_users">بسته فقط کاربر</option>
-            </select>
-          </label>
-          <label class="form-field" id="reseller-duration-field">مدت اشتراک (روز)
+        <div class="form-row" id="reseller-duration-field">
+          <label class="form-field">مدت اشتراک (روز)
             <input name="duration_days" type="number" min="0" value="0" />
             <small class="muted">۰ = بدون محدودیت زمان</small>
           </label>
@@ -547,10 +589,10 @@
           </label>
         </div>
         <div class="form-row" id="reseller-addon-fields" hidden>
-          <label class="form-field">حجم بسته (گیگ)
+          <label class="form-field" id="reseller-addon-gb-field">حجم بسته (گیگ)
             <input name="addon_gb" type="number" min="0" value="0" />
           </label>
-          <label class="form-field">کاربر بسته
+          <label class="form-field" id="reseller-addon-users-field">کاربر بسته
             <input name="addon_users" type="number" min="0" value="0" />
           </label>
         </div>
@@ -567,6 +609,7 @@
           </label>
         </div>
 
+        <div id="reseller-subscription-extras">
         <div id="reseller-groups" class="form-field">
           <span class="form-field-label">گروه‌های پاسارگارد (الزامی)</span>
           <p class="muted update-card-caption">حداقل یک گروه باید انتخاب شود — برای ثابت و PAYG.</p>
@@ -579,7 +622,7 @@
           </div>
         </div>
 
-        <div class="ui-switch-section">
+        <div class="ui-switch-section" id="reseller-perms-section">
           <span class="ui-switch-section-title">دسترسی پیش‌فرض (وب = بات)</span>
           <p class="ui-switch-section-hint">این دسترسی‌ها هنگام تأیید درخواست نمایندگی اعمال می‌شوند.</p>
           <div class="ui-switch-list">
@@ -589,11 +632,10 @@
           </div>
         </div>
 
-        <div class="ui-switch-list">
+        <div class="ui-switch-list" id="reseller-provision-switches">
           {{ switch('create_pg_admin', 'ساخت ادمین پاسارگارد هنگام تأیید', checked=true, help='با نقش پاسارگارد پلن؛ برای مالکیت کاربران لازم است') }}
           {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=false, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند') }}
           {{ switch('allow_buy_extra', 'امکان خرید حجم و کاربر اضافه', checked=false, help='اگر روشن باشد در ربات نماینده گزینه خرید حجم/کاربر نمایش داده می‌شود؛ وگرنه فقط تمدید', id='reseller-allow-buy-extra') }}
-          {{ switch('is_active', 'پلن فعال', checked=true) }}
         </div>
 
         <div class="form-row" id="reseller-extra-prices" hidden>
@@ -605,14 +647,19 @@
           </label>
         </div>
 
-        <label class="form-field">نقش پاسارگارد (الزامی)
-          <select name="pg_role_id" required>
+        <label class="form-field" id="reseller-role-field">نقش پاسارگارد (الزامی)
+          <select name="pg_role_id" id="reseller-pg-role">
             <option value="" disabled selected>— انتخاب کنید —</option>
             {% for r in pg_roles %}
             <option value="{{ r.get('id') }}">{{ r.get('name') or r.get('id') }}</option>
             {% endfor %}
           </select>
         </label>
+        </div>{# /reseller-subscription-extras #}
+
+        <div class="ui-switch-list">
+          {{ switch('is_active', 'پلن فعال', checked=true) }}
+        </div>
         <div class="actions">
           <button class="btn" type="submit">ذخیره پلن</button>
           <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
@@ -703,8 +750,10 @@
     {value: 'wholesale', label: 'فروش عمده'}
   ];
   const RESELLER_KINDS = [
-    {value: 'fixed', label: 'ثابت (کمیسیون)'},
-    {value: 'payg', label: 'PAYG'}
+    {value: 'fixed', label: 'اشتراک ثابت'},
+    {value: 'payg', label: 'اشتراک PAYG'},
+    {value: 'addon_volume', label: 'بسته حجم'},
+    {value: 'addon_users', label: 'بسته کاربر'}
   ];
 
   function currentAudience(){
@@ -749,58 +798,90 @@
     el.style.display = show ? '' : 'none';
   }
 
-  function syncResellerBilling(){
-    const kind = kindSel ? kindSel.value : 'fixed';
-    const billing = document.getElementById('reseller-billing-mode');
-    const commissionField = document.getElementById('reseller-commission-field');
-    const commissionInput = document.getElementById('reseller-commission-input');
-    const rateField = document.getElementById('reseller-price-per-gb-field');
-    const groupsField = document.getElementById('reseller-groups');
-    const hint = document.getElementById('reseller-mode-hint');
-    const isPayg = kind === 'payg';
-    if (billing) billing.value = isPayg ? 'payg' : 'fixed';
-    setVisible(commissionField, !isPayg);
-    if (isPayg && commissionInput) commissionInput.value = '0';
-    setVisible(rateField, isPayg);
-    setVisible(groupsField, true);
-    if (hint) {
-      hint.textContent = isPayg
-        ? 'نوع: PAYG — نرخ هر گیگ، گروه و نقش پاسارگارد الزامی است.'
-        : 'نوع: ثابت — کمیسیون، گروه و نقش پاسارگارد الزامی است.';
-    }
-    syncResellerExtras();
-  }
-
   function syncResellerExtras(){
     const prices = document.getElementById('reseller-extra-prices');
-    const sw = document.querySelector('input[name="allow_buy_extra"]');
+    const sw = document.querySelector('#reseller-plan-form input[name="allow_buy_extra"]');
     if (!prices) return;
     const on = sw ? !!sw.checked : false;
     prices.hidden = !on;
   }
 
-  function syncResellerPlanKind(){
-    const kind = document.getElementById('reseller-plan-kind');
+  function syncResellerForm(){
+    const kind = kindSel ? kindSel.value : 'fixed';
+    const billing = document.getElementById('reseller-billing-mode');
+    const planKindInput = document.getElementById('reseller-plan-kind');
+    const commissionField = document.getElementById('reseller-commission-field');
+    const commissionInput = document.getElementById('reseller-commission-input');
+    const rateField = document.getElementById('reseller-price-per-gb-field');
+    const extras = document.getElementById('reseller-subscription-extras');
     const included = document.getElementById('reseller-included-fields');
     const addon = document.getElementById('reseller-addon-fields');
+    const addonGb = document.getElementById('reseller-addon-gb-field');
+    const addonUsers = document.getElementById('reseller-addon-users-field');
     const renew = document.getElementById('reseller-renew-fields');
     const duration = document.getElementById('reseller-duration-field');
-    if (!kind) return;
-    const v = kind.value || 'subscription';
-    const isSub = v === 'subscription';
-    const isVol = v === 'addon_volume';
-    const isUsers = v === 'addon_users';
-    if (included) included.hidden = !isSub;
-    if (renew) renew.hidden = !isSub;
-    if (duration) duration.hidden = !isSub;
-    if (addon) addon.hidden = !(isVol || isUsers);
+    const roleSel = document.getElementById('reseller-pg-role');
+    const hint = document.getElementById('reseller-mode-hint');
+    const priceLabel = document.getElementById('reseller-price-label');
+    const priceHint = document.getElementById('reseller-price-hint');
+    const nameInput = document.getElementById('reseller-plan-name');
+
+    const isVol = kind === 'addon_volume';
+    const isUsers = kind === 'addon_users';
+    const isAddon = isVol || isUsers;
+    const isPayg = kind === 'payg';
+
+    if (planKindInput) {
+      planKindInput.value = isVol ? 'addon_volume' : (isUsers ? 'addon_users' : 'subscription');
+    }
+    if (billing) billing.value = isPayg ? 'payg' : 'fixed';
+
+    setVisible(commissionField, !isAddon && !isPayg);
+    if ((isPayg || isAddon) && commissionInput) commissionInput.value = '0';
+    setVisible(rateField, !isAddon && isPayg);
+    setVisible(extras, !isAddon);
+    setVisible(included, !isAddon);
+    setVisible(renew, !isAddon);
+    setVisible(duration, !isAddon);
+    setVisible(addon, isAddon);
+    setVisible(addonGb, isVol);
+    setVisible(addonUsers, isUsers);
+
+    if (roleSel) {
+      if (isAddon) {
+        roleSel.removeAttribute('required');
+        roleSel.value = '';
+      } else {
+        roleSel.setAttribute('required', 'required');
+      }
+    }
+
+    if (priceLabel) priceLabel.textContent = isAddon ? 'قیمت بسته (تومان)' : 'قیمت ورود (تومان)';
+    if (priceHint) {
+      priceHint.textContent = isAddon
+        ? 'فقط برای نمایندگانی که قبلاً اشتراک خریده‌اند — تاریخ انقضا عوض نمی‌شود'
+        : 'هزینه خرید پکیج نمایندگی — ۰ = رایگان؛ فقط تأیید ادمین';
+    }
+    if (nameInput) {
+      nameInput.placeholder = isVol ? 'بسته ۲۰ گیگ' : (isUsers ? 'بسته ۱۰ کاربر' : 'نمایندگی نقره‌ای');
+    }
+    if (hint) {
+      if (isVol) {
+        hint.textContent = 'بسته حجم — بدون گروه/نقش/دسترسی؛ فقط برای نمایندگان با اشتراک فعال.';
+      } else if (isUsers) {
+        hint.textContent = 'بسته کاربر — بدون گروه/نقش/دسترسی؛ فقط برای نمایندگان با اشتراک فعال.';
+      } else if (isPayg) {
+        hint.textContent = 'اشتراک PAYG — نرخ هر گیگ، گروه و نقش پاسارگارد الزامی است.';
+      } else {
+        hint.textContent = 'اشتراک ثابت — کمیسیون، گروه و نقش پاسارگارد الزامی است.';
+      }
+    }
+    if (!isAddon) syncResellerExtras();
   }
 
   document.addEventListener('change', (e) => {
     if (e.target && e.target.name === 'allow_buy_extra') syncResellerExtras();
-    if (e.target && e.target.id === 'reseller-plan-kind') syncResellerPlanKind();
   });
-  syncResellerPlanKind();
 
   function hideAllPanels(){
     Object.keys(panels).forEach((k) => {
@@ -818,7 +899,7 @@
     hideAllPanels();
     if (audience === 'resellers') {
       if (panels.resellers) panels.resellers.hidden = false;
-      syncResellerBilling();
+      syncResellerForm();
     } else {
       const key = 'users:' + kind;
       if (panels[key]) panels[key].hidden = false;
@@ -843,7 +924,7 @@
       hideAllPanels();
       if (audience === 'resellers') {
         if (panels.resellers) panels.resellers.hidden = false;
-        syncResellerBilling();
+        syncResellerForm();
       } else {
         const key = 'users:' + kindSel.value;
         if (panels[key]) panels[key].hidden = false;
@@ -860,9 +941,17 @@
     if (hasKind || hasAud) {
       applyPlanOpen(btn.getAttribute('data-plan-audience') || 'users', btn.getAttribute('data-plan-kind') || 'fixed');
     } else {
-      const preferReseller = isPlatformAdmin && (location.hash === '#reseller-plans' || location.hash === '#reseller-plans-fixed' || location.hash === '#reseller-plans-payg');
-      const preferPayg = location.hash === '#reseller-plans-payg';
-      applyPlanOpen(preferReseller ? 'resellers' : 'users', preferPayg ? 'payg' : 'fixed');
+      const hash = location.hash || '';
+      const preferReseller = isPlatformAdmin && (
+        hash === '#reseller-plans' ||
+        hash === '#reseller-plans-fixed' ||
+        hash === '#reseller-plans-payg' ||
+        hash === '#reseller-plans-addons'
+      );
+      let preferKind = 'fixed';
+      if (hash === '#reseller-plans-payg') preferKind = 'payg';
+      else if (hash === '#reseller-plans-addons') preferKind = 'addon_volume';
+      applyPlanOpen(preferReseller ? 'resellers' : 'users', preferKind);
     }
   });
 
@@ -962,13 +1051,21 @@
   syncAudienceAndKind();
 
   const hash = location.hash || '';
-  if (hash === '#reseller-plans' || hash === '#reseller-plans-fixed' || hash === '#reseller-plans-payg') {
+  if (
+    hash === '#reseller-plans' ||
+    hash === '#reseller-plans-fixed' ||
+    hash === '#reseller-plans-payg' ||
+    hash === '#reseller-plans-addons'
+  ) {
     const section = document.getElementById(hash.slice(1)) || document.getElementById('reseller-plans');
     if (section) {
       setTimeout(() => section.scrollIntoView({behavior: 'smooth', block: 'start'}), 50);
     }
     if (isPlatformAdmin) {
-      applyPlanOpen('resellers', hash === '#reseller-plans-payg' ? 'payg' : 'fixed');
+      let k = 'fixed';
+      if (hash === '#reseller-plans-payg') k = 'payg';
+      else if (hash === '#reseller-plans-addons') k = 'addon_volume';
+      applyPlanOpen('resellers', k);
     }
   }
 })();

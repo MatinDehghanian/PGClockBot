@@ -44,15 +44,17 @@ class ResellerPlanRequiredFieldsTests(unittest.TestCase):
 
     def test_web_create_requires_groups_and_role(self):
         self.assertIn("reseller-groups", PLANS_HTML)
-        self.assertIn('name="pg_role_id" required', PLANS_HTML)
+        # Role required for subscription kinds via JS (addons strip required)
+        self.assertIn("reseller-pg-role", PLANS_HTML)
+        self.assertIn("setAttribute('required'", PLANS_HTML)
         self.assertIn("حداقل یک گروه پاسارگارد الزامی است", RESELLER_PAGES)
         self.assertIn("نقش پاسارگارد الزامی است", RESELLER_PAGES)
 
     def test_web_edit_requires_groups_and_role(self):
         self.assertIn("edit-groups", EDIT_HTML)
-        self.assertIn('name="pg_role_id" required', EDIT_HTML)
-        self.assertIn("groupsField.hidden = false", EDIT_HTML)
-        # Edit save validates both
+        self.assertIn("edit-pg-role", EDIT_HTML)
+        self.assertIn("setAttribute('required'", EDIT_HTML)
+        # Edit save validates both for subscription plans
         edit_save = RESELLER_PAGES[
             RESELLER_PAGES.find("async def reseller_plan_edit_save") : RESELLER_PAGES.find(
                 "async def reseller_plan_toggle"
@@ -60,7 +62,8 @@ class ResellerPlanRequiredFieldsTests(unittest.TestCase):
         ]
         self.assertIn("حداقل یک گروه پاسارگارد الزامی است", edit_save)
         self.assertIn("نقش پاسارگارد الزامی است", edit_save)
-        self.assertNotIn("plan.pg_group_ids = None", edit_save)
+        # Addon branch may clear groups; subscription path must still require them
+        self.assertIn("_is_addon_plan_kind", edit_save)
 
     def test_detail_shows_groups_and_role(self):
         block = RESELLERS[
