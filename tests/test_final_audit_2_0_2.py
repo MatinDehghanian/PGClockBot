@@ -204,6 +204,7 @@ class PayWithWalletRefundPaymentTests(unittest.IsolatedAsyncioTestCase):
 
         order = MagicMock()
         order.id = 7
+        order.user_id = 3
         order.amount = 1000
         order.status = OrderStatus.PENDING.value
         order.note = None

@@ -835,6 +835,14 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
         return order
     if order.status not in _PAYABLE_ORDER_STATUSES:
         raise ValueError("این سفارش قابل پرداخت با کیف پول نیست")
+    # Fail-closed: never debit one user for another user's order
+    try:
+        oid_user = int(order.user_id)
+        payer = int(getattr(user, "id", 0) or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("سفارش متعلق به این کاربر نیست") from exc
+    if payer <= 0 or oid_user != payer:
+        raise ValueError("سفارش متعلق به این کاربر نیست")
     payment: Payment | None = None
     debited = False
     order = await _claim_payable_order(

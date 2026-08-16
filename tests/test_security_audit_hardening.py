@@ -159,13 +159,14 @@ class TicketAttachmentPathTests(unittest.TestCase):
 
 class MiniAppInitDataSourceTests(unittest.TestCase):
     def test_query_string_initdata_removed(self):
-        src = Path("app/api/app.py").read_text(encoding="utf-8")
-        start = src.index("async def mini_me")
-        end = src.index("async def mini_service", start)
-        body = src[start:end]
-        self.assertNotIn('query_params.get("initData"', body)
-        self.assertIn("X-Telegram-Init-Data", body)
-        self.assertIn("now - auth_date > 600", src)
+        auth = Path("app/services/miniapp_auth.py").read_text(encoding="utf-8")
+        pages = Path("app/api/miniapp_pages.py").read_text(encoding="utf-8")
+        self.assertIn("X-Telegram-Init-Data", auth)
+        self.assertNotIn('query_params.get("initData"', auth)
+        self.assertNotIn('query_params.get("initData"', pages)
+        self.assertIn("now - auth_date > 600", auth)
+        self.assertIn("is_blocked", auth)
+        self.assertIn("assert_mini_force_join", auth)
 
 
 class WebhookCompareDigestTests(unittest.TestCase):
