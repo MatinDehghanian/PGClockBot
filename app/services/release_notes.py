@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "6.2.0": [
+        "مینی‌اپ نقش‌محور: پوسته‌های جدا برای کاربر / نماینده / ادمین با ظاهر هم‌تراز وب‌پنل",
+        "دیپ‌لینک مینی‌اپ (#ops و …) + میانبر از هاب نمایندگان و خانه نماینده",
+        "فعال‌سازی با SSL پنل و PUBLIC_BASE_URL — بدون نیاز به Nginx جدا",
+    ],
     "6.1.18": [
         "دکمه‌های روبه‌روی تیتر صفحه: عرض مثل «افزودن نماینده» — فاصله افقی متن ثابت، بدون کش‌آمدن دکمه کوتاه",
     ],

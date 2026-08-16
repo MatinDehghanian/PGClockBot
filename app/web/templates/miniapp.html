@@ -1,178 +1,27 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="fa" dir="rtl" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Clock Mini App</title>
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#09090b" />
+  <title>مینی‌اپ · MrClockBot</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <style>
-    :root {
-      --bg: var(--tg-theme-bg-color, #f3f5f7);
-      --text: var(--tg-theme-text-color, #121417);
-      --hint: var(--tg-theme-hint-color, #5c6670);
-      --btn: var(--tg-theme-button-color, #1f6f5b);
-      --btn-text: var(--tg-theme-button-text-color, #fff);
-      --sec: var(--tg-theme-secondary-bg-color, #ffffff);
-      /* Strict 8-point spacing scale (matches panel) */
-      --space-0: 4px;
-      --space-1: 8px;
-      --space-2: 16px;
-      --space-3: 24px;
-      --space-4: 32px;
-      --space-5: 48px;
-      --card-pad: 16px;
-      --section-gap: 24px;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Vazirmatn, sans-serif;
-      background:
-        radial-gradient(700px 280px at 0% 0%, #dfeae5, transparent 60%),
-        var(--bg);
-      color: var(--text);
-      line-height: 1.5;
-      padding: var(--space-2) var(--space-2) var(--space-5);
-    }
-    h1 { font-size: 22px; margin: 0 0 var(--space-0); line-height: 1.25; }
-    .muted { color: var(--hint); margin: 0 0 var(--space-3); font-size: 13px; line-height: 1.5; }
-    .card {
-      background: var(--sec);
-      border: 1px solid #d7dde3;
-      border-radius: 16px;
-      padding: var(--card-pad);
-      margin-bottom: var(--space-2);
-    }
-    .card h3 { margin: 0 0 var(--space-1); font-size: 15px; line-height: 1.5; }
-    .row { display: flex; justify-content: space-between; gap: var(--space-1); align-items: center; }
-    .pill {
-      background: #e8efec; color: #0e4f40; border-radius: 999px;
-      padding: var(--space-0) var(--space-1); font-size: 12px; font-weight: 600;
-      line-height: 1.25;
-    }
-    .btn {
-      display: block; width: 100%; border: 0; border-radius: 14px;
-      padding: var(--space-2); margin-top: var(--space-1); font: inherit; font-weight: 700;
-      background: var(--btn); color: var(--btn-text); cursor: pointer;
-      line-height: 1.25;
-    }
-    .btn.secondary { background: transparent; color: var(--text); border: 1px solid #d7dde3; }
-    .grid { display: grid; gap: var(--space-1); }
-    .price { font-weight: 700; color: #1f6f5b; }
-    .error { background: #fdecec; color: #9b2c2c; padding: var(--space-2); border-radius: 14px; line-height: 1.5; }
-    code { word-break: break-all; font-size: 12px; }
-  </style>
+  <link rel="stylesheet" href="/static/miniapp.css?v={{ app_version }}" />
 </head>
 <body>
-  <h1 id="hello">مینی‌اپ Clock</h1>
-  <p class="muted" id="wallet">در حال بارگذاری…</p>
-  <div id="root"></div>
-  <script>
-    const tg = window.Telegram?.WebApp;
-    if (tg) {
-      tg.ready();
-      tg.expand();
-      tg.setHeaderColor('#1f6f5b');
-    }
-    const initData = tg?.initData || '';
-    function esc(s) {
-      return String(s ?? '').replace(/[&<>"']/g, (c) => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-      }[c]));
-    }
-    function safeUrl(u) {
-      const s = String(u || '').trim();
-      if (!s) return '';
-      try {
-        const low = s.toLowerCase();
-        if (low.startsWith('javascript:') || low.startsWith('data:') || low.startsWith('vbscript:')) {
-          return '';
-        }
-        return s;
-      } catch (_) {
-        return '';
-      }
-    }
-    async function api(path) {
-      const res = await fetch(path, { headers: { 'X-Telegram-Init-Data': initData } });
-      if (!res.ok) throw new Error(await res.text());
-      return res.json();
-    }
-    function money(n) {
-      return (n || 0).toLocaleString('fa-IR') + ' تومان';
-    }
-    async function load() {
-      const root = document.getElementById('root');
-      try {
-        const data = await api('/api/mini/me');
-        document.getElementById('hello').textContent = 'سلام ' + (data.user.name || '');
-        document.getElementById('wallet').textContent = 'موجودی کیف پول: ' + money(data.user.wallet);
-        let html = '<div class="card"><h3>سرویس‌های من</h3>';
-        if (!data.services.length) html += '<p class="muted">سرویسی ندارید</p>';
-        for (const s of data.services) {
-          const url = esc(s.subscription_url || '');
-          html += `<div class="row" style="margin: var(--space-1) 0"><div><strong>${esc(s.username)}</strong><br/><code>${url}</code></div>
-            <button class="btn secondary" style="width:auto;padding: var(--space-1) var(--space-1)" data-svc="${Number(s.id) || 0}">جزئیات</button></div>`;
-        }
-        html += '</div><div class="card"><h3>خرید پلن</h3><div class="grid">';
-        for (const p of data.plans) {
-          html += `<div class="row"><div><strong>${esc(p.name)}</strong><div class="muted">${esc(p.days)} روز · ${esc(p.gb ?? '∞')} گیگ</div></div>
-            <div class="price">${esc(money(p.price))}</div></div>`;
-        }
-        html += '</div><p class="muted" style="margin-top: var(--space-2)">برای خرید از دکمه‌های ربات استفاده کنید؛ مینی‌اپ وضعیت و لینک را سریع نشان می‌دهد.</p></div>';
-        html += '<div class="card" id="detail" style="display:none"></div>';
-        root.innerHTML = html;
-        root.querySelectorAll('[data-svc]').forEach((btn) => {
-          btn.addEventListener('click', () => showSvc(Number(btn.getAttribute('data-svc'))));
-        });
-      } catch (e) {
-        root.textContent = '';
-        const err = document.createElement('div');
-        err.className = 'error';
-        err.appendChild(document.createTextNode('برای استفاده ابتدا ربات را /start کنید.'));
-        err.appendChild(document.createElement('br'));
-        err.appendChild(document.createTextNode(String(e.message || e)));
-        root.appendChild(err);
-      }
-    }
-    async function showSvc(id) {
-      const box = document.getElementById('detail');
-      box.style.display = 'block';
-      box.textContent = 'در حال دریافت…';
-      try {
-        const data = await api('/api/mini/service/' + id);
-        const i = data.info || {};
-        const url = safeUrl(data.service.url || '');
-        box.textContent = '';
-        const h3 = document.createElement('h3');
-        h3.textContent = data.service.username || '';
-        const muted = document.createElement('div');
-        muted.className = 'muted';
-        muted.textContent = `وضعیت: ${i.status || '—'} · مصرف: ${i.used_traffic ?? '—'} / ${i.data_limit ?? '∞'}`;
-        const p = document.createElement('p');
-        const code = document.createElement('code');
-        code.textContent = url;
-        p.appendChild(code);
-        box.appendChild(h3);
-        box.appendChild(muted);
-        box.appendChild(p);
-        if (url) {
-          const btn = document.createElement('button');
-          btn.className = 'btn';
-          btn.textContent = 'باز کردن لینک';
-          btn.addEventListener('click', () => { if (tg) tg.openLink(url); });
-          box.appendChild(btn);
-        }
-      } catch (e) {
-        box.textContent = '';
-        const err = document.createElement('div');
-        err.className = 'error';
-        err.textContent = String(e.message || e);
-        box.appendChild(err);
-      }
-    }
-    load();
-  </script>
+  <header class="ma-header">
+    <div class="ma-brand">
+      <strong id="hello">مینی‌اپ</strong>
+      <p class="muted" id="subtitle">در حال بارگذاری…</p>
+    </div>
+    <span class="ma-role" id="role-badge">…</span>
+  </header>
+  <main id="root" aria-live="polite"></main>
+  <nav class="ma-nav" id="nav" aria-label="منوی مینی‌اپ"></nav>
+  <script src="/static/miniapp.js?v={{ app_version }}"></script>
 </body>
 </html>

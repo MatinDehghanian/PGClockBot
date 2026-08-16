@@ -1173,7 +1173,12 @@ def reply_action_map(
     return {k: v for k, v in mapping.items() if k}
 
 
-def miniapp_inline_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup | None:
+def miniapp_inline_keyboard(
+    ui: dict | None = None,
+    *,
+    view: str = "",
+    label: str | None = None,
+) -> InlineKeyboardMarkup | None:
     """WebApp can only live on inline keyboards. Platform bot only."""
     from app.services.users import current_shop_reseller_id
 
@@ -1183,18 +1188,31 @@ def miniapp_inline_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup | No
     settings = get_settings()
     if not settings.miniapp_enabled:
         return None
-    if "miniapp" not in _menu_order(ui):
+    url = settings.miniapp_deep_url(view) if view else settings.miniapp_url
+    if not url:
         return None
+    if not view and "miniapp" not in _menu_order(ui):
+        return None
+    text = (label or _t(ui, "btn_miniapp") or "📱 مینی‌اپ").strip() or "📱 مینی‌اپ"
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=_t(ui, "btn_miniapp"),
-                    web_app=WebAppInfo(url=settings.miniapp_url),
+                    text=text[:64],
+                    web_app=WebAppInfo(url=url),
                 )
             ]
         ]
     )
+
+
+def miniapp_ops_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup | None:
+    """Admin/reseller shortcut into the ops (or shop) Mini App shell."""
+    return miniapp_inline_keyboard(ui, view="ops", label="📱 مینی‌اپ عملیات")
+
+
+def miniapp_reseller_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup | None:
+    return miniapp_inline_keyboard(ui, view="home", label="📱 مینی‌اپ نماینده")
 
 
 def force_join_inline_keyboard(

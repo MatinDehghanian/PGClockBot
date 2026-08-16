@@ -678,23 +678,32 @@ def create_api_app(lifespan=None) -> FastAPI:
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
+        is_miniapp = request.url.path.startswith("/miniapp")
+        # Mini App opens inside Telegram WebView — allow framing only there
+        if is_miniapp:
+            response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        else:
+            response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")
         response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
         # Panel pages only; keep CSP moderate so inline preview/scripts still work
         if not request.url.path.startswith("/static") and not request.url.path.startswith("/media"):
             script_src = "script-src 'self' 'unsafe-inline'"
-            # Mini App needs Telegram WebApp SDK
-            if request.url.path.startswith("/miniapp"):
+            frame_ancestors = "frame-ancestors 'none'"
+            # Mini App needs Telegram WebApp SDK (+ Telegram may embed the sheet)
+            if is_miniapp:
                 script_src = "script-src 'self' 'unsafe-inline' https://telegram.org"
+                frame_ancestors = (
+                    "frame-ancestors 'self' https://web.telegram.org https://telegram.org"
+                )
             response.headers.setdefault(
                 "Content-Security-Policy",
                 "default-src 'self'; img-src 'self' data: blob:; "
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 f"{script_src}; "
                 "font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; "
-                "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+                f"{frame_ancestors}; base-uri 'self'; form-action 'self'",
             )
         path = request.url.path
         ct = (response.headers.get("content-type") or "").lower()
@@ -875,6 +884,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
+    from app.api.miniapp_pages import register_miniapp_pages
+
+    register_miniapp_pages(app, render=render, get_db=get_db)
 
     @app.get("/settings/ssl/progress")
     async def ssl_progress(staff: dict = Depends(require_admin)):
@@ -3793,114 +3805,5 @@ def create_api_app(lifespan=None) -> FastAPI:
         if not ok:
             return _redirect_msg("/broadcast", err="رکورد یافت نشد")
         return _redirect_msg("/broadcast", ok="رکورد حذف شد")
-
-    # -------- Mini App pages & API --------
-
-    @app.get("/miniapp/", response_class=HTMLResponse)
-    async def miniapp_index(request: Request):
-        return render(request, "miniapp.html", {})
-
-    def _validate_init_data(init_data: str) -> dict:
-        settings = get_settings()
-        parsed = dict(parse_qsl(init_data, keep_blank_values=True))
-        received_hash = parsed.pop("hash", None)
-        if not received_hash:
-            raise HTTPException(401, "missing hash")
-        data_check = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
-        secret = hmac.new(b"WebAppData", settings.bot_token.encode(), hashlib.sha256).digest()
-        calc = hmac.new(secret, data_check.encode(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(calc, received_hash):
-            raise HTTPException(401, "bad initData")
-        try:
-            auth_date = int(parsed.get("auth_date", "0"))
-        except (TypeError, ValueError):
-            raise HTTPException(401, "bad auth_date")
-        now = time.time()
-        # Reject future skew (>5m) and stale initData (>10m)
-        if auth_date <= 0 or auth_date > now + 300 or now - auth_date > 600:
-            raise HTTPException(401, "expired")
-        user = json.loads(parsed.get("user", "{}"))
-        return user
-
-    @app.get("/api/mini/me")
-    async def mini_me(request: Request, session: AsyncSession = Depends(get_db)):
-        from fastapi.responses import JSONResponse
-
-        # Header only — never accept initData in query strings (logs/history leakage)
-        init_data = request.headers.get("X-Telegram-Init-Data") or ""
-        if not init_data:
-            raise HTTPException(401, "no initData")
-        tg_user = _validate_init_data(init_data)
-        tg_id = tg_user.get("id")
-        result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))
-        user = result.scalar_one_or_none()
-        if not user:
-            raise HTTPException(404, "start the bot first")
-        svc_result = await session.execute(
-            select(UserService).where(UserService.bot_user_id == user.id)
-        )
-        services = list(svc_result.scalars().all())
-        plans_q = select(Plan).where(Plan.is_active.is_(True), Plan.owner_reseller_id.is_(None))
-        if user.reseller_id:
-            plans_q = select(Plan).where(
-                Plan.is_active.is_(True),
-                Plan.owner_reseller_id == user.reseller_id,
-            )
-        plans_result = await session.execute(plans_q.order_by(Plan.sort_order))
-        plans = list(plans_result.scalars().all())
-        payload = {
-            "user": {
-                "id": user.id,
-                "name": user.full_name,
-                "wallet": user.wallet_balance,
-                "role": user.role,
-            },
-            "services": [
-                {
-                    "id": s.id,
-                    "username": s.pg_username,
-                    "subscription_url": s.subscription_url,
-                }
-                for s in services
-            ],
-            "plans": [
-                {
-                    "id": p.id,
-                    "name": p.name,
-                    "price": p.price,
-                    "days": p.duration_days,
-                    "gb": p.data_limit_gb,
-                }
-                for p in plans
-            ],
-        }
-        resp = JSONResponse(payload)
-        resp.headers["Cache-Control"] = "no-store, private"
-        return resp
-
-    @app.get("/api/mini/service/{service_id}")
-    async def mini_service(service_id: int, request: Request, session: AsyncSession = Depends(get_db)):
-        from fastapi.responses import JSONResponse
-
-        init_data = request.headers.get("X-Telegram-Init-Data") or ""
-        if not init_data:
-            raise HTTPException(401, "no initData")
-        tg_user = _validate_init_data(init_data)
-        result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_user.get("id")))
-        user = result.scalar_one_or_none()
-        svc = await session.get(UserService, service_id)
-        if not user or not svc or svc.bot_user_id != user.id:
-            raise HTTPException(404)
-        info = {}
-        if svc.subscription_token:
-            try:
-                info = await get_pg().subscription_info(svc.subscription_token)
-            except Exception:
-                info = {"error": "upstream_unavailable"}
-        resp = JSONResponse(
-            {"service": {"id": svc.id, "username": svc.pg_username, "url": svc.subscription_url}, "info": info}
-        )
-        resp.headers["Cache-Control"] = "no-store, private"
-        return resp
 
     return app

@@ -97,7 +97,7 @@ class SubscriptionUrlSanitizeTests(unittest.TestCase):
 
 class MiniAppSecurityTests(unittest.TestCase):
     def test_miniapp_escapes_and_uses_dom(self):
-        src = Path("app/web/templates/miniapp.html").read_text(encoding="utf-8")
+        src = Path("app/web/static/miniapp.js").read_text(encoding="utf-8")
         self.assertIn("function esc(", src)
         self.assertIn("createTextNode", src)
         self.assertIn("safeUrl", src)

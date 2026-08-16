@@ -711,6 +711,14 @@ async def open_admin_resellers_hub(
         state=state,
         push=push,
     )
+    mini = kb.miniapp_inline_keyboard(
+        None, view="ops", label="📱 مینی‌اپ · نمایندگان / عملیات"
+    )
+    if mini:
+        await message.answer(
+            "برای آمار و میانبر وب‌پنل، مینی‌اپ را باز کنید:",
+            reply_markup=mini,
+        )
 
 
 async def open_admin_settings_hub(

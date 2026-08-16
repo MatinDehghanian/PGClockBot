@@ -263,6 +263,12 @@ async def res_dash(
     )
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=None)
+        mini = kb.miniapp_reseller_keyboard()
+        if mini:
+            await callback.message.answer(
+                "مینی‌اپ نماینده — آمار و میانبر وب‌پنل:",
+                reply_markup=mini,
+            )
 
 
 RES_USERS_PAGE = 10

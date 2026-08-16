@@ -191,6 +191,14 @@ class Settings(BaseSettings):
         base = self.public_base_url.rstrip("/")
         return f"{base}/miniapp/" if base else ""
 
+    def miniapp_deep_url(self, view: str = "") -> str:
+        """HTTPS Mini App URL with optional hash deep-link (e.g. ops, services)."""
+        base = self.miniapp_url
+        if not base:
+            return ""
+        view = (view or "").strip().lstrip("#")
+        return f"{base}#{view}" if view else base
+
 
 @lru_cache
 def get_settings() -> Settings:
