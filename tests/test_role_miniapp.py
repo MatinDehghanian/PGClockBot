@@ -114,6 +114,13 @@ class MiniAppSourceTests(unittest.TestCase):
         self.assertIn('view="ops"', src)
         self.assertIn("miniapp_inline_keyboard", src)
 
+    def test_menu_button_webapp_sync(self):
+        src = (ROOT / "app/bot/chat_menu.py").read_text(encoding="utf-8")
+        self.assertIn("MenuButtonWebApp", src)
+        self.assertIn("sync_telegram_menu_button", src)
+        main = (ROOT / "app/main.py").read_text(encoding="utf-8")
+        self.assertIn("sync_telegram_menu_button", main)
+
 
 if __name__ == "__main__":
     unittest.main()

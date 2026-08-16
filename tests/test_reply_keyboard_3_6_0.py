@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from app.bot.keyboards import (
     BTN_BACK,
@@ -114,9 +115,15 @@ class ReplyKeyboard360Tests(unittest.TestCase):
         self.assertNotIn("faq", DEFAULT_MENU_ORDER)
 
     def test_chat_menu_helper_importable(self):
-        from app.bot.chat_menu import clear_telegram_menu_button
+        from app.bot.chat_menu import clear_telegram_menu_button, sync_telegram_menu_button
 
         self.assertTrue(callable(clear_telegram_menu_button))
+        self.assertTrue(callable(sync_telegram_menu_button))
+        src = Path("app/bot/chat_menu.py").read_text(encoding="utf-8")
+        self.assertIn("MenuButtonWebApp", src)
+        self.assertIn("miniapp_enabled", src)
+        main = Path("app/main.py").read_text(encoding="utf-8")
+        self.assertIn("sync_telegram_menu_button", main)
 
     def test_pg_reply_keyboard_has_ops_and_nav(self):
         from app.bot.keyboards import pg_reply_keyboard, REPLY_ACTION_PG_USERS, reply_action_map

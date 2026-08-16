@@ -109,18 +109,14 @@ async def apply_appearance(
         await bot.set_my_name(name=name)
         await bot.set_my_description(description=description)
         await bot.set_my_short_description(short_description=short_description)
-        # Reply keyboard replaced the side Menu — keep commands unpublished
+        # Menu button: Mini App «Open» when HTTPS public URL is ready; else cleared
         await bot.delete_my_commands()
         try:
-            from aiogram.types import MenuButtonDefault
+            from app.bot.chat_menu import sync_telegram_menu_button
 
-            await bot.set_chat_menu_button(menu_button=MenuButtonDefault())
+            await sync_telegram_menu_button(bot, allow_miniapp=True)
         except Exception:
-            pass
-        try:
-            await bot.delete_chat_menu_button()
-        except Exception:
-            pass
+            log.debug("sync menu button after appearance failed", exc_info=True)
         if remove_photo and not photo_bytes:
             try:
                 await bot.remove_my_profile_photo()

@@ -63,9 +63,10 @@ class ResellerBotManager:
                 me = await bot.get_me()
                 tg_id = int(me.id)
                 uname = me.username or ""
-                from app.bot.chat_menu import clear_telegram_menu_button
+                from app.bot.chat_menu import sync_telegram_menu_button
 
-                await clear_telegram_menu_button(bot)
+                # Shop bots never host the platform Mini App (HMAC / token mismatch)
+                await sync_telegram_menu_button(bot, allow_miniapp=False)
 
                 async with SessionLocal() as session:
                     row = await session.get(ResellerProfile, reseller_profile_id)

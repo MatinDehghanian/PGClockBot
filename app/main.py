@@ -110,11 +110,11 @@ def main() -> None:
                     settings.admin_ids,
                 )
                 try:
-                    from app.bot.chat_menu import clear_telegram_menu_button
+                    from app.bot.chat_menu import sync_telegram_menu_button
 
-                    await clear_telegram_menu_button(bot)
+                    await sync_telegram_menu_button(bot, allow_miniapp=True)
                 except Exception:
-                    logger.debug("clear telegram menu button failed", exc_info=True)
+                    logger.debug("sync telegram menu button failed", exc_info=True)
             except Exception:
                 logger.exception(
                     "Cannot connect to Telegram — web panel stays up. "

@@ -7,4 +7,5 @@
 - Deep links: `/miniapp/#ops`, `#services`, `#shop`, …
 - Admin «نمایندگان» hub + reseller home offer Mini App shortcuts
 - No Nginx required — existing panel SSL + `PUBLIC_BASE_URL` is enough
+- Telegram **Open** menu button (`MenuButtonWebApp`) auto-syncs when Mini App is enabled
 - Restore point before this work: branch `cursor/restore-before-role-miniapp-c615` / tag `restore/pre-role-miniapp-v6.1.18`
