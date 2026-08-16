@@ -142,8 +142,8 @@ class MiniAppSourceTests(unittest.TestCase):
         pages = (ROOT / "app/api/miniapp_pages.py").read_text(encoding="utf-8")
         buy = pages.split("async def mini_buy")[1].split("async def mini_renew")[0]
         renew = pages.split("async def mini_renew")[1]
-        self.assertIn("_require_commerce(user)", buy)
-        self.assertIn("_require_commerce(user)", renew)
+        self.assertIn("_require_commerce_ready", buy)
+        self.assertIn("_require_commerce_ready", renew)
         me = pages.split("async def mini_me")[1].split("async def mini_service")[0]
         self.assertIn("_empty_customer()", me)
         self.assertIn("commerce_allowed(persona)", me)

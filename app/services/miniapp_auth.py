@@ -59,13 +59,18 @@ def init_data_from_request(request: Request) -> str:
 
 
 async def load_mini_user(session: AsyncSession, request: Request) -> BotUser:
-    """Validate initData and load the BotUser row (must have /start'd)."""
+    """Validate initData and load the BotUser row (must have /start'd).
+
+    Blocked accounts are rejected (parity with bot middleware).
+    """
     tg_user = validate_webapp_init_data(init_data_from_request(request))
     tg_id = tg_user.get("id")
     result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(404, "start the bot first")
+    if bool(getattr(user, "is_blocked", False)):
+        raise HTTPException(403, "دسترسی شما مسدود شده است")
     return user
 
 
@@ -76,6 +81,51 @@ def resolve_mini_persona(user: BotUser) -> str:
     if (user.role or "").strip() == Role.RESELLER.value:
         return "reseller"
     return "user"
+
+
+async def assert_mini_force_join(session: AsyncSession, user: BotUser) -> None:
+    """Mirror bot ForceJoinMiddleware for Mini App commerce (users only).
+
+    Admin/reseller personas are not gated (same as Telegram middleware).
+    """
+    if resolve_mini_persona(user) != "user":
+        return
+    from aiogram import Bot
+
+    from app.bot.middlewares import check_force_join_all
+    from app.services.users import (
+        get_all_settings,
+        on,
+        parse_force_join_channels,
+        parse_force_join_entries,
+    )
+
+    ui = await get_all_settings(session)
+    if not on(ui.get("force_join_enabled")):
+        return
+    raw_channels = ui.get("force_join_channel")
+    channels = parse_force_join_channels(raw_channels)
+    if not channels:
+        return
+    entries = parse_force_join_entries(raw_channels)
+    token = (get_settings().bot_token or "").strip()
+    if not token:
+        raise HTTPException(503, "bot token missing")
+    bot = Bot(token=token)
+    try:
+        missing, unverified = await check_force_join_all(
+            bot,
+            int(user.telegram_id),
+            channels,
+            entries=entries,
+        )
+    finally:
+        await bot.session.close()
+    if missing or unverified:
+        raise HTTPException(
+            403,
+            "ابتدا در کانال‌های اجباری عضو شوید و از ربات عضویت را تأیید کنید",
+        )
 
 
 async def load_reseller_profile(

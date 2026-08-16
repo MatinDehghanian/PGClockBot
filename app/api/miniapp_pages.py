@@ -31,6 +31,7 @@ from app.services.formatting import (
     status_label,
 )
 from app.services.miniapp_auth import (
+    assert_mini_force_join,
     load_mini_user,
     load_reseller_profile,
     resolve_mini_persona,
@@ -76,6 +77,13 @@ def _require_commerce(user: BotUser) -> str:
     persona = resolve_mini_persona(user)
     if not commerce_allowed(persona):
         raise HTTPException(403, "خرید/تمدید برای این نقش در مینی‌اپ مجاز نیست")
+    return persona
+
+
+async def _require_commerce_ready(session: AsyncSession, user: BotUser) -> str:
+    """Commerce persona + force-join (users) before mutating wallet/orders."""
+    persona = _require_commerce(user)
+    await assert_mini_force_join(session, user)
     return persona
 
 
@@ -363,12 +371,8 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         _require_commerce(user)
         svc = _owned_service_or_404(await session.get(UserService, service_id), user)
         info = await _fetch_pg_info(svc.subscription_token)
-        return _no_store(
-            {
-                "service": _serialize_service(svc, info),
-                "info": info,
-            }
-        )
+        # Never return raw PG payload — allowlisted summary only
+        return _no_store({"service": _serialize_service(svc, info)})
 
     @app.get("/api/mini/service/{service_id}/qr")
     async def mini_service_qr(
@@ -406,7 +410,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         from app.services.orders import create_order, get_catalog_plan, pay_with_wallet
 
         user = await load_mini_user(session, request)
-        _require_commerce(user)
+        await _require_commerce_ready(session, user)
         try:
             body = await request.json()
         except Exception:
@@ -434,10 +438,10 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         except ValueError as exc:
             await rollback_quiet(session)
             raise HTTPException(400, str(exc)) from exc
-        except Exception as exc:
+        except Exception:
             await rollback_quiet(session)
             log.exception("mini buy failed user=%s plan=%s", user.id, plan_id)
-            raise HTTPException(500, str(exc) or "خرید ناموفق") from exc
+            raise HTTPException(500, "خرید ناموفق")
         return _no_store(
             {
                 "ok": True,
@@ -452,7 +456,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         from app.services.orders import get_catalog_plan, pay_with_wallet, renew_service_with_plan
 
         user = await load_mini_user(session, request)
-        _require_commerce(user)
+        await _require_commerce_ready(session, user)
         try:
             body = await request.json()
         except Exception:
@@ -487,10 +491,10 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         except ValueError as exc:
             await rollback_quiet(session)
             raise HTTPException(400, str(exc)) from exc
-        except Exception as exc:
+        except Exception:
             await rollback_quiet(session)
             log.exception("mini renew failed user=%s svc=%s", user.id, service_id)
-            raise HTTPException(500, str(exc) or "تمدید ناموفق") from exc
+            raise HTTPException(500, "تمدید ناموفق")
         return _no_store(
             {
                 "ok": True,
