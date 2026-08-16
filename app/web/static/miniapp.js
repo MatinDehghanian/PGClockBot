@@ -208,7 +208,7 @@
       .join("");
   }
 
-  function serviceCardHtml(s, { compact } = {}) {
+  function serviceCardHtml(s) {
     const pct = s.traffic_pct;
     const meter =
       pct == null
@@ -218,7 +218,6 @@
             pct
           )}%"></i></div>`;
     const url = esc(s.subscription_url || "");
-    const renewBlock = `<div class="renew-sheet" data-renew-host="${Number(s.id) || 0}" hidden></div>`;
     return `<article class="svc-card" data-svc-card="${Number(s.id) || 0}">
       <div class="svc-top">
         <div class="svc-title" dir="ltr">${esc(s.username || "—")}</div>
@@ -238,7 +237,6 @@
           ? `<p class="hint">آخرین آنلاین: ${esc(s.online_at)}</p>`
           : ""
       }
-      ${url ? `<code style="margin-top:var(--space-1_5);display:block;word-break:break-all;font-size:11px;color:var(--muted-fg);direction:ltr;text-align:left">${url}</code>` : ""}
       <div class="svc-actions">
         <button type="button" class="btn ghost sm" data-copy="${url}">کپی لینک</button>
         <button type="button" class="btn ghost sm" data-qr="${Number(s.id) || 0}">نمایش QR</button>
@@ -246,8 +244,25 @@
         <button type="button" class="btn sm" data-renew="${Number(s.id) || 0}">تمدید</button>
       </div>
       <div class="qr-box" data-qr-box="${Number(s.id) || 0}" hidden></div>
-      ${renewBlock}
+      <div class="renew-sheet" data-renew-host="${Number(s.id) || 0}" hidden></div>
     </article>`;
+  }
+
+  function servicePeekHtml(s) {
+    return `<div class="svc-peek">
+      <div class="svc-peek-main">
+        <strong dir="ltr">${esc(s.username || "—")}</strong>
+        <div class="svc-peek-meta">
+          <span>${esc(s.traffic || "—")}</span>
+          <span>${
+            s.expire_days == null
+              ? "نامحدود"
+              : esc(num(s.expire_days)) + " روز"
+          }</span>
+        </div>
+      </div>
+      <span class="badge ${statusClass(s.status)}">${esc(s.status_fa || s.status || "—")}</span>
+    </div>`;
   }
 
   function plansHtml(plans, { renewServiceId } = {}) {
@@ -318,7 +333,7 @@
   function renderUserPanels(data) {
     const c = data.customer || {};
     const services = c.services || [];
-    const homeSvcs = services.slice(0, 3);
+    const homeSvcs = services.slice(0, 4);
     return {
       home: `
         ${walletCardHtml(c)}
@@ -329,7 +344,7 @@
           </div>
           ${
             homeSvcs.length
-              ? homeSvcs.map((s) => serviceCardHtml(s, { compact: true })).join("")
+              ? homeSvcs.map((s) => servicePeekHtml(s)).join("")
               : '<p class="muted">سرویسی ندارید — از بخش خرید شروع کنید.</p>'
           }
         </div>`,
@@ -521,6 +536,10 @@
 
   async function doBuy(planId) {
     if (busy) return;
+    if (!(state && state.commerce_allowed)) {
+      toast("خرید برای این نقش مجاز نیست", "err");
+      return;
+    }
     const c = (state && state.customer) || {};
     if (!c.wallet_pay_enabled) {
       toast("پرداخت کیف پول غیرفعال است", "err");
@@ -551,6 +570,10 @@
 
   async function doRenew(serviceId, planId) {
     if (busy) return;
+    if (!(state && state.commerce_allowed)) {
+      toast("تمدید برای این نقش مجاز نیست", "err");
+      return;
+    }
     if (tg && tg.showConfirm) {
       const ok = await new Promise((resolve) => {
         tg.showConfirm("تمدید این سرویس با کیف پول؟", resolve);
@@ -581,51 +604,55 @@
     roleEl.textContent = personaLabel(data.persona);
     subEl.textContent =
       data.persona === "admin"
-        ? "مدیریت سریع + خرید شخصی"
+        ? "فقط عملیات ادمین — بدون خرید"
         : data.persona === "reseller"
           ? "سرویس‌ها، خرید و پنل فروشگاه"
           : "سرویس‌ها، خرید و کیف پول";
 
     renderNav(data.nav);
 
-    const panels = renderUserPanels(data);
-    if (data.persona === "admin" || data.persona === "reseller") {
-      const ops = data.ops || {};
-      const peekStats =
-        data.persona === "admin"
-          ? statsHtml(ops.stats || {}, [
-              ["users", "کاربران"],
-              ["resellers", "نمایندگان"],
-              ["pending", "رسید معلق"],
-              ["tickets", "تیکت باز"],
-            ])
-          : statsHtml(ops.stats || {}, [
-              ["users", "کاربران"],
-              ["orders", "سفارش‌ها"],
-              ["pending", "رسید معلق"],
-              ["tickets", "تیکت باز"],
-            ]);
-      const svcs = (data.customer && data.customer.services) || [];
-      panels.ops = renderOpsExtra(data);
+    const panels = {};
+    if (data.persona === "admin") {
+      // Owner/admin: ops only — never commerce UI
       panels.home = `
-        ${walletCardHtml(data.customer || {})}
         <div class="card">
-          <div class="card-head">
-            <h3>${data.persona === "admin" ? "وضعیت پلتفرم" : "فروشگاه من"}</h3>
-            <button type="button" class="btn ghost sm" data-goto="ops">بیشتر</button>
-          </div>
-          ${peekStats}
+          <h3>پنل سریع ادمین</h3>
+          <p class="hint">خرید و کیف پول کاربر در مینی‌اپ برای ادمین فعال نیست — فقط نمای عملیاتی.</p>
         </div>
-        <div class="card">
-          <div class="card-head"><h3>سرویس‌های من</h3>
-            <button type="button" class="btn ghost sm" data-goto="services">همه</button>
+        ${renderOpsExtra(data)}`;
+      panels.ops = renderOpsExtra(data);
+    } else {
+      Object.assign(panels, renderUserPanels(data));
+      if (data.persona === "reseller") {
+        const ops = data.ops || {};
+        const peekStats = statsHtml(ops.stats || {}, [
+          ["users", "کاربران"],
+          ["orders", "سفارش‌ها"],
+          ["pending", "رسید معلق"],
+          ["tickets", "تیکت باز"],
+        ]);
+        const svcs = (data.customer && data.customer.services) || [];
+        panels.ops = renderOpsExtra(data);
+        panels.home = `
+          ${walletCardHtml(data.customer || {})}
+          <div class="card">
+            <div class="card-head">
+              <h3>فروشگاه من</h3>
+              <button type="button" class="btn ghost sm" data-goto="ops">بیشتر</button>
+            </div>
+            ${peekStats}
           </div>
-          ${
-            svcs.length
-              ? svcs.slice(0, 2).map((s) => serviceCardHtml(s, { compact: true })).join("")
-              : '<p class="muted">سرویسی ندارید</p>'
-          }
-        </div>`;
+          <div class="card">
+            <div class="card-head"><h3>سرویس‌های من</h3>
+              <button type="button" class="btn ghost sm" data-goto="services">همه</button>
+            </div>
+            ${
+              svcs.length
+                ? svcs.slice(0, 4).map((s) => servicePeekHtml(s)).join("")
+                : '<p class="muted">سرویسی ندارید</p>'
+            }
+          </div>`;
+      }
     }
 
     root.innerHTML = Object.keys(panels)

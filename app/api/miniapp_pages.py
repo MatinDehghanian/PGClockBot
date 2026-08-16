@@ -1,4 +1,13 @@
-"""Telegram Mini App pages + JSON API (role-aware shells)."""
+"""Telegram Mini App pages + JSON API (role-aware shells).
+
+Security invariants (must not regress):
+- initData HMAC uses the **platform** bot token only (shop bots never host this app).
+- Every service/QR/buy/renew action is scoped to ``BotUser`` from initData — no cross-user IDs.
+- Subscription info uses the service's own ``subscription_token`` with ``auth=False``
+  (never Owner/reseller PG admin credentials for another tenant).
+- Platform **admin/owner** gets ops overview only — **no** shop buy/renew/wallet commerce.
+- Catalog in Mini App is **platform plans only** (hard shop isolation; no other reseller catalog).
+"""
 
 from __future__ import annotations
 
@@ -13,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.db.models import Plan, ResellerProfile, UserService
+from app.db.models import BotUser, Plan, ResellerProfile, UserService
 from app.services.db_safe import rollback_quiet
 from app.services.formatting import (
     expire_remaining_days,
@@ -31,6 +40,9 @@ from app.services.users import get_all_settings, on
 
 log = logging.getLogger(__name__)
 
+# Personas allowed to buy/renew/wallet commerce in Mini App (never platform admin/owner).
+_COMMERCE_PERSONAS = frozenset({"user", "reseller"})
+
 
 def _no_store(payload: dict) -> JSONResponse:
     resp = JSONResponse(payload)
@@ -38,19 +50,40 @@ def _no_store(payload: dict) -> JSONResponse:
     return resp
 
 
+def commerce_allowed(persona: str) -> bool:
+    return (persona or "").strip() in _COMMERCE_PERSONAS
+
+
 def _nav_for(persona: str) -> list[dict[str, str]]:
-    # Shared customer tabs + ops for staff personas
+    """Nav is persona-scoped — admin never sees shop/wallet/services commerce tabs."""
+    if persona == "admin":
+        return [
+            {"id": "home", "label": "خانه", "icon": "home"},
+            {"id": "ops", "label": "عملیات", "icon": "ops"},
+        ]
     base = [
         {"id": "home", "label": "خانه", "icon": "home"},
         {"id": "services", "label": "سرویس", "icon": "svc"},
         {"id": "shop", "label": "خرید", "icon": "shop"},
         {"id": "wallet", "label": "کیف پول", "icon": "wallet"},
     ]
-    if persona == "admin":
-        return base + [{"id": "ops", "label": "عملیات", "icon": "ops"}]
     if persona == "reseller":
         return base + [{"id": "ops", "label": "پنل", "icon": "ops"}]
     return base
+
+
+def _require_commerce(user: BotUser) -> str:
+    persona = resolve_mini_persona(user)
+    if not commerce_allowed(persona):
+        raise HTTPException(403, "خرید/تمدید برای این نقش در مینی‌اپ مجاز نیست")
+    return persona
+
+
+def _owned_service_or_404(svc: UserService | None, user: BotUser) -> UserService:
+    """Fail closed: service must belong to the authenticated Mini App user."""
+    if not svc or int(svc.bot_user_id) != int(user.id):
+        raise HTTPException(404)
+    return svc
 
 
 def _traffic_pct(used, limit) -> int | None:
@@ -64,8 +97,10 @@ def _traffic_pct(used, limit) -> int | None:
         return None
 
 
-async def _fetch_pg_info(token: str | None) -> dict:
-    if not (token or "").strip():
+async def _fetch_pg_info(subscription_token: str | None) -> dict:
+    """Public /sub/{token}/info — uses the service token only (auth=False, no admin JWT)."""
+    token = (subscription_token or "").strip()
+    if not token:
         return {}
     try:
         return await asyncio.wait_for(get_pg().subscription_info(token), timeout=5.0)
@@ -80,6 +115,7 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
     expire = info.get("expire")
     status_raw = (info.get("status") or "").strip() or None
     days = expire_remaining_days(expire) if "error" not in info else None
+    # Never expose subscription_token — only the share URL the user already owns.
     return {
         "id": svc.id,
         "username": svc.pg_username or "",
@@ -107,13 +143,17 @@ async def _enrich_services(services: list[UserService]) -> list[dict]:
         *[_fetch_pg_info(s.subscription_token) for s in services[:20]]
     )
     out = [_serialize_service(s, info) for s, info in zip(services[:20], infos)]
-    # Cap — avoid hammering PG for huge accounts
     for s in services[20:]:
         out.append(_serialize_service(s, {}))
     return out
 
 
-async def _user_shop_payload(session: AsyncSession, user) -> dict:
+async def _user_shop_payload(session: AsyncSession, user: BotUser) -> dict:
+    """Customer commerce payload — caller's services/wallet/activity only.
+
+    Plans are **platform catalog only** (owner_reseller_id IS NULL). Mini App never
+    mounts shop-bot context, so foreign reseller catalogs must not appear here.
+    """
     from app.services.wallet import list_activity
 
     svc_result = await session.execute(
@@ -122,28 +162,27 @@ async def _user_shop_payload(session: AsyncSession, user) -> dict:
         .order_by(UserService.id.desc())
     )
     services = list(svc_result.scalars().all())
-    plans_q = select(Plan).where(
-        Plan.is_active.is_(True),
-        Plan.is_trial.is_(False),
-        Plan.owner_reseller_id.is_(None),
-    )
-    if user.reseller_id:
-        plans_q = select(Plan).where(
+    plans_q = (
+        select(Plan)
+        .where(
             Plan.is_active.is_(True),
             Plan.is_trial.is_(False),
-            Plan.owner_reseller_id == user.reseller_id,
+            Plan.owner_reseller_id.is_(None),
         )
-    plans_result = await session.execute(plans_q.order_by(Plan.sort_order, Plan.id))
-    plans = list(plans_result.scalars().all())
-    # Include one trial if available for this shop
-    trial_q = select(Plan).where(
-        Plan.is_active.is_(True),
-        Plan.is_trial.is_(True),
-        Plan.owner_reseller_id.is_(None)
-        if not user.reseller_id
-        else Plan.owner_reseller_id == user.reseller_id,
+        .order_by(Plan.sort_order, Plan.id)
     )
-    trial = (await session.execute(trial_q.limit(1))).scalar_one_or_none()
+    plans = list((await session.execute(plans_q)).scalars().all())
+    trial = (
+        await session.execute(
+            select(Plan)
+            .where(
+                Plan.is_active.is_(True),
+                Plan.is_trial.is_(True),
+                Plan.owner_reseller_id.is_(None),
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
 
     ui = await get_all_settings(session)
     wallet_pay = on(ui.get("pay_wallet_enabled"))
@@ -152,6 +191,7 @@ async def _user_shop_payload(session: AsyncSession, user) -> dict:
     return {
         "wallet": int(user.wallet_balance or 0),
         "wallet_pay_enabled": wallet_pay,
+        "commerce_allowed": True,
         "services": enriched,
         "plans": [
             {
@@ -174,6 +214,17 @@ async def _user_shop_payload(session: AsyncSession, user) -> dict:
             }
             for a in activity
         ],
+    }
+
+
+def _empty_customer() -> dict:
+    return {
+        "wallet": 0,
+        "wallet_pay_enabled": False,
+        "commerce_allowed": False,
+        "services": [],
+        "plans": [],
+        "activity": [],
     }
 
 
@@ -218,8 +269,15 @@ async def _admin_ops_payload(session: AsyncSession) -> dict:
     }
 
 
-async def _reseller_ops_payload(session: AsyncSession, profile: ResellerProfile | None) -> dict:
+async def _reseller_ops_payload(
+    session: AsyncSession, profile: ResellerProfile | None, *, user: BotUser
+) -> dict:
+    """Shop stats for this reseller only — profile must belong to ``user``."""
     from app.api.home_pages import _reseller_shop_stats
+
+    if profile is not None and int(profile.user_id) != int(user.id):
+        # Fail closed — never serve another reseller's ops.
+        profile = None
 
     stats = {
         "users": 0,
@@ -279,17 +337,22 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
                 "id": user.id,
                 "name": user.full_name or "",
                 "role": user.role,
-                "wallet": int(user.wallet_balance or 0),
+                "wallet": int(user.wallet_balance or 0) if commerce_allowed(persona) else 0,
             },
             "currency": get_settings().currency or "تومان",
             "panel_base": (get_settings().public_base_url or "").rstrip("/"),
+            "commerce_allowed": commerce_allowed(persona),
         }
-        payload["customer"] = await _user_shop_payload(session, user)
+        if commerce_allowed(persona):
+            payload["customer"] = await _user_shop_payload(session, user)
+        else:
+            # Owner/admin: ops only — no commerce surfaces / no foreign service lists
+            payload["customer"] = _empty_customer()
         if persona == "admin":
             payload["ops"] = await _admin_ops_payload(session)
         elif persona == "reseller":
             profile = await load_reseller_profile(session, user)
-            payload["ops"] = await _reseller_ops_payload(session, profile)
+            payload["ops"] = await _reseller_ops_payload(session, profile, user=user)
         return _no_store(payload)
 
     @app.get("/api/mini/service/{service_id}")
@@ -297,9 +360,8 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         service_id: int, request: Request, session: AsyncSession = Depends(get_db)
     ):
         user = await load_mini_user(session, request)
-        svc = await session.get(UserService, service_id)
-        if not svc or svc.bot_user_id != user.id:
-            raise HTTPException(404)
+        _require_commerce(user)
+        svc = _owned_service_or_404(await session.get(UserService, service_id), user)
         info = await _fetch_pg_info(svc.subscription_token)
         return _no_store(
             {
@@ -315,9 +377,8 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         from app.services.qrcode_gen import make_subscription_qr
 
         user = await load_mini_user(session, request)
-        svc = await session.get(UserService, service_id)
-        if not svc or svc.bot_user_id != user.id:
-            raise HTTPException(404)
+        _require_commerce(user)
+        svc = _owned_service_or_404(await session.get(UserService, service_id), user)
         url = (svc.subscription_url or "").strip()
         if not url:
             raise HTTPException(404, "no subscription url")
@@ -331,7 +392,6 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             log.exception("miniapp qr failed service=%s", service_id)
             raise HTTPException(500, "qr failed")
         data = buf.getvalue()
-        # Prefer JSON data-URL for easy Telegram WebView use (CORS/blob quirks)
         if request.query_params.get("format") == "png":
             return Response(
                 content=data,
@@ -346,20 +406,22 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         from app.services.orders import create_order, get_catalog_plan, pay_with_wallet
 
         user = await load_mini_user(session, request)
+        _require_commerce(user)
         try:
             body = await request.json()
         except Exception:
             raise HTTPException(400, "bad json")
-        plan_id = body.get("plan_id")
         try:
-            plan_id = int(plan_id)
+            plan_id = int(body.get("plan_id"))
         except (TypeError, ValueError):
             raise HTTPException(400, "plan_id required")
         ui = await get_all_settings(session)
         if not on(ui.get("pay_wallet_enabled")):
             raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
+        # Platform catalog only (get_catalog_plan rejects foreign reseller plans
+        # when shop ContextVar is unset — Mini App never sets shop context).
         plan = await get_catalog_plan(session, plan_id)
-        if not plan or not plan.is_active:
+        if not plan or not plan.is_active or plan.owner_reseller_id is not None:
             raise HTTPException(400, "پلن یافت نشد")
         await session.refresh(user)
         if int(plan.price or 0) > int(user.wallet_balance or 0):
@@ -390,6 +452,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         from app.services.orders import get_catalog_plan, pay_with_wallet, renew_service_with_plan
 
         user = await load_mini_user(session, request)
+        _require_commerce(user)
         try:
             body = await request.json()
         except Exception:
@@ -402,11 +465,14 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         ui = await get_all_settings(session)
         if not on(ui.get("pay_wallet_enabled")):
             raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
-        svc = await session.get(UserService, service_id)
-        if not svc or svc.bot_user_id != user.id:
-            raise HTTPException(404, "سرویس یافت نشد")
+        svc = _owned_service_or_404(await session.get(UserService, service_id), user)
         plan = await get_catalog_plan(session, plan_id)
-        if not plan or not plan.is_active or plan.is_trial:
+        if (
+            not plan
+            or not plan.is_active
+            or plan.is_trial
+            or plan.owner_reseller_id is not None
+        ):
             raise HTTPException(400, "پلن تمدید نامعتبر است")
         await session.refresh(user)
         if int(plan.price or 0) > int(user.wallet_balance or 0):

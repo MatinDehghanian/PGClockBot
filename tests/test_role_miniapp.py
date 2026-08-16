@@ -97,6 +97,11 @@ class MiniAppSourceTests(unittest.TestCase):
         self.assertIn('/api/mini/service/{service_id}/qr', pages)
         self.assertIn("list_activity", pages)
         self.assertIn("wallet_pay_enabled", pages)
+        self.assertIn("_require_commerce", pages)
+        self.assertIn("_owned_service_or_404", pages)
+        self.assertIn("commerce_allowed", pages)
+        self.assertIn("owner_reseller_id.is_(None)", pages)
+        self.assertIn("auth=False", pages)
 
     def test_mobile_nav_and_actions(self):
         html = (ROOT / "app/web/templates/miniapp.html").read_text(encoding="utf-8")
@@ -107,18 +112,49 @@ class MiniAppSourceTests(unittest.TestCase):
         self.assertIn("data-qr", js)
         self.assertIn("data-copy", js)
         self.assertIn("ICONS", js)
+        self.assertIn("servicePeekHtml", js)
+        self.assertIn("commerce_allowed", js)
+        # Link text must not be dumped into service cards
+        self.assertNotIn("word-break:break-all", js)
         css = (ROOT / "app/web/static/miniapp.css").read_text(encoding="utf-8")
         self.assertIn("ma-nav-wrap", css)
         self.assertIn("svc-card", css)
         self.assertIn("meter", css)
+        self.assertIn("svc-peek", css)
+        self.assertIn("var(--brand)", css)
 
     def test_nav_includes_wallet(self):
-        from app.api.miniapp_pages import _nav_for
+        from app.api.miniapp_pages import _nav_for, commerce_allowed
 
         ids = [x["id"] for x in _nav_for("user")]
         self.assertEqual(ids, ["home", "services", "shop", "wallet"])
-        self.assertIn("ops", [x["id"] for x in _nav_for("admin")])
+        admin_ids = [x["id"] for x in _nav_for("admin")]
+        self.assertEqual(admin_ids, ["home", "ops"])
+        self.assertNotIn("shop", admin_ids)
+        self.assertNotIn("wallet", admin_ids)
+        self.assertNotIn("services", admin_ids)
         self.assertIn("ops", [x["id"] for x in _nav_for("reseller")])
+        self.assertFalse(commerce_allowed("admin"))
+        self.assertTrue(commerce_allowed("user"))
+        self.assertTrue(commerce_allowed("reseller"))
+
+    def test_admin_buy_blocked_in_source(self):
+        pages = (ROOT / "app/api/miniapp_pages.py").read_text(encoding="utf-8")
+        buy = pages.split("async def mini_buy")[1].split("async def mini_renew")[0]
+        renew = pages.split("async def mini_renew")[1]
+        self.assertIn("_require_commerce(user)", buy)
+        self.assertIn("_require_commerce(user)", renew)
+        me = pages.split("async def mini_me")[1].split("async def mini_service")[0]
+        self.assertIn("_empty_customer()", me)
+        self.assertIn("commerce_allowed(persona)", me)
+
+    def test_serialize_never_exposes_subscription_token(self):
+        pages = (ROOT / "app/api/miniapp_pages.py").read_text(encoding="utf-8")
+        ser = pages.split("def _serialize_service")[1].split("async def _enrich_services")[0]
+        # Payload keys must not include the raw PG token
+        self.assertNotIn('"subscription_token"', ser)
+        self.assertNotIn("'subscription_token'", ser)
+        self.assertIn("subscription_url", ser)
 
     def test_deep_link_helper(self):
         from app.config import Settings
