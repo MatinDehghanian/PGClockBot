@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "6.2.7": [
+        "اسکلتون ناوبری بدون تأخیر اجباری؛ نمایش فقط هنگام انتظار سرور بین صفحات",
+        "نمای کلی پاسارگارد: فاصله استاندارد باکس نود تا فوتر",
+    ],
     "6.2.6": [
         "پلن‌ها: مخاطب پلن + نوع پلن؛ بسته‌های حجم/کاربر بدون گروه/نقش/دسترسی اضافه",
         "کاتالوگ بسته‌ها فقط برای نمایندگان با اشتراک فعال؛ حذف fail-open در منوی بات",
