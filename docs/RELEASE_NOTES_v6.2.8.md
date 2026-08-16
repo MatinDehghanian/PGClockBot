@@ -18,6 +18,11 @@
 - No groups, PG role, web/bot permissions, or service naming — capacity + price only.
 - Bot admin wizard and detail keyboard match the web modal; overview lists addon packs.
 
+### Renew pricing lock
+
+- When «امکان خرید حجم و کاربر اضافه» is on, renew mode is forced to **بر اساس ظرفیت** (web UI + API + invoice engine + bot toggle).
+- Prevents renewing at flat plan price while keeping purchased extras.
+
 ## Deploy
 
 In-panel update to `6.2.8` (no new migration).

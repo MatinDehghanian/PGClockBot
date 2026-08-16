@@ -88,7 +88,10 @@ def _is_addon_plan_kind(kind: str | None) -> bool:
     return str(kind or "").strip().lower() in {"addon_volume", "addon_users"}
 
 
-def _parse_renew_pricing_mode(form) -> str:
+def _parse_renew_pricing_mode(form, *, allow_buy_extra: bool = False) -> str:
+    """Parse renew mode; buy-extra subscriptions must use from_capacity."""
+    if allow_buy_extra:
+        return "from_capacity"
     mode = str(form.get("renew_pricing_mode") or "fixed").strip().lower()
     return mode if mode in {"fixed", "from_capacity"} else "fixed"
 
@@ -896,12 +899,15 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             included_users=_parse_nonneg_int(form, "included_users"),
             addon_gb=0,
             addon_users=0,
-            renew_pricing_mode=_parse_renew_pricing_mode(form),
             allow_buy_extra=bool(form.get("allow_buy_extra")) if billing_mode == "fixed" else False,
             extra_gb_price=_parse_nonneg_int(form, "extra_gb_price") if billing_mode == "fixed" else 0,
             extra_user_price=_parse_nonneg_int(form, "extra_user_price")
             if billing_mode == "fixed"
             else 0,
+            renew_pricing_mode=_parse_renew_pricing_mode(
+                form,
+                allow_buy_extra=bool(form.get("allow_buy_extra")) if billing_mode == "fixed" else False,
+            ),
             renew_price=_parse_nonneg_int(form, "renew_price"),
             can_approve_receipts="payments" in parse_perms(perms),
             web_permissions=perms,
@@ -1081,8 +1087,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         plan.included_users = _parse_nonneg_int(form, "included_users")
         plan.addon_gb = 0
         plan.addon_users = 0
-        plan.renew_pricing_mode = _parse_renew_pricing_mode(form)
-        plan.create_web_access = True
+        plan.renew_pricing_mode = _parse_renew_pricing_mode(
+            form, allow_buy_extra=bool(plan.allow_buy_extra)
+        )        plan.create_web_access = True
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         if not pg_role_raw.isdigit():
             return RedirectResponse(

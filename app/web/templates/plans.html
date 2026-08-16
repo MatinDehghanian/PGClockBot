@@ -602,10 +602,11 @@
             <small class="muted">۰ = همان قیمت ورود پلن</small>
           </label>
           <label class="form-field">محاسبه تمدید
-            <select name="renew_pricing_mode">
+            <select name="renew_pricing_mode" id="reseller-renew-pricing-mode">
               <option value="fixed" selected>ثابت (فقط قیمت تمدید)</option>
               <option value="from_capacity">بر اساس ظرفیت (پایه + اضافه‌ها)</option>
             </select>
+            <small class="muted" id="reseller-renew-mode-hint">اگر خرید حجم/کاربر اضافه روشن باشد، همیشه بر اساس ظرفیت محاسبه می‌شود.</small>
           </label>
         </div>
 
@@ -806,9 +807,19 @@
   function syncResellerExtras(){
     const prices = document.getElementById('reseller-extra-prices');
     const sw = document.querySelector('#reseller-plan-form input[name="allow_buy_extra"]');
+    const renewMode = document.getElementById('reseller-renew-pricing-mode');
     if (!prices) return;
     const on = sw ? !!sw.checked : false;
     prices.hidden = !on;
+    if (renewMode) {
+      const fixedOpt = renewMode.querySelector('option[value="fixed"]');
+      if (on) {
+        renewMode.value = 'from_capacity';
+        if (fixedOpt) fixedOpt.disabled = true;
+      } else if (fixedOpt) {
+        fixedOpt.disabled = false;
+      }
+    }
   }
 
   function syncResellerForm(){

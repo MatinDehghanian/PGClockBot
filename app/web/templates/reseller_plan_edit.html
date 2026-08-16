@@ -98,10 +98,11 @@
         <small class="muted">۰ = همان قیمت ورود پلن</small>
       </label>
       <label class="form-field">محاسبه تمدید
-        <select name="renew_pricing_mode">
-          <option value="fixed" {% if (plan.renew_pricing_mode or 'fixed') == 'fixed' %}selected{% endif %}>ثابت</option>
-          <option value="from_capacity" {% if plan.renew_pricing_mode == 'from_capacity' %}selected{% endif %}>بر اساس ظرفیت</option>
+        <select name="renew_pricing_mode" id="edit-renew-pricing-mode">
+          <option value="fixed" {% if (plan.renew_pricing_mode or 'fixed') == 'fixed' and not plan.allow_buy_extra %}selected{% endif %}>ثابت</option>
+          <option value="from_capacity" {% if plan.renew_pricing_mode == 'from_capacity' or plan.allow_buy_extra %}selected{% endif %}>بر اساس ظرفیت</option>
         </select>
+        <small class="muted">با خرید حجم/کاربر اضافه، محاسبه فقط بر اساس ظرفیت است.</small>
       </label>
     </div>
 
@@ -191,8 +192,19 @@
     const extraPrices = document.getElementById('edit-extra-prices');
     const allowExtra = document.querySelector('#edit-buy-extra-block input[name="allow_buy_extra"]');
     const buyBlock = document.getElementById('edit-buy-extra-block');
+    const renewMode = document.getElementById('edit-renew-pricing-mode');
     const payg = mode && mode.value === 'payg';
     if (buyBlock) buyBlock.hidden = payg || ((planKind && planKind.value) || 'subscription') !== 'subscription';
+    if (renewMode) {
+      const fixedOpt = renewMode.querySelector('option[value="fixed"]');
+      const forceCapacity = !!(allowExtra && allowExtra.checked) && !payg;
+      if (forceCapacity) {
+        renewMode.value = 'from_capacity';
+        if (fixedOpt) fixedOpt.disabled = true;
+      } else if (fixedOpt) {
+        fixedOpt.disabled = false;
+      }
+    }
     if (!extraPrices) return;
     if (payg) {
       extraPrices.hidden = true;

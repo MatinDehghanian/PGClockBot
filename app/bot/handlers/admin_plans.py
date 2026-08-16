@@ -1501,7 +1501,9 @@ async def resplan_flag_toggle(callback: CallbackQuery, session: AsyncSession, db
             await callback.answer("خرید حجم/کاربر اضافه فقط برای اشتراک ثابت است", show_alert=True)
             return
         plan.allow_buy_extra = not bool(plan.allow_buy_extra)
-        if not plan.allow_buy_extra:
+        if plan.allow_buy_extra:
+            plan.renew_pricing_mode = "from_capacity"
+        else:
             plan.extra_gb_price = 0
             plan.extra_user_price = 0
     elif flag == "pgadmin":

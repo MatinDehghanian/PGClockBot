@@ -87,6 +87,15 @@ class WebApiPaygStripTests(unittest.TestCase):
         self.assertIn("plan.extra_gb_price = 0", branch)
         self.assertIn("plan.extra_user_price = 0", branch)
 
+    def test_buy_extra_forces_from_capacity_api_and_ui(self):
+        self.assertIn("allow_buy_extra: bool = False", RESELLER_PAGES)
+        self.assertIn('return "from_capacity"', RESELLER_PAGES)
+        self.assertIn("allow_buy_extra=bool(plan.allow_buy_extra)", RESELLER_PAGES)
+        self.assertIn("renewMode.value = 'from_capacity'", PLANS_HTML)
+        self.assertIn("fixedOpt.disabled = true", PLANS_HTML)
+        self.assertIn("forceCapacity", EDIT_HTML)
+        self.assertIn('plan.renew_pricing_mode = "from_capacity"', ADMIN_PLANS)
+
 
 class BotParityTests(unittest.TestCase):
     def test_bot_addon_kinds_in_add_picker(self):
