@@ -92,6 +92,33 @@ class MiniAppSourceTests(unittest.TestCase):
         self.assertIn("persona", pages)
         self.assertIn("_admin_ops_payload", pages)
         self.assertIn("_reseller_ops_payload", pages)
+        self.assertIn('/api/mini/buy', pages)
+        self.assertIn('/api/mini/renew', pages)
+        self.assertIn('/api/mini/service/{service_id}/qr', pages)
+        self.assertIn("list_activity", pages)
+        self.assertIn("wallet_pay_enabled", pages)
+
+    def test_mobile_nav_and_actions(self):
+        html = (ROOT / "app/web/templates/miniapp.html").read_text(encoding="utf-8")
+        self.assertIn("ma-nav-wrap", html)
+        js = (ROOT / "app/web/static/miniapp.js").read_text(encoding="utf-8")
+        self.assertIn("data-buy", js)
+        self.assertIn("data-renew", js)
+        self.assertIn("data-qr", js)
+        self.assertIn("data-copy", js)
+        self.assertIn("ICONS", js)
+        css = (ROOT / "app/web/static/miniapp.css").read_text(encoding="utf-8")
+        self.assertIn("ma-nav-wrap", css)
+        self.assertIn("svc-card", css)
+        self.assertIn("meter", css)
+
+    def test_nav_includes_wallet(self):
+        from app.api.miniapp_pages import _nav_for
+
+        ids = [x["id"] for x in _nav_for("user")]
+        self.assertEqual(ids, ["home", "services", "shop", "wallet"])
+        self.assertIn("ops", [x["id"] for x in _nav_for("admin")])
+        self.assertIn("ops", [x["id"] for x in _nav_for("reseller")])
 
     def test_deep_link_helper(self):
         from app.config import Settings

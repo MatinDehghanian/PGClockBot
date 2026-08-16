@@ -1,4 +1,4 @@
-/* Telegram Mini App client — role shells matching web panel IA */
+/* Telegram Mini App — mobile UX: buy/renew, service details, QR, wallet */
 (function () {
   "use strict";
 
@@ -22,6 +22,15 @@
   let state = null;
   let currency = "تومان";
   let activeView = "home";
+  let busy = false;
+
+  const ICONS = {
+    home: '<svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg>',
+    svc: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg>',
+    shop: '<svg viewBox="0 0 24 24"><path d="M6 8h12l-1 11H7L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>',
+    wallet: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M15 14h2"/></svg>',
+    ops: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M3 12h2M19 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  };
 
   function esc(s) {
     return String(s ?? "").replace(/[&<>"']/g, (c) =>
@@ -51,13 +60,41 @@
     return (Number(n) || 0).toLocaleString("fa-IR");
   }
 
-  async function api(path) {
+  function toast(msg, kind) {
+    const el = document.createElement("div");
+    el.className = "toast " + (kind || "");
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2800);
+    if (tg && tg.HapticFeedback) {
+      try {
+        tg.HapticFeedback.notificationOccurred(kind === "err" ? "error" : "success");
+      } catch (_) {}
+    }
+  }
+
+  async function api(path, opts) {
     const res = await fetch(path, {
-      headers: { "X-Telegram-Init-Data": initData },
+      method: (opts && opts.method) || "GET",
+      headers: {
+        "X-Telegram-Init-Data": initData,
+        ...((opts && opts.body) ? { "Content-Type": "application/json" } : {}),
+      },
+      body: opts && opts.body ? JSON.stringify(opts.body) : undefined,
       cache: "no-store",
     });
-    if (!res.ok) throw new Error(await res.text());
-    return res.json();
+    const text = await res.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch (_) {
+      data = { detail: text };
+    }
+    if (!res.ok) {
+      const detail = (data && (data.detail || data.message)) || text || res.statusText;
+      throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    }
+    return data;
   }
 
   function personaLabel(p) {
@@ -67,8 +104,7 @@
   }
 
   function hashView() {
-    const h = (location.hash || "").replace(/^#/, "").trim();
-    return h || "home";
+    return (location.hash || "").replace(/^#/, "").trim() || "home";
   }
 
   function setView(id) {
@@ -92,13 +128,53 @@
     else window.open(url, "_blank");
   }
 
+  function statusClass(status) {
+    const s = String(status || "").toLowerCase();
+    if (s === "active" || s === "on_hold") return "ok";
+    if (s === "limited" || s === "disabled") return "warn";
+    if (s === "expired") return "danger";
+    return "";
+  }
+
+  function meterClass(pct) {
+    if (pct == null) return "";
+    if (pct >= 90) return "danger";
+    if (pct >= 75) return "warn";
+    return "";
+  }
+
+  async function copyText(text) {
+    const s = String(text || "");
+    if (!s) return false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(s);
+        return true;
+      }
+    } catch (_) {}
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = s;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function renderNav(nav) {
     navEl.innerHTML = "";
     (nav || []).forEach((item) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.dataset.view = item.id;
-      btn.textContent = item.label;
+      btn.innerHTML =
+        (ICONS[item.icon] || ICONS.home) + "<span>" + esc(item.label) + "</span>";
       btn.addEventListener("click", () => setView(item.id));
       navEl.appendChild(btn);
     });
@@ -121,100 +197,213 @@
 
   function linksHtml(links) {
     if (!links || !links.length) {
-      return '<p class="hint">برای لینک مستقیم به وب‌پنل، HTTPS و آدرس عمومی را در تنظیمات فعال کنید.</p>';
+      return '<p class="hint">برای لینک وب‌پنل، HTTPS و آدرس عمومی را فعال کنید.</p>';
     }
     return links
       .map(
         (l) =>
-          `<div class="link-row row"><div><strong>${esc(l.label)}</strong></div>
-          <button type="button" class="btn ghost sm" data-path="${esc(
-            l.path
-          )}">باز کردن</button></div>`
+          `<div class="link-row"><div><strong>${esc(l.label)}</strong></div>
+          <button type="button" class="btn ghost sm" data-path="${esc(l.path)}">باز کردن</button></div>`
       )
       .join("");
   }
 
-  function customerServices(customer) {
-    const list = (customer && customer.services) || [];
-    if (!list.length) return '<p class="muted">سرویسی ندارید</p>';
+  function serviceCardHtml(s, { compact } = {}) {
+    const pct = s.traffic_pct;
+    const meter =
+      pct == null
+        ? ""
+        : `<div class="meter ${meterClass(pct)}"><i style="width:${Math.min(
+            100,
+            pct
+          )}%"></i></div>`;
+    const url = esc(s.subscription_url || "");
+    const renewBlock = `<div class="renew-sheet" data-renew-host="${Number(s.id) || 0}" hidden></div>`;
+    return `<article class="svc-card" data-svc-card="${Number(s.id) || 0}">
+      <div class="svc-top">
+        <div class="svc-title" dir="ltr">${esc(s.username || "—")}</div>
+        <span class="badge ${statusClass(s.status)}">${esc(s.status_fa || s.status || "—")}</span>
+      </div>
+      <div class="muted" style="font-size:12px">حجم مصرفی</div>
+      <div><strong>${esc(s.traffic || "—")}</strong></div>
+      ${meter}
+      <div class="meta-grid">
+        <div class="meta"><small>انقضا</small><strong>${esc(s.expire || "—")}</strong></div>
+        <div class="meta"><small>روز باقیمانده</small><strong>${
+          s.expire_days == null ? "نامحدود" : esc(num(s.expire_days))
+        }</strong></div>
+      </div>
+      ${
+        s.online_at
+          ? `<p class="hint">آخرین آنلاین: ${esc(s.online_at)}</p>`
+          : ""
+      }
+      ${url ? `<code style="margin-top:var(--space-1_5);display:block;word-break:break-all;font-size:11px;color:var(--muted-fg);direction:ltr;text-align:left">${url}</code>` : ""}
+      <div class="svc-actions">
+        <button type="button" class="btn ghost sm" data-copy="${url}">کپی لینک</button>
+        <button type="button" class="btn ghost sm" data-qr="${Number(s.id) || 0}">نمایش QR</button>
+        <button type="button" class="btn secondary sm" data-open-url="${url}">باز کردن لینک</button>
+        <button type="button" class="btn sm" data-renew="${Number(s.id) || 0}">تمدید</button>
+      </div>
+      <div class="qr-box" data-qr-box="${Number(s.id) || 0}" hidden></div>
+      ${renewBlock}
+    </article>`;
+  }
+
+  function plansHtml(plans, { renewServiceId } = {}) {
+    const list = plans || [];
+    if (!list.length) return '<p class="muted">پلنی فعال نیست</p>';
     return list
-      .map((s) => {
-        const url = esc(s.subscription_url || "");
-        return `<div class="svc-row row">
-          <div class="svc-meta"><strong>${esc(s.username || "—")}</strong><code>${url}</code></div>
-          <button type="button" class="btn secondary sm" data-svc="${Number(s.id) || 0}">جزئیات</button>
+      .map((p) => {
+        const action = renewServiceId
+          ? `data-do-renew="${Number(renewServiceId)}" data-plan="${Number(p.id) || 0}"`
+          : `data-buy="${Number(p.id) || 0}"`;
+        const label = renewServiceId ? "تمدید" : p.is_trial ? "دریافت" : "خرید";
+        return `<div class="plan-row">
+          <div class="plan-meta">
+            <strong>${esc(p.name)}</strong>
+            <div class="muted">${esc(p.days)} روز · ${esc(p.gb ?? "∞")} گیگ${
+          p.is_trial ? " · تست" : ""
+        }</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+            <div class="price">${esc(money(p.price))}</div>
+            <button type="button" class="btn sm" ${action}>${label}</button>
+          </div>
         </div>`;
       })
       .join("");
   }
 
-  function customerPlans(customer) {
-    const list = (customer && customer.plans) || [];
-    if (!list.length) return '<p class="muted">پلنی فعال نیست</p>';
-    return list
-      .map(
-        (p) =>
-          `<div class="plan-row row">
-            <div class="plan-meta">
-              <strong>${esc(p.name)}</strong>
-              <div class="muted">${esc(p.days)} روز · ${esc(p.gb ?? "∞")} گیگ</div>
-            </div>
-            <div class="price">${esc(money(p.price))}</div>
-          </div>`
-      )
+  function activityHtml(rows) {
+    if (!rows || !rows.length) return '<p class="muted">تراکنشی نیست</p>';
+    return rows
+      .map((a) => {
+        const amt = Number(a.amount) || 0;
+        const cls = amt >= 0 ? "plus" : "minus";
+        const sign = amt >= 0 ? "+" : "";
+        let when = "";
+        if (a.created_at) {
+          try {
+            when = new Date(a.created_at).toLocaleString("fa-IR");
+          } catch (_) {}
+        }
+        return `<div class="tx-row">
+          <div class="tx-meta">
+            <strong>${esc(a.reason || "—")}</strong>
+            <div class="muted">${esc(when)}</div>
+          </div>
+          <div class="tx-amt ${cls}">${esc(sign + money(amt))}</div>
+        </div>`;
+      })
       .join("");
   }
 
-  function renderUser(data) {
+  function walletCardHtml(customer) {
+    return `<div class="card wallet-card">
+      <div class="card-head">
+        <h3>کیف پول</h3>
+        <span class="badge">${customer.wallet_pay_enabled ? "پرداخت فعال" : "فقط مشاهده"}</span>
+      </div>
+      <p class="wallet-label">موجودی</p>
+      <p class="wallet-value">${esc(money(customer.wallet))}</p>
+      <div class="wallet-actions">
+        <button type="button" class="btn ghost sm" data-goto="wallet">تراکنش‌ها</button>
+        <button type="button" class="btn sm" data-goto="shop">خرید سرویس</button>
+      </div>
+      <p class="hint">شارژ کیف پول از ربات انجام می‌شود؛ خرید و تمدید این‌جا با موجودی کیف پول است.</p>
+    </div>`;
+  }
+
+  function renderUserPanels(data) {
     const c = data.customer || {};
+    const services = c.services || [];
+    const homeSvcs = services.slice(0, 3);
     return {
       home: `
-        <div class="card wallet-card">
-          <p class="wallet-label">موجودی کیف پول</p>
-          <p class="wallet-value">${esc(money(c.wallet))}</p>
-          <p class="hint">خرید و تمدید از دکمه‌های ربات انجام می‌شود؛ اینجا وضعیت سریع است.</p>
-        </div>
+        ${walletCardHtml(c)}
         <div class="card">
-          <h3>خلاصه</h3>
-          <div class="stat-grid">
-            <div class="stat"><span>سرویس‌ها</span><strong>${esc(num((c.services || []).length))}</strong></div>
-            <div class="stat"><span>پلن‌های فعال</span><strong>${esc(num((c.plans || []).length))}</strong></div>
+          <div class="card-head">
+            <h3>سرویس‌های من</h3>
+            <button type="button" class="btn ghost sm" data-goto="services">همه</button>
           </div>
+          ${
+            homeSvcs.length
+              ? homeSvcs.map((s) => serviceCardHtml(s, { compact: true })).join("")
+              : '<p class="muted">سرویسی ندارید — از بخش خرید شروع کنید.</p>'
+          }
         </div>`,
       services: `
-        <div class="card"><h3>سرویس‌های من</h3>${customerServices(c)}
-          <div id="detail" class="card card-soft" style="display:none;margin-top:var(--space-2)"></div>
-        </div>`,
+        <div class="card"><h3>سرویس‌ها</h3>
+          <p class="hint">جزئیات، QR، کپی لینک و تمدید زیر هر سرویس</p>
+        </div>
+        ${
+          services.length
+            ? services.map((s) => serviceCardHtml(s)).join("")
+            : '<div class="card"><p class="muted">سرویسی ندارید</p></div>'
+        }`,
       shop: `
-        <div class="card"><h3>خرید پلن</h3>${customerPlans(c)}
-          <p class="hint">برای تکمیل خرید به ربات برگردید.</p>
+        <div class="card">
+          <div class="card-head"><h3>خرید پلن</h3>
+            <span class="muted">${esc(money(c.wallet))}</span>
+          </div>
+          ${
+            c.wallet_pay_enabled
+              ? plansHtml(c.plans)
+              : '<p class="muted">پرداخت با کیف پول در تنظیمات ربات غیرفعال است.</p>'
+          }
+          <p class="hint">پس از خرید، سرویس در تب «سرویس» ظاهر می‌شود.</p>
+        </div>`,
+      wallet: `
+        <div class="card wallet-card">
+          <h3>کیف پول</h3>
+          <p class="wallet-label">موجودی</p>
+          <p class="wallet-value">${esc(money(c.wallet))}</p>
+        </div>
+        <div class="card">
+          <h3>تراکنش‌ها</h3>
+          ${activityHtml(c.activity)}
         </div>`,
     };
   }
 
-  function renderReseller(data) {
+  function renderOpsExtra(data) {
     const ops = data.ops || {};
-    const stats = ops.stats || {};
-    const shop = ops.shop || {};
-    const billing = shop.billing;
-    let billingHtml = "";
-    if (billing) {
-      billingHtml = `<div class="card wallet-card">
-        <p class="wallet-label">کیف پول فروشگاهی (PAYG)</p>
-        <p class="wallet-value">${esc(money(billing.balance))}</p>
+    if (data.persona === "admin") {
+      return `
+        <div class="card">
+          <h3>نمای کلی پلتفرم</h3>
+          ${statsHtml(ops.stats || {}, [
+            ["users", "کاربران"],
+            ["resellers", "نمایندگان"],
+            ["orders", "سفارش‌ها"],
+            ["pending", "رسید معلق"],
+            ["tickets", "تیکت باز"],
+            ["revenue", "درآمد"],
+          ])}
+        </div>
+        <div class="card">
+          <h3>میانبر وب‌پنل</h3>
+          ${linksHtml(ops.panel_links)}
+        </div>`;
+    }
+    if (data.persona === "reseller") {
+      const shop = ops.shop || {};
+      const billing = shop.billing;
+      return `
         ${
-          billing.suspended
-            ? '<div class="flash-err">حساب به‌خاطر موجودی صفر مسدود است</div>'
+          billing
+            ? `<div class="card wallet-card">
+                <h3>کیف پول فروشگاهی</h3>
+                <p class="wallet-label">PAYG</p>
+                <p class="wallet-value">${esc(money(billing.balance))}</p>
+                ${billing.suspended ? '<p class="hint" style="color:#fca5a5">حساب مسدود است</p>' : ""}
+              </div>`
             : ""
         }
-      </div>`;
-    }
-    return {
-      home: `
-        ${billingHtml}
         <div class="card">
           <h3>فروشگاه من</h3>
-          ${statsHtml(stats, [
+          ${statsHtml(ops.stats || {}, [
             ["users", "کاربران"],
             ["orders", "سفارش‌ها"],
             ["pending", "رسید معلق"],
@@ -225,68 +414,163 @@
           ${
             shop.bot_username
               ? `<p class="hint" dir="ltr">@${esc(shop.bot_username)}</p>`
-              : '<p class="hint">ربات اختصاصی هنوز تنظیم نشده — از وب‌پنل تکمیل کنید.</p>'
+              : ""
           }
-        </div>`,
-      shop: `
-        <div class="card">
-          <h3>دسترسی سریع وب‌پنل</h3>
-          ${linksHtml(ops.panel_links)}
         </div>
         <div class="card">
-          <h3>پلن‌های فروشگاه</h3>
-          <div class="stat"><span>پلن فعال</span><strong>${esc(num(stats.plans))}</strong></div>
-          <p class="hint">مدیریت کامل پلن‌ها در وب‌پنل است.</p>
-        </div>`,
-      support: `
-        <div class="card">
-          <h3>پشتیبانی فروشگاه</h3>
-          <div class="stat-grid">
-            <div class="stat"><span>تیکت باز</span><strong>${esc(num(stats.tickets))}</strong></div>
-            <div class="stat"><span>رسید معلق</span><strong>${esc(num(stats.pending))}</strong></div>
-          </div>
-          <button type="button" class="btn block" style="margin-top:var(--space-2)" data-path="/tickets">رفتن به تیکت‌ها در وب</button>
-        </div>`,
-    };
+          <h3>میانبر وب‌پنل</h3>
+          ${linksHtml(ops.panel_links)}
+        </div>`;
+    }
+    return "";
   }
 
-  function renderAdmin(data) {
-    const ops = data.ops || {};
-    const stats = ops.stats || {};
-    return {
-      home: `
-        <div class="card">
-          <h3>نمای کلی پلتفرم</h3>
-          ${statsHtml(stats, [
-            ["users", "کاربران"],
-            ["resellers", "نمایندگان"],
-            ["orders", "سفارش‌ها"],
-            ["pending", "رسید معلق"],
-            ["tickets", "تیکت باز"],
-            ["revenue", "درآمد"],
-          ])}
-        </div>`,
-      ops: `
-        <div class="card">
-          <h3>عملیات سریع</h3>
-          ${linksHtml(ops.panel_links)}
-          <p class="hint">صفحات وب‌پنل نیاز به لاگین دارند؛ اگر قبلاً وارد شده‌اید مستقیم باز می‌شوند.</p>
-        </div>
-        <div class="card">
-          <h3>وضعیت</h3>
-          <div class="stat-grid">
-            <div class="stat"><span>سرویس‌ها</span><strong>${esc(num(stats.services))}</strong></div>
-            <div class="stat"><span>رسید معلق</span><strong>${esc(num(stats.pending))}</strong></div>
-          </div>
-        </div>`,
-      support: `
-        <div class="card">
-          <h3>پشتیبانی</h3>
-          <div class="stat"><span>تیکت باز</span><strong>${esc(num(stats.tickets))}</strong></div>
-          <button type="button" class="btn block" style="margin-top:var(--space-2)" data-path="/tickets">باز کردن تیکت‌ها</button>
-          <button type="button" class="btn secondary block" style="margin-top:var(--space-1)" data-path="/resellers">بخش نمایندگان</button>
-        </div>`,
-    };
+  function bindActions(scope) {
+    scope.querySelectorAll("[data-path]").forEach((btn) => {
+      btn.addEventListener("click", () => openPanelPath(btn.getAttribute("data-path")));
+    });
+    scope.querySelectorAll("[data-goto]").forEach((btn) => {
+      btn.addEventListener("click", () => setView(btn.getAttribute("data-goto")));
+    });
+    scope.querySelectorAll("[data-copy]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const ok = await copyText(btn.getAttribute("data-copy"));
+        toast(ok ? "لینک کپی شد" : "کپی نشد", ok ? "ok" : "err");
+      });
+    });
+    scope.querySelectorAll("[data-open-url]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const url = safeUrl(btn.getAttribute("data-open-url"));
+        if (!url) return;
+        if (tg && tg.openLink) tg.openLink(url);
+        else window.open(url, "_blank");
+      });
+    });
+    scope.querySelectorAll("[data-qr]").forEach((btn) => {
+      btn.addEventListener("click", () => showQr(Number(btn.getAttribute("data-qr"))));
+    });
+    scope.querySelectorAll("[data-renew]").forEach((btn) => {
+      btn.addEventListener("click", () => showRenew(Number(btn.getAttribute("data-renew"))));
+    });
+    scope.querySelectorAll("[data-buy]").forEach((btn) => {
+      btn.addEventListener("click", () => doBuy(Number(btn.getAttribute("data-buy"))));
+    });
+    scope.querySelectorAll("[data-do-renew]").forEach((btn) => {
+      btn.addEventListener("click", () =>
+        doRenew(
+          Number(btn.getAttribute("data-do-renew")),
+          Number(btn.getAttribute("data-plan"))
+        )
+      );
+    });
+  }
+
+  async function showQr(serviceId) {
+    const box = document.querySelector(`[data-qr-box="${serviceId}"]`);
+    if (!box) return;
+    if (!box.hidden && box.querySelector("img")) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    box.textContent = "در حال ساخت QR…";
+    try {
+      const data = await api("/api/mini/service/" + serviceId + "/qr");
+      box.textContent = "";
+      const img = document.createElement("img");
+      img.alt = "QR";
+      img.src = "data:image/png;base64," + data.png_base64;
+      box.appendChild(img);
+      const hint = document.createElement("div");
+      hint.className = "hint";
+      hint.textContent = "اسکن برای افزودن سابسکریپشن";
+      box.appendChild(hint);
+    } catch (e) {
+      box.textContent = "";
+      const err = document.createElement("div");
+      err.className = "error";
+      err.textContent = String(e.message || e);
+      box.appendChild(err);
+    }
+  }
+
+  function showRenew(serviceId) {
+    const host = document.querySelector(`[data-renew-host="${serviceId}"]`);
+    if (!host) {
+      setView("services");
+      setTimeout(() => showRenew(serviceId), 50);
+      return;
+    }
+    if (!host.hidden) {
+      host.hidden = true;
+      host.innerHTML = "";
+      return;
+    }
+    const c = (state && state.customer) || {};
+    host.hidden = false;
+    host.innerHTML =
+      "<h3 style='margin:0 0 12px;font-size:13px'>انتخاب پلن تمدید</h3>" +
+      (c.wallet_pay_enabled
+        ? plansHtml(
+            (c.plans || []).filter((p) => !p.is_trial),
+            { renewServiceId: serviceId }
+          )
+        : '<p class="muted">پرداخت کیف پول غیرفعال است</p>');
+    bindActions(host);
+  }
+
+  async function doBuy(planId) {
+    if (busy) return;
+    const c = (state && state.customer) || {};
+    if (!c.wallet_pay_enabled) {
+      toast("پرداخت کیف پول غیرفعال است", "err");
+      return;
+    }
+    if (tg && tg.showConfirm) {
+      const plan = (c.plans || []).find((p) => p.id === planId);
+      const ok = await new Promise((resolve) => {
+        tg.showConfirm(
+          "خرید «" + (plan ? plan.name : planId) + "» با کیف پول؟",
+          resolve
+        );
+      });
+      if (!ok) return;
+    }
+    busy = true;
+    try {
+      const res = await api("/api/mini/buy", { method: "POST", body: { plan_id: planId } });
+      toast(res.message || "خرید شد", "ok");
+      await reload();
+      setView("services");
+    } catch (e) {
+      toast(String(e.message || e), "err");
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function doRenew(serviceId, planId) {
+    if (busy) return;
+    if (tg && tg.showConfirm) {
+      const ok = await new Promise((resolve) => {
+        tg.showConfirm("تمدید این سرویس با کیف پول؟", resolve);
+      });
+      if (!ok) return;
+    }
+    busy = true;
+    try {
+      const res = await api("/api/mini/renew", {
+        method: "POST",
+        body: { service_id: serviceId, plan_id: planId },
+      });
+      toast(res.message || "تمدید شد", "ok");
+      await reload();
+      setView("services");
+    } catch (e) {
+      toast(String(e.message || e), "err");
+    } finally {
+      busy = false;
+    }
   }
 
   function mount(data) {
@@ -297,17 +581,52 @@
     roleEl.textContent = personaLabel(data.persona);
     subEl.textContent =
       data.persona === "admin"
-        ? "پنل سریع ادمین — آمار و میانبر وب"
+        ? "مدیریت سریع + خرید شخصی"
         : data.persona === "reseller"
-          ? "پنل سریع نماینده — فروشگاه و پشتیبانی"
-          : "کیف پول، سرویس‌ها و پلن‌ها";
+          ? "سرویس‌ها، خرید و پنل فروشگاه"
+          : "سرویس‌ها، خرید و کیف پول";
 
     renderNav(data.nav);
 
-    let panels;
-    if (data.persona === "admin") panels = renderAdmin(data);
-    else if (data.persona === "reseller") panels = renderReseller(data);
-    else panels = renderUser(data);
+    const panels = renderUserPanels(data);
+    if (data.persona === "admin" || data.persona === "reseller") {
+      const ops = data.ops || {};
+      const peekStats =
+        data.persona === "admin"
+          ? statsHtml(ops.stats || {}, [
+              ["users", "کاربران"],
+              ["resellers", "نمایندگان"],
+              ["pending", "رسید معلق"],
+              ["tickets", "تیکت باز"],
+            ])
+          : statsHtml(ops.stats || {}, [
+              ["users", "کاربران"],
+              ["orders", "سفارش‌ها"],
+              ["pending", "رسید معلق"],
+              ["tickets", "تیکت باز"],
+            ]);
+      const svcs = (data.customer && data.customer.services) || [];
+      panels.ops = renderOpsExtra(data);
+      panels.home = `
+        ${walletCardHtml(data.customer || {})}
+        <div class="card">
+          <div class="card-head">
+            <h3>${data.persona === "admin" ? "وضعیت پلتفرم" : "فروشگاه من"}</h3>
+            <button type="button" class="btn ghost sm" data-goto="ops">بیشتر</button>
+          </div>
+          ${peekStats}
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>سرویس‌های من</h3>
+            <button type="button" class="btn ghost sm" data-goto="services">همه</button>
+          </div>
+          ${
+            svcs.length
+              ? svcs.slice(0, 2).map((s) => serviceCardHtml(s, { compact: true })).join("")
+              : '<p class="muted">سرویسی ندارید</p>'
+          }
+        </div>`;
+    }
 
     root.innerHTML = Object.keys(panels)
       .map(
@@ -316,71 +635,23 @@
       )
       .join("");
 
-    root.querySelectorAll("[data-path]").forEach((btn) => {
-      btn.addEventListener("click", () => openPanelPath(btn.getAttribute("data-path")));
-    });
-    root.querySelectorAll("[data-svc]").forEach((btn) => {
-      btn.addEventListener("click", () => showSvc(Number(btn.getAttribute("data-svc"))));
-    });
+    bindActions(root);
 
     const wanted = hashView();
     const ok = (data.nav || []).some((n) => n.id === wanted);
     setView(ok ? wanted : (data.nav[0] && data.nav[0].id) || "home");
   }
 
-  async function showSvc(id) {
-    const box = document.getElementById("detail");
-    if (!box) return;
-    box.style.display = "block";
-    box.textContent = "در حال دریافت…";
-    try {
-      const data = await api("/api/mini/service/" + id);
-      const i = data.info || {};
-      const url = safeUrl(data.service.url || "");
-      box.textContent = "";
-      const h3 = document.createElement("h3");
-      h3.textContent = data.service.username || "";
-      const muted = document.createElement("div");
-      muted.className = "muted";
-      muted.textContent =
-        "وضعیت: " +
-        (i.status || "—") +
-        " · مصرف: " +
-        (i.used_traffic ?? "—") +
-        " / " +
-        (i.data_limit ?? "∞");
-      const p = document.createElement("p");
-      const code = document.createElement("code");
-      code.textContent = url;
-      p.appendChild(code);
-      box.appendChild(h3);
-      box.appendChild(muted);
-      box.appendChild(p);
-      if (url) {
-        const btn = document.createElement("button");
-        btn.className = "btn block";
-        btn.type = "button";
-        btn.textContent = "باز کردن لینک";
-        btn.addEventListener("click", () => {
-          if (tg && tg.openLink) tg.openLink(url);
-        });
-        box.appendChild(btn);
-      }
-    } catch (e) {
-      box.textContent = "";
-      const err = document.createElement("div");
-      err.className = "error";
-      err.textContent = String(e.message || e);
-      box.appendChild(err);
-    }
+  async function reload() {
+    const data = await api("/api/mini/me");
+    mount(data);
   }
 
   async function load() {
     root.innerHTML =
       '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
     try {
-      const data = await api("/api/mini/me");
-      mount(data);
+      await reload();
     } catch (e) {
       root.textContent = "";
       const err = document.createElement("div");
