@@ -42,6 +42,8 @@ tests/test_full_audit_3_8_3.py
 tests/test_production_audit_3_5_6.py
 tests/test_security_audit_3_6_3.py
 tests/test_security_audit_hardening.py
+tests/test_miniapp_security_audit.py
+tests/test_role_miniapp.py
 tests/test_security_hardening.py
 tests/test_security_legacy_username_parity.py
 tests/test_v4_0_8_security_audit_sanitize.py

@@ -121,17 +121,21 @@ class WiringTests(unittest.TestCase):
         self.assertIn('<small class="muted">گروه دریافت‌کننده', src)
 
     def test_ram_percent_in_ring_amount_under_title(self):
-        src = Path("app/web/templates/home.html").read_text(encoding="utf-8")
+        home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
+        gauges = Path("app/web/templates/_host_resource_gauges.html").read_text(
+            encoding="utf-8"
+        )
         # Percent lives in the ring center (like CPU); used/total muted like cores.
-        self.assertIn('id="home-mem-val"', src)
-        self.assertIn('id="home-mem-hint"', src)
-        self.assertIn("num-ratio", src)
-        self.assertIn("muted", src[src.find("home-mem-hint") - 80 : src.find("home-mem-hint")])
-        self.assertNotIn("home-gauge-amount", src)
-        self.assertNotIn("home-gauge-center-quiet", src)
+        self.assertIn('data-host-mem-val', gauges)
+        self.assertIn('data-host-mem-hint', gauges)
+        self.assertIn("num-ratio", gauges)
+        hint_at = gauges.find("data-host-mem-hint")
+        self.assertIn("muted", gauges[hint_at - 80 : hint_at])
+        self.assertNotIn("home-gauge-amount", gauges)
+        self.assertNotIn("home-gauge-center-quiet", gauges)
         # PG admin counts live on /pg overview, not the slim home dash
-        self.assertIn("_home_ops.html", src)
-        self.assertNotIn(">تمپلیت‌ها</span>", src)
+        self.assertIn("_home_ops.html", home)
+        self.assertNotIn(">تمپلیت‌ها</span>", home)
 
     def test_base_nav_web_panel_for_all(self):
         src = Path("app/web/templates/base.html").read_text(encoding="utf-8")
