@@ -689,8 +689,10 @@ def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
         if plan is not None and plan_allows_buy_extra(plan):
             entries.append(("res_buy_gb", "📦 خرید حجم اضافه"))
             entries.append(("res_buy_users", "👤 خرید کاربر اضافه"))
+        entries.append(("res_addon_packs", "📦 بسته‌های حجم/کاربر"))
         entries.append(("res_renew", "🔄 تمدید سرویس"))
     except Exception:
+        entries.append(("res_addon_packs", "📦 بسته‌های حجم/کاربر"))
         entries.append(("res_renew", "🔄 تمدید سرویس"))
     if shop_feature_allowed(key="stats", profile=profile):
         entries.append(("res_stats", "📊 آمار و کمیسیون"))

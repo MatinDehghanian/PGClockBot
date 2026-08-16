@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 from datetime import datetime, timezone
 from typing import Iterable
@@ -20,6 +21,8 @@ from app.db.models import (
     ResellerProfile,
     Role,
 )
+
+logger = logging.getLogger(__name__)
 
 # Single permission set for BOTH web panel and bot (must stay identical).
 FEATURE_PERMS: list[tuple[str, str]] = [
@@ -290,11 +293,18 @@ async def list_active_reseller_plans(
     session: AsyncSession,
     *,
     billing_mode: str | None = None,
+    plan_kind: str | None = "subscription",
 ) -> list[ResellerPlan]:
-    """Active reseller packages. Optionally filter by ``fixed`` / ``payg``."""
+    """Active reseller packages. Optionally filter by ``fixed`` / ``payg`` and kind.
+
+    Default ``plan_kind=subscription`` so apply / grant lists exclude addon packs.
+    Pass ``plan_kind=None`` to include every kind.
+    """
     from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
 
     q = select(ResellerPlan).where(ResellerPlan.is_active.is_(True))
+    if plan_kind is not None:
+        q = q.where(ResellerPlan.plan_kind == str(plan_kind))
     if billing_mode is not None:
         mode = str(billing_mode).strip().lower()
         if mode not in {BILLING_MODE_FIXED, BILLING_MODE_PAYG}:
@@ -718,6 +728,27 @@ async def provision_reseller(
     profile.share_pg_panel_url = share_pg
     await session.commit()
     await session.refresh(profile)
+
+    if plan is not None and pg_username:
+        try:
+            from app.services.pg_admin_subscription import (
+                is_subscription_plan,
+                start_or_refresh_subscription,
+            )
+
+            if is_subscription_plan(plan):
+                await start_or_refresh_subscription(
+                    session,
+                    pg_username=pg_username,
+                    plan=plan,
+                    reset_extras=True,
+                    apply_pg_limits=True,
+                )
+                await session.commit()
+        except Exception:
+            logger.exception(
+                "subscription start failed after provision reseller pg=%s", pg_username
+            )
 
     base = (panel_base_url or "").rstrip("/")
     if not base:
@@ -1280,6 +1311,24 @@ async def provision_existing_pg_admin(
             return None, None, f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}"
     await session.commit()
     await session.refresh(profile)
+
+    try:
+        from app.services.pg_admin_subscription import (
+            is_subscription_plan,
+            start_or_refresh_subscription,
+        )
+
+        if is_subscription_plan(plan):
+            await start_or_refresh_subscription(
+                session,
+                pg_username=pg_u,
+                plan=plan,
+                reset_extras=current is None,
+                apply_pg_limits=True,
+            )
+            await session.commit()
+    except Exception:
+        logger.exception("subscription start failed after provision_existing pg=%s", pg_u)
 
     setup_hint = None
     if not (profile.bot_token or "").strip():

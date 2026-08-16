@@ -379,6 +379,19 @@ async def run_admin_daily_report(bot: Bot) -> None:
             logger.exception("admin daily report failed")
 
 
+async def run_pg_admin_subscription_tick() -> None:
+    """Expire due PG-admin subscriptions (reseller + pg_staff shared clock)."""
+    try:
+        async with SessionLocal() as session:
+            from app.services.pg_admin_subscription import run_subscription_expiry_tick
+
+            stats = await run_subscription_expiry_tick(session)
+            if stats.get("expired") or stats.get("warned") or stats.get("errors"):
+                logger.info("pg admin subscription tick: %s", stats)
+    except Exception:
+        logger.exception("pg admin subscription tick failed")
+
+
 def start_scheduler(bot: Bot) -> None:
     if scheduler.running:
         return
@@ -401,6 +414,15 @@ def start_scheduler(bot: Bot) -> None:
         max_instances=1,
         coalesce=True,
         misfire_grace_time=120,
+    )
+    scheduler.add_job(
+        run_pg_admin_subscription_tick,
+        "interval",
+        minutes=5,
+        id="pg_admin_subscription",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=300,
     )
     scheduler.add_job(
         cleanup_stale_pending_orders,

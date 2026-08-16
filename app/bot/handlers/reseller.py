@@ -904,6 +904,11 @@ async def res_renew(
     reseller_owner_id: int | None = None,
 ):
     from app.services.reseller_capacity import plan_renew_price, renew_reseller_capacity
+    from app.services.pg_admin_subscription import (
+        compute_renew_invoice,
+        format_renew_invoice_html,
+        get_subscription,
+    )
 
     owner_id, profile, plan, owner = await _capacity_context(
         session,
@@ -914,7 +919,10 @@ async def res_renew(
     if not owner_id or not profile or not plan or not owner:
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
-    price = plan_renew_price(plan)
+    uname = (profile.pg_admin_username or "").strip()
+    sub = await get_subscription(session, uname) if uname else None
+    invoice = compute_renew_invoice(plan, sub)
+    price = int(invoice.get("total") or plan_renew_price(plan))
     rows = [
         [
             InlineKeyboardButton(
@@ -924,6 +932,14 @@ async def res_renew(
         ],
         [InlineKeyboardButton(text="انصراف", callback_data="menu:home")],
     ]
+    detail = format_renew_invoice_html(invoice, currency=get_settings().currency)
+    exp = invoice.get("expires_at")
+    exp_line = ""
+    if exp is not None:
+        try:
+            exp_line = f"\nانقضای فعلی: <b>{exp.strftime('%Y-%m-%d %H:%M')}</b> UTC"
+        except Exception:
+            exp_line = ""
     await callback.answer()
     if callback.message:
         await safe_edit_text(
@@ -931,8 +947,8 @@ async def res_renew(
             format_message(
                 "🔄 تمدید سرویس نماینده",
                 f"پلن: <b>{plan.name}</b>\n"
-                f"مبلغ: <b>{format_toman(price, get_settings().currency)}</b>\n\n"
-                "با تمدید، مصرف ترافیک کاربران زیر ادمین شما ریست می‌شود.\n"
+                f"{detail}{exp_line}\n\n"
+                "با تمدید، دسترسی در صورت انقضا باز می‌شود و مصرف ترافیک کاربران ریست می‌شود.\n"
                 "هزینه از کیف پول فروشگاهی کسر می‌شود.",
             ),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
@@ -967,13 +983,21 @@ async def res_renew_go(
         return
     await callback.answer("تمدید شد")
     if callback.message:
+        exp = result.get("expires_at")
+        exp_line = ""
+        if exp is not None:
+            try:
+                exp_line = f"\nانقضای جدید: <b>{exp.strftime('%Y-%m-%d %H:%M')}</b> UTC"
+            except Exception:
+                exp_line = ""
         await safe_edit_text(
             callback.message,
             format_message(
                 "✅ تمدید انجام شد",
                 f"مبلغ: {format_toman(result['amount'], get_settings().currency)}\n"
                 f"ریست مصرف کاربران: {result['reset_ok']}"
-                + (f" (خطا: {result['reset_err']})" if result.get("reset_err") else ""),
+                + (f" (خطا: {result['reset_err']})" if result.get("reset_err") else "")
+                + exp_line,
             ),
             reply_markup=None,
         )
@@ -1169,6 +1193,112 @@ async def res_buy_users_go(
                 f"تعداد: {result['users']}\n"
                 f"سقف جدید: {result['max_users']}\n"
                 f"مبلغ: {format_toman(result['amount'], get_settings().currency)}",
+            ),
+            reply_markup=None,
+        )
+
+
+@router.callback_query(F.data == "res:addons")
+async def res_addons(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.pg_admin_subscription import list_addon_plans
+
+    owner_id, profile, plan, owner = await _capacity_context(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not owner_id or not profile or not owner:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    addons = await list_addon_plans(session)
+    if not addons:
+        await callback.answer("بستهٔ اضافه فعالی تعریف نشده", show_alert=True)
+        return
+    rows = []
+    for p in addons:
+        kind = str(getattr(p, "plan_kind", "") or "")
+        if kind == "addon_volume":
+            label = f"{p.name} — +{int(p.addon_gb or 0)} گیگ — {format_toman(p.price, get_settings().currency)}"
+        else:
+            label = f"{p.name} — +{int(p.addon_users or 0)} کاربر — {format_toman(p.price, get_settings().currency)}"
+        rows.append(
+            [InlineKeyboardButton(text=label[:64], callback_data=f"res:addon:buy:{p.id}")]
+        )
+    rows.append([InlineKeyboardButton(text="انصراف", callback_data="menu:home")])
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(
+                "📦 بسته‌های حجم / کاربر",
+                "با خرید بسته، فقط ظرفیت اضافه می‌شود و تاریخ انقضا عوض نمی‌شود.\n"
+                "در تمدید بعدی، مبلغ بر اساس مجموع ظرفیت جدید محاسبه می‌شود.",
+            ),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
+@router.callback_query(F.data.startswith("res:addon:buy:"))
+async def res_addon_buy(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.db.models import ResellerPlan
+    from app.services.pg_admin_subscription import (
+        apply_addon_plan,
+        get_or_create_subscription,
+    )
+
+    owner_id, profile, _plan, owner = await _capacity_context(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not owner_id or not profile or not owner:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    try:
+        plan_id = int(callback.data.split(":")[-1])
+    except ValueError:
+        await callback.answer("پلن نامعتبر", show_alert=True)
+        return
+    addon = await session.get(ResellerPlan, plan_id)
+    if not addon or not addon.is_active:
+        await callback.answer("بسته یافت نشد", show_alert=True)
+        return
+    uname = (profile.pg_admin_username or "").strip()
+    if not uname:
+        await callback.answer("ادمین پاسارگارد تنظیم نشده", show_alert=True)
+        return
+    try:
+        sub = await get_or_create_subscription(session, uname)
+        result = await apply_addon_plan(
+            session, sub=sub, addon_plan=addon, payer=owner, charge_wallet=True
+        )
+    except ValueError as e:
+        await callback.answer(str(e)[:180], show_alert=True)
+        return
+    await callback.answer("خرید شد")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(
+                "✅ بسته اعمال شد",
+                f"حجم اضافه کل: {result['extra_gb']} گیگ\n"
+                f"کاربر اضافه کل: {result['extra_users']}\n"
+                f"مبلغ: {format_toman(result['amount'], get_settings().currency)}\n"
+                "تاریخ انقضا تغییر نکرد.",
             ),
             reply_markup=None,
         )

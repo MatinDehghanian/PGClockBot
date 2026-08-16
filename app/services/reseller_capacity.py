@@ -38,12 +38,10 @@ def plan_extra_user_price(plan: ResellerPlan | None) -> int:
 
 
 def plan_renew_price(plan: ResellerPlan | None) -> int:
-    if plan is None:
-        return 0
-    renew = int(getattr(plan, "renew_price", 0) or 0)
-    if renew > 0:
-        return renew
-    return max(0, int(getattr(plan, "price", 0) or 0))
+    """Flat renew base (legacy). Prefer compute_renew_invoice for full quote."""
+    from app.services.pg_admin_subscription import renew_base_amount
+
+    return renew_base_amount(plan)
 
 
 async def load_reseller_plan(
@@ -162,7 +160,11 @@ async def buy_extra_gb(
         raise ValueError("ادمین پاسارگارد برای این نماینده تنظیم نشده است")
 
     total = price * gb_n
-    await _charge_wallet(session, user, total)
+    from app.services.wallet import credit_wallet, debit_wallet
+
+    await debit_wallet(
+        session, user, total, reason=f"reseller_extra_gb:{gb_n}:{uname}", commit=False
+    )
 
     from app.services.pasarguard import get_pg
 
@@ -176,15 +178,22 @@ async def buy_extra_gb(
         new_limit = (current if current > 0 else 0) + gb_n * GB
         await pg.modify_admin(uname, {"data_limit": int(new_limit)})
     except ValueError:
-        await _refund_wallet(session, user, total)
+        await credit_wallet(
+            session, user, total, reason=f"reseller_extra_gb_refund:{gb_n}:{uname}", commit=False
+        )
         await session.commit()
         raise
     except Exception as e:
-        await _refund_wallet(session, user, total)
+        await credit_wallet(
+            session, user, total, reason=f"reseller_extra_gb_refund:{gb_n}:{uname}", commit=False
+        )
         await session.commit()
         logger.exception("buy_extra_gb PG failed admin=%s", uname)
         raise ValueError("افزایش حجم در پاسارگارد ناموفق بود — مبلغ بازگردانده شد") from e
 
+    from app.services.pg_admin_subscription import record_unit_extra
+
+    await record_unit_extra(session, pg_username=uname, gb=gb_n, users=0)
     await session.commit()
     return {"gb": gb_n, "amount": total, "data_limit": new_limit}
 
@@ -219,7 +228,11 @@ async def buy_extra_users(
         raise ValueError("ادمین پاسارگارد برای این نماینده تنظیم نشده است")
 
     total = price * n
-    await _charge_wallet(session, user, total)
+    from app.services.wallet import credit_wallet, debit_wallet
+
+    await debit_wallet(
+        session, user, total, reason=f"reseller_extra_users:{n}:{uname}", commit=False
+    )
 
     from app.services.pasarguard import get_pg
 
@@ -240,15 +253,22 @@ async def buy_extra_users(
             uname, {"permission_overrides": overrides, "max_users": int(new_max)}
         )
     except ValueError:
-        await _refund_wallet(session, user, total)
+        await credit_wallet(
+            session, user, total, reason=f"reseller_extra_users_refund:{n}:{uname}", commit=False
+        )
         await session.commit()
         raise
     except Exception as e:
-        await _refund_wallet(session, user, total)
+        await credit_wallet(
+            session, user, total, reason=f"reseller_extra_users_refund:{n}:{uname}", commit=False
+        )
         await session.commit()
         logger.exception("buy_extra_users PG failed admin=%s", uname)
         raise ValueError("افزایش کاربر در پاسارگارد ناموفق بود — مبلغ بازگردانده شد") from e
 
+    from app.services.pg_admin_subscription import record_unit_extra
+
+    await record_unit_extra(session, pg_username=uname, gb=0, users=n)
     await session.commit()
     return {"users": n, "amount": total, "max_users": new_max}
 
@@ -260,41 +280,37 @@ async def renew_reseller_capacity(
     profile: ResellerProfile,
     plan: ResellerPlan,
 ) -> dict[str, Any]:
-    """Renew: charge renew_price and reset traffic on owned PG users."""
-    amount = plan_renew_price(plan)
-    if amount < 0:
-        raise ValueError("قیمت تمدید نامعتبر است")
-    if is_payg(profile):
-        from app.services.billing import payg_available_balance
+    """Renew subscription: invoice from capacity, restore access, reset traffic."""
+    from app.services.pg_admin_subscription import (
+        get_or_create_subscription,
+        is_subscription_plan,
+        renew_subscription,
+    )
 
-        if await payg_available_balance(session, profile) <= 0:
-            raise ValueError("موجودی کیف پول تمام شده — ابتدا شارژ و رفع مسدودی کنید")
+    if is_payg(profile):
+        raise ValueError("پلن PAYG تمدید زمانی ندارد — از شارژ کیف پول استفاده کنید")
+    if not is_subscription_plan(plan):
+        raise ValueError("تمدید فقط برای پلن اشتراک است")
 
     uname = (profile.pg_admin_username or "").strip()
     if not uname:
         raise ValueError("ادمین پاسارگارد برای این نماینده تنظیم نشده است")
 
-    await _charge_wallet(session, user, amount)
-
-    from app.services.billing_suspend import list_owned_user_ids
-    from app.services.pasarguard import get_pg
-
-    pg = get_pg()
-    reset_ok = 0
-    reset_err = 0
-    try:
-        for uid in await list_owned_user_ids(pg, uname):
-            try:
-                await pg.reset_user_by_id(uid)
-                reset_ok += 1
-            except Exception:
-                reset_err += 1
-                logger.debug("renew reset user %s failed", uid, exc_info=True)
-    except Exception as e:
-        await _refund_wallet(session, user, amount)
-        await session.commit()
-        logger.exception("renew list users failed admin=%s", uname)
-        raise ValueError("تمدید ناموفق بود — مبلغ بازگردانده شد") from e
-
-    await session.commit()
-    return {"amount": amount, "reset_ok": reset_ok, "reset_err": reset_err}
+    sub = await get_or_create_subscription(session, uname)
+    if sub.plan_id is None:
+        sub.plan_id = int(plan.id)
+    result = await renew_subscription(
+        session,
+        sub=sub,
+        plan=plan,
+        payer=user,
+        charge_wallet=True,
+        reset_user_traffic=True,
+    )
+    return {
+        "amount": result.get("amount", 0),
+        "reset_ok": result.get("reset_ok", 0),
+        "reset_err": result.get("reset_err", 0),
+        "invoice": result.get("invoice"),
+        "expires_at": result.get("expires_at"),
+    }
