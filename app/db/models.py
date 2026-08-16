@@ -443,6 +443,17 @@ class ResellerPlan(Base):
     price_per_gb: Mapped[int] = mapped_column(Integer, default=0)
     # Optional PasarGuard group ids this PAYG price is intended for (comma-separated)
     pg_group_ids: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # subscription | addon_volume | addon_users
+    plan_kind: Mapped[str] = mapped_column(String(32), default="subscription")
+    # Subscription period in days; 0 = no time limit (also skip for PAYG)
+    duration_days: Mapped[int] = mapped_column(Integer, default=0)
+    included_gb: Mapped[int] = mapped_column(Integer, default=0)
+    included_users: Mapped[int] = mapped_column(Integer, default=0)
+    # Pack size for addon_volume / addon_users kinds
+    addon_gb: Mapped[int] = mapped_column(Integer, default=0)
+    addon_users: Mapped[int] = mapped_column(Integer, default=0)
+    # fixed = renew_price/price; from_capacity = base + extras×unit
+    renew_pricing_mode: Mapped[str] = mapped_column(String(32), default="fixed")
     # Reseller capacity add-ons (buy extra volume/users) + renew
     allow_buy_extra: Mapped[bool] = mapped_column(Boolean, default=False)
     extra_gb_price: Mapped[int] = mapped_column(Integer, default=0)  # toman per extra GB
@@ -451,6 +462,41 @@ class ResellerPlan(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PgAdminSubscription(Base):
+    """Shared time+capacity clock for a PasarGuard admin (reseller and/or pg_staff)."""
+
+    __tablename__ = "pg_admin_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pg_username: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    plan_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("reseller_plans.id"), nullable=True, index=True
+    )
+    # active | expired | revoked
+    access_status: Mapped[str] = mapped_column(String(16), default="active", index=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    base_gb: Mapped[int] = mapped_column(Integer, default=0)
+    base_users: Mapped[int] = mapped_column(Integer, default=0)
+    extra_gb_purchased: Mapped[int] = mapped_column(Integer, default=0)
+    extra_users_purchased: Mapped[int] = mapped_column(Integer, default=0)
+    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expiry_disabled_user_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_renewed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    renew_generation: Mapped[int] = mapped_column(Integer, default=0)
+    warn_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    plan: Mapped[Optional["ResellerPlan"]] = relationship()
 
 
 class ResellerApplicationStatus(str, Enum):

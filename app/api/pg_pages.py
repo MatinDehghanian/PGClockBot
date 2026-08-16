@@ -1829,13 +1829,15 @@ def register_pg_pages(
         from app.services.pg_staff_access import (
             access_by_pg_username,
             classify_pg_admin_dict,
-            grant_web_access,
+            grant_web_access_with_plan,
             update_web_access,
         )
 
         form = await request.form()
         web_password = str(form.get("web_password") or "")
         note = str(form.get("note") or "").strip()
+        plan_raw = str(form.get("plan_id") or "").strip()
+        plan_id = int(plan_raw) if plan_raw.isdigit() else None
         # D3 Q1 A: explicit confirm-align checkbox (never silent rename)
         confirm_align = str(form.get("confirm_align") or "").strip().lower() in {
             "1",
@@ -1875,12 +1877,33 @@ def register_pg_pages(
                 is_active=None,
                 confirm_align=confirm_align,
             )
+            if not err and plan_id and row:
+                from app.db.models import ResellerPlan
+                from app.services.pg_admin_subscription import (
+                    is_subscription_plan,
+                    start_or_refresh_subscription,
+                )
+
+                plan = await session.get(ResellerPlan, int(plan_id))
+                if plan and is_subscription_plan(plan):
+                    try:
+                        await start_or_refresh_subscription(
+                            session,
+                            pg_username=pg_u,
+                            plan=plan,
+                            reset_extras=False,
+                            apply_pg_limits=True,
+                        )
+                        await session.commit()
+                    except Exception as e:
+                        err = f"ذخیره شد ولی اشتراک زمانی اعمال نشد: {e}"
         else:
-            row, err = await grant_web_access(
+            row, err = await grant_web_access_with_plan(
                 session,
                 pg_username=pg_u,
                 web_username=web_username,
                 password=web_password,
+                plan_id=plan_id,
                 note=note,
                 is_active=True,
             )
@@ -1889,6 +1912,61 @@ def register_pg_pages(
         uname = row.web_username if row else web_username
         msg = f"دسترسی ادمین فرعی «{uname}» ذخیره شد — فقط منوی پاسارگارد (بدون فروشگاه)"
         return RedirectResponse(f"/pg/admins?ok={_q(msg)}", status_code=303)
+
+    @app.post("/pg/admins/{username}/subscription/renew")
+    async def pg_admins_subscription_renew(
+        username: str,
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session=Depends(get_db),
+    ):
+        """Owner extends / restores a time-limited PG admin (reseller or staff). No wallet charge."""
+        from app.db.models import ResellerPlan
+        from app.services.pg_admin_subscription import (
+            get_or_create_subscription,
+            get_subscription,
+            is_subscription_plan,
+            renew_subscription,
+        )
+
+        pg_u = (username or "").strip()
+        if not pg_u:
+            return RedirectResponse(f"/pg/admins?err={_q('نام ادمین نامعتبر است')}", status_code=303)
+        form = await request.form()
+        plan_raw = str(form.get("plan_id") or "").strip()
+        sub = await get_subscription(session, pg_u)
+        plan_id = int(plan_raw) if plan_raw.isdigit() else (sub.plan_id if sub else None)
+        if not plan_id:
+            return RedirectResponse(
+                f"/pg/admins?err={_q('پلن اشتراک برای تمدید مشخص نیست')}",
+                status_code=303,
+            )
+        plan = await session.get(ResellerPlan, int(plan_id))
+        if not plan or not is_subscription_plan(plan):
+            return RedirectResponse(
+                f"/pg/admins?err={_q('پلن اشتراک معتبر نیست')}",
+                status_code=303,
+            )
+        try:
+            sub = await get_or_create_subscription(session, pg_u)
+            result = await renew_subscription(
+                session,
+                sub=sub,
+                plan=plan,
+                payer=None,
+                charge_wallet=False,
+                reset_user_traffic=True,
+            )
+        except ValueError as e:
+            return RedirectResponse(f"/pg/admins?err={_q(e)}", status_code=303)
+        except Exception as e:
+            return RedirectResponse(f"/pg/admins?err={_q(e)}", status_code=303)
+        exp = result.get("expires_at")
+        exp_s = exp.strftime("%Y-%m-%d") if exp is not None else "بدون انقضا"
+        return RedirectResponse(
+            f"/pg/admins?ok={_q(f'اشتراک «{pg_u}» تمدید شد — انقضا: {exp_s}')}",
+            status_code=303,
+        )
 
     @app.post("/pg/admins/{username}/web-access/reseller")
     async def pg_admins_web_access_reseller(

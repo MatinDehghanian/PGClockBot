@@ -525,6 +525,48 @@
           <textarea name="description" rows="2"></textarea>
         </label>
 
+        <div class="form-row">
+          <label class="form-field">نوع پلن
+            <select name="plan_kind" id="reseller-plan-kind">
+              <option value="subscription" selected>اشتراک (نمایندگی)</option>
+              <option value="addon_volume">بسته فقط حجم</option>
+              <option value="addon_users">بسته فقط کاربر</option>
+            </select>
+          </label>
+          <label class="form-field" id="reseller-duration-field">مدت اشتراک (روز)
+            <input name="duration_days" type="number" min="0" value="0" />
+            <small class="muted">۰ = بدون محدودیت زمان</small>
+          </label>
+        </div>
+        <div class="form-row" id="reseller-included-fields">
+          <label class="form-field">حجم پایه (گیگ)
+            <input name="included_gb" type="number" min="0" value="0" />
+          </label>
+          <label class="form-field">کاربر پایه
+            <input name="included_users" type="number" min="0" value="0" />
+          </label>
+        </div>
+        <div class="form-row" id="reseller-addon-fields" hidden>
+          <label class="form-field">حجم بسته (گیگ)
+            <input name="addon_gb" type="number" min="0" value="0" />
+          </label>
+          <label class="form-field">کاربر بسته
+            <input name="addon_users" type="number" min="0" value="0" />
+          </label>
+        </div>
+        <div class="form-row" id="reseller-renew-fields">
+          <label class="form-field">قیمت تمدید (تومان)
+            <input name="renew_price" type="number" min="0" value="0" />
+            <small class="muted">۰ = همان قیمت ورود پلن</small>
+          </label>
+          <label class="form-field">محاسبه تمدید
+            <select name="renew_pricing_mode">
+              <option value="fixed" selected>ثابت (فقط قیمت تمدید)</option>
+              <option value="from_capacity">بر اساس ظرفیت (پایه + اضافه‌ها)</option>
+            </select>
+          </label>
+        </div>
+
         <div id="reseller-groups" class="form-field">
           <span class="form-field-label">گروه‌های پاسارگارد (الزامی)</span>
           <p class="muted update-card-caption">حداقل یک گروه باید انتخاب شود — برای ثابت و PAYG.</p>
@@ -560,10 +602,6 @@
           </label>
           <label class="form-field">قیمت هر کاربر اضافه (تومان)
             <input name="extra_user_price" id="reseller-extra-user-price" type="number" min="0" value="0" />
-          </label>
-          <label class="form-field">قیمت تمدید (تومان)
-            <input name="renew_price" id="reseller-renew-price" type="number" min="0" value="0" />
-            <small class="muted">۰ = همان قیمت ورود پلن</small>
           </label>
         </div>
 
@@ -741,9 +779,28 @@
     prices.hidden = !on;
   }
 
+  function syncResellerPlanKind(){
+    const kind = document.getElementById('reseller-plan-kind');
+    const included = document.getElementById('reseller-included-fields');
+    const addon = document.getElementById('reseller-addon-fields');
+    const renew = document.getElementById('reseller-renew-fields');
+    const duration = document.getElementById('reseller-duration-field');
+    if (!kind) return;
+    const v = kind.value || 'subscription';
+    const isSub = v === 'subscription';
+    const isVol = v === 'addon_volume';
+    const isUsers = v === 'addon_users';
+    if (included) included.hidden = !isSub;
+    if (renew) renew.hidden = !isSub;
+    if (duration) duration.hidden = !isSub;
+    if (addon) addon.hidden = !(isVol || isUsers);
+  }
+
   document.addEventListener('change', (e) => {
     if (e.target && e.target.name === 'allow_buy_extra') syncResellerExtras();
+    if (e.target && e.target.id === 'reseller-plan-kind') syncResellerPlanKind();
   });
+  syncResellerPlanKind();
 
   function hideAllPanels(){
     Object.keys(panels).forEach((k) => {

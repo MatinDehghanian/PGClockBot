@@ -77,6 +77,18 @@ def _parse_nonneg_int(form, key: str, default: int = 0) -> int:
         return default
 
 
+def _parse_plan_kind(form) -> str:
+    kind = str(form.get("plan_kind") or "subscription").strip().lower()
+    if kind in {"subscription", "addon_volume", "addon_users"}:
+        return kind
+    return "subscription"
+
+
+def _parse_renew_pricing_mode(form) -> str:
+    mode = str(form.get("renew_pricing_mode") or "fixed").strip().lower()
+    return mode if mode in {"fixed", "from_capacity"} else "fixed"
+
+
 def _parse_pg_group_ids(form) -> str | None:
     ids: list[str] = []
     for k, v in form.items():
@@ -800,6 +812,13 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             billing_mode=billing_mode,
             price_per_gb=price_per_gb,
             pg_group_ids=pg_group_ids,
+            plan_kind=_parse_plan_kind(form),
+            duration_days=_parse_nonneg_int(form, "duration_days"),
+            included_gb=_parse_nonneg_int(form, "included_gb"),
+            included_users=_parse_nonneg_int(form, "included_users"),
+            addon_gb=_parse_nonneg_int(form, "addon_gb"),
+            addon_users=_parse_nonneg_int(form, "addon_users"),
+            renew_pricing_mode=_parse_renew_pricing_mode(form),
             allow_buy_extra=bool(form.get("allow_buy_extra")),
             extra_gb_price=_parse_nonneg_int(form, "extra_gb_price"),
             extra_user_price=_parse_nonneg_int(form, "extra_user_price"),
@@ -926,6 +945,13 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         plan.extra_gb_price = _parse_nonneg_int(form, "extra_gb_price")
         plan.extra_user_price = _parse_nonneg_int(form, "extra_user_price")
         plan.renew_price = _parse_nonneg_int(form, "renew_price")
+        plan.plan_kind = _parse_plan_kind(form)
+        plan.duration_days = _parse_nonneg_int(form, "duration_days")
+        plan.included_gb = _parse_nonneg_int(form, "included_gb")
+        plan.included_users = _parse_nonneg_int(form, "included_users")
+        plan.addon_gb = _parse_nonneg_int(form, "addon_gb")
+        plan.addon_users = _parse_nonneg_int(form, "addon_users")
+        plan.renew_pricing_mode = _parse_renew_pricing_mode(form)
         plan.is_active = bool(form.get("is_active"))
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         if not pg_role_raw.isdigit():

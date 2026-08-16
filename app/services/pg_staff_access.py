@@ -551,6 +551,52 @@ async def grant_web_access(
     session.add(row)
     await session.commit()
     await session.refresh(row)
+
+    # Optional time subscription when caller passes plan_id via note marker — see grant with plan
+    return row, None
+
+
+async def grant_web_access_with_plan(
+    session: AsyncSession,
+    *,
+    pg_username: str,
+    web_username: str,
+    password: str,
+    plan_id: int | None = None,
+    note: str = "",
+    is_active: bool = True,
+) -> tuple[PgStaffAccess | None, str | None]:
+    """Grant pg_staff and optionally bind a subscription plan (time + base capacity)."""
+    row, err = await grant_web_access(
+        session,
+        pg_username=pg_username,
+        web_username=web_username,
+        password=password,
+        note=note,
+        is_active=is_active,
+    )
+    if err or row is None:
+        return row, err
+    if plan_id:
+        from app.db.models import ResellerPlan
+        from app.services.pg_admin_subscription import (
+            is_subscription_plan,
+            start_or_refresh_subscription,
+        )
+
+        plan = await session.get(ResellerPlan, int(plan_id))
+        if plan and is_subscription_plan(plan):
+            try:
+                await start_or_refresh_subscription(
+                    session,
+                    pg_username=row.pg_username,
+                    plan=plan,
+                    reset_extras=True,
+                    apply_pg_limits=True,
+                )
+                await session.commit()
+            except Exception as e:
+                return row, f"دسترسی وب ساخته شد ولی اشتراک زمانی اعمال نشد: {e}"
     return row, None
 
 

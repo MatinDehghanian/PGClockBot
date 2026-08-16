@@ -207,11 +207,34 @@
         <input name="note" value="{{ st.get('note') if src == 'pg_staff' and st.get('note') else '' }}" placeholder="ادمین فرعی محدود" />
         <small class="muted">اختیاری</small>
       </label>
+      {% set sub_plans = (reseller_plans or [])|selectattr('plan_kind', 'equalto', 'subscription')|list %}
+      {% if not sub_plans %}
+      {% set sub_plans = reseller_plans or [] %}
+      {% endif %}
+      <label class="form-field">پلن اشتراک زمانی (اختیاری)
+        <select name="plan_id">
+          <option value="">— بدون محدودیت زمان —</option>
+          {% for p in sub_plans %}
+          {% if (p.plan_kind or 'subscription') == 'subscription' %}
+          <option value="{{ p.id }}">{{ p.name }}{% if p.duration_days %} — {{ p.duration_days }} روز{% endif %}</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+        <small class="muted">با انقضا، ادمین و کاربرانش موقتاً غیرفعال می‌شوند</small>
+      </label>
       <div class="actions">
         <button class="btn" type="submit">{% if src == 'pg_staff' %}ذخیره{% else %}اعطای دسترسی ادمین فرعی{% endif %}</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
       </div>
     </form>
+    {% if src == 'pg_staff' %}
+    <form method="post" action="/pg/admins/{{ uname }}/subscription/renew" class="form-stack" style="margin-top:var(--space-2)">
+      <input type="hidden" name="plan_id" value="" />
+      <div class="actions">
+        <button class="btn btn-ghost" type="submit">تمدید اشتراک زمانی (بدون کسر کیف پول)</button>
+      </div>
+    </form>
+    {% endif %}
   </div>
 </div>
 {% endif %}

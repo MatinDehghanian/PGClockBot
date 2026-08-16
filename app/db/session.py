@@ -222,6 +222,59 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
             sync_conn.execute(
                 sql_text("ALTER TABLE reseller_plans ADD COLUMN renew_price INTEGER DEFAULT 0")
             )
+        plan_kind_alters = {
+            "plan_kind": "VARCHAR(32) DEFAULT 'subscription'",
+            "duration_days": "INTEGER DEFAULT 0",
+            "included_gb": "INTEGER DEFAULT 0",
+            "included_users": "INTEGER DEFAULT 0",
+            "addon_gb": "INTEGER DEFAULT 0",
+            "addon_users": "INTEGER DEFAULT 0",
+            "renew_pricing_mode": "VARCHAR(32) DEFAULT 'fixed'",
+        }
+        for col, typ in plan_kind_alters.items():
+            if col not in pcols:
+                sync_conn.execute(
+                    sql_text(f"ALTER TABLE reseller_plans ADD COLUMN {col} {typ}")
+                )
+
+    if not insp.has_table("pg_admin_subscriptions"):
+        sync_conn.execute(
+            sql_text(
+                """
+                CREATE TABLE pg_admin_subscriptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pg_username VARCHAR(128) NOT NULL UNIQUE,
+                    plan_id INTEGER,
+                    access_status VARCHAR(16) DEFAULT 'active' NOT NULL,
+                    started_at DATETIME,
+                    expires_at DATETIME,
+                    base_gb INTEGER DEFAULT 0 NOT NULL,
+                    base_users INTEGER DEFAULT 0 NOT NULL,
+                    extra_gb_purchased INTEGER DEFAULT 0 NOT NULL,
+                    extra_users_purchased INTEGER DEFAULT 0 NOT NULL,
+                    expired_at DATETIME,
+                    expiry_disabled_user_ids TEXT,
+                    last_renewed_at DATETIME,
+                    renew_generation INTEGER DEFAULT 0 NOT NULL,
+                    warn_sent_at DATETIME,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        sync_conn.execute(
+            sql_text(
+                "CREATE INDEX IF NOT EXISTS ix_pg_admin_subscriptions_expires_at "
+                "ON pg_admin_subscriptions (expires_at)"
+            )
+        )
+        sync_conn.execute(
+            sql_text(
+                "CREATE INDEX IF NOT EXISTS ix_pg_admin_subscriptions_access_status "
+                "ON pg_admin_subscriptions (access_status)"
+            )
+        )
 
     if insp.has_table("pg_staff_access"):
         scols = {c["name"] for c in insp.get_columns("pg_staff_access")}
