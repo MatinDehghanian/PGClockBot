@@ -406,6 +406,10 @@
   </section>
 {% endif %}
 </div>
+{% endif %}
+{% endblock %}
+
+{% block page_scripts %}
 {% if is_admin %}
 <script>
 (function () {
@@ -555,7 +559,5 @@
   });
 })();
 </script>
-
-{% endif %}
 {% endif %}
 {% endblock %}

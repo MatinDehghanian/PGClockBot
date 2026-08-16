@@ -18,7 +18,8 @@
     if (back) back.addEventListener('click', () => setOpen(false));
     side && side.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setOpen(false)));
 
-    /* Page skeleton: show only when load is actually slow; never force a delay */
+    /* Page skeleton: show on in-app nav while waiting for the next page.
+       Never force a minimum delay after content is ready. */
     (function () {
       const html = document.documentElement;
       function revealPage() {
@@ -38,6 +39,41 @@
       window.addEventListener('pageshow', (e) => {
         if (e.persisted) revealPage();
       });
+
+      document.addEventListener('click', (e) => {
+        if (e.defaultPrevented) return;
+        if (e.button !== 0) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        const a = e.target.closest && e.target.closest('a[href]');
+        if (!a) return;
+        if (a.target && a.target !== '_self') return;
+        if (a.hasAttribute('download')) return;
+        const href = a.getAttribute('href') || '';
+        if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
+        let url;
+        try { url = new URL(href, window.location.href); } catch (err) { return; }
+        if (url.origin !== window.location.origin) return;
+        if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) return;
+        try {
+          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+          sessionStorage.setItem('pg-page-nav', '1');
+          html.classList.add('page-loading');
+          html.classList.remove('page-ready', 'page-booting', 'page-was-slow');
+        } catch (err) {}
+      }, true);
+
+      document.addEventListener('submit', (e) => {
+        const form = e.target;
+        if (!form || form.tagName !== 'FORM') return;
+        if (form.target && form.target !== '_self') return;
+        if (form.hasAttribute('data-no-skeleton')) return;
+        try {
+          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+          sessionStorage.setItem('pg-page-nav', '1');
+          html.classList.add('page-loading');
+          html.classList.remove('page-ready', 'page-booting', 'page-was-slow');
+        } catch (err) {}
+      }, true);
     })();
 
     /* Permanent no-zoom: keep focused text controls at ≥16px even if CSS regresses */
