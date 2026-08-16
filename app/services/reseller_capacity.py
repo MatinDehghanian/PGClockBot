@@ -20,9 +20,18 @@ ALLOWED_EXTRA_USERS = frozenset({1, 5, 10, 20})
 
 
 def plan_allows_buy_extra(plan: ResellerPlan | None) -> bool:
+    """Quick-buy extras: fixed subscription plans only (not PAYG, not addon packs)."""
     if plan is None:
         return False
-    return bool(getattr(plan, "allow_buy_extra", False))
+    if not bool(getattr(plan, "allow_buy_extra", False)):
+        return False
+    from app.services.billing import BILLING_MODE_PAYG
+    from app.services.pg_admin_subscription import is_subscription_plan
+
+    mode = str(getattr(plan, "billing_mode", "") or "fixed").strip().lower()
+    if mode == BILLING_MODE_PAYG:
+        return False
+    return is_subscription_plan(plan)
 
 
 def plan_extra_gb_price(plan: ResellerPlan | None) -> int:
@@ -140,6 +149,8 @@ async def buy_extra_gb(
 ) -> dict[str, Any]:
     if not plan_allows_buy_extra(plan):
         raise ValueError("این پلن امکان خرید حجم اضافه ندارد")
+    if is_payg(profile):
+        raise ValueError("خرید حجم اضافه برای پلن PAYG فعال نیست")
     try:
         gb_n = int(gb)
     except (TypeError, ValueError) as e:
@@ -149,11 +160,6 @@ async def buy_extra_gb(
     price = plan_extra_gb_price(plan)
     if price <= 0:
         raise ValueError("قیمت حجم اضافه برای این پلن تعریف نشده است")
-    if is_payg(profile):
-        from app.services.billing import payg_available_balance
-
-        if await payg_available_balance(session, profile) <= 0:
-            raise ValueError("موجودی کیف پول تمام شده — ابتدا شارژ و رفع مسدودی کنید")
 
     uname = (profile.pg_admin_username or "").strip()
     if not uname:
@@ -208,6 +214,8 @@ async def buy_extra_users(
 ) -> dict[str, Any]:
     if not plan_allows_buy_extra(plan):
         raise ValueError("این پلن امکان خرید کاربر اضافه ندارد")
+    if is_payg(profile):
+        raise ValueError("خرید کاربر اضافه برای پلن PAYG فعال نیست")
     try:
         n = int(count)
     except (TypeError, ValueError) as e:
@@ -217,11 +225,6 @@ async def buy_extra_users(
     price = plan_extra_user_price(plan)
     if price <= 0:
         raise ValueError("قیمت کاربر اضافه برای این پلن تعریف نشده است")
-    if is_payg(profile):
-        from app.services.billing import payg_available_balance
-
-        if await payg_available_balance(session, profile) <= 0:
-            raise ValueError("موجودی کیف پول تمام شده — ابتدا شارژ و رفع مسدودی کنید")
 
     uname = (profile.pg_admin_username or "").strip()
     if not uname:

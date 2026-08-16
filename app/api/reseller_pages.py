@@ -88,7 +88,10 @@ def _is_addon_plan_kind(kind: str | None) -> bool:
     return str(kind or "").strip().lower() in {"addon_volume", "addon_users"}
 
 
-def _parse_renew_pricing_mode(form) -> str:
+def _parse_renew_pricing_mode(form, *, allow_buy_extra: bool = False) -> str:
+    """Parse renew mode; buy-extra subscriptions must use from_capacity."""
+    if allow_buy_extra:
+        return "from_capacity"
     mode = str(form.get("renew_pricing_mode") or "fixed").strip().lower()
     return mode if mode in {"fixed", "from_capacity"} else "fixed"
 
@@ -896,10 +899,15 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             included_users=_parse_nonneg_int(form, "included_users"),
             addon_gb=0,
             addon_users=0,
-            renew_pricing_mode=_parse_renew_pricing_mode(form),
-            allow_buy_extra=bool(form.get("allow_buy_extra")),
-            extra_gb_price=_parse_nonneg_int(form, "extra_gb_price"),
-            extra_user_price=_parse_nonneg_int(form, "extra_user_price"),
+            allow_buy_extra=bool(form.get("allow_buy_extra")) if billing_mode == "fixed" else False,
+            extra_gb_price=_parse_nonneg_int(form, "extra_gb_price") if billing_mode == "fixed" else 0,
+            extra_user_price=_parse_nonneg_int(form, "extra_user_price")
+            if billing_mode == "fixed"
+            else 0,
+            renew_pricing_mode=_parse_renew_pricing_mode(
+                form,
+                allow_buy_extra=bool(form.get("allow_buy_extra")) if billing_mode == "fixed" else False,
+            ),
             renew_price=_parse_nonneg_int(form, "renew_price"),
             can_approve_receipts="payments" in parse_perms(perms),
             web_permissions=perms,
@@ -1056,19 +1064,22 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             plan.commission_percent = 0
             plan.price_per_gb = _parse_price_per_gb(form)
             plan.pg_group_ids = pg_group_ids
+            plan.allow_buy_extra = False
+            plan.extra_gb_price = 0
+            plan.extra_user_price = 0
         else:
             plan.commission_percent = max(0, min(100, int(plan.commission_percent or 0)))
             plan.price_per_gb = 0
             plan.pg_group_ids = pg_group_ids
+            plan.allow_buy_extra = bool(form.get("allow_buy_extra"))
+            plan.extra_gb_price = _parse_nonneg_int(form, "extra_gb_price")
+            plan.extra_user_price = _parse_nonneg_int(form, "extra_user_price")
         perms = _feature_perms_from_form(form)
         plan.web_permissions = perms
         plan.bot_permissions = perms
         plan.can_approve_receipts = "payments" in parse_perms(perms)
         plan.create_pg_admin = bool(form.get("create_pg_admin"))
         plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
-        plan.allow_buy_extra = bool(form.get("allow_buy_extra"))
-        plan.extra_gb_price = _parse_nonneg_int(form, "extra_gb_price")
-        plan.extra_user_price = _parse_nonneg_int(form, "extra_user_price")
         plan.renew_price = _parse_nonneg_int(form, "renew_price")
         plan.plan_kind = "subscription"
         plan.duration_days = _parse_nonneg_int(form, "duration_days")
@@ -1076,7 +1087,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         plan.included_users = _parse_nonneg_int(form, "included_users")
         plan.addon_gb = 0
         plan.addon_users = 0
-        plan.renew_pricing_mode = _parse_renew_pricing_mode(form)
+        plan.renew_pricing_mode = _parse_renew_pricing_mode(
+            form, allow_buy_extra=bool(plan.allow_buy_extra)
+        )
         plan.create_web_access = True
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         if not pg_role_raw.isdigit():

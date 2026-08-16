@@ -46,9 +46,14 @@ class PaygSuspendHelpersTests(unittest.IsolatedAsyncioTestCase):
     async def test_buy_extra_gb_rejects_forged_amount(self):
         from app.services.reseller_capacity import buy_extra_gb
 
-        plan = MagicMock(allow_buy_extra=True, extra_gb_price=1000)
+        plan = MagicMock(
+            allow_buy_extra=True,
+            billing_mode="fixed",
+            plan_kind="subscription",
+            extra_gb_price=1000,
+        )
         profile = MagicMock(
-            billing_mode=BILLING_MODE_PAYG,
+            billing_mode="fixed",
             billing_balance=100_000,
             pg_admin_username="r1",
         )
@@ -67,10 +72,25 @@ class ResellerCapacityPlanTests(unittest.TestCase):
         self.assertNotIn(999_999, ALLOWED_EXTRA_USERS)
 
     def test_allow_flag(self):
-        plan = MagicMock(allow_buy_extra=True, extra_gb_price=1500, renew_price=0, price=50_000)
+        plan = MagicMock(
+            allow_buy_extra=True,
+            billing_mode="fixed",
+            plan_kind="subscription",
+            extra_gb_price=1500,
+            renew_price=0,
+            price=50_000,
+        )
         self.assertTrue(plan_allows_buy_extra(plan))
         self.assertEqual(plan_extra_gb_price(plan), 1500)
         self.assertEqual(plan_renew_price(plan), 50_000)
+
+    def test_payg_disallows_buy_extra(self):
+        plan = MagicMock(
+            allow_buy_extra=True,
+            billing_mode=BILLING_MODE_PAYG,
+            plan_kind="subscription",
+        )
+        self.assertFalse(plan_allows_buy_extra(plan))
 
     def test_renew_price_override(self):
         plan = MagicMock(renew_price=12_000, price=50_000)
@@ -87,20 +107,39 @@ class ResellerCapacityPlanTests(unittest.TestCase):
     def test_keyboard_capacity_entries(self):
         from app.bot.keyboards import _reseller_submenu_entries
 
-        plan_on = MagicMock(allow_buy_extra=True)
-        profile = MagicMock(billing_mode=BILLING_MODE_PAYG, plan=plan_on)
+        plan_on = MagicMock(
+            allow_buy_extra=True,
+            billing_mode="fixed",
+            plan_kind="subscription",
+        )
+        profile = MagicMock(billing_mode="fixed", plan=plan_on)
         with patch("app.services.authz.shop_feature_allowed", return_value=True):
             labels = [t for _, t in _reseller_submenu_entries(profile)]
         self.assertIn("📦 خرید حجم اضافه", labels)
         self.assertIn("👤 خرید کاربر اضافه", labels)
         self.assertIn("🔄 تمدید سرویس", labels)
 
-        plan_off = MagicMock(allow_buy_extra=False)
+        plan_off = MagicMock(
+            allow_buy_extra=False,
+            billing_mode="fixed",
+            plan_kind="subscription",
+        )
         profile.plan = plan_off
         with patch("app.services.authz.shop_feature_allowed", return_value=True):
             labels2 = [t for _, t in _reseller_submenu_entries(profile)]
         self.assertNotIn("📦 خرید حجم اضافه", labels2)
         self.assertIn("🔄 تمدید سرویس", labels2)
+
+        payg_plan = MagicMock(
+            allow_buy_extra=True,
+            billing_mode=BILLING_MODE_PAYG,
+            plan_kind="subscription",
+        )
+        profile.plan = payg_plan
+        profile.billing_mode = BILLING_MODE_PAYG
+        with patch("app.services.authz.shop_feature_allowed", return_value=True):
+            labels3 = [t for _, t in _reseller_submenu_entries(profile)]
+        self.assertNotIn("📦 خرید حجم اضافه", labels3)
 
 
 class SchemaAddonTests(unittest.TestCase):

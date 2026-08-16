@@ -20,6 +20,7 @@ class RenewInvoiceTests(unittest.TestCase):
             extra_gb_price=1000,
             extra_user_price=2000,
             renew_pricing_mode="fixed",
+            allow_buy_extra=False,
             duration_days=30,
             included_gb=30,
             included_users=30,
@@ -36,6 +37,34 @@ class RenewInvoiceTests(unittest.TestCase):
         self.assertEqual(inv["mode"], "fixed")
         self.assertEqual(inv["total"], 100_000)
         self.assertEqual(inv["extras_gb_amount"], 0)
+
+    def test_buy_extra_forces_from_capacity_even_if_stored_fixed(self):
+        from app.services.pg_admin_subscription import (
+            compute_renew_invoice,
+            resolve_renew_pricing_mode,
+        )
+
+        plan = SimpleNamespace(
+            renew_price=0,
+            price=10,
+            extra_gb_price=1,
+            extra_user_price=1,
+            renew_pricing_mode="fixed",  # misconfigured / legacy
+            allow_buy_extra=True,
+            duration_days=30,
+        )
+        sub = SimpleNamespace(
+            extra_gb_purchased=30,
+            extra_users_purchased=10,
+            base_gb=10,
+            base_users=10,
+            expires_at=None,
+            access_status="active",
+        )
+        self.assertEqual(resolve_renew_pricing_mode(plan), "from_capacity")
+        inv = compute_renew_invoice(plan, sub)
+        self.assertEqual(inv["mode"], "from_capacity")
+        self.assertEqual(inv["total"], 10 + 30 + 10)  # 50
 
     def test_from_capacity_adds_extras(self):
         from app.services.pg_admin_subscription import compute_renew_invoice

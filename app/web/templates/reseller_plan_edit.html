@@ -98,10 +98,11 @@
         <small class="muted">۰ = همان قیمت ورود پلن</small>
       </label>
       <label class="form-field">محاسبه تمدید
-        <select name="renew_pricing_mode">
-          <option value="fixed" {% if (plan.renew_pricing_mode or 'fixed') == 'fixed' %}selected{% endif %}>ثابت</option>
-          <option value="from_capacity" {% if plan.renew_pricing_mode == 'from_capacity' %}selected{% endif %}>بر اساس ظرفیت</option>
+        <select name="renew_pricing_mode" id="edit-renew-pricing-mode">
+          <option value="fixed" {% if (plan.renew_pricing_mode or 'fixed') == 'fixed' and not plan.allow_buy_extra %}selected{% endif %}>ثابت</option>
+          <option value="from_capacity" {% if plan.renew_pricing_mode == 'from_capacity' or plan.allow_buy_extra %}selected{% endif %}>بر اساس ظرفیت</option>
         </select>
+        <small class="muted">با خرید حجم/کاربر اضافه، محاسبه فقط بر اساس ظرفیت است.</small>
       </label>
     </div>
 
@@ -132,7 +133,11 @@
     <div class="ui-switch-list" id="edit-provision-switches">
       {{ switch('create_pg_admin', 'ساخت ادمین پاسارگارد هنگام تأیید', checked=plan.create_pg_admin, help='با نقش پاسارگارد پلن؛ برای مالکیت کاربران لازم است') }}
       {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=plan.share_pg_panel_url, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند') }}
-      {{ switch('allow_buy_extra', 'امکان خرید حجم و کاربر اضافه', checked=plan.allow_buy_extra, help='اگر روشن باشد در ربات نماینده گزینه خرید حجم/کاربر نمایش داده می‌شود؛ وگرنه فقط تمدید') }}
+    </div>
+
+    <div id="edit-buy-extra-block">
+    <div class="ui-switch-list">
+      {{ switch('allow_buy_extra', 'امکان خرید حجم و کاربر اضافه', checked=plan.allow_buy_extra, help='فقط اشتراک ثابت — در ربات پله‌های سریع؛ برای PAYG لازم نیست') }}
     </div>
 
     <div class="form-row" id="edit-extra-prices" {% if not plan.allow_buy_extra %}hidden{% endif %}>
@@ -143,6 +148,7 @@
         <input name="extra_user_price" type="number" min="0" value="{{ plan.extra_user_price or 0 }}" />
       </label>
     </div>
+    </div>{# /edit-buy-extra-block #}
 
     <label class="form-field" id="edit-role-field">نقش پاسارگارد (الزامی)
       <select name="pg_role_id" id="edit-pg-role">
@@ -184,8 +190,27 @@
 
   function syncExtra(){
     const extraPrices = document.getElementById('edit-extra-prices');
-    const allowExtra = document.querySelector('#edit-subscription-extras input[name="allow_buy_extra"]');
+    const allowExtra = document.querySelector('#edit-buy-extra-block input[name="allow_buy_extra"]');
+    const buyBlock = document.getElementById('edit-buy-extra-block');
+    const renewMode = document.getElementById('edit-renew-pricing-mode');
+    const payg = mode && mode.value === 'payg';
+    if (buyBlock) buyBlock.hidden = payg || ((planKind && planKind.value) || 'subscription') !== 'subscription';
+    if (renewMode) {
+      const fixedOpt = renewMode.querySelector('option[value="fixed"]');
+      const forceCapacity = !!(allowExtra && allowExtra.checked) && !payg;
+      if (forceCapacity) {
+        renewMode.value = 'from_capacity';
+        if (fixedOpt) fixedOpt.disabled = true;
+      } else if (fixedOpt) {
+        fixedOpt.disabled = false;
+      }
+    }
     if (!extraPrices) return;
+    if (payg) {
+      extraPrices.hidden = true;
+      if (allowExtra) allowExtra.checked = false;
+      return;
+    }
     extraPrices.hidden = !(allowExtra && allowExtra.checked);
   }
 
@@ -200,6 +225,7 @@
     const isVol = v === 'addon_volume';
     const isUsers = v === 'addon_users';
     const isAddon = isVol || isUsers;
+    const payg = mode && mode.value === 'payg';
     setHidden(document.getElementById('edit-included-fields'), !isSub);
     setHidden(document.getElementById('edit-renew-fields'), !isSub);
     setHidden(document.getElementById('edit-duration-field'), !isSub);
@@ -208,8 +234,9 @@
     setHidden(document.getElementById('edit-addon-users-field'), !isUsers);
     setHidden(extras, isAddon);
     setHidden(billingWrap, isAddon);
-    setHidden(commissionField, isAddon || (mode && mode.value === 'payg'));
-    setHidden(rateField, isAddon || !(mode && mode.value === 'payg'));
+    setHidden(commissionField, isAddon || payg);
+    setHidden(rateField, isAddon || !payg);
+    setHidden(document.getElementById('edit-buy-extra-block'), isAddon || payg);
     if (roleSel) {
       if (isAddon) {
         roleSel.removeAttribute('required');
@@ -220,7 +247,7 @@
     if (priceLabel) priceLabel.textContent = isAddon ? 'قیمت بسته (تومان)' : 'قیمت (تومان)';
     if (priceHint) {
       priceHint.textContent = isAddon
-        ? 'فقط برای نمایندگان با اشتراک فعال'
+        ? 'فقط برای نمایندگان با اشتراک فعال — بدون نام‌گذاری سرویس'
         : 'قیمت خرید پکیج نمایندگی — ۰ = رایگان';
     }
     if (!isAddon) {

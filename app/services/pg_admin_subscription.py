@@ -37,6 +37,16 @@ PLAN_KIND_ADDON_USERS = "addon_users"
 RENEW_MODE_FIXED = "fixed"
 RENEW_MODE_FROM_CAPACITY = "from_capacity"
 
+
+def resolve_renew_pricing_mode(plan: ResellerPlan | None) -> str:
+    """Effective renew mode. Buy-extra plans always bill from capacity (anti-abuse)."""
+    if plan is not None and bool(getattr(plan, "allow_buy_extra", False)):
+        return RENEW_MODE_FROM_CAPACITY
+    mode = str(getattr(plan, "renew_pricing_mode", None) or RENEW_MODE_FIXED).strip().lower()
+    if mode != RENEW_MODE_FROM_CAPACITY:
+        return RENEW_MODE_FIXED
+    return mode
+
 WARN_DAYS_BEFORE = 3
 
 
@@ -139,15 +149,16 @@ def compute_renew_invoice(
     Mode ``from_capacity``:
       base + extra_gb × extra_gb_price + extra_users × extra_user_price
     Mode ``fixed`` (default): renew_price or plan.price
+
+    If ``allow_buy_extra`` is on, mode is forced to ``from_capacity`` so renew
+    cannot undercharge after capacity purchases.
     """
     base = renew_base_amount(plan)
     extra_gb = int(getattr(sub, "extra_gb_purchased", 0) or 0) if sub else 0
     extra_users = int(getattr(sub, "extra_users_purchased", 0) or 0) if sub else 0
     gb_unit = max(0, int(getattr(plan, "extra_gb_price", 0) or 0)) if plan else 0
     user_unit = max(0, int(getattr(plan, "extra_user_price", 0) or 0)) if plan else 0
-    mode = str(getattr(plan, "renew_pricing_mode", None) or RENEW_MODE_FIXED).strip().lower()
-    if mode != RENEW_MODE_FROM_CAPACITY:
-        mode = RENEW_MODE_FIXED
+    mode = resolve_renew_pricing_mode(plan)
     extras_gb_amount = extra_gb * gb_unit if mode == RENEW_MODE_FROM_CAPACITY else 0
     extras_users_amount = extra_users * user_unit if mode == RENEW_MODE_FROM_CAPACITY else 0
     total = base + extras_gb_amount + extras_users_amount
