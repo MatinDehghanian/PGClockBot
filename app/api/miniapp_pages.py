@@ -7,6 +7,8 @@ Security invariants (must not regress):
   (never Owner/reseller PG admin credentials for another tenant).
 - Platform **admin/owner** gets ops overview only — **no** shop buy/renew/wallet commerce.
 - Catalog in Mini App is **platform plans only** (hard shop isolation; no other reseller catalog).
+- Feature off (no HTTPS / public URL) → page + APIs return 404.
+- End-user force-join is enforced on every authenticated Mini App call (bot parity).
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ from app.services.formatting import (
 )
 from app.services.miniapp_auth import (
     assert_mini_force_join,
+    assert_miniapp_feature_enabled,
     load_mini_user,
     load_reseller_profile,
     resolve_mini_persona,
@@ -116,13 +119,44 @@ async def _fetch_pg_info(subscription_token: str | None) -> dict:
         return {"error": "upstream_unavailable"}
 
 
+def _safe_client_message(exc: BaseException, *, fallback: str) -> str:
+    """Never echo English/internal exception text to the Mini App client."""
+    msg = str(exc or "").strip()
+    if not msg or len(msg) > 180:
+        return fallback
+    low = msg.lower()
+    # Block known internal / upstream leak patterns (incl. ASCII-only ops errors).
+    blocked = (
+        "traceback",
+        "sqlalchemy",
+        "pasarguard",
+        "httpx",
+        "panel user",
+        "plan missing",
+        "exception",
+        "timeout",
+        "connection",
+        "stack",
+        "file \"",
+        "errno",
+    )
+    if any(b in low for b in blocked):
+        return fallback
+    # Prefer Persian user-facing copy; pure ASCII messages are usually internal.
+    if all(ord(c) < 128 for c in msg):
+        return fallback
+    return msg
+
+
 def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
     info = info or {}
+    # Only our sentinel may appear as ``error`` — never raw upstream strings.
+    upstream_err = info.get("error") == "upstream_unavailable"
     used = info.get("used_traffic")
     limit = info.get("data_limit")
     expire = info.get("expire")
     status_raw = (info.get("status") or "").strip() or None
-    days = expire_remaining_days(expire) if "error" not in info else None
+    days = expire_remaining_days(expire) if not upstream_err else None
     # Never expose subscription_token — only the share URL the user already owns.
     return {
         "id": svc.id,
@@ -130,17 +164,19 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
         "subscription_url": svc.subscription_url or "",
         "plan_id": svc.plan_id,
         "status": status_raw or "—",
-        "status_fa": status_label(status_raw) if status_raw else ("—" if not info else "نامشخص"),
+        "status_fa": status_label(status_raw)
+        if status_raw
+        else ("—" if not info or upstream_err else "نامشخص"),
         "traffic": format_bytes_ratio(used, limit, joiner=" از ")
-        if "error" not in info
+        if not upstream_err
         else "—",
-        "traffic_pct": _traffic_pct(used, limit) if "error" not in info else None,
-        "expire": format_expire_short(expire) if "error" not in info else "—",
+        "traffic_pct": _traffic_pct(used, limit) if not upstream_err else None,
+        "expire": format_expire_short(expire) if not upstream_err else "—",
         "expire_days": days,
         "online_at": format_expire_short(info.get("online_at"))
-        if info.get("online_at") and "error" not in info
+        if info.get("online_at") and not upstream_err
         else None,
-        "error": info.get("error"),
+        "error": "upstream_unavailable" if upstream_err else None,
     }
 
 
@@ -332,6 +368,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
     @app.get("/miniapp/", response_class=HTMLResponse)
     @app.get("/miniapp", response_class=HTMLResponse)
     async def miniapp_index(request: Request):
+        assert_miniapp_feature_enabled()
         return render(request, "miniapp.html", {})
 
     @app.get("/api/mini/me")
@@ -437,7 +474,9 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             await session.refresh(user)
         except ValueError as exc:
             await rollback_quiet(session)
-            raise HTTPException(400, str(exc)) from exc
+            raise HTTPException(
+                400, _safe_client_message(exc, fallback="خرید ناموفق")
+            ) from exc
         except Exception:
             await rollback_quiet(session)
             log.exception("mini buy failed user=%s plan=%s", user.id, plan_id)
@@ -490,7 +529,9 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             await session.refresh(user)
         except ValueError as exc:
             await rollback_quiet(session)
-            raise HTTPException(400, str(exc)) from exc
+            raise HTTPException(
+                400, _safe_client_message(exc, fallback="تمدید ناموفق")
+            ) from exc
         except Exception:
             await rollback_quiet(session)
             log.exception("mini renew failed user=%s svc=%s", user.id, service_id)

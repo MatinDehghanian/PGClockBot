@@ -121,8 +121,11 @@
   }
 
   function openPanelPath(path) {
+    const p = String(path || "");
+    // Only same-origin relative panel paths — block protocol-relative / absolute hijacks
+    if (!p.startsWith("/") || p.startsWith("//") || p.includes("://")) return;
     const base = (state && state.panel_base) || "";
-    const url = safeUrl(base + path);
+    const url = safeUrl(base + p);
     if (!url) return;
     if (tg && tg.openLink) tg.openLink(url);
     else window.open(url, "_blank");
@@ -217,7 +220,7 @@
             100,
             pct
           )}%"></i></div>`;
-    const url = esc(s.subscription_url || "");
+    const url = esc(safeUrl(s.subscription_url || ""));
     return `<article class="svc-card" data-svc-card="${Number(s.id) || 0}">
       <div class="svc-top">
         <div class="svc-title" dir="ltr">${esc(s.username || "—")}</div>

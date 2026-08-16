@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "6.2.4": [
+        "امنیت مینی‌اپ کامل: API فقط با HTTPS فعال؛ force-join برای همه مسیرهای کاربر؛ سقف initData",
+        "بدون نشت خطای داخلی/بالادست در خرید/تمدید و سرویس؛ سخت‌گیری لینک پنل در فرانت",
+    ],
     "6.2.3": [
         "امنیت مینی‌اپ: مسدود و عضویت اجباری قبل از خرید/تمدید؛ بدون نشت info خام پاسارگارد",
         "pay_with_wallet فقط سفارش خود کاربر؛ پیام خطای ۵۰۰ بدون جزئیات داخلی",

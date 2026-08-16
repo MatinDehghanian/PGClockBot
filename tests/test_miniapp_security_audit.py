@@ -11,12 +11,19 @@ ROOT = Path(__file__).resolve().parents[1]
 PAGES = (ROOT / "app/api/miniapp_pages.py").read_text(encoding="utf-8")
 AUTH = (ROOT / "app/services/miniapp_auth.py").read_text(encoding="utf-8")
 ORDERS = (ROOT / "app/services/orders.py").read_text(encoding="utf-8")
+JS = (ROOT / "app/web/static/miniapp.js").read_text(encoding="utf-8")
 
 
 class MiniAppSecuritySourceTests(unittest.TestCase):
     def test_blocked_users_rejected(self):
         self.assertIn("is_blocked", AUTH)
         self.assertIn("دسترسی شما مسدود شده است", AUTH)
+
+    def test_force_join_on_all_api_loads(self):
+        """End-users must pass force-join before any Mini App API (bot parity)."""
+        load = AUTH.split("async def load_mini_user")[1].split("def resolve_mini_persona")[0]
+        self.assertIn("await assert_mini_force_join", load)
+        self.assertIn("assert_miniapp_feature_enabled", load)
 
     def test_force_join_gate_for_commerce(self):
         self.assertIn("assert_mini_force_join", AUTH)
@@ -52,6 +59,7 @@ class MiniAppSecuritySourceTests(unittest.TestCase):
             '"note"',
         ):
             self.assertNotIn(leak, ser)
+        self.assertIn("upstream_unavailable", ser)
 
     def test_catalog_platform_only(self):
         self.assertIn("Plan.owner_reseller_id.is_(None)", PAGES)
@@ -74,14 +82,18 @@ class MiniAppSecuritySourceTests(unittest.TestCase):
         renew = PAGES.split("async def mini_renew")[1]
         self.assertIn('raise HTTPException(500, "خرید ناموفق")', buy)
         self.assertIn('raise HTTPException(500, "تمدید ناموفق")', renew)
-        # 500 path must not echo exception text
         self.assertNotIn("HTTPException(500, str(exc)", buy)
         self.assertNotIn("HTTPException(500, str(exc)", renew)
+        self.assertNotIn("HTTPException(400, str(exc)", buy)
+        self.assertNotIn("HTTPException(400, str(exc)", renew)
+        self.assertIn("_safe_client_message", buy)
+        self.assertIn("_safe_client_message", renew)
 
-    def test_initdata_header_only(self):
+    def test_initdata_header_only_and_capped(self):
         self.assertIn("X-Telegram-Init-Data", AUTH)
         self.assertNotIn("query_params.get", AUTH)
         self.assertIn("hmac.compare_digest", AUTH)
+        self.assertIn("_MAX_INIT_DATA_CHARS", AUTH)
 
     def test_subscription_info_auth_false(self):
         self.assertIn("auth=False", PAGES)
@@ -91,6 +103,55 @@ class MiniAppSecuritySourceTests(unittest.TestCase):
         fn = PAGES.split("async def _reseller_ops_payload")[1].split("def register_miniapp_pages")[0]
         self.assertIn("profile.user_id", fn)
         self.assertIn("user.id", fn)
+
+    def test_feature_gate_on_page_and_api(self):
+        self.assertIn("assert_miniapp_feature_enabled", AUTH)
+        self.assertIn("assert_miniapp_feature_enabled()", PAGES)
+
+    def test_js_panel_path_and_url_hardening(self):
+        self.assertIn('p.startsWith("/")', JS)
+        self.assertIn('p.startsWith("//")', JS)
+        self.assertIn("safeUrl(s.subscription_url", JS)
+
+
+class MiniAppSafeClientMessageTests(unittest.TestCase):
+    def test_blocks_english_internal(self):
+        from app.api.miniapp_pages import _safe_client_message
+
+        self.assertEqual(
+            _safe_client_message(
+                ValueError("service has no panel user"), fallback="خرید ناموفق"
+            ),
+            "خرید ناموفق",
+        )
+        self.assertEqual(
+            _safe_client_message(ValueError("plan missing"), fallback="x"),
+            "x",
+        )
+
+    def test_keeps_short_persian(self):
+        from app.api.miniapp_pages import _safe_client_message
+
+        msg = "موجودی کیف پول کافی نیست"
+        self.assertEqual(_safe_client_message(ValueError(msg), fallback="x"), msg)
+
+
+class MiniAppSerializeLeakTests(unittest.TestCase):
+    def test_raw_upstream_error_stripped(self):
+        from app.api.miniapp_pages import _serialize_service
+
+        svc = SimpleNamespace(
+            id=1,
+            pg_username="u1",
+            subscription_url="https://example.com/sub/abc",
+            plan_id=2,
+        )
+        out = _serialize_service(
+            svc, {"error": "Connection refused to 10.0.0.5:443", "status": "active"}
+        )
+        self.assertIsNone(out["error"])
+        out2 = _serialize_service(svc, {"error": "upstream_unavailable"})
+        self.assertEqual(out2["error"], "upstream_unavailable")
 
 
 class MiniAppOwnedServiceUnitTests(unittest.TestCase):
@@ -142,7 +203,6 @@ class MiniAppBlockedUserUnitTests(unittest.IsolatedAsyncioTestCase):
         request = Request(scope)
         blocked = SimpleNamespace(id=1, telegram_id=42, is_blocked=True, role="user")
         session = AsyncMock()
-        # session.execute(...).scalar_one_or_none()
         result = SimpleNamespace(scalar_one_or_none=lambda: blocked)
         session.execute = AsyncMock(return_value=result)
 
@@ -152,10 +212,25 @@ class MiniAppBlockedUserUnitTests(unittest.IsolatedAsyncioTestCase):
         ), patch(
             "app.services.miniapp_auth.init_data_from_request",
             return_value="dummy",
+        ), patch(
+            "app.services.miniapp_auth.assert_miniapp_feature_enabled",
         ):
             with self.assertRaises(HTTPException) as ctx:
                 await load_mini_user(session, request)
         self.assertEqual(ctx.exception.status_code, 403)
+
+
+class MiniAppFeatureGateUnitTests(unittest.TestCase):
+    def test_disabled_raises_404(self):
+        from fastapi import HTTPException
+
+        from app.services.miniapp_auth import assert_miniapp_feature_enabled
+
+        with patch("app.services.miniapp_auth.get_settings") as gs:
+            gs.return_value.miniapp_enabled = False
+            with self.assertRaises(HTTPException) as ctx:
+                assert_miniapp_feature_enabled()
+            self.assertEqual(ctx.exception.status_code, 404)
 
 
 class MiniAppPayWalletOwnerUnitTests(unittest.IsolatedAsyncioTestCase):

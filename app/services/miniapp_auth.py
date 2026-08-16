@@ -18,13 +18,20 @@ from app.db.models import BotUser, ResellerProfile, Role
 from app.services.platform_identity import is_bot_platform_admin
 
 
+# Telegram initData is typically <2KiB; hard-cap stops oversized header DoS.
+_MAX_INIT_DATA_CHARS = 8192
+
+
 def validate_webapp_init_data(init_data: str, *, bot_token: str | None = None) -> dict[str, Any]:
     """Validate Telegram WebApp ``initData`` HMAC and freshness; return user dict."""
     settings = get_settings()
     token = (bot_token or settings.bot_token or "").strip()
     if not token:
         raise HTTPException(503, "bot token missing")
-    parsed = dict(parse_qsl(init_data, keep_blank_values=True))
+    raw = (init_data or "").strip()
+    if not raw or len(raw) > _MAX_INIT_DATA_CHARS:
+        raise HTTPException(401, "bad initData")
+    parsed = dict(parse_qsl(raw, keep_blank_values=True))
     received_hash = parsed.pop("hash", None)
     if not received_hash:
         raise HTTPException(401, "missing hash")
@@ -55,14 +62,24 @@ def init_data_from_request(request: Request) -> str:
     init_data = request.headers.get("X-Telegram-Init-Data") or ""
     if not init_data.strip():
         raise HTTPException(401, "no initData")
+    if len(init_data) > _MAX_INIT_DATA_CHARS:
+        raise HTTPException(401, "bad initData")
     return init_data
+
+
+def assert_miniapp_feature_enabled() -> None:
+    """Fail closed when HTTPS / public URL is not ready (same gate as menu button)."""
+    if not get_settings().miniapp_enabled:
+        raise HTTPException(404, "مینی‌اپ فعال نیست")
 
 
 async def load_mini_user(session: AsyncSession, request: Request) -> BotUser:
     """Validate initData and load the BotUser row (must have /start'd).
 
-    Blocked accounts are rejected (parity with bot middleware).
+    Blocked accounts are rejected; end-users must pass force-join
+    (parity with bot ForceJoinMiddleware).
     """
+    assert_miniapp_feature_enabled()
     tg_user = validate_webapp_init_data(init_data_from_request(request))
     tg_id = tg_user.get("id")
     result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))
@@ -71,6 +88,8 @@ async def load_mini_user(session: AsyncSession, request: Request) -> BotUser:
         raise HTTPException(404, "start the bot first")
     if bool(getattr(user, "is_blocked", False)):
         raise HTTPException(403, "دسترسی شما مسدود شده است")
+    # Parity with bot: users cannot use the app until channel membership is confirmed.
+    await assert_mini_force_join(session, user)
     return user
 
 
