@@ -1089,7 +1089,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
         plan.addon_users = 0
         plan.renew_pricing_mode = _parse_renew_pricing_mode(
             form, allow_buy_extra=bool(plan.allow_buy_extra)
-        )        plan.create_web_access = True
+        )
+        plan.create_web_access = True
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         if not pg_role_raw.isdigit():
             return RedirectResponse(
