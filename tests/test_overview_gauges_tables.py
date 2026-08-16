@@ -62,6 +62,10 @@ class OverviewSurfaceTests(unittest.TestCase):
         self.assertIn("/pg/metrics", pg)
         self.assertNotIn("دسترسی سریع", pg)
         self.assertNotIn("quick-links", pg)
+        self.assertIn('href="/pg/nodes"', pg)
+        self.assertIn("صفحه نود ها", pg)
+        # Same action slot as «ورود به پاسارگارد» on panel stats
+        self.assertIn("home-panel-actions", pg)
 
     def test_build_home_overview_skips_host_metrics(self):
         src = (ROOT / "app/services/home_overview.py").read_text(encoding="utf-8")
