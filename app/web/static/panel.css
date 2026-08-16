@@ -229,6 +229,10 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
 .home-dash > :last-child {
   margin-bottom: 0;
 }
+/* PG / reseller overview: home-panels is usually the last content block */
+.main-body > .home-panels:last-child {
+  margin-bottom: 0;
+}
 
 .brand {
   display: flex;
@@ -7023,7 +7027,11 @@ html[data-theme="light"] .home-period {
   padding: var(--card-pad);
   border-radius: var(--radius);
   min-width: 0;
-  height: 100%;
+  /* Hug content — height:100% stretched short pages and left a tall empty
+     slab between node tiles and the footer on PG overview. */
+  height: auto;
+  align-self: start;
+  width: 100%;
 }
 .home-panel-bot {
   border: 1px solid color-mix(in srgb, #e08a3c 38%, var(--border));
@@ -7615,8 +7623,8 @@ html[data-theme="light"] .home-panel-neutral .home-panel-h {
 }
 
 /* —— Page skeleton + surface motion ——
-   Content is visible by default. Skeleton appears only if html.page-loading
-   is set after a real slow wait (see base.html). */
+   Content stays visible unless html.page-loading (set on in-app nav click,
+   carried via sessionStorage). Reveal is immediate — no min delay. */
 .page-skeleton {
   display: none;
   flex-direction: column;

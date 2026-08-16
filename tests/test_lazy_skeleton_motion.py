@@ -16,18 +16,16 @@ class LazySkeletonTests(unittest.TestCase):
     def test_no_forced_min_delay_in_js(self):
         js = JS.read_text(encoding="utf-8")
         self.assertNotIn("minMs", js)
-        self.assertNotIn("pg-page-nav", js)
         self.assertIn("__pgPageReveal", js)
+        # Nav flag is required so skeleton can show during TTFB without delaying paint
+        self.assertIn("pg-page-nav", js)
 
-    def test_skeleton_armed_after_wait_only(self):
+    def test_skeleton_from_nav_not_timer(self):
         html = BASE.read_text(encoding="utf-8")
-        boot = html.split("Skeleton only if", 1)[1].split("</script>", 1)[0]
-        self.assertIn("setTimeout", boot)
-        self.assertIn("page-loading", boot)
-        self.assertIn("__pgPageReveal", boot)
-        self.assertIn("280", boot)
-        self.assertNotIn('classList.add("page-booting")', boot)
-        self.assertNotIn("pg-page-nav", html)
+        self.assertIn("pg-page-nav", html)
+        self.assertIn("__pgPageReveal", html)
+        self.assertNotIn(", 280)", html)
+        self.assertNotIn('classList.add("page-booting")', html)
 
     def test_content_visible_by_default(self):
         css = CSS.read_text(encoding="utf-8")
