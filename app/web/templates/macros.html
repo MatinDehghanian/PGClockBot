@@ -153,7 +153,7 @@
 {%- endmacro %}
 
 {% macro page_title(name, text, tone='brand') -%}
-<div class="page-title">
+<div class="page-title page-title--{{ tone }}">
   {{ page_ico(name, tone) }}
   <h1>{{ text }}</h1>
 </div>
