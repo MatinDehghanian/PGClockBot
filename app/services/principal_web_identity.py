@@ -606,7 +606,17 @@ async def resolve_principal_web_session(
     # Live PG role only. Cookie ``pg_role_id`` is untrusted: a stale or injected
     # id plus the shared ``_ROLE_CACHE`` would keep/escalate capabilities after
     # PG outage, role shrink, or admin deletion. Missing live lookup → deny.
-    live = await resolve_pg_role_id_for_admin(pg_uname)
+    # L1/L2 must use this Principal's own client — never Owner get_pg().
+    from app.services.pasarguard import get_pg_for_principal
+
+    pg_client = None
+    try:
+        pg_client = await get_pg_for_principal(
+            session, principal_id=int(principal.id)
+        )
+    except Exception:
+        pg_client = None
+    live = await resolve_pg_role_id_for_admin(pg_uname, client=pg_client) if pg_client else None
     try:
         role_id = int(live) if live else None
     except (TypeError, ValueError):
@@ -614,7 +624,9 @@ async def resolve_principal_web_session(
     role = None
     if role_id:
         out["pg_role_id"] = int(role_id)
-        features, role = await resolve_reseller_pg_features(int(role_id))
+        features, role = await resolve_reseller_pg_features(
+            int(role_id), client=pg_client
+        )
         if not features and role is None:
             # PG unavailable / role missing → deny capabilities (fail closed)
             out["pg_permissions"] = []

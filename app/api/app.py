@@ -437,14 +437,27 @@ def create_api_app(lifespan=None) -> FastAPI:
             from app.services.pg_staff_access import resolve_pg_role_id_for_admin
 
             role_id = int(profile.pg_role_id) if profile.pg_role_id else None
+            pg_client = None
             if profile.pg_admin_username:
-                live_role = await resolve_pg_role_id_for_admin(profile.pg_admin_username)
-                if live_role:
-                    role_id = int(live_role)
+                try:
+                    from app.services.pasarguard import get_pg_for_reseller
+
+                    pg_client = await get_pg_for_reseller(session, int(profile.user_id))
+                except Exception:
+                    pg_client = None
+                if pg_client is not None:
+                    live_role = await resolve_pg_role_id_for_admin(
+                        profile.pg_admin_username, client=pg_client
+                    )
+                    if live_role:
+                        role_id = int(live_role)
             if role_id:
                 user["pg_role_id"] = int(role_id)
-                features, role = await resolve_reseller_pg_features(int(role_id))
-                user = enrich_staff_pg_from_role(user, features, role)
+                if pg_client is not None:
+                    features, role = await resolve_reseller_pg_features(
+                        int(role_id), client=pg_client
+                    )
+                    user = enrich_staff_pg_from_role(user, features, role)
             # Principal from the server-loaded ResellerProfile only.
             # Cookie org_principal_id / parent / depth / scope are not selectors.
             from app.services.org_principals import (
@@ -498,10 +511,24 @@ def create_api_app(lifespan=None) -> FastAPI:
             # Prefer cached role id; refresh live when PasarGuard is reachable
             if row.pg_role_id:
                 user["pg_role_id"] = int(row.pg_role_id)
-            role_id = await resolve_pg_role_id_for_admin(row.pg_username)
+            pg_client = None
+            try:
+                from app.services.pasarguard import get_pg_for_staff
+
+                pg_client = await get_pg_for_staff(session, staff_id=int(row.id))
+            except Exception:
+                pg_client = None
+            role_id = await resolve_pg_role_id_for_admin(
+                row.pg_username, client=pg_client
+            ) if pg_client is not None else None
             if role_id:
                 user["pg_role_id"] = int(role_id)
-            features, role = await resolve_reseller_pg_features(user.get("pg_role_id"))
+            if user.get("pg_role_id") and pg_client is not None:
+                features, role = await resolve_reseller_pg_features(
+                    user.get("pg_role_id"), client=pg_client
+                )
+            else:
+                features, role = [], None
             # Owner-equivalent PG admins still get mapped features via is_owner on role
             user = enrich_staff_pg_from_role(user, features, role)
             if not (user.get("pg_permissions") or []):
@@ -1471,17 +1498,34 @@ def create_api_app(lifespan=None) -> FastAPI:
                     bot_user_id = ru.id
                     pg_admin_username = profile.pg_admin_username
                     pg_role_id = int(profile.pg_role_id) if profile.pg_role_id else None
+                    pg_client = None
                     if profile.pg_admin_username:
-                        live_role = await resolve_pg_role_id_for_admin(profile.pg_admin_username)
-                        if live_role:
-                            pg_role_id = int(live_role)
-                            if profile.pg_role_id != pg_role_id:
-                                profile.pg_role_id = pg_role_id
-                                try:
-                                    await session.commit()
-                                except Exception:
-                                    await session.rollback()
-                    pg_permissions, pg_role = await resolve_reseller_pg_features(pg_role_id)
+                        try:
+                            from app.services.pasarguard import get_pg_for_reseller
+
+                            pg_client = await get_pg_for_reseller(
+                                session, int(profile.user_id)
+                            )
+                        except Exception:
+                            pg_client = None
+                        if pg_client is not None:
+                            live_role = await resolve_pg_role_id_for_admin(
+                                profile.pg_admin_username, client=pg_client
+                            )
+                            if live_role:
+                                pg_role_id = int(live_role)
+                                if profile.pg_role_id != pg_role_id:
+                                    profile.pg_role_id = pg_role_id
+                                    try:
+                                        await session.commit()
+                                    except Exception:
+                                        await session.rollback()
+                    if pg_client is not None:
+                        pg_permissions, pg_role = await resolve_reseller_pg_features(
+                            pg_role_id, client=pg_client
+                        )
+                    else:
+                        pg_permissions, pg_role = [], None
                     pg_user_actions = role_user_actions(pg_role)
                     pg_access = role_access_limits(pg_role)
                     pg_writes = map_pg_role_writes(pg_role)
@@ -1541,10 +1585,26 @@ def create_api_app(lifespan=None) -> FastAPI:
                     pg_role_id = (
                         int(staff_row.pg_role_id) if staff_row.pg_role_id else None
                     )
-                    live_role = await resolve_pg_role_id_for_admin(staff_row.pg_username)
-                    if live_role:
-                        pg_role_id = live_role
-                    pg_permissions, pg_role = await resolve_reseller_pg_features(pg_role_id)
+                    pg_client = None
+                    try:
+                        from app.services.pasarguard import get_pg_for_staff
+
+                        pg_client = await get_pg_for_staff(
+                            session, staff_id=int(staff_row.id)
+                        )
+                    except Exception:
+                        pg_client = None
+                    if pg_client is not None:
+                        live_role = await resolve_pg_role_id_for_admin(
+                            staff_row.pg_username, client=pg_client
+                        )
+                        if live_role:
+                            pg_role_id = live_role
+                        pg_permissions, pg_role = await resolve_reseller_pg_features(
+                            pg_role_id, client=pg_client
+                        )
+                    else:
+                        pg_permissions, pg_role = [], None
                     pg_user_actions = role_user_actions(pg_role)
                     pg_access = role_access_limits(pg_role)
                     pg_writes = map_pg_role_writes(pg_role)
@@ -1596,13 +1656,25 @@ def create_api_app(lifespan=None) -> FastAPI:
                     pg_user_actions = {}
                     pg_access = {}
                     pg_writes = {}
+                    pg_client = None
                     if auth.pg_username:
-                        live_role = await resolve_pg_role_id_for_admin(auth.pg_username)
-                        if live_role:
-                            pg_role_id = int(live_role)
-                    if pg_role_id:
+                        try:
+                            from app.services.pasarguard import get_pg_for_principal
+
+                            pg_client = await get_pg_for_principal(
+                                session, principal_id=int(auth.principal.id)
+                            )
+                        except Exception:
+                            pg_client = None
+                        if pg_client is not None:
+                            live_role = await resolve_pg_role_id_for_admin(
+                                auth.pg_username, client=pg_client
+                            )
+                            if live_role:
+                                pg_role_id = int(live_role)
+                    if pg_role_id and pg_client is not None:
                         pg_permissions, pg_role = await resolve_reseller_pg_features(
-                            pg_role_id
+                            pg_role_id, client=pg_client
                         )
                         pg_user_actions = role_user_actions(pg_role)
                         pg_access = role_access_limits(pg_role)

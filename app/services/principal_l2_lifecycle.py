@@ -140,7 +140,14 @@ async def _to_l2_view(
 ) -> Level2PrincipalView:
     role_id, role_name = await _provision_role_meta(session, int(row.id))
     if fetch_role_name and role_id is not None and role_name is None:
-        role_name = await _safe_pg_role_name(role_id)
+        client = None
+        try:
+            from app.services.pasarguard import get_pg_for_principal
+
+            client = await get_pg_for_principal(session, principal_id=int(parent.id))
+        except Exception:
+            client = None
+        role_name = await _safe_pg_role_name(role_id, client=client)
     web_status = await _web_identity_status(session, int(row.id))
     parent_active = str(parent.status) == STATUS_ACTIVE
     parent_uname = (str(parent.pg_username).strip() if parent.pg_username else None) or None

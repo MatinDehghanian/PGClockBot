@@ -151,14 +151,16 @@ async def _provision_role_meta(
     return int(row.pg_role_id), None
 
 
-async def _safe_pg_role_name(role_id: int | None) -> str | None:
-    """Best-effort role *name* for display only — never implies hierarchy."""
-    if role_id is None:
+async def _safe_pg_role_name(role_id: int | None, *, client: Any | None = None) -> str | None:
+    """Best-effort role *name* for display only — never implies hierarchy.
+
+    Never uses Owner ``get_pg()`` implicitly. Caller must pass the allowed
+    Principal/parent client (Owner may pass ``get_pg()`` explicitly).
+    """
+    if role_id is None or client is None:
         return None
     try:
-        from app.services.pasarguard import get_pg
-
-        roles = await get_pg().get_admin_roles()
+        roles = await client.get_admin_roles()
     except Exception:
         return None
     if not isinstance(roles, list):
@@ -184,7 +186,10 @@ async def _to_view(
 ) -> Level1PrincipalView:
     role_id, role_name = await _provision_role_meta(session, int(row.id))
     if fetch_role_name and role_id is not None and role_name is None:
-        role_name = await _safe_pg_role_name(role_id)
+        from app.services.pasarguard import get_pg
+
+        # Owner-only L1 lifecycle — explicit Owner client for display metadata.
+        role_name = await _safe_pg_role_name(role_id, client=get_pg())
     web_status = await _web_identity_status(session, int(row.id))
     return Level1PrincipalView(
         principal_id=int(row.id),

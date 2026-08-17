@@ -47,10 +47,27 @@ async def _actor(
     )
 
 
-async def _staff_ctx(profile: ResellerProfile) -> dict:
+async def _staff_ctx(profile: ResellerProfile, session: AsyncSession) -> dict:
     from app.services.pg_access import map_pg_role_writes, resolve_reseller_pg_features, role_access_limits
 
-    pg_permissions, pg_role = await resolve_reseller_pg_features(profile.pg_role_id)
+    pg_client = None
+    try:
+        from app.services.pasarguard import get_pg_for_reseller
+
+        pg_client = await get_pg_for_reseller(session, int(profile.user_id))
+    except Exception:
+        pg_client = None
+    if pg_client is None:
+        return {
+            "role": "reseller",
+            "bot_user_id": profile.user_id,
+            "pg_permissions": [],
+            "pg_access": role_access_limits(None),
+            "pg_writes": map_pg_role_writes(None),
+        }
+    pg_permissions, pg_role = await resolve_reseller_pg_features(
+        profile.pg_role_id, client=pg_client
+    )
     return {
         "role": "reseller",
         "bot_user_id": profile.user_id,
@@ -351,7 +368,7 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
         await state.clear()
         await message.answer("نماینده نیستید.")
         return
-    staff = await _staff_ctx(profile)
+    staff = await _staff_ctx(profile, session)
     templates, groups, pg_error = await load_pg_plan_options(staff, session=session)
     await state.update_data(templates=templates, groups=groups, owner_id=owner_id)
     rows: list[list[InlineKeyboardButton]] = []
@@ -464,7 +481,7 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
         return
     data = await state.get_data()
     selected = [int(x) for x in (data.get("selected_groups") or [])]
-    staff = await _staff_ctx(profile)
+    staff = await _staff_ctx(profile, session)
     if not selected or not groups_allowed_for_staff(staff, selected):
         await callback.answer("حداقل یک گروه مجاز انتخاب کنید", show_alert=True)
         return
@@ -527,7 +544,7 @@ async def res_plan_save_tpl(callback: CallbackQuery, state: FSMContext, session:
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     tid = int(callback.data.split(":")[-1])
-    staff = await _staff_ctx(profile)
+    staff = await _staff_ctx(profile, session)
     if not template_allowed_for_staff(staff, tid):
         await callback.answer("به این تمپلیت دسترسی ندارید", show_alert=True)
         return

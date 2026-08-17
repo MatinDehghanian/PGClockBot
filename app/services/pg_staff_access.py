@@ -912,12 +912,22 @@ async def change_staff_credentials(
     return row, None
 
 
-async def resolve_pg_role_id_for_admin(pg_username: str) -> int | None:
-    """Look up role_id for a PasarGuard admin username."""
-    from app.services.pasarguard import get_pg
+async def resolve_pg_role_id_for_admin(
+    pg_username: str, *, client: Any | None = None
+) -> int | None:
+    """Look up role_id for a PasarGuard admin username.
+
+    ``client`` must be the caller-allowed PG client. Omitting it uses Owner
+    ``get_pg()`` — Owner/platform paths only.
+    """
+    pg = client
+    if pg is None:
+        from app.services.pasarguard import get_pg
+
+        pg = get_pg()
 
     try:
-        admin = await get_pg().get_admin(pg_username)
+        admin = await pg.get_admin(pg_username)
     except Exception:
         return None
     if not isinstance(admin, dict):

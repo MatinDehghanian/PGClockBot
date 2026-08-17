@@ -9,7 +9,7 @@ menus/actions are clamped to the env ``PG_USERNAME`` role (fail-closed).
 """
 
 import time
-from typing import Any
+from typing import Any, Mapping
 
 # Our panel feature keys (shown in sidebar under «پاسارگارد»)
 PG_FEATURE_KEYS = (
@@ -406,8 +406,16 @@ def role_access_limits(role: dict | None) -> dict:
     }
 
 
-async def resolve_reseller_pg_features(pg_role_id: int | None) -> tuple[list[str], dict | None]:
-    """Fetch role from PasarGuard and return (feature_keys, raw_role). Cached ~60s."""
+async def resolve_reseller_pg_features(
+    pg_role_id: int | None,
+    *,
+    client: Any | None = None,
+) -> tuple[list[str], dict | None]:
+    """Fetch role from PasarGuard and return (feature_keys, raw_role). Cached ~60s.
+
+    ``client`` must be the caller-allowed PG client (Principal/parent/reseller/staff).
+    Omitting ``client`` uses Owner ``get_pg()`` — Owner/platform paths only.
+    """
     if not pg_role_id:
         return [], None
     rid = int(pg_role_id)
@@ -416,15 +424,19 @@ async def resolve_reseller_pg_features(pg_role_id: int | None) -> tuple[list[str
     if hit and (now - hit[0]) < _ROLE_CACHE_TTL:
         return list(hit[1]), dict(hit[2]) if isinstance(hit[2], dict) else hit[2]
 
-    from app.services.pasarguard import get_pg
+    pg = client
+    if pg is None:
+        from app.services.pasarguard import get_pg
+
+        pg = get_pg()
 
     role = None
     try:
-        role = await get_pg().get_admin_role(rid)
+        role = await pg.get_admin_role(rid)
     except Exception:
         # Fallback: try list and find by id
         try:
-            roles = await get_pg().get_admin_roles()
+            roles = await pg.get_admin_roles()
             role = next((r for r in roles if int(r.get("id") or 0) == rid), None)
         except Exception:
             return [], None
@@ -435,11 +447,35 @@ async def resolve_reseller_pg_features(pg_role_id: int | None) -> tuple[list[str
     return features, role
 
 
+def staff_has_pg_admins_create(staff: Mapping[str, Any] | None) -> bool:
+    """True only for actual PasarGuard ``admins.create`` — not page visibility."""
+    if not staff:
+        return False
+    actions = staff.get("pg_actions")
+    if isinstance(actions, Mapping):
+        for key in ("admins", "admin"):
+            block = actions.get(key)
+            if isinstance(block, Mapping) and _action_allowed(block.get("create")):
+                return True
+    role = staff.get("pg_role")
+    if isinstance(role, Mapping):
+        raw = role.get("permissions")
+        if isinstance(raw, Mapping):
+            for key in ("admins", "admin"):
+                block = raw.get(key)
+                if isinstance(block, Mapping) and _action_allowed(block.get("create")):
+                    return True
+    return False
+
+
 def enrich_staff_pg_from_role(user: dict, features: list[str], role: dict | None) -> dict:
     """Attach live PG ACL fields onto a staff dict (mutates a copy)."""
     out = dict(user)
     out["pg_permissions"] = list(features or [])
     if role:
+        # Keep raw role so ``admins.create`` can be checked without treating
+        # ``pg_admins`` page visibility as authority.
+        out["pg_role"] = dict(role)
         out["pg_writes"] = map_pg_role_writes(role)
         out["pg_actions"] = map_pg_role_actions(role)
         out["pg_user_actions"] = role_user_actions(role)
