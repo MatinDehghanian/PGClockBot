@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "7.0.5": [
+        "سایدبار و پورتال ربات/پاسارگارد: پس‌زمینه خنثی با حاشیه گرادیانی نرم",
+        "تیتر صفحات و مودال‌ها با اکسنت ظریف؛ فاصله داخل مودال بیشتر",
+        "سرعت امن: فونت محلی، Gzip، کش GET پاسارگارد و شمارنده سایدبار (بدون nav-swap و pulse)",
+        "ریستور قبل از این کار: cursor/restore-before-chrome-polish-5b2d",
+    ],
     "7.0.4": [
         "بازگشت کامل به درخت v7.0.2 (لغو تغییرات UX/سرعت v7.0.3)",
         "ریستور از نقطهٔ cursor/restore-before-ux-speed-pulse-5b2d",
