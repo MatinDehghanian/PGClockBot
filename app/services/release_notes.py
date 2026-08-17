@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "7.0.4": [
+        "بازگشت کامل به درخت v7.0.2 (لغو تغییرات UX/سرعت v7.0.3)",
+        "ریستور از نقطهٔ cursor/restore-before-ux-speed-pulse-5b2d",
+    ],
     "7.0.3": [
         "داشبورد اول فقط از دیتابیس محلی؛ اتصال ربات و پاسارگارد بعد از بارگذاری",
         "فونت وزیرمتن روی خود پنل؛ Gzip و کش کوتاه GET پاسارگارد و شمارنده‌های سایدبار",

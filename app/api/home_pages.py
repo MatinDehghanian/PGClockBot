@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, Payment, PaymentStatus, Plan, Ticket, UserService
 from app.services.host_gauges import gauges_json, local_host_gauges
+from app.services.home_overview import build_home_overview
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
 
 logger = logging.getLogger(__name__)
@@ -72,18 +73,6 @@ _EMPTY_ACTION = {
     "has_items": False,
 }
 
-_EMPTY_WALLET = {
-    "kind": "none",
-    "title": "کیف پول",
-    "balance": None,
-    "balance_fa": None,
-    "wallet_pay": False,
-    "pending": 0,
-    "suspended": False,
-    "href": "/finance",
-    "hint": "",
-}
-
 
 async def _safe_funnel(session: AsyncSession, *, reseller_id: int | None):
     from app.services.db_safe import rollback_quiet
@@ -121,84 +110,6 @@ async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None,
         logger.exception("action_center failed reseller_id=%s", reseller_id)
         await rollback_quiet(session)
         return dict(_EMPTY_ACTION)
-
-
-async def _safe_wallet_card(
-    session: AsyncSession,
-    *,
-    staff: dict,
-    profile=None,
-    billing_card: dict | None = None,
-    ui: dict | None = None,
-    reseller_id: int | None = None,
-) -> dict:
-    from app.services.formatting import format_toman
-    from app.services.users import on
-
-    ui = ui or {}
-    wallet_pay = on(ui.get("pay_wallet_enabled", "1"))
-    try:
-        if is_platform_admin(staff):
-            pending = int(
-                (
-                    await session.execute(
-                        select(func.count())
-                        .select_from(Payment)
-                        .where(
-                            Payment.status == PaymentStatus.PENDING.value,
-                            Payment.is_wallet_topup.is_(True),
-                            Payment.receipt_file_id.is_not(None),
-                        )
-                    )
-                ).scalar()
-                or 0
-            )
-            return {
-                "kind": "platform",
-                "title": "کیف پول فروشگاه",
-                "balance": None,
-                "balance_fa": None,
-                "wallet_pay": wallet_pay,
-                "pending": pending,
-                "suspended": False,
-                "href": "/finance?tab=payments",
-                "hint": "پرداخت با کیف پول برای مشتری "
-                + ("فعال است" if wallet_pay else "خاموش است"),
-            }
-        if billing_card:
-            return {
-                "kind": "payg",
-                "title": "کیف پول فروشگاهی",
-                "balance": billing_card.get("balance"),
-                "balance_fa": billing_card.get("balance_fa"),
-                "wallet_pay": True,
-                "pending": 0,
-                "suspended": bool(billing_card.get("suspended")),
-                "href": "/shop-settings",
-                "hint": "مصرف ترافیک از همین موجودی کسر می‌شود",
-            }
-        bal = 0
-        if reseller_id:
-            u = await session.get(BotUser, int(reseller_id))
-            if u is not None:
-                bal = int(getattr(u, "wallet_balance", 0) or 0)
-        return {
-            "kind": "shop",
-            "title": "کیف پول",
-            "balance": bal,
-            "balance_fa": format_toman(bal),
-            "wallet_pay": wallet_pay,
-            "pending": 0,
-            "suspended": False,
-            "href": "/shop-settings",
-            "hint": "موجودی فروشگاه شما",
-        }
-    except Exception:
-        logger.exception("wallet card failed")
-        from app.services.db_safe import rollback_quiet
-
-        await rollback_quiet(session)
-        return dict(_EMPTY_WALLET)
 
 
 async def _safe_pg_health(*, reseller_user_id: int | None = None, session: AsyncSession | None = None):
@@ -335,9 +246,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
 
         periods = empty_period_stats()
         action = dict(_EMPTY_ACTION)
-        from app.services.home_overview import build_home_pulse
-
-        pulse = build_home_pulse(periods=periods, action_center=action)
         if dest_target == "home.html" or is_platform_admin(staff):
             return (
                 "home.html",
@@ -349,8 +257,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "funnel": dict(_EMPTY_FUNNEL),
                     "periods": periods,
                     "action_center": action,
-                    "wallet_card": dict(_EMPTY_WALLET),
-                    "pulse": pulse,
                     "dashboard_degraded": True,
                 },
             )
@@ -369,8 +275,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "unchecked": True,
                 },
                 "billing_card": None,
-                "wallet_card": dict(_EMPTY_WALLET),
-                "pulse": pulse,
                 "pg_health": dict(_UNCHECKED_CONN),
                 "funnel_enabled": False,
                 "funnel": dict(_EMPTY_FUNNEL),
@@ -384,31 +288,15 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         # Platform admin: server + both panels.
         if is_platform_admin(staff):
             from app.services.db_safe import recover_session, rollback_quiet
-            from app.services.home_overview import (
-                build_home_pulse,
-                build_home_shell,
-                empty_home_overview,
-            )
+            from app.services.home_overview import empty_home_overview
 
             await recover_session(session)
             try:
-                overview = await build_home_shell(session)
+                overview = await build_home_overview(session)
             except Exception:
-                logger.exception("build_home_shell failed")
+                logger.exception("build_home_overview failed")
                 await rollback_quiet(session)
                 overview = empty_home_overview()
-                overview["bot"] = {
-                    "ok": None,
-                    "error": None,
-                    "username": None,
-                    "name": None,
-                    "unchecked": True,
-                }
-                overview["nodes"] = {
-                    **(overview.get("nodes") or {}),
-                    "unchecked": True,
-                    "overall": "neutral",
-                }
             from app.services.users import get_all_settings, on
 
             try:
@@ -417,7 +305,13 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 logger.exception("home get_all_settings failed")
                 await rollback_quiet(session)
                 ui = {}
+            pg_health = await _safe_pg_health()
             funnel_enabled = on(ui.get("funnel_tracking_enabled", "1"))
+            funnel = (
+                await _safe_funnel(session, reseller_id=None)
+                if funnel_enabled
+                else dict(_EMPTY_FUNNEL)
+            )
             try:
                 expire_days = int(ui.get("action_center_expire_days") or 3)
             except (TypeError, ValueError):
@@ -426,25 +320,16 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             action_center = await _safe_action_center(
                 session, reseller_id=None, expire_days=expire_days
             )
-            wallet_card = await _safe_wallet_card(session, staff=staff, ui=ui)
-            funnel = (
-                await _safe_funnel(session, reseller_id=None)
-                if funnel_enabled
-                else dict(_EMPTY_FUNNEL)
-            )
-            pulse = build_home_pulse(periods=periods, action_center=action_center)
             return (
                 "home.html",
                 {
                     "staff": staff,
                     "overview": overview,
-                    "pg_health": dict(_UNCHECKED_CONN),
+                    "pg_health": pg_health,
                     "funnel_enabled": funnel_enabled,
                     "funnel": funnel,
                     "periods": periods,
                     "action_center": action_center,
-                    "wallet_card": wallet_card,
-                    "pulse": pulse,
                     "dashboard_degraded": False,
                 },
             )
@@ -459,7 +344,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         from app.config import get_settings
         from app.db.models import ResellerProfile
         from app.services.db_safe import recover_session, rollback_quiet
-        from app.services.home_overview import build_home_pulse
+        from app.services.home_overview import check_bot_connection
         from app.services.resellers import bot_needs_setup
 
         await recover_session(session)
@@ -476,13 +361,17 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             profile = None
 
         bot_setup_needed = bot_needs_setup(profile)
-        bot = {
-            "ok": None,
-            "error": None,
-            "username": None,
-            "name": None,
-            "unchecked": True,
-        }
+        try:
+            stats = (
+                await _reseller_shop_stats(session, int(rid))
+                if not bot_setup_needed
+                else empty_shop_stats()
+            )
+        except Exception:
+            logger.exception("reseller home stats failed rid=%s", rid)
+            await rollback_quiet(session)
+            stats = empty_shop_stats()
+        # Tenant bot only — never probe platform BOT_TOKEN (empty must stay unset).
         bot_token = ((profile.bot_token if profile else None) or "").strip()
         main_token = (get_settings().bot_token or "").strip()
         if not bot_token or (main_token and bot_token == main_token):
@@ -492,6 +381,36 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "username": None,
                 "name": None,
             }
+        else:
+            try:
+                bot = await check_bot_connection(bot_token)
+            except Exception:
+                logger.exception("reseller home bot probe failed rid=%s", rid)
+                bot = {
+                    "ok": False,
+                    "error": "بررسی ربات ناموفق",
+                    "username": None,
+                    "name": None,
+                }
+
+        pg_limits = None
+        if staff.get("pg_admin_username"):
+            from app.services.pg_overview import build_reseller_pg_overview
+
+            try:
+                ov = await build_reseller_pg_overview(staff, session=session)
+                if ov.get("ready"):
+                    pg_limits = ov
+                    try:
+                        from app.services.ux20 import maybe_warn_reseller_capacity
+
+                        await maybe_warn_reseller_capacity(session, profile, pg_limits)
+                    except Exception:
+                        await rollback_quiet(session)
+            except Exception:
+                logger.exception("reseller home pg overview failed rid=%s", rid)
+                await rollback_quiet(session)
+                pg_limits = None
 
         billing_card = None
         if profile is not None:
@@ -522,54 +441,34 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             logger.exception("reseller home get_all_settings failed rid=%s", rid)
             await rollback_quiet(session)
             ui = {}
+        pg_health = await _safe_pg_health(
+            reseller_user_id=int(rid) if staff.get("pg_admin_username") else None,
+            session=session if staff.get("pg_admin_username") else None,
+        )
         funnel_enabled = on(ui.get("funnel_tracking_enabled", "1"))
-        try:
-            expire_days = int(ui.get("action_center_expire_days") or 3)
-        except (TypeError, ValueError):
-            expire_days = 3
-        async def _stats_job():
-            if bot_setup_needed:
-                return empty_shop_stats()
-            try:
-                return await _reseller_shop_stats(session, int(rid))
-            except Exception:
-                logger.exception("reseller home stats failed rid=%s", rid)
-                from app.services.db_safe import rollback_quiet as _rb
-
-                await _rb(session)
-                return empty_shop_stats()
-
-        stats = await _stats_job()
-        periods = await _safe_periods(session, reseller_id=int(rid))
-        action_center = await _safe_action_center(
-            session, reseller_id=int(rid), expire_days=expire_days
-        )
-        wallet_card = await _safe_wallet_card(
-            session,
-            staff=staff,
-            profile=profile,
-            billing_card=billing_card,
-            ui=ui,
-            reseller_id=int(rid),
-        )
         funnel = (
             await _safe_funnel(session, reseller_id=int(rid))
             if funnel_enabled
             else dict(_EMPTY_FUNNEL)
         )
-        pulse = build_home_pulse(periods=periods, action_center=action_center)
+        try:
+            expire_days = int(ui.get("action_center_expire_days") or 3)
+        except (TypeError, ValueError):
+            expire_days = 3
+        periods = await _safe_periods(session, reseller_id=int(rid))
+        action_center = await _safe_action_center(
+            session, reseller_id=int(rid), expire_days=expire_days
+        )
         return (
             "reseller_home.html",
             {
                 "staff": staff,
                 "stats": stats,
-                "pg_limits": None,
+                "pg_limits": pg_limits,
                 "bot_setup_needed": bot_setup_needed,
                 "bot": bot,
                 "billing_card": billing_card,
-                "wallet_card": wallet_card,
-                "pulse": pulse,
-                "pg_health": dict(_UNCHECKED_CONN),
+                "pg_health": pg_health,
                 "funnel_enabled": funnel_enabled,
                 "funnel": funnel,
                 "periods": periods,
@@ -577,97 +476,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 "dashboard_degraded": False,
             },
         )
-
-    @app.get("/home/live")
-    async def home_live(
-        staff: dict = Depends(require_staff),
-        session: AsyncSession = Depends(get_db),
-    ):
-        """Hydrate connection tiles after HTML — never block first paint."""
-        from app.config import get_settings
-        from app.services.home_overview import check_bot_connection, pg_home_bundle
-        from app.services.setup_wizard import current_setup_values
-
-        payload: dict = {
-            "bot": dict(_UNCHECKED_CONN),
-            "pg_health": dict(_UNCHECKED_CONN),
-            "nodes": {
-                "ok": None,
-                "error": None,
-                "total": 0,
-                "connected": 0,
-                "overall": "neutral",
-                "unchecked": True,
-            },
-            "pg_limits": None,
-        }
-        if is_platform_admin(staff):
-            token = current_setup_values().get("BOT_TOKEN")
-            bot, pg_health, pg_pair = await asyncio.gather(
-                check_bot_connection(token),
-                _safe_pg_health(),
-                pg_home_bundle(),
-                return_exceptions=True,
-            )
-            if isinstance(bot, dict):
-                payload["bot"] = bot
-            elif isinstance(bot, Exception):
-                payload["bot"] = {"ok": False, "error": "بررسی ربات ناموفق"}
-            if isinstance(pg_health, dict):
-                payload["pg_health"] = pg_health
-            if isinstance(pg_pair, tuple) and len(pg_pair) == 2:
-                _summary, nodes = pg_pair
-                if isinstance(nodes, dict):
-                    payload["nodes"] = nodes
-            return JSONResponse(payload)
-
-        rid = shop_owner_id(staff)
-        from app.db.models import ResellerProfile
-
-        profile = None
-        if rid:
-            profile = (
-                await session.execute(
-                    select(ResellerProfile).where(ResellerProfile.user_id == int(rid))
-                )
-            ).scalar_one_or_none()
-        bot_token = ((profile.bot_token if profile else None) or "").strip()
-        main_token = (get_settings().bot_token or "").strip()
-        if not bot_token or (main_token and bot_token == main_token):
-            payload["bot"] = {
-                "ok": False,
-                "error": "توکن تنظیم نشده" if not bot_token else "توکن نامعتبر",
-                "username": None,
-                "name": None,
-            }
-        else:
-            try:
-                bot_res = await check_bot_connection(bot_token)
-                if isinstance(bot_res, dict):
-                    payload["bot"] = bot_res
-            except Exception:
-                payload["bot"] = {"ok": False, "error": "بررسی ربات ناموفق"}
-        if rid and staff.get("pg_admin_username"):
-            payload["pg_health"] = await _safe_pg_health(
-                reseller_user_id=int(rid), session=session
-            )
-            try:
-                from app.services.pg_overview import build_reseller_pg_overview
-
-                result = await build_reseller_pg_overview(staff, session=session)
-                if isinstance(result, dict) and result.get("ready"):
-                    payload["pg_limits"] = {
-                        "ready": True,
-                        "username": result.get("username"),
-                        "status_label": result.get("status_label"),
-                        "status_badge": result.get("status_badge"),
-                        "lifetime_text": result.get("lifetime_text"),
-                        "users": result.get("users"),
-                        "traffic": result.get("traffic"),
-                    }
-            except Exception:
-                logger.exception("home live pg limits failed")
-        return JSONResponse(payload)
 
     @app.get("/home/metrics")
     async def home_metrics_json(staff: dict = Depends(require_admin)):

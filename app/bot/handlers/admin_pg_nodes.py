@@ -102,11 +102,9 @@ class PgNodeStates(StatesGroup):
 
 
 def _err_msg(exc: Exception) -> str:
-    from app.services.user_facing_errors import user_facing_error
-
     if isinstance(exc, PasarGuardError):
-        return user_facing_error("pg_outage", fallback=exc.user_message(fallback="پاسارگارد در دسترس نیست."))
-    return user_facing_error(None, fallback=str(exc) or "الان امکان انجام این کار نیست.")
+        return exc.user_message(fallback=str(exc))
+    return str(exc) or "خطا"
 
 
 def _nodes_list_kb(items: list) -> InlineKeyboardMarkup:

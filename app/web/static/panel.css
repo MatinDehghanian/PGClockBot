@@ -110,51 +110,6 @@ a { color: var(--foreground); text-decoration: none; }
 a:hover { opacity: 0.8; }
 .muted { color: var(--muted-fg); }
 
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-1);
-  padding: var(--space-3);
-  border-radius: var(--radius);
-  border: 1px dashed color-mix(in srgb, var(--border) 70%, var(--brand) 30%);
-  background: color-mix(in srgb, var(--brand) 5%, var(--bg-card));
-}
-.empty-state strong {
-  font-size: 14px;
-  font-weight: 650;
-}
-.empty-state .muted {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-}
-.empty-state .btn { margin-top: var(--space-1); }
-
-.page-split {
-  display: grid;
-  gap: var(--section-gap);
-  align-items: start;
-}
-@media (min-width: 1100px) {
-  .page-split {
-    grid-template-columns: minmax(0, 1.25fr) minmax(16rem, 0.75fr);
-  }
-}
-.page-split-aside {
-  padding: var(--space-3);
-}
-.page-split-aside h2,
-.page-split-aside h3 { margin: 0 0 var(--space-1); }
-.page-split-aside p { margin: 0; }
-
-.main-body a:not(.btn):not(.nav):not(.home-portal):not(.home-conn):not(.home-action-item):not(.logout-link) {
-  color: var(--primary-fg);
-}
-.main-body a:not(.btn):not(.nav):not(.home-portal):not(.home-conn):not(.home-action-item):not(.logout-link):hover {
-  opacity: 0.85;
-}
-
 /* Global: text must never paint outside its chrome — truncate with … */
 .page-title > span,
 .page-title > strong,
@@ -2191,10 +2146,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   display: grid;
   place-items: center;
   padding: calc(var(--space-3) + var(--safe-top)) calc(var(--space-2) + var(--safe-right)) calc(var(--space-3) + var(--safe-bottom)) calc(var(--space-2) + var(--safe-left));
-  background:
-    radial-gradient(520px 240px at 100% -8%, rgba(249, 115, 22, 0.16), transparent 55%),
-    radial-gradient(420px 200px at 0% 12%, rgba(59, 130, 246, 0.08), transparent 50%),
-    var(--background);
+  background: var(--background);
 }
 .auth-panel {
   width: min(380px, 100%);
@@ -4520,7 +4472,7 @@ body.modal-open .side {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: calc(var(--space-3) + var(--safe-top)) calc(var(--space-3) + var(--safe-right)) calc(var(--space-3) + var(--safe-bottom)) calc(var(--space-3) + var(--safe-left));
+  padding: calc(var(--space-2) + var(--safe-top)) calc(var(--space-2) + var(--safe-right)) calc(var(--space-2) + var(--safe-bottom)) calc(var(--space-2) + var(--safe-left));
   direction: rtl;
   font-family: var(--font);
   font-size: 14px;
@@ -4551,7 +4503,7 @@ body.modal-open .side {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
-  padding: var(--space-3);
+  padding: var(--card-pad);
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--bg-card);
@@ -5023,9 +4975,7 @@ td.byte-size {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  margin: calc(var(--space-0) * -1) calc(var(--space-0) * -1) var(--space-3);
-  padding: 0 0 var(--space-2);
-  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-2);
 }
 /* Modal chrome title matches page titles (not the tiny section --title-size) */
 .ui-modal-head h1,
