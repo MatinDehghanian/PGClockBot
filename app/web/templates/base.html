@@ -24,14 +24,6 @@
       var theme = pref === "light" ? "light" : pref === "dark" ? "dark" : dark ? "dark" : "light";
       document.documentElement.setAttribute("data-theme", theme);
     } catch (e) {}
-    /* Carry skeleton across in-app navigations — no forced delay after paint. */
-    try {
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      if (sessionStorage.getItem("pg-page-nav") === "1") {
-        document.documentElement.classList.add("page-loading");
-        sessionStorage.removeItem("pg-page-nav");
-      }
-    } catch (e) {}
   })();
   </script>
   {% block head %}{% endblock %}
@@ -39,21 +31,16 @@
 <body>
   {% if staff is defined and staff %}
   <script>
-  /* Reveal ASAP once DOM is ready. Skeleton only appears when page-loading was
-     set on the previous click (or via sessionStorage above) — never a min delay. */
+  /* Next page paints immediately. Skeleton lives only on the departing
+     document while waiting — never hide arrived HTML, never min delay. */
   (function () {
     try {
       var html = document.documentElement;
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        html.classList.remove("page-loading", "page-booting");
-        html.classList.add("page-ready");
-        return;
-      }
-      var wasLoading = html.classList.contains("page-loading");
+      html.classList.remove("page-loading", "page-booting");
+      html.classList.add("page-ready");
       window.__pgPageReveal = function () {
         html.classList.remove("page-loading", "page-booting");
         html.classList.add("page-ready");
-        if (wasLoading) html.classList.add("page-was-slow");
       };
     } catch (e) {}
   })();

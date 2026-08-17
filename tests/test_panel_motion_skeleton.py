@@ -61,7 +61,8 @@ class PageSkeletonTests(unittest.TestCase):
         self.assertIn("page-ready", js)
         self.assertIn("function closeModal(el, opts)", js)
         self.assertIn("is-closing", js)
-        self.assertIn("pg-page-nav", js)
+        self.assertIn("SKELETON_WAIT_MS", js)
+        self.assertNotIn("pg-page-nav", js)
         self.assertNotIn("minMs", js)
 
 

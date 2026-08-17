@@ -17,25 +17,26 @@ class NavSkeletonNoDelayTests(unittest.TestCase):
     def test_no_forced_min_delay(self):
         js = JS.read_text(encoding="utf-8")
         self.assertNotIn("minMs", js)
-        self.assertIn("pg-page-nav", js)
+        self.assertIn("SKELETON_WAIT_MS", js)
         self.assertIn("__pgPageReveal", js)
         # Reveal on DOM ready, not window.load wait
         self.assertIn("DOMContentLoaded", js)
 
     def test_nav_intercept_shows_skeleton(self):
         js = JS.read_text(encoding="utf-8")
-        self.assertIn("sessionStorage.setItem('pg-page-nav'", js)
+        self.assertIn("armSkeleton", js)
         self.assertIn("html.classList.add('page-loading')", js)
         self.assertIn("addEventListener('click'", js)
         self.assertIn("addEventListener('submit'", js)
+        self.assertNotIn("sessionStorage.setItem('pg-page-nav'", js)
 
     def test_head_carries_nav_flag(self):
         html = BASE.read_text(encoding="utf-8")
-        self.assertIn('sessionStorage.getItem("pg-page-nav")', html)
-        self.assertIn('classList.add("page-loading")', html)
-        # No 280ms arm timer that races with DOMContentLoaded
+        self.assertNotIn('sessionStorage.getItem("pg-page-nav")', html)
+        self.assertNotIn('classList.add("page-loading")', html)
         self.assertNotIn(", 280)", html)
         self.assertIn("__pgPageReveal", html)
+        self.assertNotIn("page-was-slow", html)
 
     def test_content_visible_without_nav(self):
         css = CSS.read_text(encoding="utf-8")

@@ -18,17 +18,33 @@
     if (back) back.addEventListener('click', () => setOpen(false));
     side && side.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setOpen(false)));
 
-    /* Page skeleton: show on in-app nav while waiting for the next page.
-       Never force a minimum delay after content is ready. */
+    /* Page skeleton: only after a short wait on the *current* document.
+       Fast navigations keep the old page until unload — next HTML paints
+       immediately (no hide + 380ms fade on arrival). */
     (function () {
       const html = document.documentElement;
+      const SKELETON_WAIT_MS = 150;
+      let skTimer = 0;
       function revealPage() {
+        if (skTimer) {
+          clearTimeout(skTimer);
+          skTimer = 0;
+        }
         if (typeof window.__pgPageReveal === 'function') {
           window.__pgPageReveal();
           return;
         }
         html.classList.remove('page-loading', 'page-booting');
         html.classList.add('page-ready');
+      }
+      function armSkeleton() {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        if (skTimer) clearTimeout(skTimer);
+        skTimer = window.setTimeout(() => {
+          skTimer = 0;
+          html.classList.add('page-loading');
+          html.classList.remove('page-ready', 'page-booting');
+        }, SKELETON_WAIT_MS);
       }
       function scheduleReveal() {
         const go = () => requestAnimationFrame(revealPage);
@@ -54,12 +70,7 @@
         try { url = new URL(href, window.location.href); } catch (err) { return; }
         if (url.origin !== window.location.origin) return;
         if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) return;
-        try {
-          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-          sessionStorage.setItem('pg-page-nav', '1');
-          html.classList.add('page-loading');
-          html.classList.remove('page-ready', 'page-booting', 'page-was-slow');
-        } catch (err) {}
+        armSkeleton();
       }, true);
 
       document.addEventListener('submit', (e) => {
@@ -67,12 +78,7 @@
         if (!form || form.tagName !== 'FORM') return;
         if (form.target && form.target !== '_self') return;
         if (form.hasAttribute('data-no-skeleton')) return;
-        try {
-          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-          sessionStorage.setItem('pg-page-nav', '1');
-          html.classList.add('page-loading');
-          html.classList.remove('page-ready', 'page-booting', 'page-was-slow');
-        } catch (err) {}
+        armSkeleton();
       }, true);
     })();
 

@@ -17,21 +17,23 @@ class LazySkeletonTests(unittest.TestCase):
         js = JS.read_text(encoding="utf-8")
         self.assertNotIn("minMs", js)
         self.assertIn("__pgPageReveal", js)
-        # Nav flag is required so skeleton can show during TTFB without delaying paint
-        self.assertIn("pg-page-nav", js)
+        self.assertIn("SKELETON_WAIT_MS", js)
+        self.assertNotIn("pg-page-nav", js)
 
     def test_skeleton_from_nav_not_timer(self):
         html = BASE.read_text(encoding="utf-8")
-        self.assertIn("pg-page-nav", html)
+        self.assertNotIn("pg-page-nav", html)
         self.assertIn("__pgPageReveal", html)
         self.assertNotIn(", 280)", html)
         self.assertNotIn('classList.add("page-booting")', html)
+        self.assertNotIn('classList.add("page-was-slow")', html)
+        self.assertNotIn("page-was-slow", html)
 
     def test_content_visible_by_default(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertNotIn("html.page-booting .page-surface", css)
         self.assertIn("html.page-loading .page-skeleton", css)
-        self.assertIn("page-was-slow", css)
+        self.assertNotIn("page-was-slow", css)
 
 
 class StrongerMotionTests(unittest.TestCase):
