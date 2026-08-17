@@ -27,25 +27,11 @@
   --info-fg: #60a5fa;
   --brand: #f97316;
   --brand-fg: #fb923c;
-  /* Bot (orange) / PasarGuard (blue) chrome — neutral fills, soft gradient edges */
-  --bot-edge: #f97316;
-  --bot-edge-soft: #fb923c;
-  --pg-edge: #3b82f6;
-  --pg-edge-soft: #60a5fa;
-  --bot-border-grad: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--bot-edge-soft) 88%, #fff) 0%,
-    color-mix(in srgb, var(--bot-edge) 42%, transparent) 46%,
-    color-mix(in srgb, #ea580c 72%, transparent) 100%
-  );
-  --pg-border-grad: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--pg-edge-soft) 88%, #fff) 0%,
-    color-mix(in srgb, var(--pg-edge) 40%, transparent) 46%,
-    color-mix(in srgb, #2563eb 72%, transparent) 100%
-  );
-  --bot-title-grad: linear-gradient(90deg, var(--bot-edge-soft), color-mix(in srgb, var(--bot-edge) 35%, transparent));
-  --pg-title-grad: linear-gradient(90deg, var(--pg-edge-soft), color-mix(in srgb, var(--pg-edge) 35%, transparent));
+  /* Bot / PG solid chrome — no gradient borders */
+  --bot-line: #e08a3c;
+  --pg-line: #3d8fd1;
+  --bot-fill: color-mix(in srgb, var(--bot-line) 12%, transparent);
+  --pg-fill: color-mix(in srgb, var(--pg-line) 12%, transparent);
   /* Motion — visible but calm */
   --motion-fast: 180ms;
   --motion-med: 280ms;
@@ -538,28 +524,10 @@ tr.principal-row-l2 td:first-child {
   width: 100%;
 }
 .page-title {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-1_5);
+  gap: var(--space-1);
   min-width: 0;
-  padding-bottom: var(--space-1_5);
-}
-.page-title::after {
-  content: "";
-  position: absolute;
-  inset-inline-start: calc(var(--space-4_5) + var(--space-1_5));
-  bottom: 0;
-  width: 2.75rem;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--bot-title-grad);
-  opacity: 0.9;
-}
-.page-title--pg::after { background: var(--pg-title-grad); }
-.page-title--neutral::after {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--muted-fg) 55%, transparent), transparent);
-  opacity: 0.7;
 }
 .page-title-ico {
   display: inline-flex;
@@ -571,11 +539,9 @@ tr.principal-row-l2 td:first-child {
   outline: none;
   box-shadow: none;
   border-radius: 18px;
-  border: 1px solid transparent;
-  background:
-    linear-gradient(var(--bg-card), var(--bg-card)) padding-box,
-    var(--bot-border-grad) border-box;
-  color: var(--brand-fg);
+  border: 1px solid color-mix(in srgb, var(--bot-line) 55%, var(--border));
+  background: var(--bg-card);
+  color: var(--bot-line);
   animation: page-title-ico-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .page-title-ico svg {
@@ -588,10 +554,9 @@ tr.principal-row-l2 td:first-child {
   stroke-linejoin: round;
 }
 .page-title-ico--pg {
-  background:
-    linear-gradient(var(--bg-card), var(--bg-card)) padding-box,
-    var(--pg-border-grad) border-box;
-  color: var(--primary-fg);
+  border-color: color-mix(in srgb, var(--pg-line) 55%, var(--border));
+  background: var(--bg-card);
+  color: var(--pg-line);
 }
 .page-title-ico--neutral {
   border: 1px solid var(--border);
@@ -602,8 +567,8 @@ tr.principal-row-l2 td:first-child {
 .page-title h1 {
   margin: 0;
   font-size: 22px;
-  font-weight: 650;
-  letter-spacing: -0.025em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   line-height: 1.25;
   animation: page-title-text-in 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -3629,9 +3594,9 @@ form.settings-form > .actions.sticky-actions,
   height: var(--btn-h);
   /* Same soft square as v4.3.10 — not pill / not card radius */
   border-radius: var(--r-sm);
-  border: 1px solid rgba(249, 115, 22, 0.4);
-  background: rgba(249, 115, 22, 0.12);
-  color: var(--brand-fg);
+  border: 1px solid color-mix(in srgb, var(--bot-line) 40%, var(--border));
+  background: transparent;
+  color: var(--bot-line);
   cursor: pointer;
   display: inline-grid;
   place-items: center;
@@ -4457,45 +4422,45 @@ form.settings-form > .actions.sticky-actions,
 }
 .nav-section-bot:first-child { margin-top: var(--space-1); }
 .nav-section-bot {
-  border: 1px solid transparent;
-  background:
-    linear-gradient(var(--bg-card), var(--bg-card)) padding-box,
-    var(--bot-border-grad) border-box;
+  border: 1px solid color-mix(in srgb, var(--bot-line) 38%, var(--border));
+  background: transparent;
 }
 .nav-section-pg {
-  border: 1px solid transparent;
-  background:
-    linear-gradient(var(--bg-card), var(--bg-card)) padding-box,
-    var(--pg-border-grad) border-box;
+  border: 1px solid color-mix(in srgb, var(--pg-line) 35%, var(--border));
+  background: transparent;
 }
 .nav-label-bot {
-  color: color-mix(in srgb, var(--bot-edge-soft) 82%, var(--muted-fg));
+  color: var(--bot-line);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
 .nav-label-pg {
-  color: color-mix(in srgb, var(--pg-edge-soft) 82%, var(--muted-fg));
+  color: var(--pg-line);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
+.nav-section-bot .nav-ico { color: var(--bot-line); }
+.nav-section-pg .nav-ico { color: var(--pg-line); }
 .nav-item-bot.active {
-  background: var(--muted);
-  border-color: color-mix(in srgb, var(--bot-edge) 40%, var(--border));
+  background: var(--bot-fill);
+  border-color: color-mix(in srgb, var(--bot-line) 45%, transparent);
   color: var(--foreground);
 }
+.nav-item-bot.active .nav-ico { color: var(--bot-line); }
 .nav-item-bot:hover {
-  background: color-mix(in srgb, var(--muted-fg) 10%, transparent);
-  border-color: color-mix(in srgb, var(--bot-edge) 28%, var(--border));
+  background: color-mix(in srgb, var(--bot-line) 8%, transparent);
+  border-color: color-mix(in srgb, var(--bot-line) 36%, transparent);
   color: var(--foreground);
 }
 .nav-item-pg.active {
-  background: var(--muted);
-  border-color: color-mix(in srgb, var(--pg-edge) 40%, var(--border));
+  background: var(--pg-fill);
+  border-color: color-mix(in srgb, var(--pg-line) 45%, transparent);
   color: var(--foreground);
 }
+.nav-item-pg.active .nav-ico { color: var(--pg-line); }
 .nav-item-pg:hover {
-  background: color-mix(in srgb, var(--muted-fg) 10%, transparent);
-  border-color: color-mix(in srgb, var(--pg-edge) 28%, var(--border));
+  background: color-mix(in srgb, var(--pg-line) 8%, transparent);
+  border-color: color-mix(in srgb, var(--pg-line) 36%, transparent);
   color: var(--foreground);
 }
 
@@ -5018,27 +4983,12 @@ td.byte-size {
   overflow: visible;
 }
 .ui-modal-head {
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
   margin: 0 0 var(--space-3);
-  padding: 0 0 var(--space-2);
-}
-.ui-modal-head::after {
-  content: "";
-  position: absolute;
-  inset-inline: 0;
-  bottom: 0;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--bot-edge) 55%, transparent),
-    color-mix(in srgb, var(--pg-edge) 35%, transparent) 55%,
-    transparent
-  );
-  opacity: 0.85;
+  padding: 0;
 }
 /* Modal chrome title matches page titles (not the tiny section --title-size) */
 .ui-modal-head h1,
@@ -5046,8 +4996,8 @@ td.byte-size {
 .ui-modal-head h3 {
   margin: 0;
   font-size: 22px;
-  font-weight: 650;
-  letter-spacing: -0.025em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   line-height: 1.25;
   color: var(--foreground);
 }
@@ -5056,8 +5006,8 @@ td.byte-size {
 .ui-modal-panel > h3 {
   margin: 0;
   font-size: 22px;
-  font-weight: 650;
-  letter-spacing: -0.025em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   line-height: 1.25;
   color: var(--foreground);
 }
@@ -5734,10 +5684,10 @@ html[data-theme="light"] {
   --info-fg: #1d4ed8;
   --brand: #ea580c;
   --brand-fg: #c2410c;
-  --bot-edge: #ea580c;
-  --bot-edge-soft: #f97316;
-  --pg-edge: #2563eb;
-  --pg-edge-soft: #3b82f6;
+  --bot-line: #ea580c;
+  --pg-line: #2563eb;
+  --bot-fill: color-mix(in srgb, var(--bot-line) 8%, transparent);
+  --pg-fill: color-mix(in srgb, var(--pg-line) 8%, transparent);
   --bg: var(--background);
   --bg-card: #ffffff;
   --bg-muted: var(--muted);
@@ -5837,47 +5787,35 @@ html[data-theme="light"] .nav-item-home:hover {
   color: var(--foreground);
 }
 html[data-theme="light"] .nav-section-bot {
-  border: 1px solid transparent;
-  background:
-    linear-gradient(#fff, #fff) padding-box,
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, #f97316 70%, #fff) 0%,
-      color-mix(in srgb, #ea580c 28%, transparent) 50%,
-      color-mix(in srgb, #c2410c 55%, transparent) 100%
-    ) border-box;
+  border-color: color-mix(in srgb, var(--bot-line) 28%, var(--border));
+  background: transparent;
 }
 html[data-theme="light"] .nav-section-pg {
-  border: 1px solid transparent;
-  background:
-    linear-gradient(#fff, #fff) padding-box,
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, #3b82f6 70%, #fff) 0%,
-      color-mix(in srgb, #2563eb 28%, transparent) 50%,
-      color-mix(in srgb, #1d4ed8 55%, transparent) 100%
-    ) border-box;
+  border-color: color-mix(in srgb, var(--pg-line) 28%, var(--border));
+  background: transparent;
 }
-html[data-theme="light"] .nav-label-bot { color: #c2410c; }
-html[data-theme="light"] .nav-label-pg { color: #1d4ed8; }
+html[data-theme="light"] .nav-label-bot,
+html[data-theme="light"] .nav-section-bot .nav-ico { color: var(--bot-line); }
+html[data-theme="light"] .nav-label-pg,
+html[data-theme="light"] .nav-section-pg .nav-ico { color: var(--pg-line); }
 html[data-theme="light"] .nav-item-bot.active {
-  background: #f4f4f5;
-  border-color: color-mix(in srgb, #ea580c 36%, var(--border));
+  background: var(--bot-fill);
+  border-color: color-mix(in srgb, var(--bot-line) 32%, transparent);
   color: var(--foreground);
 }
 html[data-theme="light"] .nav-item-bot:hover {
-  background: color-mix(in srgb, var(--foreground) 4%, transparent);
-  border-color: color-mix(in srgb, #ea580c 28%, var(--border));
+  background: color-mix(in srgb, var(--bot-line) 6%, transparent);
+  border-color: color-mix(in srgb, var(--bot-line) 28%, transparent);
   color: var(--foreground);
 }
 html[data-theme="light"] .nav-item-pg.active {
-  background: #f4f4f5;
-  border-color: color-mix(in srgb, #2563eb 36%, var(--border));
+  background: var(--pg-fill);
+  border-color: color-mix(in srgb, var(--pg-line) 32%, transparent);
   color: var(--foreground);
 }
 html[data-theme="light"] .nav-item-pg:hover {
-  background: color-mix(in srgb, var(--foreground) 4%, transparent);
-  border-color: color-mix(in srgb, #2563eb 28%, var(--border));
+  background: color-mix(in srgb, var(--pg-line) 6%, transparent);
+  border-color: color-mix(in srgb, var(--pg-line) 28%, transparent);
   color: var(--foreground);
 }
 
@@ -6068,26 +6006,14 @@ html[data-theme="light"] .upload-box.has-file .upload-box-name {
 }
 html[data-theme="light"] .stat-ico { background: var(--muted); color: var(--muted-fg); }
 html[data-theme="light"] .page-title-ico {
-  background:
-    linear-gradient(#fff, #fff) padding-box,
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, #f97316 70%, #fff) 0%,
-      color-mix(in srgb, #ea580c 28%, transparent) 50%,
-      color-mix(in srgb, #c2410c 55%, transparent) 100%
-    ) border-box;
-  color: #c2410c;
+  background: #fff;
+  border-color: color-mix(in srgb, var(--bot-line) 40%, var(--border));
+  color: var(--bot-line);
 }
 html[data-theme="light"] .page-title-ico--pg {
-  background:
-    linear-gradient(#fff, #fff) padding-box,
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, #3b82f6 70%, #fff) 0%,
-      color-mix(in srgb, #2563eb 28%, transparent) 50%,
-      color-mix(in srgb, #1d4ed8 55%, transparent) 100%
-    ) border-box;
-  color: #1d4ed8;
+  background: #fff;
+  border-color: color-mix(in srgb, var(--pg-line) 40%, var(--border));
+  color: var(--pg-line);
 }
 html[data-theme="light"] .page-title-ico--neutral {
   background: #f4f4f5;
@@ -6796,40 +6722,22 @@ html[data-theme="light"] .pg-node-metric {
 }
 .home-portal-bot {
   background: var(--bg-card);
-  border: 1px solid transparent;
-  background-image:
-    linear-gradient(var(--bg-card), var(--bg-card)),
-    var(--bot-border-grad);
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
+  border: 1px solid color-mix(in srgb, var(--bot-line) 42%, var(--border));
 }
 .home-portal-bot:hover {
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--muted) 35%, var(--bg-card)), color-mix(in srgb, var(--muted) 35%, var(--bg-card))),
-    var(--bot-border-grad);
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
-  border-color: transparent;
+  background: color-mix(in srgb, var(--muted) 35%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--bot-line) 55%, var(--border));
 }
 .home-portal-bot:focus-visible {
-  outline-color: color-mix(in srgb, var(--brand) 55%, transparent);
+  outline-color: color-mix(in srgb, var(--bot-line) 55%, transparent);
 }
 .home-portal-pg {
   background: var(--bg-card);
-  border: 1px solid transparent;
-  background-image:
-    linear-gradient(var(--bg-card), var(--bg-card)),
-    var(--pg-border-grad);
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
+  border: 1px solid color-mix(in srgb, var(--pg-line) 42%, var(--border));
 }
 .home-portal-pg:hover {
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--muted) 35%, var(--bg-card)), color-mix(in srgb, var(--muted) 35%, var(--bg-card))),
-    var(--pg-border-grad);
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
-  border-color: transparent;
+  background: color-mix(in srgb, var(--muted) 35%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--pg-line) 55%, var(--border));
 }
 .home-portal-ico {
   display: inline-flex;
@@ -6839,20 +6747,16 @@ html[data-theme="light"] .pg-node-metric {
   height: 40px;
   flex: 0 0 auto;
   border-radius: 14px;
+  background: transparent;
+  border: 1px solid transparent;
 }
 .home-portal-bot .home-portal-ico {
-  border: 1px solid transparent;
-  background:
-    linear-gradient(var(--bg-card), var(--bg-card)) padding-box,
-    var(--bot-border-grad) border-box;
-  color: var(--brand-fg);
+  color: var(--bot-line);
+  border-color: color-mix(in srgb, var(--bot-line) 40%, var(--border));
 }
 .home-portal-pg .home-portal-ico {
-  border: 1px solid transparent;
-  background:
-    linear-gradient(var(--bg-card), var(--bg-card)) padding-box,
-    var(--pg-border-grad) border-box;
-  color: var(--primary-fg);
+  color: var(--pg-line);
+  border-color: color-mix(in srgb, var(--pg-line) 40%, var(--border));
 }
 .home-portal-ico svg {
   width: 20px;
@@ -6902,8 +6806,8 @@ html[data-theme="light"] .pg-node-metric {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.home-portal-bot .home-portal-go { color: var(--brand-fg); }
-.home-portal-pg .home-portal-go { color: var(--primary-fg); }
+.home-portal-bot .home-portal-go { color: var(--bot-line); }
+.home-portal-pg .home-portal-go { color: var(--pg-line); }
 
 /* —— Period sales —— */
 .home-periods-card {
@@ -7009,40 +6913,19 @@ html[data-theme="light"] .pg-node-metric {
 }
 html[data-theme="light"] .home-portal-bot {
   background: #fff;
-  background-image:
-    linear-gradient(#fff, #fff),
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, #f97316 70%, #fff) 0%,
-      color-mix(in srgb, #ea580c 28%, transparent) 50%,
-      color-mix(in srgb, #c2410c 55%, transparent) 100%
-    );
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
+  border-color: color-mix(in srgb, var(--bot-line) 36%, var(--border));
 }
 html[data-theme="light"] .home-portal-pg {
   background: #fff;
-  background-image:
-    linear-gradient(#fff, #fff),
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, #3b82f6 70%, #fff) 0%,
-      color-mix(in srgb, #2563eb 28%, transparent) 50%,
-      color-mix(in srgb, #1d4ed8 55%, transparent) 100%
-    );
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
+  border-color: color-mix(in srgb, var(--pg-line) 36%, var(--border));
 }
-html[data-theme="light"] .home-portal-bot:hover,
-html[data-theme="light"] .home-portal-pg:hover {
-  background-image:
-    linear-gradient(#fafafa, #fafafa),
-    var(--bot-border-grad);
+html[data-theme="light"] .home-portal-bot:hover {
+  background: #fafafa;
+  border-color: color-mix(in srgb, var(--bot-line) 48%, var(--border));
 }
 html[data-theme="light"] .home-portal-pg:hover {
-  background-image:
-    linear-gradient(#fafafa, #fafafa),
-    var(--pg-border-grad);
+  background: #fafafa;
+  border-color: color-mix(in srgb, var(--pg-line) 48%, var(--border));
 }
 html[data-theme="light"] .home-period {
   background: rgba(0, 0, 0, 0.02);
@@ -8266,4 +8149,18 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   max-height: min(70vh, 640px);
   object-fit: contain;
   border-radius: calc(var(--radius) - 2px);
+}
+
+
+/* Gift codes modal — recent list under create form */
+#modal-gift-codes .gift-codes-recent-title {
+  margin: var(--space-3) 0 var(--space-2);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--foreground);
+}
+#modal-gift-codes .form-stack + .gift-codes-recent-title {
+  margin-top: var(--space-3);
 }

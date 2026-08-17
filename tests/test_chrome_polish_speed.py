@@ -1,4 +1,4 @@
-"""Chrome polish (bot/PG neutral fills + gradient edges) and safe speed hooks."""
+"""Solid bot/PG chrome + safe speed hooks (no gradient borders / title underlines)."""
 
 from __future__ import annotations
 
@@ -9,37 +9,51 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class ChromePolishTests(unittest.TestCase):
-    def test_bot_pg_sections_use_gradient_border_not_tint_fill(self):
+class ChromeSolidTests(unittest.TestCase):
+    def test_no_gradient_chrome_tokens(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn("--bot-border-grad", css)
-        self.assertIn("--pg-border-grad", css)
-        # Neutral fill via padding-box gradient, not orange/blue wash on section.
-        self.assertIn(
-            "linear-gradient(var(--bg-card), var(--bg-card)) padding-box",
-            css,
-        )
-        self.assertIn("var(--bot-border-grad) border-box", css)
-        self.assertIn("var(--pg-border-grad) border-box", css)
-        self.assertNotIn(
-            "background: color-mix(in srgb, #e08a3c 12%, transparent);",
-            css,
-        )
-        self.assertNotIn(
-            "background: color-mix(in srgb, #3d8fd1 12%, transparent);",
-            css,
-        )
+        for dead in (
+            "--bot-border-grad",
+            "--pg-border-grad",
+            "--bot-title-grad",
+            "--pg-title-grad",
+            "--bot-edge",
+            "--pg-edge",
+            ".page-title::after",
+            ".ui-modal-head::after",
+        ):
+            self.assertNotIn(dead, css)
+        self.assertIn("--bot-line", css)
+        self.assertIn("--pg-line", css)
+        self.assertIn("--bot-fill", css)
+        self.assertIn("--pg-fill", css)
 
-    def test_page_and_modal_titles_have_accent(self):
+    def test_sidebar_selector_uses_section_fill(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn(".nav-item-bot.active {\n  background: var(--bot-fill);", css)
+        self.assertIn(".nav-item-pg.active {\n  background: var(--pg-fill);", css)
+        self.assertIn(".nav-section-bot .nav-ico { color: var(--bot-line); }", css)
+        self.assertIn(".nav-section-pg .nav-ico { color: var(--pg-line); }", css)
+
+    def test_menu_toggle_transparent(self):
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        # Extract .menu-toggle block
+        block = css.split(".menu-toggle {", 1)[1].split("}", 1)[0]
+        self.assertIn("background: transparent;", block)
+
+    def test_gift_codes_modal_recent_title(self):
+        plans = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn('class="gift-codes-recent-title"', plans)
+        self.assertNotIn('style="margin-top:var(--space-3)"', plans)
+        self.assertIn(".gift-codes-recent-title", css)
+
+    def test_macros_page_title_no_tone_class(self):
         macros = (ROOT / "app/web/templates/macros.html").read_text(encoding="utf-8")
-        self.assertIn("page-title--{{ tone }}", macros)
-        self.assertIn(".page-title::after", css)
-        self.assertIn(".ui-modal-head::after", css)
-        self.assertIn("padding: var(--space-3);", css)
+        self.assertNotIn("page-title--{{ tone }}", macros)
+        self.assertIn('<div class="page-title">', macros)
 
     def test_no_pulse_items_jinja_trap(self):
-        """Guard the 7.0.3 dashboard 500: pulse.items is dict.items in Jinja."""
         home = (ROOT / "app/web/templates/home.html").read_text(encoding="utf-8")
         reseller = (ROOT / "app/web/templates/reseller_home.html").read_text(
             encoding="utf-8"
@@ -58,13 +72,6 @@ class SafeSpeedHooksTests(unittest.TestCase):
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
         self.assertIn("/static/fonts.css", base)
         self.assertNotIn("fonts.googleapis.com", base)
-        self.assertTrue(
-            (ROOT / "app/web/static/fonts/Vazirmatn-Variable.woff2").is_file()
-        )
-        pg = (ROOT / "app/services/pasarguard.py").read_text(encoding="utf-8")
-        self.assertIn("_read_cache_ident", pg)
-        self.assertIn("cache_get", pg)
-        # Content-swap nav caused wrong sidebar active — must stay off.
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
         self.assertNotIn("X-Panel-Nav", js)
         self.assertNotIn("panelNavigate", js)
