@@ -2,6 +2,10 @@
 {% from "macros.html" import page_title %}
 {% block title %}داشبورد{% endblock %}
 {% block content %}
+{% set pulse = pulse or {} %}
+{% set wallet = wallet_card or billing_card %}
+
+<div class="home-dash" id="home-dash" data-home-live="1" data-home-role="reseller">
 {% if dashboard_degraded %}
 <div class="flash warn home-update-banner">
   <div class="home-update-copy">
@@ -28,65 +32,30 @@
 </div>
 {% endif %}
 
-{% if pg_limits and pg_limits.ready %}
-{% from "_pg_quota_gauges.html" import pg_quota_exhausted_banners %}
-{{ pg_quota_exhausted_banners(users=pg_limits.users, traffic=pg_limits.traffic) }}
-{% endif %}
+<section class="card home-pulse tone-{{ pulse.tone or 'neutral' }}" aria-label="وضعیت امروز">
+  <p class="home-pulse-lead">{{ pulse.lead or 'وضعیت امروز' }}</p>
+  <ul class="home-pulse-items">
+    {% for it in pulse.items or [] %}
+    <li><strong>{{ it.n | num }}</strong><span>{{ it.label }}</span></li>
+    {% endfor %}
+  </ul>
+</section>
 
-{% if billing_card %}
-<div class="card home-conn-card">
-  <h2>کیف پول (PAYG)</h2>
-  <p class="muted">مصرف ترافیک از همین کیف پول فروشگاهی کسر می‌شود</p>
-  <p class="home-balance"><strong>{{ billing_card.balance_fa }}</strong></p>
-  {% if billing_card.suspended %}
-  <p class="flash err">حساب به‌خاطر موجودی صفر مسدود است</p>
+{% if wallet %}
+<section class="card home-wallet-card">
+  <header class="home-section-head">
+    <h2>{{ wallet.title or 'کیف پول' }}</h2>
+    {% if wallet.href %}<a class="btn btn-sm btn-ghost" href="{{ wallet.href }}">جزئیات</a>{% endif %}
+  </header>
+  {% if wallet.balance_fa %}
+  <p class="home-wallet-value">{{ wallet.balance_fa }}</p>
+  {% elif wallet.balance is not none %}
+  <p class="home-wallet-value">{{ wallet.balance | num }}</p>
   {% endif %}
-</div>
+  {% if wallet.hint %}<p class="muted home-wallet-hint">{{ wallet.hint }}</p>{% endif %}
+  {% if wallet.suspended %}<p class="flash err">حساب به‌خاطر موجودی صفر مسدود است</p>{% endif %}
+</section>
 {% endif %}
-
-<div class="card home-conn-card">
-  <h2>وضعیت اتصال</h2>
-  <div class="home-conn-row">
-    <a class="home-conn {% if bot.unchecked %}is-neutral{% elif bot.ok %}is-ok{% else %}is-err{% endif %}" href="/shop-settings?tab=bot">
-      <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-      <span class="home-conn-text">
-        <span class="home-conn-k">ربات</span>
-        <span class="home-conn-cap muted">
-          {% if bot.unchecked %}بررسی نشده
-          {% elif bot.ok and bot.username %}<span dir="ltr">@{{ bot.username }}</span>
-          {% elif bot.error %}{{ bot.error }}
-          {% else %}—{% endif %}
-        </span>
-      </span>
-      {% if bot.unchecked %}
-      <span class="badge neutral home-conn-badge">—</span>
-      {% elif bot.ok %}
-      <span class="badge ok home-conn-badge">متصل</span>
-      {% else %}
-      <span class="badge danger home-conn-badge">قطع</span>
-      {% endif %}
-    </a>
-    <a class="home-conn {% if (pg_health and pg_health.unchecked) %}is-neutral{% elif (pg_health and pg_health.ok) %}is-ok{% else %}is-err{% endif %}" href="/pg">
-      <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-      <span class="home-conn-text">
-        <span class="home-conn-k">پاسارگارد</span>
-        <span class="home-conn-cap muted">
-          {% if pg_health and pg_health.unchecked %}بررسی نشده
-          {% elif pg_health and pg_health.ok %}{% if pg_health.version %}v{{ pg_health.version }}{% else %}آنلاین{% endif %}
-          {% elif pg_health and pg_health.error %}{{ pg_health.error }}
-          {% else %}—{% endif %}
-        </span>
-      </span>
-      {% if pg_health and pg_health.unchecked %}
-      <span class="badge neutral home-conn-badge">—</span>
-      {% elif pg_health and pg_health.ok %}
-      <span class="badge ok home-conn-badge">متصل</span>
-      {% else %}
-      <span class="badge danger home-conn-badge">قطع</span>
-      {% endif %}
-    </a>
-  </div>
-</div>
 
 {% set portal_bot_show = ('dashboard' in (staff.get('permissions') or []) or staff.role == 'reseller') %}
 {% set portal_pg_show = ('pg_overview' in (staff.get('pg_permissions') or []) or staff.role == 'reseller' or staff.get('pg_admin_username')) %}
@@ -94,31 +63,65 @@
 {% set portal_pg_href = '/pg' %}
 {% include "_home_ops.html" %}
 
-{% if pg_limits and pg_limits.ready %}
-{% from "_pg_quota_gauges.html" import pg_quota_gauge %}
-<section class="card home-conn-card home-quota-card">
+<div class="card home-conn-card">
+  <h2>وضعیت اتصال</h2>
+  <div class="home-conn-row">
+    <a class="home-conn {% if bot.unchecked %}is-neutral{% elif bot.ok %}is-ok{% else %}is-err{% endif %}" href="/shop-settings?tab=bot" data-live="bot">
+      <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+      <span class="home-conn-text">
+        <span class="home-conn-k">ربات</span>
+        <span class="home-conn-cap muted" data-live-cap>
+          {% if bot.unchecked %}در حال بررسی…
+          {% elif bot.ok and bot.username %}<span dir="ltr">@{{ bot.username }}</span>
+          {% elif bot.error %}{{ bot.error }}
+          {% else %}—{% endif %}
+        </span>
+      </span>
+      {% if bot.unchecked %}
+      <span class="badge neutral home-conn-badge" data-live-badge>—</span>
+      {% elif bot.ok %}
+      <span class="badge ok home-conn-badge" data-live-badge>متصل</span>
+      {% else %}
+      <span class="badge danger home-conn-badge" data-live-badge>قطع</span>
+      {% endif %}
+    </a>
+    <a class="home-conn {% if (pg_health and pg_health.unchecked) %}is-neutral{% elif (pg_health and pg_health.ok) %}is-ok{% else %}is-err{% endif %}" href="/pg" data-live="pg">
+      <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+      <span class="home-conn-text">
+        <span class="home-conn-k">پاسارگارد</span>
+        <span class="home-conn-cap muted" data-live-cap>
+          {% if pg_health and pg_health.unchecked %}در حال بررسی…
+          {% elif pg_health and pg_health.ok %}{% if pg_health.version %}v{{ pg_health.version }}{% else %}آنلاین{% endif %}
+          {% elif pg_health and pg_health.error %}{{ pg_health.error }}
+          {% else %}—{% endif %}
+        </span>
+      </span>
+      {% if pg_health and pg_health.unchecked %}
+      <span class="badge neutral home-conn-badge" data-live-badge>—</span>
+      {% elif pg_health and pg_health.ok %}
+      <span class="badge ok home-conn-badge" data-live-badge>متصل</span>
+      {% else %}
+      <span class="badge danger home-conn-badge" data-live-badge>قطع</span>
+      {% endif %}
+    </a>
+  </div>
+</div>
+
+<section class="card home-conn-card home-quota-card" id="home-quota" {% if not (pg_limits and pg_limits.ready) %}hidden{% endif %}>
   <header class="home-periods-head">
     <h2>ظرفیت پاسارگارد</h2>
-    <p class="muted">
-      {% if pg_limits.username %}<span dir="ltr">{{ pg_limits.username }}</span>{% endif %}
-      {% if pg_limits.status_label %}
-      <span class="badge {{ pg_limits.status_badge or 'neutral' }}">{{ pg_limits.status_label }}</span>
-      {% endif %}
+    <p class="muted" id="home-quota-meta">
+      {% if pg_limits and pg_limits.username %}<span dir="ltr">{{ pg_limits.username }}</span>{% endif %}
     </p>
   </header>
-  {% if pg_limits.users or pg_limits.traffic %}
-  <div class="home-gauges pg-quota-gauges pg-quota-gauges-embed">
-    {% if pg_limits.users %}
-    {{ pg_quota_gauge(pg_limits.users, 'کاربران', 'Users', 'pg-users') }}
+  <div class="home-quota-simple" id="home-quota-body">
+    {% if pg_limits and pg_limits.users %}
+    <div class="home-quota-row"><span>کاربران</span><strong>{{ pg_limits.users.users_text or pg_limits.users.text or '—' }}</strong></div>
     {% endif %}
-    {% if pg_limits.traffic %}
-    {{ pg_quota_gauge(pg_limits.traffic, 'حجم', 'Traffic', 'pg-traffic') }}
+    {% if pg_limits and pg_limits.traffic %}
+    <div class="home-quota-row"><span>حجم</span><strong>{{ pg_limits.traffic.traffic_text or pg_limits.traffic.text or '—' }}</strong></div>
     {% endif %}
   </div>
-  {% endif %}
-  {% if pg_limits.lifetime_text %}
-  <p class="muted stack-mt">مصرف lifetime (مبنای PAYG): <b dir="ltr">{{ pg_limits.lifetime_text }}</b></p>
-  {% endif %}
 </section>
-{% endif %}
+</div>
 {% endblock %}

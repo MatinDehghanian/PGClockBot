@@ -176,7 +176,11 @@ async def support_body(
             ticket.id,
             ticket.reseller_id,
         )
-    ok_body = f"تیکت <b>#{ticket.id}</b> با موفقیت ثبت شد.\nبه‌زودی پاسخ می‌دهیم."
+    ok_body = (
+        f"تیکت <b>#{ticket.id}</b> ثبت شد.\n"
+        "وضعیت: <b>در صف بررسی</b> → پاسخ پشتیبانی → بسته.\n"
+        "الان در صف است؛ به‌زودی پاسخ می‌دهیم."
+    )
     if is_reseller_bot and ticket.reseller_id and delivered <= 0:
         # Ticket is saved; staff DM may have failed (never /start on shop bot, etc.)
         import logging

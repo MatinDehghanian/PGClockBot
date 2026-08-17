@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import tkt_status, page_title, panel_tkt_status, panel_tkt_priority %}
+{% from "macros.html" import tkt_status, page_title, panel_tkt_status, panel_tkt_priority, empty_state %}
 {% block title %}پشتیبانی{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -98,7 +98,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="6" class="muted">تیکت کاربری نیست</td></tr>
+        <tr><td colspan="6">{{ empty_state('تیکت کاربری نیست', 'تیکت‌های باز مشتریان اینجا می‌آید.', '', '') }}</td></tr>
       {% endfor %}
       </tbody>
     </table>

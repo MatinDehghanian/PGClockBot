@@ -8,7 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -317,75 +317,140 @@ def _period_since_utc() -> dict[str, datetime]:
     }
 
 
+def _delta(cur: int, prev: int) -> dict[str, Any] | None:
+    cur_i = int(cur or 0)
+    prev_i = int(prev or 0)
+    if prev_i <= 0:
+        if cur_i <= 0:
+            return None
+        return {"pct": 100, "dir": "up"}
+    pct = int(round((cur_i - prev_i) * 100 / prev_i))
+    if pct == 0:
+        return {"pct": 0, "dir": "flat"}
+    return {"pct": abs(pct), "dir": "up" if pct > 0 else "down"}
+
+
+def _bucket(orders: int, delivered: int, revenue: int, new_users: int, *, delta=None) -> dict[str, Any]:
+    row = {
+        "orders": int(orders or 0),
+        "delivered": int(delivered or 0),
+        "revenue": int(revenue or 0),
+        "new_users": int(new_users or 0),
+    }
+    if delta is not None:
+        row["delta"] = delta
+    return row
+
+
 async def shop_period_stats(
     session: AsyncSession, *, reseller_id: int | None = None
 ) -> dict[str, Any]:
-    """Sales-ish totals for امروز / ۷ روز / ۳۰ روز (shop-scoped)."""
+    """Sales-ish totals for امروز / ۷ روز / ۳۰ روز (shop-scoped, two round-trips)."""
     starts = _period_since_utc()
-    out = empty_period_stats()
+    day = starts["day"]
+    week = starts["week"]
+    month = starts["month"]
+    prev_day = day - timedelta(days=1)
+    prev_week = week - timedelta(days=7)
+    prev_month = month - timedelta(days=30)
+    if reseller_id is None:
+        scope_orders = Order.reseller_id.is_(None)
+        scope_users = BotUser.reseller_id.is_(None)
+    else:
+        rid = int(reseller_id)
+        scope_orders = Order.reseller_id == rid
+        scope_users = BotUser.reseller_id == rid
 
-    for key, since in starts.items():
-        if reseller_id is None:
-            scope_orders = Order.reseller_id.is_(None)
-            scope_users = BotUser.reseller_id.is_(None)
-        else:
-            rid = int(reseller_id)
-            scope_orders = Order.reseller_id == rid
-            scope_users = BotUser.reseller_id == rid
-
-        orders_n = int(
-            (
-                await session.execute(
-                    select(func.count())
-                    .select_from(Order)
-                    .where(Order.created_at >= since, scope_orders)
-                )
-            ).scalar()
-            or 0
+    delivered = Order.status == "delivered"
+    order_row = (
+        await session.execute(
+            select(
+                func.coalesce(func.sum(case((Order.created_at >= day, 1), else_=0)), 0),
+                func.coalesce(func.sum(case((Order.created_at >= week, 1), else_=0)), 0),
+                func.coalesce(func.sum(case((Order.created_at >= month, 1), else_=0)), 0),
+                func.coalesce(
+                    func.sum(case(((Order.created_at >= day) & delivered, 1), else_=0)), 0
+                ),
+                func.coalesce(
+                    func.sum(case(((Order.created_at >= week) & delivered, 1), else_=0)), 0
+                ),
+                func.coalesce(
+                    func.sum(case(((Order.created_at >= month) & delivered, 1), else_=0)), 0
+                ),
+                func.coalesce(
+                    func.sum(case(((Order.created_at >= day) & delivered, Order.amount), else_=0)),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(case(((Order.created_at >= week) & delivered, Order.amount), else_=0)),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(case(((Order.created_at >= month) & delivered, Order.amount), else_=0)),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            ((Order.created_at >= prev_day) & (Order.created_at < day) & delivered, Order.amount),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            ((Order.created_at >= prev_week) & (Order.created_at < week) & delivered, Order.amount),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            ((Order.created_at >= prev_month) & (Order.created_at < month) & delivered, Order.amount),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+            ).where(scope_orders, Order.created_at >= prev_month)
         )
-        delivered_n = int(
-            (
-                await session.execute(
-                    select(func.count())
-                    .select_from(Order)
-                    .where(
-                        Order.created_at >= since,
-                        Order.status == "delivered",
-                        scope_orders,
-                    )
-                )
-            ).scalar()
-            or 0
+    ).one()
+    user_row = (
+        await session.execute(
+            select(
+                func.coalesce(func.sum(case((BotUser.created_at >= day, 1), else_=0)), 0),
+                func.coalesce(func.sum(case((BotUser.created_at >= week, 1), else_=0)), 0),
+                func.coalesce(func.sum(case((BotUser.created_at >= month, 1), else_=0)), 0),
+            ).where(scope_users, BotUser.created_at >= month)
         )
-        revenue_n = int(
-            (
-                await session.execute(
-                    select(func.coalesce(func.sum(Order.amount), 0)).where(
-                        Order.created_at >= since,
-                        Order.status == "delivered",
-                        scope_orders,
-                    )
-                )
-            ).scalar()
-            or 0
-        )
-        users_n = int(
-            (
-                await session.execute(
-                    select(func.count())
-                    .select_from(BotUser)
-                    .where(BotUser.created_at >= since, scope_users)
-                )
-            ).scalar()
-            or 0
-        )
-        out[key] = {
-            "orders": orders_n,
-            "delivered": delivered_n,
-            "revenue": revenue_n,
-            "new_users": users_n,
-        }
-    return out
+    ).one()
+    return {
+        "day": _bucket(
+            order_row[0],
+            order_row[3],
+            order_row[6],
+            user_row[0],
+            delta=_delta(order_row[6], order_row[9]),
+        ),
+        "week": _bucket(
+            order_row[1],
+            order_row[4],
+            order_row[7],
+            user_row[1],
+            delta=_delta(order_row[7], order_row[10]),
+        ),
+        "month": _bucket(
+            order_row[2],
+            order_row[5],
+            order_row[8],
+            user_row[2],
+            delta=_delta(order_row[8], order_row[11]),
+        ),
+    }
 
 
 def _empty_bot_summary() -> dict[str, Any]:
@@ -484,4 +549,59 @@ async def build_home_overview(session: AsyncSession) -> dict[str, Any]:
         if isinstance(nodes, dict):
             out["nodes"] = nodes
 
+    return out
+
+
+def build_home_pulse(*, periods: dict[str, Any] | None, action_center: dict[str, Any] | None) -> dict[str, Any]:
+    """One-line business status for /home (no live probes)."""
+    day = (periods or {}).get("day") or {}
+    ac = action_center or {}
+    delivered = int(day.get("delivered") or 0)
+    revenue = int(day.get("revenue") or 0)
+    tickets = int(ac.get("tickets") or 0)
+    pending = int(ac.get("pending") or 0)
+    expiring = int(ac.get("expiring") or 0)
+    has_work = bool(ac.get("has_items"))
+    items = [
+        {"n": delivered, "label": "خرید موفق امروز"},
+        {"n": tickets, "label": "تیکت باز"},
+        {"n": pending, "label": "رسید معلق"},
+    ]
+    if expiring:
+        items.append({"n": expiring, "label": "نزدیک انقضا"})
+    if has_work:
+        lead = "کار در صف مانده"
+        tone = "warn"
+    elif delivered:
+        lead = "امروز فروش فعال بوده"
+        tone = "ok"
+    else:
+        lead = "صف کار خالی است"
+        tone = "neutral"
+    return {
+        "lead": lead,
+        "tone": tone,
+        "items": items,
+        "revenue": revenue,
+        "delivered": delivered,
+    }
+
+
+async def build_home_shell(session: AsyncSession) -> dict[str, Any]:
+    """DB-only /home overview — live Telegram/PG probes stay unchecked."""
+    import logging
+
+    from app.services.db_safe import rollback_quiet
+
+    log = logging.getLogger(__name__)
+    out = empty_home_overview()
+    out["bot"] = {**_empty_bot(), "unchecked": True}
+    out["nodes"] = {**_empty_nodes(), "unchecked": True, "overall": "neutral"}
+    out["pg_summary"] = {**_empty_pg_summary(), "unchecked": True}
+    try:
+        out["bot_summary"] = await bot_panel_summary(session)
+    except Exception:
+        log.exception("home shell bot_panel_summary failed")
+        await rollback_quiet(session)
+        out["bot_summary"] = _empty_bot_summary()
     return out
