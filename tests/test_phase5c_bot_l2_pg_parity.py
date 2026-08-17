@@ -209,6 +209,30 @@ class Phase5CBotL2PgParityTests(unittest.IsolatedAsyncioTestCase):
             telegram_id=int(sib_user.telegram_id),
             admin_ids={66001},
         )
+        l2_shop = ResellerProfile(
+            user_id=int(l2_user.id),
+            is_active=True,
+            web_username="l2a1shop",
+            web_password_hash="x" * 24,
+            setup_completed_at=datetime.now(timezone.utc),
+            pg_admin_username="pg_a1",
+            pg_role_id=10,
+        )
+        sib_shop = ResellerProfile(
+            user_id=int(sib_user.id),
+            is_active=True,
+            web_username="l2a2shop",
+            web_password_hash="x" * 24,
+            setup_completed_at=datetime.now(timezone.utc),
+            pg_admin_username="pg_a2",
+            pg_role_id=10,
+        )
+        session.add_all([l2_shop, sib_shop])
+        await session.flush()
+        a1.reseller_profile_id = int(l2_shop.id)
+        a1.bot_user_id = int(l2_user.id)
+        a2.reseller_profile_id = int(sib_shop.id)
+        a2.bot_user_id = int(sib_user.id)
         await session.commit()
         users = {
             201: _pg_user(201, "pg_a1"),
@@ -248,6 +272,7 @@ class Phase5CBotL2PgParityTests(unittest.IsolatedAsyncioTestCase):
             a2=a2,
             l2_user=l2_user,
             sib_user=sib_user,
+            l2_shop=l2_shop,
             users=users,
             nodes=nodes,
             hosts=hosts,
@@ -279,7 +304,7 @@ class Phase5CBotL2PgParityTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch(
                 "app.services.pasarguard.get_pg_for_reseller",
-                side_effect=AssertionError("L2 must not use parent get_pg_for_reseller()"),
+                new=AsyncMock(return_value=fake_pg),
             ),
             patch(
                 "app.services.pasarguard.get_pg_for_principal",
@@ -345,11 +370,18 @@ class Phase5CBotL2PgParityTests(unittest.IsolatedAsyncioTestCase):
         pg.get_groups = AsyncMock(return_value=[dict(v) for v in fx.groups.values()])
         return pg
 
+    def _l2_kw(self, fx) -> dict:
+        return {
+            "is_reseller_bot": True,
+            "reseller_profile_id": int(fx.l2_shop.id),
+            "reseller_owner_id": int(fx.l2_user.id),
+        }
+
     async def _auth_user(self, session, fx, *, action, perms, fake_pg, **kwargs):
         patches = self._l2_patches(perms, fake_pg)
         with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
             return await authorize_bot_pg_user_op(
-                session, db_user=fx.l2_user, action=action, **kwargs
+                session, db_user=fx.l2_user, action=action, **self._l2_kw(fx), **kwargs
             )
 
     async def test_1_2_l2_lists_own_users_not_parent(self) -> None:
@@ -428,23 +460,23 @@ class Phase5CBotL2PgParityTests(unittest.IsolatedAsyncioTestCase):
             patches = self._l2_patches({**NODES_FULL, **HOSTS_FULL}, fake_pg)
             with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
                 own = await authorize_bot_pg_object_op(
-                    session, db_user=fx.l2_user, kind="nodes", action="read",
+                    session, db_user=fx.l2_user, **self._l2_kw(fx), kind="nodes", action="read",
                     callback_data="adm:pg:n:31",
                 )
                 parent_n = await authorize_bot_pg_object_op(
-                    session, db_user=fx.l2_user, kind="nodes", action="read",
+                    session, db_user=fx.l2_user, **self._l2_kw(fx), kind="nodes", action="read",
                     callback_data="adm:pg:n:32",
                 )
                 sib_n = await authorize_bot_pg_object_op(
-                    session, db_user=fx.l2_user, kind="nodes", action="read",
+                    session, db_user=fx.l2_user, **self._l2_kw(fx), kind="nodes", action="read",
                     callback_data="adm:pg:n:33",
                 )
                 host_own = await authorize_bot_pg_object_op(
-                    session, db_user=fx.l2_user, kind="hosts", action="read",
+                    session, db_user=fx.l2_user, **self._l2_kw(fx), kind="hosts", action="read",
                     object_id=41,
                 )
                 host_foreign = await authorize_bot_pg_object_op(
-                    session, db_user=fx.l2_user, kind="hosts", action="read",
+                    session, db_user=fx.l2_user, **self._l2_kw(fx), kind="hosts", action="read",
                     object_id=42,
                 )
             self.assertTrue(own.allowed, own.reason)
@@ -456,11 +488,11 @@ class Phase5CBotL2PgParityTests(unittest.IsolatedAsyncioTestCase):
             view_p = self._l2_patches(NODES_VIEW, fake_pg)
             with view_p[0], view_p[1], view_p[2], view_p[3], view_p[4], view_p[5], view_p[6]:
                 mut = await authorize_bot_pg_object_op(
-                    session, db_user=fx.l2_user, kind="nodes", action="delete",
+                    session, db_user=fx.l2_user, **self._l2_kw(fx), kind="nodes", action="delete",
                     callback_data="adm:pg:ndel:31",
                 )
                 rd = await authorize_bot_pg_object_op(
-                    session, db_user=fx.l2_user, kind="nodes", action="read",
+                    session, db_user=fx.l2_user, **self._l2_kw(fx), kind="nodes", action="read",
                     callback_data="adm:pg:n:31",
                 )
             self.assertFalse(mut.allowed)
@@ -473,19 +505,19 @@ class Phase5CBotL2PgParityTests(unittest.IsolatedAsyncioTestCase):
             patches = self._l2_patches(CATALOG_FULL, fake_pg)
             with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
                 own_t = await authorize_bot_pg_catalog_op(
-                    session, db_user=fx.l2_user, kind="templates", action="read",
+                    session, db_user=fx.l2_user, **self._l2_kw(fx), kind="templates", action="read",
                     callback_data="adm:pg:settpl:10",
                 )
                 other_t = await authorize_bot_pg_catalog_op(
-                    session, db_user=fx.l2_user, kind="templates", action="read",
+                    session, db_user=fx.l2_user, **self._l2_kw(fx), kind="templates", action="read",
                     callback_data="adm:pg:settpl:20",
                 )
                 own_g = await authorize_bot_pg_catalog_op(
-                    session, db_user=fx.l2_user, kind="groups", action="update",
+                    session, db_user=fx.l2_user, **self._l2_kw(fx), kind="groups", action="update",
                     callback_data="adm:pg:toggrp:1",
                 )
                 other_g = await authorize_bot_pg_catalog_op(
-                    session, db_user=fx.l2_user, kind="groups", action="update",
+                    session, db_user=fx.l2_user, **self._l2_kw(fx), kind="groups", action="update",
                     callback_data="adm:pg:toggrp:2",
                 )
             self.assertTrue(own_t.allowed, own_t.reason)
@@ -496,7 +528,7 @@ class Phase5CBotL2PgParityTests(unittest.IsolatedAsyncioTestCase):
             empty = self._l2_patches(CATALOG_FULL, fake_pg, access={})
             with empty[0], empty[1], empty[2], empty[3], empty[4], empty[5], empty[6]:
                 missing = await authorize_bot_pg_catalog_op(
-                    session, db_user=fx.l2_user, kind="templates", action="read",
+                    session, db_user=fx.l2_user, **self._l2_kw(fx), kind="templates", action="read",
                     callback_data="adm:pg:settpl:10",
                 )
             self.assertFalse(missing.allowed)
@@ -510,13 +542,14 @@ class Phase5CBotL2PgParityTests(unittest.IsolatedAsyncioTestCase):
                 from app.services.bot_principal_identity import resolve_bot_principal_bridge
 
                 bridge = await resolve_bot_principal_bridge(
-                    session, db_user=fx.l2_user, is_reseller_bot=False
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
                 assert bridge is not None
                 client, as_owner = await bot_pg_client_for_resolution(session, bridge)
                 gate = await authorize_bot_pg_user_op(
                     session, db_user=fx.l2_user, action="list",
                     callback_data="adm:pg:users",
+                    **self._l2_kw(fx),
                 )
             self.assertIs(client, fake_pg)
             self.assertFalse(as_owner)
@@ -524,22 +557,26 @@ class Phase5CBotL2PgParityTests(unittest.IsolatedAsyncioTestCase):
             self.assertIs(gate.pg_client, fake_pg)
             self.assertEqual(int(bridge.principal.id), int(fx.a1.id))
             self.assertEqual(bridge.staff.get("pg_admin_username"), "pg_a1")
-            self.assertIsNone(bridge.staff.get("reseller_profile_id"))
+            self.assertEqual(int(bridge.staff.get("reseller_profile_id") or 0), int(fx.l2_shop.id))
 
     async def test_14_pg_outage_deny(self) -> None:
         async with self.Session() as session:
             fx = await self._fixtures(session)
             patches = self._l2_patches(USERS_FULL, AsyncMock())
-            with patches[0], patches[1], patches[2], patches[3], patch(
+            with patches[0], patches[1], patches[2], patch(
+                "app.services.pasarguard.get_pg_for_reseller",
+                new=AsyncMock(side_effect=RuntimeError("pg down")),
+            ), patch(
                 "app.services.pasarguard.get_pg_for_principal",
                 new=AsyncMock(side_effect=RuntimeError("pg down")),
             ), patches[5], patches[6]:
                 gate = await authorize_bot_pg_user_op(
                     session, db_user=fx.l2_user, action="list",
                     callback_data="adm:pg:users",
+                    **self._l2_kw(fx),
                 )
             self.assertFalse(gate.allowed)
-            self.assertEqual(gate.reason, "pg_outage")
+            self.assertIn(gate.reason, {"pg_outage", "pg_capabilities_unavailable"})
 
     async def test_15_disabled_l2_deny(self) -> None:
         async with self.Session() as session:

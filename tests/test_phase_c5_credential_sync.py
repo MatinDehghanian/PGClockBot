@@ -48,7 +48,18 @@ class CredentialsReadyFlagTests(unittest.TestCase):
         )
 
     def test_admin_and_reseller_ready(self):
-        self.assertTrue(staff_pg_credentials_ready({"role": "admin"}))
+        self.assertFalse(staff_pg_credentials_ready({"role": "admin"}))
+        self.assertTrue(
+            staff_pg_credentials_ready(
+                {
+                    "role": "admin",
+                    "org_principal_id": 1,
+                    "org_depth": 0,
+                    "org_parent_id": None,
+                    "org_status": "active",
+                }
+            )
+        )
         self.assertTrue(
             staff_pg_credentials_ready({"role": "reseller", "bot_user_id": 1})
         )
@@ -317,7 +328,16 @@ class StaffPgAsOwnerContractTests(unittest.IsolatedAsyncioTestCase):
 
         with patch("app.api.pg_pages.get_pg", return_value=MagicMock()):
             _client, as_owner = await _staff_pg(
-                AsyncMock(), {"role": "admin", "pg_is_owner": True}
+                AsyncMock(),
+                {
+                    "role": "admin",
+                    "web_owner": True,
+                    "pg_is_owner": True,
+                    "org_principal_id": 1,
+                    "org_depth": 0,
+                    "org_parent_id": None,
+                    "org_status": "active",
+                },
             )
         self.assertTrue(as_owner)
 
@@ -326,7 +346,16 @@ class StaffPgAsOwnerContractTests(unittest.IsolatedAsyncioTestCase):
 
         with patch("app.api.pg_pages.get_pg", return_value=MagicMock()):
             _client, as_owner = await _staff_pg(
-                AsyncMock(), {"role": "admin", "pg_is_owner": False}
+                AsyncMock(),
+                {
+                    "role": "admin",
+                    "web_owner": True,
+                    "pg_is_owner": False,
+                    "org_principal_id": 1,
+                    "org_depth": 0,
+                    "org_parent_id": None,
+                    "org_status": "active",
+                },
             )
         self.assertFalse(as_owner)
 

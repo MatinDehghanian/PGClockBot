@@ -472,6 +472,13 @@ async def provision_level2_child(
             )
         except PrincipalWebIdentityError as exc:
             raise ChildProvisionError(exc.message, code=exc.code) from None
+        from app.services.representative_unification import (
+            attach_shop_package_to_child_principal,
+        )
+
+        await attach_shop_package_to_child_principal(
+            session, child, pg_username=uname
+        )
     except ChildProvisionError:
         if pg_created:
             await _compensate_delete_pg_admin(parent_pg, uname)

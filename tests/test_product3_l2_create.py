@@ -271,7 +271,7 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp.status_code, 303)
         self.assertTrue(spy.await_count)
         loc = resp.headers.get("location") or ""
-        self.assertIn("/principals?detail=", loc)
+        self.assertTrue(loc.startswith("/resellers"))
         self.assertNotIn(_CHILD_PASSWORD, loc)
         self.assertNotIn(_PARENT_PASSWORD, loc)
         async with self.Session() as session:
@@ -293,8 +293,13 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
                 decrypt_secret(child.pg_password_enc),
                 decrypt_secret(parent.pg_password_enc),
             )
-            self.assertIsNone(child.bot_user_id)
-            self.assertIsNone(child.reseller_profile_id)
+            self.assertIsNotNone(child.bot_user_id)
+            self.assertIsNotNone(child.reseller_profile_id)
+            shop = await session.get(ResellerProfile, int(child.reseller_profile_id))
+            self.assertIsNotNone(shop)
+            self.assertEqual(shop.pg_admin_username, "child_own1")
+            self.assertIsNone(shop.pg_admin_password_enc)
+            self.assertIsNone(shop.web_username)
             webs = await session.scalar(
                 select(func.count())
                 .select_from(OrgPrincipalWebIdentity)
@@ -302,7 +307,7 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(int(webs or 0), 1)
             shops = await session.scalar(select(func.count()).select_from(ResellerProfile))
-            self.assertEqual(int(shops or 0), 0)
+            self.assertEqual(int(shops or 0), 1)
             prov = (
                 await session.execute(
                     select(OrgPrincipalProvision).where(
@@ -317,22 +322,6 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(int(payload["role_id"]), 12)
         self.assertNotEqual(payload["username"], _OWNER_ENV_PG)
         self.assertNotIn("password", payload)
-        async with self._client(staff) as client:
-            page = await client.get(loc)
-        self.assertEqual(page.status_code, 200)
-        body = page.text
-        self.assertIn("child_own1", body)
-        self.assertIn("زیرمجموعه", body)
-        self.assertIn("l1_a", body)
-        self.assertIn("PG Role: CustomRoleX", body)
-        self.assertIn("فعال", body)
-        self.assertIn("هویت وب: فعال", body)
-        self.assertIn("بدون اتصال", body)
-        self.assertIn("فعال", body)
-        self.assertNotIn(_CHILD_PASSWORD, body)
-        self.assertNotIn(_PARENT_PASSWORD, body)
-        self.assertNotIn("pg_password_enc", body)
-        self.assertNotIn("gAAAAA", body)
 
     async def test_l1_cannot_create_under_another_l1(self) -> None:
         _, a, b, _ = await self._seed()
@@ -375,14 +364,14 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
     async def test_owner_cannot_create_l2_via_this_ui(self) -> None:
         owner, _, _, _ = await self._seed()
         async with self._client(_owner_staff(owner)) as client:
-            page = await client.get("/principals")
+            page = await client.get("/principals", follow_redirects=False)
             resp = await client.post(
                 "/principals/create-l2",
                 data=self._form(username="owner_l2"),
                 follow_redirects=False,
             )
-        self.assertEqual(page.status_code, 200)
-        self.assertNotIn("/principals/create-l2", page.text)
+        self.assertEqual(page.status_code, 303)
+        self.assertTrue((page.headers.get("location") or "").startswith("/resellers"))
         self.assertEqual(resp.status_code, 403)
         self.assertEqual(await self._count_by_username("owner_l2"), 0)
 
@@ -415,8 +404,7 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
                 data=self._form(username="no_cap"),
                 follow_redirects=False,
             )
-        self.assertEqual(page.status_code, 200)
-        self.assertNotIn("/principals/create-l2", page.text)
+        self.assertEqual(page.status_code, 403)
         self.assertEqual(resp.status_code, 403)
         self.assertEqual(await self._count_by_username("no_cap"), 0)
         self.assertFalse(self._parent_pg.create_admin.await_count)
@@ -462,19 +450,16 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
         _, a, _, _ = await self._seed()
         staff = _l1_staff(a)
         async with self._client(staff) as client:
-            page = await client.get("/principals")
-        self.assertEqual(page.status_code, 200)
-        body = page.text
-        self.assertIn("افزودن نماینده", body)
-        self.assertIn('action="/principals/create-l2"', body)
-        self.assertIn("CustomRoleX", body)
-        self.assertIn('value="12"', body)
-        self.assertIn('value="10"', body)
-        self.assertIn('value="11"', body)
-        self.assertNotIn('value="1"', body)
-        self.assertNotIn('name="parent_id"', body)
-        self.assertNotIn('name="depth"', body)
-        self.assertNotIn('name="org_principal_id"', body)
+            page = await client.get("/principals", follow_redirects=False)
+        self.assertEqual(page.status_code, 303)
+        loc = page.headers.get("location") or ""
+        self.assertTrue(loc.startswith("/resellers"))
+        tpl = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
+        self.assertIn("افزودن نماینده", tpl)
+        self.assertIn('action="/resellers/create-child"', tpl)
+        self.assertNotIn('name="parent_id"', tpl)
+        self.assertNotIn('name="depth"', tpl)
+        self.assertNotIn('name="org_principal_id"', tpl)
         async with self._client(staff) as client:
             missing = await client.post(
                 "/principals/create-l2",
@@ -521,12 +506,11 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("_compensate_delete_pg_admin", pages)
         self.assertNotIn("create_admin", pages)
 
-    async def test_no_automatic_bot_or_shop_profile(self) -> None:
+    async def test_creates_independent_shop_package(self) -> None:
         _, a, _, _ = await self._seed()
         pages = (ROOT / "app/api/principal_pages.py").read_text(encoding="utf-8")
         self.assertNotIn("create_web_identity", pages)
         self.assertNotIn("bind_telegram", pages)
-        self.assertNotIn("ResellerProfile", pages)
         async with self._client(_l1_staff(a)) as client:
             resp = await client.post(
                 "/principals/create-l2",
@@ -540,8 +524,11 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
                     select(OrgPrincipal).where(OrgPrincipal.pg_username == "no_auto_id")
                 )
             ).scalar_one()
-            self.assertIsNone(child.bot_user_id)
-            self.assertIsNone(child.reseller_profile_id)
+            self.assertIsNotNone(child.bot_user_id)
+            self.assertIsNotNone(child.reseller_profile_id)
+            shop = await session.get(ResellerProfile, int(child.reseller_profile_id))
+            self.assertIsNotNone(shop)
+            self.assertIsNone(shop.pg_admin_password_enc)
             webs = await session.scalar(
                 select(func.count())
                 .select_from(OrgPrincipalWebIdentity)
@@ -562,9 +549,9 @@ class Product3SourceContracts(unittest.TestCase):
         self.assertNotIn("delete_admin", pages)
         self.assertNotIn("bind_telegram", pages)
         self.assertNotIn("create_web_identity", pages)
-        tpl = (ROOT / "app/web/templates/principals.html").read_text(encoding="utf-8")
+        tpl = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
         self.assertIn("افزودن نماینده", tpl)
-        self.assertIn("/principals/create-l2", tpl)
+        self.assertIn("/resellers/create-child", tpl)
         self.assertIn("l2_pg_roles", tpl)
         self.assertNotIn('name="parent_id"', tpl)
         self.assertNotIn('name="depth"', tpl)

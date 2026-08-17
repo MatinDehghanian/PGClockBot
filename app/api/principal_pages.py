@@ -138,6 +138,7 @@ def _raise_if_forbidden(exc: PrincipalLifecycleError) -> None:
         "unauthenticated",
         "not_found",
         "inactive_or_missing_principal",
+        "pg_capability_denied",
     }:
         raise HTTPException(status_code=403, detail="forbidden") from exc
 
@@ -384,189 +385,20 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
         staff: dict = Depends(staff_dep),
         session: AsyncSession = Depends(get_db),
     ):
-        err = request.query_params.get("err")
-        ok = request.query_params.get("ok")
-        groups: list[dict] = []
-        l2_rows: list[dict] = []
-        detail: dict | None = None
-        detail_chips: list[str] = []
-        resource_count = None
-        roles: list[dict] = []
-        l2_pg_roles: list[dict] = []
-        actor_kind = "l1"
-        can_create = False
-        can_create_l2 = False
-        try:
-            actor = await load_management_actor(session, staff)
-        except PrincipalLifecycleError as exc:
-            _raise_if_forbidden(exc)
-            return render(
-                request,
-                "principals.html",
-                {
-                    "staff": staff,
-                    "actor_kind": "none",
-                    "groups": [],
-                    "l2_rows": [],
-                    "detail": None,
-                    "detail_chips": [],
-                    "resource_count": None,
-                    "pg_roles": [],
-                    "l2_pg_roles": [],
-                    "can_create": False,
-                    "can_create_l2": False,
-                    "can_attach_web": False,
-                    "can_attach_l2_telegram": False,
-                    "can_detach_l2_telegram": False,
-                    "flash_ok": ok,
-                    "flash_err": exc.message,
-                    "open_detail": False,
-                },
-            )
-
-        owner = actor_is_owner(actor)
-        actor_kind = "owner" if owner else "l1"
-        names: dict[int, str] = {}
-        try:
-            # Owner env client is for Owner L1-create only — never L1 page loads.
-            can_create = owner and owner_has_pg_admin_create_capability(staff)
-            if can_create:
-                roles = await _pg_roles_for_picker()
-                names = _role_name_map(roles)
-            # Owner creates L1 only — existing service DENY for Owner→L2.
-            can_create_l2 = (not owner) and has_pg_admin_create_capability(staff)
-            if can_create_l2:
-                l2_pg_roles = await _l2_pg_roles_for_picker(session, staff)
-                l2_names = _role_name_map(l2_pg_roles)
-                if l2_names:
-                    names.update(l2_names)
-            l2_views = await list_level2_principals(session, staff)
-            if public_views_contain_secret(l2_views):
-                log.error("L2 list view leaked credential keys — refusing render")
-                l2_views = []
-                err = err or "نمایش فهرست نامعتبر است"
-            l2_by_parent: dict[int, list[dict]] = {}
-            for view in l2_views:
-                item = _safe_public(view, hierarchy_label=_hierarchy_label(DEPTH_TWO))
-                if not item.get("pg_role_name") and item.get("pg_role_id") is not None:
-                    item["pg_role_name"] = names.get(int(item["pg_role_id"]))
-                parent_key = int(item["parent_id"]) if item.get("parent_id") else 0
-                l2_by_parent.setdefault(parent_key, []).append(item)
-                l2_rows.append(item)
-
-            if owner:
-                l1_views = await list_level1_principals(session, staff)
-                if public_views_contain_secret(l1_views):
-                    log.error("principal list view leaked credential keys — refusing render")
-                    l1_views = []
-                    err = err or "نمایش فهرست نامعتبر است"
-                for view in l1_views:
-                    item = _safe_public(view, hierarchy_label=_hierarchy_label(DEPTH_ONE))
-                    if not item.get("pg_role_name") and item.get("pg_role_id") is not None:
-                        item["pg_role_name"] = names.get(int(item["pg_role_id"]))
-                    kids = l2_by_parent.get(int(item["principal_id"]), [])
-                    groups.append({"l1": item, "children": kids})
-        except PrincipalLifecycleError as exc:
-            _raise_if_forbidden(exc)
-            err = exc.message
-            roles = []
-            l2_pg_roles = []
-            can_create = False
-            can_create_l2 = False
-        except Exception:
-            log.exception("principal list failed")
-            err = "بارگذاری فهرست نمایندگان ناموفق بود"
-            roles = []
-            l2_pg_roles = []
-            can_create = False
-            can_create_l2 = False
-
-        detail_raw = (request.query_params.get("detail") or "").strip()
-        if detail_raw.isdigit():
-            try:
-                target = await get_principal(session, int(detail_raw))
-                if target is None:
-                    raise PrincipalLifecycleError("نماینده یافت نشد", code="not_found")
-                if int(target.depth) == DEPTH_TWO:
-                    view = await get_level2_principal_detail(
-                        session, staff, int(detail_raw)
-                    )
-                    hierarchy = _hierarchy_label(DEPTH_TWO)
-                elif int(target.depth) == DEPTH_ONE and owner:
-                    view = await get_level1_principal_detail(
-                        session, staff, int(detail_raw)
-                    )
-                    hierarchy = _hierarchy_label(DEPTH_ONE)
-                else:
-                    raise PrincipalLifecycleError(
-                        "جزئیات نماینده قابل نمایش نیست",
-                        code="out_of_scope",
-                    )
-                if public_views_contain_secret(view):
-                    err = err or "جزئیات نماینده قابل نمایش نیست"
-                else:
-                    detail = _safe_public(view, hierarchy_label=hierarchy)
-                    if not detail.get("pg_role_name") and detail.get("pg_role_id") is not None:
-                        detail["pg_role_name"] = names.get(int(detail["pg_role_id"])) if names else None
-                    if owner:
-                        try:
-                            from app.services.pasarguard import get_pg
-
-                            chip_client: Any | None = get_pg()
-                        except Exception:
-                            chip_client = None
-                    else:
-                        chip_client = await _l1_pg_client(session, staff)
-                    detail_chips = await _chips_for_role_id(
-                        detail.get("pg_role_id"),
-                        client=chip_client,
-                    )
-                    if int(target.depth) == DEPTH_ONE:
-                        from app.services.principal_lifecycle import count_owned_resources
-
-                        resource_count = await count_owned_resources(
-                            session, int(view.principal_id)
-                        )
-            except PrincipalLifecycleError as exc:
-                err = exc.message
-            except Exception:
-                log.exception("principal detail failed")
-                err = err or "بارگذاری جزئیات ناموفق بود"
-
-        page = render(
-            request,
-            "principals.html",
-            {
-                "staff": staff,
-                "actor_kind": actor_kind,
-                "groups": groups,
-                "l2_rows": l2_rows,
-                "detail": detail,
-                "detail_chips": detail_chips,
-                "resource_count": resource_count,
-                "pg_roles": roles if can_create else [],
-                "l2_pg_roles": l2_pg_roles if can_create_l2 else [],
-                "can_create": can_create,
-                "can_create_l2": can_create_l2,
-                "can_attach_web": _can_attach_web(detail),
-                "can_attach_l2_telegram": _can_attach_l2_telegram(detail),
-                "can_detach_l2_telegram": _can_detach_l2_telegram(detail),
-                "flash_ok": ok,
-                "flash_err": err,
-                "open_detail": bool(detail),
-            },
+        from app.services.representative_unification import (
+            RepresentativeUnifyError,
+            assert_live_parent_for_child,
         )
+
         try:
-            body = bytes(page.body).decode("utf-8", errors="ignore")
-            if _html_contains_secret(body):
-                log.error("principal page HTML contained secret markers — refusing")
-                return RedirectResponse(
-                    f"/principals?err={_q('نمایش صفحه نامعتبر است')}",
-                    status_code=303,
-                )
-        except Exception:
-            pass
-        return page
+            await assert_live_parent_for_child(session, staff)
+        except RepresentativeUnifyError:
+            raise HTTPException(status_code=403, detail="forbidden")
+        qs = str(request.url.query or "")
+        dest = "/resellers"
+        if qs:
+            dest = f"/resellers?{qs}"
+        return RedirectResponse(dest, status_code=303)
 
     @app.post("/principals/{principal_id}/disable")
     async def principal_disable(
@@ -580,7 +412,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
         except PrincipalLifecycleError as exc:
             _raise_if_forbidden(exc)
             return RedirectResponse(
-                f"/principals?detail={int(principal_id)}&err={_q(exc.message)}",
+                f"/resellers?detail={int(principal_id)}&err={_q(exc.message)}",
                 status_code=303,
             )
         except Exception:
@@ -590,11 +422,11 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             except Exception:
                 pass
             return RedirectResponse(
-                f"/principals?detail={int(principal_id)}&err={_q('غیرفعال‌سازی ناموفق بود')}",
+                f"/resellers?detail={int(principal_id)}&err={_q('غیرفعال‌سازی ناموفق بود')}",
                 status_code=303,
             )
         return RedirectResponse(
-            f"/principals?detail={int(principal_id)}&ok={_q('نماینده غیرفعال شد')}",
+            f"/resellers?detail={int(principal_id)}&ok={_q('نماینده غیرفعال شد')}",
             status_code=303,
         )
 
@@ -610,7 +442,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
         except PrincipalLifecycleError as exc:
             _raise_if_forbidden(exc)
             return RedirectResponse(
-                f"/principals?detail={int(principal_id)}&err={_q(exc.message)}",
+                f"/resellers?detail={int(principal_id)}&err={_q(exc.message)}",
                 status_code=303,
             )
         except Exception:
@@ -620,11 +452,11 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             except Exception:
                 pass
             return RedirectResponse(
-                f"/principals?detail={int(principal_id)}&err={_q('فعال‌سازی ناموفق بود')}",
+                f"/resellers?detail={int(principal_id)}&err={_q('فعال‌سازی ناموفق بود')}",
                 status_code=303,
             )
         return RedirectResponse(
-            f"/principals?detail={int(principal_id)}&ok={_q('نماینده فعال شد')}",
+            f"/resellers?detail={int(principal_id)}&ok={_q('نماینده فعال شد')}",
             status_code=303,
         )
 
@@ -660,7 +492,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             await session.commit()
         except PrincipalProvisionError as exc:
             return RedirectResponse(
-                f"/principals?err={_q(exc.message)}",
+                f"/resellers?err={_q(exc.message)}",
                 status_code=303,
             )
         except Exception:
@@ -670,12 +502,12 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             except Exception:
                 pass
             return RedirectResponse(
-                f"/principals?err={_q('ساخت نماینده ناموفق بود')}",
+                f"/resellers?err={_q('ساخت نماینده ناموفق بود')}",
                 status_code=303,
             )
         created = "ساخته شد" if result.created else "از قبل موجود بود"
         return RedirectResponse(
-            f"/principals?detail={int(result.principal.id)}"
+            f"/resellers?detail={int(result.principal.id)}"
             f"&ok={_q(f'نماینده {created}')}",
             status_code=303,
         )
@@ -720,13 +552,13 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
         except PrincipalLifecycleError as exc:
             _raise_if_forbidden(exc)
             return RedirectResponse(
-                f"/principals?err={_q(exc.message)}",
+                f"/resellers?err={_q(exc.message)}",
                 status_code=303,
             )
         except ChildProvisionError as exc:
             _raise_if_l2_create_denied(exc)
             return RedirectResponse(
-                f"/principals?err={_q(exc.message)}",
+                f"/resellers?err={_q(exc.message)}",
                 status_code=303,
             )
         except Exception:
@@ -736,12 +568,12 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             except Exception:
                 pass
             return RedirectResponse(
-                f"/principals?err={_q('ساخت نماینده ناموفق بود')}",
+                f"/resellers?err={_q('ساخت نماینده ناموفق بود')}",
                 status_code=303,
             )
         created = "ساخته شد" if result.created else "از قبل موجود بود"
         return RedirectResponse(
-            f"/principals?detail={int(result.principal.id)}"
+            f"/resellers?detail={int(result.principal.id)}"
             f"&ok={_q(f'نماینده {created}')}",
             status_code=303,
         )
@@ -816,13 +648,13 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
         except PrincipalLifecycleError as exc:
             _raise_if_web_attach_lifecycle_denied(exc)
             return RedirectResponse(
-                f"/principals?detail={int(principal_id)}&err={_q(exc.message)}",
+                f"/resellers?detail={int(principal_id)}&err={_q(exc.message)}",
                 status_code=303,
             )
         except PrincipalWebIdentityError as exc:
             _raise_if_web_attach_denied(exc)
             return RedirectResponse(
-                f"/principals?detail={int(principal_id)}&err={_q(exc.message)}",
+                f"/resellers?detail={int(principal_id)}&err={_q(exc.message)}",
                 status_code=303,
             )
         except Exception:
@@ -832,11 +664,11 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             except Exception:
                 pass
             return RedirectResponse(
-                f"/principals?detail={int(principal_id)}&err={_q('فعال‌سازی ورود وب ناموفق بود')}",
+                f"/resellers?detail={int(principal_id)}&err={_q('فعال‌سازی ورود وب ناموفق بود')}",
                 status_code=303,
             )
         return RedirectResponse(
-            f"/principals?detail={int(principal_id)}"
+            f"/resellers?detail={int(principal_id)}"
             f"&ok={_q('ورود وب فعال شد')}",
             status_code=303,
         )
@@ -876,13 +708,13 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
         except PrincipalLifecycleError as exc:
             _raise_if_forbidden(exc)
             return RedirectResponse(
-                f"/principals?detail={int(principal_id)}&err={_q(exc.message)}",
+                f"/resellers?detail={int(principal_id)}&err={_q(exc.message)}",
                 status_code=303,
             )
         except L2BotBindError as exc:
             _raise_if_l2_bind_denied(exc)
             return RedirectResponse(
-                f"/principals?detail={int(principal_id)}&err={_q(exc.message)}",
+                f"/resellers?detail={int(principal_id)}&err={_q(exc.message)}",
                 status_code=303,
             )
         except Exception:
@@ -892,11 +724,11 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             except Exception:
                 pass
             return RedirectResponse(
-                f"/principals?detail={int(principal_id)}&err={_q('اتصال تلگرام ناموفق بود')}",
+                f"/resellers?detail={int(principal_id)}&err={_q('اتصال تلگرام ناموفق بود')}",
                 status_code=303,
             )
         return RedirectResponse(
-            f"/principals?detail={int(principal_id)}"
+            f"/resellers?detail={int(principal_id)}"
             f"&ok={_q('اتصال تلگرام انجام شد')}",
             status_code=303,
         )
@@ -921,13 +753,13 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
         except PrincipalLifecycleError as exc:
             _raise_if_forbidden(exc)
             return RedirectResponse(
-                f"/principals?detail={int(principal_id)}&err={_q(exc.message)}",
+                f"/resellers?detail={int(principal_id)}&err={_q(exc.message)}",
                 status_code=303,
             )
         except L2BotBindError as exc:
             _raise_if_l2_bind_denied(exc)
             return RedirectResponse(
-                f"/principals?detail={int(principal_id)}&err={_q(exc.message)}",
+                f"/resellers?detail={int(principal_id)}&err={_q(exc.message)}",
                 status_code=303,
             )
         except Exception:
@@ -937,11 +769,11 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             except Exception:
                 pass
             return RedirectResponse(
-                f"/principals?detail={int(principal_id)}&err={_q('قطع اتصال تلگرام ناموفق بود')}",
+                f"/resellers?detail={int(principal_id)}&err={_q('قطع اتصال تلگرام ناموفق بود')}",
                 status_code=303,
             )
         return RedirectResponse(
-            f"/principals?detail={int(principal_id)}"
+            f"/resellers?detail={int(principal_id)}"
             f"&ok={_q('اتصال تلگرام قطع شد')}",
             status_code=303,
         )

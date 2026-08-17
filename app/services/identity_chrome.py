@@ -67,11 +67,17 @@ def hierarchy_identity(staff: Mapping[str, Any] | None) -> dict[str, Any]:
         "show_pg_role": False,
         "chips": [],
         "commercial_reseller": False,
+        "can_add_representative": False,
     }
     if not staff:
         return empty
 
     from app.services.platform_identity import is_explicit_owner_staff
+    from app.services.representative_unification import staff_can_manage_representatives
+
+    can_add = (not is_explicit_owner_staff(staff)) and staff_can_manage_representatives(
+        staff
+    )
 
     if is_explicit_owner_staff(staff):
         return {
@@ -81,6 +87,7 @@ def hierarchy_identity(staff: Mapping[str, Any] | None) -> dict[str, Any]:
             "show_pg_role": False,
             "chips": [],
             "commercial_reseller": False,
+            "can_add_representative": False,
         }
 
     role = str(staff.get("role") or "").strip()
@@ -96,11 +103,12 @@ def hierarchy_identity(staff: Mapping[str, Any] | None) -> dict[str, Any]:
             "show_pg_role": False,
             "chips": [],
             "commercial_reseller": True,
+            "can_add_representative": can_add,
         }
 
     if role == "principal" or (depth in (1, 2) and role not in {"reseller", "admin"}):
         if depth == 2:
-            kind, label = "l2", "نماینده"
+            kind, label = "l2", "زیرنماینده"
         elif depth == 1:
             kind, label = "l1", "نماینده"
         else:
@@ -113,6 +121,7 @@ def hierarchy_identity(staff: Mapping[str, Any] | None) -> dict[str, Any]:
             "show_pg_role": bool(pg_name),
             "chips": chips,
             "commercial_reseller": False,
+            "can_add_representative": can_add,
         }
 
     if role == "pg_staff":

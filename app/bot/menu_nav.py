@@ -82,7 +82,22 @@ async def build_main_reply_keyboard(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
-        markup = kb.reseller_hub_main_keyboard(profile, ui)
+        can_add = False
+        if profile is not None:
+            from app.services.representative_unification import (
+                shop_bot_can_manage_representatives,
+            )
+
+            can_add = await shop_bot_can_manage_representatives(
+                session,
+                db_user,
+                is_reseller_bot=True,
+                reseller_owner_id=reseller_owner_id,
+                reseller_profile_id=int(getattr(profile, "id", 0) or 0) or None,
+            )
+        markup = kb.reseller_hub_main_keyboard(
+            profile, ui, can_add_representative=can_add
+        )
         return markup, ui, role
     has = False if (role == "admin" and not as_user) else await user_has_services(session, db_user.id)
     show_creds = is_shop_owner_on_main_bot(db_user, is_reseller_bot=is_reseller_bot)

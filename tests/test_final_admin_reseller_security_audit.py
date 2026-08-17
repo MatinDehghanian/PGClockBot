@@ -67,8 +67,9 @@ class NodesAclIsolationTests(unittest.TestCase):
         src = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
         fn = src[src.find("async def open_pg_home") : src.find("async def open_admin_users_hub")]
         self.assertIn("is_reseller_bot", fn)
-        self.assertIn("Role.ADMIN", fn)
-        self.assertIn("دسترسی ندارید", fn)
+        self.assertIn("bot_may_open_pg_hub", fn)
+        self.assertIn("OWNER_REQUIRED_MESSAGE", fn)
+        self.assertNotIn("Role.ADMIN", fn)
 
 
 class QuotaEnforcementTests(unittest.IsolatedAsyncioTestCase):

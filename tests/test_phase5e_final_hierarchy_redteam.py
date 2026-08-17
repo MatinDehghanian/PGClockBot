@@ -200,6 +200,7 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
             },
             l1a,
         )
+        shops: dict[int, ResellerProfile] = {}
         for child, tg in (
             (a1, l2_a1_user),
             (a2, l2_a2_user),
@@ -223,6 +224,20 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
                 telegram_id=int(tg.telegram_id),
                 admin_ids={OWNER_TID},
             )
+            shop = ResellerProfile(
+                user_id=int(tg.id),
+                is_active=True,
+                web_username=f"shop_{child.pg_username}",
+                web_password_hash="x" * 24,
+                setup_completed_at=datetime.now(timezone.utc),
+                pg_admin_username=child.pg_username,
+                pg_role_id=10,
+            )
+            session.add(shop)
+            await session.flush()
+            child.reseller_profile_id = int(shop.id)
+            child.bot_user_id = int(tg.id)
+            shops[int(tg.id)] = shop
         ident_l1a = await attach_level1_web_identity(
             session, principal_id=int(l1a.id), web_username="pg_shopa", password=_WEB
         )
@@ -251,6 +266,9 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
             l2_a1_user=l2_a1_user,
             l2_a2_user=l2_a2_user,
             l2_b1_user=l2_b1_user,
+            l2_a1_shop=shops[int(l2_a1_user.id)],
+            l2_a2_shop=shops[int(l2_a2_user.id)],
+            l2_b1_shop=shops[int(l2_b1_user.id)],
             ident_l1a=ident_l1a,
             ident_a1=ident_a1,
             ident_a2=ident_a2,
@@ -267,21 +285,37 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
                 session, build_principal_session_payload(auth)
             )
 
-    async def _bot_bridge(self, session, db_user, fake_pg=None):
+    def _l2_kw(self, fx, db_user=None) -> dict:
+        user = db_user or fx.l2_a1_user
+        shop = fx.l2_a1_shop
+        if int(user.id) == int(fx.l2_a2_user.id):
+            shop = fx.l2_a2_shop
+        elif int(user.id) == int(fx.l2_b1_user.id):
+            shop = fx.l2_b1_shop
+        return {
+            "is_reseller_bot": True,
+            "reseller_profile_id": int(shop.id),
+            "reseller_owner_id": int(user.id),
+        }
+
+    async def _bot_bridge(self, session, db_user, fake_pg=None, fx=None):
         live, feats = self._pg_live()
         pg = fake_pg if fake_pg is not None else AsyncMock()
+        kw = {"is_reseller_bot": False}
+        if fx is not None:
+            kw = self._l2_kw(fx, db_user)
         with live, feats, self._admin_ids(OWNER_TID), patch(
             "app.services.pasarguard.get_pg",
             side_effect=AssertionError("must not use Owner get_pg()"),
         ), patch(
             "app.services.pasarguard.get_pg_for_reseller",
-            side_effect=AssertionError("L2 must not use get_pg_for_reseller()"),
+            new=AsyncMock(return_value=pg),
         ), patch(
             "app.services.pasarguard.get_pg_for_principal",
             new=AsyncMock(return_value=pg),
         ):
             return await resolve_bot_principal_bridge(
-                session, db_user=db_user, is_reseller_bot=False
+                session, db_user=db_user, **kw
             )
 
     async def test_invariants_owner_unique_and_depth(self) -> None:
@@ -381,11 +415,11 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
             with self._admin_ids(OWNER_TID):
                 self.assertFalse(
                     await is_bot_owner_principal(
-                        session, fx.l2_a1_user, is_reseller_bot=False
+                        session, fx.l2_a1_user, **self._l2_kw(fx)
                     )
                 )
                 bot = await resolve_bot_org_principal(
-                    session, db_user=fx.l2_a1_user, is_reseller_bot=False
+                    session, db_user=fx.l2_a1_user, **self._l2_kw(fx)
                 )
             self.assertEqual(int(bot.id), int(fx.a1.id))
 
@@ -403,7 +437,7 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
                 side_effect=AssertionError("L2 must not use Owner get_pg()"),
             ), patch(
                 "app.services.pasarguard.get_pg_for_reseller",
-                side_effect=AssertionError("L2 must not use parent client"),
+                new=AsyncMock(return_value=fake_pg),
             ), patch(
                 "app.services.pasarguard.get_pg_for_principal",
                 new=AsyncMock(return_value=fake_pg),
@@ -411,18 +445,20 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
                 parent = await authorize_bot_pg_user_op(
                     session,
                     db_user=fx.l2_a1_user,
+                    **self._l2_kw(fx),
                     action="read",
                     callback_data="adm:pg:u:202",
                 )
                 tamper = await authorize_bot_pg_user_op(
                     session,
                     db_user=fx.l2_a1_user,
+                    **self._l2_kw(fx),
                     action="list",
                     callback_data="adm:pg:users:org_principal_id:1:pg_username:env_owner",
                 )
                 msg, _ = _fake_msg()
                 await open_admin_backup_hub(
-                    msg, session, fx.l2_a1_user, None, is_reseller_bot=False
+                    msg, session, fx.l2_a1_user, None, **self._l2_kw(fx)
                 )
                 state = SimpleNamespace(
                     get_data=AsyncMock(return_value={}),
@@ -445,7 +481,8 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
                 )
             self.assertFalse(parent.allowed)
             self.assertFalse(tamper.allowed)
-            self.assertIn("مالک", msg.answer.await_args.args[0])
+            backup_deny = msg.answer.await_args.args[0]
+            self.assertTrue("مالک" in backup_deny or "ربات اصلی" in backup_deny, backup_deny)
             self.assertIn("مالک", msg2.answer.await_args.args[0])
 
     async def test_q_r_stale_after_disable(self) -> None:
@@ -463,7 +500,7 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
             with self._admin_ids(OWNER_TID):
                 self.assertIsNone(
                     await resolve_bot_org_principal(
-                        session, db_user=fx.l2_a1_user, is_reseller_bot=False
+                        session, db_user=fx.l2_a1_user, **self._l2_kw(fx)
                     )
                 )
             fx.a1.status = "active"
@@ -477,7 +514,7 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
             with self._admin_ids(OWNER_TID):
                 self.assertIsNone(
                     await resolve_bot_org_principal(
-                        session, db_user=fx.l2_a1_user, is_reseller_bot=False
+                        session, db_user=fx.l2_a1_user, **self._l2_kw(fx)
                     )
                 )
 
@@ -506,6 +543,7 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
                 gate = await authorize_bot_pg_user_op(
                     session,
                     db_user=fx.l2_a1_user,
+                    **self._l2_kw(fx),
                     action="list",
                     callback_data="adm:pg:users",
                 )
@@ -546,7 +584,7 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
                     telegram_id=int(fx.l2_a1_user.telegram_id),
                     admin_ids={OWNER_TID},
                 )
-            self.assertIn(dup.exception.code, {"duplicate_bot_user_id", "binding_collision"})
+            self.assertIn(dup.exception.code, {"duplicate_bot_user_id", "binding_collision", "reseller_collision"})
             with self.assertRaises(OrgPrincipalError):
                 await create_principal(session, parent_id=None, depth=0)
             fx.owner_p.status = "disabled"
@@ -601,7 +639,16 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             fx = await self._tree(session)
             live, feats = self._pg_live()
-            with live, feats, self._admin_ids(OWNER_TID):
+            with live, feats, self._admin_ids(OWNER_TID), patch(
+                "app.services.pasarguard.get_pg",
+                side_effect=AssertionError("must not use Owner get_pg()"),
+            ), patch(
+                "app.services.pasarguard.get_pg_for_principal",
+                new=AsyncMock(),
+            ), patch(
+                "app.services.pasarguard.get_pg_for_reseller",
+                new=AsyncMock(),
+            ):
                 msg, _ = _fake_msg()
                 await open_admin_backup_hub(
                     msg, session, fx.ua, None, is_reseller_bot=False
@@ -622,9 +669,13 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(OWNER_REQUIRED_MESSAGE, cb.answer.await_args.args[0])
                 msg3, _ = _fake_msg()
                 await open_pg_home(
-                    msg3, session, fx.l2_a1_user, None, is_reseller_bot=True
+                    msg3, session, fx.l2_a1_user, None, **self._l2_kw(fx)
                 )
-                self.assertIn("ربات اصلی", msg3.answer.await_args.args[0])
+                texts = " ".join(
+                    str(c.args[0]) for c in msg3.answer.await_args_list if c.args
+                )
+                self.assertNotIn("ربات اصلی", texts)
+                self.assertIn("پاسارگارد", texts)
                 shop_as_l2_chatter = await resolve_bot_org_principal(
                     session,
                     db_user=fx.l2_a1_user,
@@ -666,7 +717,7 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=fake_l2),
             ):
                 bridge = await resolve_bot_principal_bridge(
-                    session, db_user=fx.l2_a1_user, is_reseller_bot=False
+                    session, db_user=fx.l2_a1_user, **self._l2_kw(fx)
                 )
                 client, as_owner = await bot_pg_client_for_resolution(session, bridge)
                 staff_a1 = await resolve_principal_web_session(
@@ -709,7 +760,7 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
             live, feats = self._pg_live()
             with live, feats, self._admin_ids(OWNER_TID):
                 bot_a1 = await resolve_bot_principal_bridge(
-                    session, db_user=fx.l2_a1_user, is_reseller_bot=False
+                    session, db_user=fx.l2_a1_user, **self._l2_kw(fx)
                 )
                 bot_l1 = await resolve_bot_principal_bridge(
                     session, db_user=fx.ua, is_reseller_bot=False

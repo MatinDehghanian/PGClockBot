@@ -24,6 +24,9 @@ class ParseIdsTests(unittest.TestCase):
     def test_parse_ignores_junk(self):
         self.assertEqual(parse_telegram_ids("1,abc,,2"), {1, 2})
 
+    def test_parse_ignores_synthetic_ids(self):
+        self.assertEqual(parse_telegram_ids("10,-99,0,-2100000000000001"), {10})
+
     def test_normalize_sorts(self):
         self.assertEqual(normalize_telegram_ids_csv("3,1,2"), "1,2,3")
         self.assertIsNone(normalize_telegram_ids_csv("  "))
@@ -35,6 +38,9 @@ class BotAdminIdTests(unittest.TestCase):
         self.assertTrue(is_bot_admin_id(profile, 10))
         self.assertFalse(is_bot_admin_id(profile, 99))
         self.assertFalse(is_bot_admin_id(None, 10))
+        self.assertFalse(is_bot_admin_id(profile, -10))
+        synth_profile = SimpleNamespace(bot_admin_ids="-99,10")
+        self.assertFalse(is_bot_admin_id(synth_profile, -99))
 
 
 class ResolveOwnerTests(unittest.IsolatedAsyncioTestCase):

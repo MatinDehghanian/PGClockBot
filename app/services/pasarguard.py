@@ -770,6 +770,23 @@ def invalidate_pg_principal_cache(principal_id: int | None) -> None:
         _pg_principal_cache.pop(stale_key, None)
 
 
+def invalidate_pg_reseller_cache(reseller_user_id: int | None) -> None:
+    """Drop cached PG clients for one shop (e.g. after password rotate).
+
+    Does not touch Owner env client or other shops.
+    """
+    if reseller_user_id is None:
+        return
+    try:
+        rid = int(reseller_user_id)
+    except (TypeError, ValueError):
+        return
+    if rid <= 0:
+        return
+    for stale_key in [k for k in _pg_reseller_cache if k[0] == rid]:
+        _pg_reseller_cache.pop(stale_key, None)
+
+
 async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClient:
     """PasarGuard client authenticated as the shop's PG admin — never owner token.
 
@@ -799,6 +816,18 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
     cached = _pg_reseller_cache.get(cache_key)
     if cached is not None and cached._token:
         return cached
+
+    from app.services.org_principals import get_principal_by_reseller_profile
+
+    linked = await get_principal_by_reseller_profile(session, int(profile.id))
+    if (
+        linked is not None
+        and str(linked.status) == "active"
+        and int(getattr(linked, "depth", -1) or -1) in (1, 2)
+        and (linked.pg_password_enc or "").strip()
+        and (linked.pg_username or "").strip()
+    ):
+        return await get_pg_for_principal(session, principal_id=int(linked.id))
 
     password = decrypt_secret(profile.pg_admin_password_enc)
     if not password:

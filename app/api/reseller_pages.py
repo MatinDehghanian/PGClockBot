@@ -3,6 +3,7 @@ from __future__ import annotations
 """Reseller plans, applications, and staff management pages."""
 
 import logging
+import uuid
 from datetime import datetime, timezone
 from urllib.parse import quote
 
@@ -128,7 +129,9 @@ def _parse_pg_group_ids(form) -> str | None:
     return ",".join(seen) if seen else None
 
 
-def register_reseller_pages(app, *, render, require_admin, get_db):
+def register_reseller_pages(app, *, render, require_admin, get_db, require_staff=None):
+    staff_dep = require_staff or require_admin
+
     def _tabs(active: str) -> list[dict]:
         # Plans live under unified /plans — no duplicate «پلن‌ها» tab here.
         return [
@@ -139,12 +142,44 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
     @app.get("/resellers", response_class=HTMLResponse)
     async def resellers_page(
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(staff_dep),
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.pg_overview import admin_usage_snapshot
+        from app.services.platform_identity import is_explicit_owner_staff
+        from app.services.representative_unification import (
+            RepresentativeUnifyError,
+            assert_live_parent_for_child,
+            descendant_shop_profile_ids,
+        )
         from app.services.setup_wizard import default_panel_base_url
         from app.services.users import get_setting
+        from fastapi import HTTPException
+
+        try:
+            await assert_live_parent_for_child(session, staff)
+        except RepresentativeUnifyError:
+            raise HTTPException(status_code=403, detail="forbidden")
+
+        owner_view = is_explicit_owner_staff(staff)
+        l2_pg_roles: list[dict] = []
+        if not owner_view:
+            try:
+                from app.services.pasarguard import get_pg_for_principal
+
+                pid = int(staff.get("org_principal_id") or 0)
+                if pid > 0:
+                    pg = await get_pg_for_principal(session, principal_id=pid)
+                    raw_roles = await pg.get_admin_roles()
+                    l2_pg_roles = [
+                        r
+                        for r in (raw_roles or [])
+                        if isinstance(r, dict)
+                        and r.get("id") is not None
+                        and not bool(r.get("is_owner"))
+                    ]
+            except Exception:
+                l2_pg_roles = []
 
         result = await session.execute(
             select(BotUser, ResellerProfile)
@@ -152,6 +187,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             .order_by(ResellerProfile.id.desc())
         )
         rows = result.all()
+        if not owner_view:
+            allowed = await descendant_shop_profile_ids(session, staff)
+            rows = [pair for pair in rows if int(pair[1].id) in allowed]
         search_q = ""
         try:
             from app.services.list_query import filter_by_search, normalize_search_q
@@ -207,42 +245,43 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 pass
         roles = []
         reseller_usage: dict = {}
-        try:
-            roles = await get_pg().get_admin_roles()
-        except Exception:
-            roles = []
-        try:
-            pg = get_pg()
-            admins = await pg.get_admins()
-            if not admins:
-                admins = await pg.get_admins_simple()
-            roles_by_id = {
-                int(r.get("id")): r
-                for r in (roles or [])
-                if isinstance(r, dict) and r.get("id") is not None
-            }
-            by_name = {
-                str(a.get("username") or "").strip().lower(): a
-                for a in (admins or [])
-                if isinstance(a, dict) and a.get("username")
-            }
-            for _user, profile in rows:
-                uname = str(profile.pg_admin_username or "").strip().lower()
-                if not uname:
-                    continue
-                admin = by_name.get(uname)
-                if not isinstance(admin, dict):
-                    continue
-                role = admin.get("role") if isinstance(admin.get("role"), dict) else None
-                if role is None:
-                    rid = admin.get("role_id") or profile.pg_role_id
-                    try:
-                        role = roles_by_id.get(int(rid)) if rid is not None else None
-                    except (TypeError, ValueError):
-                        role = None
-                reseller_usage[int(profile.user_id)] = admin_usage_snapshot(admin, role)
-        except Exception:
-            reseller_usage = {}
+        if owner_view:
+            try:
+                roles = await get_pg().get_admin_roles()
+            except Exception:
+                roles = []
+            try:
+                pg = get_pg()
+                admins = await pg.get_admins()
+                if not admins:
+                    admins = await pg.get_admins_simple()
+                roles_by_id = {
+                    int(r.get("id")): r
+                    for r in (roles or [])
+                    if isinstance(r, dict) and r.get("id") is not None
+                }
+                by_name = {
+                    str(a.get("username") or "").strip().lower(): a
+                    for a in (admins or [])
+                    if isinstance(a, dict) and a.get("username")
+                }
+                for _user, profile in rows:
+                    uname = str(profile.pg_admin_username or "").strip().lower()
+                    if not uname:
+                        continue
+                    admin = by_name.get(uname)
+                    if not isinstance(admin, dict):
+                        continue
+                    role = admin.get("role") if isinstance(admin.get("role"), dict) else None
+                    if role is None:
+                        rid = admin.get("role_id") or profile.pg_role_id
+                        try:
+                            role = roles_by_id.get(int(rid)) if rid is not None else None
+                        except (TypeError, ValueError):
+                            role = None
+                    reseller_usage[int(profile.user_id)] = admin_usage_snapshot(admin, role)
+            except Exception:
+                reseller_usage = {}
         panel_url = await get_reseller_panel_base_url(session)
         custom_url = (await get_setting(session, "reseller_panel_base_url") or "").strip()
         default_url = default_panel_base_url()
@@ -279,6 +318,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
                 "flash_err": request.query_params.get("err"),
                 "open_edit": request.query_params.get("edit"),
                 "q": search_q,
+                "owner_view": owner_view,
+                "can_create_l2": not owner_view,
+                "l2_pg_roles": l2_pg_roles,
             },
         )
 
@@ -371,6 +413,63 @@ def register_reseller_pages(app, *, render, require_admin, get_db):
             pass
         return RedirectResponse(
             f"/resellers?ok={_q('نماینده فعال شد — اطلاعات ورود (پاسارگارد + وب‌پنل) ارسال شد')}",
+            status_code=303,
+        )
+
+    @app.post("/resellers/create-child")
+    async def reseller_create_child(
+        request: Request,
+        staff: dict = Depends(staff_dep),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.platform_identity import is_explicit_owner_staff
+        from app.services.principal_child_provisioning import (
+            ChildProvisionError,
+            Level2ProvisionRequest,
+            provision_level2_child,
+        )
+        from app.services.representative_unification import (
+            RepresentativeUnifyError,
+            assert_live_parent_for_child,
+        )
+        from fastapi import HTTPException
+
+        if is_explicit_owner_staff(staff):
+            raise HTTPException(status_code=403, detail="forbidden")
+        try:
+            await assert_live_parent_for_child(session, staff)
+        except RepresentativeUnifyError:
+            raise HTTPException(status_code=403, detail="forbidden")
+        form = await request.form()
+        _ = form.get("parent_id")
+        _ = form.get("depth")
+        _ = form.get("principal_id")
+        _ = form.get("reseller_profile_id")
+        try:
+            role_raw = str(form.get("pg_role_id") or "").strip()
+            result = await provision_level2_child(
+                session,
+                staff,
+                Level2ProvisionRequest(
+                    pg_username=str(form.get("pg_username") or ""),
+                    pg_password=str(form.get("pg_password") or ""),
+                    pg_role_id=int(role_raw) if role_raw.isdigit() else None,
+                    idempotency_key=str(form.get("idempotency_key") or "")
+                    or f"web-child-{uuid.uuid4()}",
+                    note=str(form.get("note") or "") or None,
+                    parent_id=form.get("parent_id"),
+                    depth=form.get("depth"),
+                ),
+            )
+        except ChildProvisionError as exc:
+            return RedirectResponse(f"/resellers?err={_q(exc.message)}", status_code=303)
+        except Exception:
+            return RedirectResponse(
+                f"/resellers?err={_q('ساخت نماینده ناموفق بود')}",
+                status_code=303,
+            )
+        return RedirectResponse(
+            f"/resellers?ok={_q('نماینده ساخته شد')}",
             status_code=303,
         )
 

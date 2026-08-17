@@ -225,7 +225,16 @@ class StaffPgCredentialMatrix(unittest.IsolatedAsyncioTestCase):
         fake = MagicMock()
         with patch("app.api.pg_pages.get_pg", return_value=fake):
             client, as_owner = await _staff_pg(
-                AsyncMock(), {"role": "admin", "pg_is_owner": True}
+                AsyncMock(),
+                {
+                    "role": "admin",
+                    "web_owner": True,
+                    "pg_is_owner": True,
+                    "org_principal_id": 1,
+                    "org_depth": 0,
+                    "org_parent_id": None,
+                    "org_status": "active",
+                },
             )
         self.assertTrue(as_owner)
         self.assertIs(client, fake)

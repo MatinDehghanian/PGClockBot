@@ -36,8 +36,6 @@ from app.services.principal_lifecycle import (
     _safe_pg_role_name,
     _web_identity_status,
 )
-from app.services.principal_web_identity import ROLE_PRINCIPAL
-
 log = logging.getLogger(__name__)
 
 
@@ -92,7 +90,11 @@ def _bot_binding_status(row: OrgPrincipal) -> str:
 async def load_management_actor(
     session: AsyncSession, staff: Mapping[str, Any] | None
 ) -> OrgPrincipal:
-    """Server-side actor for Principal management. L2 / shop / missing → DENY."""
+    """Server-side actor for representative management.
+
+    Owner or active depth-1 Principal. Role strings are not authority.
+    Sub-representatives (depth 2) are denied.
+    """
     if not staff:
         raise PrincipalLifecycleError("احراز هویت نشده", code="unauthenticated")
     pid = _positive_id(staff.get("org_principal_id"))
@@ -112,14 +114,18 @@ async def load_management_actor(
             "Principal فعال نیست",
             code="inactive_or_missing_principal",
         )
-    role = str(staff.get("role") or "").strip()
-    if is_owner_principal(actor) and is_explicit_owner_staff(staff) and role == "admin":
+    if is_owner_principal(actor) and is_explicit_owner_staff(staff):
         return actor
-    if (
-        role == ROLE_PRINCIPAL
-        and int(actor.depth) == DEPTH_ONE
-        and not is_owner_principal(actor)
-    ):
+    if int(actor.depth) == DEPTH_ONE and not is_owner_principal(actor):
+        from app.services.representative_unification import (
+            staff_can_manage_representatives,
+        )
+
+        if not staff_can_manage_representatives(staff):
+            raise PrincipalLifecycleError(
+                "قابلیت ساخت نماینده برای این حساب فعال نیست",
+                code="pg_capability_denied",
+            )
         return actor
     raise PrincipalLifecycleError(
         "دسترسی به مدیریت Principal مجاز نیست",

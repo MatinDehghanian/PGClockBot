@@ -21,9 +21,20 @@ from app.services.plans_catalog import filter_groups_for_staff, filter_templates
 class StaffPgReadClientTests(unittest.IsolatedAsyncioTestCase):
     async def test_admin_uses_owner_client(self):
         fake = object()
+        owner = {
+            "role": "admin",
+            "web_owner": True,
+            "pg_is_owner": True,
+            "org_principal_id": 1,
+            "org_depth": 0,
+            "org_parent_id": None,
+            "org_status": "active",
+        }
         with patch("app.services.pg_read.get_pg", return_value=fake):
-            client = await staff_pg_read_client(None, {"role": "admin"})
+            client = await staff_pg_read_client(None, owner)
         self.assertIs(client, fake)
+        with self.assertRaises(PgReadDenied):
+            await staff_pg_read_client(None, {"role": "admin"})
 
     async def test_reseller_uses_shop_client(self):
         fake = object()

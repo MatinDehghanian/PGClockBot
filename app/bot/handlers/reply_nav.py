@@ -77,6 +77,19 @@ class ReplyMenuTextFilter(BaseFilter):
                 is_reseller_bot=is_reseller_bot,
                 reseller_owner_id=reseller_owner_id,
             )
+        can_add = False
+        if profile is not None:
+            from app.services.representative_unification import (
+                shop_bot_can_manage_representatives,
+            )
+
+            can_add = await shop_bot_can_manage_representatives(
+                session,
+                db_user,
+                is_reseller_bot=True,
+                reseller_owner_id=reseller_owner_id,
+                reseller_profile_id=int(getattr(profile, "id", 0) or 0) or None,
+            )
         mapping = kb.reply_action_map(
             role,
             has_services=has,
@@ -85,6 +98,7 @@ class ReplyMenuTextFilter(BaseFilter):
             include_submenus=True,
             is_reseller_bot=is_reseller_bot,
             profile=profile,
+            can_add_representative=can_add,
         )
         # Main-bot admin / shop reseller can also hit user-preview labels
         if role == "admin" and not is_reseller_bot:
@@ -635,14 +649,26 @@ async def open_pg_home(
     *,
     push: bool = True,
     is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
 ) -> None:
     from app.bot.auth import OWNER_REQUIRED_MESSAGE, bot_may_open_pg_hub
+    from app.services.bot_principal_identity import shop_bot_actor_is_operator
 
-    if is_reseller_bot:
+    if is_reseller_bot and not await shop_bot_actor_is_operator(
+        session,
+        db_user,
+        is_reseller_bot=True,
+        reseller_owner_id=reseller_owner_id,
+    ):
         await _refuse_admin(message)
         return
     if not await bot_may_open_pg_hub(
-        session, db_user, is_reseller_bot=is_reseller_bot
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
     ):
         await message.answer(OWNER_REQUIRED_MESSAGE + ".")
         return
@@ -738,7 +764,10 @@ async def open_admin_settings_hub(
     *,
     push: bool = True,
     is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
 ) -> None:
+    _ = (reseller_profile_id, reseller_owner_id)
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
@@ -762,6 +791,8 @@ async def open_admin_backup_hub(
     *,
     push: bool = True,
     is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
 ) -> None:
     import asyncio
 
@@ -796,7 +827,10 @@ async def open_admin_broadcast_hub(
     *,
     push: bool = True,
     is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
 ) -> None:
+    _ = (reseller_profile_id, reseller_owner_id)
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
@@ -820,7 +854,10 @@ async def open_admin_plans_hub(
     *,
     push: bool = True,
     is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
 ) -> None:
+    _ = (reseller_profile_id, reseller_owner_id)
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
@@ -1050,6 +1087,8 @@ async def _soft_admin(
     state: FSMContext | None = None,
     *,
     is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
 ) -> None:
     from app.bot.auth import is_migrated_pg_soft_callback
     from app.bot.handlers import admin as admin_h
@@ -1057,9 +1096,22 @@ async def _soft_admin(
     from app.bot.handlers import admin_plans as plans_h
     from app.bot.handlers import admin_settings as settings_h
 
+    shop_kw = dict(
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+    )
     if is_reseller_bot:
-        await _refuse_admin(message)
-        return
+        from app.services.bot_principal_identity import shop_bot_actor_is_operator
+
+        if not is_migrated_pg_soft_callback(data) or not await shop_bot_actor_is_operator(
+            session,
+            db_user,
+            is_reseller_bot=True,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            await _refuse_admin(message)
+            return
     if not is_migrated_pg_soft_callback(data):
         if not await _deny_unless_owner(
             message, session, db_user, is_reseller_bot=is_reseller_bot
@@ -1089,46 +1141,40 @@ async def _soft_admin(
         elif data == "adm:pg":
             from app.bot.handlers import admin_pg_users as pg_users_h
 
-            await pg_users_h.adm_pg(
-                cb, db_user, session=session, is_reseller_bot=is_reseller_bot
-            )
+            await pg_users_h.adm_pg(cb, db_user, session=session, **shop_kw)
         elif data == "adm:pg:stats":
             await admin_h.pg_stats(cb, db_user, session=session)
         elif data == "adm:pg:nodes":
             from app.bot.handlers import admin_pg_nodes as pg_nodes_h
 
-            await pg_nodes_h.pg_nodes(
-                cb, db_user, session=session, is_reseller_bot=is_reseller_bot
-            )
+            await pg_nodes_h.pg_nodes(cb, db_user, session=session, **shop_kw)
         elif data == "adm:pg:group":
             from app.bot.handlers import admin_pg_users as pg_users_h
 
-            await pg_users_h.adm_pg_group_hint(
-                cb, db_user, session=session, is_reseller_bot=is_reseller_bot
-            )
+            await pg_users_h.adm_pg_group_hint(cb, db_user, session=session, **shop_kw)
         elif data == "adm:pg:template":
             from app.bot.handlers import admin_pg_users as pg_users_h
 
             await pg_users_h.adm_pg_template_hint(
-                cb, db_user, session=session, is_reseller_bot=is_reseller_bot
+                cb, db_user, session=session, **shop_kw
             )
         elif data == "adm:pg:users":
             from app.bot.handlers import admin_pg_users as pg_users_h
 
             await pg_users_h.pg_users_list(
-                cb, state, db_user, session=session, is_reseller_bot=is_reseller_bot
+                cb, state, db_user, session=session, **shop_kw
             )
         elif data == "adm:pg:search":
             from app.bot.handlers import admin_pg_users as pg_users_h
 
             await pg_users_h.pg_search_start(
-                cb, state, db_user, session=session, is_reseller_bot=is_reseller_bot
+                cb, state, db_user, session=session, **shop_kw
             )
         elif data == "adm:pg:create":
             from app.bot.handlers import admin_pg_users as pg_users_h
 
             await pg_users_h.pg_create_menu(
-                cb, state, db_user, session=session, is_reseller_bot=is_reseller_bot
+                cb, state, db_user, session=session, **shop_kw
             )
         elif data == "adm:users:list:0":
             await admin_h.adm_users_list(cb, session, db_user)
@@ -1216,7 +1262,16 @@ async def handle_back(
         await open_admin_home(message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot)
         return
     if level == nav.NAV_ADMIN_PG:
-        await open_pg_home(message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot)
+        await open_pg_home(
+            message,
+            session,
+            db_user,
+            state,
+            push=False,
+            is_reseller_bot=is_reseller_bot,
+            reseller_profile_id=reseller_profile_id,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     if level == nav.NAV_ADMIN_USERS:
         await open_admin_users_hub(message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot)
@@ -1488,6 +1543,19 @@ async def _soft_reseller(
         await message.answer("دسترسی نماینده یافت نشد.")
         return
 
+    if action == kb.REPLY_ACTION_RES_ADD_REP:
+        from app.bot.handlers.reseller_reps import start_add_representative
+
+        await start_add_representative(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+
     if action == "res_settings":
         await open_reseller_settings_hub(
             message,
@@ -1604,6 +1672,7 @@ async def reply_main_nav(
     reply_role: str,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
+    reseller_profile_id: int | None = None,
 ):
     """Handle taps on the reply keyboard."""
     from app.bot.handlers.start import render_home
@@ -1659,6 +1728,7 @@ async def reply_main_nav(
         "res_buy_users",
         "res_addon_packs",
         "res_preview",
+        kb.REPLY_ACTION_RES_ADD_REP,
         "res_st_shop",
         "res_st_menu",
         "res_st_pay",
@@ -1982,7 +2052,13 @@ async def reply_main_nav(
             await open_kind_screen(message, session, aud, kind)
     elif action == kb.REPLY_ACTION_ADMIN_PG:
         await open_pg_home(
-            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_profile_id=reseller_profile_id,
+            reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_ADMIN_USERS:
         await open_admin_users_hub(
@@ -2059,31 +2135,80 @@ async def reply_main_nav(
         )
     elif action == kb.REPLY_ACTION_PG_STATS:
         await _soft_admin(
-            message, session, db_user, "adm:pg:stats", state, is_reseller_bot=is_reseller_bot
+            message,
+            session,
+            db_user,
+            "adm:pg:stats",
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_profile_id=reseller_profile_id,
+            reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_PG_USERS:
         await _soft_admin(
-            message, session, db_user, "adm:pg:users", state, is_reseller_bot=is_reseller_bot
+            message,
+            session,
+            db_user,
+            "adm:pg:users",
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_profile_id=reseller_profile_id,
+            reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_PG_CREATE:
         await _soft_admin(
-            message, session, db_user, "adm:pg:create", state, is_reseller_bot=is_reseller_bot
+            message,
+            session,
+            db_user,
+            "adm:pg:create",
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_profile_id=reseller_profile_id,
+            reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_PG_SEARCH:
         await _soft_admin(
-            message, session, db_user, "adm:pg:search", state, is_reseller_bot=is_reseller_bot
+            message,
+            session,
+            db_user,
+            "adm:pg:search",
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_profile_id=reseller_profile_id,
+            reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_PG_NODES:
         await _soft_admin(
-            message, session, db_user, "adm:pg:nodes", state, is_reseller_bot=is_reseller_bot
+            message,
+            session,
+            db_user,
+            "adm:pg:nodes",
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_profile_id=reseller_profile_id,
+            reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_PG_GROUP:
         await _soft_admin(
-            message, session, db_user, "adm:pg:group", state, is_reseller_bot=is_reseller_bot
+            message,
+            session,
+            db_user,
+            "adm:pg:group",
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_profile_id=reseller_profile_id,
+            reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_PG_TEMPLATE:
         await _soft_admin(
-            message, session, db_user, "adm:pg:template", state, is_reseller_bot=is_reseller_bot
+            message,
+            session,
+            db_user,
+            "adm:pg:template",
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_profile_id=reseller_profile_id,
+            reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_ADM_USERS_LIST:
         await _soft_admin(

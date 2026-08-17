@@ -69,6 +69,8 @@ def _l1_staff(principal: OrgPrincipal) -> dict:
             "pg_role_name": "Operator",
             "pg_is_owner": False,
             "web_owner": False,
+            "pg_can_create_admin": True,
+            "pg_actions": {"admins": {"create": True}},
         },
         principal,
         visible_principal_ids=frozenset({int(principal.id)}),
@@ -243,12 +245,11 @@ class Product4L2WebIdentityHttpTests(unittest.IsolatedAsyncioTestCase):
             shop_id = before.reseller_profile_id
         staff = _owner_staff(owner)
         async with self._client(staff) as client:
-            page = await client.get(f"/principals?detail={int(a1.id)}")
-        self.assertEqual(page.status_code, 200)
-        self.assertIn("فعال‌سازی ورود وب", page.text)
-        self.assertIn("بدون هویت وب", page.text)
-        self.assertNotIn(_WEB_PLAIN, page.text)
-        self.assertNotIn(_PG_PLAIN, page.text)
+            page = await client.get(
+                f"/principals?detail={int(a1.id)}", follow_redirects=False
+            )
+        self.assertEqual(page.status_code, 303)
+        self.assertTrue((page.headers.get("location") or "").startswith("/resellers"))
         with patch(
             "app.api.principal_pages.attach_level2_web_identity",
             wraps=attach_level2_web_identity,
@@ -297,32 +298,20 @@ class Product4L2WebIdentityHttpTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(live, frozenset({int(a1.id)}))
             self.assertFalse(staff_uses_owner_pg_credentials(resolved))
             self.assertNotEqual(resolved.get("pg_admin_username"), _OWNER_ENV_PG)
-        async with self._client(staff) as client:
-            after = await client.get(loc)
-        self.assertEqual(after.status_code, 200)
-        body = after.text
-        self.assertIn("هویت وب: فعال", body)
-        self.assertNotIn("فعال‌سازی ورود وب", body)
-        self.assertNotIn(_WEB_PLAIN, body)
-        self.assertNotIn(_PG_PLAIN, body)
-        self.assertNotIn("web_password_hash", body)
-        self.assertNotIn("$2b$", body)
-        self.assertNotIn("$2a$", body)
-        self.assertNotIn("gAAAAA", body)
-        self.assertNotIn(pg_enc or "", body)
 
     async def test_l1_attaches_only_own_child(self) -> None:
         _, a, _, a1, _, _ = await self._seed()
         staff = _l1_staff(a)
         async with self._client(staff) as client:
-            page = await client.get(f"/principals?detail={int(a1.id)}")
+            page = await client.get(
+                f"/principals?detail={int(a1.id)}", follow_redirects=False
+            )
             resp = await client.post(
                 f"/principals/{int(a1.id)}/web-identity",
                 data=self._form("webl2_own"),
                 follow_redirects=False,
             )
-        self.assertEqual(page.status_code, 200)
-        self.assertIn("فعال‌سازی ورود وب", page.text)
+        self.assertEqual(page.status_code, 303)
         self.assertEqual(resp.status_code, 303)
         self.assertEqual(await self._identity_count(int(a1.id)), 1)
 
@@ -366,14 +355,15 @@ class Product4L2WebIdentityHttpTests(unittest.IsolatedAsyncioTestCase):
             row.status = "disabled"
             await session.commit()
         async with self._client(_owner_staff(owner)) as client:
-            page = await client.get(f"/principals?detail={int(a1.id)}")
+            page = await client.get(
+                f"/principals?detail={int(a1.id)}", follow_redirects=False
+            )
             resp = await client.post(
                 f"/principals/{int(a1.id)}/web-identity",
                 data=self._form("webl2_off"),
                 follow_redirects=False,
             )
-        self.assertEqual(page.status_code, 200)
-        self.assertNotIn("فعال‌سازی ورود وب", page.text)
+        self.assertEqual(page.status_code, 303)
         self.assertEqual(resp.status_code, 403)
         self.assertEqual(await self._identity_count(int(a1.id)), 0)
 
@@ -383,14 +373,15 @@ class Product4L2WebIdentityHttpTests(unittest.IsolatedAsyncioTestCase):
             await disable_level1_principal(session, _owner_staff(owner), int(a.id))
             await session.commit()
         async with self._client(_owner_staff(owner)) as client:
-            page = await client.get(f"/principals?detail={int(a1.id)}")
+            page = await client.get(
+                f"/principals?detail={int(a1.id)}", follow_redirects=False
+            )
             resp = await client.post(
                 f"/principals/{int(a1.id)}/web-identity",
                 data=self._form("webl2_parent_off"),
                 follow_redirects=False,
             )
-        self.assertEqual(page.status_code, 200)
-        self.assertNotIn("فعال‌سازی ورود وب", page.text)
+        self.assertEqual(page.status_code, 303)
         self.assertEqual(resp.status_code, 403)
         self.assertEqual(await self._identity_count(int(a1.id)), 0)
 

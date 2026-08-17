@@ -49,6 +49,8 @@ async def is_bot_owner_principal(
     user: BotUser | None,
     *,
     is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
 ) -> bool:
     """True when Bot admin maps to the same explicit Owner Principal as Web.
 
@@ -191,7 +193,8 @@ async def bot_migrated_pg_features(
     """PG page keys the Bot actor may open from migrated 4B–4E families.
 
     Owner: env Hybrid features (may include overview). L1/L2: own Principal
-    capabilities ∩ migrated pages (never pg_overview / pg_admins). Shop: empty.
+    capabilities ∩ migrated pages (never pg_overview / pg_admins).
+    Shop bot: same as L1/L2 when the Telegram user is that shop's operator.
     """
     from app.services.bot_principal_identity import (
         bot_pg_family_resolution_ok,
@@ -204,8 +207,18 @@ async def bot_migrated_pg_features(
         is_level1_principal_staff,
     )
 
-    if session is None or db_user is None or is_reseller_bot:
+    if session is None or db_user is None:
         return frozenset()
+    if is_reseller_bot:
+        from app.services.bot_principal_identity import shop_bot_actor_is_operator
+
+        if not await shop_bot_actor_is_operator(
+            session,
+            db_user,
+            is_reseller_bot=True,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return frozenset()
     resolution = await resolve_bot_principal_bridge(
         session,
         db_user=db_user,
@@ -267,8 +280,18 @@ async def bot_pg_can_create_user(
         is_level1_principal_staff,
     )
 
-    if session is None or db_user is None or is_reseller_bot:
+    if session is None or db_user is None:
         return False
+    if is_reseller_bot:
+        from app.services.bot_principal_identity import shop_bot_actor_is_operator
+
+        if not await shop_bot_actor_is_operator(
+            session,
+            db_user,
+            is_reseller_bot=True,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return False
     resolution = await resolve_bot_principal_bridge(
         session,
         db_user=db_user,

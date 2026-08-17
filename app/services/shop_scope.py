@@ -44,6 +44,18 @@ def shop_owner_id(staff: dict | None) -> int | None:
         except (TypeError, ValueError):
             return None
         return rid if rid > 0 else None
+    if role == "principal":
+        try:
+            rpid = int(staff.get("reseller_profile_id") or 0)
+        except (TypeError, ValueError):
+            rpid = 0
+        if rpid <= 0:
+            return None
+        try:
+            rid = int(staff.get("bot_user_id") or 0)
+        except (TypeError, ValueError):
+            return None
+        return rid if rid > 0 else None
     return None
 
 

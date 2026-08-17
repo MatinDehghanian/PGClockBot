@@ -151,7 +151,7 @@ class IdentityChromeTests(unittest.TestCase):
             }
         )
         self.assertEqual(ident["kind"], "l2")
-        self.assertEqual(ident["label"], "نماینده")
+        self.assertEqual(ident["label"], "زیرنماینده")
         self.assertEqual(ident["pg_role_name"], "Administrator")
         self.assertNotEqual(ident["label"], "Administrator")
 
@@ -244,27 +244,22 @@ class PrincipalPageSourceContracts(unittest.TestCase):
         )
 
     def test_template_never_hardcodes_pg_roles_as_hierarchy(self) -> None:
-        tpl = (ROOT / "app/web/templates/principals.html").read_text(encoding="utf-8")
-        self.assertIn("نماینده", tpl)
-        self.assertIn("hierarchy_label", tpl)
-        self.assertIn("PG Role:", tpl)
+        tpl = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
+        self.assertIn("نمایندگان", tpl)
+        self.assertIn("/resellers/create-child", tpl)
         self.assertNotIn("Administrator", tpl)
         self.assertNotIn("Operator", tpl)
         self.assertNotIn("pg_password_enc", tpl)
-        self.assertNotIn("parent_id", tpl)
-        self.assertNotIn("org_principal_id", tpl)
+        self.assertNotIn('name="parent_id"', tpl)
+        self.assertNotIn('name="org_principal_id"', tpl)
         self.assertNotIn('name="depth"', tpl)
 
     def test_nav_owner_only_and_not_reseller_label(self) -> None:
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
         self.assertIn("نمایندگان من", base)
-        self.assertIn('href="/principals"', base)
-        # Nav entry lives inside the existing is_admin shop block, next to /resellers.
-        resellers_at = base.find('href="/resellers"')
-        principals_at = base.find('href="/principals"', resellers_at)
-        self.assertGreater(principals_at, resellers_at)
-        chunk = base[base.find("{% if is_admin %}") : principals_at]
-        self.assertIn('href="/resellers"', chunk)
+        self.assertIn('href="/resellers"', base)
+        self.assertNotIn('href="/principals"', base)
+        self.assertIn("ident.can_add_representative", base)
 
     def test_identity_chrome_labels_in_footer(self) -> None:
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
@@ -366,33 +361,25 @@ class PrincipalManagementHttpTests(unittest.IsolatedAsyncioTestCase):
     async def test_owner_can_open_and_list(self) -> None:
         owner, active, disabled, _ = await self._seed()
         async with self._client(_owner_staff(owner)) as client:
-            resp = await client.get("/principals")
-        self.assertEqual(resp.status_code, 200)
-        body = resp.text
-        self.assertIn("prin_a", body)
-        self.assertIn("prin_off", body)
-        self.assertIn("نماینده", body)
-        self.assertIn("فعال", body)
-        self.assertIn("غیرفعال", body)
-        self.assertIn("PG Role: Operator", body)
-        self.assertNotIn(_PLAIN_SECRET, body)
-        self.assertNotIn("pg_password_enc", body)
-        self.assertNotIn("gAAAAA", body)
-        self.assertNotIn(str(active.pg_password_enc or ""), body)
-        # Hierarchy label is product language; live PG name is secondary metadata.
-        self.assertIn("hierarchy_label", Path("app/web/templates/principals.html").read_text(encoding="utf-8"))
-        self.assertNotIn(">Administrator</span>", body)
-        self.assertIn(str(active.id), body)
-        self.assertIn(str(disabled.id), body)
+            resp = await client.get("/principals", follow_redirects=False)
+        self.assertEqual(resp.status_code, 303)
+        loc = resp.headers.get("location") or ""
+        self.assertTrue(loc.startswith("/resellers"))
+        self.assertNotIn(_PLAIN_SECRET, loc)
+        self.assertNotIn("pg_password_enc", loc)
+        _ = (active, disabled)
 
     async def test_disabled_principal_renders_disabled_state(self) -> None:
         owner, _, disabled, _ = await self._seed()
         async with self._client(_owner_staff(owner)) as client:
-            resp = await client.get(f"/principals?detail={int(disabled.id)}")
-        self.assertEqual(resp.status_code, 200)
-        self.assertIn("غیرفعال", resp.text)
-        self.assertIn("فعال کردن", resp.text)
-        self.assertNotIn(_PLAIN_SECRET, resp.text)
+            resp = await client.get(
+                f"/principals?detail={int(disabled.id)}", follow_redirects=False
+            )
+        self.assertEqual(resp.status_code, 303)
+        loc = resp.headers.get("location") or ""
+        self.assertIn("/resellers", loc)
+        self.assertIn(f"detail={int(disabled.id)}", loc)
+        self.assertNotIn(_PLAIN_SECRET, loc)
 
     async def test_l1_cannot_open(self) -> None:
         owner, active, _, _ = await self._seed()
@@ -430,10 +417,6 @@ class PrincipalManagementHttpTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             row = await session.get(OrgPrincipal, int(active.id))
             self.assertEqual(row.status, "disabled")
-        async with self._client(staff) as client:
-            page = await client.get(f"/principals?detail={int(active.id)}")
-        self.assertIn("غیرفعال", page.text)
-        self.assertIn("فعال کردن", page.text)
 
     async def test_enable_calls_existing_service(self) -> None:
         owner, _, disabled, _ = await self._seed()
@@ -453,9 +436,6 @@ class PrincipalManagementHttpTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             row = await session.get(OrgPrincipal, int(disabled.id))
             self.assertEqual(row.status, "active")
-        async with self._client(staff) as client:
-            page = await client.get(f"/principals?detail={int(disabled.id)}")
-        self.assertIn("غیرفعال کردن", page.text)
 
 
 class SimplePg:

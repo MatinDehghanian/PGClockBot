@@ -231,10 +231,11 @@ async def map_reseller_profile_to_principal(
     session: AsyncSession,
     profile: ResellerProfile,
 ) -> OrgPrincipal | None:
-    """Adapter: reliable ResellerProfile → depth-1 under Owner. Never invent.
+    """Adapter: ResellerProfile → its linked Principal.
 
-    Reliable = positive profile id, positive user_id. Inactive profiles are not
-    auto-mapped (return existing mapping if any, else None).
+    Unmapped active shops become depth-1 under Owner (never L2). Existing
+    mappings are returned at their stored depth (1 or 2). Client cannot
+    choose parent/depth.
     """
     if profile is None or not getattr(profile, "id", None):
         return None
@@ -274,11 +275,11 @@ async def bind_reseller_profile_principal(
     session: AsyncSession,
     profile: ResellerProfile | None,
 ) -> OrgPrincipal | None:
-    """Server-loaded ResellerProfile → its own depth-1 Principal (or None).
+    """Server-loaded ResellerProfile → its own Principal (depth 1 or 2).
 
-    Always goes through ``map_reseller_profile_to_principal``. Never reads
-    cookie ``org_principal_id`` / parent / depth / scope. Owner, wrong depth,
-    or identity mismatch → None (caller must DENY).
+    Auto-map of a *new* shop is always depth-1 under Owner. An existing
+    depth-2 link (sub-representative shop) is returned as-is. Cookie
+    ``org_principal_id`` / parent / depth / scope are never selectors.
     """
     if profile is None or not getattr(profile, "id", None):
         return None
@@ -295,7 +296,7 @@ async def bind_reseller_profile_principal(
         depth = int(principal.depth)
     except (TypeError, ValueError):
         return None
-    if depth != DEPTH_ONE:
+    if depth not in (DEPTH_ONE, DEPTH_TWO):
         return None
     if int(principal.reseller_profile_id or 0) != int(profile.id):
         return None

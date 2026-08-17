@@ -14,19 +14,37 @@ class StaffPgWriteClientTests(unittest.IsolatedAsyncioTestCase):
         from app.api.pg_pages import _staff_pg
 
         fake = MagicMock()
+        owner = {
+            "role": "admin",
+            "web_owner": True,
+            "pg_is_owner": True,
+            "org_principal_id": 1,
+            "org_depth": 0,
+            "org_parent_id": None,
+            "org_status": "active",
+        }
         with patch("app.api.pg_pages.get_pg", return_value=fake):
-            client, as_owner = await _staff_pg(
-                AsyncMock(), {"role": "admin", "pg_is_owner": True}
-            )
+            client, as_owner = await _staff_pg(AsyncMock(), owner)
         self.assertTrue(as_owner)
         self.assertIs(client, fake)
+        with self.assertRaises(PasarGuardError):
+            await _staff_pg(AsyncMock(), {"role": "admin", "pg_is_owner": True})
 
     async def test_limited_admin_env_client_not_as_owner(self):
         from app.api.pg_pages import _staff_pg
 
         fake = MagicMock()
+        hybrid = {
+            "role": "admin",
+            "web_owner": True,
+            "pg_is_owner": False,
+            "org_principal_id": 1,
+            "org_depth": 0,
+            "org_parent_id": None,
+            "org_status": "active",
+        }
         with patch("app.api.pg_pages.get_pg", return_value=fake):
-            client, as_owner = await _staff_pg(AsyncMock(), {"role": "admin"})
+            client, as_owner = await _staff_pg(AsyncMock(), hybrid)
         self.assertFalse(as_owner)
         self.assertIs(client, fake)
 

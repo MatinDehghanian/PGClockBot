@@ -95,7 +95,12 @@ def _allowed_gate(fake_pg):
         user_message="",
         staff={
             "role": "admin",
-            "pg_is_owner": False,
+            "web_owner": True,
+            "pg_is_owner": True,
+            "org_principal_id": 1,
+            "org_depth": 0,
+            "org_parent_id": None,
+            "org_status": "active",
             "pg_admin_username": "envlimited",
         },
         pg_client=fake_pg,

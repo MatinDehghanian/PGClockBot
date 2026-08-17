@@ -175,7 +175,9 @@ class NoBotPgContracts(unittest.TestCase):
         ):
             src = _read(rel)
             self.assertNotIn("get_pg_for_staff", src, rel)
-            self.assertNotIn("get_pg_for_reseller", src, rel)
+            # Owner env client is forbidden on shop-bot handlers.
+            # Own-shop ``get_pg_for_reseller`` is allowed (Web/Bot PG parity).
+            self.assertNotIn("get_pg()", src, rel)
 
 
 class NoOwnerFallbackContracts(unittest.TestCase):

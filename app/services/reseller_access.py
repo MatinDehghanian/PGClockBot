@@ -18,9 +18,11 @@ def parse_telegram_ids(raw: str | None) -> set[int]:
         if not part:
             continue
         try:
-            out.add(int(part))
+            n = int(part)
         except ValueError:
             continue
+        if n > 0:
+            out.add(n)
     return out
 
 
@@ -33,6 +35,10 @@ def normalize_telegram_ids_csv(raw: str | None) -> str | None:
 
 def is_bot_admin_id(profile: ResellerProfile | None, telegram_id: int) -> bool:
     if not profile:
+        return False
+    from app.services.platform_identity import is_synthetic_telegram_id
+
+    if is_synthetic_telegram_id(telegram_id):
         return False
     return int(telegram_id) in parse_telegram_ids(profile.bot_admin_ids)
 

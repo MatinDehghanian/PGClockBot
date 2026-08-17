@@ -3,21 +3,20 @@
 Telegram identity resolves to OrgPrincipal through trusted server-side mappings
 only. Never uses client callback fields, role names, or cookie principal ids.
 
-Resolution order (platform bot):
-  1. Shop/reseller bot token → ResellerProfile.id → depth-1 Principal (never L2)
-  2. ADMIN_IDS Telegram operator → singleton Owner Principal
-  3. ResellerProfile on db_user → depth-1 Principal
-  4. Unique active depth-2 OrgPrincipal.bot_user_id == BotUser.id
-     with an active depth-1 parent
-  5. Otherwise DENY
+Resolution order:
+  1. Shop/reseller bot token → that shop's Principal (L1 or L2; L2 requires
+     an active depth-1 parent). Customers are not operators.
+  2. Platform (Owner) bot: ADMIN_IDS → singleton Owner Principal
+  3. Platform bot: ResellerProfile on db_user → depth-1 Principal only
+  4. Sub-Representative never operates on the Owner bot (no telegram fallback)
 
-L2 Bot UI / PG handlers are not opened here — identity + AuthzContext only.
+Identity + AuthzContext only — PG gates live in the 4B–4E pilots.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,11 +48,11 @@ class BotPrincipalResolution:
 def bot_pg_family_resolution_ok(resolution: BotPrincipalResolution | None) -> bool:
     """Whether a Bot PG-family gate may run for this resolved actor.
 
-    Owner and active L1 keep existing behavior. L2 is allowed only when:
+    Owner and active L1 keep existing behavior. L2 is allowed when:
 
     - depth == 2, active, channel principal_l2
     - AuthzContext scope is exactly ``{self}`` (no parent/sibling)
-    - no ResellerProfile shop id (must not inherit L1 shop client)
+    - shop id is this Principal's own shop (never parent/sibling/Owner bot)
     - not Owner / ``pg_is_owner``
     """
     if resolution is None:
@@ -94,9 +93,14 @@ def bot_pg_family_resolution_ok(resolution: BotPrincipalResolution | None) -> bo
 
     if is_explicit_owner_staff(staff):
         return False
-    if shop_owner_id(staff):
+    rid = shop_owner_id(staff)
+    if not rid:
         return False
-    return True
+    try:
+        own = int(principal.bot_user_id or 0)
+    except (TypeError, ValueError):
+        own = 0
+    return own == int(rid) and own > 0
 
 
 def callback_carries_principal_tamper(callback_data: str | None) -> bool:
@@ -117,14 +121,25 @@ def callback_carries_principal_tamper(callback_data: str | None) -> bool:
 
 
 def _admin_ids_set(admin_ids: frozenset[int] | set[int] | None) -> frozenset[int]:
+    raw: Iterable[int]
     if admin_ids is not None:
-        return frozenset(int(x) for x in admin_ids)
-    try:
-        from app.config import get_settings
+        raw = admin_ids
+    else:
+        try:
+            from app.config import get_settings
 
-        return frozenset(int(x) for x in (get_settings().admin_ids or ()))
-    except Exception:
-        return frozenset()
+            raw = get_settings().admin_ids or ()
+        except Exception:
+            return frozenset()
+    out: set[int] = set()
+    for x in raw:
+        try:
+            n = int(x)
+        except (TypeError, ValueError):
+            continue
+        if n > 0:
+            out.add(n)
+    return frozenset(out)
 
 
 def _telegram_id(user: BotUser | None) -> int:
@@ -136,13 +151,42 @@ def _telegram_id(user: BotUser | None) -> int:
         return 0
 
 
-def _validate_active_l1(
+async def shop_bot_actor_is_operator(
+    session: AsyncSession | None,
+    db_user: BotUser | None,
+    *,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None = None,
+) -> bool:
+    """True when this Telegram user may run this Representative's own-bot ops.
+
+    Customers on a shop bot are not operators. Owner bot is not a shop bot.
+    """
+    if not is_reseller_bot:
+        return True
+    if session is None or db_user is None:
+        return False
+    from app.services.reseller_access import resolve_reseller_owner_id
+
+    owner_id = await resolve_reseller_owner_id(
+        session,
+        db_user,
+        is_reseller_bot=True,
+        reseller_owner_id=reseller_owner_id,
+    )
+    try:
+        return int(owner_id or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _validate_active_shop_rep(
     principal: OrgPrincipal | None,
     *,
     expected_bot_user_id: int | None = None,
     expected_reseller_profile_id: int | None = None,
 ) -> OrgPrincipal | None:
-    """Active depth-1 only."""
+    """Active depth-1 or depth-2 shop-linked Principal."""
     if principal is None or is_owner_principal(principal):
         return None
     if str(principal.status) != STATUS_ACTIVE:
@@ -151,7 +195,7 @@ def _validate_active_l1(
         depth = int(principal.depth)
     except (TypeError, ValueError):
         return None
-    if depth != DEPTH_ONE:
+    if depth not in (DEPTH_ONE, DEPTH_TWO):
         return None
     if expected_bot_user_id is not None:
         try:
@@ -171,6 +215,45 @@ def _validate_active_l1(
     if parent_id is None:
         return None
     return principal
+
+
+async def _active_l1_parent(
+    session: AsyncSession, principal: OrgPrincipal
+) -> bool:
+    parent_id = getattr(principal, "parent_id", None)
+    if parent_id is None:
+        return False
+    parent = await get_principal(session, int(parent_id))
+    if parent is None or str(parent.status) != STATUS_ACTIVE:
+        return False
+    try:
+        return int(getattr(parent, "depth", -1) or -1) == DEPTH_ONE
+    except (TypeError, ValueError):
+        return False
+
+
+async def _active_shop_rep(
+    session: AsyncSession,
+    principal: OrgPrincipal | None,
+    *,
+    expected_bot_user_id: int | None = None,
+    expected_reseller_profile_id: int | None = None,
+) -> OrgPrincipal | None:
+    """Shop-linked Principal that may operate; L2 also requires active L1 parent."""
+    got = _validate_active_shop_rep(
+        principal,
+        expected_bot_user_id=expected_bot_user_id,
+        expected_reseller_profile_id=expected_reseller_profile_id,
+    )
+    if got is None:
+        return None
+    try:
+        depth = int(got.depth)
+    except (TypeError, ValueError):
+        return None
+    if depth == DEPTH_TWO and not await _active_l1_parent(session, got):
+        return None
+    return got
 
 
 async def _validate_active_l2(
@@ -265,7 +348,8 @@ async def _reseller_shop_bot_principal(
         except (TypeError, ValueError):
             return None
     bound = await bind_reseller_profile_principal(session, profile)
-    return _validate_active_l1(
+    return await _active_shop_rep(
+        session,
         bound,
         expected_bot_user_id=int(profile.user_id),
         expected_reseller_profile_id=int(profile.id),
@@ -291,11 +375,20 @@ async def _reseller_user_bot_principal(
     if profile is None or not bool(profile.is_active):
         return None
     bound = await bind_reseller_profile_principal(session, profile)
-    return _validate_active_l1(
+    validated = await _active_shop_rep(
+        session,
         bound,
         expected_bot_user_id=int(profile.user_id),
         expected_reseller_profile_id=int(profile.id),
     )
+    if validated is None:
+        return None
+    try:
+        if int(validated.depth) != DEPTH_ONE:
+            return None
+    except (TypeError, ValueError):
+        return None
+    return validated
 
 
 async def _l2_user_bot_principal(
@@ -363,9 +456,8 @@ async def resolve_bot_org_principal(
     if l1 is not None:
         return l1
 
-    return await _l2_user_bot_principal(
-        session, db_user=db_user, admin_ids=admin_ids
-    )
+    # Sub-Representative never operates on the Owner bot. Own shop bot only.
+    return None
 
 
 async def _staff_for_owner(
@@ -441,7 +533,9 @@ async def _staff_for_reseller_l1(
                 int(role_id), client=pg_client
             )
             staff = enrich_staff_pg_from_role(staff, features, role)
-    staff["pg_credentials_ready"] = bool(profile.pg_admin_password_enc)
+    staff["pg_credentials_ready"] = bool(
+        profile.pg_admin_password_enc or principal.pg_password_enc
+    )
     return attach_org_principal_fields(
         staff, principal, visible_principal_ids=visible
     )
@@ -570,11 +664,60 @@ async def bot_staff_from_org_principal(
         return None
 
     if depth == DEPTH_TWO:
-        return await _staff_for_principal_l2(session, principal, db_user=db_user)
+        profile = await _linked_shop_profile(
+            session, principal, reseller_profile_id=reseller_profile_id, db_user=db_user
+        )
+        if profile is None:
+            # Shop-less L2 has no independent Bot — do not fall back to Owner bot.
+            return None
+        validated = await _active_shop_rep(
+            session,
+            principal,
+            expected_bot_user_id=int(profile.user_id),
+            expected_reseller_profile_id=int(profile.id),
+        )
+        if validated is None:
+            return None
+        staff = await _staff_for_principal_l2(
+            session, validated, db_user=db_user
+        )
+        if staff is None:
+            return None
+        staff["reseller_profile_id"] = int(profile.id)
+        staff["bot_user_id"] = int(profile.user_id)
+        staff["pg_credentials_ready"] = bool(
+            profile.pg_admin_password_enc or principal.pg_password_enc
+        )
+        staff["web_owner"] = False
+        staff["pg_is_owner"] = False
+        return staff
 
     if depth != DEPTH_ONE:
         return None
 
+    profile = await _linked_shop_profile(
+        session, principal, reseller_profile_id=reseller_profile_id, db_user=db_user
+    )
+    if profile is None or not bool(profile.is_active):
+        return None
+    validated = await _active_shop_rep(
+        session,
+        principal,
+        expected_bot_user_id=int(profile.user_id),
+        expected_reseller_profile_id=int(profile.id),
+    )
+    if validated is None:
+        return None
+    return await _staff_for_reseller_l1(session, validated, profile=profile)
+
+
+async def _linked_shop_profile(
+    session: AsyncSession,
+    principal: OrgPrincipal,
+    *,
+    reseller_profile_id: int | None = None,
+    db_user: BotUser | None = None,
+) -> ResellerProfile | None:
     profile: ResellerProfile | None = None
     if reseller_profile_id is not None:
         profile = await session.get(ResellerProfile, int(reseller_profile_id))
@@ -584,17 +727,9 @@ async def bot_staff_from_org_principal(
         from app.services.resellers import get_reseller_profile
 
         profile = await get_reseller_profile(session, int(db_user.id))
-
     if profile is None or not bool(profile.is_active):
         return None
-    validated = _validate_active_l1(
-        principal,
-        expected_bot_user_id=int(profile.user_id),
-        expected_reseller_profile_id=int(profile.id),
-    )
-    if validated is None:
-        return None
-    return await _staff_for_reseller_l1(session, validated, profile=profile)
+    return profile
 
 
 async def resolve_bot_principal_bridge(
@@ -671,9 +806,6 @@ async def bot_pg_client_for_resolution(
     staff = resolution.staff
     if is_explicit_owner_staff(staff):
         return get_pg(), bool(staff.get("pg_is_owner"))
-    rid = shop_owner_id(staff)
-    if rid:
-        return await get_pg_for_reseller(session, int(rid)), False
     try:
         depth = int(resolution.principal.depth)
     except (TypeError, ValueError):
@@ -685,6 +817,9 @@ async def bot_pg_client_for_resolution(
             ),
             False,
         )
+    rid = shop_owner_id(staff)
+    if rid:
+        return await get_pg_for_reseller(session, int(rid)), False
     raise PasarGuardError(
         "کلاینت پاسارگارد برای این Principal Bot در دسترس نیست"
     )

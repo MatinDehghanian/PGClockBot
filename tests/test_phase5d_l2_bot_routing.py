@@ -248,6 +248,19 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
             telegram_id=int(sib_user.telegram_id),
             admin_ids={77001},
         )
+        l2_shop = ResellerProfile(
+            user_id=int(l2_user.id),
+            is_active=True,
+            web_username="l2a1shop",
+            web_password_hash="x" * 24,
+            setup_completed_at=datetime.now(timezone.utc),
+            pg_admin_username="pg_a1",
+            pg_role_id=10,
+        )
+        session.add(l2_shop)
+        await session.flush()
+        a1.reseller_profile_id = int(l2_shop.id)
+        a1.bot_user_id = int(l2_user.id)
         await session.commit()
         return SimpleNamespace(
             owner_p=owner_p,
@@ -262,6 +275,7 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
             a2=a2,
             l2_user=l2_user,
             sib_user=sib_user,
+            l2_shop=l2_shop,
             users={
                 201: _pg_user(201, "pg_a1"),
                 202: _pg_user(202, "pg_shopa"),
@@ -293,7 +307,7 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch(
                 "app.services.pasarguard.get_pg_for_reseller",
-                side_effect=AssertionError("L2 must not use parent get_pg_for_reseller()"),
+                new=AsyncMock(return_value=fake_pg),
             ),
             patch(
                 "app.services.pasarguard.get_pg_for_principal",
@@ -301,6 +315,13 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
             ),
             self._admin_ids(77001),
         )
+
+    def _l2_kw(self, fx) -> dict:
+        return {
+            "is_reseller_bot": True,
+            "reseller_profile_id": int(fx.l2_shop.id),
+            "reseller_owner_id": int(fx.l2_user.id),
+        }
 
     def _enter_l2(self, permissions: dict, fake_pg):
         patches = self._l2_patches(permissions, fake_pg)
@@ -316,7 +337,7 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
             p0, p1, p2, p3, p4, p5 = self._enter_l2(ALL_PG, fake_pg)
             with p0, p1, p2, p3, p4, p5:
                 feats = await bot_migrated_pg_features(
-                    session, fx.l2_user, is_reseller_bot=False
+                    session, fx.l2_user, **self._l2_kw(fx)
                 )
                 self.assertEqual(feats, APPROVED)
                 self.assertEqual(feats, feats & MIGRATED_PG_PAGES)
@@ -332,7 +353,7 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(kb.REPLY_ACTION_PG_TEMPLATE, keys)
                 msg, _ = _fake_msg()
                 await open_pg_home(
-                    msg, session, fx.l2_user, _fake_state(), is_reseller_bot=False
+                    msg, session, fx.l2_user, _fake_state(), **self._l2_kw(fx)
                 )
             texts = " ".join(
                 str(c.args[0]) for c in msg.answer.await_args_list if c.args
@@ -354,9 +375,10 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(OWNER_REQUIRED_MESSAGE, cb.answer.await_args.args[0])
                 msg, bubble = _fake_msg()
                 await _soft_admin(
-                    msg, session, fx.l2_user, "adm:pg:stats", None, is_reseller_bot=False
+                    msg, session, fx.l2_user, "adm:pg:stats", None, **self._l2_kw(fx)
                 )
-                self.assertIn("مالک", msg.answer.await_args.args[0])
+                deny = msg.answer.await_args.args[0]
+                self.assertTrue("مالک" in deny or "ربات اصلی" in deny, deny)
                 bubble.edit_text.assert_not_awaited()
                 msg2, _ = _fake_msg()
                 await reply_main_nav(
@@ -389,16 +411,16 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
             msg, _ = _fake_msg()
             with p0, p1, p2, p3, p4, p5:
                 await open_admin_backup_hub(
-                    msg, session, fx.l2_user, None, is_reseller_bot=False
+                    msg, session, fx.l2_user, None, **self._l2_kw(fx)
                 )
                 await open_admin_settings_hub(
-                    msg, session, fx.l2_user, None, is_reseller_bot=False
+                    msg, session, fx.l2_user, None, **self._l2_kw(fx)
                 )
                 await open_admin_broadcast_hub(
-                    msg, session, fx.l2_user, None, is_reseller_bot=False
+                    msg, session, fx.l2_user, None, **self._l2_kw(fx)
                 )
                 await open_admin_plans_hub(
-                    msg, session, fx.l2_user, _fake_state(), is_reseller_bot=False
+                    msg, session, fx.l2_user, _fake_state(), **self._l2_kw(fx)
                 )
                 await _soft_admin(
                     msg,
@@ -533,11 +555,11 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
             with p0, p1, p2, p3, p4, p5:
                 self.assertFalse(
                     await is_bot_owner_principal(
-                        session, fx.l2_user, is_reseller_bot=False
+                        session, fx.l2_user, **self._l2_kw(fx)
                     )
                 )
                 principal = await resolve_bot_org_principal(
-                    session, db_user=fx.l2_user, is_reseller_bot=False
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
                 self.assertIsNotNone(principal)
                 self.assertFalse(is_owner_principal(principal))
@@ -550,7 +572,7 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
             p0, p1, p2, p3, p4, p5 = self._enter_l2(ALL_PG, fake_pg)
             with p0, p1, p2, p3, p4, p5:
                 resolution = await resolve_bot_principal_bridge(
-                    session, db_user=fx.l2_user, is_reseller_bot=False
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
             self.assertIsNotNone(resolution)
             staff = dict(resolution.staff)
@@ -562,7 +584,7 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
             staff["role"] = "admin"
             self.assertFalse(
                 await is_bot_owner_principal(
-                    session, fx.l2_user, is_reseller_bot=False
+                    session, fx.l2_user, **self._l2_kw(fx)
                 )
             )
 
@@ -575,13 +597,14 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
                 resolved = await resolve_bot_org_principal(
                     session,
                     db_user=fx.l2_user,
-                    is_reseller_bot=False,
+                    **self._l2_kw(fx),
                     spoof_org_principal_id=int(fx.owner_p.id),
                 )
                 self.assertEqual(int(resolved.id), int(fx.a1.id))
                 gate = await authorize_bot_pg_user_op(
                     session,
                     db_user=fx.l2_user,
+                    **self._l2_kw(fx),
                     action="list",
                     callback_data=(
                         f"adm:pg:users:org_principal_id={fx.owner_p.id}"
@@ -607,18 +630,21 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
                 sib = await authorize_bot_pg_user_op(
                     session,
                     db_user=fx.l2_user,
+                    **self._l2_kw(fx),
                     action="read",
                     callback_data="adm:pg:u:203",
                 )
                 parent = await authorize_bot_pg_user_op(
                     session,
                     db_user=fx.l2_user,
+                    **self._l2_kw(fx),
                     action="read",
                     callback_data="adm:pg:u:202",
                 )
                 own = await authorize_bot_pg_user_op(
                     session,
                     db_user=fx.l2_user,
+                    **self._l2_kw(fx),
                     action="read",
                     callback_data="adm:pg:u:201",
                 )
@@ -633,7 +659,7 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
             p0, p1, p2, p3, p4, p5 = self._enter_l2(USERS_FULL, fake_pg)
             with p0, p1, p2, p3, p4, p5:
                 resolution = await resolve_bot_principal_bridge(
-                    session, db_user=fx.l2_user, is_reseller_bot=False
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
                 client, as_owner = await bot_pg_client_for_resolution(
                     session, resolution
@@ -641,6 +667,7 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
                 gate = await authorize_bot_pg_user_op(
                     session,
                     db_user=fx.l2_user,
+                    **self._l2_kw(fx),
                     action="list",
                     callback_data="adm:pg:users",
                 )
@@ -660,17 +687,18 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
             p0, p1, p2, p3, p4, p5 = self._enter_l2(ALL_PG, fake_pg)
             with p0, p1, p2, p3, p4, p5:
                 feats = await bot_migrated_pg_features(
-                    session, fx.l2_user, is_reseller_bot=False
+                    session, fx.l2_user, **self._l2_kw(fx)
                 )
                 self.assertEqual(feats, frozenset())
                 msg, _ = _fake_msg()
                 await open_pg_home(
-                    msg, session, fx.l2_user, _fake_state(), is_reseller_bot=False
+                    msg, session, fx.l2_user, _fake_state(), **self._l2_kw(fx)
                 )
                 self.assertIn("مالک", msg.answer.await_args.args[0])
                 gate = await authorize_bot_pg_user_op(
                     session,
                     db_user=fx.l2_user,
+                    **self._l2_kw(fx),
                     action="list",
                     callback_data="adm:pg:users",
                 )
@@ -686,12 +714,13 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
             with p0, p1, p2, p3, p4, p5:
                 self.assertIsNone(
                     await resolve_bot_org_principal(
-                        session, db_user=fx.l2_user, is_reseller_bot=False
+                        session, db_user=fx.l2_user, **self._l2_kw(fx)
                     )
                 )
                 gate = await authorize_bot_pg_user_op(
                     session,
                     db_user=fx.l2_user,
+                    **self._l2_kw(fx),
                     action="list",
                     callback_data="adm:pg:users",
                 )

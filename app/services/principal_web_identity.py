@@ -653,7 +653,7 @@ async def resolve_principal_web_session(
             out, principal, visible_principal_ids=visible
         )
         out["web_owner"] = False
-        return out
+        return await _attach_linked_shop_package(session, out, principal)
 
     # Live PG role only. Cookie ``pg_role_id`` is untrusted: a stale or injected
     # id plus the shared ``_ROLE_CACHE`` would keep/escalate capabilities after
@@ -705,6 +705,38 @@ async def resolve_principal_web_session(
     )
     out["web_owner"] = False
     out["pg_is_owner"] = False
+    out = await _attach_linked_shop_package(session, out, principal)
+    return out
+
+
+async def _attach_linked_shop_package(
+    session: AsyncSession,
+    staff: dict[str, Any],
+    principal: OrgPrincipal,
+) -> dict[str, Any]:
+    """Attach the linked ResellerProfile shop tenant without a second login."""
+    from app.db.models import ResellerProfile
+    from app.services.authz import resolve_shop_permissions_from_profile
+
+    rpid = getattr(principal, "reseller_profile_id", None)
+    try:
+        rpid_i = int(rpid) if rpid is not None else 0
+    except (TypeError, ValueError):
+        rpid_i = 0
+    if rpid_i <= 0:
+        return staff
+    profile = await session.get(ResellerProfile, rpid_i)
+    if profile is None or not bool(profile.is_active):
+        return staff
+    out = dict(staff)
+    out["reseller_profile_id"] = int(profile.id)
+    try:
+        out["bot_user_id"] = int(profile.user_id)
+    except (TypeError, ValueError):
+        pass
+    perms = resolve_shop_permissions_from_profile(profile)
+    if perms:
+        out["permissions"] = list(perms)
     return out
 
 

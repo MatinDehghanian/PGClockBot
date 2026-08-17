@@ -75,3 +75,9 @@ tests/test_setup_wizard_secret_masking.py
 tests/test_secret_box_key_separation.py
 tests/test_sqlite_db_file_permissions.py
 tests/test_client_ip_spoofing.py
+tests/test_representative_unification.py
+tests/test_phase5b_bot_l2_bind_resolve.py
+tests/test_phase5c_bot_l2_pg_parity.py
+tests/test_phase5d_l2_bot_routing.py
+tests/test_phase5e_final_hierarchy_redteam.py
+tests/test_product5_l2_telegram_bind.py

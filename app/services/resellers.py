@@ -233,6 +233,44 @@ async def apply_reseller_panel_password(
     enc = encrypt_secret(pwd)
     if not enc:
         raise ValueError("رمز‌گذاری رمز پاسارگارد ناموفق بود — دوباره تلاش کنید")
+    from app.services.org_principals import get_principal_by_reseller_profile
+
+    linked = await get_principal_by_reseller_profile(session, int(profile.id))
+    if (
+        linked is not None
+        and str(getattr(linked, "status", "") or "") == "active"
+        and (linked.pg_password_enc or "").strip()
+        and int(getattr(linked, "depth", -1) or -1) in (1, 2)
+    ):
+        from app.services.pasarguard import get_pg_for_principal, invalidate_pg_principal_cache
+
+        try:
+            client = await get_pg_for_principal(session, principal_id=int(linked.id))
+            await client.modify_admin(profile.pg_admin_username, {"password": pwd})
+        except Exception as e:
+            raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}") from e
+        linked.pg_password_enc = enc
+        profile.pg_admin_password_enc = None
+        try:
+            invalidate_pg_principal_cache(int(linked.id))
+        except Exception:
+            pass
+        return
+    if (profile.pg_admin_password_enc or "").strip():
+        from app.services.pasarguard import get_pg_for_reseller, invalidate_pg_reseller_cache
+
+        try:
+            client = await get_pg_for_reseller(session, int(profile.user_id))
+            await client.modify_admin(profile.pg_admin_username, {"password": pwd})
+        except Exception as e:
+            raise ValueError(f"به‌روزرسانی رمز پاسارگارد ناموفق: {e}") from e
+        profile.pg_admin_password_enc = enc
+        try:
+            invalidate_pg_reseller_cache(int(profile.user_id))
+        except Exception:
+            pass
+        return
+    # Owner-panel shop with no stored tenant secret — Owner provisioning only.
     profile.pg_admin_password_enc = enc
     try:
         await get_pg().modify_admin(profile.pg_admin_username, {"password": pwd})
@@ -719,9 +757,13 @@ async def provision_reseller(
         payload: dict = {
             "username": pg_username,
             "password": pg_password,
-            "telegram_id": user.telegram_id,
             "note": f"PGClockBot reseller #{user.id}",
         }
+        from app.services.platform_identity import deliverable_telegram_id
+
+        tid = deliverable_telegram_id(getattr(user, "telegram_id", None))
+        if tid is not None:
+            payload["telegram_id"] = tid
         if role_id:
             payload["role_id"] = int(role_id)
         else:

@@ -283,6 +283,7 @@ REPLY_ACTION_ADMIN_PLANS = "adm_plans"
 REPLY_ACTION_ADMIN_PG = "adm_pg"
 REPLY_ACTION_ADMIN_PREVIEW = "adm_preview"
 REPLY_ACTION_RES_PREVIEW = "res_preview"
+REPLY_ACTION_RES_ADD_REP = "res_add_rep"
 REPLY_ACTION_ADMIN_USERS = "adm_users"
 REPLY_ACTION_ADMIN_SETTINGS = "adm_settings"
 REPLY_ACTION_ADMIN_BROADCAST = "adm_broadcast"
@@ -670,7 +671,9 @@ def _admin_loyalty_submenu_entries(ui: dict | None = None, *, include_tiers: boo
     return entries
 
 
-def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
+def _reseller_submenu_entries(
+    profile=None, *, can_add_representative: bool = False
+) -> list[tuple[str, str]]:
     from app.services.authz import shop_feature_allowed
 
     # Fail closed: without a live profile show nothing (matches reply_action_map)
@@ -680,6 +683,8 @@ def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
     if shop_feature_allowed(key="dashboard", profile=profile):
         entries.append(("res_dash", "🏠 خانه نماینده"))
         entries.append(("res_users", "👥 مشتریان من"))
+    if can_add_representative:
+        entries.append((REPLY_ACTION_RES_ADD_REP, "➕ افزودن نماینده"))
     # PAYG billing wallet — only when mode is payg
     try:
         from app.services.billing import is_payg
@@ -724,9 +729,16 @@ def _reseller_submenu_entries(profile=None) -> list[tuple[str, str]]:
     return entries
 
 
-def reseller_hub_main_keyboard(profile=None, ui: dict | None = None) -> ReplyKeyboardMarkup:
+def reseller_hub_main_keyboard(
+    profile=None,
+    ui: dict | None = None,
+    *,
+    can_add_representative: bool = False,
+) -> ReplyKeyboardMarkup:
     """Primary keyboard for shop owner/staff on their dedicated bot (like admin hub)."""
-    entries = _reseller_submenu_entries(profile)
+    entries = _reseller_submenu_entries(
+        profile, can_add_representative=can_add_representative
+    )
     rows = _pack_reply_rows(entries, ui, footer=[(REPLY_ACTION_HOME, _home_label(ui))])
     return _reply_markup(
         rows or [[_kb(_home_label(ui), action=REPLY_ACTION_HOME, ui=ui)]],
@@ -1063,6 +1075,7 @@ def reply_action_map(
     include_submenus: bool = True,
     is_reseller_bot: bool = False,
     profile=None,
+    can_add_representative: bool = False,
 ) -> dict[str, str]:
     """Map button label → action key for the current role/bot.
 
@@ -1177,7 +1190,9 @@ def reply_action_map(
 
             # Fail closed: without a live profile, register no reseller panel labels
             if profile is not None:
-                for key, text in _reseller_submenu_entries(profile):
+                for key, text in _reseller_submenu_entries(
+                    profile, can_add_representative=can_add_representative
+                ):
                     mapping[(text or "").strip()] = key
                 if shop_feature_allowed(key="shop_settings", profile=profile):
                     for key, text in _reseller_settings_submenu_entries(ui):

@@ -241,14 +241,22 @@ async def _resolve_identity(
     if session is None or db_user is None:
         return _deny("unauthenticated")
     if is_reseller_bot:
-        return _deny("shop_bot_isolated")
+        from app.services.bot_principal_identity import shop_bot_actor_is_operator
+
+        if not await shop_bot_actor_is_operator(
+            session,
+            db_user,
+            is_reseller_bot=True,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return _deny("shop_bot_isolated")
     if callback_carries_identity_tamper(callback_data):
         return _deny("identity_tamper")
 
     resolution = await resolve_bot_principal_bridge(
         session,
         db_user=db_user,
-        is_reseller_bot=False,
+        is_reseller_bot=is_reseller_bot,
         reseller_profile_id=reseller_profile_id,
         reseller_owner_id=reseller_owner_id,
         spoof_org_principal_id=None,

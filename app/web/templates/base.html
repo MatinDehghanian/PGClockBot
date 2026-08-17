@@ -152,8 +152,8 @@
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 5v4M19 7h1"/><path d="M4 12h3M11 10v4M13 12h7"/><path d="M4 17h11M19 15v4M21 17h-1"/></svg>
             <span>تنظیمات وب پنل</span>
           </a>
-          {% if ident.kind == 'l1' %}
-          <a href="/principals" class="nav-item nav-item-home {% if path.startswith('/principals') %}active{% endif %}">
+          {% if ident.can_add_representative %}
+          <a href="/resellers" class="nav-item nav-item-home {% if path.startswith('/resellers') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
             <span>نمایندگان من</span>
           </a>
@@ -183,10 +183,6 @@
           <a href="/resellers" class="nav-item nav-item-bot {% if path.startswith('/resellers') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
             <span>نمایندگان</span>
-          </a>
-          <a href="/principals" class="nav-item nav-item-bot {% if path.startswith('/principals') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
-            <span>نمایندگان من</span>
           </a>
           {% endif %}
           {% if is_admin or 'orders' in perms or 'payments' in perms %}

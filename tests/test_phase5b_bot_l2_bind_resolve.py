@@ -148,7 +148,7 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
             new=AsyncMock(return_value=None),
         )
 
-    async def _bind_own_child(self, session, fx) -> None:
+    async def _bind_own_child(self, session, fx, *, with_shop: bool = True) -> None:
         await bind_l2_bot_telegram(
             session,
             staff=_l1_staff(fx.pa_p, fx.ua, fx.pa),
@@ -156,19 +156,47 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
             telegram_id=int(fx.l2_user.telegram_id),
             admin_ids={99001},
         )
+        if not with_shop:
+            await session.commit()
+            return
+        shop = ResellerProfile(
+            user_id=int(fx.l2_user.id),
+            is_active=True,
+            web_username="l2a1shop",
+            web_password_hash="x" * 24,
+            setup_completed_at=datetime.now(timezone.utc),
+            pg_admin_username="pg_a1",
+            pg_role_id=10,
+        )
+        session.add(shop)
+        await session.flush()
+        fx.a1.reseller_profile_id = int(shop.id)
+        fx.a1.bot_user_id = int(fx.l2_user.id)
+        fx.l2_shop = shop
         await session.commit()
+
+    def _l2_kw(self, fx) -> dict:
+        return {
+            "is_reseller_bot": True,
+            "reseller_profile_id": int(fx.l2_shop.id),
+            "reseller_owner_id": int(fx.l2_user.id),
+        }
 
     async def test_1_l2_resolves_own_principal(self) -> None:
         async with self.Session() as session:
             fx = await self._fixtures(session)
             await self._bind_own_child(session, fx)
             with self._admin_ids(99001), self._pg_quiet():
-                got = await resolve_bot_org_principal(
+                owner_got = await resolve_bot_org_principal(
                     session, db_user=fx.l2_user, is_reseller_bot=False
+                )
+                got = await resolve_bot_org_principal(
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
                 bridge = await resolve_bot_principal_bridge(
-                    session, db_user=fx.l2_user, is_reseller_bot=False
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
+            self.assertIsNone(owner_got)
             self.assertIsNotNone(got)
             assert got is not None and bridge is not None
             self.assertEqual(int(got.id), int(fx.a1.id))
@@ -183,7 +211,7 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(ctx.visible_principal_ids, frozenset({int(fx.a1.id)}))
             self.assertFalse(bool(bridge.staff.get("web_owner")))
             self.assertEqual(bridge.staff.get("pg_admin_username"), "pg_a1")
-            self.assertIsNone(shop_owner_id(bridge.staff))
+            self.assertEqual(int(shop_owner_id(bridge.staff) or 0), int(fx.l2_user.id))
 
     async def test_2_l2_cannot_resolve_sibling(self) -> None:
         async with self.Session() as session:
@@ -199,7 +227,7 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
             await session.commit()
             with self._admin_ids(99001), self._pg_quiet():
                 got = await resolve_bot_org_principal(
-                    session, db_user=fx.l2_user, is_reseller_bot=False
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
             assert got is not None
             self.assertEqual(int(got.id), int(fx.a1.id))
@@ -213,7 +241,7 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
             await self._bind_own_child(session, fx)
             with self._admin_ids(99001), self._pg_quiet():
                 got = await resolve_bot_org_principal(
-                    session, db_user=fx.l2_user, is_reseller_bot=False
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
             assert got is not None
             self.assertNotEqual(int(got.id), int(fx.pa_p.id))
@@ -226,7 +254,7 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
             await self._bind_own_child(session, fx)
             with self._admin_ids(99001), self._pg_quiet():
                 bridge = await resolve_bot_principal_bridge(
-                    session, db_user=fx.l2_user, is_reseller_bot=False
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
             assert bridge is not None
             self.assertFalse(is_owner_principal(bridge.principal))
@@ -243,7 +271,7 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
             await session.commit()
             with self._admin_ids(99001):
                 got = await resolve_bot_org_principal(
-                    session, db_user=fx.l2_user, is_reseller_bot=False
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
             self.assertIsNone(got)
 
@@ -255,7 +283,7 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
             await session.commit()
             with self._admin_ids(99001):
                 got = await resolve_bot_org_principal(
-                    session, db_user=fx.l2_user, is_reseller_bot=False
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
             self.assertIsNone(got)
 
@@ -307,7 +335,7 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
     async def test_10_existing_principal_binding_collision_deny(self) -> None:
         async with self.Session() as session:
             fx = await self._fixtures(session)
-            await self._bind_own_child(session, fx)
+            await self._bind_own_child(session, fx, with_shop=False)
             with self.assertRaises(L2BotBindError) as ctx:
                 await bind_l2_bot_telegram(
                     session,
@@ -358,14 +386,21 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             with self._admin_ids(99001), self._pg_quiet():
-                got = await resolve_bot_org_principal(
+                owner_got = await resolve_bot_org_principal(
                     session,
                     db_user=fx.l2_user,
                     is_reseller_bot=False,
                     spoof_org_principal_id=int(fx.owner_p.id),
                 )
-            assert got is not None
-            self.assertEqual(int(got.id), int(fx.a1.id))
+                shop_got = await resolve_bot_org_principal(
+                    session,
+                    db_user=fx.l2_user,
+                    **self._l2_kw(fx),
+                    spoof_org_principal_id=int(fx.owner_p.id),
+                )
+            self.assertIsNone(owner_got)
+            assert shop_got is not None
+            self.assertEqual(int(shop_got.id), int(fx.a1.id))
 
     async def test_13_role_admin_does_not_create_authority(self) -> None:
         async with self.Session() as session:
@@ -375,7 +410,7 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
             await self._bind_own_child(session, fx)
             with self._admin_ids(99001), self._pg_quiet():
                 bridge = await resolve_bot_principal_bridge(
-                    session, db_user=fx.l2_user, is_reseller_bot=False
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
                 sticky = await resolve_bot_org_principal(
                     session, db_user=fx.sticky, is_reseller_bot=False
@@ -510,7 +545,7 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
             )
             with self._admin_ids(99001), self._pg_quiet():
                 bot = await resolve_bot_org_principal(
-                    session, db_user=fx.l2_user, is_reseller_bot=False
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
             self.assertIsNotNone(web)
             self.assertIsNotNone(bot)
@@ -526,7 +561,7 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
             )
             with self._pg_quiet():
                 bridge = await resolve_bot_principal_bridge(
-                    session, db_user=fx.l2_user, is_reseller_bot=False
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
             assert bridge is not None
             self.assertEqual(web_ctx.principal_id, bridge.authz.principal_id)
@@ -543,13 +578,13 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
                 side_effect=AssertionError("L2 must not use Owner get_pg()"),
             ), patch(
                 "app.services.pasarguard.get_pg_for_reseller",
-                side_effect=AssertionError("L2 must not use parent reseller client"),
+                new=AsyncMock(return_value=fake),
             ), patch(
                 "app.services.pasarguard.get_pg_for_principal",
                 new=AsyncMock(return_value=fake),
             ):
                 bridge = await resolve_bot_principal_bridge(
-                    session, db_user=fx.l2_user, is_reseller_bot=False
+                    session, db_user=fx.l2_user, **self._l2_kw(fx)
                 )
                 assert bridge is not None
                 client, as_owner = await bot_pg_client_for_resolution(session, bridge)
@@ -565,14 +600,15 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
             await self._bind_own_child(session, fx)
             with self._admin_ids(99001), self._pg_quiet():
                 feats = await bot_migrated_pg_features(
-                    session, fx.l2_user, is_reseller_bot=False
+                    session, fx.l2_user, **self._l2_kw(fx)
                 )
                 can_create = await bot_pg_can_create_user(
-                    session, fx.l2_user, is_reseller_bot=False
+                    session, fx.l2_user, **self._l2_kw(fx)
                 )
                 gate = await authorize_bot_pg_user_op(
                     session,
                     db_user=fx.l2_user,
+                    **self._l2_kw(fx),
                     action="list",
                     callback_data="adm:pg:users",
                 )

@@ -57,8 +57,8 @@ def _owner_staff(owner: OrgPrincipal) -> dict:
     )
 
 
-def _l1_staff(principal: OrgPrincipal) -> dict:
-    return attach_org_principal_fields(
+def _l1_staff(principal: OrgPrincipal, *, capable: bool = False) -> dict:
+    staff = attach_org_principal_fields(
         {
             "role": "principal",
             "username": f"l1_{principal.pg_username}",
@@ -71,6 +71,13 @@ def _l1_staff(principal: OrgPrincipal) -> dict:
         principal,
         visible_principal_ids=frozenset({int(principal.id)}),
     )
+    if capable:
+        staff["pg_can_create_admin"] = True
+        staff["pg_actions"] = {"admins": {"create": True}}
+    else:
+        staff["pg_can_create_admin"] = False
+        staff["pg_actions"] = {"admins": {"create": False}}
+    return staff
 
 
 def _l2_staff(principal: OrgPrincipal) -> dict:
@@ -193,7 +200,7 @@ class L2LifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_l1_lists_only_direct_children(self) -> None:
         owner, a, b, a1, a2, b1 = await self._seed()
         async with self.Session() as session:
-            views = await list_level2_principals(session, _l1_staff(a))
+            views = await list_level2_principals(session, _l1_staff(a, capable=True))
         ids = {v.principal_id for v in views}
         self.assertEqual(ids, {int(a1.id), int(a2.id)})
         self.assertNotIn(int(b1.id), ids)
@@ -223,16 +230,16 @@ class L2LifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             with self.assertRaises(PrincipalLifecycleError) as ctx:
                 await list_level2_principals(session, staff)
-        self.assertEqual(ctx.exception.code, "forbidden")
+        self.assertEqual(ctx.exception.code, "pg_capability_denied")
 
     async def test_sibling_isolation_detail_and_disable(self) -> None:
         owner, a, _, _, _, b1 = await self._seed()
         async with self.Session() as session:
             with self.assertRaises(PrincipalLifecycleError) as ctx:
-                await get_level2_principal_detail(session, _l1_staff(a), int(b1.id))
+                await get_level2_principal_detail(session, _l1_staff(a, capable=True), int(b1.id))
             self.assertEqual(ctx.exception.code, "out_of_scope")
             with self.assertRaises(PrincipalLifecycleError) as ctx:
-                await disable_level2_principal(session, _l1_staff(a), int(b1.id))
+                await disable_level2_principal(session, _l1_staff(a, capable=True), int(b1.id))
             self.assertEqual(ctx.exception.code, "out_of_scope")
             row = await session.get(OrgPrincipal, int(b1.id))
             self.assertEqual(row.status, "active")
@@ -242,14 +249,14 @@ class L2LifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             with self.assertRaises(PrincipalLifecycleError) as ctx:
                 await list_level2_principals(
-                    session, _l1_staff(a), parent_id=int(b.id)
+                    session, _l1_staff(a, capable=True), parent_id=int(b.id)
                 )
         self.assertEqual(ctx.exception.code, "out_of_scope")
 
     async def test_disable_enable_roundtrip(self) -> None:
         owner, a, _, a1, _, _ = await self._seed()
         async with self.Session() as session:
-            off = await disable_level2_principal(session, _l1_staff(a), int(a1.id))
+            off = await disable_level2_principal(session, _l1_staff(a, capable=True), int(a1.id))
             await session.commit()
             self.assertEqual(off.status, "disabled")
             self.assertEqual(off.depth, 2)
@@ -287,7 +294,7 @@ class L2LifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
                     session, _owner_staff(owner), int(owner.id)
                 )
             with self.assertRaises(PrincipalLifecycleError):
-                await disable_level2_principal(session, _l1_staff(a), int(owner.id))
+                await disable_level2_principal(session, _l1_staff(a, capable=True), int(owner.id))
 
     async def test_pg_role_is_secondary_not_hierarchy(self) -> None:
         owner, _, _, a1, _, _ = await self._seed()
@@ -407,44 +414,26 @@ class L2ManagementHttpTests(unittest.IsolatedAsyncioTestCase):
     async def test_owner_sees_l1_and_l2(self) -> None:
         owner, a, _, a1, b1 = await self._seed()
         async with self._client(_owner_staff(owner)) as client:
-            resp = await client.get("/principals")
-        self.assertEqual(resp.status_code, 200)
-        body = resp.text
-        self.assertIn("prin_a", body)
-        self.assertIn("child_a1", body)
-        self.assertIn("child_b1", body)
-        self.assertIn("نماینده", body)
-        self.assertIn("زیرمجموعه", body)
-        self.assertIn("PG Role: Operator", body)
-        self.assertNotIn(_PLAIN, body)
-        self.assertNotIn("gAAAAA", body)
-        self.assertNotIn("pg_password_enc", body)
-        self.assertIn("افزودن نماینده", body)
-        self.assertNotIn("/principals/create-l2", body)
-        self.assertIn(str(a.id), body)
-        self.assertIn(str(a1.id), body)
+            resp = await client.get("/principals", follow_redirects=False)
+        self.assertEqual(resp.status_code, 303)
+        loc = resp.headers.get("location") or ""
+        self.assertTrue(loc.startswith("/resellers"))
+        self.assertNotIn(_PLAIN, loc)
+        _ = (a, a1, b1)
 
-    async def test_l1_sees_only_own_l2(self) -> None:
-        _, a, b, a1, b1 = await self._seed()
-        async with self._client(_l1_staff(a)) as client:
-            resp = await client.get("/principals")
-        self.assertEqual(resp.status_code, 200)
-        body = resp.text
-        self.assertIn("child_a1", body)
-        self.assertNotIn("child_b1", body)
-        self.assertNotIn("افزودن نماینده", body)
-        self.assertNotIn("/principals/create-l2", body)
-        self.assertIn("زیرمجموعه", body)
-        self.assertNotIn(_PLAIN, body)
-        async with self._client(_l1_staff(a)) as client:
-            detail = await client.get(f"/principals?detail={int(a1.id)}")
-        self.assertEqual(detail.status_code, 200)
-        self.assertIn("child_a1", detail.text)
-        self.assertIn("کاربران", detail.text)
-        async with self._client(_l1_staff(a)) as client:
-            foreign = await client.get(f"/principals?detail={int(b1.id)}")
-        self.assertEqual(foreign.status_code, 200)
-        self.assertNotIn("child_b1", foreign.text)
+    async def test_l1_without_capability_cannot_open(self) -> None:
+        _, a, _, a1, b1 = await self._seed()
+        async with self._client(_l1_staff(a, capable=False)) as client:
+            resp = await client.get("/principals", follow_redirects=False)
+        self.assertEqual(resp.status_code, 403)
+        _ = (a1, b1)
+
+    async def test_l1_with_capability_redirects_to_resellers(self) -> None:
+        _, a, _, _, _ = await self._seed()
+        async with self._client(_l1_staff(a, capable=True)) as client:
+            resp = await client.get("/principals", follow_redirects=False)
+        self.assertEqual(resp.status_code, 303)
+        self.assertTrue((resp.headers.get("location") or "").startswith("/resellers"))
 
     async def test_l2_cannot_open(self) -> None:
         _, _, _, a1, _ = await self._seed()
@@ -460,7 +449,7 @@ class L2ManagementHttpTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_l1_disable_enable_own_child(self) -> None:
         _, a, _, a1, _ = await self._seed()
-        staff = _l1_staff(a)
+        staff = _l1_staff(a, capable=True)
         async with self._client(staff) as client:
             resp = await client.post(
                 f"/principals/{int(a1.id)}/disable", follow_redirects=False
@@ -470,9 +459,10 @@ class L2ManagementHttpTests(unittest.IsolatedAsyncioTestCase):
             row = await session.get(OrgPrincipal, int(a1.id))
             self.assertEqual(row.status, "disabled")
         async with self._client(staff) as client:
-            page = await client.get(f"/principals?detail={int(a1.id)}")
-        self.assertIn("غیرفعال", page.text)
-        self.assertIn("فعال کردن", page.text)
+            page = await client.get(
+                f"/principals?detail={int(a1.id)}", follow_redirects=False
+            )
+        self.assertEqual(page.status_code, 303)
         async with self._client(staff) as client:
             resp = await client.post(
                 f"/principals/{int(a1.id)}/enable", follow_redirects=False
@@ -484,7 +474,7 @@ class L2ManagementHttpTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_l1_cannot_disable_foreign_or_sibling_l1(self) -> None:
         _, a, b, _, b1 = await self._seed()
-        staff = _l1_staff(a)
+        staff = _l1_staff(a, capable=True)
         async with self._client(staff) as client:
             resp = await client.post(
                 f"/principals/{int(b1.id)}/disable", follow_redirects=False
@@ -504,7 +494,7 @@ class L2ManagementHttpTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_l1_cannot_create_l1(self) -> None:
         _, a, _, _, _ = await self._seed()
-        async with self._client(_l1_staff(a)) as client:
+        async with self._client(_l1_staff(a, capable=True)) as client:
             resp = await client.post(
                 "/principals/create",
                 data={
@@ -527,24 +517,20 @@ class Product2SourceContracts(unittest.TestCase):
         self.assertIn("Depends(require_admin)", pages)
         self.assertNotIn("can_shop", pages)
         self.assertNotIn("bind_telegram", pages)
-        tpl = (ROOT / "app/web/templates/principals.html").read_text(encoding="utf-8")
-        self.assertIn("hierarchy_label", tpl)
-        self.assertIn("PG Role:", tpl)
+        tpl = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
+        self.assertIn("افزودن نماینده", tpl)
+        self.assertIn("/resellers/create-child", tpl)
         self.assertNotIn("Administrator", tpl)
         self.assertNotIn("pg_password_enc", tpl)
         self.assertNotIn('name="parent_id"', tpl)
         self.assertNotIn('name="depth"', tpl)
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("ident.kind == 'l1'", base)
+        self.assertIn("ident.can_add_representative", base)
 
     def test_l2_nav_not_shown_for_l2_kind(self) -> None:
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        start = base.find("{% if ident.kind == 'l1' %}")
-        self.assertGreater(start, 0)
-        end = base.find("{% endif %}", start)
-        chunk = base[start:end]
-        self.assertIn('href="/principals"', chunk)
-        self.assertNotIn("l2", chunk)
+        self.assertIn("ident.can_add_representative", base)
+        self.assertNotIn('href="/principals"', base)
 
 
 if __name__ == "__main__":
