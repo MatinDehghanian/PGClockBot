@@ -15,15 +15,19 @@ UPD = ROOT / "app/web/templates/_settings_update.html"
 class UpdateTabUiTests(unittest.TestCase):
     def test_changelog_is_inside_update_card_under_flash(self):
         src = UPD.read_text(encoding="utf-8")
+        caption_at = src.find("update-card-caption")
         flash_at = src.find("نسخه جدید آماده است")
+        meta_at = src.find('class="update-meta"')
         cl_at = src.find('class="update-changelog"')
         rollback_at = src.find("راه برگشت")
-        # changelog block appears after the update-available flash copy
-        self.assertGreater(flash_at, 0)
-        self.assertGreater(cl_at, flash_at)
+        self.assertGreater(caption_at, 0)
+        self.assertGreater(flash_at, caption_at)
+        self.assertGreater(meta_at, flash_at)
+        self.assertGreater(cl_at, meta_at)
         self.assertGreater(rollback_at, cl_at)
         self.assertIn("update-changelog-title", src)
         self.assertNotIn('class="card settings-card update-changelog"', src)
+        self.assertIn('class="update-meta-versions"', src)
 
     def test_version_boxes_use_ok_and_err_states(self):
         src = UPD.read_text(encoding="utf-8")
