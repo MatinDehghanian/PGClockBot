@@ -177,6 +177,8 @@ class ServicesRedesignTests(unittest.TestCase):
         admin = (ROOT / "app/services/bot_user_admin.py").read_text(encoding="utf-8")
         self.assertIn("status_label_plain", admin)
         self.assertIn("status_fa=status_label_plain(", admin)
+        mini = (ROOT / "app/api/miniapp_pages.py").read_text(encoding="utf-8")
+        self.assertIn("status_label_plain", mini)
 
 
 class ResellersPlanColumnTests(unittest.TestCase):

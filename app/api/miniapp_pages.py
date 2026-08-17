@@ -30,7 +30,7 @@ from app.services.formatting import (
     expire_remaining_days,
     format_bytes_ratio,
     format_expire_short,
-    status_label,
+    status_label_plain,
 )
 from app.services.miniapp_auth import (
     assert_mini_force_join,
@@ -164,7 +164,7 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
         "subscription_url": svc.subscription_url or "",
         "plan_id": svc.plan_id,
         "status": status_raw or "—",
-        "status_fa": status_label(status_raw)
+        "status_fa": status_label_plain(status_raw)
         if status_raw
         else ("—" if not info or upstream_err else "نامشخص"),
         "traffic": format_bytes_ratio(used, limit, joiner=" از ")
@@ -261,6 +261,20 @@ async def _user_shop_payload(session: AsyncSession, user: BotUser) -> dict:
     }
 
 
+def _mini_panel_base() -> str:
+    """Canonical panel URL for Mini App open-links.
+
+    Uses the live panel address (HTTPS domain when SSL is on, otherwise HTTP+IP).
+    Never PUBLIC_BASE_URL — that is the web-panel / webhook host and can differ.
+    """
+    try:
+        from app.services.ssl_certs import public_panel_base_url
+
+        return (public_panel_base_url() or "").rstrip("/")
+    except Exception:
+        return ""
+
+
 def _empty_customer() -> dict:
     return {
         "wallet": 0,
@@ -288,8 +302,7 @@ async def _admin_ops_payload(session: AsyncSession) -> dict:
             "tickets": 0,
             "resellers": 0,
         }
-    settings = get_settings()
-    base = (settings.public_base_url or "").rstrip("/")
+    base = _mini_panel_base()
     return {
         "stats": {
             "users": int(summary.get("users") or 0),
@@ -318,6 +331,7 @@ async def _reseller_ops_payload(
 ) -> dict:
     """Shop stats for this reseller only — profile must belong to ``user``."""
     from app.api.home_pages import _reseller_shop_stats
+    from app.services.resellers import get_reseller_panel_base_url
 
     if profile is not None and int(profile.user_id) != int(user.id):
         # Fail closed — never serve another reseller's ops.
@@ -337,8 +351,7 @@ async def _reseller_ops_payload(
             stats = await _reseller_shop_stats(session, int(profile.id))
         except Exception:
             await rollback_quiet(session)
-    settings = get_settings()
-    base = (settings.public_base_url or "").rstrip("/")
+    base = (await get_reseller_panel_base_url(session) or "").rstrip("/") or _mini_panel_base()
     billing = None
     if profile is not None and (profile.billing_mode or "") == "payg":
         billing = {
@@ -385,7 +398,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
                 "wallet": int(user.wallet_balance or 0) if commerce_allowed(persona) else 0,
             },
             "currency": get_settings().currency or "تومان",
-            "panel_base": (get_settings().public_base_url or "").rstrip("/"),
+            "panel_base": _mini_panel_base(),
             "commerce_allowed": commerce_allowed(persona),
         }
         if commerce_allowed(persona):
@@ -398,6 +411,9 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         elif persona == "reseller":
             profile = await load_reseller_profile(session, user)
             payload["ops"] = await _reseller_ops_payload(session, profile, user=user)
+        ops_base = ((payload.get("ops") or {}).get("panel_base") or "").rstrip("/")
+        if ops_base:
+            payload["panel_base"] = ops_base
         return _no_store(payload)
 
     @app.get("/api/mini/service/{service_id}")

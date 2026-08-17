@@ -170,6 +170,23 @@
     }
   }
 
+  function markCopied(btn) {
+    if (!btn) return;
+    const idle =
+      btn.dataset.copyIdle ||
+      ((btn.textContent || "").trim() && (btn.textContent || "").trim() !== "کپی شد"
+        ? (btn.textContent || "").trim()
+        : "کپی لینک");
+    btn.dataset.copyIdle = idle;
+    btn.textContent = "کپی شد";
+    btn.classList.add("is-copied");
+    if (btn._copyTimer) clearTimeout(btn._copyTimer);
+    btn._copyTimer = setTimeout(() => {
+      btn.textContent = btn.dataset.copyIdle || "کپی لینک";
+      btn.classList.remove("is-copied");
+    }, 1400);
+  }
+
   function renderNav(nav) {
     navEl.innerHTML = "";
     (nav || []).forEach((item) => {
@@ -200,7 +217,7 @@
 
   function linksHtml(links) {
     if (!links || !links.length) {
-      return '<p class="hint">برای لینک وب‌پنل، HTTPS و آدرس عمومی را فعال کنید.</p>';
+      return '<p class="hint">آدرس پنل در دسترس نیست.</p>';
     }
     return links
       .map(
@@ -401,7 +418,7 @@
           ])}
         </div>
         <div class="card">
-          <h3>میانبر وب‌پنل</h3>
+          <h3>میانبر پنل</h3>
           ${linksHtml(ops.panel_links)}
         </div>`;
     }
@@ -436,7 +453,7 @@
           }
         </div>
         <div class="card">
-          <h3>میانبر وب‌پنل</h3>
+          <h3>میانبر پنل</h3>
           ${linksHtml(ops.panel_links)}
         </div>`;
     }
@@ -453,7 +470,8 @@
     scope.querySelectorAll("[data-copy]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const ok = await copyText(btn.getAttribute("data-copy"));
-        toast(ok ? "لینک کپی شد" : "کپی نشد", ok ? "ok" : "err");
+        if (ok) markCopied(btn);
+        else toast("کپی نشد", "err");
       });
     });
     scope.querySelectorAll("[data-open-url]").forEach((btn) => {
@@ -485,25 +503,38 @@
 
   async function showQr(serviceId) {
     const box = document.querySelector(`[data-qr-box="${serviceId}"]`);
+    const trigger = document.querySelector(`[data-qr="${serviceId}"]`);
     if (!box) return;
     if (!box.hidden && box.querySelector("img")) {
       box.hidden = true;
+      box.classList.remove("is-ready", "is-loading");
+      box.textContent = "";
+      if (trigger) trigger.textContent = "نمایش QR";
       return;
     }
     box.hidden = false;
+    box.classList.add("is-loading");
+    box.classList.remove("is-ready");
     box.textContent = "در حال ساخت QR…";
     try {
       const data = await api("/api/mini/service/" + serviceId + "/qr");
       box.textContent = "";
+      box.classList.remove("is-loading");
+      box.classList.add("is-ready");
+      const frame = document.createElement("div");
+      frame.className = "qr-frame";
       const img = document.createElement("img");
       img.alt = "QR";
       img.src = "data:image/png;base64," + data.png_base64;
-      box.appendChild(img);
+      frame.appendChild(img);
+      box.appendChild(frame);
       const hint = document.createElement("div");
       hint.className = "hint";
       hint.textContent = "اسکن برای افزودن سابسکریپشن";
       box.appendChild(hint);
+      if (trigger) trigger.textContent = "بستن QR";
     } catch (e) {
+      box.classList.remove("is-loading", "is-ready");
       box.textContent = "";
       const err = document.createElement("div");
       err.className = "error";
