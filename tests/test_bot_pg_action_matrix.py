@@ -56,11 +56,12 @@ class BotPgUsersActionMatrixTests(unittest.IsolatedAsyncioTestCase):
         cb.answer.assert_awaited()
 
     async def test_reset_allowed_with_update_permission(self):
+        """Phase 4C: reset is Principal-gated. Missing session fail-closes (no PG call)."""
         cb = _fake_callback("adm:pg:reset:5")
         fake_pg = await self._run_with_action_gate(
             lambda m: m.pg_reset(cb, db_user=object()), allow_action="update"
         )
-        fake_pg.reset_user_by_id.assert_awaited_once_with(5)
+        fake_pg.reset_user_by_id.assert_not_called()
 
     async def test_disable_blocked_without_update_permission(self):
         cb = _fake_callback("adm:pg:dis:7")
@@ -80,15 +81,16 @@ class BotPgUsersActionMatrixTests(unittest.IsolatedAsyncioTestCase):
         fake_pg.delete_user_by_id.assert_not_called()
 
     async def test_delete_user_allowed_with_delete_permission(self):
+        """Phase 4C: delete is Principal-gated. Missing session fail-closes (no PG call)."""
         cb = _fake_callback("adm:pg:u:9:del")
         fake_pg = await self._run_with_action_gate(
             lambda m: m.pg_user_del(cb, state=AsyncMock(), db_user=object()),
             allow_action="delete",
         )
-        fake_pg.delete_user_by_id.assert_awaited_once_with(9)
+        fake_pg.delete_user_by_id.assert_not_called()
 
     async def test_read_only_detail_view_does_not_require_action_permission(self):
-        """Page-level access alone must still be enough for pure reads."""
+        """Phase 4B: detail is Principal-gated. Missing session fail-closes (no PG call)."""
         import app.bot.handlers.admin_pg_users as mod
 
         cb = _fake_callback("adm:pg:u:9")
@@ -103,7 +105,9 @@ class BotPgUsersActionMatrixTests(unittest.IsolatedAsyncioTestCase):
             mod, "_show_user_card", new=AsyncMock()
         ) as show_card:
             await mod.pg_user_detail(cb, db_user=object())
-        show_card.assert_awaited_once()
+        show_card.assert_not_awaited()
+        fake_pg.get_user_by_id.assert_not_called()
+        cb.answer.assert_awaited()
 
 
 class BotPgNodesActionMatrixTests(unittest.IsolatedAsyncioTestCase):
@@ -132,11 +136,12 @@ class BotPgNodesActionMatrixTests(unittest.IsolatedAsyncioTestCase):
         fake_pg.delete_node.assert_not_called()
 
     async def test_delete_node_allowed_with_delete_permission(self):
+        """Phase 4D: delete is Principal-gated. Missing session fail-closes (no PG call)."""
         cb = _fake_callback("adm:pg:ndel:3")
         fake_pg = await self._run_with_action_gate(
             lambda m: m.pg_node_delete(cb, db_user=object()), allow_action="delete"
         )
-        fake_pg.delete_node.assert_awaited_once_with(3)
+        fake_pg.delete_node.assert_not_called()
 
     async def test_reconnect_blocked_without_reconnect_permission(self):
         cb = _fake_callback("adm:pg:recon:4")
@@ -146,11 +151,12 @@ class BotPgNodesActionMatrixTests(unittest.IsolatedAsyncioTestCase):
         fake_pg.reconnect_node.assert_not_called()
 
     async def test_reconnect_allowed_with_reconnect_permission(self):
+        """Phase 4D: reconnect is Principal-gated. Missing session fail-closes (no PG call)."""
         cb = _fake_callback("adm:pg:recon:4")
         fake_pg = await self._run_with_action_gate(
             lambda m: m.pg_recon(cb, db_user=object()), allow_action="reconnect"
         )
-        fake_pg.reconnect_node.assert_awaited_once_with(4)
+        fake_pg.reconnect_node.assert_not_called()
 
     async def test_node_toggle_blocked_without_update_permission(self):
         cb = _fake_callback("adm:pg:ntog:8")

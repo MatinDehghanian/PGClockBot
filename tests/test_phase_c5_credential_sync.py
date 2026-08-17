@@ -193,7 +193,9 @@ class StaffPgReadWriteWithCredentialsTests(unittest.IsolatedAsyncioTestCase):
         from app.api.pg_pages import _assert_owned_user
 
         staff_pg = AsyncMock()
-        staff_pg.get_user_by_id = AsyncMock(return_value={"id": 5, "username": "u"})
+        staff_pg.get_user_by_id = AsyncMock(
+            return_value={"id": 5, "username": "u", "admin": {"username": "s1"}}
+        )
         owner = AsyncMock()
         owner.get_user_by_id = AsyncMock(return_value={"id": 5})
         with (

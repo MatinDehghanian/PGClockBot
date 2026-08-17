@@ -66,6 +66,7 @@
   {% set is_admin = staff.role == 'admin' %}
   {% set is_reseller = staff.role == 'reseller' %}
   {% set is_pg_staff = staff.role == 'pg_staff' %}
+  {% set ident = identity if identity is defined and identity else {} %}
   {% set has_bot = is_admin or (perms|length > 0) or is_reseller %}
   {% set has_pg = (pg_nav|length > 0) %}
   <div class="shell">
@@ -153,6 +154,12 @@
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 5v4M19 7h1"/><path d="M4 12h3M11 10v4M13 12h7"/><path d="M4 17h11M19 15v4M21 17h-1"/></svg>
             <span>تنظیمات وب پنل</span>
           </a>
+          {% if ident.kind == 'l1' %}
+          <a href="/principals" class="nav-item nav-item-home {% if path.startswith('/principals') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
+            <span>مدیریت کاربران سازمان</span>
+          </a>
+          {% endif %}
           {% if is_pg_staff %}
           <a href="/tickets" class="nav-item nav-item-home {% if path.startswith('/tickets') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
@@ -178,6 +185,10 @@
           <a href="/resellers" class="nav-item nav-item-bot {% if path.startswith('/resellers') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
             <span>نمایندگان</span>
+          </a>
+          <a href="/principals" class="nav-item nav-item-bot {% if path.startswith('/principals') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
+            <span>مدیریت کاربران سازمان</span>
           </a>
           {% endif %}
           {% if is_admin or 'orders' in perms or 'payments' in perms %}
@@ -277,13 +288,31 @@
       <div class="side-foot">
         <div class="side-foot-user">
           <span class="side-foot-name">{{ staff.username }}</span>
-          {% if is_admin %}
-          <span class="role-tag role-tag-admin">ادمین</span>
-          {% elif is_reseller %}
-          <span class="role-tag role-tag-reseller">نماینده</span>
-          {% elif is_pg_staff %}
-          <span class="role-tag role-tag-pg">ادمین پاسارگارد</span>
-          {% endif %}
+          <div class="side-foot-identity">
+            {% if ident.kind == 'owner' %}
+            <span class="role-tag role-tag-owner">مالک</span>
+            {% elif ident.kind == 'l1' or ident.kind == 'l2' %}
+            <span class="role-tag role-tag-principal">{{ ident.label }}</span>
+            {% if ident.show_pg_role and ident.pg_role_name %}
+            <span class="identity-pg-role">PG Role: {{ ident.pg_role_name }}</span>
+            {% endif %}
+            {% if ident.chips %}
+            <span class="identity-chips">
+              {% for chip in ident.chips %}
+              <span class="identity-chip">{{ chip }}</span>
+              {% endfor %}
+            </span>
+            {% endif %}
+            {% elif is_admin %}
+            <span class="role-tag role-tag-admin">ادمین</span>
+            {% elif is_reseller %}
+            <span class="role-tag role-tag-reseller">نماینده</span>
+            {% elif is_pg_staff %}
+            <span class="role-tag role-tag-pg">ادمین پاسارگارد</span>
+            {% elif ident.label %}
+            <span class="role-tag">{{ ident.label }}</span>
+            {% endif %}
+          </div>
         </div>
         <form method="post" action="/logout" class="logout-form">
           <button type="submit" class="logout-link">
@@ -325,8 +354,9 @@
         {# Page flashes stay above the title. When an edit/domain settings modal
            is reopening, the same message is shown inside the modal instead. #}
         {% set _domain_modal_open = open_supports_modal or open_loyalty_settings or (open_finance_settings|default('')|string|length > 0) %}
-        {% if flash_ok and not open_edit and not _domain_modal_open %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
-        {% if flash_err and not open_edit and not _domain_modal_open %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+        {% set _principal_modal_open = open_detail|default(false) %}
+        {% if flash_ok and not open_edit and not _domain_modal_open and not _principal_modal_open %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+        {% if flash_err and not open_edit and not _domain_modal_open and not _principal_modal_open %}<div class="flash err">{{ flash_err }}</div>{% endif %}
         {% block content %}{% endblock %}
       </div>
       <footer class="site-footer">

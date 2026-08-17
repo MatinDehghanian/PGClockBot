@@ -17,10 +17,44 @@ from typing import Any, Collection, Iterable
 
 
 def is_web_platform_admin(staff: dict | None) -> bool:
-    """True when the Web session is Owner / platform Admin (``role=admin``)."""
+    """True when the Web session role string is ``admin`` (legacy shop label).
+
+    SAFE LEGACY identity label only — does **not** grant platform-catalog or
+    cross-tenant authority. Shop/tenant security paths use
+    ``shop_scope.is_platform_admin`` → ``is_explicit_owner_staff`` (Phase 1G).
+    Hierarchy-global authority: ``is_explicit_owner_staff`` /
+    ``authz.is_explicit_org_owner``.
+    """
     if not staff:
         return False
     return (staff.get("role") or "").strip() == "admin"
+
+
+def is_explicit_owner_staff(staff: dict | None) -> bool:
+    """True only for an explicit Org Owner principal on the staff dict.
+
+    ``role=admin`` alone is insufficient. Requires server-attached
+    ``org_principal_id`` depth 0 (optionally flagged ``web_owner=True``).
+    """
+    if not staff:
+        return False
+    try:
+        depth = staff.get("org_depth")
+        depth_i = int(depth) if depth is not None else None
+    except (TypeError, ValueError):
+        return False
+    if depth_i != 0:
+        return False
+    if staff.get("org_parent_id") is not None:
+        return False
+    status = str(staff.get("org_status") or "").strip() or "active"
+    if status != "active":
+        return False
+    try:
+        pid = int(staff.get("org_principal_id") or 0)
+    except (TypeError, ValueError):
+        return False
+    return pid > 0
 
 
 def is_bot_platform_admin(

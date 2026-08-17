@@ -88,6 +88,21 @@ def _fake_message(text: str):
     return msg
 
 
+def _allowed_gate(fake_pg):
+    return SimpleNamespace(
+        allowed=True,
+        reason="ok",
+        user_message="",
+        staff={
+            "role": "admin",
+            "pg_is_owner": False,
+            "pg_admin_username": "envlimited",
+        },
+        pg_client=fake_pg,
+        pg_user=None,
+    )
+
+
 class BotCreateUserQuotaWiringTests(unittest.IsolatedAsyncioTestCase):
     """The bot's own PG user-creation flow (platform-admin-only) must run the
     same quota pre-check as the web panel instead of only relying on
@@ -100,13 +115,12 @@ class BotCreateUserQuotaWiringTests(unittest.IsolatedAsyncioTestCase):
         state = _fake_state({"pg_create_mode": "template", "pg_template_id": 5})
         message = _fake_message("testuser1")
         with (
-            patch.object(mod, "_require_users", new=AsyncMock(return_value=True)),
+            patch.object(mod, "_pg_user_gate", new=AsyncMock(return_value=_allowed_gate(fake_pg))),
             patch.object(
                 mod,
                 "assert_can_create_user",
                 new=AsyncMock(side_effect=PgQuotaError("سقف تعداد کاربران شما پر شده است")),
             ),
-            patch.object(mod, "get_pg", return_value=fake_pg),
         ):
             await mod.pg_create_username(message, state, db_user=SimpleNamespace(telegram_id=999999))
         fake_pg.create_user_from_template.assert_not_called()
@@ -121,9 +135,8 @@ class BotCreateUserQuotaWiringTests(unittest.IsolatedAsyncioTestCase):
         state = _fake_state({"pg_create_mode": "template", "pg_template_id": 5})
         message = _fake_message("testuser1")
         with (
-            patch.object(mod, "_require_users", new=AsyncMock(return_value=True)),
+            patch.object(mod, "_pg_user_gate", new=AsyncMock(return_value=_allowed_gate(fake_pg))),
             patch.object(mod, "assert_can_create_user", new=AsyncMock(return_value=None)),
-            patch.object(mod, "get_pg", return_value=fake_pg),
             patch.object(mod, "_show_user_card", new=AsyncMock()),
         ):
             await mod.pg_create_username(message, state, db_user=SimpleNamespace(telegram_id=999999))
@@ -142,13 +155,12 @@ class BotCreateUserQuotaWiringTests(unittest.IsolatedAsyncioTestCase):
         )
         message = _fake_message("30")
         with (
-            patch.object(mod, "_require_users", new=AsyncMock(return_value=True)),
+            patch.object(mod, "_pg_user_gate", new=AsyncMock(return_value=_allowed_gate(fake_pg))),
             patch.object(
                 mod,
                 "assert_can_create_user",
                 new=AsyncMock(side_effect=PgQuotaError("حجم کاربر نمی‌تواند بیشتر از حد مجاز باشد")),
             ),
-            patch.object(mod, "get_pg", return_value=fake_pg),
         ):
             await mod.pg_create_days(message, state, db_user=SimpleNamespace(telegram_id=999999))
         fake_pg.create_user.assert_not_called()
@@ -168,9 +180,8 @@ class BotCreateUserQuotaWiringTests(unittest.IsolatedAsyncioTestCase):
         )
         message = _fake_message("30")
         with (
-            patch.object(mod, "_require_users", new=AsyncMock(return_value=True)),
+            patch.object(mod, "_pg_user_gate", new=AsyncMock(return_value=_allowed_gate(fake_pg))),
             patch.object(mod, "assert_can_create_user", new=AsyncMock(return_value=None)),
-            patch.object(mod, "get_pg", return_value=fake_pg),
             patch.object(mod, "_show_user_card", new=AsyncMock()),
         ):
             await mod.pg_create_days(message, state, db_user=SimpleNamespace(telegram_id=999999))

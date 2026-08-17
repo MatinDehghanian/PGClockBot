@@ -66,7 +66,15 @@ class InboxPlatformScopeLeakTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             await self._seed_platform_only_setting(session)
 
-            admin = {"role": "admin", "id": 1, "username": "root"}
+            admin = {
+                "role": "admin",
+                "id": 1,
+                "username": "root",
+                "org_principal_id": 1,
+                "org_depth": 0,
+                "org_parent_id": None,
+                "org_status": "active",
+            }
             fake_request = SimpleNamespace(state=SimpleNamespace())
 
             with patch(

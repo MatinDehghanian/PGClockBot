@@ -491,6 +491,11 @@ async def make_reseller(
         profile.setup_token = None
         profile.setup_token_expires = None
 
+    await session.flush()
+    from app.services.org_principals import bind_reseller_profile_principal
+
+    # Fresh install: map this shop to its depth-1 Principal now (idempotent).
+    await bind_reseller_profile_principal(session, profile)
     await session.commit()
     await session.refresh(profile)
     return profile

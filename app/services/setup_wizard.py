@@ -430,39 +430,79 @@ def update_env_keys(updates: dict[str, str | int | None]) -> Path:
     return ENV_PATH
 
 
-def ensure_web_secret() -> str:
-    """Return current WEB_SECRET, generating and persisting one if missing.
+class WebSecretPersistenceError(RuntimeError):
+    """Generated WEB_SECRET could not be stored; do not use a process-only key."""
 
-    Must never raise: a failure here 500s every signed session (login included).
-    If ``.env`` is not writable, keep a process-local secret so the panel stays up.
+
+def _is_usable_web_secret(raw: str | None) -> bool:
+    from app.services.security_policy import PLACEHOLDER_SECRETS, is_placeholder_secret
+
+    s = (raw or "").strip()
+    if not s:
+        return False
+    if is_placeholder_secret(s) or s in PLACEHOLDER_SECRETS:
+        return False
+    return True
+
+
+def _existing_valid_web_secret() -> str:
+    """Return an already-configured WEB_SECRET (env, .env, or settings).
+
+    Container/environment secrets win. A persisted .env value is also valid.
+    Placeholders are ignored so they cannot become the live encryption key.
+    """
+    import os
+
+    candidates: list[str] = []
+    try:
+        candidates.append(os.environ.get("WEB_SECRET") or "")
+    except Exception:
+        pass
+    try:
+        candidates.append(_read_env_file().get("WEB_SECRET") or "")
+    except Exception:
+        pass
+    try:
+        get_settings.cache_clear()
+        candidates.append(get_settings().web_secret or "")
+    except Exception:
+        pass
+    for raw in candidates:
+        if _is_usable_web_secret(raw):
+            return raw.strip()
+    return ""
+
+
+def ensure_web_secret() -> str:
+    """Return a usable WEB_SECRET, generating and persisting one if missing.
+
+    Externally supplied valid secrets (process environment / settings) are
+    accepted even when ``.env`` is not writable. A newly generated secret must
+    be persisted to ``.env``; otherwise raise rather than keeping a process-only
+    encryption key. Never falls back to a known placeholder.
     """
     import logging
 
-    from app.services.security_policy import PLACEHOLDER_SECRETS, is_placeholder_secret
-
     log = logging.getLogger(__name__)
-    try:
-        secret = (_env_get("WEB_SECRET") or "").strip()
-    except Exception:
-        log.exception("reading WEB_SECRET failed")
-        secret = ""
-    if not (is_placeholder_secret(secret) or secret in PLACEHOLDER_SECRETS):
-        return secret
+    existing = _existing_valid_web_secret()
+    if existing:
+        return existing
     secret = secrets.token_hex(32)
     try:
         update_env_keys({"WEB_SECRET": secret})
-        return secret
     except Exception:
-        log.exception("persisting WEB_SECRET failed; using in-memory secret for this process")
-        # Best-effort: keep serving signed cookies until ops fixes .env permissions.
-        try:
-            import os
-
-            os.environ["WEB_SECRET"] = secret
-            get_settings.cache_clear()
-        except Exception:
-            pass
-        return secret
+        log.exception("persisting WEB_SECRET failed")
+        raise WebSecretPersistenceError(
+            "WEB_SECRET is missing and could not be persisted. "
+            "Set WEB_SECRET in the environment or make .env writable."
+        ) from None
+    persisted = _existing_valid_web_secret()
+    if persisted:
+        return persisted
+    raise WebSecretPersistenceError(
+        "WEB_SECRET is missing and could not be persisted. "
+        "Set WEB_SECRET in the environment or make .env writable."
+    )
 
 
 def normalize_webhook_path(raw: str | None) -> str:

@@ -241,10 +241,14 @@ async def show_nav_keyboard(
     elif level == NAV_ADMIN:
         pg_feats: frozenset[str] | None = None
         try:
-            from app.bot.auth import is_platform_admin, platform_pg_features
+            from app.bot.auth import bot_migrated_pg_features, is_bot_owner_principal
 
-            if is_platform_admin(db_user):
-                pg_feats = await platform_pg_features()
+            if await is_bot_owner_principal(
+                session, db_user, is_reseller_bot=is_reseller_bot
+            ):
+                pg_feats = await bot_migrated_pg_features(
+                    session, db_user, is_reseller_bot=is_reseller_bot
+                )
         except Exception:
             pg_feats = frozenset()
         markup = kb.admin_reply_keyboard(ui, pg_features=pg_feats)
@@ -252,10 +256,14 @@ async def show_nav_keyboard(
         feats: frozenset[str] = frozenset()
         can_create = False
         try:
-            from app.bot.auth import can_platform_pg_action, platform_pg_features
+            from app.bot.auth import bot_migrated_pg_features, bot_pg_can_create_user
 
-            feats = await platform_pg_features()
-            can_create = await can_platform_pg_action(db_user, "users", "create")
+            feats = await bot_migrated_pg_features(
+                session, db_user, is_reseller_bot=is_reseller_bot
+            )
+            can_create = await bot_pg_can_create_user(
+                session, db_user, is_reseller_bot=is_reseller_bot
+            )
         except Exception:
             feats = frozenset()
             can_create = False

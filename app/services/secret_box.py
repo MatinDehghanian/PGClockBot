@@ -70,7 +70,11 @@ def encrypt_secret(plain: str | None) -> str | None:
     try:
         key = _fernet_keys()[0]
         return _fernet(key).encrypt(text.encode("utf-8")).decode("ascii")
-    except Exception:
+    except Exception as exc:
+        from app.services.setup_wizard import WebSecretPersistenceError
+
+        if isinstance(exc, WebSecretPersistenceError):
+            raise
         logger.exception("encrypt_secret failed")
         return None
 

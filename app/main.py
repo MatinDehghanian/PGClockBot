@@ -78,6 +78,9 @@ def main() -> None:
     @asynccontextmanager
     async def lifespan(app):
         await init_db()
+        from app.services.setup_wizard import ensure_web_secret
+
+        ensure_web_secret()
         try:
             from app.services.service_control import ensure_restart_helper
 

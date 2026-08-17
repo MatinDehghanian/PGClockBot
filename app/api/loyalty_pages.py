@@ -23,17 +23,23 @@ from app.services.loyalty import (
     ensure_loyalty_defaults,
     overview_metrics,
 )
+from app.services.shop_scope import (
+    ShopScopeError,
+    assert_bot_user_in_scope,
+    resolve_shop_scope_id,
+)
 from app.services.users import get_setting, set_setting
 
 
 def _shop_scope(staff: dict) -> int | None:
-    """Platform admin → None (platform shop). Reseller → their bot_user_id only."""
-    if staff.get("role") == "reseller":
-        rid = staff.get("bot_user_id")
-        if rid is None:
-            raise ValueError("reseller scope missing")
-        return int(rid)
-    return None
+    """Platform admin → None (platform shop). Reseller → bot_user_id.
+
+    Scopeless staff (pg_staff / broken reseller) raises — never platform fallthrough.
+    """
+    try:
+        return resolve_shop_scope_id(staff)
+    except ShopScopeError as e:
+        raise ValueError(e.message) from e
 
 
 def _rule_in_scope(rule: PointsRule, scope: int | None) -> bool:
@@ -91,15 +97,17 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 )
             ).scalars().all()
         )
-        txs_q = select(PointsTransaction).order_by(PointsTransaction.id.desc()).limit(50)
+        txs_q = (
+            select(PointsTransaction)
+            .join(BotUser, BotUser.id == PointsTransaction.user_id)
+            .order_by(PointsTransaction.id.desc())
+            .limit(50)
+        )
         if scope is not None:
-            txs_q = (
-                select(PointsTransaction)
-                .join(BotUser, BotUser.id == PointsTransaction.user_id)
-                .where(BotUser.reseller_id == int(scope))
-                .order_by(PointsTransaction.id.desc())
-                .limit(50)
-            )
+            txs_q = txs_q.where(BotUser.reseller_id == int(scope))
+        else:
+            # Platform shop only — never list sibling/tenant loyalty txs as global.
+            txs_q = txs_q.where(BotUser.reseller_id.is_(None))
         txs = list((await session.execute(txs_q)).scalars().all())
         loyalty_enabled = await get_setting(
             session, "loyalty_enabled", "1", reseller_id=scope
@@ -414,6 +422,12 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         if not user:
             return RedirectResponse(
                 f"/loyalty?tab=transactions&err={quote('کاربر پیدا نشد')}", status_code=303
+            )
+        try:
+            assert_bot_user_in_scope(staff, user)
+        except ShopScopeError as e:
+            return RedirectResponse(
+                f"/loyalty?tab=transactions&err={quote(e.message)}", status_code=303
             )
         admin_id = str(staff.get("username") or staff.get("telegram_id") or staff.get("id") or "admin")
         try:

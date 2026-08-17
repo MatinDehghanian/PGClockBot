@@ -166,6 +166,13 @@ def render(request: Request, name: str, context: dict | None = None, status_code
         ctx["tickets_unread"] = int(getattr(request.state, "panel_tickets_unread", 0) or 0)
     if "inbox_alert" not in ctx:
         ctx["inbox_alert"] = bool(getattr(request.state, "panel_inbox_alert", False))
+    if ctx.get("staff") and "identity" not in ctx:
+        try:
+            from app.services.identity_chrome import hierarchy_identity
+
+            ctx["identity"] = hierarchy_identity(ctx.get("staff"))
+        except Exception:
+            ctx["identity"] = {}
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
 
@@ -326,15 +333,15 @@ def create_api_app(lifespan=None) -> FastAPI:
         pass
 
     def get_signer() -> URLSafeTimedSerializer:
-        # Never fall back to a hardcoded secret — forgeable sessions otherwise
+        # Never fall back to a hardcoded or process-only secret.
         secret = ensure_web_secret()
         if not secret:
-            # Last resort ephemeral secret (process lifetime) — better than 500.
-            import logging
-            import secrets as _secrets
+            from app.services.setup_wizard import WebSecretPersistenceError
 
-            logging.getLogger(__name__).error("WEB_SECRET empty after ensure; using ephemeral")
-            secret = _secrets.token_hex(32)
+            raise WebSecretPersistenceError(
+                "WEB_SECRET is missing and could not be persisted. "
+                "Set WEB_SECRET in the environment or make .env writable."
+            )
         return URLSafeTimedSerializer(secret, salt="pgclock-session")
 
     async def get_db():
@@ -376,7 +383,12 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ) -> dict:
         user = get_session_user(request)
-        if not user or user.get("role") not in {"admin", "reseller", "pg_staff"}:
+        if not user or user.get("role") not in {
+            "admin",
+            "reseller",
+            "pg_staff",
+            "principal",
+        }:
             raise NotAuthenticated()
         if user.get("role") == "reseller":
             from sqlalchemy import select
@@ -433,6 +445,27 @@ def create_api_app(lifespan=None) -> FastAPI:
                 user["pg_role_id"] = int(role_id)
                 features, role = await resolve_reseller_pg_features(int(role_id))
                 user = enrich_staff_pg_from_role(user, features, role)
+            # Principal from the server-loaded ResellerProfile only.
+            # Cookie org_principal_id / parent / depth / scope are not selectors.
+            from app.services.org_principals import (
+                attach_org_principal_fields,
+                bind_reseller_profile_principal,
+            )
+            from app.services.org_scope import visible_principal_ids
+
+            user.pop("org_principal_id", None)
+            user.pop("org_parent_id", None)
+            user.pop("org_depth", None)
+            user.pop("org_visible_principal_ids", None)
+            user.pop("web_owner", None)
+            user["reseller_profile_id"] = int(profile.id)
+            principal = await bind_reseller_profile_principal(session, profile)
+            if principal is None:
+                raise NotAuthenticated()
+            visible = await visible_principal_ids(session, principal)
+            user = attach_org_principal_fields(
+                user, principal, visible_principal_ids=visible
+            )
         elif user.get("role") == "pg_staff":
             from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
             from app.services.pg_staff_access import (
@@ -474,11 +507,51 @@ def create_api_app(lifespan=None) -> FastAPI:
             if not (user.get("pg_permissions") or []):
                 # No mapped features → deny panel use
                 raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
+            # Phase 1G: pg_staff without an existing OrgPrincipal → DENY (no role fallback).
+            from app.services.org_principals import (
+                attach_org_principal_fields,
+                resolve_org_principal_for_staff,
+            )
+            from app.services.org_scope import visible_principal_ids
+
+            principal = await resolve_org_principal_for_staff(session, user)
+            if principal is None:
+                raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)
+            visible = await visible_principal_ids(session, principal)
+            user = attach_org_principal_fields(
+                user, principal, visible_principal_ids=visible
+            )
+        elif user.get("role") == "principal":
+            # Phase 2B: Level-1 OrgPrincipal Web identity — resolve server-side only.
+            from app.services.principal_web_identity import (
+                PrincipalWebIdentityError,
+                resolve_principal_web_session,
+            )
+
+            try:
+                user = await resolve_principal_web_session(session, user)
+            except PrincipalWebIdentityError as exc:
+                raise NotAuthenticated(login_error=exc.message) from exc
         elif user.get("role") == "admin":
             # Hybrid Owner: shop stays full; PG menus/actions follow env PG role.
+            # C2/1G: bind Web Owner session to explicit Org Owner principal (not role alone).
+            from app.services.org_principals import (
+                attach_org_principal_fields,
+                resolve_org_principal_for_staff,
+            )
+            from app.services.org_scope import visible_principal_ids
             from app.services.pg_access import enrich_platform_admin_staff
 
             user = await enrich_platform_admin_staff(dict(user))
+            # Valid admin cookie is always web_admin.json-bound (sv check above).
+            user["web_owner"] = True
+            principal = await resolve_org_principal_for_staff(session, user)
+            if principal is None:
+                raise NotAuthenticated()
+            visible = await visible_principal_ids(session, principal)
+            user = attach_org_principal_fields(
+                user, principal, visible_principal_ids=visible
+            )
         # Skip unread COUNT on mutations / JSON polls that never render the sidebar.
         try:
             from app.services.panel_tickets import should_skip_unread_count, sidebar_unread_count
@@ -508,8 +581,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         request: Request,
         session: AsyncSession = Depends(get_db),
     ) -> dict:
+        from app.services.platform_identity import is_explicit_owner_staff
+
         user = await require_staff(request, session)
-        if user.get("role") != "admin":
+        # C2: role=admin alone is not Owner — require attached Owner principal.
+        if user.get("role") != "admin" or not is_explicit_owner_staff(user):
             raise NotAdmin()
         return user
 
@@ -546,7 +622,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         return "/logout"
 
     def require_pg_perm(perm: str):
-        """Require mapped PG feature (Hybrid: Owner also clamped to env PG role)."""
+        """Require mapped PG feature (Hybrid: Owner also clamped to env PG role).
+
+        Phase 2C: Level-1 Principals use the same PG page keys + local safety.
+        """
 
         async def _dep(
             request: Request,
@@ -554,9 +633,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         ) -> dict:
             from app.services.authz import authz_from_staff, can_pg_page, is_platform_admin
             from app.services.pg_read import effective_pg_menu_keys
+            from app.services.principal_pg_authz import (
+                is_level1_principal_staff,
+                staff_may_pg_page,
+            )
 
             user = await require_staff(request, session)
             ctx = authz_from_staff(user)
+            if is_level1_principal_staff(user):
+                if not staff_may_pg_page(user, perm):
+                    features = list(ctx.pg_permissions)
+                    raise NotAdmin(redirect=_live_pg_home(features))
+                return user
             if not can_pg_page(ctx, perm):
                 features = list(ctx.pg_permissions)
                 # Platform admin without PG features → shop home, not logout
@@ -746,9 +834,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         except Exception:
             user = None
         role = (user or {}).get("role")
-        if role in {"reseller", "pg_staff"}:
+        if role in {"reseller", "pg_staff", "principal"}:
             pg = (user or {}).get("pg_permissions") or []
-            if role == "pg_staff":
+            if role in {"pg_staff", "principal"}:
                 return RedirectResponse("/pg", status_code=303)
             for path in (
                 "/home",
@@ -833,6 +921,15 @@ def create_api_app(lifespan=None) -> FastAPI:
     from app.api.user_pages import register_user_pages
 
     register_reseller_pages(app, render=render, require_admin=require_admin, get_db=get_db)
+    from app.api.principal_pages import register_principal_pages
+
+    register_principal_pages(
+        app,
+        render=render,
+        require_admin=require_admin,
+        require_staff=require_staff,
+        get_db=get_db,
+    )
     register_user_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     from app.api.finance_pages import register_finance_pages
     register_finance_pages(
@@ -1209,8 +1306,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse("/login", status_code=303)
         if user.get("role") == "admin":
             return RedirectResponse("/home", status_code=303)
-        if user.get("role") == "pg_staff":
-            # Legacy pg_staff without shop profile → PG home
+        if user.get("role") in {"pg_staff", "principal"}:
+            # Legacy pg_staff / Level-1 Principal → PG home
             return RedirectResponse("/pg", status_code=303)
         # Reseller / sub-admin → web dashboard (bot + PG summaries)
         return RedirectResponse("/home", status_code=303)
@@ -1226,7 +1323,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             if sess:
                 if sess.get("role") == "admin":
                     return _panel_redirect(request, "/home")
-                if sess.get("role") == "pg_staff":
+                if sess.get("role") in {"pg_staff", "principal"}:
                     return _panel_redirect(request, "/pg")
                 # Reseller / sub-admin: web dashboard
                 return _panel_redirect(request, "/home")
@@ -1465,6 +1562,93 @@ def create_api_app(lifespan=None) -> FastAPI:
                             status_code=400,
                         )
 
+            if not role:
+                # Phase 2B: Level-1 OrgPrincipal independent Web identity
+                from app.services.principal_web_identity import (
+                    PrincipalWebIdentityError,
+                    authenticate_level1_web,
+                    build_principal_session_payload,
+                )
+                from app.services.pg_access import (
+                    map_pg_role_writes,
+                    resolve_reseller_pg_features,
+                    role_access_limits,
+                    role_user_actions,
+                )
+                from app.services.pg_staff_access import resolve_pg_role_id_for_admin
+
+                try:
+                    auth = await authenticate_level1_web(
+                        session, username=u, password=p
+                    )
+                except PrincipalWebIdentityError as exc:
+                    for k in limit_keys:
+                        _login_fail(k)
+                    return render(
+                        request,
+                        "login.html",
+                        {"error": exc.message, "username": typed_user},
+                        status_code=403,
+                    )
+                if auth is not None:
+                    pg_role_id = None
+                    pg_permissions = []
+                    pg_user_actions = {}
+                    pg_access = {}
+                    pg_writes = {}
+                    if auth.pg_username:
+                        live_role = await resolve_pg_role_id_for_admin(auth.pg_username)
+                        if live_role:
+                            pg_role_id = int(live_role)
+                    if pg_role_id:
+                        pg_permissions, pg_role = await resolve_reseller_pg_features(
+                            pg_role_id
+                        )
+                        pg_user_actions = role_user_actions(pg_role)
+                        pg_access = role_access_limits(pg_role)
+                        pg_writes = map_pg_role_writes(pg_role)
+                    for k in limit_keys:
+                        _login_success(k)
+                    payload = build_principal_session_payload(
+                        auth,
+                        permissions=[],
+                        pg_permissions=pg_permissions,
+                        pg_user_actions=pg_user_actions,
+                        pg_access=pg_access,
+                        pg_writes=pg_writes,
+                        pg_role_id=pg_role_id,
+                    )
+                    home = "/pg" if pg_permissions else "/home"
+                    resp = _panel_redirect(request, home)
+                    try:
+                        cookie_val = get_signer().dumps(payload)
+                    except Exception:
+                        logging.getLogger(__name__).exception("session cookie sign failed")
+                        return render(
+                            request,
+                            "login.html",
+                            {
+                                "error": "خطای داخلی نشست — دوباره تلاش کنید",
+                                "username": typed_user,
+                            },
+                            status_code=500,
+                        )
+                    resp.set_cookie(
+                        "session",
+                        cookie_val,
+                        httponly=True,
+                        samesite="lax",
+                        max_age=SESSION_MAX_AGE,
+                        secure=_cookie_secure(request),
+                        path="/",
+                    )
+                    try:
+                        revoke_setup_gate()
+                    except Exception:
+                        logging.getLogger(__name__).exception("revoke_setup_gate failed")
+                    resp.delete_cookie("setup_gate", path="/")
+                    return resp
+
         if not role:
             for k in limit_keys:
                 _login_fail(k)
@@ -1488,6 +1672,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         }
         if role == "admin":
             payload["sv"] = admin_session_version()
+            payload["web_owner"] = True
         if bot_user_id is not None:
             payload["bot_user_id"] = bot_user_id
         if pg_admin_username:
@@ -2763,6 +2948,12 @@ def create_api_app(lifespan=None) -> FastAPI:
         user = await session.get(BotUser, user_id)
         if not user:
             return _redirect_msg("/users", err="کاربر یافت نشد")
+        from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
+
+        try:
+            assert_bot_user_in_scope(staff, user)
+        except ShopScopeError as e:
+            return _redirect_msg("/users", err=e.message)
         if role not in {Role.USER.value, Role.RESELLER.value, Role.ADMIN.value}:
             return _redirect_msg("/users", err="نقش نامعتبر")
 
@@ -2887,6 +3078,12 @@ def create_api_app(lifespan=None) -> FastAPI:
         user = await session.get(BotUser, user_id)
         if not user:
             return _redirect_msg("/users", err="کاربر یافت نشد")
+        from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
+
+        try:
+            assert_bot_user_in_scope(staff, user)
+        except ShopScopeError as e:
+            return _redirect_msg("/users", err=e.message)
         if is_protected_admin(user):
             return _redirect_msg("/users", err="مسدود کردن ادمین مجاز نیست")
         will_block = not user.is_blocked
@@ -2935,6 +3132,12 @@ def create_api_app(lifespan=None) -> FastAPI:
         user = await session.get(BotUser, user_id)
         if not user:
             return _redirect_msg("/users", err="کاربر یافت نشد")
+        from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
+
+        try:
+            assert_bot_user_in_scope(staff, user)
+        except ShopScopeError as e:
+            return _redirect_msg("/users", err=e.message)
         await notify_account_edit(
             session,
             user=user,

@@ -83,7 +83,7 @@ class PgUsersFetchTests(unittest.IsolatedAsyncioTestCase):
             return_value={"users": [{"id": 1, "username": "u1"}], "total": 25}
         )
         with patch("app.bot.handlers.admin_pg_users.get_pg", return_value=pg):
-            users, total = await _fetch_users_page(2, username="u")
+            users, total = await _fetch_users_page(2, username="u", pg=pg)
         self.assertEqual(total, 25)
         self.assertEqual(len(users), 1)
         pg.get_users.assert_awaited_once_with(offset=2 * PAGE_SIZE, limit=PAGE_SIZE, username="u")

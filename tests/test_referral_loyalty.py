@@ -596,10 +596,21 @@ class LoyaltyStaticContractTests(unittest.TestCase):
         from app.api.loyalty_pages import _reward_in_scope, _rule_in_scope, _shop_scope
         from app.db.models import LoyaltyReward, PointsRule
 
-        self.assertIsNone(_shop_scope({"role": "admin"}))
+        owner = {
+            "role": "admin",
+            "org_principal_id": 1,
+            "org_depth": 0,
+            "org_parent_id": None,
+            "org_status": "active",
+        }
+        self.assertIsNone(_shop_scope(owner))
+        with self.assertRaises(ValueError):
+            _shop_scope({"role": "admin"})
         self.assertEqual(_shop_scope({"role": "reseller", "bot_user_id": 42}), 42)
         with self.assertRaises(ValueError):
             _shop_scope({"role": "reseller"})
+        with self.assertRaises(ValueError):
+            _shop_scope({"role": "pg_staff", "bot_user_id": 1})
 
         platform_rule = PointsRule(
             name="p", event_key="purchase", amount_mode="fixed", amount=1, reseller_id=None

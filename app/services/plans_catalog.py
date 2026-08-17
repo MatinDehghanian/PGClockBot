@@ -91,13 +91,17 @@ def _admin_pg_unrestricted(staff: dict | None) -> bool:
 
 
 def _allowed_id_set(raw) -> set[int] | None:
-    """None = no restriction; empty set = nothing allowed."""
+    """Parse allow-list.
+
+    ``None`` input → None (unresolved — callers must not treat as unrestricted
+    for non-Owner mutations). Invalid payloads → empty set (deny everything).
+    """
     if raw is None:
         return None
     try:
         return {int(x) for x in raw}
     except (TypeError, ValueError):
-        return None
+        return set()
 
 
 def filter_templates_for_staff(
@@ -149,6 +153,7 @@ def filter_groups_for_staff(
 
 
 def template_allowed_for_staff(staff: dict | None, template_id: int | None) -> bool:
+    """Mutation/object check. Missing allow-list is NOT unrestricted for non-Owner (M1)."""
     if template_id is None:
         return False
     if not staff or _admin_pg_unrestricted(staff):
@@ -156,11 +161,21 @@ def template_allowed_for_staff(staff: dict | None, template_id: int | None) -> b
     access = staff.get("pg_access") or {}
     allowed = _allowed_id_set(access.get("allowed_template_ids"))
     if allowed is None:
-        return True
+        # Unresolved allow-list ≠ unrestricted. Hybrid limited admin → deny.
+        # Reseller / credentialed pg_staff → own-client scopes the ID space.
+        from app.services.pg_read import staff_pg_credentials_ready
+        from app.services.shop_scope import is_platform_admin
+
+        if is_platform_admin(staff):
+            return False
+        return bool(staff_pg_credentials_ready(staff))
+    if not allowed:
+        return False
     return int(template_id) in allowed
 
 
 def groups_allowed_for_staff(staff: dict | None, group_ids: list[int]) -> bool:
+    """Mutation/object check. Missing allow-list is NOT unrestricted for non-Owner (M1)."""
     if not group_ids:
         return False
     if not staff or _admin_pg_unrestricted(staff):
@@ -168,7 +183,14 @@ def groups_allowed_for_staff(staff: dict | None, group_ids: list[int]) -> bool:
     access = staff.get("pg_access") or {}
     allowed = _allowed_id_set(access.get("allowed_group_ids"))
     if allowed is None:
-        return True
+        from app.services.pg_read import staff_pg_credentials_ready
+        from app.services.shop_scope import is_platform_admin
+
+        if is_platform_admin(staff):
+            return False
+        return bool(staff_pg_credentials_ready(staff))
+    if not allowed:
+        return False
     return all(int(g) in allowed for g in group_ids)
 
 

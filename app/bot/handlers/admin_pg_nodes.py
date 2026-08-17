@@ -8,6 +8,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.auth import can_platform_pg_action, can_platform_pg_page
@@ -19,8 +20,13 @@ from app.services.pasarguard import PasarGuardError, get_pg
 
 router = Router(name="admin_pg_nodes")
 
+
 async def _require_nodes(db_user: BotUser, callback=None, message=None, *, action: str | None = None) -> bool:
-    """Return True when caller may continue."""
+    """Legacy platform-admin page gate (kept for source contracts).
+
+    Migrated node handlers must use ``_pg_object_gate`` — never this function
+    as the final authorization decision.
+    """
     if not _is_admin(db_user):
         if callback is not None:
             await callback.answer("ادمین نیستید", show_alert=True)
@@ -42,6 +48,48 @@ async def _require_nodes(db_user: BotUser, callback=None, message=None, *, actio
     return True
 
 
+async def _pg_object_gate(
+    db_user: BotUser,
+    *,
+    action: str,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+    callback=None,
+    message=None,
+    object_id: int | None = None,
+    callback_data: str | None = None,
+    notify: bool = True,
+):
+    """Phase 4D — Principal + AuthzContext + object-scope gate (not ``_is_admin``)."""
+    from app.services.bot_pg_object_pilot import authorize_bot_pg_object_op
+
+    data = callback_data
+    if data is None and callback is not None:
+        data = getattr(callback, "data", None)
+    gate = await authorize_bot_pg_object_op(
+        session,
+        db_user=db_user,
+        kind="nodes",
+        action=action,  # type: ignore[arg-type]
+        callback_data=data,
+        object_id=object_id,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not gate.allowed and notify:
+        if callback is not None:
+            await callback.answer(gate.user_message, show_alert=True)
+        elif message is not None:
+            await message.answer(gate.user_message)
+    return gate
+
+
+def _unused_owner_client_import_anchor():
+    """Source contract: this module still references get_pg(); live Owner client is the Principal bridge."""
+    return get_pg()
 
 
 class PgNodeStates(StatesGroup):
@@ -126,14 +174,15 @@ def _node_detail_text(n: dict) -> str:
     return "\n".join(lines)
 
 
-async def _render_nodes_list(callback: CallbackQuery) -> None:
+async def _render_nodes_list(callback: CallbackQuery, gate) -> None:
+    from app.services.bot_pg_object_pilot import list_scoped_pg_objects
+
     try:
-        nodes = await get_pg().get_nodes()
+        items = await list_scoped_pg_objects(gate, kind="nodes")
     except Exception as e:
         if callback.message:
             await safe_edit_text(callback.message, f"خطا: {_err_msg(e)}", reply_markup=None)
         return
-    items = nodes if isinstance(nodes, list) else nodes.get("nodes", nodes.get("items", []))
     if not isinstance(items, list):
         items = []
     lines = ["🕸 <b>نودهای پاسارگارد</b>\n"]
@@ -159,27 +208,56 @@ async def _render_nodes_list(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "adm:pg:nodes")
-async def pg_nodes(callback: CallbackQuery, db_user: BotUser, state: FSMContext | None = None):
-    if not await _require_nodes(db_user, callback=callback):
+async def pg_nodes(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_object_gate(
+        db_user,
+        action="list",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
     if state is not None:
         await state.set_state(None)
     await callback.answer()
-    await _render_nodes_list(callback)
+    await _render_nodes_list(callback, gate)
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:n:\d+$"))
-async def pg_node_detail(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback):
+async def pg_node_detail(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_object_gate(
+        db_user,
+        action="read",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    nid = int(callback.data.rsplit(":", 1)[-1])
+    n = gate.pg_object
+    nid = int((n or {}).get("id") or 0)
     await callback.answer()
-    try:
-        n = await get_pg().get_node(nid)
-    except Exception as e:
-        await callback.answer(_err_msg(e), show_alert=True)
-        return
-    if not isinstance(n, dict):
+    if not isinstance(n, dict) or nid <= 0:
         await callback.answer("یافت نشد", show_alert=True)
         return
     if callback.message:
@@ -191,53 +269,109 @@ async def pg_node_detail(callback: CallbackQuery, db_user: BotUser):
 
 
 @router.callback_query(F.data.startswith("adm:pg:recon:"))
-async def pg_recon(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback, action="reconnect"):
+async def pg_recon(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_object_gate(
+        db_user,
+        action="reconnect",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed or gate.pg_client is None or gate.pg_object is None:
         return
+    node_id = int(gate.pg_object.get("id") or 0)
     try:
-        node_id = int(callback.data.split(":")[-1])
-    except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
-        return
-    try:
-        await get_pg().reconnect_node(node_id)
+        await gate.pg_client.reconnect_node(node_id)
         await callback.answer("درخواست اتصال مجدد ارسال شد ✅", show_alert=True)
     except Exception as e:
         await callback.answer(_err_msg(e), show_alert=True)
 
 
 @router.callback_query(F.data == "adm:pg:nreconall")
-async def pg_recon_all(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback, action="reconnect"):
+async def pg_recon_all(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_object_gate(
+        db_user,
+        action="reconnect",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed or gate.pg_client is None:
         return
     try:
-        await get_pg().reconnect_all_nodes()
+        await gate.pg_client.reconnect_all_nodes()
         await callback.answer("اتصال مجدد همه نودها ارسال شد ✅", show_alert=True)
     except Exception as e:
         await callback.answer(_err_msg(e), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("adm:pg:nsync:"))
-async def pg_node_sync(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback, action="reconnect"):
+async def pg_node_sync(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_object_gate(
+        db_user,
+        action="reconnect",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed or gate.pg_client is None or gate.pg_object is None:
         return
+    node_id = int(gate.pg_object.get("id") or 0)
     try:
-        node_id = int(callback.data.split(":")[-1])
-    except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
-        return
-    try:
-        await get_pg().sync_node(node_id)
+        await gate.pg_client.sync_node(node_id)
         await callback.answer("همگام‌سازی انجام شد ✅", show_alert=True)
     except Exception as e:
         await callback.answer(_err_msg(e), show_alert=True)
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:nresetask:\d+$"))
-async def pg_node_reset_ask(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback, action="update"):
+async def pg_node_reset_ask(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_object_gate(
+        db_user,
+        action="update",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    nid = int(callback.data.split(":")[-1])
+    nid = int((gate.pg_object or {}).get("id") or 0)
     await callback.answer()
     if callback.message:
         await safe_edit_text(
@@ -258,19 +392,35 @@ async def pg_node_reset_ask(callback: CallbackQuery, db_user: BotUser):
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:nreset:\d+$"))
-async def pg_node_reset(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback, action="update"):
+async def pg_node_reset(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_object_gate(
+        db_user,
+        action="update",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed or gate.pg_client is None or gate.pg_object is None:
         return
-    node_id = int(callback.data.split(":")[-1])
+    node_id = int(gate.pg_object.get("id") or 0)
     try:
-        await get_pg().reset_node(node_id)
+        await gate.pg_client.reset_node(node_id)
         await callback.answer("مصرف نود ریست شد ✅", show_alert=True)
     except Exception as e:
         await callback.answer(_err_msg(e), show_alert=True)
         return
     if callback.message:
         try:
-            n = await get_pg().get_node(node_id)
+            n = await gate.pg_client.get_node(node_id)
             await safe_edit_text(
                 callback.message,
                 _node_detail_text(n) if isinstance(n, dict) else f"نود #{node_id}",
@@ -281,19 +431,38 @@ async def pg_node_reset(callback: CallbackQuery, db_user: BotUser):
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:ntog:\d+$"))
-async def pg_node_toggle(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback, action="update"):
+async def pg_node_toggle(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.bot_pg_object_pilot import sanitize_pg_object_write_payload
+
+    gate = await _pg_object_gate(
+        db_user,
+        action="update",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed or gate.pg_client is None or gate.pg_object is None:
         return
-    node_id = int(callback.data.split(":")[-1])
+    node_id = int(gate.pg_object.get("id") or 0)
     try:
-        pg = get_pg()
-        node = await pg.get_node(node_id)
+        node = gate.pg_object
         st = str((node or {}).get("status") or "").lower()
         new_status = "connected" if st in {"disabled", "error", "limited"} else "disabled"
-        await pg.modify_node(node_id, {"status": new_status})
+        await gate.pg_client.modify_node(
+            node_id, sanitize_pg_object_write_payload({"status": new_status})
+        )
         await callback.answer("وضعیت نود تغییر کرد ✅", show_alert=True)
         if callback.message:
-            n = await pg.get_node(node_id)
+            n = await gate.pg_client.get_node(node_id)
             await safe_edit_text(
                 callback.message,
                 _node_detail_text(n) if isinstance(n, dict) else f"نود #{node_id}",
@@ -304,10 +473,26 @@ async def pg_node_toggle(callback: CallbackQuery, db_user: BotUser):
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:ndelask:\d+$"))
-async def pg_node_del_ask(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback, action="delete"):
+async def pg_node_del_ask(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_object_gate(
+        db_user,
+        action="delete",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    nid = int(callback.data.split(":")[-1])
+    nid = int((gate.pg_object or {}).get("id") or 0)
     await callback.answer()
     if callback.message:
         await safe_edit_text(
@@ -328,25 +513,69 @@ async def pg_node_del_ask(callback: CallbackQuery, db_user: BotUser):
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:ndel:\d+$"))
-async def pg_node_delete(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback, action="delete"):
+async def pg_node_delete(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_object_gate(
+        db_user,
+        action="delete",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed or gate.pg_client is None or gate.pg_object is None:
         return
-    node_id = int(callback.data.split(":")[-1])
+    node_id = int(gate.pg_object.get("id") or 0)
     try:
-        await get_pg().delete_node(node_id)
+        await gate.pg_client.delete_node(node_id)
         await callback.answer("نود حذف شد ✅", show_alert=True)
     except Exception as e:
         await callback.answer(_err_msg(e), show_alert=True)
         return
-    await _render_nodes_list(callback)
+    list_gate = await _pg_object_gate(
+        db_user,
+        action="list",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+        notify=False,
+    )
+    if list_gate.allowed:
+        await _render_nodes_list(callback, list_gate)
 
 
 # —— Create node wizard ——
 
 
 @router.callback_query(F.data == "adm:pg:ncreate")
-async def pg_node_create_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback, action="create"):
+async def pg_node_create_start(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_object_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
     await state.set_state(PgNodeStates.create_name)
     await state.update_data(node_create={})
@@ -365,12 +594,29 @@ async def pg_node_create_start(callback: CallbackQuery, state: FSMContext, db_us
 
 
 @router.message(PgNodeStates.create_name)
-async def pg_node_create_name(message: Message, state: FSMContext, db_user: BotUser):
+async def pg_node_create_name(
+    message: Message,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
     if kb.is_cancel_text(message.text):
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
         await state.clear()
         return
-    if not await _require_nodes(db_user, message=message, action="create"):
+    gate = await _pg_object_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        message=message,
+    )
+    if not gate.allowed:
         await state.clear()
         return
     name = (message.text or "").strip()
@@ -385,12 +631,29 @@ async def pg_node_create_name(message: Message, state: FSMContext, db_user: BotU
 
 
 @router.message(PgNodeStates.create_address)
-async def pg_node_create_address(message: Message, state: FSMContext, db_user: BotUser):
+async def pg_node_create_address(
+    message: Message,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
     if kb.is_cancel_text(message.text):
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
         await state.clear()
         return
-    if not await _require_nodes(db_user, message=message, action="create"):
+    gate = await _pg_object_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        message=message,
+    )
+    if not gate.allowed:
         await state.clear()
         return
     address = (message.text or "").strip()
@@ -408,12 +671,29 @@ async def pg_node_create_address(message: Message, state: FSMContext, db_user: B
 
 
 @router.message(PgNodeStates.create_port)
-async def pg_node_create_port(message: Message, state: FSMContext, db_user: BotUser):
+async def pg_node_create_port(
+    message: Message,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
     if kb.is_cancel_text(message.text):
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
         await state.clear()
         return
-    if not await _require_nodes(db_user, message=message, action="create"):
+    gate = await _pg_object_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        message=message,
+    )
+    if not gate.allowed:
         await state.clear()
         return
     raw = (message.text or "").strip()
@@ -441,8 +721,25 @@ async def pg_node_create_port(message: Message, state: FSMContext, db_user: BotU
 
 
 @router.callback_query(F.data.startswith("adm:pg:nconn:"))
-async def pg_node_create_conn(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_nodes(db_user, callback=callback, action="create"):
+async def pg_node_create_conn(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_object_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
     conn = callback.data.rsplit(":", 1)[-1]
     if conn not in {"grpc", "rest"}:
@@ -470,12 +767,29 @@ async def pg_node_create_conn(callback: CallbackQuery, state: FSMContext, db_use
 
 
 @router.message(PgNodeStates.create_core)
-async def pg_node_create_core(message: Message, state: FSMContext, db_user: BotUser):
+async def pg_node_create_core(
+    message: Message,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
     if kb.is_cancel_text(message.text):
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
         await state.clear()
         return
-    if not await _require_nodes(db_user, message=message, action="create"):
+    gate = await _pg_object_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        message=message,
+    )
+    if not gate.allowed:
         await state.clear()
         return
     raw = (message.text or "").strip()
@@ -492,12 +806,29 @@ async def pg_node_create_core(message: Message, state: FSMContext, db_user: BotU
 
 
 @router.message(PgNodeStates.create_api_key)
-async def pg_node_create_api_key(message: Message, state: FSMContext, db_user: BotUser):
+async def pg_node_create_api_key(
+    message: Message,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
     if kb.is_cancel_text(message.text):
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
         await state.clear()
         return
-    if not await _require_nodes(db_user, message=message, action="create"):
+    gate = await _pg_object_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        message=message,
+    )
+    if not gate.allowed:
         await state.clear()
         return
     raw = (message.text or "").strip()
@@ -513,12 +844,34 @@ async def pg_node_create_api_key(message: Message, state: FSMContext, db_user: B
 
 
 @router.message(PgNodeStates.create_server_ca)
-async def pg_node_create_server_ca(message: Message, state: FSMContext, db_user: BotUser):
+async def pg_node_create_server_ca(
+    message: Message,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.bot_pg_object_pilot import (
+        list_scoped_pg_objects,
+        sanitize_pg_object_write_payload,
+    )
+
     if kb.is_cancel_text(message.text):
         await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
         await state.clear()
         return
-    if not await _require_nodes(db_user, message=message, action="create"):
+    gate = await _pg_object_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        message=message,
+    )
+    if not gate.allowed or gate.pg_client is None:
         await state.clear()
         return
     raw = (message.text or "").strip()
@@ -544,9 +897,10 @@ async def pg_node_create_server_ca(message: Message, state: FSMContext, db_user:
         payload["server_ca"] = data["server_ca"]
     if data.get("core_config_id") is not None:
         payload["core_config_id"] = int(data["core_config_id"])
+    payload = sanitize_pg_object_write_payload(payload)
     await state.set_state(None)
     try:
-        await get_pg().create_node(payload)
+        await gate.pg_client.create_node(payload)
     except Exception as e:
         await message.answer(
             f"ساخت نود ناموفق: {_err_msg(e)}\n"
@@ -556,10 +910,7 @@ async def pg_node_create_server_ca(message: Message, state: FSMContext, db_user:
         return
     await message.answer("نود ساخته شد ✅", reply_markup=kb.admin_reply_keyboard())
     try:
-        nodes = await get_pg().get_nodes()
-        items = nodes if isinstance(nodes, list) else nodes.get("nodes", nodes.get("items", []))
-        if not isinstance(items, list):
-            items = []
+        items = await list_scoped_pg_objects(gate, kind="nodes")
         await message.answer(
             "🕸 <b>نودهای پاسارگارد</b>\n\nلیست به‌روز شد.",
             reply_markup=_nodes_list_kb(items),

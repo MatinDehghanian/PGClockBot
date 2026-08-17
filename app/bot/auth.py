@@ -1,21 +1,333 @@
-"""Shared bot authorization helpers (Phase C4 / D4 / Hybrid Owner PG)."""
+"""Shared bot authorization helpers (Phase C4 / D4 / Hybrid Owner PG / Phase 1 / 4G)."""
 
 from __future__ import annotations
 
-from typing import Any
+import functools
+import inspect
+from typing import Any, Awaitable, Callable
 
-from app.db.models import BotUser
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models import BotUser, OrgPrincipal
+
+# Phase 4G — single Owner-only denial copy (Web-equivalent explicit Owner Principal).
+OWNER_REQUIRED_MESSAGE = "دسترسی مالک سیستم لازم است"
+
+# Migrated 4B–4E families L1 may use on Bot (never overview/admins/backup).
+MIGRATED_PG_PAGES = frozenset(
+    {"pg_users", "pg_nodes", "pg_hosts", "pg_templates", "pg_groups"}
+)
+
+# reply_nav _soft_admin callback ids that use the shared PG gate (not Owner-only).
+MIGRATED_PG_SOFT_CALLBACKS = frozenset(
+    {
+        "adm:pg",
+        "adm:pg:users",
+        "adm:pg:search",
+        "adm:pg:create",
+        "adm:pg:nodes",
+        "adm:pg:group",
+        "adm:pg:template",
+    }
+)
 
 
 def is_platform_admin(user: BotUser | None) -> bool:
     """True when the Telegram user is a platform admin (role or ADMIN_IDS).
 
-    Independent of Web ``web_admin.json`` (Phase D4). See
-    ``app.services.platform_identity`` and ``docs/PHASE_D4_IDENTITY_MATRIX.md``.
+    Candidate check only — does **not** grant Org Owner authority by itself.
+    Sensitive admin routers must use ``is_bot_owner_principal``.
+    Independent of Web ``web_admin.json`` identity store (Phase D4).
     """
     from app.services.platform_identity import is_bot_platform_admin
 
     return is_bot_platform_admin(user)
+
+
+async def is_bot_owner_principal(
+    session: AsyncSession | None,
+    user: BotUser | None,
+    *,
+    is_reseller_bot: bool = False,
+) -> bool:
+    """True when Bot admin maps to the same explicit Owner Principal as Web.
+
+    - Shop/reseller bots → always deny.
+    - Requires Telegram id in ``ADMIN_IDS`` (explicit Owner operator).
+    - Sticky ``BotUser.role=admin`` alone is legacy metadata — not Owner.
+    - Resolves via shared Owner singleton (Phase 4A bridge).
+    """
+    from app.services.bot_principal_identity import resolve_bot_org_principal
+    from app.services.org_principals import is_owner_principal
+
+    principal = await resolve_bot_org_principal(
+        session,
+        db_user=user,
+        is_reseller_bot=is_reseller_bot,
+    )
+    return principal is not None and is_owner_principal(principal)
+
+
+def is_migrated_pg_soft_callback(data: str | None) -> bool:
+    """True when reply-nav may invoke a 4B–4E PG family handler without Owner."""
+    raw = (data or "").strip()
+    if not raw:
+        return False
+    if raw in MIGRATED_PG_SOFT_CALLBACKS:
+        return True
+    return False
+
+
+async def notify_owner_required(*, callback=None, message=None) -> None:
+    if callback is not None:
+        try:
+            await callback.answer(OWNER_REQUIRED_MESSAGE, show_alert=True)
+        except Exception:
+            pass
+        return
+    if message is not None:
+        try:
+            await message.answer(OWNER_REQUIRED_MESSAGE + ".")
+        except Exception:
+            pass
+
+
+async def require_bot_owner(
+    session: AsyncSession | None,
+    db_user: BotUser | None,
+    *,
+    is_reseller_bot: bool = False,
+    callback=None,
+    message=None,
+    notify: bool = True,
+) -> bool:
+    """Final Owner-only gate. Uses Phase 4A resolver — never role=admin.
+
+    Same explicit Owner Principal as Web ``require_admin`` / ``is_explicit_owner_staff``.
+    """
+    ok = await is_bot_owner_principal(
+        session, db_user, is_reseller_bot=is_reseller_bot
+    )
+    if ok:
+        return True
+    if notify:
+        await notify_owner_required(callback=callback, message=message)
+    return False
+
+
+def require_bot_owner_handler(fn: Callable[..., Awaitable[Any]]):
+    """Decorator: Owner Principal required before the wrapped Bot handler runs.
+
+    ``role=admin`` / ``is_platform_admin`` are never sufficient. Shop bots deny.
+    Injects ``session`` even when the original signature omitted it so reply-nav
+    and the dispatcher share the same check.
+    """
+
+    @functools.wraps(fn)
+    async def wrapper(
+        *args: Any,
+        session: AsyncSession | None = None,
+        db_user: BotUser | None = None,
+        is_reseller_bot: bool = False,
+        **kwargs: Any,
+    ):
+        from aiogram.types import CallbackQuery, Message
+
+        callback = None
+        message = None
+        for value in (*args, *kwargs.values()):
+            if db_user is None and isinstance(value, BotUser):
+                db_user = value
+            if session is None and isinstance(value, AsyncSession):
+                session = value
+            if value is None or isinstance(value, (BotUser, AsyncSession)):
+                continue
+            if callback is None and (
+                isinstance(value, CallbackQuery)
+                or (
+                    callable(getattr(value, "answer", None))
+                    and hasattr(value, "data")
+                )
+            ):
+                callback = value
+            elif message is None and (
+                isinstance(value, Message)
+                or (
+                    callable(getattr(value, "answer", None))
+                    and hasattr(value, "text")
+                    and not hasattr(value, "data")
+                )
+            ):
+                message = value
+        if not await require_bot_owner(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            callback=callback,
+            message=message,
+        ):
+            return None
+        sig = inspect.signature(fn)
+        bound = sig.bind_partial(*args, **kwargs)
+        if "session" in sig.parameters and "session" not in bound.arguments:
+            kwargs["session"] = session
+        if "db_user" in sig.parameters and "db_user" not in bound.arguments:
+            kwargs["db_user"] = db_user
+        if "is_reseller_bot" in sig.parameters and "is_reseller_bot" not in bound.arguments:
+            kwargs["is_reseller_bot"] = is_reseller_bot
+        return await fn(*args, **kwargs)
+
+    return wrapper
+
+
+async def bot_migrated_pg_features(
+    session: AsyncSession | None,
+    db_user: BotUser | None,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+) -> frozenset[str]:
+    """PG page keys the Bot actor may open from migrated 4B–4E families.
+
+    Owner: env Hybrid features (may include overview). L1/L2: own Principal
+    capabilities ∩ migrated pages (never pg_overview / pg_admins). Shop: empty.
+    """
+    from app.services.bot_principal_identity import (
+        bot_pg_family_resolution_ok,
+        resolve_bot_principal_bridge,
+    )
+    from app.services.org_principals import is_owner_principal
+    from app.services.principal_pg_authz import (
+        apply_level1_pg_local_safety,
+        authorize_pg_page,
+        is_level1_principal_staff,
+    )
+
+    if session is None or db_user is None or is_reseller_bot:
+        return frozenset()
+    resolution = await resolve_bot_principal_bridge(
+        session,
+        db_user=db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if resolution is None:
+        return frozenset()
+    principal = resolution.principal
+    if is_owner_principal(principal):
+        return await platform_pg_features()
+    if not bot_pg_family_resolution_ok(resolution):
+        return frozenset()
+    staff = dict(resolution.staff)
+    if is_level1_principal_staff(staff):
+        staff = apply_level1_pg_local_safety(staff)
+    allowed: set[str] = set()
+    for page in MIGRATED_PG_PAGES:
+        if authorize_pg_page(staff, page).allowed:
+            allowed.add(page)
+    return frozenset(allowed)
+
+
+async def bot_may_open_pg_hub(
+    session: AsyncSession | None,
+    db_user: BotUser | None,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+) -> bool:
+    feats = await bot_migrated_pg_features(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+    )
+    return bool(feats)
+
+
+async def bot_pg_can_create_user(
+    session: AsyncSession | None,
+    db_user: BotUser | None,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+) -> bool:
+    from app.services.bot_principal_identity import (
+        bot_pg_family_resolution_ok,
+        resolve_bot_principal_bridge,
+    )
+    from app.services.org_principals import is_owner_principal
+    from app.services.principal_pg_authz import (
+        apply_level1_pg_local_safety,
+        authorize_pg_user_action,
+        is_level1_principal_staff,
+    )
+
+    if session is None or db_user is None or is_reseller_bot:
+        return False
+    resolution = await resolve_bot_principal_bridge(
+        session,
+        db_user=db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if resolution is None:
+        return False
+    if is_owner_principal(resolution.principal):
+        return await can_platform_pg_action(db_user, "users", "create")
+    if not bot_pg_family_resolution_ok(resolution):
+        return False
+    staff = dict(resolution.staff)
+    if is_level1_principal_staff(staff):
+        staff = apply_level1_pg_local_safety(staff)
+    return bool(authorize_pg_user_action(staff, "create").allowed)
+
+
+async def resolve_bot_owner_principal(
+    session: AsyncSession | None,
+    user: BotUser | None,
+    *,
+    is_reseller_bot: bool = False,
+) -> OrgPrincipal | None:
+    """Return the shared Owner principal when bot operator is authorized."""
+    from app.services.bot_principal_identity import resolve_bot_org_principal
+    from app.services.org_principals import is_owner_principal
+
+    principal = await resolve_bot_org_principal(
+        session,
+        db_user=user,
+        is_reseller_bot=is_reseller_bot,
+    )
+    if principal is None or not is_owner_principal(principal):
+        return None
+    return principal
+
+
+async def resolve_bot_principal_bridge(
+    session: AsyncSession | None,
+    user: BotUser | None,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    """Phase 4A — Principal + staff + AuthzContext for Bot (same as Web)."""
+    from app.services.bot_principal_identity import (
+        resolve_bot_principal_bridge as _bridge,
+    )
+
+    return await _bridge(
+        session,
+        db_user=user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+    )
 
 
 def can_shop_feature(
@@ -93,10 +405,34 @@ async def platform_pg_quota_staff() -> dict:
     }
 
 
-async def filtered_pg_reply_keyboard(db_user: BotUser | None = None, ui: dict | None = None):
-    """Reply keyboard for PasarGuard submenu clamped to env PG role."""
+async def filtered_pg_reply_keyboard(
+    db_user: BotUser | None = None,
+    ui: dict | None = None,
+    *,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    """Reply keyboard for PasarGuard submenu clamped to the actor's PG pages."""
     from app.bot import keyboards as kb
 
-    feats = await platform_pg_features()
-    can_create = await can_platform_pg_action(db_user, "users", "create")
+    if session is not None:
+        feats = await bot_migrated_pg_features(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_profile_id=reseller_profile_id,
+            reseller_owner_id=reseller_owner_id,
+        )
+        can_create = await bot_pg_can_create_user(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_profile_id=reseller_profile_id,
+            reseller_owner_id=reseller_owner_id,
+        )
+    else:
+        feats = await platform_pg_features()
+        can_create = await can_platform_pg_action(db_user, "users", "create")
     return kb.pg_reply_keyboard(ui, features=feats, can_create_user=can_create)
