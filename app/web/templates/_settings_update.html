@@ -17,14 +17,24 @@
     نسخه را با گیت‌هاب مقایسه کنید و در صورت نیاز آپدیت را از همین‌جا اعمال کنید.
   </p>
 
+  {% if available and not show_ops %}
+  <div class="flash warn">نسخه جدید آماده است: {{ local_version }} → {{ update_info.remote_version }}</div>
+  {% elif update_info.checked and not available and not show_ops %}
+  <div class="flash ok">شما روی آخرین نسخه منتشرشده هستید.</div>
+  {% elif not update_info.checked and not show_ops %}
+  <div class="flash warn">{{ update_info.label }}</div>
+  {% endif %}
+
   <div class="update-meta">
-    <div class="update-meta-box {% if available %}update-meta-err{% else %}update-meta-ok{% endif %}">
-      <span class="muted">نسخه فعلی</span>
-      <strong dir="ltr">v{{ local_version }}</strong>
-    </div>
-    <div class="update-meta-box {% if available %}update-meta-ok{% endif %}">
-      <span class="muted">آخرین نسخه</span>
-      <strong dir="ltr">{% if update_info.remote_version %}v{{ update_info.remote_version }}{% else %}—{% endif %}</strong>
+    <div class="update-meta-versions">
+      <div class="update-meta-box {% if available %}update-meta-err{% else %}update-meta-ok{% endif %}">
+        <span class="muted">نسخه فعلی</span>
+        <strong dir="ltr">v{{ local_version }}</strong>
+      </div>
+      <div class="update-meta-box {% if available %}update-meta-ok{% endif %}">
+        <span class="muted">آخرین نسخه</span>
+        <strong dir="ltr">{% if update_info.remote_version %}v{{ update_info.remote_version }}{% else %}—{% endif %}</strong>
+      </div>
     </div>
     <div class="update-meta-box">
       <span class="muted">وضعیت</span>
@@ -36,14 +46,6 @@
       </strong>
     </div>
   </div>
-
-  {% if available and not show_ops %}
-  <div class="flash warn">نسخه جدید آماده است: {{ local_version }} → {{ update_info.remote_version }}</div>
-  {% elif update_info.checked and not available and not show_ops %}
-  <div class="flash ok">شما روی آخرین نسخه منتشرشده هستید.</div>
-  {% elif not update_info.checked and not show_ops %}
-  <div class="flash warn">{{ update_info.label }}</div>
-  {% endif %}
 
   {% set cl = changelog if changelog is defined else none %}
   {% if cl and cl.get('has_notes') %}
