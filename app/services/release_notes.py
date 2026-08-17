@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "7.0.6": [
+        "حذف گرادیان و خط زیر تیتر؛ حاشیه solid ربات/پاسارگارد",
+        "سلکتور سایدبار با tint قبلی باکس؛ دکمه منو بدون بکگراند؛ آیکن هم‌رنگ حاشیه",
+        "اصلاح فاصله و تیتر «کدهای اخیر» در مودال کد هدیه",
+        "ریستور: cursor/restore-before-chrome-solid-5b2d",
+    ],
     "7.0.5": [
         "سایدبار و پورتال ربات/پاسارگارد: پس‌زمینه خنثی با حاشیه گرادیانی نرم",
         "تیتر صفحات و مودال‌ها با اکسنت ظریف؛ فاصله داخل مودال بیشتر",
