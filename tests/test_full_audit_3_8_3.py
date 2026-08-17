@@ -86,7 +86,9 @@ class AssertOwnedUserCredentialTests(unittest.IsolatedAsyncioTestCase):
 
         staff = {"role": "reseller", "bot_user_id": 9, "pg_admin_username": "res"}
         reseller_pg = AsyncMock()
-        reseller_pg.get_user_by_id = AsyncMock(return_value={"id": 1, "username": "u"})
+        reseller_pg.get_user_by_id = AsyncMock(
+            return_value={"id": 1, "username": "u", "admin": {"username": "res"}}
+        )
         owner_pg = AsyncMock()
         owner_pg.get_user_by_id = AsyncMock(return_value={"id": 1})
         with (

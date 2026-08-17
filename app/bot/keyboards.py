@@ -430,8 +430,11 @@ def _reply_user_entries(
             continue
     if role == Role.RESELLER.value:
         entries.append((REPLY_ACTION_RESELLER, _t(ui, "btn_reseller")))
+        if show_reseller_creds:
+            entries.append((REPLY_ACTION_ADMIN_PG, _t(ui, "btn_adm_pg")))
     elif show_reseller_creds:
         entries.append((REPLY_ACTION_CREDS, _t(ui, "btn_reseller_creds")))
+        entries.append((REPLY_ACTION_ADMIN_PG, _t(ui, "btn_adm_pg")))
     if role == Role.ADMIN.value:
         entries.append((REPLY_ACTION_ADMIN, _t(ui, "btn_admin")))
     return entries
@@ -1099,6 +1102,13 @@ def reply_action_map(
             show_reseller_creds=show_reseller_creds,
         ):
             mapping[(text or "").strip()] = key
+        # L1 on the platform bot: register migrated PG submenu labels (not overview).
+        if show_reseller_creds and not is_reseller_bot:
+            l1_pg = frozenset(
+                {"pg_users", "pg_nodes", "pg_templates", "pg_groups"}
+            )
+            for key, text in _pg_submenu_entries(ui, features=l1_pg):
+                mapping[(text or "").strip()] = key
         # Preview escape on main bot only
         if role == Role.ADMIN.value and as_user and not is_reseller_bot:
             mapping[(_t(ui, "btn_admin") or "").strip()] = REPLY_ACTION_ADMIN

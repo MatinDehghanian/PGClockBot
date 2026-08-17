@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import BotUser, ChargeCode, DeliveryFailure, Order
 from app.services.authz import authz_from_staff, can_shop
-from app.services.shop_scope import is_platform_admin, shop_owner_id
+from app.services.shop_scope import is_platform_admin, shop_owner_id, ShopScopeError, assert_order_retry_in_scope, assert_bot_user_in_scope
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.ux20 import (
     create_charge_code,
@@ -67,10 +67,12 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             return RedirectResponse(
                 f"/finance?tab=delivery&err={quote('سفارش پیدا نشد')}", status_code=303
             )
-        rid = shop_owner_id(staff)
-        if not is_platform_admin(staff):
-            if not rid or int(order.reseller_id or 0) != int(rid):
-                return RedirectResponse("/home", status_code=303)
+        try:
+            assert_order_retry_in_scope(staff, order)
+        except ShopScopeError as e:
+            return RedirectResponse(
+                f"/finance?tab=delivery&err={quote(e.message)}", status_code=303
+            )
         try:
             await retry_delivery(session, int(order_id))
             return RedirectResponse(
@@ -100,10 +102,10 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         ).scalar_one_or_none()
         if not user:
             return RedirectResponse("/users", status_code=303)
-        if not is_platform_admin(staff):
-            rid = shop_owner_id(staff)
-            if not rid or int(user.reseller_id or 0) != int(rid):
-                return RedirectResponse("/home", status_code=303)
+        try:
+            assert_bot_user_in_scope(staff, user)
+        except ShopScopeError:
+            return RedirectResponse("/home", status_code=303)
         user.staff_note = (note or "").strip()[:2000] or None
         flags = [f for f in parse_risk_flags(user.risk_flags) if f != "manual"]
         if (risk_manual or "").strip() in {"1", "on", "true", "yes"}:

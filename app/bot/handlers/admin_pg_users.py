@@ -11,13 +11,13 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.auth import (
     can_platform_pg_action,
     can_platform_pg_page,
     filtered_pg_reply_keyboard,
-    platform_pg_quota_staff,
 )
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.tg_utils import safe_edit_text
@@ -36,6 +36,11 @@ from app.services.pg_quota import PgQuotaError, assert_can_create_user
 router = Router(name="admin_pg_users")
 
 async def _require_users(db_user: BotUser, callback=None, message=None, *, action: str | None = None) -> bool:
+    """Legacy platform-admin page gate (kept for source contracts).
+
+    Migrated PG-user handlers must use ``_pg_user_gate`` — never this function
+    as the final authorization decision.
+    """
     if not _is_admin(db_user):
         if callback is not None:
             await callback.answer("ادمین نیستید", show_alert=True)
@@ -55,6 +60,71 @@ async def _require_users(db_user: BotUser, callback=None, message=None, *, actio
             await message.answer("اجازه این عمل را ندارید.")
         return False
     return True
+
+
+async def _pg_user_gate(
+    db_user: BotUser,
+    *,
+    action: str,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+    callback=None,
+    message=None,
+    pg_user_id: int | None = None,
+    callback_data: str | None = None,
+    notify: bool = True,
+):
+    """Phase 4B/4C — Principal + AuthzContext gate (not ``_is_admin``)."""
+    from app.services.bot_pg_user_pilot import authorize_bot_pg_user_op
+
+    data = callback_data
+    if data is None and callback is not None:
+        data = getattr(callback, "data", None)
+    gate = await authorize_bot_pg_user_op(
+        session,
+        db_user=db_user,
+        action=action,  # type: ignore[arg-type]
+        callback_data=data,
+        pg_user_id=pg_user_id,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not gate.allowed and notify:
+        if callback is not None:
+            await callback.answer(gate.user_message, show_alert=True)
+        elif message is not None:
+            await message.answer(gate.user_message)
+    return gate
+
+
+def _filter_staff_templates(items, staff) -> list:
+    from app.services.plans_catalog import filter_templates_for_staff
+
+    if not isinstance(items, list):
+        return []
+    return filter_templates_for_staff(items, staff or {}, trust_client_scope=False)
+
+
+def _filter_staff_groups(items, staff) -> list:
+    from app.services.plans_catalog import filter_groups_for_staff
+
+    if not isinstance(items, list):
+        return []
+    return filter_groups_for_staff(items, staff or {}, trust_client_scope=False)
+
+
+_PAGE_RE = re.compile(r"^adm:pg:users:p:(\d+)$")
+_SETTPL_RE = re.compile(r"^adm:pg:settpl:(\d+)$")
+_TOGGRP_RE = re.compile(r"^adm:pg:toggrp:(\d+)$")
+_EDGRP_RE = re.compile(r"^adm:pg:edgrp:(\d+)$")
+
+
+def _unused_owner_client_import_anchor():
+    """Source contract: this module still references get_pg(); live Owner client is the Principal bridge."""
+    return get_pg()
 
 
 
@@ -123,13 +193,14 @@ async def _fetch_users_page(
     page: int,
     *,
     username: str | None = None,
+    pg,
 ) -> tuple[list[dict], int | None]:
     page = max(0, int(page))
     params: dict[str, Any] = {"offset": page * PAGE_SIZE, "limit": PAGE_SIZE}
     q = (username or "").strip()
     if q:
         params["username"] = q
-    data = await get_pg().get_users(**params)
+    data = await pg.get_users(**params)
     if isinstance(data, list):
         users = [u for u in data if isinstance(u, dict)]
         total = None
@@ -153,10 +224,15 @@ async def _render_users_list(
     page: int = 0,
     query: str | None = None,
     edit: bool = True,
+    gate,
 ) -> None:
+    from app.services.bot_pg_user_pilot import list_scoped_pg_users
+
     query = (query or "").strip() or None
     try:
-        users, total = await _fetch_users_page(page, username=query)
+        users, total = await list_scoped_pg_users(
+            gate, page=page, username=query, page_size=PAGE_SIZE
+        )
     except Exception as e:
         text = format_message("❌ خطا", str(e))
         markup = None  # navigation is on reply keyboard (pg_reply_keyboard)
@@ -227,16 +303,26 @@ async def _show_user_card(
     *,
     edit: bool = True,
     notice: str | None = None,
+    user: dict | None = None,
+    pg=None,
 ) -> None:
-    try:
-        user = await get_pg().get_user_by_id(uid)
-    except Exception as e:
-        text = format_message("❌ خطا", str(e))
-        if edit:
-            await safe_edit_text(target, text, reply_markup=None)
-        else:
-            await target.answer(text, reply_markup=await filtered_pg_reply_keyboard(db_user))
-        return
+    if user is None:
+        if pg is None:
+            text = format_message("❌ خطا", "اجازه این عمل را ندارید")
+            if edit:
+                await safe_edit_text(target, text, reply_markup=None)
+            else:
+                await target.answer(text, reply_markup=None)
+            return
+        try:
+            user = await pg.get_user_by_id(uid)
+        except Exception as e:
+            text = format_message("❌ خطا", str(e))
+            if edit:
+                await safe_edit_text(target, text, reply_markup=None)
+            else:
+                await target.answer(text, reply_markup=None)
+            return
     text = service_card(user if isinstance(user, dict) else {})
     if notice:
         text = f"{notice}\n\n{text}"
@@ -247,40 +333,250 @@ async def _show_user_card(
         await target.answer(text, reply_markup=markup)
 
 
+# ----- PG hub + catalog hints (Phase 4E/4G — Principal-gated, not Owner middleware) -----
+
+
+@router.callback_query(F.data == "adm:pg")
+async def adm_pg(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    """PasarGuard hub for Owner and L1 with migrated PG pages (not platform overview)."""
+    from app.bot.auth import bot_may_open_pg_hub, filtered_pg_reply_keyboard
+
+    if not await bot_may_open_pg_hub(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+    ):
+        await callback.answer("دسترسی پاسارگارد برای این حساب تعریف نشده", show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        await callback.message.edit_text(
+            "🖥 <b>عملیات پاسارگارد</b>\n"
+            "از کیبورد پایین بخش موردنظر را انتخاب کنید.",
+            reply_markup=None,
+        )
+        try:
+            await callback.message.answer(
+                "⌨️",
+                reply_markup=await filtered_pg_reply_keyboard(
+                    db_user,
+                    session=session,
+                    is_reseller_bot=is_reseller_bot,
+                    reseller_profile_id=reseller_profile_id,
+                    reseller_owner_id=reseller_owner_id,
+                ),
+            )
+        except Exception:
+            pass
+
+
+@router.callback_query(F.data == "adm:pg:group")
+async def adm_pg_group_hint(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    """Phase 4E — Principal-gated groups hint (not ``_is_admin``)."""
+    from app.services.bot_pg_catalog_pilot import (
+        authorize_bot_pg_catalog_op,
+        list_scoped_pg_catalog,
+    )
+
+    gate = await authorize_bot_pg_catalog_op(
+        session,
+        db_user=db_user,
+        kind="groups",
+        action="list",
+        callback_data=getattr(callback, "data", None),
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not gate.allowed:
+        await callback.answer(gate.user_message, show_alert=True)
+        return
+    await callback.answer()
+    lines = ["📁 <b>گروه‌های پاسارگارد</b>\n"]
+    try:
+        groups = await list_scoped_pg_catalog(gate, kind="groups")
+    except Exception as e:
+        groups = []
+        lines.append(f"خطا: {e}")
+    if groups:
+        for g in groups[:15]:
+            if not isinstance(g, dict):
+                continue
+            gid = g.get("id")
+            name = html.escape(str(g.get("name") or gid))
+            lines.append(f"#{gid} <b>{name}</b>")
+    else:
+        lines.append("گروهی در محدوده شما یافت نشد.")
+    lines.extend(
+        [
+            "",
+            "ساخت/ویرایش گروه نیاز به انتخاب اینباند دارد.",
+            "از وب‌پنل مسیر <code>/pg/groups</code> استفاده کنید.",
+            "",
+            "مدیریت کاربران از همین ربات: «کاربران».",
+        ]
+    )
+    if callback.message:
+        await callback.message.edit_text("\n".join(lines)[:3900], reply_markup=None)
+
+
+@router.callback_query(F.data == "adm:pg:template")
+async def adm_pg_template_hint(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    """Phase 4E — Principal-gated templates hint (not ``_is_admin``)."""
+    from app.services.bot_pg_catalog_pilot import (
+        authorize_bot_pg_catalog_op,
+        list_scoped_pg_catalog,
+    )
+
+    gate = await authorize_bot_pg_catalog_op(
+        session,
+        db_user=db_user,
+        kind="templates",
+        action="list",
+        callback_data=getattr(callback, "data", None),
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not gate.allowed:
+        await callback.answer(gate.user_message, show_alert=True)
+        return
+    await callback.answer()
+    lines = ["📋 <b>تمپلیت‌های پاسارگارد</b>\n"]
+    try:
+        templates = await list_scoped_pg_catalog(gate, kind="templates")
+    except Exception as e:
+        templates = []
+        lines.append(f"خطا: {e}")
+    if templates:
+        for t in templates[:15]:
+            if not isinstance(t, dict):
+                continue
+            tid = t.get("id")
+            name = html.escape(str(t.get("name") or tid))
+            lines.append(f"#{tid} <b>{name}</b>")
+    else:
+        lines.append("تمپلیتی در محدوده شما یافت نشد.")
+    lines.extend(
+        [
+            "",
+            "ساخت تمپلیت از وب‌پنل مسیر <code>/pg/templates</code>.",
+            "",
+            "ساخت کاربر از تمپلیت در ربات: پاسارگارد ← ساخت کاربر.",
+        ]
+    )
+    if callback.message:
+        await callback.message.edit_text("\n".join(lines)[:3900], reply_markup=None)
+
+
 # ----- list / search -----
 
 
 @router.callback_query(F.data == "adm:pg:users")
 @router.callback_query(F.data == "adm:pg:users:clear")
-async def pg_users_list(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+async def pg_users_list(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="list",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
     await callback.answer()
     await state.update_data(pg_list_q=None, pg_list_page=0)
     if callback.message:
-        await _render_users_list(callback.message, page=0, query=None)
+        await _render_users_list(callback.message, page=0, query=None, gate=gate)
 
 
 @router.callback_query(F.data.startswith("adm:pg:users:p:"))
-async def pg_users_page(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+async def pg_users_page(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="list",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    try:
-        page = int(callback.data.rsplit(":", 1)[-1])
-    except ValueError:
+    match = _PAGE_RE.match(callback.data or "")
+    if match is None:
         await callback.answer("صفحه نامعتبر", show_alert=True)
         return
+    page = int(match.group(1))
     await callback.answer()
     data = await state.get_data()
     query = data.get("pg_list_q")
     await state.update_data(pg_list_page=page)
     if callback.message:
-        await _render_users_list(callback.message, page=page, query=query)
+        await _render_users_list(callback.message, page=page, query=query, gate=gate)
 
 
 @router.callback_query(F.data == "adm:pg:search")
-async def pg_search_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+async def pg_search_start(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="search",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
     await callback.answer()
     await state.set_state(PgUserStates.search)
@@ -293,13 +589,32 @@ async def pg_search_start(callback: CallbackQuery, state: FSMContext, db_user: B
 
 
 @router.message(PgUserStates.search)
-async def pg_search_query(message: Message, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, message=message):
+async def pg_search_query(
+    message: Message,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.bot_pg_user_pilot import lookup_scoped_pg_user_by_username
+
+    gate = await _pg_user_gate(
+        db_user,
+        action="search",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        message=message,
+    )
+    if not gate.allowed:
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
+        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     q = (message.text or "").strip()
     if not q:
@@ -307,132 +622,247 @@ async def pg_search_query(message: Message, state: FSMContext, db_user: BotUser)
         return
     await state.set_state(None)
     await state.update_data(pg_list_q=q, pg_list_page=0)
-    # Exact match → open card; otherwise filtered list
-    try:
-        exact = await get_pg().get_user_by_username(q)
-        if isinstance(exact, dict) and exact.get("id") is not None:
-            await state.clear()
-            await _show_user_card(message, int(exact["id"]), edit=False)
-            return
-    except Exception:
-        pass
-    await _render_users_list(message, page=0, query=q, edit=False)
+    exact = await lookup_scoped_pg_user_by_username(gate, q)
+    if exact is not None and exact.get("id") is not None:
+        await state.clear()
+        await _show_user_card(message, int(exact["id"]), edit=False, user=exact)
+        return
+    await _render_users_list(message, page=0, query=q, edit=False, gate=gate)
 
 
 # ----- user detail + actions -----
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+$"))
-async def pg_user_detail(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+async def pg_user_detail(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    """PG user card (read) via OrgPrincipal + AuthzContext."""
+    gate = await _pg_user_gate(
+        db_user,
+        action="read",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    uid = int(callback.data.rsplit(":", 1)[-1])
     await callback.answer()
-    if callback.message:
-        await _show_user_card(callback.message, uid)
+    uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
+    if callback.message and uid:
+        await _show_user_card(callback.message, uid, user=gate.pg_user)
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:link$"))
-async def pg_user_link(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback):
+async def pg_user_link(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="read",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    uid = int(callback.data.split(":")[3])
-    try:
-        user = await get_pg().get_user_by_id(uid)
-        url = user_subscription_url(user if isinstance(user, dict) else None)
-        if not url:
-            await callback.answer("لینک یافت نشد", show_alert=True)
-            return
-        await callback.answer()
-        uname = (user or {}).get("username") if isinstance(user, dict) else ""
-        await callback.message.answer(
-            format_message(
-                "🔗 لینک اشتراک",
-                f"کاربر: <code>{html.escape(str(uname or uid))}</code>\n\n<code>{html.escape(url)}</code>",
-            ),
-            reply_markup=_user_actions_kb(uid),
-        )
-    except Exception as e:
-        await callback.answer(str(e), show_alert=True)
+    uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
+    user = gate.pg_user or {}
+    url = user_subscription_url(user if isinstance(user, dict) else None)
+    if not url:
+        await callback.answer("لینک یافت نشد", show_alert=True)
+        return
+    await callback.answer()
+    uname = user.get("username") if isinstance(user, dict) else ""
+    await callback.message.answer(
+        format_message(
+            "🔗 لینک اشتراک",
+            f"کاربر: <code>{html.escape(str(uname or uid))}</code>\n\n<code>{html.escape(url)}</code>",
+        ),
+        reply_markup=_user_actions_kb(uid),
+    )
 
 
 @router.callback_query(F.data.startswith("adm:pg:reset:"))
-async def pg_reset(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="update"):
+async def pg_reset(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="reset",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    uid = int(callback.data.split(":")[-1])
+    uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
     try:
-        user = await get_pg().reset_user_by_id(uid)
+        user = await gate.pg_client.reset_user_by_id(uid)
         await callback.answer("ریست شد ✅", show_alert=True)
         if callback.message:
             if isinstance(user, dict) and user.get("id") is not None:
                 text = "♻️ حجم ریست شد\n\n" + service_card(user)
                 await safe_edit_text(callback.message, text, reply_markup=_user_actions_kb(uid))
             else:
-                await _show_user_card(callback.message, uid, notice="♻️ حجم ریست شد")
+                await _show_user_card(
+                    callback.message, uid, notice="♻️ حجم ریست شد", user=gate.pg_user
+                )
     except Exception as e:
         await callback.answer(str(e), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("adm:pg:dis:"))
-async def pg_dis(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="update"):
+async def pg_dis(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    """PG user disable via OrgPrincipal + AuthzContext."""
+    gate = await _pg_user_gate(
+        db_user,
+        action="disable",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    uid = int(callback.data.split(":")[-1])
+    uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
     try:
-        user = await get_pg().set_disabled_by_id(uid, True)
+        user = await gate.pg_client.set_disabled_by_id(uid, True)
         await callback.answer("غیرفعال شد", show_alert=True)
         if callback.message:
             if isinstance(user, dict) and user.get("id") is not None:
                 text = "🚫 کاربر غیرفعال شد\n\n" + service_card(user)
                 await safe_edit_text(callback.message, text, reply_markup=_user_actions_kb(uid))
             else:
-                await _show_user_card(callback.message, uid, notice="🚫 کاربر غیرفعال شد")
+                await _show_user_card(
+                    callback.message, uid, notice="🚫 کاربر غیرفعال شد", user=gate.pg_user
+                )
     except Exception as e:
         await callback.answer(str(e), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("adm:pg:en:"))
-async def pg_en(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="update"):
+async def pg_en(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="enable",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    uid = int(callback.data.split(":")[-1])
+    uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
     try:
-        user = await get_pg().set_disabled_by_id(uid, False)
+        user = await gate.pg_client.set_disabled_by_id(uid, False)
         await callback.answer("فعال شد", show_alert=True)
         if callback.message:
             if isinstance(user, dict) and user.get("id") is not None:
                 text = "✅ کاربر فعال شد\n\n" + service_card(user)
                 await safe_edit_text(callback.message, text, reply_markup=_user_actions_kb(uid))
             else:
-                await _show_user_card(callback.message, uid, notice="✅ کاربر فعال شد")
+                await _show_user_card(
+                    callback.message, uid, notice="✅ کاربر فعال شد", user=gate.pg_user
+                )
     except Exception as e:
         await callback.answer(str(e), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("adm:pg:rev:"))
-async def pg_rev(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="update"):
+async def pg_rev(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="revoke",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    uid = int(callback.data.split(":")[-1])
+    uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
     try:
-        user = await get_pg().revoke_sub_by_id(uid)
+        user = await gate.pg_client.revoke_sub_by_id(uid)
         await callback.answer("ساب باطل شد", show_alert=True)
         if callback.message:
             if isinstance(user, dict) and user.get("id") is not None:
                 text = "🔏 سابسکریپشن باطل شد\n\n" + service_card(user)
                 await safe_edit_text(callback.message, text, reply_markup=_user_actions_kb(uid))
             else:
-                await _show_user_card(callback.message, uid, notice="🔏 سابسکریپشن باطل شد")
+                await _show_user_card(
+                    callback.message, uid, notice="🔏 سابسکریپشن باطل شد", user=gate.pg_user
+                )
     except Exception as e:
         await callback.answer(str(e), show_alert=True)
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:delask$"))
-async def pg_user_del_ask(callback: CallbackQuery, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="delete"):
+async def pg_user_del_ask(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="delete",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    uid = int(callback.data.split(":")[3])
+    uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
     await callback.answer()
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -451,19 +881,47 @@ async def pg_user_del_ask(callback: CallbackQuery, db_user: BotUser):
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:del$"))
-async def pg_user_del(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="delete"):
+async def pg_user_del(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="delete",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    uid = int(callback.data.split(":")[3])
+    uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
     try:
-        await get_pg().delete_user_by_id(uid)
+        await gate.pg_client.delete_user_by_id(uid)
         await callback.answer("حذف شد", show_alert=True)
+        list_gate = await _pg_user_gate(
+            db_user,
+            action="list",
+            session=session,
+            is_reseller_bot=is_reseller_bot,
+            reseller_profile_id=reseller_profile_id,
+            reseller_owner_id=reseller_owner_id,
+            callback=callback,
+            notify=False,
+        )
         data = await state.get_data()
-        if callback.message:
+        if callback.message and list_gate.allowed:
             await _render_users_list(
                 callback.message,
                 page=int(data.get("pg_list_page") or 0),
                 query=data.get("pg_list_q"),
+                gate=list_gate,
             )
     except Exception as e:
         await callback.answer(str(e), show_alert=True)
@@ -473,8 +931,25 @@ async def pg_user_del(callback: CallbackQuery, state: FSMContext, db_user: BotUs
 
 
 @router.callback_query(F.data == "adm:pg:create")
-async def pg_create_menu(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="create"):
+async def pg_create_menu(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
     await callback.answer()
     await state.clear()
@@ -494,15 +969,33 @@ async def pg_create_menu(callback: CallbackQuery, state: FSMContext, db_user: Bo
 
 
 @router.callback_query(F.data == "adm:pg:create:tpl")
-async def pg_create_tpl_pick(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="create"):
+async def pg_create_tpl_pick(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
     await callback.answer()
     await state.update_data(pg_create_mode="template", pg_template_id=None, pg_selected_groups=[])
     try:
-        templates = await get_pg().get_user_templates_simple()
+        templates = await gate.pg_client.get_user_templates_simple()
     except Exception:
         templates = []
+    templates = _filter_staff_templates(templates, gate.staff)
     rows: list[list[InlineKeyboardButton]] = []
     for t in templates[:25]:
         if not isinstance(t, dict):
@@ -533,10 +1026,36 @@ async def pg_create_tpl_pick(callback: CallbackQuery, state: FSMContext, db_user
 
 
 @router.callback_query(F.data.startswith("adm:pg:settpl:"))
-async def pg_create_tpl_chosen(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="create"):
+async def pg_create_tpl_chosen(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    tid = int(callback.data.split(":")[-1])
+    match = _SETTPL_RE.match(callback.data or "")
+    if match is None:
+        await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+        return
+    tid = int(match.group(1))
+    from app.services.bot_pg_catalog_pilot import catalog_template_allowed
+
+    if not catalog_template_allowed(gate.staff, tid):
+        await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+        return
     await callback.answer()
     await state.update_data(pg_create_mode="template", pg_template_id=tid)
     await state.set_state(PgUserStates.create_username)
@@ -548,24 +1067,44 @@ async def pg_create_tpl_chosen(callback: CallbackQuery, state: FSMContext, db_us
 
 
 @router.callback_query(F.data == "adm:pg:create:custom")
-async def pg_create_custom_groups(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="create"):
+async def pg_create_custom_groups(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
     await callback.answer()
     await state.update_data(pg_create_mode="custom", pg_template_id=None, pg_selected_groups=[])
-    await _show_create_group_picker(callback, state)
+    await _show_create_group_picker(callback, state, pg=gate.pg_client, staff=gate.staff)
 
 
-async def _show_create_group_picker(callback: CallbackQuery, state: FSMContext) -> None:
+async def _show_create_group_picker(
+    callback: CallbackQuery, state: FSMContext, *, pg, staff=None
+) -> None:
     data = await state.get_data()
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
     edit_uid = data.get("pg_edit_uid")
     groups = data.get("pg_groups_cache")
     if not isinstance(groups, list):
         try:
-            groups = await get_pg().get_groups_simple()
+            groups = await pg.get_groups_simple()
         except Exception:
             groups = []
+        groups = _filter_staff_groups(groups, staff)
         await state.update_data(pg_groups_cache=groups)
     rows: list[list[InlineKeyboardButton]] = []
     prefix = "adm:pg:edgrp" if edit_uid else "adm:pg:toggrp"
@@ -613,29 +1152,77 @@ async def _show_create_group_picker(callback: CallbackQuery, state: FSMContext) 
 
 
 @router.callback_query(F.data.startswith("adm:pg:toggrp:"))
-async def pg_create_toggrp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="create"):
+async def pg_create_toggrp(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    gid = int(callback.data.split(":")[-1])
+    match = _TOGGRP_RE.match(callback.data or "")
+    if match is None:
+        await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+        return
+    gid = int(match.group(1))
     data = await state.get_data()
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
     if gid in selected:
         selected = [x for x in selected if x != gid]
     else:
+        from app.services.bot_pg_catalog_pilot import catalog_groups_allowed
+
+        if not catalog_groups_allowed(gate.staff, [gid]):
+            await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+            return
         selected.append(gid)
     await state.update_data(pg_selected_groups=selected)
     await callback.answer()
-    await _show_create_group_picker(callback, state)
+    await _show_create_group_picker(callback, state, pg=gate.pg_client, staff=gate.staff)
 
 
 @router.callback_query(F.data == "adm:pg:grpdone")
-async def pg_create_grpdone(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="create"):
+async def pg_create_grpdone(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
     data = await state.get_data()
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
     if not selected:
         await callback.answer("حداقل یک گروه انتخاب کنید", show_alert=True)
+        return
+    from app.services.bot_pg_catalog_pilot import catalog_groups_allowed
+
+    if not catalog_groups_allowed(gate.staff, selected):
+        await callback.answer("اجازه این عمل را ندارید", show_alert=True)
         return
     await callback.answer()
     await state.set_state(PgUserStates.create_username)
@@ -647,13 +1234,32 @@ async def pg_create_grpdone(callback: CallbackQuery, state: FSMContext, db_user:
 
 
 @router.message(PgUserStates.create_username)
-async def pg_create_username(message: Message, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, message=message, action="create"):
+async def pg_create_username(
+    message: Message,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.bot_pg_user_pilot import sanitize_pg_user_write_payload
+
+    gate = await _pg_user_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        message=message,
+    )
+    if not gate.allowed:
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
+        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     uname = (message.text or "").strip()
     if not _USERNAME_RE.fullmatch(uname):
@@ -666,30 +1272,39 @@ async def pg_create_username(message: Message, state: FSMContext, db_user: BotUs
         tid = data.get("pg_template_id")
         if not tid:
             await state.clear()
-            await message.answer("تمپلیت انتخاب نشده.", reply_markup=await filtered_pg_reply_keyboard(db_user))
+            await message.answer("تمپلیت انتخاب نشده.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+            return
+        from app.services.bot_pg_catalog_pilot import catalog_template_allowed
+
+        if not catalog_template_allowed(gate.staff, int(tid)):
+            await state.clear()
+            await message.answer("اجازه این عمل را ندارید", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
             return
         try:
-            await assert_can_create_user(await platform_pg_quota_staff(), from_template=True)
+            await assert_can_create_user(gate.staff or {}, from_template=True)
         except PgQuotaError as qe:
             await message.answer(f"❌ {qe.message}")
             return
         try:
-            user = await get_pg().create_user_from_template(
+            payload = sanitize_pg_user_write_payload(
                 {
                     "username": uname,
                     "user_template_id": int(tid),
                     "note": f"telegram admin · {db_user.telegram_id}",
                 }
             )
+            user = await gate.pg_client.create_user_from_template(payload)
         except Exception as e:
             await message.answer(f"خطا در ساخت: {e}")
             return
         await state.clear()
         uid = int((user or {}).get("id") or 0) if isinstance(user, dict) else 0
         if uid:
-            await _show_user_card(message, uid, edit=False, notice="✅ کاربر ساخته شد")
+            await _show_user_card(
+                message, uid, edit=False, notice="✅ کاربر ساخته شد", user=user if isinstance(user, dict) else None, pg=gate.pg_client
+            )
         else:
-            await message.answer("✅ کاربر ساخته شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
+            await message.answer("✅ کاربر ساخته شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     await state.set_state(PgUserStates.create_gb)
     await message.answer(
@@ -699,13 +1314,30 @@ async def pg_create_username(message: Message, state: FSMContext, db_user: BotUs
 
 
 @router.message(PgUserStates.create_gb)
-async def pg_create_gb(message: Message, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, message=message, action="create"):
+async def pg_create_gb(
+    message: Message,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        message=message,
+    )
+    if not gate.allowed:
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
+        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     raw = (message.text or "").strip().replace(",", ".")
     try:
@@ -724,13 +1356,32 @@ async def pg_create_gb(message: Message, state: FSMContext, db_user: BotUser):
 
 
 @router.message(PgUserStates.create_days)
-async def pg_create_days(message: Message, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, message=message, action="create"):
+async def pg_create_days(
+    message: Message,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.bot_pg_user_pilot import sanitize_pg_user_write_payload
+
+    gate = await _pg_user_gate(
+        db_user,
+        action="create",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        message=message,
+    )
+    if not gate.allowed:
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
+        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     raw = (message.text or "").strip()
     try:
@@ -746,25 +1397,32 @@ async def pg_create_days(message: Message, state: FSMContext, db_user: BotUser):
     gb = float(data.get("pg_create_gb") or 0)
     if not uname or not groups:
         await state.clear()
-        await message.answer("داده ناقص است — دوباره شروع کنید.", reply_markup=await filtered_pg_reply_keyboard(db_user))
+        await message.answer("داده ناقص است — دوباره شروع کنید.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        return
+    from app.services.bot_pg_catalog_pilot import catalog_groups_allowed
+
+    if not catalog_groups_allowed(gate.staff, groups):
+        await state.clear()
+        await message.answer("اجازه این عمل را ندارید", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     data_limit = int(gb * (1024**3)) if gb > 0 else 0
     expire_ts = int(time.time()) + days * 86400 if days > 0 else 0
-    payload = build_user_create_payload(
-        username=uname,
-        group_ids=groups,
-        data_limit=data_limit if gb > 0 else 0,
-        expire_ts=expire_ts if days > 0 else 0,
-        note=f"telegram admin · {db_user.telegram_id}",
+    payload = sanitize_pg_user_write_payload(
+        build_user_create_payload(
+            username=uname,
+            group_ids=groups,
+            data_limit=data_limit if gb > 0 else 0,
+            expire_ts=expire_ts if days > 0 else 0,
+            note=f"telegram admin · {db_user.telegram_id}",
+        )
     )
-    # Unlimited: omit or send 0 — panel uses 0 for unlimited on edit; create may omit
     if gb <= 0:
         payload["data_limit"] = 0
     if days <= 0:
         payload["expire"] = 0
     try:
         await assert_can_create_user(
-            await platform_pg_quota_staff(),
+            gate.staff or {},
             data_limit=data_limit if gb > 0 else None,
             expire_ts=expire_ts if days > 0 else None,
             from_template=False,
@@ -773,26 +1431,50 @@ async def pg_create_days(message: Message, state: FSMContext, db_user: BotUser):
         await message.answer(f"❌ {qe.message}")
         return
     try:
-        user = await get_pg().create_user(payload)
+        user = await gate.pg_client.create_user(payload)
     except Exception as e:
         await message.answer(f"خطا در ساخت: {e}")
         return
     await state.clear()
     uid = int((user or {}).get("id") or 0) if isinstance(user, dict) else 0
     if uid:
-        await _show_user_card(message, uid, edit=False, notice="✅ کاربر ساخته شد")
+        await _show_user_card(
+            message,
+            uid,
+            edit=False,
+            notice="✅ کاربر ساخته شد",
+            user=user if isinstance(user, dict) else None,
+            pg=gate.pg_client,
+        )
     else:
-        await message.answer("✅ کاربر ساخته شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
+        await message.answer("✅ کاربر ساخته شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
 
 
 # ----- edit -----
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:edit$"))
-async def pg_user_edit_menu(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="update"):
+async def pg_user_edit_menu(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="update",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    uid = int(callback.data.split(":")[3])
+    uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
     await callback.answer()
     await state.update_data(pg_edit_uid=uid)
     if callback.message:
@@ -804,10 +1486,27 @@ async def pg_user_edit_menu(callback: CallbackQuery, state: FSMContext, db_user:
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:ed:name$"))
-async def pg_edit_name_ask(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="update"):
+async def pg_edit_name_ask(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="update",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    uid = int(callback.data.split(":")[3])
+    uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
     await callback.answer()
     await state.update_data(pg_edit_uid=uid)
     await state.set_state(PgUserStates.edit_username)
@@ -819,13 +1518,20 @@ async def pg_edit_name_ask(callback: CallbackQuery, state: FSMContext, db_user: 
 
 
 @router.message(PgUserStates.edit_username)
-async def pg_edit_name_save(message: Message, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, message=message, action="update"):
-        await state.clear()
-        return
+async def pg_edit_name_save(
+    message: Message,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.bot_pg_user_pilot import sanitize_pg_user_write_payload
+
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
+        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     uname = (message.text or "").strip()
     if not _USERNAME_RE.fullmatch(uname):
@@ -833,30 +1539,62 @@ async def pg_edit_name_save(message: Message, state: FSMContext, db_user: BotUse
         return
     data = await state.get_data()
     uid = int(data.get("pg_edit_uid") or 0)
+    gate = await _pg_user_gate(
+        db_user,
+        action="update",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        message=message,
+        pg_user_id=uid,
+    )
+    if not gate.allowed:
+        await state.clear()
+        return
     if not uid:
         await state.clear()
         return
     try:
-        current = await get_pg().get_user_by_id(uid)
+        current = gate.pg_user or {}
         groups = user_group_ids(current if isinstance(current, dict) else {})
-        payload = build_user_modify_payload(
-            username=uname,
-            group_ids=groups or None,
-            status=str((current or {}).get("status") or "") or None if isinstance(current, dict) else None,
+        payload = sanitize_pg_user_write_payload(
+            build_user_modify_payload(
+                username=uname,
+                group_ids=groups or None,
+                status=str((current or {}).get("status") or "") or None if isinstance(current, dict) else None,
+            )
         )
-        await get_pg().modify_user_by_id(uid, payload)
+        await gate.pg_client.modify_user_by_id(uid, payload)
     except Exception as e:
         await message.answer(f"خطا: {e}")
         return
     await state.clear()
-    await _show_user_card(message, uid, edit=False, notice="✅ نام کاربری به‌روز شد")
+    await _show_user_card(message, uid, edit=False, notice="✅ نام کاربری به‌روز شد", pg=gate.pg_client)
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:ed:gb$"))
-async def pg_edit_gb_ask(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="update"):
+async def pg_edit_gb_ask(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="update",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    uid = int(callback.data.split(":")[3])
+    uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
     await callback.answer()
     await state.update_data(pg_edit_uid=uid)
     await state.set_state(PgUserStates.edit_gb)
@@ -868,13 +1606,20 @@ async def pg_edit_gb_ask(callback: CallbackQuery, state: FSMContext, db_user: Bo
 
 
 @router.message(PgUserStates.edit_gb)
-async def pg_edit_gb_save(message: Message, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, message=message, action="update"):
-        await state.clear()
-        return
+async def pg_edit_gb_save(
+    message: Message,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.bot_pg_user_pilot import sanitize_pg_user_write_payload
+
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
+        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     raw = (message.text or "").strip().replace(",", ".")
     try:
@@ -886,32 +1631,64 @@ async def pg_edit_gb_save(message: Message, state: FSMContext, db_user: BotUser)
         return
     data = await state.get_data()
     uid = int(data.get("pg_edit_uid") or 0)
+    gate = await _pg_user_gate(
+        db_user,
+        action="update",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        message=message,
+        pg_user_id=uid,
+    )
+    if not gate.allowed:
+        await state.clear()
+        return
     if not uid:
         await state.clear()
         return
     try:
-        current = await get_pg().get_user_by_id(uid)
+        current = gate.pg_user or {}
         groups = user_group_ids(current if isinstance(current, dict) else {})
         uname = (current or {}).get("username") if isinstance(current, dict) else None
-        payload = build_user_modify_payload(
-            username=str(uname) if uname else None,
-            group_ids=groups or None,
-            data_limit=int(gb * (1024**3)) if gb > 0 else 0,
-            status=str((current or {}).get("status") or "") or None if isinstance(current, dict) else None,
+        payload = sanitize_pg_user_write_payload(
+            build_user_modify_payload(
+                username=str(uname) if uname else None,
+                group_ids=groups or None,
+                data_limit=int(gb * (1024**3)) if gb > 0 else 0,
+                status=str((current or {}).get("status") or "") or None if isinstance(current, dict) else None,
+            )
         )
-        await get_pg().modify_user_by_id(uid, payload)
+        await gate.pg_client.modify_user_by_id(uid, payload)
     except Exception as e:
         await message.answer(f"خطا: {e}")
         return
     await state.clear()
-    await _show_user_card(message, uid, edit=False, notice="✅ حجم به‌روز شد")
+    await _show_user_card(message, uid, edit=False, notice="✅ حجم به‌روز شد", pg=gate.pg_client)
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:ed:days$"))
-async def pg_edit_days_ask(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="update"):
+async def pg_edit_days_ask(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="update",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    uid = int(callback.data.split(":")[3])
+    uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
     await callback.answer()
     await state.update_data(pg_edit_uid=uid)
     await state.set_state(PgUserStates.edit_days)
@@ -923,13 +1700,20 @@ async def pg_edit_days_ask(callback: CallbackQuery, state: FSMContext, db_user: 
 
 
 @router.message(PgUserStates.edit_days)
-async def pg_edit_days_save(message: Message, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, message=message, action="update"):
-        await state.clear()
-        return
+async def pg_edit_days_save(
+    message: Message,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.bot_pg_user_pilot import sanitize_pg_user_write_payload
+
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user))
+        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     raw = (message.text or "").strip()
     try:
@@ -941,84 +1725,169 @@ async def pg_edit_days_save(message: Message, state: FSMContext, db_user: BotUse
         return
     data = await state.get_data()
     uid = int(data.get("pg_edit_uid") or 0)
+    gate = await _pg_user_gate(
+        db_user,
+        action="update",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        message=message,
+        pg_user_id=uid,
+    )
+    if not gate.allowed:
+        await state.clear()
+        return
     if not uid:
         await state.clear()
         return
     expire_ts = int(time.time()) + days * 86400 if days > 0 else 0
     try:
-        current = await get_pg().get_user_by_id(uid)
+        current = gate.pg_user or {}
         groups = user_group_ids(current if isinstance(current, dict) else {})
         uname = (current or {}).get("username") if isinstance(current, dict) else None
-        payload = build_user_modify_payload(
-            username=str(uname) if uname else None,
-            group_ids=groups or None,
-            expire_ts=expire_ts,
-            status=str((current or {}).get("status") or "") or None if isinstance(current, dict) else None,
+        payload = sanitize_pg_user_write_payload(
+            build_user_modify_payload(
+                username=str(uname) if uname else None,
+                group_ids=groups or None,
+                expire_ts=expire_ts,
+                status=str((current or {}).get("status") or "") or None if isinstance(current, dict) else None,
+            )
         )
-        await get_pg().modify_user_by_id(uid, payload)
+        await gate.pg_client.modify_user_by_id(uid, payload)
     except Exception as e:
         await message.answer(f"خطا: {e}")
         return
     await state.clear()
-    await _show_user_card(message, uid, edit=False, notice="✅ انقضا به‌روز شد")
+    await _show_user_card(message, uid, edit=False, notice="✅ انقضا به‌روز شد", pg=gate.pg_client)
 
 
 @router.callback_query(F.data.regexp(r"^adm:pg:u:\d+:ed:grps$"))
-async def pg_edit_groups_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="update"):
+async def pg_edit_groups_start(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    gate = await _pg_user_gate(
+        db_user,
+        action="update",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+    )
+    if not gate.allowed:
         return
-    uid = int(callback.data.split(":")[3])
+    uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
     await callback.answer()
-    try:
-        current = await get_pg().get_user_by_id(uid)
-        selected = user_group_ids(current if isinstance(current, dict) else {})
-    except Exception:
-        selected = []
+    selected = user_group_ids(gate.pg_user if isinstance(gate.pg_user, dict) else {})
     await state.update_data(pg_edit_uid=uid, pg_selected_groups=selected)
-    await _show_create_group_picker(callback, state)
+    await _show_create_group_picker(callback, state, pg=gate.pg_client, staff=gate.staff)
 
 
 @router.callback_query(F.data.startswith("adm:pg:edgrp:"))
-async def pg_edit_toggrp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="update"):
-        return
-    gid = int(callback.data.split(":")[-1])
+async def pg_edit_toggrp(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
     data = await state.get_data()
+    uid = int(data.get("pg_edit_uid") or 0)
+    gate = await _pg_user_gate(
+        db_user,
+        action="update",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+        pg_user_id=uid,
+    )
+    if not gate.allowed:
+        return
+    match = _EDGRP_RE.match(callback.data or "")
+    if match is None:
+        await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+        return
+    gid = int(match.group(1))
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
     if gid in selected:
         selected = [x for x in selected if x != gid]
     else:
+        from app.services.bot_pg_catalog_pilot import catalog_groups_allowed
+
+        if not catalog_groups_allowed(gate.staff, [gid]):
+            await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+            return
         selected.append(gid)
     await state.update_data(pg_selected_groups=selected)
     await callback.answer()
-    await _show_create_group_picker(callback, state)
+    await _show_create_group_picker(callback, state, pg=gate.pg_client, staff=gate.staff)
 
 
 @router.callback_query(F.data == "adm:pg:edgrpdone")
-async def pg_edit_grpdone(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not await _require_users(db_user, callback=callback, action="update"):
-        return
+async def pg_edit_grpdone(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db_user: BotUser,
+    session: AsyncSession | None = None,
+    is_reseller_bot: bool = False,
+    reseller_profile_id: int | None = None,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.bot_pg_user_pilot import sanitize_pg_user_write_payload
+
     data = await state.get_data()
     uid = int(data.get("pg_edit_uid") or 0)
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
+    gate = await _pg_user_gate(
+        db_user,
+        action="update",
+        session=session,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        callback=callback,
+        pg_user_id=uid,
+    )
+    if not gate.allowed:
+        return
     if not uid:
         await callback.answer("کاربر نامعتبر", show_alert=True)
         return
     if not selected:
         await callback.answer("حداقل یک گروه انتخاب کنید", show_alert=True)
         return
+    from app.services.bot_pg_catalog_pilot import catalog_groups_allowed
+
+    if not catalog_groups_allowed(gate.staff, selected):
+        await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+        return
     try:
-        current = await get_pg().get_user_by_id(uid)
+        current = gate.pg_user or {}
         uname = (current or {}).get("username") if isinstance(current, dict) else None
-        payload = build_user_modify_payload(
-            username=str(uname) if uname else None,
-            group_ids=selected,
-            status=str((current or {}).get("status") or "") or None if isinstance(current, dict) else None,
+        payload = sanitize_pg_user_write_payload(
+            build_user_modify_payload(
+                username=str(uname) if uname else None,
+                group_ids=selected,
+                status=str((current or {}).get("status") or "") or None if isinstance(current, dict) else None,
+            )
         )
-        await get_pg().modify_user_by_id(uid, payload)
+        await gate.pg_client.modify_user_by_id(uid, payload)
         await callback.answer("گروه‌ها ذخیره شد ✅", show_alert=True)
         await state.clear()
         if callback.message:
-            await _show_user_card(callback.message, uid, notice="✅ گروه‌ها به‌روز شد")
+            await _show_user_card(
+                callback.message, uid, notice="✅ گروه‌ها به‌روز شد", pg=gate.pg_client
+            )
     except Exception as e:
         await callback.answer(str(e), show_alert=True)

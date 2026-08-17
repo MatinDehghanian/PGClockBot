@@ -88,16 +88,24 @@ class EnforceGateTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(msg, PG_ACCESS_DENIED_MSG)
         revoke.assert_awaited_once()
 
-    async def test_unreachable_allows(self):
-        from app.services.pg_staff_access import enforce_pg_admin_web_gate
+    async def test_unreachable_denies_without_revoke(self):
+        from app.services.pg_staff_access import (
+            PG_UNAVAILABLE_MSG,
+            enforce_pg_admin_web_gate,
+        )
 
         with patch(
             "app.services.pg_staff_access.fetch_pg_admin_gate",
             new=AsyncMock(return_value=("unreachable", None)),
-        ):
-            ok, msg = await enforce_pg_admin_web_gate(AsyncMock(), "x")
-        self.assertTrue(ok)
-        self.assertIsNone(msg)
+        ), patch(
+            "app.services.pg_staff_access.revoke_web_access", new=AsyncMock()
+        ) as revoke:
+            ok, msg = await enforce_pg_admin_web_gate(
+                AsyncMock(), f"unreachable_user_{id(self)}"
+            )
+        self.assertFalse(ok)
+        self.assertEqual(msg, PG_UNAVAILABLE_MSG)
+        revoke.assert_not_awaited()
 
     async def test_ok_allows(self):
         from app.services.pg_staff_access import enforce_pg_admin_web_gate
@@ -106,7 +114,9 @@ class EnforceGateTests(unittest.IsolatedAsyncioTestCase):
             "app.services.pg_staff_access.fetch_pg_admin_gate",
             new=AsyncMock(return_value=("ok", {"status": "active"})),
         ):
-            ok, msg = await enforce_pg_admin_web_gate(AsyncMock(), "x")
+            ok, msg = await enforce_pg_admin_web_gate(
+                AsyncMock(), f"ok_user_{id(self)}"
+            )
         self.assertTrue(ok)
         self.assertIsNone(msg)
 

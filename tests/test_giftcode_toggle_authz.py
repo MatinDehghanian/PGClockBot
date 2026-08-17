@@ -120,7 +120,15 @@ class GiftCodeToggleAuthzTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             code = await self._make_platform_code(session, active=True)
 
-            admin = {"role": "admin", "id": 1, "username": "root"}
+            admin = {
+                "role": "admin",
+                "id": 1,
+                "username": "root",
+                "org_principal_id": 1,
+                "org_depth": 0,
+                "org_parent_id": None,
+                "org_status": "active",
+            }
             await self.toggle_route.endpoint(
                 code_id=code.id, staff=admin, session=session
             )

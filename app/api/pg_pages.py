@@ -39,11 +39,12 @@ def _q(msg: str) -> str:
 
 
 async def _staff_pg(session: AsyncSession, staff: dict):
-    """Return (client, as_owner) for mutations (Phase C2 + C5 + Hybrid).
+    """Return (client, as_owner) for mutations (Phase C2 + C5 + Hybrid + 2C).
 
     - Platform admin → env credentials; ``as_owner`` only when PG account is owner
     - Reseller → shop PG admin credentials (as_owner=False)
     - pg_staff → own PG credentials when stored (as_owner=False); else fail closed
+    - principal (Level-1) → own OrgPrincipal PG credentials (as_owner=False)
     """
     if is_platform_admin(staff):
         return get_pg(), bool(staff.get("pg_is_owner"))
@@ -58,6 +59,14 @@ async def _staff_pg(session: AsyncSession, staff: dict):
             pg_username=staff.get("pg_admin_username"),
             staff_id=staff.get("pg_staff_id"),
         ), False
+    if staff.get("role") == "principal":
+        from app.services.pasarguard import get_pg_for_principal
+
+        return await get_pg_for_principal(
+            session,
+            principal_id=staff.get("org_principal_id"),
+            pg_username=staff.get("pg_admin_username"),
+        ), False
     raise PasarGuardError(
         "تغییر در پاسارگارد بدون اعتبارنامه اختصاصی ممکن نیست. "
         "علت محتمل: رمز ادمین فرعی هنوز با پاسارگارد همگام نشده. "
@@ -70,22 +79,35 @@ async def _assert_owned_user(
 ) -> dict | None:
     """Fetch a PG user only when the staff principal is allowed to see/mutate it.
 
-    Resellers and credentialed pg_staff authenticate as themselves (no owner-token probe).
+    Object-level check after load (H1). Non-owner without ``pg_admin_username``
+    → deny (M6). Unknown ownership on the user payload → deny.
+    Never uses Owner credentials for reseller/pg_staff.
     """
-    if _is_admin(staff):
-        info = await get_pg().get_user_by_id(user_id)
-        return info if isinstance(info, dict) else None
+    from app.services.pg_user_scope import (
+        is_full_pg_owner,
+        pg_user_in_staff_scope,
+        staff_pg_username,
+    )
+
+    info: dict | None = None
+
+    if is_full_pg_owner(staff):
+        raw = await get_pg().get_user_by_id(user_id)
+        return raw if isinstance(raw, dict) else None
+
+    # Limited / Hybrid / reseller / pg_staff — must have own PG identity
+    if not staff_pg_username(staff):
+        return None
 
     rid = shop_owner_id(staff)
     if rid and session is not None:
         try:
             pg = await get_pg_for_reseller(session, int(rid))
-            info = await pg.get_user_by_id(user_id)
+            raw = await pg.get_user_by_id(user_id)
+            info = raw if isinstance(raw, dict) else None
         except Exception:
             return None
-        return info if isinstance(info, dict) else None
-
-    if staff.get("role") == "pg_staff" and session is not None:
+    elif staff.get("role") == "pg_staff" and session is not None:
         try:
             from app.services.pasarguard import get_pg_for_staff
 
@@ -94,12 +116,38 @@ async def _assert_owned_user(
                 pg_username=staff.get("pg_admin_username"),
                 staff_id=staff.get("pg_staff_id"),
             )
-            info = await pg.get_user_by_id(user_id)
+            raw = await pg.get_user_by_id(user_id)
+            info = raw if isinstance(raw, dict) else None
         except Exception:
             return None
-        return info if isinstance(info, dict) else None
+    elif staff.get("role") == "principal" and session is not None:
+        try:
+            from app.services.pasarguard import get_pg_for_principal
 
-    return None
+            pg = await get_pg_for_principal(
+                session,
+                principal_id=staff.get("org_principal_id"),
+                pg_username=staff.get("pg_admin_username"),
+            )
+            raw = await pg.get_user_by_id(user_id)
+            info = raw if isinstance(raw, dict) else None
+        except Exception:
+            return None
+    elif _is_admin(staff):
+        # Hybrid limited platform admin: env client fetch, then ownership assert
+        try:
+            raw = await get_pg().get_user_by_id(user_id)
+            info = raw if isinstance(raw, dict) else None
+        except Exception:
+            return None
+    else:
+        return None
+
+    if info is None:
+        return None
+    if not pg_user_in_staff_scope(info, staff):
+        return None
+    return info
 
 
 def _pg_form_err(msg: str, *, modal: str, uid: str | int | None = None) -> RedirectResponse:
@@ -143,22 +191,16 @@ def _pg_owner(staff: dict) -> str:
 
 
 def _owner_of(user: dict) -> str:
-    admin = user.get("admin") or user.get("owner_username") or ""
-    if isinstance(admin, dict):
-        admin = admin.get("username") or ""
-    return str(admin or "").strip().lower()
+    from app.services.pg_user_scope import pg_user_owner_username
+
+    return pg_user_owner_username(user)
 
 
 def _filter_owned_users(users: list[dict], staff: dict) -> list[dict]:
-    # Full PG owner sees env-client list as-is; limited principals stay scoped.
-    if _is_pg_owner_principal(staff):
-        return users
-    if _is_admin(staff) and not _pg_owner(staff):
-        return users
-    mine = _pg_owner(staff).lower()
-    if not mine:
-        return []
-    return [u for u in users if isinstance(u, dict) and _owner_of(u) == mine]
+    """Scope PG user lists. Missing pg_username for non-owner → [] (M6)."""
+    from app.services.pg_user_scope import filter_pg_users_for_staff
+
+    return filter_pg_users_for_staff(users, staff)
 
 
 def _filter_templates(items: list[dict], staff: dict) -> list[dict]:
@@ -292,7 +334,7 @@ def register_pg_pages(
         except Exception as e:
             err = str(e)
         ticket_alert = None
-        if not _is_admin(staff) and staff.get("role") in {"reseller", "pg_staff"}:
+        if not _is_admin(staff) and staff.get("role") in {"reseller", "pg_staff", "principal"}:
             from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
 
             ticket_alert = await panel_ticket_dashboard_alert(
@@ -1250,6 +1292,14 @@ def register_pg_pages(
             payload["port"] = port_n
         try:
             pg, _as_owner = await _staff_pg(session, staff)
+            from app.services.pg_object_scope import inbound_tag_allowed
+
+            valid_tags = set(_inbound_tags(await pg.get_inbounds()))
+            if not inbound_tag_allowed(payload["inbound_tag"], valid_tags):
+                return RedirectResponse(
+                    f"/pg/hosts?err={_q('اینباند انتخاب‌شده نامعتبر است')}",
+                    status_code=303,
+                )
             await pg.create_host(payload)
         except Exception as e:
             return RedirectResponse(f"/pg/hosts?err={_q(e)}", status_code=303)
@@ -1290,6 +1340,18 @@ def register_pg_pages(
             payload["port"] = port_n
         try:
             pg, _as_owner = await _staff_pg(session, staff)
+            from app.services.pg_object_scope import assert_owned_host, inbound_tag_allowed
+
+            if await assert_owned_host(pg, staff, host_id) is None:
+                return RedirectResponse(
+                    f"/pg/hosts?err={_q('هاست خارج از دسترسی شماست')}", status_code=303
+                )
+            valid_tags = set(_inbound_tags(await pg.get_inbounds()))
+            if not inbound_tag_allowed(payload["inbound_tag"], valid_tags):
+                return RedirectResponse(
+                    f"/pg/hosts?err={_q('اینباند انتخاب‌شده نامعتبر است')}",
+                    status_code=303,
+                )
             await pg.modify_host(host_id, payload)
         except Exception as e:
             return RedirectResponse(f"/pg/hosts?err={_q(e)}", status_code=303)
@@ -1309,7 +1371,13 @@ def register_pg_pages(
             return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
         try:
             pg, _as_owner = await _staff_pg(session, staff)
-            host = await pg.get_host(host_id)
+            from app.services.pg_object_scope import assert_owned_host
+
+            host = await assert_owned_host(pg, staff, host_id)
+            if host is None:
+                return RedirectResponse(
+                    f"/pg/hosts?err={_q('هاست خارج از دسترسی شماست')}", status_code=303
+                )
             disabled = bool(host.get("is_disabled"))
             await pg.set_host_disabled(host_id, not disabled)
         except Exception as e:
@@ -1330,6 +1398,12 @@ def register_pg_pages(
             return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
         try:
             pg, _as_owner = await _staff_pg(session, staff)
+            from app.services.pg_object_scope import assert_owned_host
+
+            if await assert_owned_host(pg, staff, host_id) is None:
+                return RedirectResponse(
+                    f"/pg/hosts?err={_q('هاست خارج از دسترسی شماست')}", status_code=303
+                )
             await pg.delete_host(host_id)
         except Exception as e:
             return RedirectResponse(f"/pg/hosts?err={_q(e)}", status_code=303)
@@ -1394,6 +1468,12 @@ def register_pg_pages(
             )
         try:
             pg, _as_owner = await _staff_pg(session, staff)
+            from app.services.pg_object_scope import assert_owned_node
+
+            if await assert_owned_node(pg, staff, node_id) is None:
+                return RedirectResponse(
+                    f"/pg/nodes?err={_q('نود خارج از دسترسی شماست')}", status_code=303
+                )
             await pg.reconnect_node(node_id)
         except Exception as e:
             msg = e.user_message(fallback=str(e)) if isinstance(e, PasarGuardError) else str(e)
@@ -1428,6 +1508,12 @@ def register_pg_pages(
             return RedirectResponse(f"/pg/nodes?err={_q('اجازه ریست مصرف نود ندارید')}", status_code=303)
         try:
             pg, _ = await _staff_pg(session, staff)
+            from app.services.pg_object_scope import assert_owned_node
+
+            if await assert_owned_node(pg, staff, node_id) is None:
+                return RedirectResponse(
+                    f"/pg/nodes?err={_q('نود خارج از دسترسی شماست')}", status_code=303
+                )
             await pg.reset_node(node_id)
         except Exception as e:
             msg = e.user_message(fallback=str(e)) if isinstance(e, PasarGuardError) else str(e)
@@ -1444,6 +1530,12 @@ def register_pg_pages(
             return RedirectResponse(f"/pg/nodes?err={_q('اجازه همگام‌سازی نود ندارید')}", status_code=303)
         try:
             pg, _ = await _staff_pg(session, staff)
+            from app.services.pg_object_scope import assert_owned_node
+
+            if await assert_owned_node(pg, staff, node_id) is None:
+                return RedirectResponse(
+                    f"/pg/nodes?err={_q('نود خارج از دسترسی شماست')}", status_code=303
+                )
             await pg.sync_node(node_id)
         except Exception as e:
             msg = e.user_message(fallback=str(e)) if isinstance(e, PasarGuardError) else str(e)
@@ -1460,7 +1552,13 @@ def register_pg_pages(
             return RedirectResponse(f"/pg/nodes?err={_q('اجازه تغییر وضعیت نود ندارید')}", status_code=303)
         try:
             pg, _ = await _staff_pg(session, staff)
-            node = await pg.get_node(node_id)
+            from app.services.pg_object_scope import assert_owned_node
+
+            node = await assert_owned_node(pg, staff, node_id)
+            if node is None:
+                return RedirectResponse(
+                    f"/pg/nodes?err={_q('نود خارج از دسترسی شماست')}", status_code=303
+                )
             st = str(node.get("status") or "").lower()
             # Toggle disabled ↔ connected (PasarGuard uses status enum)
             new_status = "connected" if st in {"disabled", "error", "limited"} else "disabled"
@@ -1480,6 +1578,12 @@ def register_pg_pages(
             return RedirectResponse(f"/pg/nodes?err={_q('اجازه حذف نود ندارید')}", status_code=303)
         try:
             pg, _ = await _staff_pg(session, staff)
+            from app.services.pg_object_scope import assert_owned_node
+
+            if await assert_owned_node(pg, staff, node_id) is None:
+                return RedirectResponse(
+                    f"/pg/nodes?err={_q('نود خارج از دسترسی شماست')}", status_code=303
+                )
             await pg.delete_node(node_id)
         except Exception as e:
             msg = e.user_message(fallback=str(e)) if isinstance(e, PasarGuardError) else str(e)

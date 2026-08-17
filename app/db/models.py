@@ -91,6 +91,10 @@ class BotUser(Base):
     reseller_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bot_users.id"), nullable=True, index=True
     )
+    # Phase 1E — nullable; NULL ≠ global. Prefer over reseller_id when set.
+    owner_principal_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("org_principals.id"), nullable=True, index=True
+    )
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
     staff_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     risk_flags: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # CSV
@@ -138,6 +142,10 @@ class Order(Base):
     reseller_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bot_users.id"), nullable=True, index=True
     )
+    # Phase 1E — nullable; NULL ≠ global. Prefer over reseller_id when set.
+    owner_principal_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("org_principals.id"), nullable=True, index=True
+    )
     amount: Mapped[int] = mapped_column(Integer)
     discount_amount: Mapped[int] = mapped_column(Integer, default=0)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
@@ -182,6 +190,10 @@ class UserService(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
     plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("plans.id"), nullable=True)
+    # Phase 1E — nullable; shop tenant via BotUser.reseller_id until set.
+    owner_principal_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("org_principals.id"), nullable=True, index=True
+    )
     pg_user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     pg_username: Mapped[str] = mapped_column(String(128))
     subscription_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -208,6 +220,10 @@ class Ticket(Base):
     # Shop that owns this ticket (None = platform main bot). Same pattern as Order.reseller_id.
     reseller_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    # Phase 1E — nullable; NULL ≠ global. Prefer over reseller_id when set.
+    owner_principal_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("org_principals.id"), nullable=True, index=True
     )
     subject: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(32), default=TicketStatus.OPEN.value, index=True)
@@ -563,6 +579,93 @@ class PgStaffAccess(Base):
     pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class OrgPrincipal(Base):
+    """Hierarchy SoT: Owner (depth 0) → depth-1 → depth-2. Not derived from role names."""
+
+    __tablename__ = "org_principals"
+    __table_args__ = (
+        UniqueConstraint("reseller_profile_id", name="uq_org_principals_reseller_profile"),
+        UniqueConstraint("pg_staff_id", name="uq_org_principals_pg_staff"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    parent_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("org_principals.id"), nullable=True, index=True
+    )
+    depth: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="active", index=True)
+    pg_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    # Phase 2C: encrypted PasarGuard password for this Principal's own PG identity
+    # (never Owner env credentials). Used for tenant-safe PG client selection.
+    pg_password_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reseller_profile_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("reseller_profiles.id"), nullable=True
+    )
+    pg_staff_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("pg_staff_access.id"), nullable=True
+    )
+    bot_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class OrgPrincipalProvision(Base):
+    """Idempotency ledger for Level-1 Principal provisioning (Phase 2A).
+
+    Does not store Owner PG credentials. Records completed provisions so retries
+    return the same Principal instead of minting duplicates.
+    """
+
+    __tablename__ = "org_principal_provisions"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_org_principal_provision_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    principal_id: Mapped[int] = mapped_column(
+        ForeignKey("org_principals.id"), nullable=False, index=True
+    )
+    pg_username: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_by_principal_id: Mapped[int] = mapped_column(
+        ForeignKey("org_principals.id"), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(32), default="completed", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OrgPrincipalWebIdentity(Base):
+    """Independent Web login for a Level-1 OrgPrincipal (Phase 2B).
+
+    Resolves server-side to ``principal_id``. Does not store PG passwords or
+    Owner credentials. Cookie sessions may carry ``web_identity_id`` only as a
+    lookup key — hierarchy fields are never trusted from the client.
+    """
+
+    __tablename__ = "org_principal_web_identities"
+    __table_args__ = (
+        UniqueConstraint("principal_id", name="uq_org_principal_web_identity_principal"),
+        UniqueConstraint("web_username", name="uq_org_principal_web_identity_username"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    principal_id: Mapped[int] = mapped_column(
+        ForeignKey("org_principals.id"), nullable=False, index=True
+    )
+    web_username: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    web_password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

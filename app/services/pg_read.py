@@ -48,6 +48,10 @@ def staff_pg_credentials_ready(staff: dict | None) -> bool:
         return True
     if shop_owner_id(staff) is not None:
         return True
+    if staff.get("role") == "principal":
+        return bool(staff.get("pg_credentials_ready")) and bool(
+            str(staff.get("pg_admin_username") or "").strip()
+        )
     return bool(staff.get("pg_credentials_ready"))
 
 
@@ -84,6 +88,25 @@ async def staff_pg_read_client(
                 session,
                 pg_username=staff.get("pg_admin_username"),
                 staff_id=staff.get("pg_staff_id"),
+            )
+        except PasarGuardError as e:
+            raise PgReadDenied(e.user_message(fallback=PG_READ_ISOLATION_MSG)) from e
+        except Exception as e:
+            raise PgReadDenied(str(e) or PG_READ_ISOLATION_MSG) from e
+
+    if staff.get("role") == "principal":
+        # Phase 2C: Level-1 Principal — own PG identity only (never Owner token).
+        if session is None:
+            raise PgReadDenied("نشست پایگاه‌داده برای خواندن لازم است")
+        if not str(staff.get("pg_admin_username") or "").strip():
+            raise PgReadDenied("هویت پاسارگارد Principal موجود نیست")
+        try:
+            from app.services.pasarguard import get_pg_for_principal
+
+            return await get_pg_for_principal(
+                session,
+                principal_id=staff.get("org_principal_id"),
+                pg_username=staff.get("pg_admin_username"),
             )
         except PasarGuardError as e:
             raise PgReadDenied(e.user_message(fallback=PG_READ_ISOLATION_MSG)) from e

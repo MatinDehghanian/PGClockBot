@@ -217,6 +217,11 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         + dashboard_degraded banner instead (false-disconnected regression).
         """
         from app.services.db_safe import rollback_quiet
+        from app.services.identity_chrome import resolve_staff_home
+
+        dest_kind, dest_target = resolve_staff_home(staff)
+        if dest_kind == "redirect":
+            return RedirectResponse(dest_target, status_code=303)
 
         try:
             result = await _home_dashboard_context(request, staff, session)
@@ -231,12 +236,17 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         # hit the global handler with a ref=, not paint fake connection failures.
         return render(request, template, ctx)
 
-    def _degraded_home_shell(staff: dict) -> tuple[str, dict]:
+    def _degraded_home_shell(staff: dict):
         from app.services.home_overview import empty_period_stats
+        from app.services.identity_chrome import resolve_staff_home
+
+        dest_kind, dest_target = resolve_staff_home(staff)
+        if dest_kind == "redirect":
+            return RedirectResponse(dest_target, status_code=303)
 
         periods = empty_period_stats()
         action = dict(_EMPTY_ACTION)
-        if is_platform_admin(staff):
+        if dest_target == "home.html" or is_platform_admin(staff):
             return (
                 "home.html",
                 {

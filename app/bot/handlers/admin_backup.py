@@ -19,6 +19,7 @@ from aiogram.types import (
 
 from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
+from app.bot.auth import require_bot_owner_handler
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.backup import (
@@ -92,6 +93,7 @@ def _hub_text(backups: list[dict]) -> str:
 
 
 @router.callback_query(F.data == "adm:backup")
+@require_bot_owner_handler
 async def backup_hub(callback: CallbackQuery, db_user: BotUser, state: FSMContext):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -108,6 +110,7 @@ async def backup_hub(callback: CallbackQuery, db_user: BotUser, state: FSMContex
 
 
 @router.callback_query(F.data.startswith("adm:backup:create"))
+@require_bot_owner_handler
 async def backup_create(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -151,6 +154,7 @@ async def backup_create(callback: CallbackQuery, db_user: BotUser):
 
 
 @router.callback_query(F.data.startswith("adm:backup:item:"))
+@require_bot_owner_handler
 async def backup_item(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -177,6 +181,7 @@ async def backup_item(callback: CallbackQuery, db_user: BotUser):
 
 
 @router.callback_query(F.data.startswith("adm:backup:dl:"))
+@require_bot_owner_handler
 async def backup_download(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -198,6 +203,7 @@ async def backup_download(callback: CallbackQuery, db_user: BotUser):
 
 
 @router.callback_query(F.data.startswith("adm:backup:del:"))
+@require_bot_owner_handler
 async def backup_delete(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -215,6 +221,7 @@ async def backup_delete(callback: CallbackQuery, db_user: BotUser):
 
 
 @router.callback_query(F.data.startswith("adm:backup:restore:"))
+@require_bot_owner_handler
 async def backup_restore_ask(callback: CallbackQuery, db_user: BotUser, state: FSMContext):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -242,6 +249,7 @@ async def backup_restore_ask(callback: CallbackQuery, db_user: BotUser, state: F
 
 
 @router.message(BackupStates.confirm_restore)
+@require_bot_owner_handler
 async def backup_restore_confirm(message: Message, db_user: BotUser, state: FSMContext):
     if not _is_admin(db_user):
         await state.clear()
@@ -289,6 +297,7 @@ async def backup_restore_confirm(message: Message, db_user: BotUser, state: FSMC
 
 
 @router.callback_query(F.data == "adm:backup:upload")
+@require_bot_owner_handler
 async def backup_upload_ask(callback: CallbackQuery, db_user: BotUser, state: FSMContext):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -303,6 +312,7 @@ async def backup_upload_ask(callback: CallbackQuery, db_user: BotUser, state: FS
 
 
 @router.message(BackupStates.waiting_upload, F.document)
+@require_bot_owner_handler
 async def backup_upload_file(message: Message, db_user: BotUser, state: FSMContext):
     if not _is_admin(db_user):
         await state.clear()

@@ -272,6 +272,9 @@ class PasarGuardClient:
                                 body=payload,
                             )
                         self._token = token
+                        # Drop plaintext password from memory once a Bearer token exists
+                        # (cached clients must not retain PG passwords).
+                        self._login_password = None
                         logger.info("PasarGuard login OK · base=%s", self.base_url)
                         return self._token
                     if last.status_code in (401, 403):
@@ -705,7 +708,10 @@ def as_list(data: Any, *keys: str) -> list[dict]:
 
 _pg: Optional[PasarGuardClient] = None
 _pg_reseller_cache: dict[tuple[int, str], PasarGuardClient] = {}
-_pg_staff_cache: dict[str, PasarGuardClient] = {}
+# staff cache: (staff_row_id, pg_username) — never username alone (sibling isolation)
+_pg_staff_cache: dict[tuple[int, str], PasarGuardClient] = {}
+# Level-1 OrgPrincipal cache: (principal_id, pg_username) — never share with Owner
+_pg_principal_cache: dict[tuple[int, str], PasarGuardClient] = {}
 
 
 def get_pg() -> PasarGuardClient:
@@ -718,10 +724,28 @@ def get_pg() -> PasarGuardClient:
 
 def reset_pg() -> None:
     """Drop cached clients (after PG_BASE_URL / credentials change)."""
-    global _pg, _pg_reseller_cache, _pg_staff_cache
+    global _pg, _pg_reseller_cache, _pg_staff_cache, _pg_principal_cache
     _pg = None
     _pg_reseller_cache = {}
     _pg_staff_cache = {}
+    _pg_principal_cache = {}
+
+
+def invalidate_pg_principal_cache(principal_id: int | None) -> None:
+    """Drop cached PG clients for one OrgPrincipal (e.g. after disable).
+
+    Does not touch Owner env client or sibling Principal caches.
+    """
+    if principal_id is None:
+        return
+    try:
+        pid = int(principal_id)
+    except (TypeError, ValueError):
+        return
+    if pid <= 0:
+        return
+    for stale_key in [k for k in _pg_principal_cache if k[0] == pid]:
+        _pg_principal_cache.pop(stale_key, None)
 
 
 async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClient:
@@ -777,9 +801,11 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
 async def get_pg_for_staff(
     session, *, pg_username: str | None = None, staff_id: int | None = None
 ) -> PasarGuardClient:
-    """PasarGuard client for a pg_staff row — never owner token (Phase C5).
+    """PasarGuard client for a pg_staff row — never owner token (Phase C5 / 1F).
 
     Requires ``PgStaffAccess.pg_admin_password_enc``.
+    Cache key is ``(staff_id, username)`` so sibling principals never share a
+    client even if usernames collide after re-grant.
     """
     from sqlalchemy import select
 
@@ -806,7 +832,9 @@ async def get_pg_for_staff(
             "علت محتمل: حساب غیرفعال شده یا ردیف دسترسی حذف شده. "
             "راه حل: ادمین اصلی از «ادمین‌ها» وضعیت را بررسی و در صورت نیاز دوباره اعطا کند."
         )
-    cache_key = (row.pg_username or "").strip().lower()
+    uname = (row.pg_username or "").strip().lower()
+    sid = int(row.id)
+    cache_key = (sid, uname)
     cached = _pg_staff_cache.get(cache_key)
     if cached is not None and cached._token:
         return cached
@@ -819,7 +847,99 @@ async def get_pg_for_staff(
         )
     client = PasarGuardClient(username=row.pg_username, password=password)
     await client.ensure_token()
+    # Drop stale keys for this staff row (username rename) and legacy
+    # username-only keys if any remain from older builds.
+    for stale_key in [k for k in _pg_staff_cache if k[0] == sid and k != cache_key]:
+        _pg_staff_cache.pop(stale_key, None)
     _pg_staff_cache[cache_key] = client
+    return client
+
+
+async def get_pg_for_principal(
+    session,
+    *,
+    principal_id: int | None = None,
+    pg_username: str | None = None,
+) -> PasarGuardClient:
+    """PasarGuard client for a Level-1 or Level-2 OrgPrincipal — never Owner env token.
+
+    Requires ``OrgPrincipal.pg_username`` + ``pg_password_enc`` on *this* row.
+    Cache key is ``(principal_id, username)`` so parent/siblings never share clients.
+
+    Level-2 uses its own stored credential only. Missing identity, inactive parent,
+    or decrypt failure → fail closed. Never falls back to Owner env credentials,
+    parent Level-1 credentials, or sibling caches.
+    """
+    from app.db.models import OrgPrincipal
+    from app.services.secret_box import decrypt_secret
+
+    row: OrgPrincipal | None = None
+    if principal_id is not None:
+        row = await session.get(OrgPrincipal, int(principal_id))
+    elif pg_username:
+        from sqlalchemy import func, select
+
+        uname = str(pg_username).strip().lower()
+        row = (
+            await session.execute(
+                select(OrgPrincipal).where(
+                    func.lower(OrgPrincipal.pg_username) == uname
+                )
+            )
+        ).scalar_one_or_none()
+    if row is None or str(row.status) != "active":
+        raise PasarGuardError(
+            "Principal فعال با هویت پاسارگارد یافت نشد. "
+            "علت محتمل: Principal حذف/غیرفعال شده. "
+            "راه حل: با ادمین اصلی تماس بگیرید."
+        )
+    try:
+        depth = int(row.depth)
+    except (TypeError, ValueError):
+        depth = -1
+    if depth not in (1, 2):
+        raise PasarGuardError(
+            "فقط Principal سطح ۱ یا ۲ می‌تواند کلاینت اختصاصی پاسارگارد داشته باشد"
+        )
+    if depth == 2:
+        parent_id = getattr(row, "parent_id", None)
+        if parent_id is None:
+            raise PasarGuardError(
+                "والد Principal سطح ۲ نامعتبر است — دسترسی رد شد"
+            )
+        parent = await session.get(OrgPrincipal, int(parent_id))
+        if (
+            parent is None
+            or str(parent.status) != "active"
+            or int(getattr(parent, "depth", -1) or -1) != 1
+        ):
+            raise PasarGuardError(
+                "والد Principal سطح ۲ غیرفعال است — دسترسی رد شد"
+            )
+    uname = (row.pg_username or "").strip()
+    if not uname:
+        raise PasarGuardError(
+            "هویت پاسارگارد برای این Principal تعریف نشده — دسترسی رد شد"
+        )
+    pid = int(row.id)
+    cache_key = (pid, uname.lower())
+    cached = _pg_principal_cache.get(cache_key)
+    if cached is not None and cached._token:
+        return cached
+    password = decrypt_secret(row.pg_password_enc)
+    if not password:
+        raise PasarGuardError(
+            "رمز پاسارگارد Principal ذخیره نشده. "
+            "علت محتمل: provisioning ناقص یا کلید رمزنگاری تغییر کرده. "
+            "راه حل: ادمین اصلی Principal را دوباره provision کند."
+        )
+    client = PasarGuardClient(username=uname, password=password)
+    # Local plaintext reference must not outlive token acquisition.
+    password = ""
+    await client.ensure_token()
+    for stale_key in [k for k in _pg_principal_cache if k[0] == pid and k != cache_key]:
+        _pg_principal_cache.pop(stale_key, None)
+    _pg_principal_cache[cache_key] = client
     return client
 
 

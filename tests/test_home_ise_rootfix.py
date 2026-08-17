@@ -179,17 +179,19 @@ class PanelRedirectAndSecretTests(unittest.TestCase):
         from app.services import setup_wizard
 
         with (
-            patch.object(setup_wizard, "_env_get", return_value="change-me"),
+            patch.object(setup_wizard, "_existing_valid_web_secret", return_value=""),
             patch.object(
                 setup_wizard,
                 "update_env_keys",
                 side_effect=OSError("read-only fs"),
             ),
         ):
-            secret = setup_wizard.ensure_web_secret()
-        self.assertTrue(secret)
-        self.assertNotEqual(secret, "change-me")
-        self.assertGreaterEqual(len(secret), 32)
+            with self.assertRaises(setup_wizard.WebSecretPersistenceError) as ctx:
+                setup_wizard.ensure_web_secret()
+        msg = str(ctx.exception)
+        self.assertIn("WEB_SECRET", msg)
+        self.assertNotIn("change-me", msg)
+        self.assertNotIn("read-only fs", msg.lower())
 
     def test_home_action_center_entries_render(self):
         """Jinja ``ac.items`` would call dict.items — must use ``entries`` key."""

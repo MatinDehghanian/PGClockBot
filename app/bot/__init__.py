@@ -32,6 +32,47 @@ class _BlockPlatformAdminOnResellerBot(BaseMiddleware):
         return await handler(event, data)
 
 
+class _RequireBotOwnerPrincipal(BaseMiddleware):
+    """H4 — admin routers require explicit Owner Principal (not role alone).
+
+    Shop bots are already blocked by ``_BlockPlatformAdminOnResellerBot``.
+    Callback/message tampering by non-Owner candidates is denied here.
+    """
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any],
+    ) -> Any:
+        if data.get("is_reseller_bot"):
+            return None
+        from app.bot.auth import is_bot_owner_principal
+
+        ok = await is_bot_owner_principal(
+            data.get("session"),
+            data.get("db_user"),
+            is_reseller_bot=bool(data.get("is_reseller_bot")),
+        )
+        if not ok:
+            from aiogram.types import CallbackQuery, Message
+
+            if isinstance(event, CallbackQuery):
+                try:
+                    await event.answer("دسترسی مالک سیستم لازم است", show_alert=True)
+                except Exception:
+                    pass
+                return None
+            if isinstance(event, Message):
+                try:
+                    await event.answer("دسترسی مالک سیستم لازم است.")
+                except Exception:
+                    pass
+                return None
+            return None
+        return await handler(event, data)
+
+
 def create_bot(token: str | None = None) -> Bot:
     settings = get_settings()
     return Bot(
@@ -90,13 +131,21 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(admin.router)
 
     block = _BlockPlatformAdminOnResellerBot()
+    owner_gate = _RequireBotOwnerPrincipal()
     for r in (
         admin.router,
         admin_backup.router,
         admin_settings.router,
+        admin_plans.router,
+    ):
+        r.message.middleware(block)
+        r.callback_query.middleware(block)
+        r.message.middleware(owner_gate)
+        r.callback_query.middleware(owner_gate)
+    # Phase 4G — migrated PG families: shop-bot block only (Principal gate inside handlers).
+    for r in (
         admin_pg_users.router,
         admin_pg_nodes.router,
-        admin_plans.router,
     ):
         r.message.middleware(block)
         r.callback_query.middleware(block)

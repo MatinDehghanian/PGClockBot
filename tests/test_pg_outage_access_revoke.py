@@ -118,8 +118,8 @@ class PgStaffOutageDoesNotRevokeTests(unittest.IsolatedAsyncioTestCase):
                 session=None, pg_username=f"outage_probe_{id(self)}"
             )
 
-        self.assertTrue(allowed)
-        self.assertIsNone(err)
+        self.assertFalse(allowed)
+        self.assertIsNotNone(err)
         mock_revoke.assert_not_called()
 
     async def test_enforce_web_gate_revokes_on_confirmed_missing(self):

@@ -66,7 +66,19 @@ class PlatformIdentityHelperTests(unittest.TestCase):
     def test_shop_scope_delegates(self):
         from app.services.shop_scope import is_platform_admin as web_admin
 
-        self.assertTrue(web_admin({"role": "admin"}))
+        # Phase 1G: shop platform privilege requires explicit Owner Principal.
+        self.assertFalse(web_admin({"role": "admin"}))
+        self.assertTrue(
+            web_admin(
+                {
+                    "role": "admin",
+                    "org_principal_id": 1,
+                    "org_depth": 0,
+                    "org_parent_id": None,
+                    "org_status": "active",
+                }
+            )
+        )
         self.assertFalse(web_admin({"role": "pg_staff"}))
 
     def test_synthetic_telegram_ids(self):

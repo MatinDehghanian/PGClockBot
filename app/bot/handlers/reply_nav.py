@@ -636,8 +636,15 @@ async def open_pg_home(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
-    if is_reseller_bot or db_user.role != Role.ADMIN.value:
-        await message.answer("دسترسی ندارید.")
+    from app.bot.auth import OWNER_REQUIRED_MESSAGE, bot_may_open_pg_hub
+
+    if is_reseller_bot:
+        await _refuse_admin(message)
+        return
+    if not await bot_may_open_pg_hub(
+        session, db_user, is_reseller_bot=is_reseller_bot
+    ):
+        await message.answer(OWNER_REQUIRED_MESSAGE + ".")
         return
     await nav.show_nav_keyboard(
         message,
@@ -662,8 +669,9 @@ async def open_admin_users_hub(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
-    if is_reseller_bot or db_user.role != Role.ADMIN.value:
-        await message.answer("دسترسی ندارید.")
+    if not await _deny_unless_owner(
+        message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
         return
     from sqlalchemy import func
     from app.db.models import Order
@@ -699,8 +707,9 @@ async def open_admin_resellers_hub(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
-    if is_reseller_bot or db_user.role != Role.ADMIN.value:
-        await message.answer("دسترسی ندارید.")
+    if not await _deny_unless_owner(
+        message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
         return
     await nav.show_nav_keyboard(
         message,
@@ -730,8 +739,9 @@ async def open_admin_settings_hub(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
-    if is_reseller_bot or db_user.role != Role.ADMIN.value:
-        await message.answer("دسترسی ندارید.")
+    if not await _deny_unless_owner(
+        message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
         return
     await nav.show_nav_keyboard(
         message,
@@ -758,8 +768,9 @@ async def open_admin_backup_hub(
     from app.bot.handlers import admin_backup as backup_h
     from app.services.backup import list_backups
 
-    if is_reseller_bot or db_user.role != Role.ADMIN.value:
-        await _refuse_admin(message)
+    if not await _deny_unless_owner(
+        message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
         return
     await nav.show_nav_keyboard(
         message,
@@ -786,8 +797,9 @@ async def open_admin_broadcast_hub(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
-    if is_reseller_bot or db_user.role != Role.ADMIN.value:
-        await _refuse_admin(message)
+    if not await _deny_unless_owner(
+        message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
         return
     await nav.show_nav_keyboard(
         message,
@@ -809,8 +821,9 @@ async def open_admin_plans_hub(
     push: bool = True,
     is_reseller_bot: bool = False,
 ) -> None:
-    if is_reseller_bot or db_user.role != Role.ADMIN.value:
-        await _refuse_admin(message)
+    if not await _deny_unless_owner(
+        message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
         return
     await state.set_state(None)
     await state.update_data(_adm_plans_aud=None, _adm_plans_kind=None)
@@ -946,8 +959,9 @@ async def open_admin_home(
 ) -> None:
     from app.version import __version__ as local_version
 
-    if is_reseller_bot or db_user.role != Role.ADMIN.value:
-        await message.answer("دسترسی ندارید.")
+    if not await _deny_unless_owner(
+        message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
         return
     await nav.show_nav_keyboard(
         message,
@@ -988,6 +1002,46 @@ async def _refuse_admin(message: Message) -> None:
     await message.answer("دسترسی ادمین فقط روی ربات اصلی پلتفرم مجاز است.")
 
 
+async def _deny_unless_owner(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool = False,
+) -> bool:
+    """Phase 4G — reply-nav Owner gate (same Principal as admin callbacks)."""
+    from app.bot.auth import OWNER_REQUIRED_MESSAGE, is_bot_owner_principal
+
+    if is_reseller_bot:
+        await _refuse_admin(message)
+        return False
+    if not await is_bot_owner_principal(
+        session, db_user, is_reseller_bot=is_reseller_bot
+    ):
+        await message.answer(OWNER_REQUIRED_MESSAGE + ".")
+        return False
+    return True
+
+
+# Platform-plan reply keys used to skip the hub opener. Must still be Owner-only
+# even if L2/L1 forges the keyboard action (Phase 5D).
+_OWNER_ONLY_REPLY_ACTIONS = frozenset(
+    {
+        kb.REPLY_ACTION_ADM_PLANS_AUD_USERS,
+        kb.REPLY_ACTION_ADM_PLANS_AUD_RESELLERS,
+        kb.REPLY_ACTION_ADM_PLANS_ADD,
+        kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED,
+        kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM,
+        kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL,
+        kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_WHOLESALE,
+        kb.REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED,
+        kb.REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG,
+        kb.REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_VOL,
+        kb.REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_USERS,
+    }
+)
+
+
 async def _soft_admin(
     message: Message,
     session: AsyncSession,
@@ -997,14 +1051,20 @@ async def _soft_admin(
     *,
     is_reseller_bot: bool = False,
 ) -> None:
+    from app.bot.auth import is_migrated_pg_soft_callback
     from app.bot.handlers import admin as admin_h
     from app.bot.handlers import admin_backup as backup_h
     from app.bot.handlers import admin_plans as plans_h
     from app.bot.handlers import admin_settings as settings_h
 
-    if is_reseller_bot or db_user.role != Role.ADMIN.value:
+    if is_reseller_bot:
         await _refuse_admin(message)
         return
+    if not is_migrated_pg_soft_callback(data):
+        if not await _deny_unless_owner(
+            message, session, db_user, is_reseller_bot=is_reseller_bot
+        ):
+            return
     bubble = await message.answer("⏳")
     cb = _SoftCallback(bubble, data)
     try:
@@ -1021,69 +1081,89 @@ async def _soft_admin(
         elif data.startswith("adm:plans:kind:"):
             await plans_h.plans_kind_cb(cb, session, db_user, state)
         elif data == "adm:plan:add":
-            await admin_h.adm_plan_add(cb, state, db_user)
+            await admin_h.adm_plan_add(cb, state, db_user, session=session)
         elif data == "adm:st:sub:service:custom":
             await settings_h.settings_sub(cb, session, db_user)
         elif data == "adm:st:sub:service:trial":
             await settings_h.settings_sub(cb, session, db_user)
         elif data == "adm:pg":
-            await admin_h.adm_pg(cb, db_user)
+            from app.bot.handlers import admin_pg_users as pg_users_h
+
+            await pg_users_h.adm_pg(
+                cb, db_user, session=session, is_reseller_bot=is_reseller_bot
+            )
         elif data == "adm:pg:stats":
-            await admin_h.pg_stats(cb, db_user)
+            await admin_h.pg_stats(cb, db_user, session=session)
         elif data == "adm:pg:nodes":
             from app.bot.handlers import admin_pg_nodes as pg_nodes_h
 
-            await pg_nodes_h.pg_nodes(cb, db_user)
+            await pg_nodes_h.pg_nodes(
+                cb, db_user, session=session, is_reseller_bot=is_reseller_bot
+            )
         elif data == "adm:pg:group":
-            await admin_h.adm_pg_group_hint(cb, db_user)
+            from app.bot.handlers import admin_pg_users as pg_users_h
+
+            await pg_users_h.adm_pg_group_hint(
+                cb, db_user, session=session, is_reseller_bot=is_reseller_bot
+            )
         elif data == "adm:pg:template":
-            await admin_h.adm_pg_template_hint(cb, db_user)
+            from app.bot.handlers import admin_pg_users as pg_users_h
+
+            await pg_users_h.adm_pg_template_hint(
+                cb, db_user, session=session, is_reseller_bot=is_reseller_bot
+            )
         elif data == "adm:pg:users":
             from app.bot.handlers import admin_pg_users as pg_users_h
 
-            await pg_users_h.pg_users_list(cb, state, db_user)
+            await pg_users_h.pg_users_list(
+                cb, state, db_user, session=session, is_reseller_bot=is_reseller_bot
+            )
         elif data == "adm:pg:search":
             from app.bot.handlers import admin_pg_users as pg_users_h
 
-            await pg_users_h.pg_search_start(cb, state, db_user)
+            await pg_users_h.pg_search_start(
+                cb, state, db_user, session=session, is_reseller_bot=is_reseller_bot
+            )
         elif data == "adm:pg:create":
             from app.bot.handlers import admin_pg_users as pg_users_h
 
-            await pg_users_h.pg_create_menu(cb, state, db_user)
+            await pg_users_h.pg_create_menu(
+                cb, state, db_user, session=session, is_reseller_bot=is_reseller_bot
+            )
         elif data == "adm:users:list:0":
             await admin_h.adm_users_list(cb, session, db_user)
         elif data == "adm:users:search":
-            await admin_h.adm_users_search_start(cb, state, db_user)
+            await admin_h.adm_users_search_start(cb, state, db_user, session=session)
         elif data == "adm:users:webhint":
-            await admin_h.adm_users_webhint(cb, db_user)
+            await admin_h.adm_users_webhint(cb, db_user, session=session)
         elif data == "adm:resellers:list:0":
             await admin_h.adm_resellers_list(cb, session, db_user)
         elif data == "adm:resapp:list":
             await admin_h.adm_resapp_list(cb, session, db_user)
         elif data == "adm:resellers:add":
-            await admin_h.adm_resellers_add(cb, state, db_user)
+            await admin_h.adm_resellers_add(cb, state, db_user, session=session)
         elif data.startswith("adm:st:sec:"):
             await settings_h.settings_section(cb, session, db_user)
         elif data == "adm:dash":
             await admin_h.adm_dash(cb, session, db_user)
         elif data == "adm:resellers":
-            await admin_h.adm_resellers(cb, db_user, state)
+            await admin_h.adm_resellers(cb, db_user, state, session=session)
         elif data == "adm:backup":
-            await backup_h.backup_hub(cb, db_user, state)
+            await backup_h.backup_hub(cb, db_user, state, session=session)
         elif data == "adm:backup:create":
-            await backup_h.backup_create(cb, db_user)
+            await backup_h.backup_create(cb, db_user, session=session)
         elif data == "adm:backup:create:noenv":
-            await backup_h.backup_create(cb, db_user)
+            await backup_h.backup_create(cb, db_user, session=session)
         elif data == "adm:backup:upload":
-            await backup_h.backup_upload_ask(cb, db_user, state)
+            await backup_h.backup_upload_ask(cb, db_user, state, session=session)
         elif data == "adm:broadcast":
             # Audience is chosen on reply keyboard (open_broadcast_hub)
             await bubble.edit_text("مخاطب را از کیبورد پایین انتخاب کنید.")
         elif data.startswith("adm:broadcast:aud:"):
-            await admin_h.adm_broadcast_audience(cb, db_user, state)
+            await admin_h.adm_broadcast_audience(cb, db_user, state, session=session)
         elif data == "adm:settings":
             if state is not None:
-                await settings_h.settings_hub(cb, state, db_user)
+                await settings_h.settings_hub(cb, state, db_user, session=session)
             else:
                 await bubble.edit_text("⚙️ تنظیمات را از کیبورد پایین انتخاب کنید.")
         else:
@@ -1159,6 +1239,11 @@ async def handle_back(
             message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
         )
         return
+    if level in {nav.NAV_ADMIN_PLANS_ADD_TYPE, nav.NAV_ADMIN_PLANS_KIND}:
+        if not await _deny_unless_owner(
+            message, session, db_user, is_reseller_bot=is_reseller_bot
+        ):
+            return
     if level == nav.NAV_ADMIN_PLANS_ADD_TYPE:
         aud = (await state.get_data()).get("_adm_plans_aud") or "users"
         await state.update_data(_adm_plans_kind=None)
@@ -1637,6 +1722,12 @@ async def reply_main_nav(
             reseller_owner_id=reseller_owner_id,
         )
         return
+
+    if action in _OWNER_ONLY_REPLY_ACTIONS:
+        if not await _deny_unless_owner(
+            message, session, db_user, is_reseller_bot=is_reseller_bot
+        ):
+            return
 
     if action == kb.REPLY_ACTION_SHOP:
         await open_shop_list(message, session, db_user, state)

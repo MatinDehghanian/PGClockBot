@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Plan
+from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
 
 
 def _q(msg: str) -> str:
@@ -26,6 +27,19 @@ def _redirect_user(user_id: int, *, ok: str | None = None, err: str | None = Non
     return RedirectResponse(f"/users?{'&'.join(qs)}", status_code=303)
 
 
+async def _require_scoped_user(
+    session: AsyncSession, staff: dict, user_id: int
+) -> BotUser | RedirectResponse:
+    user = await session.get(BotUser, int(user_id))
+    if not user:
+        return RedirectResponse(f"/users?err={_q('کاربر یافت نشد')}", status_code=303)
+    try:
+        assert_bot_user_in_scope(staff, user)
+    except ShopScopeError as e:
+        return RedirectResponse(f"/users?err={_q(e.message)}", status_code=303)
+    return user
+
+
 def register_user_pages(app, *, render, require_admin, get_db) -> None:
     @app.get("/users/{user_id}/edit", response_class=HTMLResponse)
     async def user_edit_page(
@@ -37,9 +51,10 @@ def register_user_pages(app, *, render, require_admin, get_db) -> None:
         from app.services.bot_user_admin import list_service_snapshots, list_wallet_txs
         from app.services.formatting import format_toman
 
-        user = await session.get(BotUser, int(user_id))
-        if not user:
-            return RedirectResponse(f"/users?err={_q('کاربر یافت نشد')}", status_code=303)
+        loaded = await _require_scoped_user(session, staff, user_id)
+        if isinstance(loaded, RedirectResponse):
+            return loaded
+        user = loaded
 
         snaps = await list_service_snapshots(session, int(user_id))
         wallet_txs = await list_wallet_txs(session, int(user_id), limit=20)
@@ -77,9 +92,10 @@ def register_user_pages(app, *, render, require_admin, get_db) -> None:
         from app.services.bot_user_admin import admin_credit_user_wallet
         from app.services.notifications import actor_label_from_staff
 
-        user = await session.get(BotUser, int(user_id))
-        if not user:
-            return RedirectResponse(f"/users?err={_q('کاربر یافت نشد')}", status_code=303)
+        loaded = await _require_scoped_user(session, staff, user_id)
+        if isinstance(loaded, RedirectResponse):
+            return loaded
+        user = loaded
         form = await request.form()
         from app.services.numbers import parse_int
 
@@ -110,6 +126,10 @@ def register_user_pages(app, *, render, require_admin, get_db) -> None:
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.bot_user_admin import admin_renew_service, get_owned_service
+
+        loaded = await _require_scoped_user(session, staff, user_id)
+        if isinstance(loaded, RedirectResponse):
+            return loaded
 
         form = await request.form()
         try:
@@ -155,6 +175,10 @@ def register_user_pages(app, *, render, require_admin, get_db) -> None:
     ):
         from app.services.bot_user_admin import admin_extend_service, get_owned_service
 
+        loaded = await _require_scoped_user(session, staff, user_id)
+        if isinstance(loaded, RedirectResponse):
+            return loaded
+
         form = await request.form()
         try:
             svc = await get_owned_service(
@@ -191,6 +215,14 @@ def register_user_pages(app, *, render, require_admin, get_db) -> None:
         from fastapi.responses import JSONResponse
 
         from app.services.bot_user_admin import get_owned_service, service_snapshot
+
+        user = await session.get(BotUser, int(user_id))
+        if not user:
+            return JSONResponse({"ok": False, "error": "کاربر یافت نشد"}, status_code=404)
+        try:
+            assert_bot_user_in_scope(staff, user)
+        except ShopScopeError as e:
+            return JSONResponse({"ok": False, "error": e.message}, status_code=403)
 
         try:
             svc = await get_owned_service(

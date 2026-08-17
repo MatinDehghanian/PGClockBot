@@ -444,6 +444,15 @@ def enrich_staff_pg_from_role(user: dict, features: list[str], role: dict | None
         out["pg_actions"] = map_pg_role_actions(role)
         out["pg_user_actions"] = role_user_actions(role)
         out["pg_access"] = role_access_limits(role)
+        name = role.get("name")
+        if isinstance(name, str) and name.strip():
+            out["pg_role_name"] = name.strip()
+        rid = role.get("id")
+        if rid is not None and out.get("pg_role_id") is None:
+            try:
+                out["pg_role_id"] = int(rid)
+            except (TypeError, ValueError):
+                pass
     return out
 
 
@@ -457,14 +466,34 @@ def staff_pg_writes(staff: dict) -> dict[str, bool]:
 
 
 def staff_pg_action(staff: dict, resource: str, action: str) -> bool:
-    """True when staff may perform the exact PG action on a resource."""
-    from app.services.authz import authz_from_staff, can_pg_action
+    """True when staff may perform the exact PG action on a resource.
 
+    Phase 2C/3D: Level-1 and Level-2 Principals also pass local-safety
+    (never Owner-grade ops) and fail closed when PG identity/capabilities
+    are not ready.
+    """
+    from app.services.authz import authz_from_staff, can_pg_action
+    from app.services.principal_pg_authz import (
+        is_level1_principal_staff,
+        local_safety_allows_pg_action,
+        principal_pg_authz_ready,
+    )
+
+    if is_level1_principal_staff(staff) and not principal_pg_authz_ready(staff):
+        return False
+    if is_level1_principal_staff(staff) and not local_safety_allows_pg_action(
+        staff, resource, action
+    ):
+        return False
     return can_pg_action(authz_from_staff(staff), resource, action)
 
 
 def staff_user_actions(staff: dict) -> dict[str, bool]:
     from app.services.authz import authz_from_staff, can_pg_user_action
+    from app.services.principal_pg_authz import (
+        is_level1_principal_staff,
+        local_safety_allows_pg_action,
+    )
 
     ctx = authz_from_staff(staff)
     keys = (
@@ -477,4 +506,9 @@ def staff_user_actions(staff: dict) -> dict[str, bool]:
         "disable",
         "enable",
     )
-    return {k: can_pg_user_action(ctx, k) for k in keys}
+    out = {k: can_pg_user_action(ctx, k) for k in keys}
+    if is_level1_principal_staff(staff):
+        for k in list(out.keys()):
+            if out[k] and not local_safety_allows_pg_action(staff, "users", k):
+                out[k] = False
+    return out

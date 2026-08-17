@@ -23,9 +23,24 @@ from app.services.shop_scope import (
 
 
 class ShopOwnerIdTests(unittest.TestCase):
+    def _owner(self, **extra):
+        staff = {
+            "role": "admin",
+            "org_principal_id": 1,
+            "org_depth": 0,
+            "org_parent_id": None,
+            "org_status": "active",
+            "bot_user_id": 99,
+        }
+        staff.update(extra)
+        return staff
+
     def test_admin_has_no_shop_id(self):
+        # Bare role=admin is not platform; explicit Owner has None shop id.
         self.assertIsNone(shop_owner_id({"role": "admin", "bot_user_id": 99}))
-        self.assertTrue(is_platform_admin({"role": "admin"}))
+        self.assertFalse(is_platform_admin({"role": "admin"}))
+        self.assertIsNone(shop_owner_id(self._owner()))
+        self.assertTrue(is_platform_admin(self._owner()))
 
     def test_reseller_with_id(self):
         self.assertEqual(shop_owner_id({"role": "reseller", "bot_user_id": 42}), 42)
@@ -46,16 +61,21 @@ class ShopOwnerIdTests(unittest.TestCase):
             require_shop_owner_id({"role": "reseller"})
         with self.assertRaises(ShopScopeError):
             require_shop_owner_id({"role": "admin"})
+        with self.assertRaises(ShopScopeError):
+            require_shop_owner_id(self._owner())
         self.assertEqual(require_shop_owner_id({"role": "reseller", "bot_user_id": 7}), 7)
 
     def test_assert_order_in_scope(self):
         order = SimpleNamespace(reseller_id=7)
-        assert_order_in_scope({"role": "admin"}, order)
+        assert_order_in_scope(self._owner(), order)
         assert_order_in_scope({"role": "reseller", "bot_user_id": 7}, order)
         with self.assertRaises(ShopScopeError):
             assert_order_in_scope({"role": "reseller", "bot_user_id": 8}, order)
         with self.assertRaises(ShopScopeError):
             assert_order_in_scope({"role": "pg_staff"}, order)
+        with self.assertRaises(ShopScopeError):
+            # Bare admin is not platform — deny
+            assert_order_in_scope({"role": "admin"}, order)
         with self.assertRaises(ShopScopeError):
             # NULL reseller_id is platform/admin shop — never match missing staff scope
             assert_order_in_scope(
@@ -71,19 +91,31 @@ class ShopOwnerIdTests(unittest.TestCase):
 
 
 class CatalogIsolationTests(unittest.TestCase):
+    def _owner(self):
+        return {
+            "role": "admin",
+            "org_principal_id": 1,
+            "org_depth": 0,
+            "org_parent_id": None,
+            "org_status": "active",
+        }
+
     def test_catalog_owner_id(self):
-        self.assertIsNone(catalog_owner_id({"role": "admin"}))
+        self.assertIsNone(catalog_owner_id(self._owner()))
+        self.assertIsNone(catalog_owner_id({"role": "admin"}))  # bare → no platform
         self.assertEqual(catalog_owner_id({"role": "reseller", "bot_user_id": 3}), 3)
         self.assertIsNone(catalog_owner_id({"role": "pg_staff"}))
         self.assertIsNone(catalog_owner_id({"role": "reseller", "bot_user_id": 0}))
 
     def test_require_catalog_write(self):
-        self.assertIsNone(require_catalog_owner_id({"role": "admin"}))
+        self.assertIsNone(require_catalog_owner_id(self._owner()))
         self.assertEqual(require_catalog_owner_id({"role": "reseller", "bot_user_id": 9}), 9)
         with self.assertRaises(ShopScopeError):
             require_catalog_owner_id({"role": "pg_staff"})
         with self.assertRaises(ShopScopeError):
             require_catalog_owner_id({"role": "reseller"})
+        with self.assertRaises(ShopScopeError):
+            require_catalog_owner_id({"role": "admin"})
 
     def test_filter_fails_closed_for_pg_staff(self):
         q = MagicMock()
@@ -105,16 +137,25 @@ class CatalogIsolationTests(unittest.TestCase):
     def test_filter_admin_platform_only(self):
         q = MagicMock()
         q.where = MagicMock(return_value="ok")
-        apply_catalog_owner_filter(q, {"role": "admin"})
+        apply_catalog_owner_filter(q, self._owner())
         expr = str(q.where.call_args[0][0]).lower()
         self.assertIn("owner_reseller_id", expr)
         self.assertIn("is null", expr)
 
+    def test_bare_admin_catalog_not_platform(self):
+        q = MagicMock()
+        q.where = MagicMock(return_value="empty")
+        apply_catalog_owner_filter(q, {"role": "admin"})
+        # Fail closed — not platform IS NULL filter
+        expr = str(q.where.call_args[0][0]).lower().replace('"', "")
+        self.assertIn("plans.id", expr)
+
     def test_plan_belongs_to_staff(self):
         platform = SimpleNamespace(owner_reseller_id=None)
         shop = SimpleNamespace(owner_reseller_id=5)
-        self.assertTrue(plan_belongs_to_staff(platform, {"role": "admin"}))
-        self.assertFalse(plan_belongs_to_staff(shop, {"role": "admin"}))
+        self.assertTrue(plan_belongs_to_staff(platform, self._owner()))
+        self.assertFalse(plan_belongs_to_staff(shop, self._owner()))
+        self.assertFalse(plan_belongs_to_staff(platform, {"role": "admin"}))
         self.assertTrue(plan_belongs_to_staff(shop, {"role": "reseller", "bot_user_id": 5}))
         self.assertFalse(plan_belongs_to_staff(platform, {"role": "reseller", "bot_user_id": 5}))
         self.assertFalse(plan_belongs_to_staff(platform, {"role": "pg_staff"}))

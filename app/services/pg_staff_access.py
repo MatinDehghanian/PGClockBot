@@ -32,6 +32,10 @@ from app.services.web_auth import (
 PG_ACCESS_DENIED_MSG = (
     "دسترسی وب‌پنل برای شما فعال نیست. با ادمین اصلی تماس بگیرید."
 )
+# Phase 1F M3 — PG identity/authorization cannot be resolved safely.
+PG_UNAVAILABLE_MSG = (
+    "ارتباط با پاسارگارد برقرار نیست — تا برقراری ارتباط، ورود/دسترسی مسدود است."
+)
 
 PgAdminGate = Literal["ok", "disabled", "missing", "unreachable"]
 
@@ -107,8 +111,9 @@ async def enforce_pg_admin_web_gate(
     if gate == "ok":
         result: tuple[bool, str | None] = (True, None)
     elif gate == "unreachable":
-        # Don't lock everyone out if PasarGuard is temporarily down
-        result = (True, None)
+        # M3: cannot safely resolve PG identity → deny access (do NOT revoke).
+        # Never convert outage into allow / unrestricted menus.
+        result = (False, PG_UNAVAILABLE_MSG)
     else:
         if gate == "missing" and revoke_if_missing:
             try:

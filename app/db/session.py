@@ -4,7 +4,7 @@ import logging
 import os
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy import event, text
+from sqlalchemy import event
 
 from app.config import get_settings
 from app.db import Base
@@ -40,7 +40,12 @@ if _engine_info.is_sqlite:
     @event.listens_for(engine.sync_engine, "connect")
     def _sqlite_on_connect(dbapi_conn, _connection_record) -> None:
         cursor = dbapi_conn.cursor()
+        # These PRAGMAs must not run inside SQLAlchemy's transaction
+        # (SQLite rejects journal_mode / synchronous mid-transaction).
         cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.close()
         # bot.db holds encrypted PasarGuard passwords, session data, etc.
         # DATA_DIR is already 0700, but pin the file itself too — belt and
@@ -80,7 +85,7 @@ async def init_db() -> None:
 
     if has_tables and not has_alembic:
         # Existing production DB created before Alembic — apply legacy additive
-        # migrations once, then stamp baseline so future changes use Alembic.
+        # migrations once, then stamp head only if Phase 1–3 objects exist.
         log.warning(
             "Existing database without alembic_version — applying legacy "
             "compatibility migrator then stamping Alembic head"
@@ -88,11 +93,8 @@ async def init_db() -> None:
         async with engine.begin() as conn:
             await conn.run_sync(_migrate_sqlite_legacy)
             if _engine_info.is_sqlite:
-                await conn.execute(text("PRAGMA journal_mode=WAL"))
-                await conn.execute(text("PRAGMA busy_timeout=30000"))
-                await conn.execute(text("PRAGMA synchronous=NORMAL"))
-                await conn.execute(text("PRAGMA foreign_keys=ON"))
                 await conn.run_sync(_ensure_indexes)
+            await conn.run_sync(_assert_ready_to_stamp_head)
         stamp_head(_db_url)
     else:
         # Fresh DB or already under Alembic — upgrade to head (no create_all).
@@ -122,10 +124,6 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(_migrate_sqlite_legacy)
         if _engine_info.is_sqlite:
-            await conn.execute(text("PRAGMA journal_mode=WAL"))
-            await conn.execute(text("PRAGMA busy_timeout=30000"))
-            await conn.execute(text("PRAGMA synchronous=NORMAL"))
-            await conn.execute(text("PRAGMA foreign_keys=ON"))
             await conn.run_sync(_ensure_indexes)
 
 
@@ -276,6 +274,124 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
             )
         )
 
+    if not insp.has_table("org_principals"):
+        sync_conn.execute(
+            sql_text(
+                """
+                CREATE TABLE org_principals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    parent_id INTEGER REFERENCES org_principals(id),
+                    depth INTEGER NOT NULL,
+                    status VARCHAR(32) DEFAULT 'active' NOT NULL,
+                    pg_username VARCHAR(128),
+                    reseller_profile_id INTEGER REFERENCES reseller_profiles(id),
+                    pg_staff_id INTEGER REFERENCES pg_staff_access(id),
+                    bot_user_id INTEGER REFERENCES bot_users(id),
+                    pg_password_enc TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        sync_conn.execute(
+            sql_text(
+                "CREATE INDEX IF NOT EXISTS ix_org_principals_parent_id "
+                "ON org_principals (parent_id)"
+            )
+        )
+        sync_conn.execute(
+            sql_text(
+                "CREATE INDEX IF NOT EXISTS ix_org_principals_depth "
+                "ON org_principals (depth)"
+            )
+        )
+        sync_conn.execute(
+            sql_text(
+                "CREATE INDEX IF NOT EXISTS ix_org_principals_status "
+                "ON org_principals (status)"
+            )
+        )
+        sync_conn.execute(
+            sql_text(
+                "CREATE INDEX IF NOT EXISTS ix_org_principals_pg_username "
+                "ON org_principals (pg_username)"
+            )
+        )
+        sync_conn.execute(
+            sql_text(
+                "CREATE INDEX IF NOT EXISTS ix_org_principals_bot_user_id "
+                "ON org_principals (bot_user_id)"
+            )
+        )
+        sync_conn.execute(
+            sql_text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_org_principals_reseller_profile "
+                "ON org_principals (reseller_profile_id) "
+                "WHERE reseller_profile_id IS NOT NULL"
+            )
+        )
+        sync_conn.execute(
+            sql_text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_org_principals_pg_staff "
+                "ON org_principals (pg_staff_id) "
+                "WHERE pg_staff_id IS NOT NULL"
+            )
+        )
+        sync_conn.execute(
+            sql_text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_org_principals_bot_user_id "
+                "ON org_principals (bot_user_id) "
+                "WHERE bot_user_id IS NOT NULL"
+            )
+        )
+        insp.clear_cache() if hasattr(insp, "clear_cache") else None
+
+    if insp.has_table("org_principals"):
+        ocols = {c["name"] for c in insp.get_columns("org_principals")}
+        if "pg_password_enc" not in ocols:
+            sync_conn.execute(
+                sql_text("ALTER TABLE org_principals ADD COLUMN pg_password_enc TEXT")
+            )
+            insp.clear_cache() if hasattr(insp, "clear_cache") else None
+        _ensure_org_principal_aux_tables(sync_conn)
+        _seed_owner_if_no_depth0(sync_conn)
+        # Phase 5B / 6A — unique Telegram bind (NULLs remain unbound).
+        # Idempotent with Alembic 0017 (IF NOT EXISTS).
+        sync_conn.execute(
+            sql_text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_org_principals_bot_user_id "
+                "ON org_principals (bot_user_id) "
+                "WHERE bot_user_id IS NOT NULL"
+            )
+        )
+
+    # Phase 1E — nullable owner_principal_id on prioritized business resources.
+    # NULL means unresolved (never global). No automatic inventing backfill here.
+    _owner_principal_tables = (
+        ("bot_users", "ix_bot_users_owner_principal_id"),
+        ("orders", "ix_orders_owner_principal_id"),
+        ("tickets", "ix_tickets_owner_principal_id"),
+        ("user_services", "ix_user_services_owner_principal_id"),
+    )
+    for _tbl, _idx in _owner_principal_tables:
+        if not insp.has_table(_tbl):
+            continue
+        _cols = {c["name"] for c in insp.get_columns(_tbl)}
+        if "owner_principal_id" in _cols:
+            continue
+        sync_conn.execute(
+            sql_text(
+                f"ALTER TABLE {_tbl} ADD COLUMN owner_principal_id "
+                "INTEGER REFERENCES org_principals(id)"
+            )
+        )
+        sync_conn.execute(
+            sql_text(
+                f"CREATE INDEX IF NOT EXISTS {_idx} ON {_tbl} (owner_principal_id)"
+            )
+        )
+
     if insp.has_table("pg_staff_access"):
         scols = {c["name"] for c in insp.get_columns("pg_staff_access")}
         if "pg_admin_password_enc" not in scols:
@@ -377,6 +493,75 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
     except Exception:
         _ensure_core_reseller_perms(sync_conn, "reseller_profiles")
         _ensure_core_reseller_perms(sync_conn, "reseller_plans")
+
+
+def _seed_owner_if_no_depth0(sync_conn) -> None:
+    """Insert the first Owner only when no depth-0 row exists (any status).
+
+    A disabled Owner must stay disabled. Never insert a replacement.
+    Duplicate depth-0 rows are left for application fail-closed logic.
+    """
+    from sqlalchemy import text as sql_text
+
+    row = sync_conn.execute(
+        sql_text(
+            "SELECT COUNT(1) FROM org_principals "
+            "WHERE depth = 0 AND parent_id IS NULL"
+        )
+    ).scalar()
+    if row:
+        return
+    sync_conn.execute(
+        sql_text(
+            "INSERT INTO org_principals "
+            "(parent_id, depth, status, pg_username, reseller_profile_id, "
+            "pg_staff_id, bot_user_id) "
+            "VALUES (NULL, 0, 'active', NULL, NULL, NULL, NULL)"
+        )
+    )
+
+
+def _ensure_org_principal_aux_tables(sync_conn) -> None:
+    """Create missing Phase 2A/2B tables without touching existing rows."""
+    from app.db.models import OrgPrincipalProvision, OrgPrincipalWebIdentity
+
+    OrgPrincipalProvision.__table__.create(sync_conn, checkfirst=True)
+    OrgPrincipalWebIdentity.__table__.create(sync_conn, checkfirst=True)
+
+
+def _missing_alembic_head_schema(sync_conn) -> list[str]:
+    """Return required Phase 1–3 objects that are absent (never invent data)."""
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    missing: list[str] = []
+    if not insp.has_table("org_principals"):
+        missing.append("org_principals")
+        return missing
+    cols = {c["name"] for c in insp.get_columns("org_principals")}
+    if "pg_password_enc" not in cols:
+        missing.append("org_principals.pg_password_enc")
+    if not insp.has_table("org_principal_provisions"):
+        missing.append("org_principal_provisions")
+    if not insp.has_table("org_principal_web_identities"):
+        missing.append("org_principal_web_identities")
+    idx_names = {ix.get("name") for ix in insp.get_indexes("org_principals")}
+    if "uq_org_principals_bot_user_id" not in idx_names:
+        missing.append("uq_org_principals_bot_user_id")
+    return missing
+
+
+def _assert_ready_to_stamp_head(sync_conn) -> None:
+    """Refuse to stamp Alembic head when the compatibility migrator is incomplete."""
+    missing = _missing_alembic_head_schema(sync_conn)
+    if not missing:
+        return
+    raise RuntimeError(
+        "Pre-Alembic database is missing required schema after the "
+        "compatibility migrator: "
+        + ", ".join(missing)
+        + ". Refusing to stamp Alembic head as current."
+    )
 
 
 # Backwards-compatible alias used by older tests / callers
