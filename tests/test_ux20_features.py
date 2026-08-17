@@ -188,7 +188,7 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertNotIn("finance-note-form", html)
         self.assertIn("data-receipt-open", html)
         self.assertIn("modal-receipt", html)
-        self.assertIn("receipt-thumb", html)
+        self.assertNotIn('class="receipt-thumb"', html)
         # Shared panel: neutral chrome + count stats with icons (no rates/abandon).
         panel = Path("app/web/templates/_funnel_panel.html").read_text(encoding="utf-8")
         self.assertIn("home-panel-neutral", panel)

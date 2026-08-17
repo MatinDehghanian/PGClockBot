@@ -168,11 +168,6 @@
           <span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}approved{% else %}rejected{% endif %}">
             {{ pay_status(p.status) }}
           </span>
-          {% if p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:') %}
-          <button type="button" class="receipt-thumb-link" data-receipt-open="/payments/{{ p.id }}/receipt" title="مشاهده رسید">
-            <img class="receipt-thumb" src="/payments/{{ p.id }}/receipt" alt="رسید" loading="lazy" />
-          </button>
-          {% endif %}
         </td>
         <td class="col-hide-sm" data-sort-value="{{ p.order_id or 0 }}">{{ p.order_id or "—" }}</td>
         <td class="col-actions">
