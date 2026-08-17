@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "7.6.4": [
+        "نمای کلی پاسارگارد: فاصله تیتر و آیکن باکس‌های آپلود/دانلود زنده با stat-top هماهنگ شد",
+        "بدون مایگریشن؛ ریستور: تگ v7.6.3",
+    ],
     "7.6.3": [
         "سایدبار: حاشیه باکس بزرگ ربات/پاسارگارد برگشت؛ فقط حاشیه آیتم فعال حذف شد (بکگراند ماند)",
         "امنیت: راست‌چین شدن hintهای داخل باکس تغییر رمز و نام کاربری",
