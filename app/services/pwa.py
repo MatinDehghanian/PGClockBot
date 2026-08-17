@@ -279,9 +279,7 @@ def service_worker_js() -> str:
     return """/* PGClockBot panel service worker — static shell only */
 const CACHE = 'pgclock-shell-v3';
 const PRECACHE = [
-  '/static/fonts.css',
   '/static/panel.css',
-  '/static/panel-home.css',
   '/static/logo.png',
   '/static/logo-64.png',
   '/manifest.webmanifest'

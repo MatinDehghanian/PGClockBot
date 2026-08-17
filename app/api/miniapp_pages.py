@@ -482,11 +482,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             raise HTTPException(400, "پلن یافت نشد")
         await session.refresh(user)
         if int(plan.price or 0) > int(user.wallet_balance or 0):
-            need = int(plan.price or 0) - int(user.wallet_balance or 0)
-            raise HTTPException(
-                400,
-                f"موجودی کیف پول کافی نیست — {need} تومان کم دارید. از ربات شارژ کنید.",
-            )
+            raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
             order = await create_order(session, user_id=user.id, plan_id=plan_id)
             await session.refresh(user)
@@ -539,11 +535,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             raise HTTPException(400, "پلن تمدید نامعتبر است")
         await session.refresh(user)
         if int(plan.price or 0) > int(user.wallet_balance or 0):
-            need = int(plan.price or 0) - int(user.wallet_balance or 0)
-            raise HTTPException(
-                400,
-                f"موجودی کیف پول کافی نیست — {need} تومان کم دارید. از ربات شارژ کنید.",
-            )
+            raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
             order = await renew_service_with_plan(
                 session, user_id=user.id, service=svc, plan=plan

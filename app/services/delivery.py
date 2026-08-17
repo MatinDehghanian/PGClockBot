@@ -60,7 +60,6 @@ async def build_delivery_content(
         success = _subscription_success_body(ui, order)
         if success:
             body_parts.append(success)
-        body_parts.append("قدم بعد: از «سرویس‌های من» لینک را کپی کنید یا QR را اسکن کنید.")
         if qty > 1:
             body_parts.append(f"📦 تعداد سرویس تحویل‌شده: <b>{qty}</b>")
             siblings = (

@@ -5,10 +5,8 @@
 {% set ov = overview %}
 {% set bot = ov.bot %}
 {% set nodes = ov.nodes %}
-{% set pulse = pulse or {} %}
-{% set wallet = wallet_card or {} %}
 
-<div class="home-dash" id="home-dash" data-home-live="1">
+<div class="home-dash" id="home-dash">
   {% if dashboard_degraded %}
   <div class="flash warn home-update-banner">
     <div class="home-update-copy">
@@ -25,102 +23,70 @@
     </div>
   </div>
 
-  <section class="card home-pulse tone-{{ pulse.tone or 'neutral' }}" aria-label="وضعیت امروز">
-    <p class="home-pulse-lead">{{ pulse.lead or 'وضعیت امروز' }}</p>
-    <ul class="home-pulse-items">
-      {% for it in pulse.items or [] %}
-      <li><strong>{{ it.n | num }}</strong><span>{{ it.label }}</span></li>
-      {% endfor %}
-    </ul>
-  </section>
-
-  {% include "_home_ops.html" %}
-
-  {% if wallet %}
-  <section class="card home-wallet-card">
-    <header class="home-section-head">
-      <h2>{{ wallet.title or 'کیف پول' }}</h2>
-      {% if wallet.href %}<a class="btn btn-sm btn-ghost" href="{{ wallet.href }}">مالی</a>{% endif %}
-    </header>
-    {% if wallet.balance_fa %}
-    <p class="home-wallet-value">{{ wallet.balance_fa }}</p>
-    {% endif %}
-    <p class="muted home-wallet-hint">{{ wallet.hint }}</p>
-    <div class="home-wallet-meta">
-      {% if wallet.kind == 'platform' %}
-      <span class="badge {% if wallet.wallet_pay %}ok{% else %}neutral{% endif %}">{% if wallet.wallet_pay %}پرداخت فعال{% else %}پرداخت خاموش{% endif %}</span>
-      <span class="badge {% if wallet.pending %}warn{% else %}neutral{% endif %}">{{ wallet.pending | num }} شارژ معلق</span>
-      {% endif %}
-      {% if wallet.suspended %}<span class="badge danger">مسدود</span>{% endif %}
-    </div>
-  </section>
-  {% endif %}
-
   <div class="card home-conn-card">
     <h2>وضعیت اتصال</h2>
     <div class="home-conn-row">
-      <a class="home-conn {% if bot.unchecked %}is-neutral{% elif bot.ok %}is-ok{% else %}is-err{% endif %}" href="/settings?tab=bot" data-live="bot">
+      <a class="home-conn {% if bot.unchecked %}is-neutral{% elif bot.ok %}is-ok{% else %}is-err{% endif %}" href="/settings?tab=bot">
         <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
         <span class="home-conn-text">
           <span class="home-conn-k">ربات</span>
-          <span class="home-conn-cap muted" data-live-cap>
-            {% if bot.unchecked %}در حال بررسی…
+          <span class="home-conn-cap muted">
+            {% if bot.unchecked %}بررسی نشده
             {% elif bot.ok and bot.username %}<span dir="ltr">@{{ bot.username }}</span>
             {% elif bot.error %}{{ bot.error }}
             {% else %}—{% endif %}
           </span>
         </span>
         {% if bot.unchecked %}
-        <span class="badge neutral home-conn-badge" data-live-badge>—</span>
+        <span class="badge neutral home-conn-badge">—</span>
         {% elif bot.ok %}
-        <span class="badge ok home-conn-badge" data-live-badge>متصل</span>
+        <span class="badge ok home-conn-badge">متصل</span>
         {% else %}
-        <span class="badge danger home-conn-badge" data-live-badge>قطع</span>
+        <span class="badge danger home-conn-badge">قطع</span>
         {% endif %}
       </a>
-      <a class="home-conn {% if (pg_health and pg_health.unchecked) %}is-neutral{% elif (pg_health and pg_health.ok) %}is-ok{% else %}is-err{% endif %}" href="/pg" id="home-pg-health" data-live="pg">
+      <a class="home-conn {% if (pg_health and pg_health.unchecked) %}is-neutral{% elif (pg_health and pg_health.ok) %}is-ok{% else %}is-err{% endif %}" href="/pg" id="home-pg-health">
         <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
         <span class="home-conn-text">
           <span class="home-conn-k">پاسارگارد</span>
-          <span class="home-conn-cap muted" id="home-pg-health-cap" data-live-cap>
-            {% if pg_health and pg_health.unchecked %}در حال بررسی…
+          <span class="home-conn-cap muted" id="home-pg-health-cap">
+            {% if pg_health and pg_health.unchecked %}بررسی نشده
             {% elif pg_health and pg_health.ok %}{% if pg_health.version %}v{{ pg_health.version }}{% else %}آنلاین{% endif %}
             {% elif pg_health and pg_health.error %}{{ pg_health.error }}
             {% else %}—{% endif %}
           </span>
         </span>
         {% if pg_health and pg_health.unchecked %}
-        <span class="badge neutral home-conn-badge" id="home-pg-health-badge" data-live-badge>—</span>
+        <span class="badge neutral home-conn-badge" id="home-pg-health-badge">—</span>
         {% elif pg_health and pg_health.ok %}
-        <span class="badge ok home-conn-badge" id="home-pg-health-badge" data-live-badge>متصل</span>
+        <span class="badge ok home-conn-badge" id="home-pg-health-badge">متصل</span>
         {% else %}
-        <span class="badge danger home-conn-badge" id="home-pg-health-badge" data-live-badge>قطع</span>
+        <span class="badge danger home-conn-badge" id="home-pg-health-badge">قطع</span>
         {% endif %}
       </a>
-      <a class="home-conn {% if nodes.unchecked %}is-neutral{% elif nodes.overall == 'ok' %}is-ok{% elif nodes.overall == 'err' %}is-err{% elif nodes.overall == 'warn' %}is-warn{% else %}is-neutral{% endif %}" href="/pg/nodes" data-live="nodes">
+      <a class="home-conn {% if nodes.overall == 'ok' %}is-ok{% elif nodes.overall == 'err' %}is-err{% elif nodes.overall == 'warn' %}is-warn{% else %}is-neutral{% endif %}" href="/pg/nodes">
         <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
         <span class="home-conn-text">
           <span class="home-conn-k">نود</span>
-          <span class="home-conn-cap muted" data-live-cap>
-            {% if nodes.unchecked %}در حال بررسی…
-            {% elif nodes.ok and nodes.total %}{{ nodes.connected }}/{{ nodes.total }}
+          <span class="home-conn-cap muted">
+            {% if nodes.ok and nodes.total %}{{ nodes.connected }}/{{ nodes.total }}
             {% elif nodes.error %}{{ nodes.error }}
             {% else %}ثبت‌نشده{% endif %}
           </span>
         </span>
-        {% if nodes.unchecked %}
-        <span class="badge neutral home-conn-badge" data-live-badge>—</span>
-        {% elif nodes.ok and nodes.overall == 'ok' %}
-        <span class="badge ok home-conn-badge" data-live-badge>آنلاین</span>
+        {% if nodes.ok and nodes.overall == 'ok' %}
+        <span class="badge ok home-conn-badge">آنلاین</span>
         {% elif nodes.ok and nodes.overall == 'warn' %}
-        <span class="badge warn home-conn-badge" data-live-badge>هشدار</span>
+        <span class="badge warn home-conn-badge">هشدار</span>
         {% elif not nodes.ok or nodes.overall == 'err' %}
-        <span class="badge danger home-conn-badge" data-live-badge>قطع</span>
+        <span class="badge danger home-conn-badge">قطع</span>
         {% else %}
-        <span class="badge neutral home-conn-badge" data-live-badge>—</span>
+        <span class="badge neutral home-conn-badge">—</span>
         {% endif %}
       </a>
     </div>
   </div>
+
+  {% include "_home_ops.html" %}
 </div>
 {% endblock %}

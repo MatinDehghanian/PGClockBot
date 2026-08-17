@@ -190,11 +190,3 @@
   {% endif %}
 </nav>
 {%- endmacro %}
-
-{% macro empty_state(title, detail, href='', action='') -%}
-<div class="empty-state">
-  <strong>{{ title }}</strong>
-  {% if detail %}<p class="muted">{{ detail }}</p>{% endif %}
-  {% if href and action %}<a class="btn btn-sm" href="{{ href }}">{{ action }}</a>{% endif %}
-</div>
-{%- endmacro %}

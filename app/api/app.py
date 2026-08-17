@@ -290,9 +290,6 @@ def _panel_redirect(request: Request, path: str, *, status_code: int = 303) -> R
 
 def create_api_app(lifespan=None) -> FastAPI:
     app = FastAPI(title="PGClockBot Panel", docs_url=None, redoc_url=None, lifespan=lifespan)
-    from starlette.middleware.gzip import GZipMiddleware
-
-    app.add_middleware(GZipMiddleware, minimum_size=400)
     class _CachedStatic(StaticFiles):
         async def get_response(self, path, scope):  # type: ignore[override]
             response = await super().get_response(path, scope)
@@ -590,25 +587,12 @@ def create_api_app(lifespan=None) -> FastAPI:
                 request.state.panel_tickets_unread = 0
                 request.state.panel_inbox_alert = False
             else:
-                from app.services.panel_sidebar_cache import (
-                    peek_sidebar_counts,
-                    sidebar_cache_key,
-                    store_sidebar_counts,
+                request.state.panel_tickets_unread = await sidebar_unread_count(session, user)
+                from app.services.panel_inbox import sidebar_inbox_has_alerts
+
+                request.state.panel_inbox_alert = await sidebar_inbox_has_alerts(
+                    session, request, user
                 )
-
-                cache_key = sidebar_cache_key(user)
-                cached = peek_sidebar_counts(cache_key)
-                if cached is not None:
-                    request.state.panel_tickets_unread = cached[0]
-                    request.state.panel_inbox_alert = cached[1]
-                else:
-                    unread = await sidebar_unread_count(session, user)
-                    from app.services.panel_inbox import sidebar_inbox_has_alerts
-
-                    alert = await sidebar_inbox_has_alerts(session, request, user)
-                    store_sidebar_counts(cache_key, unread, alert)
-                    request.state.panel_tickets_unread = unread
-                    request.state.panel_inbox_alert = alert
         except Exception:
             from app.services.db_safe import rollback_quiet
 
@@ -831,9 +815,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             response.headers.setdefault(
                 "Content-Security-Policy",
                 "default-src 'self'; img-src 'self' data: blob:; "
-                "style-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 f"{script_src}; "
-                "font-src 'self' data:; connect-src 'self'; "
+                "font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; "
                 f"{frame_ancestors}; base-uri 'self'; form-action 'self'",
             )
         path = request.url.path

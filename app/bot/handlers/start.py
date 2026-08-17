@@ -4,7 +4,7 @@ from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
@@ -24,26 +24,6 @@ async def _has_services(session: AsyncSession, user_id: int) -> bool:
         select(UserService.id).where(UserService.bot_user_id == user_id).limit(1)
     )
     return result.scalar_one_or_none() is not None
-
-
-async def _customer_status_line(session: AsyncSession, db_user: BotUser) -> str:
-    from app.config import get_settings
-    from app.services.formatting import format_toman
-
-    n = int(
-        (
-            await session.execute(
-                select(func.count())
-                .select_from(UserService)
-                .where(UserService.bot_user_id == db_user.id)
-            )
-        ).scalar()
-        or 0
-    )
-    wallet = format_toman(int(db_user.wallet_balance or 0), get_settings().currency)
-    if n <= 0:
-        return f"سرویسی ندارید · موجودی {wallet}\nاز «خرید سرویس» شروع کنید."
-    return f"{n} سرویس · موجودی {wallet}"
 
 
 async def render_home(
@@ -80,13 +60,11 @@ async def render_home(
     if effective_role == "admin":
         text = format_message(
             f"🛠 {ui.get('shop_title', 'کلاک')}",
-            "پنل مدیریت آماده است.\nکارهای روز را از کیبورد پایین انتخاب کنید.",
+            "پنل مدیریت فروشگاه\nاز کیبورد پایین گزینه را انتخاب کنید.",
         )
         reply_kb = kb.main_reply_keyboard(effective_role, has_services=False, ui=ui)
     elif effective_role == "reseller" and is_reseller_bot:
         from app.services.reseller_access import load_reseller_actor
-        from app.config import get_settings
-        from app.services.formatting import format_toman
 
         _, profile = await load_reseller_actor(
             session,
@@ -94,11 +72,9 @@ async def render_home(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
-        wallet = format_toman(int(db_user.wallet_balance or 0), get_settings().currency)
         text = format_message(
             f"🛠 {ui.get('shop_title', 'فروشگاه')}",
-            f"پنل فروشگاه شما · موجودی {wallet}\n"
-            "از کیبورد پایین فروش و سفارش‌ها را ببینید.\n"
+            "پنل مدیریت فروشگاه شما\nاز کیبورد پایین گزینه را انتخاب کنید.\n"
             "برای دیدن منوی مشتری: «پیش‌نمایش منوی کاربر».",
         )
         reply_kb = kb.reseller_hub_main_keyboard(profile, ui)
@@ -109,11 +85,6 @@ async def render_home(
             body = safe_format(welcome, name=db_user.full_name or "دوست عزیز")
         except Exception:
             body = welcome
-        try:
-            status = await _customer_status_line(session, db_user)
-            body = f"{body}\n\n{status}" if body else status
-        except Exception:
-            pass
         text = format_message(f"✨ {title}", body)
         reply_kb = kb.main_reply_keyboard(
             effective_role,

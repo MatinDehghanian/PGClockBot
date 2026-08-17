@@ -311,14 +311,6 @@ class PasarGuardClient:
         token = await self.ensure_token()
         return {"Authorization": f"Bearer {token}"}
 
-    def _read_cache_ident(self) -> str:
-        """Cache partition: never share Owner reads with an L1/L2 client."""
-        user = (getattr(self, "_login_username", None) or "").strip()
-        base = (self.base_url or "").rstrip("/")
-        if user:
-            return f"u:{user}@{base}"
-        return f"owner@{base}"
-
     async def request(
         self,
         method: str,
@@ -327,16 +319,6 @@ class PasarGuardClient:
         auth: bool = True,
         **kwargs: Any,
     ) -> Any:
-        from app.services.pg_read_cache import cache_get, cache_put, invalidate_ident
-
-        method_u = (method or "GET").upper()
-        ident = self._read_cache_ident()
-        if method_u != "GET":
-            invalidate_ident(ident)
-        else:
-            cached = cache_get(ident, path, kwargs.get("params"))
-            if cached is not None:
-                return cached
         headers = kwargs.pop("headers", {})
         if auth:
             headers.update(await self._headers())
@@ -357,12 +339,8 @@ class PasarGuardClient:
             return None
         content_type = resp.headers.get("content-type", "")
         if "application/json" in content_type:
-            payload = resp.json()
-        else:
-            payload = resp.text
-        if method_u == "GET":
-            cache_put(ident, path, kwargs.get("params"), payload)
-        return payload
+            return resp.json()
+        return resp.text
 
     async def get_users(self, **params: Any) -> dict:
         return await self.request("GET", "/api/users", params=params)

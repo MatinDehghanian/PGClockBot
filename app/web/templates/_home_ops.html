@@ -1,8 +1,7 @@
-{# Shared home ops: work queue → sales → portals
-   Expects: periods, action_center, portal_bot_href, portal_pg_href,
-            portal_bot_show, portal_pg_show
+{# Shared home ops block: portals → period sales → work queue
+   Expects: periods, action_center (optional), portal_bot_href, portal_pg_href,
+            portal_bot_show (bool, default true), portal_pg_show (bool, default true)
 #}
-{% from "macros.html" import empty_state %}
 {% set ac = action_center or {} %}
 {% set periods = periods or {} %}
 {% set day = periods.day or {} %}
@@ -12,78 +11,6 @@
 {% set show_pg = portal_pg_show if portal_pg_show is defined else true %}
 {% set bot_href = portal_bot_href or '/dashboard' %}
 {% set pg_href = portal_pg_href or '/pg' %}
-
-<section class="card home-action-card{% if ac.has_items %} is-hero{% endif %}" aria-label="صف کار">
-  <header class="home-section-head">
-    <h2>صف کار</h2>
-    {% if ac.has_items %}
-    <a class="btn btn-sm btn-ghost" href="/inbox">مرکز اقدام</a>
-    {% endif %}
-  </header>
-  {% if ac.has_items %}
-  <div class="home-action-list">
-    {% for item in ac.entries %}
-    <a class="home-action-item tone-{{ item.tone or 'neutral' }}" href="{{ item.href }}">
-      <span class="home-action-copy">
-        <strong>{{ item.title }}</strong>
-        <span class="muted">{{ item.detail }}</span>
-      </span>
-      <span class="btn btn-sm btn-ghost">برو</span>
-    </a>
-    {% endfor %}
-  </div>
-  {% else %}
-  {{ empty_state('صف کار خالی است', 'اگر رسید، تیکت یا انقضای نزدیک باشد اینجا می‌آید.', '/inbox', 'مرکز اقدام') }}
-  {% endif %}
-</section>
-
-<section class="card home-periods-card" aria-label="فروش دوره‌ای">
-  <header class="home-periods-head">
-    <h2>فروش</h2>
-    <p class="muted">امروز نسبت به دیروز · هفته و ماه فشرده</p>
-  </header>
-  <div class="home-period-grid home-period-grid-hero">
-    <article class="home-period is-hero">
-      <h3 class="home-period-label">امروز</h3>
-      <p class="home-period-hero-val" dir="ltr">{{ day.revenue | num }}</p>
-      <p class="home-period-hero-cap">درآمد{% if day.delta %}
-        {% if day.delta.dir == 'up' %}<span class="home-delta is-up">+{{ day.delta.pct }}٪</span>
-        {% elif day.delta.dir == 'down' %}<span class="home-delta is-down">−{{ day.delta.pct }}٪</span>
-        {% else %}<span class="home-delta is-flat">بدون تغییر</span>{% endif %}
-      {% endif %}</p>
-      <dl class="home-period-metrics">
-        <div><dt>سفارش</dt><dd>{{ day.orders | num }}</dd></div>
-        <div><dt>خرید موفق</dt><dd>{{ day.delivered | num }}</dd></div>
-        <div><dt>کاربر جدید</dt><dd>{{ day.new_users | num }}</dd></div>
-        <div><dt>درآمد</dt><dd>{{ day.revenue | num }}</dd></div>
-      </dl>
-    </article>
-    <article class="home-period">
-      <h3 class="home-period-label">۷ روز</h3>
-      <dl class="home-period-metrics">
-        <div><dt>سفارش</dt><dd>{{ week.orders | num }}</dd></div>
-        <div><dt>خرید موفق</dt><dd>{{ week.delivered | num }}</dd></div>
-        <div><dt>درآمد</dt><dd>{{ week.revenue | num }}</dd></div>
-        <div><dt>کاربر جدید</dt><dd>{{ week.new_users | num }}</dd></div>
-      </dl>
-      {% if week.delta %}
-      <p class="home-period-delta muted">{% if week.delta.dir == 'up' %}نسبت به هفته قبل +{{ week.delta.pct }}٪{% elif week.delta.dir == 'down' %}نسبت به هفته قبل −{{ week.delta.pct }}٪{% else %}هم‌سطح هفته قبل{% endif %}</p>
-      {% endif %}
-    </article>
-    <article class="home-period">
-      <h3 class="home-period-label">۳۰ روز</h3>
-      <dl class="home-period-metrics">
-        <div><dt>سفارش</dt><dd>{{ month.orders | num }}</dd></div>
-        <div><dt>خرید موفق</dt><dd>{{ month.delivered | num }}</dd></div>
-        <div><dt>درآمد</dt><dd>{{ month.revenue | num }}</dd></div>
-        <div><dt>کاربر جدید</dt><dd>{{ month.new_users | num }}</dd></div>
-      </dl>
-      {% if month.delta %}
-      <p class="home-period-delta muted">{% if month.delta.dir == 'up' %}نسبت به ۳۰ روز قبل +{{ month.delta.pct }}٪{% elif month.delta.dir == 'down' %}نسبت به ۳۰ روز قبل −{{ month.delta.pct }}٪{% else %}هم‌سطح دوره قبل{% endif %}</p>
-      {% endif %}
-    </article>
-  </div>
-</section>
 
 {% if show_bot or show_pg %}
 <div class="home-portal-row" role="navigation" aria-label="نمای کلی">
@@ -117,3 +44,58 @@
   {% endif %}
 </div>
 {% endif %}
+
+<section class="card home-periods-card" aria-label="فروش دوره‌ای">
+  <header class="home-periods-head">
+    <h2>فروش</h2>
+    <p class="muted">امروز · ۷ روز · ۳۰ روز</p>
+  </header>
+  <div class="home-period-grid">
+    <article class="home-period">
+      <h3 class="home-period-label">امروز</h3>
+      <dl class="home-period-metrics">
+        <div><dt>سفارش</dt><dd>{{ day.orders | num }}</dd></div>
+        <div><dt>خرید موفق</dt><dd>{{ day.delivered | num }}</dd></div>
+        <div><dt>درآمد</dt><dd>{{ day.revenue | num }}</dd></div>
+        <div><dt>کاربر جدید</dt><dd>{{ day.new_users | num }}</dd></div>
+      </dl>
+    </article>
+    <article class="home-period">
+      <h3 class="home-period-label">۷ روز</h3>
+      <dl class="home-period-metrics">
+        <div><dt>سفارش</dt><dd>{{ week.orders | num }}</dd></div>
+        <div><dt>خرید موفق</dt><dd>{{ week.delivered | num }}</dd></div>
+        <div><dt>درآمد</dt><dd>{{ week.revenue | num }}</dd></div>
+        <div><dt>کاربر جدید</dt><dd>{{ week.new_users | num }}</dd></div>
+      </dl>
+    </article>
+    <article class="home-period">
+      <h3 class="home-period-label">۳۰ روز</h3>
+      <dl class="home-period-metrics">
+        <div><dt>سفارش</dt><dd>{{ month.orders | num }}</dd></div>
+        <div><dt>خرید موفق</dt><dd>{{ month.delivered | num }}</dd></div>
+        <div><dt>درآمد</dt><dd>{{ month.revenue | num }}</dd></div>
+        <div><dt>کاربر جدید</dt><dd>{{ month.new_users | num }}</dd></div>
+      </dl>
+    </article>
+  </div>
+</section>
+
+<section class="card home-action-card" aria-label="صف کار">
+  <h2>صف کار</h2>
+  {% if ac.has_items %}
+  <div class="home-action-list">
+    {% for item in ac.entries %}
+    <a class="home-action-item tone-{{ item.tone or 'neutral' }}" href="{{ item.href }}">
+      <span class="home-action-copy">
+        <strong>{{ item.title }}</strong>
+        <span class="muted">{{ item.detail }}</span>
+      </span>
+      <span class="btn btn-sm btn-ghost">برو</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted home-action-empty">الان کاری در صف نیست.</p>
+  {% endif %}
+</section>

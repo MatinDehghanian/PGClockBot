@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title, empty_state %}
+{% from "macros.html" import row_actions, page_title %}
 {% block title %}کاربران بات{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -85,7 +85,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7">{{ empty_state('کاربری نیست', 'وقتی کسی ربات را استارت کند اینجا دیده می‌شود.', '', '') }}</td></tr>
+      <tr><td colspan="7" class="muted">کاربری نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>
