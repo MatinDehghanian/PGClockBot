@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "7.0.1": [
+        "مینی‌اپ: تگ وضعیت بدون دایره/ایموجی، مثل بج وب‌پنل",
+        "مینی‌اپ: نمایش QR جمع‌وجور و هم‌سبک کارت سرویس",
+        "مینی‌اپ: دکمه کپی لینک مثل وب‌پنل به «کپی شد» تبدیل می‌شود و برمی‌گردد",
+        "مینی‌اپ: میانبر باز کردن با آدرس پنل (HTTP+IP اگر دامنه نباشد) نه وب‌پنل",
+    ],
     "7.0.0": [
         "سلسله‌مراتب امن مالک / سطح ۱ / سطح ۲ برای Principal",
         "ورود وب Principal و اعتبارنامهٔ جدا برای پاسارگارد",
