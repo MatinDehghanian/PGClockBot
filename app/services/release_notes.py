@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "7.0.2": [
+        "L1/L2 دیگر برای نقش و قابلیت از اعتبارنامه Owner پاسارگارد استفاده نمی‌کنند",
+        "Owner در پایگاه‌داده یکتاست؛ ساخت همزمان Owner دوم رد می‌شود",
+        "کلاینت پاسارگارد Principal فقط با principal_id انتخاب می‌شود، نه با نام کاربری",
+        "ساخت ادمین با admins.create واقعی است، نه فقط دیدن صفحه ادمین‌ها",
+    ],
     "7.0.1": [
         "مینی‌اپ: تگ وضعیت بدون دایره/ایموجی، مثل بج وب‌پنل",
         "مینی‌اپ: نمایش QR جمع‌وجور و هم‌سبک کارت سرویس",
