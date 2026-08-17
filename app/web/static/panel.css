@@ -3152,10 +3152,19 @@ form.settings-form > .actions.sticky-actions,
 }
 
 /* Security tab — right-align helper copy inside cards */
-#security-credentials-form .update-card-caption,
-#security-credentials-form label > small.muted,
-#identity-help .muted-list {
+#identity-help,
+#security-credentials-form .settings-card {
   text-align: right;
+}
+#security-credentials-form .update-card-caption,
+#security-credentials-form .setting-item label > small.muted,
+#identity-help .muted-list,
+#identity-help .muted-list li {
+  display: block;
+  width: 100%;
+  text-align: right;
+  direction: rtl;
+  unicode-bidi: plaintext;
 }
 
 .progress-wrap { margin: var(--space-1) 0 var(--space-2); }
@@ -4426,7 +4435,7 @@ form.settings-form > .actions.sticky-actions,
 }
 .nav-item-home.active {
   background: var(--muted);
-  border-color: var(--border);
+  border-color: transparent;
   color: var(--foreground);
 }
 .nav-item-home:hover {
@@ -4436,11 +4445,11 @@ form.settings-form > .actions.sticky-actions,
 }
 .nav-section-bot:first-child { margin-top: var(--space-1); }
 .nav-section-bot {
-  border: none;
+  border: 1px solid color-mix(in srgb, var(--bot-line) 38%, var(--border));
   background: transparent;
 }
 .nav-section-pg {
-  border: none;
+  border: 1px solid color-mix(in srgb, var(--pg-line) 35%, var(--border));
   background: transparent;
 }
 .nav-label-bot {
@@ -4455,9 +4464,10 @@ form.settings-form > .actions.sticky-actions,
 }
 .nav-section-bot .nav-ico { color: var(--bot-line); }
 .nav-section-pg .nav-ico { color: var(--pg-line); }
-.nav-item-bot.active {
+.nav-item-bot.active,
+.nav-item-bot.active:hover {
   background: var(--bot-fill);
-  border-color: color-mix(in srgb, var(--bot-line) 45%, transparent);
+  border-color: transparent;
   color: var(--foreground);
 }
 .nav-item-bot.active .nav-ico { color: var(--bot-line); }
@@ -4466,9 +4476,10 @@ form.settings-form > .actions.sticky-actions,
   border-color: color-mix(in srgb, var(--bot-line) 36%, transparent);
   color: var(--foreground);
 }
-.nav-item-pg.active {
+.nav-item-pg.active,
+.nav-item-pg.active:hover {
   background: var(--pg-fill);
-  border-color: color-mix(in srgb, var(--pg-line) 45%, transparent);
+  border-color: transparent;
   color: var(--foreground);
 }
 .nav-item-pg.active .nav-ico { color: var(--pg-line); }
@@ -5790,9 +5801,10 @@ html[data-theme="light"] .ui-modal-panel {
 }
 html[data-theme="light"] .nav-label-home { color: var(--foreground); }
 /* Neutral select/hover for the border-only home box (no brand tint) */
-html[data-theme="light"] .nav-item-home.active {
+html[data-theme="light"] .nav-item-home.active,
+html[data-theme="light"] .nav-item-home.active:hover {
   background: color-mix(in srgb, var(--foreground) 7%, transparent);
-  border-color: color-mix(in srgb, var(--foreground) 14%, var(--border));
+  border-color: transparent;
   color: var(--foreground);
 }
 html[data-theme="light"] .nav-item-home:hover {
@@ -5801,20 +5813,21 @@ html[data-theme="light"] .nav-item-home:hover {
   color: var(--foreground);
 }
 html[data-theme="light"] .nav-section-bot {
-  border: none;
+  border-color: color-mix(in srgb, var(--bot-line) 28%, var(--border));
   background: transparent;
 }
 html[data-theme="light"] .nav-section-pg {
-  border: none;
+  border-color: color-mix(in srgb, var(--pg-line) 28%, var(--border));
   background: transparent;
 }
 html[data-theme="light"] .nav-label-bot,
 html[data-theme="light"] .nav-section-bot .nav-ico { color: var(--bot-line); }
 html[data-theme="light"] .nav-label-pg,
 html[data-theme="light"] .nav-section-pg .nav-ico { color: var(--pg-line); }
-html[data-theme="light"] .nav-item-bot.active {
+html[data-theme="light"] .nav-item-bot.active,
+html[data-theme="light"] .nav-item-bot.active:hover {
   background: var(--bot-fill);
-  border-color: color-mix(in srgb, var(--bot-line) 32%, transparent);
+  border-color: transparent;
   color: var(--foreground);
 }
 html[data-theme="light"] .nav-item-bot:hover {
@@ -5822,9 +5835,10 @@ html[data-theme="light"] .nav-item-bot:hover {
   border-color: color-mix(in srgb, var(--bot-line) 28%, transparent);
   color: var(--foreground);
 }
-html[data-theme="light"] .nav-item-pg.active {
+html[data-theme="light"] .nav-item-pg.active,
+html[data-theme="light"] .nav-item-pg.active:hover {
   background: var(--pg-fill);
-  border-color: color-mix(in srgb, var(--pg-line) 32%, transparent);
+  border-color: transparent;
   color: var(--foreground);
 }
 html[data-theme="light"] .nav-item-pg:hover {
@@ -6329,7 +6343,7 @@ html[data-theme="light"] .pg-node-tabs .tab-btn.active:active {
   padding: var(--space-2);
   border-radius: var(--radius-sm, 12px);
   border: 1px solid color-mix(in srgb, #3d8fd1 22%, var(--border));
-  background: color-mix(in srgb, var(--bg-card) 72%, transparent);
+  background: var(--bg-card);
   min-width: 0;
   width: 100%;
   box-sizing: border-box;

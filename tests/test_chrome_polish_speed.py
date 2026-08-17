@@ -30,8 +30,8 @@ class ChromeSolidTests(unittest.TestCase):
 
     def test_sidebar_selector_uses_section_fill(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn(".nav-item-bot.active {\n  background: var(--bot-fill);", css)
-        self.assertIn(".nav-item-pg.active {\n  background: var(--pg-fill);", css)
+        self.assertIn(".nav-item-bot.active,\n.nav-item-bot.active:hover {\n  background: var(--bot-fill);", css)
+        self.assertIn(".nav-item-pg.active,\n.nav-item-pg.active:hover {\n  background: var(--pg-fill);", css)
         self.assertIn(".nav-section-bot .nav-ico { color: var(--bot-line); }", css)
         self.assertIn(".nav-section-pg .nav-ico { color: var(--pg-line); }", css)
 
