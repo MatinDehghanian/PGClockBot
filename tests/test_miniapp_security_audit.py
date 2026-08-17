@@ -113,6 +113,29 @@ class MiniAppSecuritySourceTests(unittest.TestCase):
         self.assertIn('p.startsWith("//")', JS)
         self.assertIn("safeUrl(s.subscription_url", JS)
 
+    def test_copy_button_flashes_copied_label(self):
+        self.assertIn("function markCopied(", JS)
+        self.assertIn("کپی شد", JS)
+        self.assertIn("is-copied", JS)
+        self.assertNotIn("لینک کپی شد", JS)
+
+    def test_panel_open_uses_panel_base_not_public_url(self):
+        self.assertIn("_mini_panel_base", PAGES)
+        self.assertIn("public_panel_base_url", PAGES)
+        self.assertNotIn("public_base_url", PAGES)
+        me = PAGES.split("async def mini_me")[1].split("async def mini_service")[0]
+        self.assertIn("_mini_panel_base()", me)
+        admin = PAGES.split("async def _admin_ops_payload")[1].split(
+            "async def _reseller_ops_payload"
+        )[0]
+        self.assertIn("_mini_panel_base()", admin)
+        self.assertNotIn("public_base_url", admin)
+
+    def test_serialize_status_plain_no_emoji_dot(self):
+        ser = PAGES.split("def _serialize_service")[1].split("async def _enrich_services")[0]
+        self.assertIn("status_label_plain", ser)
+        self.assertNotIn("status_label(status_raw)", ser)
+
 
 class MiniAppSafeClientMessageTests(unittest.TestCase):
     def test_blocks_english_internal(self):
@@ -136,6 +159,17 @@ class MiniAppSafeClientMessageTests(unittest.TestCase):
         self.assertEqual(_safe_client_message(ValueError(msg), fallback="x"), msg)
 
 
+class MiniAppPanelBaseTests(unittest.TestCase):
+    def test_uses_live_panel_url_not_webhook_host(self):
+        from app.api.miniapp_pages import _mini_panel_base
+
+        with patch(
+            "app.services.ssl_certs.public_panel_base_url",
+            return_value="http://10.0.0.5:9000/",
+        ):
+            self.assertEqual(_mini_panel_base(), "http://10.0.0.5:9000")
+
+
 class MiniAppSerializeLeakTests(unittest.TestCase):
     def test_raw_upstream_error_stripped(self):
         from app.api.miniapp_pages import _serialize_service
@@ -152,6 +186,20 @@ class MiniAppSerializeLeakTests(unittest.TestCase):
         self.assertIsNone(out["error"])
         out2 = _serialize_service(svc, {"error": "upstream_unavailable"})
         self.assertEqual(out2["error"], "upstream_unavailable")
+
+    def test_status_fa_has_no_emoji_circle(self):
+        from app.api.miniapp_pages import _serialize_service
+
+        svc = SimpleNamespace(
+            id=1,
+            pg_username="u1",
+            subscription_url="https://example.com/sub/abc",
+            plan_id=2,
+        )
+        out = _serialize_service(svc, {"status": "active"})
+        self.assertEqual(out["status_fa"], "فعال")
+        self.assertNotIn("🟢", out["status_fa"])
+        self.assertNotIn("🔴", _serialize_service(svc, {"status": "disabled"})["status_fa"])
 
 
 class MiniAppOwnedServiceUnitTests(unittest.TestCase):

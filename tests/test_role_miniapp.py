@@ -114,6 +114,9 @@ class MiniAppSourceTests(unittest.TestCase):
         self.assertIn("ICONS", js)
         self.assertIn("servicePeekHtml", js)
         self.assertIn("commerce_allowed", js)
+        self.assertIn("function markCopied(", js)
+        self.assertIn("کپی شد", js)
+        self.assertIn("qr-frame", js)
         # Link text must not be dumped into service cards
         self.assertNotIn("word-break:break-all", js)
         css = (ROOT / "app/web/static/miniapp.css").read_text(encoding="utf-8")
@@ -122,6 +125,8 @@ class MiniAppSourceTests(unittest.TestCase):
         self.assertIn("meter", css)
         self.assertIn("svc-peek", css)
         self.assertIn("var(--brand)", css)
+        self.assertIn("qr-frame", css)
+        self.assertIn(".btn.is-copied", css)
 
     def test_nav_includes_wallet(self):
         from app.api.miniapp_pages import _nav_for, commerce_allowed

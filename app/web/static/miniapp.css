@@ -280,18 +280,40 @@ body {
 }
 
 .qr-box {
-  margin-top: var(--space-2);
-  padding: var(--space-2);
+  margin-top: var(--space-1_5);
+  padding: var(--space-1_5);
   border-radius: 14px;
-  background: #fff;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
   text-align: center;
 }
-.qr-box img {
-  width: min(220px, 70vw);
-  height: auto;
-  border-radius: 8px;
+.qr-box[hidden] { display: none; }
+.qr-box.is-loading {
+  color: var(--muted-fg);
+  font-size: 12px;
 }
-.qr-box .hint { color: #52525b; margin-top: var(--space-1); }
+.qr-frame {
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  border-radius: 12px;
+  background: #fff;
+}
+.qr-box img {
+  width: min(148px, 46vw);
+  height: auto;
+  display: block;
+  border-radius: 4px;
+}
+.qr-box .hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted-fg);
+}
 
 .plan-row, .tx-row, .link-row {
   display: flex;
@@ -365,6 +387,11 @@ body {
   min-height: 34px;
   padding: 6px 12px;
   font-size: 12px;
+}
+.btn.is-copied {
+  background: var(--ok-soft);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.28);
 }
 .btn.danger {
   background: var(--danger-soft);
