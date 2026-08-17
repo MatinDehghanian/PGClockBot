@@ -1,9 +1,9 @@
-"""Principal management UI (Products 1–5).
+"""نمایندگان سازمان (Products 1–5).
 
 GET / enable / disable use ``require_staff``; the service layer enforces
 Owner vs Level-1 vs deny. L1 create stays on the existing Owner dependency.
 L2 create wraps ``provision_level2_child`` only — no second provision path.
-L2 Web identity wraps ``attach_level2_web_identity`` only — no second login path.
+Web identity wraps attach helpers only — username is the Principal's PG username.
 L2 Telegram bind/unbind wraps ``bind_l2_bot_telegram`` / ``unbind_l2_bot_telegram``.
 """
 
@@ -57,6 +57,7 @@ from app.services.principal_provisioning import (
 )
 from app.services.principal_web_identity import (
     PrincipalWebIdentityError,
+    attach_level1_web_identity,
     attach_level2_web_identity,
 )
 from app.services.bot_l2_bind import (
@@ -91,6 +92,21 @@ def _bot_label(raw: str | None) -> str:
     if str(raw or "").strip() == "bound":
         return "متصل"
     return "بدون اتصال"
+
+
+def _hierarchy_label(depth: int) -> str:
+    if int(depth) == DEPTH_TWO:
+        return "زیرمجموعه"
+    return "نماینده"
+
+
+def _detail_depth(detail: dict | None) -> int:
+    if not detail:
+        return 0
+    try:
+        return int(detail.get("depth") or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _safe_public(view, *, hierarchy_label: str) -> dict:
@@ -151,7 +167,10 @@ def _raise_if_web_attach_lifecycle_denied(exc: PrincipalLifecycleError) -> None:
         "not_found",
         "inactive_or_missing_principal",
         "out_of_scope",
+        "not_owner",
+        "not_level1",
         "not_level2",
+        "inactive_owner",
         "cannot_manage_owner",
         "cannot_manage_self",
         "parent_missing",
@@ -171,18 +190,21 @@ def _raise_if_web_attach_denied(exc: PrincipalWebIdentityError) -> None:
         "parent_disabled",
         "parent_missing",
         "parent_invalid",
+        "not_level1",
         "not_level2",
         "cannot_be_owner",
         "depth_invalid",
+        "pg_username_missing",
     }:
         raise HTTPException(status_code=403, detail="forbidden") from exc
 
 
-def _can_attach_l2_web(detail: dict | None) -> bool:
+def _can_attach_web(detail: dict | None) -> bool:
     if not detail:
         return False
+    depth = _detail_depth(detail)
     return (
-        str(detail.get("hierarchy_label") or "") == "سطح ۲"
+        depth in (DEPTH_ONE, DEPTH_TWO)
         and str(detail.get("web_identity_status") or "") == "none"
         and bool(detail.get("can_manage"))
         and str(detail.get("status") or "") == "active"
@@ -193,7 +215,7 @@ def _can_attach_l2_telegram(detail: dict | None) -> bool:
     if not detail:
         return False
     return (
-        str(detail.get("hierarchy_label") or "") == "سطح ۲"
+        _detail_depth(detail) == DEPTH_TWO
         and str(detail.get("bot_binding_status") or "") == "unbound"
         and bool(detail.get("can_manage"))
         and str(detail.get("status") or "") == "active"
@@ -204,7 +226,7 @@ def _can_detach_l2_telegram(detail: dict | None) -> bool:
     if not detail:
         return False
     return (
-        str(detail.get("hierarchy_label") or "") == "سطح ۲"
+        _detail_depth(detail) == DEPTH_TWO
         and str(detail.get("bot_binding_status") or "") == "bound"
         and bool(detail.get("can_manage"))
         and str(detail.get("status") or "") == "active"
@@ -425,7 +447,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
                 err = err or "نمایش فهرست نامعتبر است"
             l2_by_parent: dict[int, list[dict]] = {}
             for view in l2_views:
-                item = _safe_public(view, hierarchy_label="سطح ۲")
+                item = _safe_public(view, hierarchy_label=_hierarchy_label(DEPTH_TWO))
                 if not item.get("pg_role_name") and item.get("pg_role_id") is not None:
                     item["pg_role_name"] = names.get(int(item["pg_role_id"]))
                 parent_key = int(item["parent_id"]) if item.get("parent_id") else 0
@@ -439,7 +461,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
                     l1_views = []
                     err = err or "نمایش فهرست نامعتبر است"
                 for view in l1_views:
-                    item = _safe_public(view, hierarchy_label="سطح ۱")
+                    item = _safe_public(view, hierarchy_label=_hierarchy_label(DEPTH_ONE))
                     if not item.get("pg_role_name") and item.get("pg_role_id") is not None:
                         item["pg_role_name"] = names.get(int(item["pg_role_id"]))
                     kids = l2_by_parent.get(int(item["principal_id"]), [])
@@ -453,7 +475,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             can_create_l2 = False
         except Exception:
             log.exception("principal list failed")
-            err = "بارگذاری فهرست Principal ناموفق بود"
+            err = "بارگذاری فهرست نمایندگان ناموفق بود"
             roles = []
             l2_pg_roles = []
             can_create = False
@@ -464,24 +486,24 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             try:
                 target = await get_principal(session, int(detail_raw))
                 if target is None:
-                    raise PrincipalLifecycleError("Principal یافت نشد", code="not_found")
+                    raise PrincipalLifecycleError("نماینده یافت نشد", code="not_found")
                 if int(target.depth) == DEPTH_TWO:
                     view = await get_level2_principal_detail(
                         session, staff, int(detail_raw)
                     )
-                    hierarchy = "سطح ۲"
+                    hierarchy = _hierarchy_label(DEPTH_TWO)
                 elif int(target.depth) == DEPTH_ONE and owner:
                     view = await get_level1_principal_detail(
                         session, staff, int(detail_raw)
                     )
-                    hierarchy = "سطح ۱"
+                    hierarchy = _hierarchy_label(DEPTH_ONE)
                 else:
                     raise PrincipalLifecycleError(
-                        "جزئیات Principal قابل نمایش نیست",
+                        "جزئیات نماینده قابل نمایش نیست",
                         code="out_of_scope",
                     )
                 if public_views_contain_secret(view):
-                    err = err or "جزئیات Principal قابل نمایش نیست"
+                    err = err or "جزئیات نماینده قابل نمایش نیست"
                 else:
                     detail = _safe_public(view, hierarchy_label=hierarchy)
                     if not detail.get("pg_role_name") and detail.get("pg_role_id") is not None:
@@ -526,7 +548,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
                 "l2_pg_roles": l2_pg_roles if can_create_l2 else [],
                 "can_create": can_create,
                 "can_create_l2": can_create_l2,
-                "can_attach_web": _can_attach_l2_web(detail),
+                "can_attach_web": _can_attach_web(detail),
                 "can_attach_l2_telegram": _can_attach_l2_telegram(detail),
                 "can_detach_l2_telegram": _can_detach_l2_telegram(detail),
                 "flash_ok": ok,
@@ -572,7 +594,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
                 status_code=303,
             )
         return RedirectResponse(
-            f"/principals?detail={int(principal_id)}&ok={_q('Principal غیرفعال شد')}",
+            f"/principals?detail={int(principal_id)}&ok={_q('نماینده غیرفعال شد')}",
             status_code=303,
         )
 
@@ -602,7 +624,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
                 status_code=303,
             )
         return RedirectResponse(
-            f"/principals?detail={int(principal_id)}&ok={_q('Principal فعال شد')}",
+            f"/principals?detail={int(principal_id)}&ok={_q('نماینده فعال شد')}",
             status_code=303,
         )
 
@@ -648,13 +670,13 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             except Exception:
                 pass
             return RedirectResponse(
-                f"/principals?err={_q('ساخت Principal ناموفق بود')}",
+                f"/principals?err={_q('ساخت نماینده ناموفق بود')}",
                 status_code=303,
             )
         created = "ساخته شد" if result.created else "از قبل موجود بود"
         return RedirectResponse(
             f"/principals?detail={int(result.principal.id)}"
-            f"&ok={_q(f'Principal سطح ۱ {created}')}",
+            f"&ok={_q(f'نماینده {created}')}",
             status_code=303,
         )
 
@@ -714,13 +736,13 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
             except Exception:
                 pass
             return RedirectResponse(
-                f"/principals?err={_q('ساخت Principal سطح ۲ ناموفق بود')}",
+                f"/principals?err={_q('ساخت نماینده ناموفق بود')}",
                 status_code=303,
             )
         created = "ساخته شد" if result.created else "از قبل موجود بود"
         return RedirectResponse(
             f"/principals?detail={int(result.principal.id)}"
-            f"&ok={_q(f'Principal سطح ۲ {created}')}",
+            f"&ok={_q(f'نماینده {created}')}",
             status_code=303,
         )
 
@@ -732,8 +754,8 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
         session: AsyncSession = Depends(get_db),
     ):
         form = await request.form()
-        # Client hierarchy / identity fields are ignored. Target is the path id
-        # after Product 2 scope checks; attach_level2_web_identity hashes the password.
+        # Client username / hierarchy fields are ignored. Web login is the
+        # Principal's stored PG username after Product 2 scope checks.
         _ = form.get("principal_id")
         _ = form.get("parent_id")
         _ = form.get("depth")
@@ -741,26 +763,55 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
         _ = form.get("role")
         _ = form.get("pg_username")
         _ = form.get("pg_password")
-        username = str(form.get("username") or form.get("web_username") or "").strip()
+        _ = form.get("username")
+        _ = form.get("web_username")
         password = str(form.get("password") or form.get("web_password") or "")
         try:
-            view = await get_level2_principal_detail(session, staff, int(principal_id))
-            if not bool(view.can_manage):
+            target = await get_principal(session, int(principal_id))
+            if target is None:
+                raise PrincipalLifecycleError("نماینده یافت نشد", code="not_found")
+            depth = int(target.depth)
+            pg_username = (target.pg_username or "").strip()
+            if depth == DEPTH_TWO:
+                view = await get_level2_principal_detail(
+                    session, staff, int(principal_id)
+                )
+                if not bool(view.can_manage):
+                    raise PrincipalLifecycleError(
+                        "والد غیرفعال است — مدیریت فرزند مجاز نیست",
+                        code="parent_disabled",
+                    )
+                if str(view.status) != "active":
+                    raise PrincipalWebIdentityError(
+                        "نماینده غیرفعال است",
+                        code="principal_disabled",
+                    )
+                await attach_level2_web_identity(
+                    session,
+                    principal_id=int(principal_id),
+                    web_username=pg_username,
+                    password=password,
+                )
+            elif depth == DEPTH_ONE:
+                view = await get_level1_principal_detail(
+                    session, staff, int(principal_id)
+                )
+                if str(view.status) != "active":
+                    raise PrincipalWebIdentityError(
+                        "نماینده غیرفعال است",
+                        code="principal_disabled",
+                    )
+                await attach_level1_web_identity(
+                    session,
+                    principal_id=int(principal_id),
+                    web_username=pg_username,
+                    password=password,
+                )
+            else:
                 raise PrincipalLifecycleError(
-                    "والد غیرفعال است — مدیریت فرزند مجاز نیست",
-                    code="parent_disabled",
+                    "جزئیات نماینده قابل نمایش نیست",
+                    code="out_of_scope",
                 )
-            if str(view.status) != "active":
-                raise PrincipalWebIdentityError(
-                    "Principal غیرفعال است",
-                    code="principal_disabled",
-                )
-            await attach_level2_web_identity(
-                session,
-                principal_id=int(principal_id),
-                web_username=username,
-                password=password,
-            )
             await session.commit()
         except PrincipalLifecycleError as exc:
             _raise_if_web_attach_lifecycle_denied(exc)

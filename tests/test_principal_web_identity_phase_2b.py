@@ -68,18 +68,18 @@ class Phase2BWebIdentityTests(unittest.IsolatedAsyncioTestCase):
             a = await self._level1(session, pg_username="pg_a")
             b = await self._level1(session, pg_username="pg_b")
             await attach_level1_web_identity(
-                session, principal_id=a.id, web_username="web_a", password=_WEB_PASSWORD
+                session, principal_id=a.id, web_username="pg_a", password=_WEB_PASSWORD
             )
             await attach_level1_web_identity(
-                session, principal_id=b.id, web_username="web_b", password=_WEB_PASSWORD
+                session, principal_id=b.id, web_username="pg_b", password=_WEB_PASSWORD
             )
             await session.commit()
 
             auth_a = await authenticate_level1_web(
-                session, username="web_a", password=_WEB_PASSWORD
+                session, username="pg_a", password=_WEB_PASSWORD
             )
             auth_b = await authenticate_level1_web(
-                session, username="web_b", password=_WEB_PASSWORD
+                session, username="pg_b", password=_WEB_PASSWORD
             )
             self.assertIsNotNone(auth_a)
             self.assertIsNotNone(auth_b)
@@ -101,16 +101,28 @@ class Phase2BWebIdentityTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(int(staff_a["org_principal_id"]), int(a.id))
             self.assertEqual(int(staff_b["org_principal_id"]), int(b.id))
 
+    async def test_web_username_must_match_pg(self) -> None:
+        async with self.Session() as session:
+            a = await self._level1(session, pg_username="pg_match")
+            with self.assertRaises(PrincipalWebIdentityError) as ctx:
+                await attach_level1_web_identity(
+                    session,
+                    principal_id=a.id,
+                    web_username="other_login",
+                    password=_WEB_PASSWORD,
+                )
+            self.assertEqual(ctx.exception.code, "web_pg_mismatch")
+
     async def test_c_a_cannot_become_owner(self) -> None:
         async with self.Session() as session:
             owner = await ensure_owner_principal(session)
             a = await self._level1(session, pg_username="pg_c")
             await attach_level1_web_identity(
-                session, principal_id=a.id, web_username="web_c", password=_WEB_PASSWORD
+                session, principal_id=a.id, web_username="pg_c", password=_WEB_PASSWORD
             )
             await session.commit()
             auth = await authenticate_level1_web(
-                session, username="web_c", password=_WEB_PASSWORD
+                session, username="pg_c", password=_WEB_PASSWORD
             )
             assert auth
             with patch(
@@ -132,14 +144,14 @@ class Phase2BWebIdentityTests(unittest.IsolatedAsyncioTestCase):
             a = await self._level1(session, pg_username="pg_d_a")
             b = await self._level1(session, pg_username="pg_d_b")
             await attach_level1_web_identity(
-                session, principal_id=a.id, web_username="web_da", password=_WEB_PASSWORD
+                session, principal_id=a.id, web_username="pg_d_a", password=_WEB_PASSWORD
             )
             await attach_level1_web_identity(
-                session, principal_id=b.id, web_username="web_db", password=_WEB_PASSWORD
+                session, principal_id=b.id, web_username="pg_d_b", password=_WEB_PASSWORD
             )
             await session.commit()
             auth_a = await authenticate_level1_web(
-                session, username="web_da", password=_WEB_PASSWORD
+                session, username="pg_d_a", password=_WEB_PASSWORD
             )
             assert auth_a
             cookie = build_principal_session_payload(auth_a)
@@ -157,13 +169,13 @@ class Phase2BWebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             a = await self._level1(session, pg_username="pg_e")
             await attach_level1_web_identity(
-                session, principal_id=a.id, web_username="web_e", password=_WEB_PASSWORD
+                session, principal_id=a.id, web_username="pg_e", password=_WEB_PASSWORD
             )
             a.status = "disabled"
             await session.commit()
             with self.assertRaises(PrincipalWebIdentityError) as ctx:
                 await authenticate_level1_web(
-                    session, username="web_e", password=_WEB_PASSWORD
+                    session, username="pg_e", password=_WEB_PASSWORD
                 )
             self.assertEqual(ctx.exception.code, "principal_disabled")
 
@@ -171,13 +183,13 @@ class Phase2BWebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             a = await self._level1(session, pg_username="pg_e2")
             ident = await attach_level1_web_identity(
-                session, principal_id=a.id, web_username="web_e2", password=_WEB_PASSWORD
+                session, principal_id=a.id, web_username="pg_e2", password=_WEB_PASSWORD
             )
             ident.is_active = False
             await session.commit()
             with self.assertRaises(PrincipalWebIdentityError) as ctx:
                 await authenticate_level1_web(
-                    session, username="web_e2", password=_WEB_PASSWORD
+                    session, username="pg_e2", password=_WEB_PASSWORD
                 )
             self.assertEqual(ctx.exception.code, "identity_disabled")
 
@@ -213,11 +225,11 @@ class Phase2BWebIdentityTests(unittest.IsolatedAsyncioTestCase):
             a = await self._level1(session, pg_username="pg_g")
             b = await self._level1(session, pg_username="pg_g_b")
             await attach_level1_web_identity(
-                session, principal_id=a.id, web_username="web_g", password=_WEB_PASSWORD
+                session, principal_id=a.id, web_username="pg_g", password=_WEB_PASSWORD
             )
             await session.commit()
             auth = await authenticate_level1_web(
-                session, username="web_g", password=_WEB_PASSWORD
+                session, username="pg_g", password=_WEB_PASSWORD
             )
             assert auth
             cookie = build_principal_session_payload(auth)
@@ -234,11 +246,11 @@ class Phase2BWebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             a = await self._level1(session, pg_username="pg_h")
             await attach_level1_web_identity(
-                session, principal_id=a.id, web_username="web_h", password=_WEB_PASSWORD
+                session, principal_id=a.id, web_username="pg_h", password=_WEB_PASSWORD
             )
             await session.commit()
             auth = await authenticate_level1_web(
-                session, username="web_h", password=_WEB_PASSWORD
+                session, username="pg_h", password=_WEB_PASSWORD
             )
             assert auth
             cookie = build_principal_session_payload(auth)
@@ -273,11 +285,11 @@ class Phase2BWebIdentityTests(unittest.IsolatedAsyncioTestCase):
             a = await self._level1(session, pg_username="pg_j_a")
             b = await self._level1(session, pg_username="pg_j_b")
             await attach_level1_web_identity(
-                session, principal_id=a.id, web_username="web_j", password=_WEB_PASSWORD
+                session, principal_id=a.id, web_username="pg_j_a", password=_WEB_PASSWORD
             )
             await session.commit()
             auth = await authenticate_level1_web(
-                session, username="web_j", password=_WEB_PASSWORD
+                session, username="pg_j_a", password=_WEB_PASSWORD
             )
             assert auth
             with patch(
@@ -298,11 +310,11 @@ class Phase2BWebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             a = await self._level1(session, pg_username="pg_own_creds")
             await attach_level1_web_identity(
-                session, principal_id=a.id, web_username="web_k", password=_WEB_PASSWORD
+                session, principal_id=a.id, web_username="pg_own_creds", password=_WEB_PASSWORD
             )
             await session.commit()
             auth = await authenticate_level1_web(
-                session, username="web_k", password=_WEB_PASSWORD
+                session, username="pg_own_creds", password=_WEB_PASSWORD
             )
             assert auth
             with patch(
@@ -338,11 +350,11 @@ class Phase2BWebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             a = await self._level1(session, pg_username="pg_n")
             await attach_level1_web_identity(
-                session, principal_id=a.id, web_username="web_n", password=_WEB_PASSWORD
+                session, principal_id=a.id, web_username="pg_n", password=_WEB_PASSWORD
             )
             await session.commit()
             auth = await authenticate_level1_web(
-                session, username="web_n", password=_WEB_PASSWORD
+                session, username="pg_n", password=_WEB_PASSWORD
             )
             assert auth
             payload = build_principal_session_payload(auth)

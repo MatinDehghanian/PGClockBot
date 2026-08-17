@@ -155,7 +155,7 @@
           {% if ident.kind == 'l1' %}
           <a href="/principals" class="nav-item nav-item-home {% if path.startswith('/principals') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
-            <span>مدیریت کاربران سازمان</span>
+            <span>نمایندگان من</span>
           </a>
           {% endif %}
           {% if is_pg_staff %}
@@ -186,7 +186,7 @@
           </a>
           <a href="/principals" class="nav-item nav-item-bot {% if path.startswith('/principals') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
-            <span>مدیریت کاربران سازمان</span>
+            <span>نمایندگان من</span>
           </a>
           {% endif %}
           {% if is_admin or 'orders' in perms or 'payments' in perms %}

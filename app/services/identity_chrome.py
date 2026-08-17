@@ -100,9 +100,9 @@ def hierarchy_identity(staff: Mapping[str, Any] | None) -> dict[str, Any]:
 
     if role == "principal" or (depth in (1, 2) and role not in {"reseller", "admin"}):
         if depth == 2:
-            kind, label = "l2", "سطح ۲"
+            kind, label = "l2", "نماینده"
         elif depth == 1:
-            kind, label = "l1", "سطح ۱"
+            kind, label = "l1", "نماینده"
         else:
             kind, label = "principal", None
         chips = principal_capability_chips(staff) if kind in {"l1", "l2"} else []

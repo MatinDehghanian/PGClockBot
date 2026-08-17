@@ -300,7 +300,7 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
                 .select_from(OrgPrincipalWebIdentity)
                 .where(OrgPrincipalWebIdentity.principal_id == int(child.id))
             )
-            self.assertEqual(int(webs or 0), 0)
+            self.assertEqual(int(webs or 0), 1)
             shops = await session.scalar(select(func.count()).select_from(ResellerProfile))
             self.assertEqual(int(shops or 0), 0)
             prov = (
@@ -322,10 +322,11 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(page.status_code, 200)
         body = page.text
         self.assertIn("child_own1", body)
-        self.assertIn("سطح ۲", body)
+        self.assertIn("زیرمجموعه", body)
         self.assertIn("l1_a", body)
         self.assertIn("PG Role: CustomRoleX", body)
-        self.assertIn("بدون هویت وب", body)
+        self.assertIn("فعال", body)
+        self.assertIn("هویت وب: فعال", body)
         self.assertIn("بدون اتصال", body)
         self.assertIn("فعال", body)
         self.assertNotIn(_CHILD_PASSWORD, body)
@@ -381,7 +382,7 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
                 follow_redirects=False,
             )
         self.assertEqual(page.status_code, 200)
-        self.assertNotIn("ایجاد سطح ۲", page.text)
+        self.assertNotIn("/principals/create-l2", page.text)
         self.assertEqual(resp.status_code, 403)
         self.assertEqual(await self._count_by_username("owner_l2"), 0)
 
@@ -415,7 +416,7 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
                 follow_redirects=False,
             )
         self.assertEqual(page.status_code, 200)
-        self.assertNotIn("ایجاد سطح ۲", page.text)
+        self.assertNotIn("/principals/create-l2", page.text)
         self.assertEqual(resp.status_code, 403)
         self.assertEqual(await self._count_by_username("no_cap"), 0)
         self.assertFalse(self._parent_pg.create_admin.await_count)
@@ -464,7 +465,7 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
             page = await client.get("/principals")
         self.assertEqual(page.status_code, 200)
         body = page.text
-        self.assertIn("ایجاد سطح ۲", body)
+        self.assertIn("افزودن نماینده", body)
         self.assertIn('action="/principals/create-l2"', body)
         self.assertIn("CustomRoleX", body)
         self.assertIn('value="12"', body)
@@ -520,7 +521,7 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("_compensate_delete_pg_admin", pages)
         self.assertNotIn("create_admin", pages)
 
-    async def test_no_automatic_bot_or_web_identity(self) -> None:
+    async def test_no_automatic_bot_or_shop_profile(self) -> None:
         _, a, _, _ = await self._seed()
         pages = (ROOT / "app/api/principal_pages.py").read_text(encoding="utf-8")
         self.assertNotIn("create_web_identity", pages)
@@ -546,7 +547,7 @@ class Product3L2CreateHttpTests(unittest.IsolatedAsyncioTestCase):
                 .select_from(OrgPrincipalWebIdentity)
                 .where(OrgPrincipalWebIdentity.principal_id == int(child.id))
             )
-            self.assertEqual(int(webs or 0), 0)
+            self.assertEqual(int(webs or 0), 1)
 
 
 class Product3SourceContracts(unittest.TestCase):
@@ -562,7 +563,7 @@ class Product3SourceContracts(unittest.TestCase):
         self.assertNotIn("bind_telegram", pages)
         self.assertNotIn("create_web_identity", pages)
         tpl = (ROOT / "app/web/templates/principals.html").read_text(encoding="utf-8")
-        self.assertIn("ایجاد سطح ۲", tpl)
+        self.assertIn("افزودن نماینده", tpl)
         self.assertIn("/principals/create-l2", tpl)
         self.assertIn("l2_pg_roles", tpl)
         self.assertNotIn('name="parent_id"', tpl)

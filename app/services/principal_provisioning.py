@@ -376,6 +376,20 @@ async def provision_level1_principal(
             )
         )
         await session.flush()
+        from app.services.principal_web_identity import (
+            PrincipalWebIdentityError,
+            attach_level1_web_identity,
+        )
+
+        try:
+            await attach_level1_web_identity(
+                session,
+                principal_id=int(principal.id),
+                web_username=uname,
+                password=request.pg_password,
+            )
+        except PrincipalWebIdentityError as exc:
+            raise PrincipalProvisionError(exc.message, code=exc.code) from None
     except PrincipalProvisionError:
         if pg_created:
             await _compensate_delete_pg_admin(uname)

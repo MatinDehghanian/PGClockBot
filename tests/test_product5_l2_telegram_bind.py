@@ -154,12 +154,12 @@ class Product5L2TelegramBindHttpTests(unittest.IsolatedAsyncioTestCase):
                 pg_password_enc=encrypt_secret(_PG_PLAIN),
             )
             ident_a = await attach_level1_web_identity(
-                session, principal_id=int(a.id), web_username="web_l1_a", password=_WEB_PLAIN
+                session, principal_id=int(a.id), web_username="prin_a", password=_WEB_PLAIN
             )
             ident_a1 = await attach_level2_web_identity(
                 session,
                 principal_id=int(a1.id),
-                web_username="web_l2_a1",
+                web_username="child_a1",
                 password=_WEB_PLAIN,
             )
             admin_u = await self._bot_user(

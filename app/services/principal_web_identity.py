@@ -1,6 +1,6 @@
 """Phase 2B / 3C — OrgPrincipal Web identity / login (Level-1 and Level-2).
 
-Maps an independent Web username+password to ``OrgPrincipal.id`` server-side.
+Web login is the Principal's PasarGuard username (same contract as pg_staff).
 Never trusts client principal_id / depth / parent_id / role names for identity.
 Does not store or expose PG passwords in session cookies.
 
@@ -17,7 +17,7 @@ from typing import Any, Mapping
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import OrgPrincipal, OrgPrincipalWebIdentity
+from app.db.models import OrgPrincipal, OrgPrincipalWebIdentity, PgStaffAccess, ResellerProfile
 from app.services.org_principals import (
     DEPTH_ONE,
     DEPTH_TWO,
@@ -90,6 +90,55 @@ async def get_web_identity_for_principal(
         )
     )
     return result.scalar_one_or_none()
+
+
+def _web_username_for_principal(principal: OrgPrincipal, web_username: str) -> str:
+    """Web login must equal this Principal's PG username. No client rename."""
+    pg = _norm_username(principal.pg_username)
+    if not pg:
+        raise PrincipalWebIdentityError(
+            "نام کاربری پاسارگارد این نماینده موجود نیست",
+            code="pg_username_missing",
+        )
+    posted = _norm_username(web_username)
+    if posted != pg:
+        raise PrincipalWebIdentityError(
+            "نام کاربری پنل باید همان نام کاربری پاسارگارد باشد",
+            code="web_pg_mismatch",
+        )
+    return pg
+
+
+async def _assert_web_username_available(
+    session: AsyncSession, principal: OrgPrincipal, uname: str
+) -> None:
+    """Deny usernames taken by another shop reseller or pg_staff row."""
+    exclude_rid = 0
+    try:
+        exclude_rid = int(principal.reseller_profile_id or 0)
+    except (TypeError, ValueError):
+        exclude_rid = 0
+    q_res = select(ResellerProfile.id).where(ResellerProfile.web_username == uname)
+    if exclude_rid > 0:
+        q_res = q_res.where(ResellerProfile.id != exclude_rid)
+    if (await session.execute(q_res)).scalar_one_or_none() is not None:
+        raise PrincipalWebIdentityError(
+            "نام کاربری وب تکراری است",
+            code="username_taken",
+        )
+    exclude_sid = 0
+    try:
+        exclude_sid = int(principal.pg_staff_id or 0)
+    except (TypeError, ValueError):
+        exclude_sid = 0
+    q_staff = select(PgStaffAccess.id).where(PgStaffAccess.web_username == uname)
+    if exclude_sid > 0:
+        q_staff = q_staff.where(PgStaffAccess.id != exclude_sid)
+    if (await session.execute(q_staff)).scalar_one_or_none() is not None:
+        raise PrincipalWebIdentityError(
+            "نام کاربری وب تکراری است",
+            code="username_taken",
+        )
 
 
 def _assert_not_owner(principal: OrgPrincipal) -> None:
@@ -319,6 +368,7 @@ async def _create_web_identity_row(
             "نام کاربری وب تکراری است",
             code="username_taken",
         )
+    await _assert_web_username_available(session, principal, uname)
 
     row = OrgPrincipalWebIdentity(
         principal_id=int(principal.id),
@@ -342,12 +392,13 @@ async def attach_level1_web_identity(
     """Create Web credentials for an existing Level-1 Principal.
 
     Does not create Principals, bots, or depth-2 children. Password stored hashed only.
+    Web username must equal ``principal.pg_username``.
     """
     principal = _assert_level1_principal(await get_principal(session, int(principal_id)))
     return await _create_web_identity_row(
         session,
         principal=principal,
-        web_username=web_username,
+        web_username=_web_username_for_principal(principal, web_username),
         password=password,
         is_active=is_active,
     )
@@ -364,13 +415,14 @@ async def attach_level2_web_identity(
     """Create Web credentials for an existing Level-2 Principal (same table as L1).
 
     Does not provision Principals, PG accounts, bots, or UI. Parent L1 must be active.
+    Web username must equal ``principal.pg_username``.
     """
     principal = _assert_level2_principal(await get_principal(session, int(principal_id)))
     await _assert_active_level1_parent(session, principal)
     return await _create_web_identity_row(
         session,
         principal=principal,
-        web_username=web_username,
+        web_username=_web_username_for_principal(principal, web_username),
         password=password,
         is_active=is_active,
     )

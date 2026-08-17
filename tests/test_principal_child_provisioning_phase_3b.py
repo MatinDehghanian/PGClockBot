@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.db import Base
 import app.db.models  # noqa: F401
-from app.db.models import OrgPrincipal, OrgPrincipalProvision
+from app.db.models import OrgPrincipal, OrgPrincipalProvision, OrgPrincipalWebIdentity
 from app.services.org_principals import (
     DEPTH_TWO,
     STATUS_DISABLED,
@@ -182,6 +182,15 @@ class Phase3BChildProvisionTests(unittest.IsolatedAsyncioTestCase):
             payload = self._parent_pg.create_admin.await_args.args[0]
             self.assertEqual(payload["username"], "child_a1")
             self.assertNotIn("password", payload)  # scrubbed
+            ident = (
+                await session.execute(
+                    select(OrgPrincipalWebIdentity).where(
+                        OrgPrincipalWebIdentity.principal_id == int(result.principal.id)
+                    )
+                )
+            ).scalar_one()
+            self.assertEqual(ident.web_username, "child_a1")
+            self.assertTrue(ident.is_active)
             _ = owner
 
     async def test_b_l1_without_permission_deny(self) -> None:

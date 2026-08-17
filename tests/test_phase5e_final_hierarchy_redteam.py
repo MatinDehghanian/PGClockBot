@@ -224,16 +224,16 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
                 admin_ids={OWNER_TID},
             )
         ident_l1a = await attach_level1_web_identity(
-            session, principal_id=int(l1a.id), web_username="web_l1a", password=_WEB
+            session, principal_id=int(l1a.id), web_username="pg_shopa", password=_WEB
         )
         ident_a1 = await attach_level2_web_identity(
-            session, principal_id=int(a1.id), web_username="web_a1", password=_WEB
+            session, principal_id=int(a1.id), web_username="pg_a1", password=_WEB
         )
         ident_a2 = await attach_level2_web_identity(
-            session, principal_id=int(a2.id), web_username="web_a2", password=_WEB
+            session, principal_id=int(a2.id), web_username="pg_a2", password=_WEB
         )
         ident_b1 = await attach_level2_web_identity(
-            session, principal_id=int(b1.id), web_username="web_b1", password=_WEB
+            session, principal_id=int(b1.id), web_username="pg_b1", password=_WEB
         )
         await session.commit()
         return SimpleNamespace(
@@ -338,7 +338,7 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
             fx = await self._tree(session)
             live, feats = self._pg_live()
             cookie = build_principal_session_payload(
-                await authenticate_level1_web(session, username="web_a1", password=_WEB)
+                await authenticate_level1_web(session, username="pg_a1", password=_WEB)
             )
             cookie.update(
                 {
@@ -363,7 +363,7 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
                     await resolve_principal_web_session(session, cookie)
             self.assertIn(ctx.exception.code, {"principal_tamper", "hierarchy_tamper"})
             good = build_principal_session_payload(
-                await authenticate_level1_web(session, username="web_a1", password=_WEB)
+                await authenticate_level1_web(session, username="pg_a1", password=_WEB)
             )
             good["pg_role_id"] = 1
             good["web_owner"] = True
@@ -452,7 +452,7 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             fx = await self._tree(session)
             payload = build_principal_session_payload(
-                await authenticate_level1_web(session, username="web_a1", password=_WEB)
+                await authenticate_level1_web(session, username="pg_a1", password=_WEB)
             )
             fx.a1.status = "disabled"
             await session.commit()
@@ -485,7 +485,7 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             fx = await self._tree(session)
             payload = build_principal_session_payload(
-                await authenticate_level1_web(session, username="web_a1", password=_WEB)
+                await authenticate_level1_web(session, username="pg_a1", password=_WEB)
             )
             with patch(
                 "app.services.pg_staff_access.resolve_pg_role_id_for_admin",
@@ -565,8 +565,8 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
             fx = await self._tree(session)
             live, feats = self._pg_live()
             with live, feats:
-                staff_a1 = await self._web(session, "web_a1")
-                staff_l1a = await self._web(session, "web_l1a")
+                staff_a1 = await self._web(session, "pg_a1")
+                staff_l1a = await self._web(session, "pg_shopa")
             req_l2 = Level2ProvisionRequest(
                 pg_username="evil_l2",
                 pg_password="EvilL2pw12!@",
@@ -673,7 +673,7 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
                     session,
                     build_principal_session_payload(
                         await authenticate_level1_web(
-                            session, username="web_a1", password=_WEB
+                            session, username="pg_a1", password=_WEB
                         )
                     ),
                 )
@@ -704,8 +704,8 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
     async def test_ai_aj_web_bot_same_principal_and_scope(self) -> None:
         async with self.Session() as session:
             fx = await self._tree(session)
-            staff_a1 = await self._web(session, "web_a1")
-            staff_l1a = await self._web(session, "web_l1a")
+            staff_a1 = await self._web(session, "pg_a1")
+            staff_l1a = await self._web(session, "pg_shopa")
             live, feats = self._pg_live()
             with live, feats, self._admin_ids(OWNER_TID):
                 bot_a1 = await resolve_bot_principal_bridge(
@@ -768,7 +768,7 @@ class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
                     session,
                     build_principal_session_payload(
                         await authenticate_level1_web(
-                            session, username="web_a1", password=_WEB
+                            session, username="pg_a1", password=_WEB
                         )
                     ),
                 )

@@ -478,7 +478,7 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
             ident = await attach_level2_web_identity(
                 session,
                 principal_id=int(fx.a1.id),
-                web_username="web_a1_5b",
+                web_username="pg_a1",
                 password="Aa1aaaaa",
             )
             await session.commit()
@@ -499,7 +499,7 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
             ident = await attach_level2_web_identity(
                 session,
                 principal_id=int(fx.a1.id),
-                web_username="web_eq_5b",
+                web_username="pg_a1",
                 password="Aa1aaaaa",
             )
             await self._bind_own_child(session, fx)

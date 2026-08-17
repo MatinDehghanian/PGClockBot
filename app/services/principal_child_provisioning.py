@@ -2,7 +2,8 @@
 
 Eligible active Level-1 Principals create depth-2 children with independent
 PasarGuard identities. Parent/depth are always server-determined from the
-authenticated Principal. No UI, Web login, Bot, or Owner→L2 by default.
+authenticated Principal. Web login uses the child's PG username. No Bot or
+Owner→L2 by default.
 """
 
 from __future__ import annotations
@@ -457,6 +458,20 @@ async def provision_level2_child(
             )
         )
         await session.flush()
+        from app.services.principal_web_identity import (
+            PrincipalWebIdentityError,
+            attach_level2_web_identity,
+        )
+
+        try:
+            await attach_level2_web_identity(
+                session,
+                principal_id=int(child.id),
+                web_username=uname,
+                password=request.pg_password,
+            )
+        except PrincipalWebIdentityError as exc:
+            raise ChildProvisionError(exc.message, code=exc.code) from None
     except ChildProvisionError:
         if pg_created:
             await _compensate_delete_pg_admin(parent_pg, uname)

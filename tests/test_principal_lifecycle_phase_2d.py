@@ -192,14 +192,14 @@ class Phase2DLifecycleTests(unittest.IsolatedAsyncioTestCase):
             await attach_level1_web_identity(
                 session,
                 principal_id=int(a.id),
-                web_username="web_prin_a",
+                web_username="prin_a",
                 password=_WEB_PASSWORD,
             )
             await disable_level1_principal(session, _owner_staff(owner), int(a.id))
             await session.commit()
             with self.assertRaises(PrincipalWebIdentityError) as ctx:
                 await authenticate_level1_web(
-                    session, username="web_prin_a", password=_WEB_PASSWORD
+                    session, username="prin_a", password=_WEB_PASSWORD
                 )
             self.assertEqual(ctx.exception.code, "principal_disabled")
 
@@ -209,12 +209,12 @@ class Phase2DLifecycleTests(unittest.IsolatedAsyncioTestCase):
             await attach_level1_web_identity(
                 session,
                 principal_id=int(a.id),
-                web_username="web_sess_a",
+                web_username="prin_a",
                 password=_WEB_PASSWORD,
             )
             await session.commit()
             auth = await authenticate_level1_web(
-                session, username="web_sess_a", password=_WEB_PASSWORD
+                session, username="prin_a", password=_WEB_PASSWORD
             )
             assert auth is not None
             payload = build_principal_session_payload(auth)
@@ -277,7 +277,7 @@ class Phase2DLifecycleTests(unittest.IsolatedAsyncioTestCase):
             await attach_level1_web_identity(
                 session,
                 principal_id=int(a.id),
-                web_username="web_keep_a",
+                web_username="prin_a",
                 password=_WEB_PASSWORD,
             )
             pid = int(a.id)
@@ -294,7 +294,7 @@ class Phase2DLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(int(a.depth), depth)
             self.assertEqual(a.pg_username, uname)
             auth = await authenticate_level1_web(
-                session, username="web_keep_a", password=_WEB_PASSWORD
+                session, username="prin_a", password=_WEB_PASSWORD
             )
             self.assertIsNotNone(auth)
             assert auth is not None

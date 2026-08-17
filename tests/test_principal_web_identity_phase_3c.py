@@ -121,13 +121,13 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
             pg_password_enc=encrypt_secret(_PG_B1),
         )
         await attach_level1_web_identity(
-            session, principal_id=int(a.id), web_username="web_a", password=_WEB_A1
+            session, principal_id=int(a.id), web_username="l1_a", password=_WEB_A1
         )
         await attach_level2_web_identity(
-            session, principal_id=int(a1.id), web_username="web_a1", password=_WEB_A1
+            session, principal_id=int(a1.id), web_username="l2_a1", password=_WEB_A1
         )
         await attach_level2_web_identity(
-            session, principal_id=int(a2.id), web_username="web_a2", password=_WEB_A2
+            session, principal_id=int(a2.id), web_username="l2_a2", password=_WEB_A2
         )
         await session.commit()
         return owner, a, a1, a2, b, b1
@@ -148,7 +148,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, _a, a1, _a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB_A1
+                session, username="l2_a1", password=_WEB_A1
             )
             self.assertIsNotNone(auth)
             assert auth is not None
@@ -162,7 +162,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, _a, _a1, a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a2", password=_WEB_A2
+                session, username="l2_a2", password=_WEB_A2
             )
             assert auth is not None
             self.assertEqual(int(auth.principal.id), int(a2.id))
@@ -173,7 +173,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, a, a1, _a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB_A1
+                session, username="l2_a1", password=_WEB_A1
             )
             assert auth is not None
             cookie = build_principal_session_payload(auth)
@@ -193,7 +193,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, _a, a1, a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB_A1
+                session, username="l2_a1", password=_WEB_A1
             )
             assert auth is not None
             cookie = build_principal_session_payload(auth)
@@ -211,7 +211,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             owner, _a, a1, _a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB_A1
+                session, username="l2_a1", password=_WEB_A1
             )
             assert auth is not None
             staff = await self._resolve(session, auth)
@@ -237,7 +237,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             owner, a, a1, a2, b, b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB_A1
+                session, username="l2_a1", password=_WEB_A1
             )
             assert auth is not None
             staff = await self._resolve(session, auth)
@@ -271,7 +271,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, a, _a1, _a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB_A1
+                session, username="l2_a1", password=_WEB_A1
             )
             assert auth is not None
             staff = await self._resolve(session, auth)
@@ -281,7 +281,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, _a, _a1, a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB_A1
+                session, username="l2_a1", password=_WEB_A1
             )
             assert auth is not None
             staff = await self._resolve(session, auth)
@@ -291,7 +291,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, _a, _a1, _a2, b, b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB_A1
+                session, username="l2_a1", password=_WEB_A1
             )
             assert auth is not None
             staff = await self._resolve(session, auth)
@@ -305,7 +305,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
             await session.commit()
             with self.assertRaises(PrincipalWebIdentityError) as ctx:
                 await authenticate_level1_web(
-                    session, username="web_a1", password=_WEB_A1
+                    session, username="l2_a1", password=_WEB_A1
                 )
             self.assertEqual(ctx.exception.code, "principal_disabled")
 
@@ -316,7 +316,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
             await session.commit()
             with self.assertRaises(PrincipalWebIdentityError) as ctx:
                 await authenticate_level1_web(
-                    session, username="web_a1", password=_WEB_A1
+                    session, username="l2_a1", password=_WEB_A1
                 )
             self.assertEqual(ctx.exception.code, "parent_disabled")
 
@@ -324,7 +324,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, a, _a1, _a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB_A1
+                session, username="l2_a1", password=_WEB_A1
             )
             assert auth is not None
             payload = build_principal_session_payload(auth)
@@ -388,13 +388,13 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
             await attach_level2_web_identity(
                 session,
                 principal_id=int(child.id),
-                web_username="web_npg",
+                web_username="l2_npg",
                 password=_WEB_A1,
             )
             await session.commit()
             with self.assertRaises(PrincipalWebIdentityError) as ctx:
                 await authenticate_level1_web(
-                    session, username="web_npg", password=_WEB_A1
+                    session, username="l2_npg", password=_WEB_A1
                 )
             self.assertEqual(ctx.exception.code, "pg_credential_missing")
 
@@ -404,7 +404,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, a, a1, a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB_A1
+                session, username="l2_a1", password=_WEB_A1
             )
             assert auth is not None
             staff = await self._resolve(session, auth)
@@ -446,7 +446,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, a, a1, a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB_A1
+                session, username="l2_a1", password=_WEB_A1
             )
             assert auth is not None
             # Untampered cookie → server identity A1
@@ -483,7 +483,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
             # Re-attach would collide; login still binds to same principal_id
             # Update identity mapping's principal still depth 2
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB_A1
+                session, username="l2_a1", password=_WEB_A1
             )
             assert auth is not None
             self.assertEqual(int(auth.principal.id), int(a1.id))
@@ -509,7 +509,7 @@ class Phase3CLevel2WebIdentityTests(unittest.IsolatedAsyncioTestCase):
             async with self.Session() as session:
                 _o, _a, _a1, _a2, _b, _b1 = await self._tree(session)
                 auth = await authenticate_level1_web(
-                    session, username="web_a1", password=_WEB_A1
+                    session, username="l2_a1", password=_WEB_A1
                 )
                 assert auth is not None
                 payload = build_principal_session_payload(auth)

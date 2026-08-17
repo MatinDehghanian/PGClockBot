@@ -1,21 +1,21 @@
 {% extends "base.html" %}
 {% from "macros.html" import row_actions, page_title %}
-{% block title %}مدیریت کاربران سازمان{% endblock %}
+{% block title %}نمایندگان من{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    {{ page_title('users', 'مدیریت کاربران سازمان') }}
+    {{ page_title('users', 'نمایندگان من') }}
     {% if actor_kind == 'owner' %}
-    <p class="muted">Principalهای سطح ۱ و فرزندان سطح ۲ — جدا از نمایندگان فروشگاه.</p>
+    <p class="muted">نمایندگان سازمان با نقش پاسارگارد خودشان. نمایندگان فروشگاه در مسیر جدا هستند.</p>
     {% else %}
-    <p class="muted">فرزندان سطح ۲ شما. سلسله‌مراتب توسط سرور تعیین می‌شود.</p>
+    <p class="muted">نمایندگانی که با نقش پاسارگارد شما ساخته می‌شوند. سلسله‌مراتب توسط سرور تعیین می‌شود.</p>
     {% endif %}
   </div>
   {% if can_create %}
-  <button type="button" class="btn" data-modal-open="modal-principal-create">افزودن سطح ۱</button>
+  <button type="button" class="btn" data-modal-open="modal-principal-create">افزودن نماینده</button>
   {% endif %}
   {% if can_create_l2 %}
-  <button type="button" class="btn" data-modal-open="modal-principal-create-l2">ایجاد سطح ۲</button>
+  <button type="button" class="btn" data-modal-open="modal-principal-create-l2">افزودن نماینده</button>
   {% endif %}
 </div>
 
@@ -23,14 +23,14 @@
 {% if flash_err and not open_detail %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
 <div class="card card-flush">
-  <h2>{% if actor_kind == 'owner' %}فهرست Principal سازمان{% else %}فهرست Principal سطح ۲{% endif %}</h2>
+  <h2>فهرست نمایندگان</h2>
   <div class="table-wrap">
   <table class="table-compact" data-sortable>
     <thead>
       <tr>
         <th data-sort-type="num">شناسه</th>
         <th data-sort-type="text">وضعیت</th>
-        <th data-sort-type="text">سلسله‌مراتب</th>
+        <th data-sort-type="text">نوع</th>
         <th class="col-hide-sm" data-sort-type="text">کاربر پاسارگارد</th>
         <th class="col-hide-sm" data-sort-type="text">والد</th>
         <th class="col-hide-sm" data-sort-type="text">نقش پاسارگارد</th>
@@ -107,7 +107,7 @@
       </tr>
       {% endfor %}
       {% else %}
-      <tr><td colspan="10" class="muted">Principal سطح ۱ ثبت نشده است</td></tr>
+      <tr><td colspan="10" class="muted">نماینده‌ای ثبت نشده است</td></tr>
       {% endfor %}
     {% else %}
       {% for child in l2_rows %}
@@ -142,7 +142,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="10" class="muted">Principal سطح ۲ ثبت نشده است</td></tr>
+      <tr><td colspan="10" class="muted">نماینده‌ای ثبت نشده است</td></tr>
       {% endfor %}
     {% endif %}
     </tbody>
@@ -155,11 +155,11 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>افزودن Principal سطح ۱</h2>
+      <h2>افزودن نماینده</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/principals/create" class="form-stack" autocomplete="off">
-      <p class="muted">سلسله‌مراتب توسط سرور تعیین می‌شود. نقش پاسارگارد فقط پروفایل قابلیت است، نه سطح سازمان.</p>
+      <p class="muted">نام کاربری و رمز پنل همان نام کاربری و رمز پاسارگارد است. نقش پاسارگارد فقط پروفایل قابلیت است.</p>
       <label class="form-field">نام کاربری پاسارگارد
         <input name="pg_username" required dir="ltr" autocomplete="off" />
       </label>
@@ -173,7 +173,7 @@
           <option value="{{ r.id }}">{{ r.name }}</option>
           {% endfor %}
         </select>
-        <small class="muted">فهرست زنده از پاسارگارد — نام نقش، برچسب سلسله‌مراتب نیست.</small>
+        <small class="muted">فهرست زنده از پاسارگارد — نام نقش، سطح سازمان نیست.</small>
       </label>
       <label class="form-field">یادداشت (اختیاری)
         <input name="note" maxlength="200" />
@@ -192,11 +192,11 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>ایجاد Principal سطح ۲</h2>
+      <h2>افزودن نماینده</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/principals/create-l2" class="form-stack" autocomplete="off">
-      <p class="muted">والد همیشه Principal سطح ۱ احراز هویت‌شده است. نقش پاسارگارد فقط پروفایل قابلیت است، نه سطح سازمان.</p>
+      <p class="muted">نام کاربری و رمز پنل همان نام کاربری و رمز پاسارگارد است. نقش از پاسارگارد شما انتخاب می‌شود.</p>
       <label class="form-field">نام کاربری پاسارگارد
         <input name="pg_username" required dir="ltr" autocomplete="off" />
       </label>
@@ -210,7 +210,7 @@
           <option value="{{ r.id }}">{{ r.name }}</option>
           {% endfor %}
         </select>
-        <small class="muted">فهرست زنده از پاسارگارد والد — نام نقش، برچسب سلسله‌مراتب نیست.</small>
+        <small class="muted">فهرست زنده از پاسارگارد شما — نام نقش، سطح سازمان نیست.</small>
       </label>
       <label class="form-field">یادداشت (اختیاری)
         <input name="note" maxlength="200" />
@@ -228,7 +228,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="principal-detail-title">
     <div class="ui-modal-head">
-      <h2 id="principal-detail-title">جزئیات Principal</h2>
+      <h2 id="principal-detail-title">جزئیات نماینده</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     {% if detail %}
@@ -245,7 +245,7 @@
       </p>
       <p>شناسه: <span class="mono" dir="ltr">{{ detail.principal_id }}</span></p>
       <p>کاربر پاسارگارد: <span class="mono" dir="ltr">{{ detail.pg_username or '—' }}</span></p>
-      {% if detail.hierarchy_label == 'سطح ۲' %}
+      {% if detail.depth == 2 %}
       <p>والد: <span class="mono" dir="ltr">{{ detail.parent_username or '—' }}</span></p>
       <p>ربات: {{ detail.bot_binding_label }}</p>
       {% endif %}
@@ -310,11 +310,11 @@
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/principals/{{ detail.principal_id }}/web-identity" class="form-stack" autocomplete="off">
-      <p class="muted">هویت وب مستقل از پاسارگارد است. سلسله‌مراتب توسط سرور تعیین می‌شود.</p>
+      <p class="muted">نام کاربری پنل همان نام کاربری پاسارگارد است و تغییر نمی‌کند.</p>
       <label class="form-field">نام کاربری
-        <input name="username" required dir="ltr" autocomplete="off" />
+        <input name="username" required dir="ltr" autocomplete="off" value="{{ detail.pg_username or '' }}" readonly />
       </label>
-      <label class="form-field">رمز عبور
+      <label class="form-field">رمز عبور (همان رمز پاسارگارد)
         <input name="password" type="password" required dir="ltr" autocomplete="new-password" />
       </label>
       <div class="actions">

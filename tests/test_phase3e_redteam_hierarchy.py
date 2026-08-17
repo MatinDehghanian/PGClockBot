@@ -162,16 +162,16 @@ class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
             pg_password_enc=encrypt_secret(_PG_B1),
         )
         await attach_level1_web_identity(
-            session, principal_id=int(a.id), web_username="web_a", password=_WEB
+            session, principal_id=int(a.id), web_username="l1_a", password=_WEB
         )
         await attach_level2_web_identity(
-            session, principal_id=int(a1.id), web_username="web_a1", password=_WEB
+            session, principal_id=int(a1.id), web_username="l2_a1", password=_WEB
         )
         await attach_level2_web_identity(
-            session, principal_id=int(a2.id), web_username="web_a2", password=_WEB
+            session, principal_id=int(a2.id), web_username="l2_a2", password=_WEB
         )
         await attach_level2_web_identity(
-            session, principal_id=int(b1.id), web_username="web_b1", password=_WEB
+            session, principal_id=int(b1.id), web_username="l2_b1", password=_WEB
         )
         await session.commit()
         return owner, a, a1, a2, b, b1
@@ -210,7 +210,7 @@ class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, _a, _a1, a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB
+                session, username="l2_a1", password=_WEB
             )
             assert auth
             with self.assertRaises(PrincipalWebIdentityError) as ctx:
@@ -223,7 +223,7 @@ class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, _a, a1, a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB
+                session, username="l2_a1", password=_WEB
             )
             assert auth
             ident_a2 = await session.get(
@@ -249,7 +249,7 @@ class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             owner, _a, a1, _a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB
+                session, username="l2_a1", password=_WEB
             )
             assert auth
             with self.assertRaises(PrincipalWebIdentityError) as ctx:
@@ -274,7 +274,7 @@ class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             owner, _a, _a1, _a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB
+                session, username="l2_a1", password=_WEB
             )
             assert auth
             with self.assertRaises(PrincipalWebIdentityError):
@@ -395,7 +395,7 @@ class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             owner, a, a1, a2, b, b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB
+                session, username="l2_a1", password=_WEB
             )
             assert auth
             staff = await self._resolve(session, auth)
@@ -433,7 +433,7 @@ class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, _a, _a1, _a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB
+                session, username="l2_a1", password=_WEB
             )
             assert auth
             staff = await self._resolve(session, auth)
@@ -471,7 +471,7 @@ class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             owner, a, a1, a2, b, b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a", password=_WEB
+                session, username="l1_a", password=_WEB
             )
             assert auth
             staff = await self._resolve(session, auth)
@@ -538,7 +538,7 @@ class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, a, a1, a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB
+                session, username="l2_a1", password=_WEB
             )
             assert auth
             staff = await self._resolve(session, auth)
@@ -599,7 +599,7 @@ class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             owner, a, a1, _a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB
+                session, username="l2_a1", password=_WEB
             )
             assert auth
             payload = build_principal_session_payload(auth)
@@ -607,7 +607,7 @@ class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
             await session.commit()
             with self.assertRaises(PrincipalWebIdentityError) as ctx:
                 await authenticate_level1_web(
-                    session, username="web_a1", password=_WEB
+                    session, username="l2_a1", password=_WEB
                 )
             self.assertEqual(ctx.exception.code, "principal_disabled")
             with patch(
@@ -624,7 +624,7 @@ class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
             await session.commit()
             with self.assertRaises(PrincipalWebIdentityError) as ctx2:
                 await authenticate_level1_web(
-                    session, username="web_a1", password=_WEB
+                    session, username="l2_a1", password=_WEB
                 )
             self.assertEqual(ctx2.exception.code, "parent_disabled")
             with self.assertRaises(PasarGuardError):
@@ -638,7 +638,7 @@ class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             owner, a, a1, _a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB
+                session, username="l2_a1", password=_WEB
             )
             assert auth
             payload = build_principal_session_payload(auth)
@@ -662,7 +662,7 @@ class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             _o, _a, _a1, _a2, _b, _b1 = await self._tree(session)
             auth = await authenticate_level1_web(
-                session, username="web_a1", password=_WEB
+                session, username="l2_a1", password=_WEB
             )
             assert auth
             broad = _role("Operator", 99, BROAD)

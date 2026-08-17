@@ -279,13 +279,13 @@ class Product4L2WebIdentityHttpTests(unittest.IsolatedAsyncioTestCase):
                     )
                 )
             ).scalar_one()
-            self.assertEqual(ident.web_username, "webl2_owner")
+            self.assertEqual(ident.web_username, pg_user)
             self.assertTrue(ident.is_active)
             self.assertNotEqual(ident.web_password_hash, _WEB_PLAIN)
             self.assertNotEqual(ident.web_password_hash, _PG_PLAIN)
             self.assertTrue(ident.web_password_hash.startswith("$2"))
             auth, resolved = await self._resolve_login(
-                session, "webl2_owner", _WEB_PLAIN
+                session, pg_user, _WEB_PLAIN
             )
             self.assertEqual(int(auth.principal.id), int(a1.id))
             self.assertEqual(int(auth.principal.depth), 2)
@@ -408,9 +408,9 @@ class Product4L2WebIdentityHttpTests(unittest.IsolatedAsyncioTestCase):
                 data=self._form("webl2_on_owner"),
                 follow_redirects=False,
             )
-        self.assertEqual(on_l1.status_code, 403)
+        self.assertEqual(on_l1.status_code, 303)
         self.assertEqual(on_owner.status_code, 403)
-        self.assertEqual(await self._identity_count(int(a.id)), 0)
+        self.assertEqual(await self._identity_count(int(a.id)), 1)
         self.assertEqual(await self._identity_count(int(owner.id)), 0)
         async with self._client(staff) as client:
             ok = await client.post(
@@ -431,7 +431,7 @@ class Product4L2WebIdentityHttpTests(unittest.IsolatedAsyncioTestCase):
                 follow_redirects=False,
             )
             second = await client.post(
-                f"/principals/{int(a2.id)}/web-identity",
+                f"/principals/{int(a1.id)}/web-identity",
                 data=self._form("webl2_dup"),
                 follow_redirects=False,
             )
@@ -479,7 +479,7 @@ class Product4L2WebIdentityHttpTests(unittest.IsolatedAsyncioTestCase):
                     )
                 )
             ).scalar_one()
-            self.assertEqual(ident.web_username, "webl2_tamp")
+            self.assertEqual(ident.web_username, "child_a1")
             child = await session.get(OrgPrincipal, int(a1.id))
             self.assertEqual(int(child.depth), 2)
             self.assertEqual(int(child.parent_id), int(a.id))
@@ -510,8 +510,10 @@ class Product4SourceContracts(unittest.TestCase):
         chunk = tpl[start : tpl.find("{% endif %}", start)]
         self.assertIn('name="username"', chunk)
         self.assertIn('name="password"', chunk)
-        self.assertNotIn("pg_username", chunk)
-        self.assertNotIn("pg_password", chunk)
+        self.assertIn("readonly", chunk)
+        self.assertIn("detail.pg_username", chunk)
+        self.assertNotIn('name="pg_username"', chunk)
+        self.assertNotIn('name="pg_password"', chunk)
         self.assertNotIn("web_password_hash", chunk)
         self.assertNotIn("pg_password_enc", tpl)
 

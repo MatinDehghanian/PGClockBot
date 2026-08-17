@@ -109,12 +109,12 @@ class Phase2C1SecretStorageTests(unittest.IsolatedAsyncioTestCase):
             await attach_level1_web_identity(
                 session,
                 principal_id=int(p.id),
-                web_username="web_sec_b",
+                web_username="sec_b",
                 password=_WEB_PASSWORD,
             )
             await session.commit()
             auth = await authenticate_level1_web(
-                session, username="web_sec_b", password=_WEB_PASSWORD
+                session, username="sec_b", password=_WEB_PASSWORD
             )
             assert auth is not None
             payload = build_principal_session_payload(auth)
@@ -137,12 +137,12 @@ class Phase2C1SecretStorageTests(unittest.IsolatedAsyncioTestCase):
             await attach_level1_web_identity(
                 session,
                 principal_id=int(p.id),
-                web_username="web_sec_c",
+                web_username="sec_c",
                 password=_WEB_PASSWORD,
             )
             await session.commit()
             auth = await authenticate_level1_web(
-                session, username="web_sec_c", password=_WEB_PASSWORD
+                session, username="sec_c", password=_WEB_PASSWORD
             )
             assert auth is not None
             with patch(
@@ -322,12 +322,12 @@ class Phase2C1SecretStorageTests(unittest.IsolatedAsyncioTestCase):
             await attach_level1_web_identity(
                 session,
                 principal_id=int(p.id),
-                web_username="web_g",
+                web_username="not_owner_pg",
                 password=_WEB_PASSWORD,
             )
             await session.commit()
             auth = await authenticate_level1_web(
-                session, username="web_g", password=_WEB_PASSWORD
+                session, username="not_owner_pg", password=_WEB_PASSWORD
             )
             assert auth
             with patch(

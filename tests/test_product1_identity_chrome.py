@@ -131,7 +131,7 @@ class IdentityChromeTests(unittest.TestCase):
             }
         )
         self.assertEqual(ident["kind"], "l1")
-        self.assertEqual(ident["label"], "سطح ۱")
+        self.assertEqual(ident["label"], "نماینده")
         self.assertTrue(ident["show_pg_role"])
         self.assertEqual(ident["pg_role_name"], "Operator")
         self.assertNotEqual(ident["label"], ident["pg_role_name"])
@@ -151,7 +151,7 @@ class IdentityChromeTests(unittest.TestCase):
             }
         )
         self.assertEqual(ident["kind"], "l2")
-        self.assertEqual(ident["label"], "سطح ۲")
+        self.assertEqual(ident["label"], "نماینده")
         self.assertEqual(ident["pg_role_name"], "Administrator")
         self.assertNotEqual(ident["label"], "Administrator")
 
@@ -245,9 +245,9 @@ class PrincipalPageSourceContracts(unittest.TestCase):
 
     def test_template_never_hardcodes_pg_roles_as_hierarchy(self) -> None:
         tpl = (ROOT / "app/web/templates/principals.html").read_text(encoding="utf-8")
-        self.assertIn("سطح ۱", tpl)
-        self.assertIn("PG Role:", tpl)
+        self.assertIn("نماینده", tpl)
         self.assertIn("hierarchy_label", tpl)
+        self.assertIn("PG Role:", tpl)
         self.assertNotIn("Administrator", tpl)
         self.assertNotIn("Operator", tpl)
         self.assertNotIn("pg_password_enc", tpl)
@@ -257,7 +257,7 @@ class PrincipalPageSourceContracts(unittest.TestCase):
 
     def test_nav_owner_only_and_not_reseller_label(self) -> None:
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("مدیریت کاربران سازمان", base)
+        self.assertIn("نمایندگان من", base)
         self.assertIn('href="/principals"', base)
         # Nav entry lives inside the existing is_admin shop block, next to /resellers.
         resellers_at = base.find('href="/resellers"')
@@ -371,7 +371,7 @@ class PrincipalManagementHttpTests(unittest.IsolatedAsyncioTestCase):
         body = resp.text
         self.assertIn("prin_a", body)
         self.assertIn("prin_off", body)
-        self.assertIn("سطح ۱", body)
+        self.assertIn("نماینده", body)
         self.assertIn("فعال", body)
         self.assertIn("غیرفعال", body)
         self.assertIn("PG Role: Operator", body)
@@ -379,7 +379,7 @@ class PrincipalManagementHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("pg_password_enc", body)
         self.assertNotIn("gAAAAA", body)
         self.assertNotIn(str(active.pg_password_enc or ""), body)
-        # Hierarchy is سطح ۱; live PG name is secondary metadata.
+        # Hierarchy label is product language; live PG name is secondary metadata.
         self.assertIn("hierarchy_label", Path("app/web/templates/principals.html").read_text(encoding="utf-8"))
         self.assertNotIn(">Administrator</span>", body)
         self.assertIn(str(active.id), body)
