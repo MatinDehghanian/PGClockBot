@@ -229,6 +229,8 @@ class PanelRedirectAndSecretTests(unittest.TestCase):
         self.assertIn("_home_ops.html", home)
         self.assertIn("_home_ops.html", reseller)
         self.assertIn("ac.entries", ops)
+        self.assertIn("home-action-leading", ops)
+        self.assertIn("action_center_icon", ops)
         self.assertNotIn("for item in ac.items", ops)
         self.assertNotIn("for item in ac.items", home)
         self.assertNotIn("for item in ac.items", reseller)

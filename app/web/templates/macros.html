@@ -159,6 +159,23 @@
 </div>
 {%- endmacro %}
 
+{# Action center row icons — keyed by ux20 build_action_center entry key #}
+{% macro action_center_icon(key) -%}
+<span class="home-action-ico" aria-hidden="true">
+{%- if key == 'pending' -%}
+<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 14h4"/></svg>
+{%- elif key == 'delivery' -%}
+<svg viewBox="0 0 24 24"><path d="M12 9v4M12 16h.01"/><circle cx="12" cy="12" r="9"/></svg>
+{%- elif key == 'tickets' -%}
+<svg viewBox="0 0 24 24"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
+{%- elif key == 'expiring' -%}
+<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+{%- else -%}
+<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2.5"/></svg>
+{%- endif -%}
+</span>
+{%- endmacro %}
+
 {# PasarGuard sub-nav — respects pg_perms / is_admin #}
 {% macro pg_tabs(active='') -%}
 {% set perms = pg_perms if pg_perms is defined else [] %}

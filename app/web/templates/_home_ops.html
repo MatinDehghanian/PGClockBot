@@ -2,6 +2,7 @@
    Expects: periods, action_center (optional), portal_bot_href, portal_pg_href,
             portal_bot_show (bool, default true), portal_pg_show (bool, default true)
 #}
+{% from "macros.html" import action_center_icon %}
 {% set ac = action_center or {} %}
 {% set periods = periods or {} %}
 {% set day = periods.day or {} %}
@@ -87,9 +88,12 @@
   <div class="home-action-list">
     {% for item in ac.entries %}
     <a class="home-action-item tone-{{ item.tone or 'neutral' }}" href="{{ item.href }}">
-      <span class="home-action-copy">
-        <strong>{{ item.title }}</strong>
-        <span class="muted">{{ item.detail }}</span>
+      <span class="home-action-leading">
+        {{ action_center_icon(item.key) }}
+        <span class="home-action-copy">
+          <strong>{{ item.title }}</strong>
+          <span class="muted">{{ item.detail }}</span>
+        </span>
       </span>
       <span class="btn btn-sm btn-ghost">برو</span>
     </a>

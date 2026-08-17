@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_title, action_center_icon %}
 {% block title %}اعلان‌ها و مرکز اقدام{% endblock %}
 {% block content %}
 {% set ac = action_center or {} %}
@@ -83,9 +83,12 @@
   <div class="home-action-list">
     {% for item in ac.entries %}
     <a class="home-action-item tone-{{ item.tone or 'neutral' }}" href="{{ item.href }}">
-      <span class="home-action-copy">
-        <strong>{{ item.title }}</strong>
-        <span class="muted">{{ item.detail }}</span>
+      <span class="home-action-leading">
+        {{ action_center_icon(item.key) }}
+        <span class="home-action-copy">
+          <strong>{{ item.title }}</strong>
+          <span class="muted">{{ item.detail }}</span>
+        </span>
       </span>
       <span class="btn btn-sm btn-ghost">برو</span>
     </a>
