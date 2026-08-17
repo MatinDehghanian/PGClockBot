@@ -10,12 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class TestLimitedRoleOverview(unittest.IsolatedAsyncioTestCase):
-    async def test_overview_falls_back_to_own_admin_meta(self):
+    async def test_overview_uses_own_client_without_owner_get_pg(self):
         from app.services.pg_overview import build_reseller_pg_overview
-
-        staff_pg = MagicMock()
-        staff_pg.get_admin = AsyncMock(return_value=None)
-        staff_pg.get_users = AsyncMock(return_value={"users": []})
 
         own = {
             "username": "limited_res",
@@ -24,6 +20,10 @@ class TestLimitedRoleOverview(unittest.IsolatedAsyncioTestCase):
             "status": "active",
             "role": {"id": 9, "name": "limited", "permissions": {"users": {"read": True}}},
         }
+        staff_pg = MagicMock()
+        staff_pg.get_admin = AsyncMock(return_value=own)
+        staff_pg.get_users = AsyncMock(return_value={"users": []})
+        staff_pg.get_admin_role = AsyncMock(return_value=own["role"])
 
         with (
             patch(
@@ -31,12 +31,12 @@ class TestLimitedRoleOverview(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=staff_pg),
             ),
             patch(
-                "app.services.pg_read.fetch_own_admin_meta",
-                new=AsyncMock(return_value=own),
+                "app.services.pg_overview.get_pg",
+                side_effect=AssertionError("L1/L2 must not use Owner get_pg()"),
             ),
             patch(
-                "app.services.pg_overview.get_pg",
-                return_value=MagicMock(get_admin_role=AsyncMock(return_value=own["role"])),
+                "app.services.pg_read.fetch_own_admin_meta",
+                side_effect=AssertionError("L1/L2 must not use Owner admin meta"),
             ),
         ):
             out = await build_reseller_pg_overview(
@@ -51,6 +51,35 @@ class TestLimitedRoleOverview(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(out["ready"], out.get("error"))
         self.assertIsNone(out.get("error"))
         self.assertEqual(out["users"]["used"], 2)
+
+    async def test_overview_fail_closed_when_own_admin_unavailable(self):
+        from app.services.pg_overview import build_reseller_pg_overview
+
+        staff_pg = MagicMock()
+        staff_pg.get_admin = AsyncMock(return_value=None)
+        staff_pg.get_users = AsyncMock(return_value={"users": []})
+
+        with (
+            patch(
+                "app.services.pg_read.get_pg_for_reseller",
+                new=AsyncMock(return_value=staff_pg),
+            ),
+            patch(
+                "app.services.pg_overview.get_pg",
+                side_effect=AssertionError("L1/L2 must not use Owner get_pg()"),
+            ),
+        ):
+            out = await build_reseller_pg_overview(
+                {
+                    "pg_admin_username": "limited_res",
+                    "role": "reseller",
+                    "bot_user_id": 7,
+                    "pg_role_id": 9,
+                },
+                session=MagicMock(),
+            )
+        self.assertFalse(out["ready"])
+        self.assertIsNotNone(out.get("error"))
 
     async def test_fetch_own_admin_meta_rejects_mismatch(self):
         from app.services.pg_read import fetch_own_admin_meta

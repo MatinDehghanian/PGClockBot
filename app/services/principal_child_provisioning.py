@@ -83,33 +83,17 @@ def _action_allowed(val: Any) -> bool:
 def has_pg_admin_create_capability(staff: Mapping[str, Any] | None) -> bool:
     """PasarGuard capability to create admin identities (capability only).
 
-    Uses action matrix / raw role permissions / explicit flag — never role *names*.
-    Level-1 UI may clamp ``pg_admins`` page visibility; child provisioning still
-    requires underlying create permission (or an explicit allow for tests/ops).
+    Uses action matrix / raw role permissions / explicit flag — never role *names*
+    and never ``pg_admins`` page visibility. Owner explicit ``pg_is_owner`` is
+    handled by the Owner provision gate, not this L1 helper.
     """
     if not staff:
         return False
     if bool(staff.get("pg_can_create_admin")):
         return True
-    actions = staff.get("pg_actions")
-    if isinstance(actions, Mapping):
-        for key in ("admins", "admin"):
-            block = actions.get(key)
-            if isinstance(block, Mapping) and _action_allowed(block.get("create")):
-                return True
-    role = staff.get("pg_role")
-    if isinstance(role, Mapping):
-        raw = role.get("permissions")
-        if isinstance(raw, Mapping):
-            for key in ("admins", "admin"):
-                block = raw.get(key)
-                if isinstance(block, Mapping) and _action_allowed(block.get("create")):
-                    return True
-    perms = staff.get("pg_permissions") or []
-    if "pg_admins" in perms:
-        return True
-    # Owner-equivalent PG flag — still not enough alone for L2 (hierarchy gates).
-    return False
+    from app.services.pg_access import staff_has_pg_admins_create
+
+    return staff_has_pg_admins_create(staff)
 
 
 def _client_depth_value(raw: Any) -> int | None:

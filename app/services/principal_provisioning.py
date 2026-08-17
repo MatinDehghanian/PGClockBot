@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import OrgPrincipal, OrgPrincipalProvision
 from app.services.authz import (
     authz_from_staff,
-    can_pg_page,
     is_explicit_org_owner,
 )
 from app.services.org_principals import (
@@ -74,17 +73,16 @@ class Level1ProvisionResult:
 def owner_has_pg_admin_create_capability(staff: Mapping[str, Any] | None) -> bool:
     """PasarGuard capability for creating admins / Level-1 Principals.
 
-    Uses mapped ``pg_admins`` feature or true PG owner flag — never role *names*
-    such as Administrator / Operator / admin.
+    Uses explicit PG owner flag or actual ``admins.create`` — never page
+    visibility (``pg_admins``) and never role *names*.
     """
     if not staff:
         return False
     if bool(staff.get("pg_is_owner")):
         return True
-    perms = staff.get("pg_permissions") or []
-    if "pg_admins" in perms:
-        return True
-    return can_pg_page(authz_from_staff(staff), "pg_admins")
+    from app.services.pg_access import staff_has_pg_admins_create
+
+    return staff_has_pg_admins_create(staff)
 
 
 def assert_can_provision_level1(staff: Mapping[str, Any] | None) -> None:

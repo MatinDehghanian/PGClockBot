@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import OrgPrincipal, PgStaffAccess, ResellerProfile
@@ -144,9 +145,17 @@ async def ensure_owner_principal(session: AsyncSession) -> OrgPrincipal:
         bot_user_id=None,
     )
     validate_parent_depth(depth=DEPTH_OWNER, parent=None)
-    session.add(owner)
-    await session.flush()
-    return owner
+    try:
+        async with session.begin_nested():
+            session.add(owner)
+            await session.flush()
+        return owner
+    except IntegrityError:
+        session.expunge(owner)
+        existing = await get_active_owner(session)
+        if existing is not None:
+            return existing
+        raise OrgPrincipalError("Owner principal conflict; resolve manually")
 
 
 async def create_principal(
@@ -187,8 +196,14 @@ async def create_principal(
         pg_staff_id=pg_staff_id,
         bot_user_id=bot_user_id,
     )
-    session.add(row)
-    await session.flush()
+    try:
+        async with session.begin_nested():
+            session.add(row)
+            await session.flush()
+    except IntegrityError:
+        if depth == DEPTH_OWNER:
+            raise OrgPrincipalError("Owner principal already exists") from None
+        raise
     return row
 
 

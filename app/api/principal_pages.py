@@ -13,6 +13,8 @@ import logging
 import uuid
 from urllib.parse import quote
 
+from typing import Any
+
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -230,8 +232,26 @@ def _raise_if_l2_bind_denied(exc: L2BotBindError) -> None:
         raise HTTPException(status_code=403, detail="forbidden") from exc
 
 
-async def _chips_for_role_id(role_id: int | None) -> list[str]:
-    if role_id is None:
+async def _l1_pg_client(session: AsyncSession, staff: dict) -> Any | None:
+    """L1/L2 Principal PG client — never Owner ``get_pg()``."""
+    try:
+        pid = int(staff.get("org_principal_id") or 0)
+    except (TypeError, ValueError):
+        return None
+    if pid <= 0:
+        return None
+    try:
+        from app.services.pasarguard import get_pg_for_principal
+
+        return await get_pg_for_principal(session, principal_id=pid)
+    except Exception:
+        return None
+
+
+async def _chips_for_role_id(
+    role_id: int | None, *, client: Any | None = None
+) -> list[str]:
+    if role_id is None or client is None:
         return []
     try:
         rid = int(role_id)
@@ -242,7 +262,7 @@ async def _chips_for_role_id(role_id: int | None) -> list[str]:
     try:
         from app.services.pg_access import resolve_reseller_pg_features
 
-        features, _role = await resolve_reseller_pg_features(rid)
+        features, _role = await resolve_reseller_pg_features(rid, client=client)
     except Exception:
         return []
     if not features:
@@ -466,7 +486,19 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
                     detail = _safe_public(view, hierarchy_label=hierarchy)
                     if not detail.get("pg_role_name") and detail.get("pg_role_id") is not None:
                         detail["pg_role_name"] = names.get(int(detail["pg_role_id"])) if names else None
-                    detail_chips = await _chips_for_role_id(detail.get("pg_role_id"))
+                    if owner:
+                        try:
+                            from app.services.pasarguard import get_pg
+
+                            chip_client: Any | None = get_pg()
+                        except Exception:
+                            chip_client = None
+                    else:
+                        chip_client = await _l1_pg_client(session, staff)
+                    detail_chips = await _chips_for_role_id(
+                        detail.get("pg_role_id"),
+                        client=chip_client,
+                    )
                     if int(target.depth) == DEPTH_ONE:
                         from app.services.principal_lifecycle import count_owned_resources
 

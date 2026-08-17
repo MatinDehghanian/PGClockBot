@@ -10,11 +10,13 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -592,6 +594,14 @@ class OrgPrincipal(Base):
     __table_args__ = (
         UniqueConstraint("reseller_profile_id", name="uq_org_principals_reseller_profile"),
         UniqueConstraint("pg_staff_id", name="uq_org_principals_pg_staff"),
+        # At most one depth-0 / parent_id NULL row (active or disabled).
+        Index(
+            "uq_org_principals_single_owner",
+            "depth",
+            unique=True,
+            sqlite_where=text("depth = 0 AND parent_id IS NULL"),
+            postgresql_where=text("depth = 0 AND parent_id IS NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

@@ -864,6 +864,9 @@ async def get_pg_for_principal(
     """PasarGuard client for a Level-1 or Level-2 OrgPrincipal — never Owner env token.
 
     Requires ``OrgPrincipal.pg_username`` + ``pg_password_enc`` on *this* row.
+    Selector is ``principal_id`` only. ``pg_username`` is ignored and must not
+    choose a sibling/parent row.
+
     Cache key is ``(principal_id, username)`` so parent/siblings never share clients.
 
     Level-2 uses its own stored credential only. Missing identity, inactive parent,
@@ -873,20 +876,15 @@ async def get_pg_for_principal(
     from app.db.models import OrgPrincipal
     from app.services.secret_box import decrypt_secret
 
+    _ = pg_username  # not a selector — principal_id is required
     row: OrgPrincipal | None = None
     if principal_id is not None:
-        row = await session.get(OrgPrincipal, int(principal_id))
-    elif pg_username:
-        from sqlalchemy import func, select
-
-        uname = str(pg_username).strip().lower()
-        row = (
-            await session.execute(
-                select(OrgPrincipal).where(
-                    func.lower(OrgPrincipal.pg_username) == uname
-                )
-            )
-        ).scalar_one_or_none()
+        try:
+            pid = int(principal_id)
+        except (TypeError, ValueError):
+            pid = 0
+        if pid > 0:
+            row = await session.get(OrgPrincipal, pid)
     if row is None or str(row.status) != "active":
         raise PasarGuardError(
             "Principal فعال با هویت پاسارگارد یافت نشد. "

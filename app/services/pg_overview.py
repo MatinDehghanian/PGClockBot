@@ -310,10 +310,8 @@ async def build_reseller_pg_overview(
 ) -> dict[str, Any]:
     """Metrics for a staff member's own PG admin account (reseller or pg_staff).
 
-    C1: list/user stats use tenant-safe read client — never owner token for
-    general PG ops. Own admin metadata may fall back to a narrow owner-token
-    self-lookup when the limited role cannot list ``/api/admins`` (same data
-    native PasarGuard shows about that admin — never another admin's record).
+    C1: list/user stats and role metadata use the tenant-safe read client.
+    L1/L2 never fall back to Owner ``get_pg()`` for admin/role lookup.
     """
     owner = str(staff.get("pg_admin_username") or "").strip()
     out: dict[str, Any] = {
@@ -338,7 +336,6 @@ async def build_reseller_pg_overview(
     try:
         from app.services.pg_read import (
             PgReadDenied,
-            fetch_own_admin_meta,
             staff_pg_read_client,
         )
         from app.services.shop_scope import is_platform_admin
@@ -356,28 +353,18 @@ async def build_reseller_pg_overview(
             admin = await pg.get_admin(owner)
         except Exception:
             admin = None
-        if not isinstance(admin, dict) and not is_platform_admin(staff):
-            # Limited roles often cannot list admins — self-meta only (exact username).
-            admin = await fetch_own_admin_meta(owner)
         if not isinstance(admin, dict):
             out["error"] = f"ادمین «{owner}» در پاسارگارد یافت نشد"
             return out
 
         role_id = staff.get("pg_role_id")
-        # Prefer embedded role on admin payload
+        # Prefer embedded role on admin payload; otherwise the same allowed client.
         role = admin.get("role") if isinstance(admin.get("role"), dict) else None
         if not role and role_id:
-            # Role definitions are global metadata — owner client (same as
-            # resolve_reseller_pg_features); never elevates resource access.
             try:
-                role = await get_pg().get_admin_role(int(role_id))
+                role = await pg.get_admin_role(int(role_id))
             except Exception:
                 role = None
-            if not isinstance(role, dict):
-                try:
-                    role = await pg.get_admin_role(int(role_id))
-                except Exception:
-                    role = None
 
         limits = _role_limits(admin, role)
         total_users = _as_int(admin.get("total_users")) or _as_int(admin.get("users_count")) or 0

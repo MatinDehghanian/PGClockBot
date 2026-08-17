@@ -420,14 +420,27 @@ async def _staff_for_reseller_l1(
     if profile.pg_admin_username:
         staff["pg_admin_username"] = profile.pg_admin_username
     role_id = int(profile.pg_role_id) if profile.pg_role_id else None
+    pg_client = None
     if profile.pg_admin_username:
-        live = await resolve_pg_role_id_for_admin(profile.pg_admin_username)
-        if live:
-            role_id = int(live)
+        try:
+            from app.services.pasarguard import get_pg_for_reseller
+
+            pg_client = await get_pg_for_reseller(session, int(profile.user_id))
+        except Exception:
+            pg_client = None
+        if pg_client is not None:
+            live = await resolve_pg_role_id_for_admin(
+                profile.pg_admin_username, client=pg_client
+            )
+            if live:
+                role_id = int(live)
     if role_id:
         staff["pg_role_id"] = int(role_id)
-        features, role = await resolve_reseller_pg_features(int(role_id))
-        staff = enrich_staff_pg_from_role(staff, features, role)
+        if pg_client is not None:
+            features, role = await resolve_reseller_pg_features(
+                int(role_id), client=pg_client
+            )
+            staff = enrich_staff_pg_from_role(staff, features, role)
     staff["pg_credentials_ready"] = bool(profile.pg_admin_password_enc)
     return attach_org_principal_fields(
         staff, principal, visible_principal_ids=visible
@@ -484,18 +497,32 @@ async def _staff_for_principal_l2(
         staff["pg_capabilities_ok"] = False
     else:
         live = None
+        pg_client = None
         try:
-            live = await resolve_pg_role_id_for_admin(str(pg_uname))
+            from app.services.pasarguard import get_pg_for_principal
+
+            pg_client = await get_pg_for_principal(
+                session, principal_id=int(principal.id)
+            )
         except Exception:
-            live = None
+            pg_client = None
+        if pg_client is not None:
+            try:
+                live = await resolve_pg_role_id_for_admin(
+                    str(pg_uname), client=pg_client
+                )
+            except Exception:
+                live = None
         try:
             role_id = int(live) if live else None
         except (TypeError, ValueError):
             role_id = None
-        if role_id:
+        if role_id and pg_client is not None:
             staff["pg_role_id"] = int(role_id)
             try:
-                features, role = await resolve_reseller_pg_features(int(role_id))
+                features, role = await resolve_reseller_pg_features(
+                    int(role_id), client=pg_client
+                )
             except Exception:
                 features, role = [], None
             if not features and role is None:
