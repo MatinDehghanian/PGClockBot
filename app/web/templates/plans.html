@@ -1,5 +1,5 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch, switch_chip, page_title %}
+{% from "macros.html" import switch, switch_chip, page_title, empty_state %}
 {% from "macros.html" import row_actions %}
 {% block title %}پلن‌ها{% endblock %}
 {% block content %}
@@ -729,7 +729,7 @@
             </td>
           </tr>
         {% else %}
-          <tr><td colspan="5" class="muted">هنوز کدی ساخته نشده.</td></tr>
+          <tr><td colspan="5">{{ empty_state('هنوز کدی ساخته نشده', 'کد هدیه برای شارژ کیف پول یا تخفیف کمپین بسازید.', '', '') }}</td></tr>
         {% endfor %}
         </tbody>
       </table>

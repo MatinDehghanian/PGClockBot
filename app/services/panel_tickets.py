@@ -74,6 +74,8 @@ _SAFE_NAME_RE = re.compile(r"[^\w.\-()+ ]+", re.UNICODE)
 SKIP_UNREAD_PATHS = frozenset(
     {
         "/home/metrics",
+        "/home/live",
+        "/home/pg-health",
         "/dashboard/metrics",
         "/pg/metrics",
         "/update/status",

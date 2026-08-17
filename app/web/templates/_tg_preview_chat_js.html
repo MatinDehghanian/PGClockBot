@@ -153,6 +153,7 @@
       }
     } else if (tab === 'buttons' || tab === 'menu') {
       text = fillVars(values.welcome_text || val('welcome_text','سلام {name} 👋'));
+      text += '\n\n۲ سرویس · موجودی ۱۲۵٬۰۰۰ تومان';
       showKeys = true;
     } else if (tab === 'qr') {
       text = fillVars(val('purchase_success_text','سرویس فعال شد.'));

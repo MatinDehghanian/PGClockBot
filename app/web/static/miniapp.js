@@ -7,8 +7,8 @@
     tg.ready();
     tg.expand();
     try {
-      tg.setHeaderColor("#09090b");
-      tg.setBackgroundColor("#09090b");
+      tg.setHeaderColor((tg.themeParams && tg.themeParams.bg_color) || "#09090b");
+      tg.setBackgroundColor((tg.themeParams && tg.themeParams.bg_color) || "#09090b");
     } catch (_) {}
   }
 
@@ -118,6 +118,9 @@
     document.querySelectorAll(".ma-nav button").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.view === activeView);
     });
+    if (tg && tg.HapticFeedback) {
+      try { tg.HapticFeedback.selectionChanged(); } catch (_) {}
+    }
   }
 
   function openPanelPath(path) {
@@ -287,25 +290,28 @@
 
   function plansHtml(plans, { renewServiceId } = {}) {
     const list = plans || [];
-    if (!list.length) return '<p class="muted">پلنی فعال نیست</p>';
+    if (!list.length) {
+      return '<div class="empty-state"><strong>پلنی فعال نیست</strong><p class="muted">وقتی پلن فروش روشن شود اینجا می‌آید.</p></div>';
+    }
     return list
       .map((p) => {
         const action = renewServiceId
           ? `data-do-renew="${Number(renewServiceId)}" data-plan="${Number(p.id) || 0}"`
           : `data-buy="${Number(p.id) || 0}"`;
-        const label = renewServiceId ? "تمدید" : p.is_trial ? "دریافت" : "خرید";
-        return `<div class="plan-row">
+        const label = renewServiceId ? "تمدید" : p.is_trial ? "دریافت" : "پرداخت";
+        const price = Number(p.price) || 0;
+        return `<article class="plan-card" data-plan-price="${price}">
           <div class="plan-meta">
             <strong>${esc(p.name)}</strong>
             <div class="muted">${esc(p.days)} روز · ${esc(p.gb ?? "∞")} گیگ${
           p.is_trial ? " · تست" : ""
         }</div>
           </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+          <div class="plan-pay">
             <div class="price">${esc(money(p.price))}</div>
-            <button type="button" class="btn sm" ${action}>${label}</button>
+            <button type="button" class="btn sm" ${action}>${label} ${esc(money(p.price))}</button>
           </div>
-        </div>`;
+        </article>`;
       })
       .join("");
   }
@@ -353,21 +359,16 @@
   function renderUserPanels(data) {
     const c = data.customer || {};
     const services = c.services || [];
-    const homeSvcs = services.slice(0, 4);
+    const featured = services[0];
+    const homeSvc = featured
+      ? serviceCardHtml(featured)
+      : `<div class="empty-state">
+          <strong>سرویسی ندارید</strong>
+          <p class="muted">یک پلن انتخاب کنید؛ پرداخت با کیف پول است.</p>
+          <button type="button" class="btn sm" data-goto="shop">خرید سرویس</button>
+        </div>`;
     return {
-      home: `
-        ${walletCardHtml(c)}
-        <div class="card">
-          <div class="card-head">
-            <h3>سرویس‌های من</h3>
-            <button type="button" class="btn ghost sm" data-goto="services">همه</button>
-          </div>
-          ${
-            homeSvcs.length
-              ? homeSvcs.map((s) => servicePeekHtml(s)).join("")
-              : '<p class="muted">سرویسی ندارید — از بخش خرید شروع کنید.</p>'
-          }
-        </div>`,
+      home: homeSvc,
       services: `
         <div class="card"><h3>سرویس‌ها</h3>
           <p class="hint">جزئیات، QR، کپی لینک و تمدید زیر هر سرویس</p>
@@ -375,7 +376,7 @@
         ${
           services.length
             ? services.map((s) => serviceCardHtml(s)).join("")
-            : '<div class="card"><p class="muted">سرویسی ندارید</p></div>'
+            : '<div class="empty-state"><strong>سرویسی ندارید</strong><p class="muted">از خرید شروع کنید.</p><button type="button" class="btn sm" data-goto="shop">خرید سرویس</button></div>'
         }`,
       shop: `
         <div class="card">
@@ -385,15 +386,16 @@
           ${
             c.wallet_pay_enabled
               ? plansHtml(c.plans)
-              : '<p class="muted">پرداخت با کیف پول در تنظیمات ربات غیرفعال است.</p>'
+              : '<div class="empty-state"><strong>پرداخت کیف پول خاموش است</strong><p class="muted">از تنظیمات ربات روشن کنید.</p></div>'
           }
-          <p class="hint">پس از خرید، سرویس در تب «سرویس» ظاهر می‌شود.</p>
+          <p class="hint">بعد از خرید موفق، سرویس در تب سرویس ظاهر می‌شود.</p>
         </div>`,
       wallet: `
         <div class="card wallet-card">
           <h3>کیف پول</h3>
           <p class="wallet-label">موجودی</p>
           <p class="wallet-value">${esc(money(c.wallet))}</p>
+          <p class="hint">اگر موجودی کم باشد، مبلغ کمبود هنگام خرید اعلام می‌شود. شارژ از ربات است.</p>
         </div>
         <div class="card">
           <h3>تراکنش‌ها</h3>
@@ -530,7 +532,7 @@
       box.appendChild(frame);
       const hint = document.createElement("div");
       hint.className = "hint";
-      hint.textContent = "اسکن برای افزودن سابسکریپشن";
+      hint.textContent = "اسکن کنید یا لینک را در کلاینت Paste کنید";
       box.appendChild(hint);
       if (trigger) trigger.textContent = "بستن QR";
     } catch (e) {
@@ -575,6 +577,12 @@
       return;
     }
     const c = (state && state.customer) || {};
+    const plan = (c.plans || []).find((p) => p.id === planId);
+    if (plan && Number(plan.price) > Number(c.wallet || 0)) {
+      toast("موجودی کافی نیست — از ربات شارژ کنید", "err");
+      setView("wallet");
+      return;
+    }
     if (!c.wallet_pay_enabled) {
       toast("پرداخت کیف پول غیرفعال است", "err");
       return;
@@ -592,11 +600,13 @@
     busy = true;
     try {
       const res = await api("/api/mini/buy", { method: "POST", body: { plan_id: planId } });
-      toast(res.message || "خرید شد", "ok");
+      toast(res.message || "سرویس آماده است", "ok");
       await reload();
       setView("services");
     } catch (e) {
-      toast(String(e.message || e), "err");
+      const msg = String(e.message || e);
+      toast(msg, "err");
+      if (msg.indexOf("موجودی") !== -1) setView("wallet");
     } finally {
       busy = false;
     }
@@ -636,12 +646,20 @@
     const name = (data.user && data.user.name) || "";
     helloEl.textContent = name ? "سلام " + name : "مینی‌اپ";
     roleEl.textContent = personaLabel(data.persona);
-    subEl.textContent =
-      data.persona === "admin"
-        ? "فقط عملیات ادمین — بدون خرید"
-        : data.persona === "reseller"
+    const featured = ((data.customer && data.customer.services) || [])[0];
+    const walletN = data.customer && data.customer.wallet;
+    if (data.persona === "admin") {
+      subEl.textContent = "فقط عملیات — بدون خرید";
+    } else if (featured && featured.expire_days != null) {
+      subEl.textContent = num(featured.expire_days) + " روز مانده · " + money(walletN);
+    } else if (walletN != null) {
+      subEl.textContent = "موجودی " + money(walletN);
+    } else {
+      subEl.textContent =
+        data.persona === "reseller"
           ? "سرویس‌ها، خرید و پنل فروشگاه"
           : "سرویس‌ها، خرید و کیف پول";
+    }
 
     renderNav(data.nav);
 
@@ -715,14 +733,22 @@
       await reload();
     } catch (e) {
       root.textContent = "";
-      const err = document.createElement("div");
-      err.className = "error";
-      err.appendChild(
-        document.createTextNode("برای استفاده ابتدا ربات را /start کنید.")
-      );
-      err.appendChild(document.createElement("br"));
-      err.appendChild(document.createTextNode(String(e.message || e)));
-      root.appendChild(err);
+      const wrap = document.createElement("div");
+      wrap.className = "empty-state";
+      const title = document.createElement("strong");
+      title.textContent = "مینی‌اپ باز نشد";
+      const p = document.createElement("p");
+      p.className = "muted";
+      p.textContent = "ابتدا در ربات /start کنید، بعد دوباره تلاش کنید.";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn sm";
+      btn.textContent = "تلاش دوباره";
+      btn.addEventListener("click", () => load());
+      wrap.appendChild(title);
+      wrap.appendChild(p);
+      wrap.appendChild(btn);
+      root.appendChild(wrap);
       navEl.innerHTML = "";
     }
   }

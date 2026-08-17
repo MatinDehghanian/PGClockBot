@@ -13,10 +13,10 @@
   <title>{% block title %}پنل مدیریت{% endblock %} · {{ pwa_name|default('MrClockBot') }}</title>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/pwa/icon/180" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/fonts.css?v={{ app_version }}" />
   <link rel="stylesheet" href="/static/panel.css?v={{ app_version }}" />
+  <link rel="stylesheet" href="/static/panel-home.css?v={{ app_version }}" />
+  {% block extra_css %}{% endblock %}
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
   <script>
   (function () {
@@ -350,7 +350,7 @@
           <span class="sk-bone sk-row"></span>
         </div>
       </div>
-      <div class="main-body page-surface">
+      <div class="main-body page-surface" id="panel-page">
         {# Page flashes stay above the title. When an edit/domain settings modal
            is reopening, the same message is shown inside the modal instead. #}
         {% set _domain_modal_open = open_supports_modal or open_loyalty_settings or (open_finance_settings|default('')|string|length > 0) %}

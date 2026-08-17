@@ -40,6 +40,70 @@
         if (e.persisted) revealPage();
       });
 
+      function canPanelNav(url) {
+        if (url.origin !== window.location.origin) return false;
+        const p = url.pathname;
+        if (p === '/logout' || p === '/login' || p.indexOf('/setup') === 0) return false;
+        if (p.indexOf('/static/') === 0 || p.indexOf('/media/') === 0) return false;
+        if (p.indexOf('/pwa/') === 0) return false;
+        return true;
+      }
+      function applyPanelDoc(doc, url) {
+        const next = doc.getElementById('panel-page');
+        const cur = document.getElementById('panel-page');
+        if (!next || !cur) return false;
+        cur.replaceWith(next);
+        const t = doc.querySelector('title');
+        if (t) document.title = t.textContent || document.title;
+        document.querySelectorAll('.nav a[href]').forEach((a) => {
+          try {
+            const u = new URL(a.getAttribute('href'), window.location.href);
+            a.classList.toggle('active', u.pathname === url.pathname);
+          } catch (err) {}
+        });
+        doc.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
+          const href = link.getAttribute('href') || '';
+          if (!href || href.indexOf('/static/') !== 0) return;
+          if (document.querySelector('link[href="' + href + '"]')) return;
+          document.head.appendChild(link.cloneNode(true));
+        });
+        next.querySelectorAll('script').forEach((old) => {
+          const s = document.createElement('script');
+          if (old.src) s.src = old.src;
+          else s.textContent = old.textContent;
+          old.replaceWith(s);
+        });
+        document.dispatchEvent(new CustomEvent('panel:dom-ready', { detail: { root: next } }));
+        if (typeof window.__pgHydrateHome === 'function') window.__pgHydrateHome();
+        return true;
+      }
+      async function panelNavigate(url, push) {
+        html.classList.add('page-loading');
+        html.classList.remove('page-ready', 'page-booting', 'page-was-slow');
+        try {
+          const res = await fetch(url.pathname + url.search, {
+            credentials: 'same-origin',
+            headers: { Accept: 'text/html', 'X-Panel-Nav': '1' },
+            cache: 'no-store',
+          });
+          const loc = new URL(res.url, window.location.href);
+          if (!res.ok || loc.pathname === '/login') {
+            window.location.assign(url.href);
+            return;
+          }
+          const text = await res.text();
+          const doc = new DOMParser().parseFromString(text, 'text/html');
+          if (!applyPanelDoc(doc, loc)) {
+            window.location.assign(url.href);
+            return;
+          }
+          if (push) history.pushState({ panel: 1 }, '', loc.pathname + loc.search + loc.hash);
+          revealPage();
+        } catch (err) {
+          window.location.assign(url.href);
+        }
+      }
+
       document.addEventListener('click', (e) => {
         if (e.defaultPrevented) return;
         if (e.button !== 0) return;
@@ -47,20 +111,19 @@
         const a = e.target.closest && e.target.closest('a[href]');
         if (!a) return;
         if (a.target && a.target !== '_self') return;
-        if (a.hasAttribute('download')) return;
+        if (a.hasAttribute('download') || a.hasAttribute('data-full-nav')) return;
         const href = a.getAttribute('href') || '';
         if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
         let url;
         try { url = new URL(href, window.location.href); } catch (err) { return; }
-        if (url.origin !== window.location.origin) return;
         if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) return;
-        try {
-          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-          sessionStorage.setItem('pg-page-nav', '1');
-          html.classList.add('page-loading');
-          html.classList.remove('page-ready', 'page-booting', 'page-was-slow');
-        } catch (err) {}
+        if (!canPanelNav(url)) return;
+        e.preventDefault();
+        panelNavigate(url, true);
       }, true);
+      window.addEventListener('popstate', () => {
+        panelNavigate(new URL(window.location.href), false);
+      });
 
       document.addEventListener('submit', (e) => {
         const form = e.target;
@@ -1966,5 +2029,85 @@
         });
       }
       document.querySelectorAll('table[data-sortable]').forEach(bind);
+    })();
+
+    (function hydrateHomeLive() {
+      function paintConn(el, kind, ok, cap, badge) {
+        if (!el) return;
+        el.classList.remove('is-neutral', 'is-ok', 'is-err', 'is-warn');
+        el.classList.add(kind || 'is-neutral');
+        const capEl = el.querySelector('[data-live-cap]');
+        const badgeEl = el.querySelector('[data-live-badge]');
+        if (capEl) capEl.textContent = cap || '—';
+        if (badgeEl) {
+          badgeEl.textContent = badge || '—';
+          badgeEl.className = 'badge home-conn-badge ' + (
+            kind === 'is-ok' ? 'ok' : kind === 'is-err' ? 'danger' : kind === 'is-warn' ? 'warn' : 'neutral'
+          );
+        }
+      }
+      async function run() {
+        const root = document.getElementById('home-dash');
+        if (!root || root.getAttribute('data-home-live') !== '1') return;
+        try {
+          const res = await fetch('/home/live', {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+          });
+          if (!res.ok) return;
+          const data = await res.json();
+          const bot = data.bot || {};
+          paintConn(
+            root.querySelector('[data-live="bot"]'),
+            bot.unchecked ? 'is-neutral' : bot.ok ? 'is-ok' : 'is-err',
+            bot.ok,
+            bot.unchecked ? 'در حال بررسی…' : (bot.username ? '@' + bot.username : (bot.error || '—')),
+            bot.unchecked ? '—' : bot.ok ? 'متصل' : 'قطع'
+          );
+          const pg = data.pg_health || {};
+          paintConn(
+            root.querySelector('[data-live="pg"]'),
+            pg.unchecked ? 'is-neutral' : pg.ok ? 'is-ok' : 'is-err',
+            pg.ok,
+            pg.unchecked ? 'در حال بررسی…' : (pg.version ? ('v' + pg.version) : (pg.ok ? 'آنلاین' : (pg.error || '—'))),
+            pg.unchecked ? '—' : pg.ok ? 'متصل' : 'قطع'
+          );
+          const nodes = data.nodes || {};
+          let nKind = 'is-neutral';
+          let nBadge = '—';
+          if (!nodes.unchecked) {
+            if (nodes.overall === 'ok') { nKind = 'is-ok'; nBadge = 'آنلاین'; }
+            else if (nodes.overall === 'warn') { nKind = 'is-warn'; nBadge = 'هشدار'; }
+            else if (nodes.overall === 'err') { nKind = 'is-err'; nBadge = 'قطع'; }
+          }
+          const nCap = nodes.unchecked
+            ? 'در حال بررسی…'
+            : (nodes.total ? (nodes.connected + '/' + nodes.total) : (nodes.error || 'ثبت‌نشده'));
+          paintConn(root.querySelector('[data-live="nodes"]'), nKind, true, nCap, nBadge);
+          const quota = document.getElementById('home-quota');
+          const limits = data.pg_limits;
+          if (quota && limits && limits.ready) {
+            quota.hidden = false;
+            const body = document.getElementById('home-quota-body');
+            const users = (limits.users && (limits.users.users_text || limits.users.text)) || '';
+            const traffic = (limits.traffic && (limits.traffic.traffic_text || limits.traffic.text)) || '';
+            if (body) {
+              body.innerHTML =
+                (users ? '<div class="home-quota-row"><span>کاربران</span><strong></strong></div>' : '') +
+                (traffic ? '<div class="home-quota-row"><span>حجم</span><strong></strong></div>' : '');
+              const strongs = body.querySelectorAll('strong');
+              if (users && strongs[0]) strongs[0].textContent = users;
+              if (traffic && strongs[users ? 1 : 0]) strongs[users ? 1 : 0].textContent = traffic;
+            }
+          }
+        } catch (err) {}
+      }
+      window.__pgHydrateHome = run;
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', run, { once: true });
+      } else {
+        run();
+      }
     })();
   })();

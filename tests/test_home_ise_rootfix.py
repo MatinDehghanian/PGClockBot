@@ -75,7 +75,7 @@ class HomeTemplateGaugeTests(unittest.TestCase):
         self.assertEqual(html, "—")
 
     def test_home_html_uses_number_test(self):
-        src = Path("app/web/templates/home.html").read_text(encoding="utf-8")
+        src = Path("app/web/templates/_host_resource_gauges.html").read_text(encoding="utf-8")
         self.assertIn("host.cpu_percent is number", src)
         self.assertIn("host.memory_percent is number", src)
         self.assertNotIn("host.cpu_percent is not none", src)

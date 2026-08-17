@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_title, empty_state %}
 {% block title %}مدیر پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -291,7 +291,7 @@
       </div>
     </div>
     {% if not ov_nodes %}
-    <p class="muted pg-node-board-empty">نودی نیست.</p>
+    {{ empty_state('نودی ثبت نشده', 'نودهای پاسارگارد بعد از اتصال اینجا دیده می‌شوند.', '/pg/nodes', 'رفتن به نودها') }}
     {% else %}
     {% set multi_nodes = ov_nodes|length > 1 %}
     {% if multi_nodes %}

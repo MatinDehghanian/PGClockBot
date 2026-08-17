@@ -74,8 +74,10 @@ class PanelFontUnityTests(unittest.TestCase):
 
     def test_base_loads_vazirmatn_only(self):
         html = BASE.read_text(encoding="utf-8")
-        self.assertIn("family=Vazirmatn", html)
-        self.assertEqual(html.count("fonts.googleapis.com/css2"), 1)
+        self.assertIn("/static/fonts.css", html)
+        self.assertIn("Vazirmatn", Path("app/web/static/fonts.css").read_text(encoding="utf-8"))
+        self.assertNotIn("fonts.googleapis.com", html)
+        self.assertTrue(Path("app/web/static/fonts/Vazirmatn-Variable.woff2").is_file())
 
 
 if __name__ == "__main__":
