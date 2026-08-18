@@ -318,7 +318,7 @@ async def authorize_bot_pg_user_op(
         try:
             from app.services.pg_quota import PgQuotaError, assert_can_mutate_owned_users
 
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session, client=pg_client)
         except PgQuotaError:
             return _deny("local_safety_denied", resolution=resolution)
         except Exception:

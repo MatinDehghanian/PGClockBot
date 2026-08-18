@@ -71,6 +71,7 @@ async def assert_provision_create(
                 hwid_limit=hwid_limit,
                 from_template=from_template,
                 quantity=quantity,
+                session=session,
             )
         elif pg_admin_username is not None or rid:
             await assert_reseller_can_deliver(
@@ -81,6 +82,8 @@ async def assert_provision_create(
                 hwid_limit=hwid_limit,
                 from_template=from_template,
                 quantity=quantity,
+                session=session,
+                reseller_user_id=rid,
             )
         elif staff is not None:
             await assert_can_create_user(
@@ -90,6 +93,7 @@ async def assert_provision_create(
                 hwid_limit=hwid_limit,
                 from_template=from_template,
                 quantity=quantity,
+                session=session,
             )
     except PgQuotaError as e:
         raise _wrap(e) from e
@@ -119,7 +123,7 @@ async def assert_provision_renew(
     try:
         if staff is not None and pg_admin_username is None:
             if from_template:
-                await assert_can_mutate_owned_users(staff)
+                await assert_can_mutate_owned_users(staff, session=session)
             else:
                 await assert_can_modify_user(
                     staff,
@@ -127,6 +131,7 @@ async def assert_provision_renew(
                     expire_ts=expire_ts,
                     data_limit_changed=data_limit is not None,
                     expire_changed=expire_ts is not None,
+                    session=session,
                 )
         else:
             await assert_reseller_can_renew(
@@ -135,6 +140,8 @@ async def assert_provision_renew(
                 data_limit=data_limit,
                 expire_ts=expire_ts,
                 from_template=from_template,
+                session=session,
+                reseller_user_id=rid,
             )
     except PgQuotaError as e:
         raise _wrap(e) from e
@@ -168,6 +175,7 @@ async def assert_provision_modify(
             data_limit_changed=data_limit_changed,
             expire_changed=expire_changed,
             hwid_changed=hwid_changed,
+            session=session,
         )
     except PgQuotaError as e:
         raise _wrap(e) from e
@@ -181,6 +189,6 @@ async def assert_provision_mutate(session: AsyncSession, staff: dict) -> None:
     except BillingError as e:
         raise _wrap(e) from e
     try:
-        await assert_can_mutate_owned_users(staff)
+        await assert_can_mutate_owned_users(staff, session=session)
     except PgQuotaError as e:
         raise _wrap(e) from e
