@@ -78,6 +78,9 @@ class SurfaceContractTests(unittest.TestCase):
         plans = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
         self.assertIn("pg_snapshot_limit_board", plans)
         self.assertNotIn("سقف زنده این حساب پاسارگارد", plans)
+        # Non-owner account-limit boxes on /plans: heading only, no board/box captions.
+        self.assertIn("box_captions=false", plans)
+        self.assertNotIn("پلن‌ها نباید از محدودیت زنده این نقش بیشتر باشند", plans)
         edit = (ROOT / "app/web/templates/plan_edit.html").read_text(encoding="utf-8")
         self.assertIn("pg_snapshot_limit_board", edit)
         self.assertNotIn("سقف این حساب:", edit)
