@@ -117,6 +117,46 @@ async def require_bot_owner(
     return False
 
 
+def _owner_handler_signature(fn: Callable[..., Awaitable[Any]]) -> inspect.Signature:
+    """Aiogram follows ``inspect.signature`` → ``__wrapped__``, so extra DI
+    params on the wrapper are invisible unless ``__signature__`` is set.
+
+    Handlers that omit ``session`` (e.g. ``settings_hub`` / inline «تنظیمات»)
+    must still receive the request session or the Owner check fail-closes.
+    """
+    orig = inspect.signature(fn)
+    names = set(orig.parameters)
+    extras: list[inspect.Parameter] = []
+    for name, annotation, default in (
+        ("session", AsyncSession | None, None),
+        ("db_user", BotUser | None, None),
+        ("is_reseller_bot", bool, False),
+    ):
+        if name in names:
+            continue
+        extras.append(
+            inspect.Parameter(
+                name,
+                inspect.Parameter.KEYWORD_ONLY,
+                default=default,
+                annotation=annotation,
+            )
+        )
+    if not extras:
+        return orig
+    new_params: list[inspect.Parameter] = []
+    var_kw: inspect.Parameter | None = None
+    for param in orig.parameters.values():
+        if param.kind == inspect.Parameter.VAR_KEYWORD:
+            var_kw = param
+            continue
+        new_params.append(param)
+    new_params.extend(extras)
+    if var_kw is not None:
+        new_params.append(var_kw)
+    return orig.replace(parameters=new_params)
+
+
 def require_bot_owner_handler(fn: Callable[..., Awaitable[Any]]):
     """Decorator: Owner Principal required before the wrapped Bot handler runs.
 
@@ -124,17 +164,15 @@ def require_bot_owner_handler(fn: Callable[..., Awaitable[Any]]):
     Injects ``session`` even when the original signature omitted it so reply-nav
     and the dispatcher share the same check.
     """
+    orig_sig = inspect.signature(fn)
 
     @functools.wraps(fn)
-    async def wrapper(
-        *args: Any,
-        session: AsyncSession | None = None,
-        db_user: BotUser | None = None,
-        is_reseller_bot: bool = False,
-        **kwargs: Any,
-    ):
+    async def wrapper(*args: Any, **kwargs: Any):
         from aiogram.types import CallbackQuery, Message
 
+        session = kwargs.get("session")
+        db_user = kwargs.get("db_user")
+        is_reseller_bot = bool(kwargs.get("is_reseller_bot", False))
         callback = None
         message = None
         for value in (*args, *kwargs.values()):
@@ -169,16 +207,20 @@ def require_bot_owner_handler(fn: Callable[..., Awaitable[Any]]):
             message=message,
         ):
             return None
-        sig = inspect.signature(fn)
-        bound = sig.bind_partial(*args, **kwargs)
-        if "session" in sig.parameters and "session" not in bound.arguments:
-            kwargs["session"] = session
-        if "db_user" in sig.parameters and "db_user" not in bound.arguments:
-            kwargs["db_user"] = db_user
-        if "is_reseller_bot" in sig.parameters and "is_reseller_bot" not in bound.arguments:
-            kwargs["is_reseller_bot"] = is_reseller_bot
-        return await fn(*args, **kwargs)
+        call_kwargs = {k: v for k, v in kwargs.items() if k in orig_sig.parameters}
+        bound = orig_sig.bind_partial(*args, **call_kwargs)
+        if "session" in orig_sig.parameters and "session" not in bound.arguments:
+            call_kwargs["session"] = session
+        if "db_user" in orig_sig.parameters and "db_user" not in bound.arguments:
+            call_kwargs["db_user"] = db_user
+        if (
+            "is_reseller_bot" in orig_sig.parameters
+            and "is_reseller_bot" not in bound.arguments
+        ):
+            call_kwargs["is_reseller_bot"] = is_reseller_bot
+        return await fn(*args, **call_kwargs)
 
+    wrapper.__signature__ = _owner_handler_signature(fn)
     return wrapper
 
 
