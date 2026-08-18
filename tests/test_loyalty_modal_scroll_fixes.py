@@ -18,12 +18,19 @@ class LoyaltyTopReferrersColumns(unittest.TestCase):
         self.assertIn('class="col-count"', html)
         self.assertIn('class="mono col-count"', html)
         self.assertIn("برترین معرف‌ها", html)
+        self.assertIn("loyalty-referrers", html)
 
     def test_col_count_css_shrinks_to_content(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(".col-count {", css)
         block = css.split(".col-count {", 1)[1].split("}", 1)[0]
         self.assertIn("width: 50%;", block)
+        # 50% first-column is loyalty-only — never all compact tables
+        self.assertNotIn(
+            ".table-compact th:not(.col-count):first-child,\n.table-compact td:not(.col-count):first-child {",
+            css,
+        )
+        self.assertIn(".loyalty-referrers .table-compact th:not(.col-count):first-child", css)
 
 
 class ModalScrollLockTests(unittest.TestCase):

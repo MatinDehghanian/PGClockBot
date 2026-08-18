@@ -860,18 +860,19 @@ tr.principal-row-l2 td:first-child {
   align-items: start;
 }
 .dash-cols > .card { margin-bottom: 0; }
-.dash-cols .table-compact {
-  table-layout: fixed;
+/* Dashboard tables: hug viewport. Global `table { min-width: 560px }` plus a
+   later 50% first-column rule made `#` eat half the card. */
+.dash-cols table {
+  min-width: 0;
   width: 100%;
+  table-layout: auto;
 }
 .dash-cols .table-compact th.col-id,
 .dash-cols .table-compact td.col-id {
-  width: 2.25rem;
-  min-width: 2.25rem;
-  max-width: 2.25rem;
-  padding-inline: var(--space-1);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  width: 1%;
+  max-width: none;
+  white-space: nowrap;
+  padding-inline: var(--space-2);
 }
 
 label {
@@ -7723,8 +7724,8 @@ html[data-theme="light"] .ticket-attach {
   width: 50%;
   padding-inline: var(--space-2);
 }
-.table-compact th:not(.col-count):first-child,
-.table-compact td:not(.col-count):first-child {
+.loyalty-referrers .table-compact th:not(.col-count):first-child,
+.loyalty-referrers .table-compact td:not(.col-count):first-child {
   width: 50%;
 }
 .home-panel-neutral {
