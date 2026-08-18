@@ -163,6 +163,13 @@ class TestGetAdminDirectPath(unittest.TestCase):
         self.assertGreaterEqual(idx_direct, 0)
         self.assertGreaterEqual(idx_list, 0)
         self.assertLess(idx_direct, idx_list)
+        # Own-account lookup must run before directory paths so limited
+        # roles (no admins.read) can still resolve themselves.
+        src_gate = (ROOT / "app/services/pasarguard.py").read_text(encoding="utf-8")
+        self.assertIn('self.request("GET", "/api/admin")', src_gate)
+        idx_self = src_gate.find('self.request("GET", "/api/admin")')
+        idx_by_name = src_gate.find("/api/admin/by-username/")
+        self.assertLess(idx_self, idx_by_name)
 
 
 if __name__ == "__main__":

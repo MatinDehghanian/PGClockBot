@@ -231,6 +231,7 @@ def _pg_ctx(staff: dict, **extra) -> dict:
         "pg_writes": writes,
         "pg_user_actions": actions,
         "pg_access": staff.get("pg_access") or {},
+        "pg_is_owner": bool(staff.get("pg_is_owner")),
     }
     ctx.update(extra)
     return ctx

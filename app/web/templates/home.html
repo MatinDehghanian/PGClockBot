@@ -5,6 +5,7 @@
 {% set ov = overview %}
 {% set bot = ov.bot %}
 {% set nodes = ov.nodes %}
+{% set show_pg_nodes = show_pg_nodes if show_pg_nodes is defined else ('pg_nodes' in (staff.get('pg_permissions') or [])) %}
 
 <div class="home-dash" id="home-dash">
   {% if dashboard_degraded %}
@@ -64,6 +65,7 @@
         <span class="badge danger home-conn-badge" id="home-pg-health-badge">قطع</span>
         {% endif %}
       </a>
+        {% if show_pg_nodes %}
       <a class="home-conn {% if nodes.overall == 'ok' %}is-ok{% elif nodes.overall == 'err' %}is-err{% elif nodes.overall == 'warn' %}is-warn{% else %}is-neutral{% endif %}" href="/pg/nodes">
         <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
         <span class="home-conn-text">
@@ -84,8 +86,22 @@
         <span class="badge neutral home-conn-badge">—</span>
         {% endif %}
       </a>
+        {% endif %}
     </div>
   </div>
+
+  {% if wallet_card %}
+  <div class="card home-conn-card">
+    <h2>کیف پول</h2>
+    <p class="muted">موجودی فروشگاه همین حساب</p>
+    <p class="home-balance"><strong>{{ wallet_card.balance_fa }}</strong></p>
+  </div>
+  {% endif %}
+
+  {% if pg_limits and pg_limits.ready %}
+  {% from "_pg_limit_cards.html" import pg_overview_limit_board %}
+  {{ pg_overview_limit_board(pg_limits) }}
+  {% endif %}
 
   {% include "_home_ops.html" %}
 </div>

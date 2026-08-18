@@ -28,11 +28,6 @@
 </div>
 {% endif %}
 
-{% if pg_limits and pg_limits.ready %}
-{% from "_pg_quota_gauges.html" import pg_quota_exhausted_banners %}
-{{ pg_quota_exhausted_banners(users=pg_limits.users, traffic=pg_limits.traffic) }}
-{% endif %}
-
 {% if billing_card %}
 <div class="card home-conn-card">
   <h2>کیف پول (PAYG)</h2>
@@ -95,30 +90,7 @@
 {% include "_home_ops.html" %}
 
 {% if pg_limits and pg_limits.ready %}
-{% from "_pg_quota_gauges.html" import pg_quota_gauge %}
-<section class="card home-conn-card home-quota-card">
-  <header class="home-periods-head">
-    <h2>ظرفیت پاسارگارد</h2>
-    <p class="muted">
-      {% if pg_limits.username %}<span dir="ltr">{{ pg_limits.username }}</span>{% endif %}
-      {% if pg_limits.status_label %}
-      <span class="badge {{ pg_limits.status_badge or 'neutral' }}">{{ pg_limits.status_label }}</span>
-      {% endif %}
-    </p>
-  </header>
-  {% if pg_limits.users or pg_limits.traffic %}
-  <div class="home-gauges pg-quota-gauges pg-quota-gauges-embed">
-    {% if pg_limits.users %}
-    {{ pg_quota_gauge(pg_limits.users, 'کاربران', 'Users', 'pg-users') }}
-    {% endif %}
-    {% if pg_limits.traffic %}
-    {{ pg_quota_gauge(pg_limits.traffic, 'حجم', 'Traffic', 'pg-traffic') }}
-    {% endif %}
-  </div>
-  {% endif %}
-  {% if pg_limits.lifetime_text %}
-  <p class="muted stack-mt">مصرف lifetime (مبنای PAYG): <b dir="ltr">{{ pg_limits.lifetime_text }}</b></p>
-  {% endif %}
-</section>
+{% from "_pg_limit_cards.html" import pg_overview_limit_board %}
+{{ pg_overview_limit_board(pg_limits) }}
 {% endif %}
 {% endblock %}

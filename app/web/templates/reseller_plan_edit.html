@@ -11,13 +11,8 @@
   <a class="btn btn-ghost" href="/plans#reseller-plans">بازگشت</a>
 </div>
 
-{% if pg_limit_snapshot and pg_limit_snapshot.restricted %}
-<div class="flash warn">
-  سقف زنده ادمین اصلی:
-  {% if pg_limit_snapshot.max_users %}<b>{{ pg_limit_snapshot.max_users }}</b> کاربر{% endif %}
-  {% if pg_limit_snapshot.account_data_limit %} · <b>{{ pg_limit_snapshot.account_data_limit | bytes }}</b> حجم کل{% endif %}
-</div>
-{% endif %}
+{% from "_pg_limit_cards.html" import pg_snapshot_limit_board %}
+{{ pg_snapshot_limit_board(pg_limit_cards, heading='سقف ادمین اصلی', caption='ظرفیت این پلن از سقف زنده ادمین اصلی بیشتر نمی‌شود') }}
 
 {# flash_ok / flash_err rendered once in base.html #}
 

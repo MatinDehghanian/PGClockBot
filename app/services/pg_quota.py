@@ -8,7 +8,7 @@ through PGClock — whether via own credentials or (legacy) owner-token paths.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Mapping
 
 from app.services.formatting import format_bytes
 
@@ -238,7 +238,17 @@ async def _load_admin_and_role(staff: dict) -> tuple[dict, dict | None]:
     from app.services.pasarguard import get_pg
 
     pg = get_pg()
-    admin = await pg.get_admin(owner)
+    admin = None
+    try:
+        current = await pg.get_current_admin()
+        if isinstance(current, dict):
+            got = str(current.get("username") or "").strip()
+            if not owner or (got and got.lower() == owner.lower()):
+                admin = current
+    except Exception:
+        admin = None
+    if not isinstance(admin, dict) or not admin:
+        admin = await pg.get_admin(owner)
     if not isinstance(admin, dict) or not admin:
         raise PgQuotaError(f"ادمین «{owner}» در پاسارگارد یافت نشد")
 
@@ -321,6 +331,68 @@ async def load_staff_limit_snapshot(staff: dict) -> dict[str, Any]:
         "hwid_min": hmin,
         "hwid_max": hmax,
     }
+
+
+def limit_snapshot_cards(snapshot: Mapping[str, Any] | None) -> list[dict[str, str]]:
+    """UI cards for a live PG limit snapshot. Empty when unrestricted."""
+    from app.services.formatting import format_bytes
+
+    snap = snapshot or {}
+    if not snap.get("restricted"):
+        return []
+    cards: list[dict[str, str]] = []
+
+    max_users = snap.get("max_users")
+    current = snap.get("current_users")
+    if max_users:
+        used = f"{int(current)} از " if current is not None else ""
+        remain = snap.get("remaining_users")
+        caption = f"باقی‌مانده {int(remain)}" if remain is not None else ""
+        cards.append(
+            {
+                "key": "users",
+                "label": "سقف کاربران",
+                "value": f"{used}{int(max_users)}",
+                "caption": caption,
+            }
+        )
+
+    acct = snap.get("account_data_limit")
+    if acct:
+        used_t = snap.get("account_used_traffic") or 0
+        remain_t = snap.get("account_remaining_traffic")
+        caption = f"باقی‌مانده {format_bytes(remain_t)}" if remain_t is not None else ""
+        cards.append(
+            {
+                "key": "traffic",
+                "label": "سقف حجم حساب",
+                "value": f"{format_bytes(used_t)} از {format_bytes(acct)}",
+                "caption": caption,
+            }
+        )
+
+    per_data = snap.get("per_user_data_max")
+    if per_data:
+        cards.append(
+            {
+                "key": "per_user_data",
+                "label": "حداکثر حجم هر کاربر",
+                "value": format_bytes(per_data),
+                "caption": "",
+            }
+        )
+    per_exp = snap.get("per_user_expire_max")
+    if per_exp:
+        days = max(1, int(per_exp) // 86400)
+        cards.append(
+            {
+                "key": "per_user_expire",
+                "label": "حداکثر مدت هر کاربر",
+                "value": f"{days} روز",
+                "caption": "",
+            }
+        )
+    return cards
 
 
 async def assert_user_plan_within_limits(

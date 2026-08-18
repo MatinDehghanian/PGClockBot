@@ -51,5 +51,22 @@ class TicketStatusFullWidthTests(unittest.TestCase):
         self.assertIn("width: 100%", chunk)
 
 
+class PlanStatusTagsLayoutTests(unittest.TestCase):
+    def test_status_tags_wrap_with_gap(self):
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        after = css.split(".status-tags {", 1)[1]
+        block = after.split("}", 1)[0]
+        self.assertIn("display: flex", block)
+        self.assertIn("flex-wrap: wrap", block)
+        self.assertIn("gap: var(--space-1)", block)
+        self.assertIn("flex-wrap: nowrap", after[:900])
+
+    def test_plan_status_column_uses_status_tags(self):
+        html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        self.assertIn('class="status-tags"', html)
+        self.assertNotIn("<div><small class=\"badge warn\"", html)
+        self.assertGreaterEqual(html.count("خارج از سقف"), 3)
+
+
 if __name__ == "__main__":
     unittest.main()

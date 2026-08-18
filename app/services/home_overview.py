@@ -197,7 +197,7 @@ async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
     }
 
 
-async def pg_home_bundle() -> tuple[dict[str, Any], dict[str, Any]]:
+async def pg_home_bundle(*, include_nodes: bool = True) -> tuple[dict[str, Any], dict[str, Any]]:
     """Fetch PasarGuard summary + node status in one pass (shared nodes call)."""
     nodes_status = {
         "ok": False,
@@ -220,48 +220,61 @@ async def pg_home_bundle() -> tuple[dict[str, Any], dict[str, Any]]:
         "version": None,
     }
     try:
+        from app.services.pasarguard import is_pg_permission_denied
+
         pg = get_pg()
+        await pg.ensure_token()
+
+        async def _no_nodes():
+            return []
+
+        node_call = pg.get_nodes_simple() if include_nodes else _no_nodes()
         admins, groups, hosts, nodes, stats = await asyncio.gather(
             pg.get_admins_simple(),
             pg.get_groups_simple(),
             pg.get_hosts(),
-            pg.get_nodes_simple(),
+            node_call,
             pg.get_system_stats(),
             return_exceptions=True,
         )
-        if isinstance(nodes, Exception):
-            nodes_status["error"] = str(nodes) or "خطا در دریافت نودها"
-            nodes_status["overall"] = "err"
+        # Token already proved reachability. 403 on admins/hosts/nodes is a
+        # limited role, not a dropped connection.
+        summary["ok"] = True
+        if not include_nodes:
+            nodes_status = {**_empty_nodes(), "ok": True, "overall": "neutral"}
+            nodes = []
+        elif isinstance(nodes, Exception):
+            if is_pg_permission_denied(nodes):
+                nodes_status["ok"] = True
+                nodes_status["overall"] = "neutral"
+            else:
+                nodes_status["error"] = "خطا در دریافت نودها"
+                nodes_status["overall"] = "err"
             nodes = []
         else:
             nodes_status = _summarize_nodes(nodes if isinstance(nodes, list) else [])
 
-        if any(isinstance(x, Exception) for x in (admins, groups, hosts)):
-            errs = [str(x) for x in (admins, groups, hosts) if isinstance(x, Exception)]
-            summary["error"] = errs[0] if errs else "خطا در دریافت آمار پاسارگارد"
-        else:
-            summary.update(
-                {
-                    "ok": True,
-                    "admins": len(admins or []),
-                    "groups": len(groups or []),
-                    "hosts": len(hosts or []),
-                    "nodes": nodes_status["total"],
-                }
-            )
-            if isinstance(stats, dict):
-                for key in ("total_user", "users_active", "users", "total_users"):
-                    if key in stats and isinstance(stats[key], (int, float)):
-                        summary["users"] = int(stats[key])
-                        break
-                ver = stats.get("version")
-                if ver:
-                    summary["version"] = str(ver)
-            elif isinstance(stats, Exception):
-                # counts still usable even if /system fails
-                pass
-    except Exception as exc:
-        summary["error"] = str(exc) or "اتصال به پاسارگارد برقرار نشد"
+        def _count(payload: Any) -> int:
+            return len(payload) if isinstance(payload, list) else 0
+
+        summary.update(
+            {
+                "admins": _count(admins),
+                "groups": _count(groups),
+                "hosts": _count(hosts),
+                "nodes": nodes_status["total"],
+            }
+        )
+        if isinstance(stats, dict):
+            for key in ("total_user", "users_active", "users", "total_users"):
+                if key in stats and isinstance(stats[key], (int, float)):
+                    summary["users"] = int(stats[key])
+                    break
+            ver = stats.get("version")
+            if ver:
+                summary["version"] = str(ver)
+    except Exception:
+        summary["error"] = "اتصال به پاسارگارد برقرار نشد"
         nodes_status["error"] = summary["error"]
         nodes_status["overall"] = "err"
     return summary, nodes_status
@@ -437,10 +450,13 @@ def empty_home_overview() -> dict[str, Any]:
     }
 
 
-async def build_home_overview(session: AsyncSession) -> dict[str, Any]:
+async def build_home_overview(
+    session: AsyncSession, *, include_nodes: bool = True
+) -> dict[str, Any]:
     """Build admin home payloads; never raise — partial failures return defaults.
 
     Host CPU/RAM live on bot/PG overviews now — skipped here for a faster /home.
+    ``include_nodes`` is False when the live PG role has no nodes permission.
     """
     import logging
 
@@ -451,7 +467,7 @@ async def build_home_overview(session: AsyncSession) -> dict[str, Any]:
     # Platform admin overview only — pass main token explicitly (no silent fallback).
     bot_task = check_bot_connection(current_setup_values().get("BOT_TOKEN"))
     bot_sum_task = bot_panel_summary(session)
-    pg_task = pg_home_bundle()
+    pg_task = pg_home_bundle(include_nodes=include_nodes)
 
     bot, bot_sum, pg_pair = await asyncio.gather(
         bot_task, bot_sum_task, pg_task, return_exceptions=True

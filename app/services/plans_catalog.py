@@ -229,13 +229,26 @@ async def load_pg_plan_options(
                 return [], [], e.message
         else:
             pg = get_pg()
-        templates = await pg.get_user_templates_simple()
-        full = await pg.get_user_templates()
-        if isinstance(full, list) and full:
-            templates = full
-        else:
-            templates = as_list(full, "templates") or templates
-        groups = await pg.get_groups_simple()
+        try:
+            await pg.ensure_token()
+        except Exception as e:
+            log.warning("load_pg_plan_options token failed: %s", e)
+            return [], [], "اتصال به پاسارگارد برقرار نشد"
+        try:
+            templates = await pg.get_user_templates_simple()
+            full = await pg.get_user_templates()
+            if isinstance(full, list) and full:
+                templates = full
+            else:
+                templates = as_list(full, "templates") or templates
+        except Exception as e:
+            log.warning("load_pg_plan_options templates unavailable: %s", e)
+            templates = []
+        try:
+            groups = await pg.get_groups_simple()
+        except Exception as e:
+            log.warning("load_pg_plan_options groups unavailable: %s", e)
+            groups = []
     except Exception as e:
         # Never surface raw PG/HTTP exception text to the panel (info leak).
         log.warning("load_pg_plan_options failed: %s", e)

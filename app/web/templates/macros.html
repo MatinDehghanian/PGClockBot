@@ -176,33 +176,32 @@
 </span>
 {%- endmacro %}
 
-{# PasarGuard sub-nav — respects pg_perms / is_admin #}
+{# PasarGuard sub-nav — live pg_permissions only (never web is_admin) #}
 {% macro pg_tabs(active='') -%}
-{% set perms = pg_perms if pg_perms is defined else [] %}
-{% set admin = is_admin if is_admin is defined else (staff is defined and staff.role == 'admin') %}
+{% set perms = pg_perms if pg_perms is defined else (staff.get('pg_permissions') if staff is defined else []) %}
 <nav class="section-tabs pg-tabs" aria-label="بخش‌های پاسارگارد">
-  {% if admin or 'pg_overview' in perms %}
+  {% if 'pg_overview' in perms %}
   <a href="/pg" class="{% if active=='pg' %}active{% endif %}">نمای کلی</a>
   {% endif %}
-  {% if admin or 'pg_users' in perms %}
+  {% if 'pg_users' in perms %}
   <a href="/pg/users" class="{% if active=='pg_users' %}active{% endif %}">کاربران</a>
   {% endif %}
-  {% if admin %}
+  {% if 'pg_admins' in perms %}
   <a href="/pg/admins" class="{% if active=='pg_admins' %}active{% endif %}">ادمین</a>
   {% endif %}
-  {% if admin or 'pg_nodes' in perms %}
+  {% if 'pg_nodes' in perms %}
   <a href="/pg/nodes" class="{% if active=='pg_nodes' %}active{% endif %}">نود</a>
   {% endif %}
-  {% if admin or 'pg_groups' in perms %}
+  {% if 'pg_groups' in perms %}
   <a href="/pg/groups" class="{% if active=='pg_groups' %}active{% endif %}">گروه</a>
   {% endif %}
-  {% if admin or 'pg_hosts' in perms %}
+  {% if 'pg_hosts' in perms %}
   <a href="/pg/hosts" class="{% if active=='pg_hosts' %}active{% endif %}">هاست</a>
   {% endif %}
-  {% if admin or 'pg_templates' in perms %}
+  {% if 'pg_templates' in perms %}
   <a href="/pg/templates" class="{% if active=='pg_templates' %}active{% endif %}">تمپلیت</a>
   {% endif %}
-  {% if admin or 'pg_inbounds' in perms %}
+  {% if 'pg_inbounds' in perms %}
   <a href="/pg/inbounds" class="{% if active=='pg_inbounds' %}active{% endif %}">اینباند</a>
   {% endif %}
 </nav>
