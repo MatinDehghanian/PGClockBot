@@ -24,9 +24,8 @@ from app.services.authz import AuthDecision
 from app.services.bot_principal_identity import (
     BotPrincipalResolution,
     bot_pg_client_for_resolution,
-    bot_pg_family_resolution_ok,
     callback_carries_principal_tamper,
-    resolve_bot_principal_bridge,
+    resolve_bot_pg_family_identity,
 )
 from app.services.pg_user_scope import filter_pg_users_for_staff, pg_user_in_staff_scope
 from app.services.principal_pg_authz import (
@@ -227,33 +226,17 @@ async def _resolve_identity(
 ) -> BotPgUserGate | BotPrincipalResolution:
     if session is None or db_user is None:
         return _deny("unauthenticated")
-    if is_reseller_bot:
-        from app.services.bot_principal_identity import shop_bot_actor_is_operator
-
-        if not await shop_bot_actor_is_operator(
-            session,
-            db_user,
-            is_reseller_bot=True,
-            reseller_owner_id=reseller_owner_id,
-        ):
-            return _deny("shop_bot_isolated")
-    if callback_carries_identity_tamper(callback_data):
-        return _deny("identity_tamper")
-
-    resolution = await resolve_bot_principal_bridge(
+    got = await resolve_bot_pg_family_identity(
         session,
         db_user=db_user,
         is_reseller_bot=is_reseller_bot,
         reseller_profile_id=reseller_profile_id,
         reseller_owner_id=reseller_owner_id,
-        spoof_org_principal_id=None,
+        identity_tamper=callback_carries_identity_tamper(callback_data),
     )
-    if resolution is None:
-        return _deny("missing_principal")
-
-    if not bot_pg_family_resolution_ok(resolution):
-        return _deny("missing_principal")
-    return resolution
+    if isinstance(got, str):
+        return _deny(got)
+    return got
 
 
 async def authorize_bot_pg_user_op(

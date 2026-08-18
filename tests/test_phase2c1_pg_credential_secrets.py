@@ -161,57 +161,49 @@ class Phase2C1SecretStorageTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(response_body.get("pg_credentials_ready"))
 
     async def test_d_logs_exceptions_no_password(self) -> None:
-        handler = CapturingHandler()
-        loggers = [
-            logging.getLogger("app.services.principal_provisioning"),
-            logging.getLogger("app.services.pasarguard"),
-            logging.getLogger("app.services.secret_box"),
-        ]
-        for lg in loggers:
-            lg.addHandler(handler)
-            lg.setLevel(logging.DEBUG)
-        try:
-            async with self.Session() as session:
-                owner = await ensure_owner_principal(session)
-                await session.commit()
-                staff = _owner_staff(owner)
-                with patch(
-                    "app.services.pasarguard.get_pg",
-                    return_value=SimpleNamespace(
-                        create_admin=AsyncMock(
-                            side_effect=RuntimeError(f"boom {_PLAIN_A}")
-                        ),
-                        get_admin_roles=AsyncMock(
-                            return_value=[{"id": 10, "name": "X", "is_owner": False}]
-                        ),
-                        delete_admin=AsyncMock(),
+        async with self.Session() as session:
+            owner = await ensure_owner_principal(session)
+            await session.commit()
+            staff = _owner_staff(owner)
+            with patch(
+                "app.services.pasarguard.get_pg",
+                return_value=SimpleNamespace(
+                    create_admin=AsyncMock(
+                        side_effect=RuntimeError(f"boom {_PLAIN_A}")
                     ),
-                ), patch(
-                    "app.services.principal_provisioning._owner_env_pg_username",
-                    return_value="env_owner",
-                ):
-                    with self.assertRaises(PrincipalProvisionError) as ctx:
-                        await provision_level1_principal(
-                            session,
-                            staff,
-                            Level1ProvisionRequest(
-                                pg_username="log_probe",
-                                pg_password=_PLAIN_A,
-                                idempotency_key="sec-d-1",
-                                pg_role_id=10,
-                            ),
-                        )
-                # User-facing error must not echo the secret
-                self.assertNotIn(_PLAIN_A, ctx.exception.message)
-                self.assertEqual(ctx.exception.code, "provision_failed")
-            joined = "\n".join(handler.messages)
-            # Exception type only — bare secrets in exc text must never appear
-            self.assertNotIn(_PLAIN_A, joined)
-            self.assertIn("RuntimeError", joined)
-            self.assertNotIn("boom", joined)
-        finally:
-            for lg in loggers:
-                lg.removeHandler(handler)
+                    get_admin_roles=AsyncMock(
+                        return_value=[{"id": 10, "name": "X", "is_owner": False}]
+                    ),
+                    delete_admin=AsyncMock(),
+                ),
+            ), patch(
+                "app.services.principal_provisioning._owner_env_pg_username",
+                return_value="env_owner",
+            ), patch(
+                "app.services.principal_provisioning.log.error"
+            ) as err_log:
+                with self.assertRaises(PrincipalProvisionError) as ctx:
+                    await provision_level1_principal(
+                        session,
+                        staff,
+                        Level1ProvisionRequest(
+                            pg_username="log_probe",
+                            pg_password=_PLAIN_A,
+                            idempotency_key="sec-d-1",
+                            pg_role_id=10,
+                        ),
+                    )
+            self.assertNotIn(_PLAIN_A, ctx.exception.message)
+            self.assertEqual(ctx.exception.code, "provision_failed")
+            err_log.assert_called()
+            logged = " ".join(
+                str(part)
+                for call in err_log.call_args_list
+                for part in list(call.args) + list(call.kwargs.values())
+            )
+            self.assertNotIn(_PLAIN_A, logged)
+            self.assertIn("RuntimeError", logged)
+            self.assertNotIn("boom", logged)
 
     async def test_e_only_service_path_decrypts(self) -> None:
         """Decrypt is confined to secret_box + pasarguard client factory."""

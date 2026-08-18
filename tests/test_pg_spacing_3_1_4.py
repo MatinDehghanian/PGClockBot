@@ -16,11 +16,13 @@ class PgSpacingAlignTests(unittest.TestCase):
             "app/web/templates/pg_templates.html",
             "app/web/templates/pg_groups.html",
             "app/web/templates/pg_inbounds.html",
-            "app/web/templates/pg_home.html",
         ]
         for path in pages:
             src = Path(path).read_text(encoding="utf-8")
             self.assertIn("card-flush", src, msg=path)
+        home = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        self.assertIn('class="page-head"', home)
+        self.assertNotIn("pg_tabs(", home)
 
 
 if __name__ == "__main__":

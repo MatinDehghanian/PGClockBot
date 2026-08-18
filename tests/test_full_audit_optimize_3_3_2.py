@@ -33,7 +33,7 @@ class DeadCodeRemovedTests(unittest.TestCase):
         pg = (ROOT / "app/services/pg_access.py").read_text(encoding="utf-8")
         self.assertNotIn("PG_ADMIN_ONLY", pg)
         self.assertNotIn("def clear_role_cache", pg)
-        self.assertNotIn("def staff_has_pg", pg)
+        self.assertNotIn("def staff_has_pg(", pg)
 
         sc = (ROOT / "app/services/service_control.py").read_text(encoding="utf-8")
         self.assertNotIn("def get_restart_status", sc)
@@ -115,8 +115,11 @@ class ClientPerfTests(unittest.TestCase):
 
     def test_home_metrics_pauses_when_hidden(self):
         src = (ROOT / "app/web/templates/home.html").read_text(encoding="utf-8")
-        self.assertIn("document.hidden", src)
-        self.assertIn("visibilitychange", src)
+        # Dashboard numbers are server-rendered; this page must not keep a
+        # background /home/metrics poll running (hidden-tab or otherwise).
+        self.assertNotIn("/home/metrics", src)
+        self.assertNotIn("setInterval", src)
+        self.assertNotIn("visibilitychange", src)
 
 
 class BotPerfTests(unittest.TestCase):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -231,11 +232,25 @@ class Phase4CBotPgUsersTests(unittest.IsolatedAsyncioTestCase):
                 "app.services.pg_access.resolve_platform_pg_capabilities",
                 new=AsyncMock(return_value=self._owner_caps()),
             ),
+            patch(
+                "app.services.pasarguard.get_pg_for_reseller",
+                new=AsyncMock(return_value=fake_pg),
+            ),
+            patch(
+                "app.services.pasarguard.get_pg_for_principal",
+                new=AsyncMock(return_value=fake_pg),
+            ),
         )
+
+    def _enter(self, patches):
+        stack = ExitStack()
+        for p in patches:
+            stack.enter_context(p)
+        return stack
 
     async def _auth(self, session, *, db_user, action, permissions, fake_pg, **kwargs):
         patches = self._patches(permissions, fake_pg)
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
+        with self._enter(patches):
             return await authorize_bot_pg_user_op(
                 session,
                 db_user=db_user,
@@ -614,20 +629,20 @@ class Phase4CBotPgUsersTests(unittest.IsolatedAsyncioTestCase):
             state = AsyncMock()
             state.update_data = AsyncMock()
             patches = self._patches(USERS_FULL, fake_pg)
-            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patch.object(
+            with self._enter(patches), patch.object(
                 mod, "_render_users_list", new=AsyncMock()
             ) as render:
                 await mod.pg_users_list(cb, state, fx.ua, session=session)
             render.assert_awaited_once()
 
             cb_r = SimpleNamespace(data="adm:pg:reset:101", answer=AsyncMock(), message=None)
-            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
+            with self._enter(patches):
                 await mod.pg_reset(cb_r, db_user=fx.ua, session=session)
             fake_pg.reset_user_by_id.assert_awaited_once_with(101)
 
             cb_f = SimpleNamespace(data="adm:pg:reset:102", answer=AsyncMock(), message=None)
             fake_pg.reset_user_by_id.reset_mock()
-            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
+            with self._enter(patches):
                 await mod.pg_reset(cb_f, db_user=fx.ua, session=session)
             fake_pg.reset_user_by_id.assert_not_called()
 

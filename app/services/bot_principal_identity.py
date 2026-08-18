@@ -180,6 +180,41 @@ async def shop_bot_actor_is_operator(
         return False
 
 
+async def resolve_bot_pg_family_identity(
+    session: AsyncSession | None,
+    *,
+    db_user: BotUser | None,
+    is_reseller_bot: bool,
+    reseller_profile_id: int | None,
+    reseller_owner_id: int | None,
+    identity_tamper: bool,
+) -> BotPrincipalResolution | str:
+    """Identity for the platform PG-user / object / catalog family.
+
+    Shop bots are isolated from this family except a bound L2 operator on
+    their own bot (channel ``principal_l2``). An L1 shop owner on a shop
+    token stays isolated. Callback identity tamper always denies.
+    """
+    if session is None or db_user is None:
+        return "unauthenticated"
+    if identity_tamper:
+        return "identity_tamper"
+    resolution = await resolve_bot_principal_bridge(
+        session,
+        db_user=db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_profile_id=reseller_profile_id,
+        reseller_owner_id=reseller_owner_id,
+        spoof_org_principal_id=None,
+    )
+    if is_reseller_bot:
+        if resolution is None or resolution.channel != "principal_l2":
+            return "shop_bot_isolated"
+    if resolution is None or not bot_pg_family_resolution_ok(resolution):
+        return "missing_principal"
+    return resolution
+
+
 def _validate_active_shop_rep(
     principal: OrgPrincipal | None,
     *,

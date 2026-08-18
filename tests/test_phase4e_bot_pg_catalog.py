@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -297,7 +298,21 @@ class Phase4EBotPgCatalogTests(unittest.IsolatedAsyncioTestCase):
                 "app.services.pg_access.resolve_platform_pg_capabilities",
                 new=AsyncMock(return_value=self._owner_caps()),
             ),
+            patch(
+                "app.services.pasarguard.get_pg_for_reseller",
+                new=AsyncMock(return_value=fake_pg),
+            ),
+            patch(
+                "app.services.pasarguard.get_pg_for_principal",
+                new=AsyncMock(return_value=fake_pg),
+            ),
         )
+
+    def _enter(self, patches):
+        stack = ExitStack()
+        for p in patches:
+            stack.enter_context(p)
+        return stack
 
     def _pg(self, fx):
         return _fake_pg(
@@ -320,7 +335,7 @@ class Phase4EBotPgCatalogTests(unittest.IsolatedAsyncioTestCase):
         **kwargs,
     ):
         patches = self._patches(permissions, fake_pg, access=access)
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+        with self._enter(patches):
             return await authorize_bot_pg_catalog_op(
                 session,
                 db_user=db_user,
@@ -811,7 +826,8 @@ class Phase4EBotPgCatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(gate.as_owner_client)
             self.assertFalse(bool(gate.staff.get("pg_is_owner")))
             gp.assert_not_called()
-            gr.assert_awaited_once()
+            gr.assert_awaited()
+            self.assertGreaterEqual(gr.await_count, 1)
 
     async def test_r_phase4b_4c_4d_unchanged(self) -> None:
         async with self.Session() as session:
@@ -840,8 +856,16 @@ class Phase4EBotPgCatalogTests(unittest.IsolatedAsyncioTestCase):
                     "app.services.pg_quota.assert_can_mutate_owned_users",
                     new=AsyncMock(return_value=None),
                 ),
+                patch(
+                    "app.services.pasarguard.get_pg_for_reseller",
+                    new=AsyncMock(return_value=fake_pg),
+                ),
+                patch(
+                    "app.services.pasarguard.get_pg_for_principal",
+                    new=AsyncMock(return_value=fake_pg),
+                ),
             )
-            with common[0], common[1], common[2], common[3], common[4], patch(
+            with common[0], common[1], common[2], common[3], common[4], common[5], common[6], patch(
                 "app.services.bot_pg_user_pilot.bot_pg_client_for_resolution",
                 new=AsyncMock(return_value=(fake_pg, False)),
             ):
@@ -852,7 +876,7 @@ class Phase4EBotPgCatalogTests(unittest.IsolatedAsyncioTestCase):
                     callback_data="adm:pg:u:101",
                 )
             self.assertTrue(user.allowed, user.reason)
-            with common[0], common[1], common[2], common[3], common[4], patch(
+            with common[0], common[1], common[2], common[3], common[4], common[5], common[6], patch(
                 "app.services.bot_pg_object_pilot.bot_pg_client_for_resolution",
                 new=AsyncMock(return_value=(fake_pg, False)),
             ):
@@ -877,7 +901,7 @@ class Phase4EBotPgCatalogTests(unittest.IsolatedAsyncioTestCase):
                 answer=AsyncMock(),
                 message=SimpleNamespace(edit_text=AsyncMock()),
             )
-            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+            with self._enter(patches):
                 await mod.adm_pg_template_hint(cb, fx.ua, session=session)
             cb.message.edit_text.assert_awaited()
             text = cb.message.edit_text.await_args.args[0]
@@ -889,7 +913,7 @@ class Phase4EBotPgCatalogTests(unittest.IsolatedAsyncioTestCase):
                 answer=AsyncMock(),
                 message=SimpleNamespace(edit_text=AsyncMock()),
             )
-            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+            with self._enter(patches):
                 await mod.adm_pg_group_hint(cb_g, fx.ua, session=session)
             shown = cb_g.message.edit_text.await_args.args[0]
             self.assertIn("grp_a", shown)

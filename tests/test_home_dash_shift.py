@@ -31,7 +31,7 @@ class HomeDashShiftSurfaceTests(unittest.TestCase):
         self.assertIn("home-portal-go svg", css)
         self.assertNotIn("تقویم تهران", ops)
         self.assertIn("<svg viewBox=\"0 0 24 24\"><path d=\"M15 6l-6 6 6 6\"/></svg>", ops)
-        self.assertIn("var(--brand)", css[css.find(".home-portal-bot") : css.find(".home-portal-bot") + 400])
+        self.assertIn("var(--bot-line)", css[css.find(".home-portal-bot") : css.find(".home-portal-bot") + 400])
         home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
         self.assertIn("_home_ops.html", home)
         self.assertNotIn("home-gauge", home)

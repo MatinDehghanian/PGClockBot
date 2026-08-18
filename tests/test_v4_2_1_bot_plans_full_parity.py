@@ -23,7 +23,7 @@ class PlansBackLinkTests(unittest.TestCase):
     def test_kind_screens_back_to_audience_not_same_kind(self):
         """«انتخاب نوع» must return to kind hub, not re-open the same screen."""
         self.assertIn("BACK_USERS_KIND = \"adm:plans:aud:users\"", ADMIN_PLANS)
-        self.assertIn("_back_row(\"⬅️ پلن‌های کاربران\", BACK_USERS_KIND)", ADMIN_PLANS)
+        self.assertIn("_back_row(\"⬅️ پلن‌های کاربران\", BACK_USERS_KIND", ADMIN_PLANS)
         self.assertNotIn("_back_row(\"⬅️ انتخاب نوع\", BACK_USERS_TRIAL)", ADMIN_PLANS)
 
     def test_wholesale_in_bot_not_web_only(self):

@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db import Base
@@ -127,14 +129,23 @@ class Phase4ABotPrincipalTests(unittest.IsolatedAsyncioTestCase):
     async def test_3b_admin_ids_with_disabled_owner_conflict_denies(self) -> None:
         async with self.Session() as session:
             owner = await ensure_owner_principal(session)
-            owner.status = "disabled"
+            await session.commit()
             conflict = OrgPrincipal(
                 parent_id=None,
                 depth=0,
                 status="disabled",
             )
             session.add(conflict)
-            await session.flush()
+            with self.assertRaises(IntegrityError):
+                await session.flush()
+            await session.rollback()
+
+            owner = (
+                await session.execute(
+                    select(OrgPrincipal).where(OrgPrincipal.depth == 0)
+                )
+            ).scalar_one()
+            owner.status = "disabled"
             user = BotUser(
                 telegram_id=88004,
                 role=Role.USER.value,

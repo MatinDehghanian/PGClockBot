@@ -495,10 +495,12 @@ class ButtonStyleTests(unittest.TestCase):
 class Ux20VersionTests(unittest.TestCase):
     def test_version_aligned(self):
         from app.version import __version__
+        from app.services.updates import is_same_or_newer
 
-        self.assertEqual(Path("VERSION").read_text().strip(), "6.1.7")
-        self.assertEqual(__version__, "6.1.7")
+        self.assertEqual(Path("VERSION").read_text().strip(), __version__)
+        self.assertTrue(is_same_or_newer(__version__, "6.1.7"))
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
+        self.assertIn(f'"{__version__}"', notes)
         self.assertIn('"6.1.7"', notes)
         self.assertIn('"6.1.6"', notes)
         self.assertIn('"6.1.5"', notes)

@@ -27,7 +27,7 @@ class PlansCrudFixTests(unittest.TestCase):
 
     def test_reseller_edit_routing_excludes_toggrp(self):
         self.assertIn(
-            'F.data.regexp(r"^adm:resplan:edit:(name|price|comm|rate|desc|grp|role):\\d+$")',
+            'F.data.regexp(\n        r"^adm:resplan:edit:(name|price|comm|rate|desc|grp|role|addon_gb|addon_users|extra_gb|extra_user):\\d+$"',
             ADMIN_PLANS,
         )
         self.assertIn("adm:resplan:edit:toggrp:", ADMIN_PLANS)

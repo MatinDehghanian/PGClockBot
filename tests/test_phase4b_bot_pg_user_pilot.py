@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -215,7 +216,21 @@ class Phase4BBotPgUserPilotTests(unittest.IsolatedAsyncioTestCase):
                 "app.services.pg_access.resolve_platform_pg_capabilities",
                 new=AsyncMock(return_value=self._owner_caps()),
             ),
+            patch(
+                "app.services.pasarguard.get_pg_for_reseller",
+                new=AsyncMock(return_value=fake_pg),
+            ),
+            patch(
+                "app.services.pasarguard.get_pg_for_principal",
+                new=AsyncMock(return_value=fake_pg),
+            ),
         )
+
+    def _enter(self, patches):
+        stack = ExitStack()
+        for p in patches:
+            stack.enter_context(p)
+        return stack
 
     async def _auth(
         self,
@@ -234,7 +249,7 @@ class Phase4BBotPgUserPilotTests(unittest.IsolatedAsyncioTestCase):
             f"adm:pg:u:{uid}" if kind == "read" else f"adm:pg:dis:{uid}"
         )
         patches = self._l1_patches(permissions, fake_pg)
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+        with self._enter(patches):
             return await authorize_bot_pg_user_op(
                 session,
                 db_user=db_user,
@@ -570,7 +585,7 @@ class Phase4BBotPgUserPilotTests(unittest.IsolatedAsyncioTestCase):
                 message=None,
             )
             patches = self._l1_patches(USERS_VIEW_UPDATE, fake_pg)
-            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+            with self._enter(patches):
                 await mod.pg_dis(cb, db_user=fx.ua, session=session)
             fake_pg.set_disabled_by_id.assert_awaited_once_with(101, True)
 
@@ -580,7 +595,7 @@ class Phase4BBotPgUserPilotTests(unittest.IsolatedAsyncioTestCase):
                 message=None,
             )
             fake_pg.set_disabled_by_id.reset_mock()
-            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+            with self._enter(patches):
                 await mod.pg_dis(cb_b, db_user=fx.ua, session=session)
             fake_pg.set_disabled_by_id.assert_not_called()
 
@@ -596,7 +611,7 @@ class Phase4BBotPgUserPilotTests(unittest.IsolatedAsyncioTestCase):
                 message=MagicMock(),
             )
             patches = self._l1_patches(USERS_VIEW_ONLY, fake_pg)
-            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patch.object(
+            with self._enter(patches), patch.object(
                 mod, "_show_user_card", new=AsyncMock()
             ) as show:
                 await mod.pg_user_detail(cb, db_user=fx.ua, session=session)

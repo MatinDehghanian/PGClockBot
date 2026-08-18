@@ -49,10 +49,9 @@ class AdminPlanKindFlowTests(unittest.TestCase):
         self.assertIn("REPLY_ACTION_ADM_PLANS_AUD_USERS", reply_nav)
 
     def test_admin_kind_keyboard_user_kinds(self):
-        block = KEYBOARDS_SRC[
-            KEYBOARDS_SRC.find("def admin_plan_kind_keyboard")
-            : KEYBOARDS_SRC.find("def admin_plan_kind_keyboard") + 2000
-        ]
+        start = KEYBOARDS_SRC.find("def admin_plan_kind_keyboard")
+        nxt = KEYBOARDS_SRC.find("\ndef ", start + 1)
+        block = KEYBOARDS_SRC[start:nxt]
         self.assertIn("adm:plans:kind:users:fixed", block)
         self.assertIn("adm:plans:kind:users:custom", block)
         self.assertIn("adm:plans:kind:users:trial", block)

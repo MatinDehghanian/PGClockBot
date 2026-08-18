@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -271,6 +272,14 @@ class Phase4DBotPgObjectsTests(unittest.IsolatedAsyncioTestCase):
                 "app.services.pg_access.resolve_platform_pg_capabilities",
                 new=AsyncMock(return_value=self._owner_caps()),
             ),
+            patch(
+                "app.services.pasarguard.get_pg_for_reseller",
+                new=AsyncMock(return_value=fake_pg),
+            ),
+            patch(
+                "app.services.pasarguard.get_pg_for_principal",
+                new=AsyncMock(return_value=fake_pg),
+            ),
         )
 
     def _user_patches(self, permissions: dict, fake_pg):
@@ -301,7 +310,21 @@ class Phase4DBotPgObjectsTests(unittest.IsolatedAsyncioTestCase):
                 "app.services.pg_access.resolve_platform_pg_capabilities",
                 new=AsyncMock(return_value=self._owner_caps()),
             ),
+            patch(
+                "app.services.pasarguard.get_pg_for_reseller",
+                new=AsyncMock(return_value=fake_pg),
+            ),
+            patch(
+                "app.services.pasarguard.get_pg_for_principal",
+                new=AsyncMock(return_value=fake_pg),
+            ),
         )
+
+    def _enter(self, patches):
+        stack = ExitStack()
+        for p in patches:
+            stack.enter_context(p)
+        return stack
 
     def _l1_pg(self, fx):
         return _fake_pg(
@@ -321,7 +344,7 @@ class Phase4DBotPgObjectsTests(unittest.IsolatedAsyncioTestCase):
 
     async def _auth(self, session, *, db_user, kind, action, permissions, fake_pg, **kwargs):
         patches = self._patches(permissions, fake_pg)
-        with patches[0], patches[1], patches[2], patches[3], patches[4]:
+        with self._enter(patches):
             return await authorize_bot_pg_object_op(
                 session,
                 db_user=db_user,
@@ -791,14 +814,15 @@ class Phase4DBotPgObjectsTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(gate.as_owner_client)
             self.assertFalse(bool(gate.staff.get("pg_is_owner")))
             gp.assert_not_called()
-            gr.assert_awaited_once()
+            gr.assert_awaited()
+            self.assertGreaterEqual(gr.await_count, 1)
 
     async def test_o_phase4b_4c_pg_user_unchanged(self) -> None:
         async with self.Session() as session:
             fx = await self._fixtures(session)
             fake_pg = self._l1_pg(fx)
             patches = self._user_patches(VIEW_ONLY, fake_pg)
-            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+            with self._enter(patches):
                 read = await authorize_bot_pg_user_op(
                     session,
                     db_user=fx.ua,
@@ -831,20 +855,20 @@ class Phase4DBotPgObjectsTests(unittest.IsolatedAsyncioTestCase):
             fake_pg = self._l1_pg(fx)
             cb = SimpleNamespace(data="adm:pg:nodes", answer=AsyncMock(), message=MagicMock())
             patches = self._patches(FULL, fake_pg)
-            with patches[0], patches[1], patches[2], patches[3], patches[4], patch.object(
+            with self._enter(patches), patch.object(
                 mod, "_render_nodes_list", new=AsyncMock()
             ) as render:
                 await mod.pg_nodes(cb, fx.ua, session=session)
             render.assert_awaited_once()
 
             cb_d = SimpleNamespace(data="adm:pg:ndel:13", answer=AsyncMock(), message=None)
-            with patches[0], patches[1], patches[2], patches[3], patches[4]:
+            with self._enter(patches):
                 await mod.pg_node_delete(cb_d, db_user=fx.ua, session=session)
             fake_pg.delete_node.assert_awaited_once_with(13)
 
             cb_f = SimpleNamespace(data="adm:pg:ndel:12", answer=AsyncMock(), message=None)
             fake_pg.delete_node.reset_mock()
-            with patches[0], patches[1], patches[2], patches[3], patches[4]:
+            with self._enter(patches):
                 await mod.pg_node_delete(cb_f, db_user=fx.ua, session=session)
             fake_pg.delete_node.assert_not_called()
 

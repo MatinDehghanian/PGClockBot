@@ -136,30 +136,31 @@ class OwnerBootstrapTests(unittest.IsolatedAsyncioTestCase):
             session.add(
                 OrgPrincipal(parent_id=None, depth=0, status="active")
             )
+            await session.commit()
             session.add(
                 OrgPrincipal(parent_id=None, depth=0, status="active")
             )
-            await session.commit()
-            from app.db.session import _seed_owner_if_no_depth0
-
-            async with engine.begin() as conn:
-                await conn.run_sync(_seed_owner_if_no_depth0)
+            with self.assertRaises(IntegrityError):
+                await session.flush()
+            await session.rollback()
             n = (
                 await session.execute(
                     select(OrgPrincipal).where(OrgPrincipal.depth == 0)
                 )
             ).scalars().all()
-            self.assertEqual(len(n), 2)
+            self.assertEqual(len(n), 1)
+            n[0].status = "disabled"
+            await session.commit()
             with self.assertRaises(OrgPrincipalError):
                 await ensure_owner_principal(session)
         await engine.dispose()
 
 
 class BotUserIdUniqueIndexTests(unittest.TestCase):
-    def test_alembic_head_is_0017(self) -> None:
+    def test_alembic_head_is_0018(self) -> None:
         from app.db.alembic_runner import heads
 
-        self.assertEqual(heads(), ["0017_org_principal_bot_user_unique"])
+        self.assertEqual(heads(), ["0018_org_principal_single_owner"])
 
     def test_migration_creates_partial_unique_index(self) -> None:
         from app.db.alembic_runner import upgrade_head

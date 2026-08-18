@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db import Base
@@ -256,14 +257,40 @@ class Phase4GBotOwnerL1Tests(unittest.IsolatedAsyncioTestCase):
     async def test_5_inactive_owner_deny(self) -> None:
         async with self.Session() as session:
             fx = await self._fixtures(session)
-            fx.owner_p.status = "disabled"
-            conflict = OrgPrincipal(parent_id=None, depth=0, status="disabled")
-            session.add(conflict)
+            owner_id = int(fx.owner_p.id)
+            user_id = int(fx.owner_user.id)
+            session.add(OrgPrincipal(parent_id=None, depth=0, status="disabled"))
+            with self.assertRaises(IntegrityError):
+                await session.flush()
+            await session.rollback()
+
+        async with self.Session() as session:
+            owner_p = await session.get(OrgPrincipal, owner_id)
+            owner_user = await session.get(BotUser, user_id)
+            self.assertIsNotNone(owner_p)
+            self.assertIsNotNone(owner_user)
+            owner_p.status = "disabled"
             await session.commit()
+            await session.refresh(owner_user)
             with self._admin_ids(77001):
                 self.assertFalse(
                     await is_bot_owner_principal(
-                        session, fx.owner_user, is_reseller_bot=False
+                        session, owner_user, is_reseller_bot=False
+                    )
+                )
+
+        async with self.Session() as session:
+            owner_p = await session.get(OrgPrincipal, owner_id)
+            owner_user = await session.get(BotUser, user_id)
+            self.assertIsNotNone(owner_p)
+            self.assertIsNotNone(owner_user)
+            owner_p.status = "disabled"
+            await session.commit()
+            await session.refresh(owner_user)
+            with self._admin_ids(77001):
+                self.assertFalse(
+                    await is_bot_owner_principal(
+                        session, owner_user, is_reseller_bot=False
                     )
                 )
 

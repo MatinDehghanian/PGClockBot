@@ -178,8 +178,10 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
 
         root = Path(__file__).resolve().parents[1]
         src = (root / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
-        self.assertIn("is_reseller_bot or db_user.role != Role.ADMIN.value", src)
         self.assertIn("async def _refuse_admin", src)
+        self.assertIn("async def _deny_unless_owner", src)
+        self.assertIn("if is_reseller_bot:", src)
+        self.assertIn("is_bot_owner_principal", src)
         self.assertIn("open_admin_backup_hub", src)
         self.assertIn("open_reseller_settings_hub", src)
         nav = (root / "app/bot/menu_nav.py").read_text(encoding="utf-8")
