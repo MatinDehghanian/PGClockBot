@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.1.4": [
+        "ربات: دکمه اینلاین «تنظیمات» دیگر مالک واقعی را با خطای دسترسی رد نمی‌کند",
+        "بدون مایگریشن جدید نسبت به ۸.۱.۳؛ ریستور: تگ v8.1.3",
+    ],
     "8.1.3": [
         "نمای کلی پاسارگارد: رنگ باکس نود داخل برد نودها مثل باکس فروش داشبورد",
         "بدون مایگریشن جدید نسبت به ۸.۱.۲؛ ریستور: تگ v8.1.2",
