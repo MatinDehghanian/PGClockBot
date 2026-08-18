@@ -234,6 +234,19 @@ class RepresentativeUnificationTests(unittest.IsolatedAsyncioTestCase):
             "org_status": "active",
         }
         self.assertTrue(staff_can_manage_representatives(owner_staff))
+        hybrid_no = {
+            **owner_staff,
+            "pg_is_owner": False,
+            "pg_actions": {"admins": {"create": False}},
+            "pg_role": {"permissions": {"users": {"create": True}}},
+        }
+        self.assertFalse(staff_can_manage_representatives(hybrid_no))
+        hybrid_yes = {
+            **owner_staff,
+            "pg_is_owner": False,
+            "pg_actions": {"admins": {"create": True}},
+        }
+        self.assertTrue(staff_can_manage_representatives(hybrid_yes))
         l1_cap = {
             "role": "principal",
             "org_depth": 1,
@@ -634,6 +647,7 @@ class RepresentativeUnificationSourceContracts(unittest.TestCase):
     def test_product_ui_is_resellers_not_principals_nav(self) -> None:
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
         self.assertIn("ident.can_add_representative", base)
+        self.assertIn("ident.can_manage_representatives", base)
         self.assertIn("نمایندگان من", base)
         self.assertNotIn('href="/principals"', base)
         pages = (ROOT / "app/api/principal_pages.py").read_text(encoding="utf-8")

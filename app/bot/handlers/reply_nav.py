@@ -737,6 +737,11 @@ async def open_admin_resellers_hub(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
         return
+    from app.bot.auth import platform_can_manage_representatives
+
+    if not await platform_can_manage_representatives():
+        await message.answer("قابلیت ساخت نماینده برای این حساب فعال نیست")
+        return
     await nav.show_nav_keyboard(
         message,
         session,
@@ -1117,6 +1122,12 @@ async def _soft_admin(
             message, session, db_user, is_reseller_bot=is_reseller_bot
         ):
             return
+        if data.startswith("adm:resellers") or data.startswith("adm:resapp"):
+            from app.bot.auth import platform_can_manage_representatives
+
+            if not await platform_can_manage_representatives():
+                await message.answer("قابلیت ساخت نماینده برای این حساب فعال نیست")
+                return
     bubble = await message.answer("⏳")
     cb = _SoftCallback(bubble, data)
     try:

@@ -117,6 +117,23 @@ class IdentityChromeTests(unittest.TestCase):
         self.assertEqual(ident["label"], "مالک")
         self.assertFalse(ident["show_pg_role"])
         self.assertIsNone(ident["pg_role_name"])
+        self.assertTrue(ident["can_manage_representatives"])
+
+    def test_hybrid_owner_without_admins_create_cannot_manage_reps(self) -> None:
+        ident = hierarchy_identity(
+            {
+                "role": "admin",
+                "org_depth": 0,
+                "org_parent_id": None,
+                "org_status": "active",
+                "org_principal_id": 1,
+                "pg_is_owner": False,
+                "pg_actions": {"admins": {"create": False}},
+            }
+        )
+        self.assertEqual(ident["kind"], "owner")
+        self.assertFalse(ident["can_manage_representatives"])
+        self.assertFalse(ident["can_add_representative"])
 
     def test_l1_hierarchy_plus_live_pg_role(self) -> None:
         ident = hierarchy_identity(

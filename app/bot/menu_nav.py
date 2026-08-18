@@ -55,6 +55,53 @@ async def user_has_services(session: AsyncSession, user_id: int) -> bool:
     return result.scalar_one_or_none() is not None
 
 
+async def _platform_admin_menu_flags(
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool = False,
+) -> tuple[frozenset[str], bool]:
+    """Live PG menu keys + representative-create flag for platform admin keyboards."""
+    from app.bot.auth import (
+        bot_migrated_pg_features,
+        is_bot_owner_principal,
+        platform_can_manage_representatives,
+    )
+
+    feats: frozenset[str] = frozenset()
+    can_reps = False
+    try:
+        if await is_bot_owner_principal(
+            session, db_user, is_reseller_bot=is_reseller_bot
+        ):
+            feats = await bot_migrated_pg_features(
+                session, db_user, is_reseller_bot=is_reseller_bot
+            )
+            can_reps = await platform_can_manage_representatives()
+    except Exception:
+        feats = frozenset()
+        can_reps = False
+    return feats, can_reps
+
+
+async def admin_hub_reply_keyboard(
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool = False,
+    ui: dict | None = None,
+) -> ReplyKeyboardMarkup:
+    """Live admin hub keyboard — same flags as ``build_main_reply_keyboard``."""
+    if ui is None:
+        ui = await get_all_settings(session)
+    pg_feats, can_reps = await _platform_admin_menu_flags(
+        session, db_user, is_reseller_bot=is_reseller_bot
+    )
+    return kb.admin_reply_keyboard(
+        ui, pg_features=pg_feats, can_manage_representatives=can_reps
+    )
+
+
 async def build_main_reply_keyboard(
     session: AsyncSession,
     db_user: BotUser,
@@ -101,12 +148,20 @@ async def build_main_reply_keyboard(
         return markup, ui, role
     has = False if (role == "admin" and not as_user) else await user_has_services(session, db_user.id)
     show_creds = is_shop_owner_on_main_bot(db_user, is_reseller_bot=is_reseller_bot)
+    pg_feats: frozenset[str] | set[str] | None = None
+    can_reps = True
+    if role == "admin" and not as_user:
+        pg_feats, can_reps = await _platform_admin_menu_flags(
+            session, db_user, is_reseller_bot=is_reseller_bot
+        )
     markup = kb.main_reply_keyboard(
         role,
         has_services=has,
         ui=ui,
         as_user=as_user,
         show_reseller_creds=show_creds,
+        pg_features=pg_feats,
+        can_manage_representatives=can_reps,
     )
     return markup, ui, role
 
@@ -254,19 +309,12 @@ async def show_nav_keyboard(
         include_tiers = not bool(is_reseller_bot)
         markup = kb.admin_loyalty_reply_keyboard(ui, include_tiers=include_tiers)
     elif level == NAV_ADMIN:
-        pg_feats: frozenset[str] | None = None
-        try:
-            from app.bot.auth import bot_migrated_pg_features, is_bot_owner_principal
-
-            if await is_bot_owner_principal(
-                session, db_user, is_reseller_bot=is_reseller_bot
-            ):
-                pg_feats = await bot_migrated_pg_features(
-                    session, db_user, is_reseller_bot=is_reseller_bot
-                )
-        except Exception:
-            pg_feats = frozenset()
-        markup = kb.admin_reply_keyboard(ui, pg_features=pg_feats)
+        pg_feats, can_reps = await _platform_admin_menu_flags(
+            session, db_user, is_reseller_bot=is_reseller_bot
+        )
+        markup = kb.admin_reply_keyboard(
+            ui, pg_features=pg_feats, can_manage_representatives=can_reps
+        )
     elif level == NAV_ADMIN_PG:
         feats: frozenset[str] = frozenset()
         can_create = False
@@ -283,7 +331,12 @@ async def show_nav_keyboard(
             feats = frozenset()
             can_create = False
         if not feats:
-            markup = kb.admin_reply_keyboard(ui, pg_features=feats)
+            _, can_reps = await _platform_admin_menu_flags(
+                session, db_user, is_reseller_bot=is_reseller_bot
+            )
+            markup = kb.admin_reply_keyboard(
+                ui, pg_features=feats, can_manage_representatives=can_reps
+            )
         else:
             markup = kb.pg_reply_keyboard(ui, features=feats, can_create_user=can_create)
     elif level == NAV_ADMIN_USERS:

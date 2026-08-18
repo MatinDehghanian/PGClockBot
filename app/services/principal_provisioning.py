@@ -75,14 +75,17 @@ def owner_has_pg_admin_create_capability(staff: Mapping[str, Any] | None) -> boo
 
     Uses explicit PG owner flag or actual ``admins.create`` — never page
     visibility (``pg_admins``) and never role *names*.
+
+    ``pg_is_owner is False`` is Hybrid Owner (live probe): only ``admins.create``.
+    Missing flag keeps sudo (same default as ``pg_quota.staff_needs_quota_check``).
     """
     if not staff:
         return False
-    if bool(staff.get("pg_is_owner")):
-        return True
-    from app.services.pg_access import staff_has_pg_admins_create
+    if staff.get("pg_is_owner") is False:
+        from app.services.pg_access import staff_has_pg_admins_create
 
-    return staff_has_pg_admins_create(staff)
+        return staff_has_pg_admins_create(staff)
+    return True
 
 
 def assert_can_provision_level1(staff: Mapping[str, Any] | None) -> None:

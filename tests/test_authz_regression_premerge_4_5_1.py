@@ -61,7 +61,11 @@ class PgWriteRouteStaticAudit(unittest.TestCase):
         self.assertGreaterEqual(len(blocks), 20, "expected many /pg write routes")
         for path, src in blocks:
             if path.startswith("/pg/admins"):
-                self.assertIn("require_admin", src, msg=f"{path} must require_admin")
+                self.assertIn(
+                    'require_pg_perm("pg_admins")',
+                    src,
+                    msg=f"{path} must require mapped pg_admins (Owner-only)",
+                )
                 continue
             # Users: exact user-action map; others: staff_pg_action
             if path.startswith("/pg/users"):

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
-from app.bot.auth import require_bot_owner_handler
+from app.bot.auth import require_bot_owner_handler, require_platform_rep_mgmt
 from app.config import get_settings
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Plan, Role, Ticket, UserService
 from app.services.formatting import (
@@ -24,6 +24,12 @@ from app.services.pasarguard import get_pg
 from app.services.tickets import get_ticket, list_open_tickets, reply_ticket
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
+
+
+async def _admin_hub_kb(session: AsyncSession, db_user: BotUser) -> ReplyKeyboardMarkup:
+    from app.bot.menu_nav import admin_hub_reply_keyboard
+
+    return await admin_hub_reply_keyboard(session, db_user)
 
 
 def _plan_line(p: Plan) -> str:
@@ -229,7 +235,7 @@ class AdminStates(StatesGroup):
 
 @router.callback_query(F.data == "adm:home")
 @require_bot_owner_handler
-async def adm_home(callback: CallbackQuery, db_user: BotUser):
+async def adm_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -246,7 +252,7 @@ async def adm_home(callback: CallbackQuery, db_user: BotUser):
         await safe_edit_text(callback.message, text, reply_markup=None)
         await callback.message.answer(
             "پنل ادمین:",
-            reply_markup=kb.admin_reply_keyboard(),
+            reply_markup=await _admin_hub_kb(session, db_user),
         )
 
 
@@ -2175,6 +2181,7 @@ async def adm_users_unreseller_reason(
 
 @router.callback_query(F.data == "adm:resellers")
 @require_bot_owner_handler
+@require_platform_rep_mgmt
 async def adm_resellers(callback: CallbackQuery, db_user: BotUser, state: FSMContext | None = None):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -2203,6 +2210,7 @@ RESELLERS_PAGE_SIZE = 10
 
 @router.callback_query(F.data.startswith("adm:resellers:list:"))
 @require_bot_owner_handler
+@require_platform_rep_mgmt
 async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -2302,6 +2310,7 @@ async def _render_reseller_card(
 
 @router.callback_query(F.data.startswith("adm:resellers:view:"))
 @require_bot_owner_handler
+@require_platform_rep_mgmt
 async def adm_resellers_view(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
 ):
@@ -2320,6 +2329,7 @@ async def adm_resellers_view(
 
 @router.callback_query(F.data.startswith("adm:resellers:svcs:"))
 @require_bot_owner_handler
+@require_platform_rep_mgmt
 async def adm_resellers_services(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
 ):
@@ -2430,6 +2440,7 @@ async def adm_resellers_services(
 
 @router.callback_query(F.data == "adm:resellers:add")
 @require_bot_owner_handler
+@require_platform_rep_mgmt
 async def adm_resellers_add(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -2450,6 +2461,7 @@ async def adm_resellers_add(callback: CallbackQuery, state: FSMContext, db_user:
 
 @router.callback_query(F.data == "adm:resapp:list")
 @require_bot_owner_handler
+@require_platform_rep_mgmt
 async def adm_resapp_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -2484,6 +2496,7 @@ async def adm_resapp_list(callback: CallbackQuery, session: AsyncSession, db_use
 
 @router.callback_query(F.data.startswith("adm:resapp:view:"))
 @require_bot_owner_handler
+@require_platform_rep_mgmt
 async def adm_resapp_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -2519,6 +2532,7 @@ async def adm_resapp_view(callback: CallbackQuery, session: AsyncSession, db_use
 
 @router.callback_query(F.data.startswith("adm:resapp:ok:"))
 @require_bot_owner_handler
+@require_platform_rep_mgmt
 async def adm_resapp_ok(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -2564,6 +2578,7 @@ async def adm_resapp_ok(callback: CallbackQuery, session: AsyncSession, db_user:
 
 @router.callback_query(F.data.startswith("adm:resapp:no:"))
 @require_bot_owner_handler
+@require_platform_rep_mgmt
 async def adm_resapp_no(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -2598,6 +2613,7 @@ async def adm_resapp_no(callback: CallbackQuery, session: AsyncSession, db_user:
 
 @router.message(AdminStates.make_reseller)
 @require_bot_owner_handler
+@require_platform_rep_mgmt
 async def make_res(
     message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
@@ -2607,7 +2623,7 @@ async def make_res(
         return
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _admin_hub_kb(session, db_user))
         return
     parts = (message.text or "").split()
     try:
@@ -2658,7 +2674,7 @@ async def make_res(
         pass
     await message.answer(
         f"کاربر {tg_id} نماینده شد ✅ — اطلاعات ورود ارسال شد",
-        reply_markup=kb.admin_reply_keyboard(),
+        reply_markup=await _admin_hub_kb(session, db_user),
     )
 
 
@@ -2718,7 +2734,7 @@ async def adm_ticket_view(callback: CallbackQuery, session: AsyncSession, db_use
 async def adm_ticket_reply(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser):
     if kb.is_cancel_text(message.text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=await _admin_hub_kb(session, db_user))
         return
     data = await state.get_data()
     ticket = await session.get(Ticket, data.get("ticket_id"))
@@ -2727,12 +2743,12 @@ async def adm_ticket_reply(message: Message, state: FSMContext, session: AsyncSe
         return
     if ticket.reseller_id:
         await state.clear()
-        await message.answer("دسترسی به تیکت فروشگاه ندارید.", reply_markup=kb.admin_reply_keyboard())
+        await message.answer("دسترسی به تیکت فروشگاه ندارید.", reply_markup=await _admin_hub_kb(session, db_user))
         return
     ticket_user = await session.get(BotUser, int(ticket.user_id))
     if ticket_user and ticket_user.reseller_id:
         await state.clear()
-        await message.answer("دسترسی به تیکت فروشگاه ندارید.", reply_markup=kb.admin_reply_keyboard())
+        await message.answer("دسترسی به تیکت فروشگاه ندارید.", reply_markup=await _admin_hub_kb(session, db_user))
         return
     await reply_ticket(session, ticket, message.text or "", db_user.telegram_id, is_staff=True)
     await state.clear()
@@ -2752,7 +2768,7 @@ async def adm_ticket_reply(message: Message, state: FSMContext, session: AsyncSe
         )
     except Exception:
         pass
-    await message.answer("ارسال شد ✅", reply_markup=kb.admin_reply_keyboard())
+    await message.answer("ارسال شد ✅", reply_markup=await _admin_hub_kb(session, db_user))
 
 
 @router.callback_query(F.data == "adm:broadcast")
@@ -2827,14 +2843,14 @@ async def adm_broadcast_send(message: Message, state: FSMContext, session: Async
             created_by=str(db_user.telegram_id),
         )
     except ValueError as e:
-        await message.answer(str(e), reply_markup=kb.admin_reply_keyboard())
+        await message.answer(str(e), reply_markup=await _admin_hub_kb(session, db_user))
         return
     except Exception as e:
-        await message.answer(f"خطا: {e}", reply_markup=kb.admin_reply_keyboard())
+        await message.answer(f"خطا: {e}", reply_markup=await _admin_hub_kb(session, db_user))
         return
     await message.answer(
         f"✅ ارسال شد\nموفق: {result['ok']} / {result['total']}\nناموفق: {result['fail']}",
-        reply_markup=kb.admin_reply_keyboard(),
+        reply_markup=await _admin_hub_kb(session, db_user),
     )
 
 

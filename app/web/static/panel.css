@@ -2269,7 +2269,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 }
 .auth-foot { text-align: center; color: var(--muted-fg); font-size: 12px; }
 
-.setup-panel { width: min(440px, 100%); }
+.setup-panel { width: min(460px, 100%); }
 .setup-title { margin: 0; font-size: 1.05rem; }
 .setup-lead, .setup-hint {
   margin: 0;
@@ -2302,6 +2302,144 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   background: var(--foreground);
   border-color: var(--foreground);
 }
+.setup-probe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-1) 0 var(--space-2);
+}
+.setup-probe-bar {
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.setup-probe-bar i {
+  display: block;
+  height: 100%;
+  width: 8%;
+  border-radius: inherit;
+  background: var(--foreground);
+  transition: width 0.35s ease;
+}
+.setup-probe-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.setup-probe-steps li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 13px;
+  color: var(--muted-fg);
+}
+.setup-probe-steps li::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--border);
+}
+.setup-probe-steps li.is-on { color: var(--foreground); }
+.setup-probe-steps li.is-on::before {
+  background: var(--foreground);
+  border-color: var(--foreground);
+}
+.setup-probe-steps li.is-done { color: var(--foreground); }
+.setup-probe-steps li.is-done::before {
+  background: rgba(255, 255, 255, 0.45);
+  border-color: transparent;
+}
+.setup-audit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+.setup-audit-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+.setup-audit-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0.2em 0.55em;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+}
+.setup-audit-badge.is-owner {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.28);
+}
+.setup-audit-badge.is-limited {
+  background: rgba(234, 179, 8, 0.12);
+  color: #fde047;
+  border-color: rgba(234, 179, 8, 0.28);
+}
+.setup-audit-user {
+  font-size: 12px;
+}
+.setup-audit-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.setup-audit-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-0);
+}
+.setup-audit-empty { margin: 0; font-size: 13px; }
+.setup-audit-kvs {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.setup-audit-kvs > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: 13px;
+}
+.setup-audit-kvs dt { color: var(--muted-fg); }
+.setup-audit-kvs dd { margin: 0; font-weight: 600; }
+.setup-audit-flags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+  font-size: 13px;
+}
+.setup-audit-flags li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+.setup-audit-flags li::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-top: 0.45em;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+.setup-audit-flags li.is-yes::before { background: #4ade80; }
+.setup-audit-flags li.is-no::before { background: #facc15; }
 .setup-summary {
   display: flex;
   flex-direction: column;
@@ -6173,6 +6311,28 @@ html[data-theme="light"] .setup-progress span {
 }
 html[data-theme="light"] .setup-progress span.done {
   background: rgba(24, 24, 27, 0.35);
+}
+html[data-theme="light"] .setup-probe-bar {
+  background: rgba(24, 24, 27, 0.08);
+}
+html[data-theme="light"] .setup-probe-steps li::before {
+  background: rgba(24, 24, 27, 0.12);
+}
+html[data-theme="light"] .setup-probe-steps li.is-done::before {
+  background: rgba(24, 24, 27, 0.4);
+}
+html[data-theme="light"] .setup-audit {
+  background: rgba(24, 24, 27, 0.02);
+}
+html[data-theme="light"] .setup-audit-badge.is-owner {
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+  border-color: rgba(22, 163, 74, 0.22);
+}
+html[data-theme="light"] .setup-audit-badge.is-limited {
+  background: rgba(202, 138, 4, 0.1);
+  color: #a16207;
+  border-color: rgba(202, 138, 4, 0.22);
 }
 
 /* —— Overall home dashboard —— */

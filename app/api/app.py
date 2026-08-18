@@ -59,6 +59,7 @@ from app.services.setup_wizard import (
     normalize_webhook_path,
     resolve_bot_update_mode,
     setup_finish_login_url,
+    setup_pg_access_audit,
     wizard_panel_url_hint,
     parse_admin_ids,
     revoke_setup_gate,
@@ -954,7 +955,6 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_pg_pages(
         app,
         render=render,
-        require_admin=require_admin,
         require_pg_perm=require_pg_perm,
         get_db=get_db,
     )
@@ -1118,7 +1118,15 @@ def create_api_app(lifespan=None) -> FastAPI:
         )
 
     # -------- Setup wizard --------
-    def _setup_page(request: Request, *, step: int = 0, err: str | None = None, ok: str | None = None, show_done: bool = False):
+    async def _setup_page(
+        request: Request,
+        *,
+        step: int = 0,
+        err: str | None = None,
+        ok: str | None = None,
+        show_done: bool = False,
+        pg_audit: dict | None = None,
+    ):
         begin_setup()
         values = current_setup_values()
         from app.services.security_policy import is_placeholder_bot_token
@@ -1135,6 +1143,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         display_values = dict(values)
         display_values["BOT_TOKEN"] = ""
         display_values["PG_PASSWORD"] = ""
+        if pg_audit is None and (show_done or step >= 4):
+            try:
+                pg_audit = await setup_pg_access_audit()
+            except Exception:
+                pg_audit = None
         return render(
             request,
             "setup.html",
@@ -1146,12 +1159,15 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "show_done": show_done,
                 "flash_err": err or request.query_params.get("err"),
                 "flash_ok": ok or request.query_params.get("ok"),
-                "flash_warn": request.query_params.get("pg_warn"),
                 "panel_url": wizard_panel_url_hint(values.get("WEB_PORT", "9000")),
                 "finish_login_url": setup_finish_login_url(),
                 "bot_username": (values.get("BOT_USERNAME") or "").lstrip("@"),
+                "pg_audit": pg_audit,
             },
         )
+
+    def _setup_wants_json(request: Request) -> bool:
+        return (request.headers.get("x-requested-with") or "").strip() == "setup-probe"
 
     @app.get("/setup", response_class=HTMLResponse)
     async def setup_page(request: Request):
@@ -1163,7 +1179,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         except ValueError:
             step = 0
         show_done = step >= 4
-        return _setup_page(request, step=step if step < 4 else 4, show_done=show_done)
+        return await _setup_page(request, step=step if step < 4 else 4, show_done=show_done)
 
     @app.post("/setup/admin")
     async def setup_admin(
@@ -1179,14 +1195,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         p1 = password or ""
         p2 = password_confirm or ""
         if p1 != p2:
-            return _setup_page(request, step=1, err="رمز عبور و تکرار آن یکسان نیستند.")
+            return await _setup_page(request, step=1, err="رمز عبور و تکرار آن یکسان نیستند.")
         ok, msg = validate_password_strength(p1)
         if not ok:
-            return _setup_page(request, step=1, err=msg)
+            return await _setup_page(request, step=1, err=msg)
         try:
             save_web_admin(user, p1)
         except ValueError as e:
-            return _setup_page(request, step=1, err=str(e))
+            return await _setup_page(request, step=1, err=str(e))
         ensure_web_secret()
         update_env_keys({"WEB_ADMIN_USER": user})
         return RedirectResponse("/setup?step=2", status_code=303)
@@ -1213,17 +1229,17 @@ def create_api_app(lifespan=None) -> FastAPI:
             if existing and not is_placeholder_bot_token(existing):
                 token = existing
             else:
-                return _setup_page(request, step=2, err="توکن ربات الزامی است.")
+                return await _setup_page(request, step=2, err="توکن ربات الزامی است.")
         if is_placeholder_bot_token(token):
-            return _setup_page(request, step=2, err="توکن ربات نامعتبر است — یک توکن واقعی از BotFather وارد کنید.")
+            return await _setup_page(request, step=2, err="توکن ربات نامعتبر است — یک توکن واقعی از BotFather وارد کنید.")
         if not uname:
-            return _setup_page(request, step=2, err="نام کاربری ربات الزامی است.")
+            return await _setup_page(request, step=2, err="نام کاربری ربات الزامی است.")
         try:
             ids = parse_admin_ids(ids_raw)
         except ValueError:
-            return _setup_page(request, step=2, err="آیدی ادمین‌ها باید عدد باشد (با کاما جدا کنید).")
+            return await _setup_page(request, step=2, err="آیدی ادمین‌ها باید عدد باشد (با کاما جدا کنید).")
         if not ids:
-            return _setup_page(request, step=2, err="حداقل یک آیدی ادمین وارد کنید.")
+            return await _setup_page(request, step=2, err="حداقل یک آیدی ادمین وارد کنید.")
         update_env_keys(
             {
                 "BOT_TOKEN": token,
@@ -1244,14 +1260,21 @@ def create_api_app(lifespan=None) -> FastAPI:
         public_base_url: str = Form(""),
         currency: str = Form("تومان"),
     ):
+        async def fail(err: str):
+            if _setup_wants_json(request):
+                return JSONResponse({"ok": False, "error": err}, status_code=400)
+            return await _setup_page(request, step=3, err=err)
+
         if is_setup_complete():
+            if _setup_wants_json(request):
+                return JSONResponse({"ok": False, "error": "راه‌اندازی قبلاً کامل شده است"}, status_code=400)
             return RedirectResponse("/", status_code=303)
         begin_setup()
         base = normalize_pg_base_url((pg_base_url or "").strip())
         if not base:
-            return _setup_page(request, step=3, err="آدرس پاسارگارد الزامی است.")
+            return await fail("آدرس پاسارگارد الزامی است.")
         if not (pg_username or "").strip():
-            return _setup_page(request, step=3, err="نام کاربری پاسارگارد الزامی است.")
+            return await fail("نام کاربری پاسارگارد الزامی است.")
         if not (pg_password or "").strip():
             # Wizard never re-displays the saved password (see _setup_page) —
             # an empty submit here means "keep the existing one".
@@ -1259,14 +1282,14 @@ def create_api_app(lifespan=None) -> FastAPI:
             if existing_pw:
                 pg_password = existing_pw
             else:
-                return _setup_page(request, step=3, err="رمز پاسارگارد الزامی است.")
+                return await fail("رمز پاسارگارد الزامی است.")
         port = (web_port or "9000").strip()
         try:
             port_n = int(port)
             if port_n < 1 or port_n > 65535:
                 raise ValueError
         except ValueError:
-            return _setup_page(request, step=3, err="پورت وب نامعتبر است.")
+            return await fail("پورت وب نامعتبر است.")
         # Hybrid: probe credentials + role before saving (fail closed on bad login).
         from app.services.pg_access import (
             clear_platform_pg_capability_cache,
@@ -1281,14 +1304,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         )
         if not caps.get("ok"):
             detail = caps.get("error") or "نامعتبر"
-            return _setup_page(
-                request,
-                step=3,
-                err=(
-                    f"ورود به پاسارگارد ناموفق بود: {detail}. "
-                    "علت محتمل: آدرس/یوزر/رمز اشتباه. "
-                    "راه حل: همان اعتبارنامه ورود پنل پاسارگارد را وارد کنید."
-                ),
+            return await fail(
+                f"ورود به پاسارگارد ناموفق بود: {detail}. "
+                "علت محتمل: آدرس/یوزر/رمز اشتباه. "
+                "راه حل: همان اعتبارنامه ورود پنل پاسارگارد را وارد کنید."
             )
         ensure_web_secret()
         pub = (public_base_url or "").strip().rstrip("/")
@@ -1305,16 +1324,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             }
         )
         clear_platform_pg_capability_cache()
-        # Soft warn when installer is not PG owner — setup still completes (Hybrid).
-        if not caps.get("pg_is_owner"):
-            from app.services.pg_access import PG_FEATURE_LABELS
-
-            feats = caps.get("features") or []
-            labels = "، ".join(PG_FEATURE_LABELS.get(f, f) for f in feats) if feats else "هیچ بخش پاسارگارد"
-            return RedirectResponse(
-                f"/setup?step=4&pg_warn={quote('حساب پاسارگارد مالک کامل نیست؛ منوی پاسارگارد محدود به: ' + labels)}",
-                status_code=303,
-            )
+        if _setup_wants_json(request):
+            return JSONResponse({"ok": True, "next": "/setup?step=4"})
         return RedirectResponse("/setup?step=4", status_code=303)
 
     @app.post("/setup/finish")
@@ -1345,7 +1356,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             except ValueError:
                 step = 0
             show_done = step >= 4
-            return _setup_page(request, step=step if step < 4 else 4, show_done=show_done)
+            return await _setup_page(request, step=step if step < 4 else 4, show_done=show_done)
         user = get_session_user(request)
         if not user:
             return RedirectResponse("/login", status_code=303)

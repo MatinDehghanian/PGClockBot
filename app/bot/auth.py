@@ -393,18 +393,12 @@ async def can_platform_pg_action(db_user: BotUser | None, resource: str, action:
     if not is_platform_admin(db_user):
         return False
     from app.services.authz import authz_from_staff, can_pg_action
-    from app.services.pg_access import enrich_staff_pg_from_role, resolve_platform_pg_capabilities
+    from app.services.pg_access import resolve_platform_pg_capabilities, staff_from_platform_caps
 
     caps = await resolve_platform_pg_capabilities()
-    role = caps.get("role") if isinstance(caps.get("role"), dict) else None
-    if caps.get("pg_is_owner"):
-        role = {"is_owner": True}
-    staff = enrich_staff_pg_from_role(
-        {"role": "admin", "pg_is_owner": bool(caps.get("pg_is_owner"))},
-        list(caps.get("features") or []),
-        role,
-    )
-    return can_pg_action(authz_from_staff(staff), resource, action)
+    if not caps.get("ok"):
+        return False
+    return can_pg_action(authz_from_staff(staff_from_platform_caps(caps)), resource, action)
 
 
 async def platform_pg_quota_staff() -> dict:
@@ -417,15 +411,59 @@ async def platform_pg_quota_staff() -> dict:
     limited env PasarGuard account gets a friendly Persian quota message
     from the bot too, instead of only PasarGuard's raw rejection.
     """
-    from app.services.pg_access import resolve_platform_pg_capabilities
+    from app.services.pg_access import resolve_platform_pg_capabilities, staff_from_platform_caps
 
     caps = await resolve_platform_pg_capabilities()
+    staff = staff_from_platform_caps(caps)
     return {
         "role": "admin",
-        "pg_is_owner": bool(caps.get("pg_is_owner")),
-        "pg_admin_username": caps.get("username"),
-        "pg_role_id": caps.get("pg_role_id"),
+        "pg_is_owner": bool(staff.get("pg_is_owner")),
+        "pg_admin_username": staff.get("pg_admin_username"),
+        "pg_role_id": staff.get("pg_role_id"),
     }
+
+
+async def platform_can_manage_representatives() -> bool:
+    """True when the env PG account may create admins / shop representatives."""
+    from app.services.pg_access import resolve_platform_pg_capabilities, staff_from_platform_caps
+    from app.services.principal_provisioning import owner_has_pg_admin_create_capability
+
+    caps = await resolve_platform_pg_capabilities()
+    if not caps.get("ok"):
+        return False
+    return owner_has_pg_admin_create_capability(staff_from_platform_caps(caps))
+
+
+def require_platform_rep_mgmt(fn: Callable[..., Awaitable[Any]]):
+    """Deny Hybrid Owner without ``admins.create`` from representative management."""
+
+    @functools.wraps(fn)
+    async def wrapper(*args: Any, **kwargs: Any):
+        from aiogram.types import CallbackQuery, Message
+
+        if not await platform_can_manage_representatives():
+            callback = None
+            message = None
+            for value in (*args, *kwargs.values()):
+                if callback is None and isinstance(value, CallbackQuery):
+                    callback = value
+                elif message is None and isinstance(value, Message):
+                    message = value
+            text = "قابلیت ساخت نماینده برای این حساب فعال نیست"
+            if callback is not None:
+                try:
+                    await callback.answer(text, show_alert=True)
+                except Exception:
+                    pass
+            elif message is not None:
+                try:
+                    await message.answer(text)
+                except Exception:
+                    pass
+            return None
+        return await fn(*args, **kwargs)
+
+    return wrapper
 
 
 async def filtered_pg_reply_keyboard(

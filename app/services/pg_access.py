@@ -172,15 +172,20 @@ async def resolve_platform_pg_capabilities(
 
         role: dict | None = None
         if role_id is not None:
-            features, role = await resolve_reseller_pg_features(role_id)
+            # Always use this probe's client — never the process-wide Owner
+            # singleton (stale during setup, or a different tenant).
+            features, role = await resolve_reseller_pg_features(
+                role_id, client=client
+            )
         else:
             features, role = [], None
-            # Some owner accounts expose permissions on the admin object itself
-            if isinstance(nested_role, dict) and (
-                nested_role.get("permissions") or nested_role.get("is_owner")
-            ):
-                role = nested_role
-                features = map_pg_role_to_features(role)
+        # Limited roles often cannot GET /admin-roles/{id}; the nested role
+        # on the admin object is the same matrix they already authenticated with.
+        if not role and isinstance(nested_role, dict) and (
+            nested_role.get("permissions") or nested_role.get("is_owner")
+        ):
+            role = nested_role
+            features = map_pg_role_to_features(role)
 
         pg_is_owner = _admin_looks_like_pg_owner(admin, role)
         if pg_is_owner:
@@ -445,6 +450,131 @@ async def resolve_reseller_pg_features(
     features = map_pg_role_to_features(role)
     _ROLE_CACHE[rid] = (now, list(features), dict(role))
     return features, role
+
+
+def staff_from_platform_caps(caps: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Staff-shaped dict from ``resolve_platform_pg_capabilities`` (no secrets).
+
+    Used by the setup audit, Hybrid Owner menus, and bot quota/rep gates so
+    every surface derives ACL from the same probe payload.
+    """
+    caps = caps or {}
+    role = caps.get("role") if isinstance(caps.get("role"), dict) else None
+    features = list(caps.get("features") or [])
+    pg_is_owner = bool(caps.get("pg_is_owner"))
+    if pg_is_owner:
+        features = full_pg_owner_features()
+        role = dict(role or {})
+        role["is_owner"] = True
+    staff = enrich_staff_pg_from_role(
+        {"role": "admin", "pg_is_owner": pg_is_owner},
+        features,
+        role,
+    )
+    staff["pg_is_owner"] = pg_is_owner
+    if caps.get("username"):
+        staff["pg_admin_username"] = caps["username"]
+    if caps.get("pg_role_id") is not None:
+        staff["pg_role_id"] = caps["pg_role_id"]
+    return staff
+
+
+def public_pg_access_audit(caps: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Display-only snapshot of PG ACL. Never an authorization source."""
+    from app.services.formatting import format_bytes
+    from app.services.pg_quota import merge_role_limits
+
+    caps = dict(caps or {})
+    username = caps.get("username")
+    empty: dict[str, Any] = {
+        "ok": False,
+        "error": caps.get("error") or "بررسی دسترسی پاسارگارد ناموفق بود",
+        "pg_is_owner": False,
+        "username": username,
+        "role_name": None,
+        "account_label": "نامشخص",
+        "features": [],
+        "can_create_admin": False,
+        "can_manage_representatives": False,
+        "shop_full": True,
+        "limits": [],
+    }
+    if not caps.get("ok"):
+        return empty
+
+    staff = staff_from_platform_caps(caps)
+    pg_is_owner = bool(staff.get("pg_is_owner"))
+    can_create = pg_is_owner or staff_has_pg_admins_create(staff)
+    role = staff.get("pg_role") if isinstance(staff.get("pg_role"), dict) else None
+    admin = caps.get("admin") if isinstance(caps.get("admin"), dict) else None
+    role_name = None
+    if isinstance(role, dict):
+        raw_name = role.get("name")
+        if isinstance(raw_name, str) and raw_name.strip():
+            role_name = raw_name.strip()
+    feature_keys = list(staff.get("pg_permissions") or [])
+    features = [
+        {"key": k, "label": PG_FEATURE_LABELS.get(k, k)}
+        for k in feature_keys
+        if k in PG_FEATURE_LABELS
+    ]
+    limits_rows: list[dict[str, str]] = []
+    if pg_is_owner:
+        limits_rows.append({"label": "سقف نقش", "value": "بدون محدودیت (مالک پاسارگارد)"})
+    else:
+        merged = merge_role_limits(admin, role)
+
+        def _pos(raw: Any) -> int | None:
+            if raw is None or raw == "":
+                return None
+            try:
+                n = int(float(raw))
+            except (TypeError, ValueError):
+                return None
+            return n if n > 0 else None
+
+        max_users = _pos(merged.get("max_users"))
+        users_now = _pos((admin or {}).get("total_users")) or _pos(
+            (admin or {}).get("users_count")
+        )
+        if max_users is not None:
+            used = f"{users_now} از " if users_now is not None else ""
+            limits_rows.append({"label": "سقف کاربران", "value": f"{used}{max_users}"})
+        elif users_now is not None:
+            limits_rows.append({"label": "کاربران فعلی", "value": str(users_now)})
+        else:
+            limits_rows.append({"label": "سقف کاربران", "value": "بدون سقف نقش"})
+
+        acct_cap = _pos((admin or {}).get("data_limit"))
+        if acct_cap:
+            used_traffic = _pos((admin or {}).get("used_traffic")) or _pos(
+                (admin or {}).get("traffic_used")
+            )
+            label = format_bytes(acct_cap)
+            if used_traffic:
+                label = f"{format_bytes(used_traffic)} از {label}"
+            limits_rows.append({"label": "سقف حجم حساب", "value": label})
+        per_user = _pos(merged.get("data_limit_max"))
+        if per_user:
+            limits_rows.append(
+                {"label": "حداکثر حجم هر کاربر", "value": format_bytes(per_user)}
+            )
+
+    return {
+        "ok": True,
+        "error": None,
+        "pg_is_owner": pg_is_owner,
+        "username": username,
+        "role_name": role_name,
+        "account_label": (
+            "مالک کامل پاسارگارد" if pg_is_owner else "حساب محدود پاسارگارد"
+        ),
+        "features": features,
+        "can_create_admin": can_create,
+        "can_manage_representatives": can_create,
+        "shop_full": True,
+        "limits": limits_rows,
+    }
 
 
 def staff_has_pg_admins_create(staff: Mapping[str, Any] | None) -> bool:

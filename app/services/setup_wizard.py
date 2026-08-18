@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app.config import DATA_DIR, ROOT_DIR, get_settings
+from app.config import DATA_DIR, ROOT_DIR, get_settings, normalize_pg_base_url
 from app.services.web_auth import load_web_admin
 
 SETUP_FLAG = DATA_DIR / "setup_complete.flag"
@@ -682,3 +682,29 @@ def panel_url_hint(public_base: str = "", web_port: str = "9000") -> str:
 def wizard_panel_url_hint(web_port: str = "9000") -> str:
     """Panel URL shown during setup — always HTTP+IP (cert/HTTPS not ready yet)."""
     return default_http_panel_url(web_port=web_port).rstrip("/") + "/"
+
+
+async def setup_pg_access_audit() -> dict[str, Any]:
+    """Live PG ACL report for wizard step 4. Display only — never an authz source."""
+    from app.services.pg_access import public_pg_access_audit, resolve_platform_pg_capabilities
+
+    values = current_setup_values()
+    uname = (values.get("PG_USERNAME") or "").strip()
+    pwd = (values.get("PG_PASSWORD") or "").strip()
+    base = normalize_pg_base_url(values.get("PG_BASE_URL") or "")
+    if not uname or not pwd or not base:
+        return public_pg_access_audit(
+            {"ok": False, "error": "اعتبارنامه پاسارگارد ناقص است", "username": uname or None}
+        )
+    try:
+        caps = await resolve_platform_pg_capabilities(
+            username=uname,
+            password=pwd,
+            base_url=base,
+            use_cache=False,
+        )
+    except Exception:
+        return public_pg_access_audit(
+            {"ok": False, "error": "بررسی دسترسی پاسارگارد ناموفق بود", "username": uname}
+        )
+    return public_pg_access_audit(caps)

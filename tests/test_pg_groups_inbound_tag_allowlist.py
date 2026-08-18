@@ -43,7 +43,6 @@ class PgGroupsInboundTagAllowlistTests(unittest.IsolatedAsyncioTestCase):
         pg_pages.register_pg_pages(
             self.app,
             render=lambda *a, **k: None,
-            require_admin=lambda: None,
             require_pg_perm=lambda perm: (lambda: None),
             get_db=lambda: None,
         )

@@ -52,13 +52,15 @@ def staff_is_sub_representative(staff: Mapping[str, Any] | None) -> bool:
 
 
 def staff_can_manage_representatives(staff: Mapping[str, Any] | None) -> bool:
-    """Owner, or active Representative with real PG ``admins.create``."""
+    """Owner with PG admin-create, or active Representative with real ``admins.create``."""
     if not staff:
         return False
-    if is_explicit_owner_staff(staff):
-        return True
     if staff_is_sub_representative(staff):
         return False
+    if is_explicit_owner_staff(staff):
+        from app.services.principal_provisioning import owner_has_pg_admin_create_capability
+
+        return owner_has_pg_admin_create_capability(staff)
     try:
         depth = int(staff.get("org_depth")) if staff.get("org_depth") is not None else None
     except (TypeError, ValueError):
@@ -80,8 +82,6 @@ def assert_staff_can_manage_representatives(staff: Mapping[str, Any] | None) -> 
             "زیرنماینده نمی‌تواند نماینده بسازد",
             code="sub_representative_forbidden",
         )
-    if is_explicit_owner_staff(staff):
-        return
     if not staff_can_manage_representatives(staff):
         raise RepresentativeUnifyError(
             "قابلیت ساخت نماینده برای این حساب فعال نیست",

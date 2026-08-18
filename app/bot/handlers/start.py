@@ -54,15 +54,20 @@ async def render_home(
             reseller_owner_id=reseller_owner_id,
         )
 
-    show_creds = is_shop_owner_on_main_bot(db_user, is_reseller_bot=is_reseller_bot)
-    has = False if effective_role == "admin" else await _has_services(session, db_user.id)
-
     if effective_role == "admin":
+        from app.bot.menu_nav import build_main_reply_keyboard
+
         text = format_message(
             f"🛠 {ui.get('shop_title', 'کلاک')}",
             "پنل مدیریت فروشگاه\nاز کیبورد پایین گزینه را انتخاب کنید.",
         )
-        reply_kb = kb.main_reply_keyboard(effective_role, has_services=False, ui=ui)
+        reply_kb, ui, _ = await build_main_reply_keyboard(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            ui=ui,
+        )
     elif effective_role == "reseller" and is_reseller_bot:
         from app.services.reseller_access import load_reseller_actor
 
@@ -79,6 +84,8 @@ async def render_home(
         )
         reply_kb = kb.reseller_hub_main_keyboard(profile, ui)
     else:
+        show_creds = is_shop_owner_on_main_bot(db_user, is_reseller_bot=is_reseller_bot)
+        has = await _has_services(session, db_user.id)
         welcome = ui.get("welcome_text", "")
         title = ui.get("shop_title", "")
         try:

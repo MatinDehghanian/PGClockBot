@@ -18,8 +18,9 @@ A true PasarGuard owner / sudo account still gets the full PG sidebar (including
 1. `require_staff` enriches Owner sessions via `enrich_platform_admin_staff` → live role from PasarGuard.
 2. `can_pg_page` / `can_pg_action` / writes no longer auto-allow for `role=admin`.
 3. Web sidebar and bot PG keyboards only list mapped features.
-4. Setup probes PG login; limited accounts may finish with a warning (`pg_warn`).
-5. `/pg/admins*` requires `pg_admins` (owner-only feature key).
+4. Setup probes PG login, then shows a **display-only** access report (role, menus, limits). Runtime ACL is always a live probe — never the wizard snapshot.
+5. `/pg/admins*` requires `pg_admins` (true PasarGuard owner only).
+6. Creating shop representatives requires live `admins.create` (or true PG owner). Hybrid Owner without that capability: menus hidden, server 403.
 
 ## Security notes
 

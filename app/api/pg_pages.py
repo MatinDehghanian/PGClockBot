@@ -240,7 +240,6 @@ def register_pg_pages(
     app,
     *,
     render,
-    require_admin,
     require_pg_perm,
     get_db,
 ):
@@ -1662,7 +1661,7 @@ def register_pg_pages(
     @app.get("/pg/admins", response_class=HTMLResponse)
     async def pg_admins(
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_pg_perm("pg_admins")),
         session=Depends(get_db),
     ):
         from app.services.pg_overview import admin_usage_snapshot
@@ -1761,7 +1760,7 @@ def register_pg_pages(
         request: Request,
         username: str = Form(...),
         password: str = Form(...),
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_pg_perm("pg_admins")),
         session=Depends(get_db),
     ):
         form = await request.form()
@@ -1914,7 +1913,7 @@ def register_pg_pages(
     @app.post("/pg/admins/{username}/web-access")
     async def pg_admins_web_access_legacy(
         username: str,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_pg_perm("pg_admins")),
     ):
         """Phase D2 Q2: old single grant path hard-fails (no silent alias/conversion)."""
         return RedirectResponse(
@@ -1926,7 +1925,7 @@ def register_pg_pages(
     async def pg_admins_web_access_staff(
         username: str,
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_pg_perm("pg_admins")),
         session=Depends(get_db),
     ):
         """PG-only secondary admin (pg_staff) — never creates a reseller."""
@@ -2021,7 +2020,7 @@ def register_pg_pages(
     async def pg_admins_subscription_renew(
         username: str,
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_pg_perm("pg_admins")),
         session=Depends(get_db),
     ):
         """Owner extends / restores a time-limited PG admin (reseller or staff). No wallet charge."""
@@ -2076,7 +2075,7 @@ def register_pg_pages(
     async def pg_admins_web_access_reseller(
         username: str,
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_pg_perm("pg_admins")),
         session=Depends(get_db),
     ):
         """Shop reseller grant — refuses when pg_staff row exists (no conversion)."""
@@ -2132,7 +2131,7 @@ def register_pg_pages(
     async def pg_admins_convert_to_reseller(
         username: str,
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_pg_perm("pg_admins")),
         session=Depends(get_db),
     ):
         """Explicit Owner action: pg_staff → reseller (never silent)."""
@@ -2170,7 +2169,7 @@ def register_pg_pages(
     @app.post("/pg/admins/{username}/web-access/revoke")
     async def pg_admins_web_access_revoke(
         username: str,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_pg_perm("pg_admins")),
         session=Depends(get_db),
     ):
         from app.services.pg_staff_access import revoke_web_access
@@ -2186,7 +2185,7 @@ def register_pg_pages(
     @app.post("/pg/admins/{username}/web-access/toggle")
     async def pg_admins_web_access_toggle(
         username: str,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_pg_perm("pg_admins")),
         session=Depends(get_db),
     ):
         from app.services.pg_staff_access import (
@@ -2220,7 +2219,7 @@ def register_pg_pages(
     async def pg_admins_delete(
         request: Request,
         username: str,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_pg_perm("pg_admins")),
         session=Depends(get_db),
     ):
         from app.services.pg_staff_access import (

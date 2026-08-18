@@ -94,7 +94,7 @@ class BotShopIsolationTests(unittest.TestCase):
         home = src.split("async def adm_home")[1].split("async def adm_dash")[0]
         self.assertNotIn("edit_text(\n            f\"🛠", home)
         self.assertIn("safe_edit_text", home)
-        self.assertIn("admin_reply_keyboard()", home)
+        self.assertIn("_admin_hub_kb", home)
 
     def test_adm_payments_platform_filter(self):
         src = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")

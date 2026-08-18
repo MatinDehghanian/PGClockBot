@@ -445,6 +445,7 @@ def _reply_admin_entries(
     ui: dict | None = None,
     *,
     pg_features: frozenset[str] | set[str] | None = None,
+    can_manage_representatives: bool = True,
 ) -> list[tuple[str, str]]:
     entries = [
         (REPLY_ACTION_ADMIN_DASH, "📊 داشبورد"),
@@ -461,6 +462,8 @@ def _reply_admin_entries(
         (REPLY_ACTION_ADMIN_BACKUP, "💾 بکاپ / ریستور"),
         (REPLY_ACTION_ADMIN_PREVIEW, _t(ui, "btn_adm_preview")),
     ]
+    if not can_manage_representatives:
+        entries = [e for e in entries if e[0] != REPLY_ACTION_ADMIN_RESELLERS]
     if pg_features is not None and not pg_features:
         entries = [e for e in entries if e[0] != REPLY_ACTION_ADMIN_PG]
     return entries
@@ -829,12 +832,18 @@ def main_reply_keyboard(
     ui: dict | None = None,
     as_user: bool = False,
     show_reseller_creds: bool = False,
+    pg_features: frozenset[str] | set[str] | None = None,
+    can_manage_representatives: bool = True,
 ) -> ReplyKeyboardMarkup:
     """Primary navigation reply keyboard (level 0)."""
     home_label = _home_label(ui)
     home_footer: list[tuple[str, str]] = [(REPLY_ACTION_HOME, home_label)]
     if role == Role.ADMIN.value and not as_user:
-        entries = _reply_admin_entries(ui)
+        entries = _reply_admin_entries(
+            ui,
+            pg_features=pg_features,
+            can_manage_representatives=can_manage_representatives,
+        )
         rows = _pack_reply_rows(entries, ui, footer=home_footer)
     else:
         # Preview / customer surface — never append staff-only buttons
@@ -853,10 +862,15 @@ def admin_reply_keyboard(
     ui: dict | None = None,
     *,
     pg_features: frozenset[str] | set[str] | None = None,
+    can_manage_representatives: bool = True,
 ) -> ReplyKeyboardMarkup:
     """Admin panel as an explicit submenu (with back + home)."""
     rows = _pack_reply_rows(
-        _reply_admin_entries(ui, pg_features=pg_features),
+        _reply_admin_entries(
+            ui,
+            pg_features=pg_features,
+            can_manage_representatives=can_manage_representatives,
+        ),
         ui,
         footer_row=_submenu_footer(ui),
     )

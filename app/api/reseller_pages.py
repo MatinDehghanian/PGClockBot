@@ -40,6 +40,21 @@ def _q(msg: str) -> str:
     return quote(str(msg), safe="")
 
 
+def _require_rep_mgmt(staff: dict) -> None:
+    """Server deny for Hybrid Owner / L1 without live PG ``admins.create``."""
+    from fastapi import HTTPException
+
+    from app.services.representative_unification import (
+        RepresentativeUnifyError,
+        assert_staff_can_manage_representatives,
+    )
+
+    try:
+        assert_staff_can_manage_representatives(staff)
+    except RepresentativeUnifyError:
+        raise HTTPException(status_code=403, detail="forbidden")
+
+
 def _redirect_reseller_edit(user_id: int, *, ok: str | None = None, err: str | None = None):
     """Return to list and reopen edit modal."""
     qs = [f"edit={int(user_id)}"]
@@ -330,6 +345,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        _require_rep_mgmt(staff)
         from app.services.users import set_setting
 
         form = await request.form()
@@ -352,6 +368,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        _require_rep_mgmt(staff)
         form = await request.form()
         try:
             telegram_id = int(str(form.get("telegram_id") or "0"))
@@ -1242,6 +1259,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        _require_rep_mgmt(staff)
         apps = await list_applications(session)
         return render(
             request,
@@ -1262,6 +1280,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        _require_rep_mgmt(staff)
         app = await get_application(session, app_id)
         if not app:
             return RedirectResponse(f"/resellers/applications?err={_q('یافت نشد')}", status_code=303)
@@ -1300,6 +1319,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        _require_rep_mgmt(staff)
         app = await get_application(session, app_id)
         if not app:
             return RedirectResponse(f"/resellers/applications?err={_q('یافت نشد')}", status_code=303)

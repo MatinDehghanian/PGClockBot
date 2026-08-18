@@ -19,8 +19,19 @@
 
     {% if flash_err %}<div class="flash err" id="flash-err">{{ flash_err }}</div>{% endif %}
     {% if flash_ok %}<div class="flash ok" id="flash-ok">{{ flash_ok }}</div>{% endif %}
-    {% if flash_warn %}<div class="flash warn" id="flash-warn">{{ flash_warn }}</div>{% endif %}
     <div class="flash err" id="client-err" hidden></div>
+
+    <div class="setup-probe" id="setup-probe" hidden>
+      <h2 class="setup-title">بررسی سطح دسترسی</h2>
+      <p class="muted setup-lead">نقش، مجوزها و سقف‌های حساب پاسارگارد در حال خواندن است.</p>
+      <div class="setup-probe-bar" aria-hidden="true"><i id="setup-probe-fill"></i></div>
+      <ol class="setup-probe-steps" id="setup-probe-steps">
+        <li data-probe="0">اتصال به پاسارگارد</li>
+        <li data-probe="1">خواندن نقش و مجوزها</li>
+        <li data-probe="2">خواندن سقف‌ها</li>
+        <li data-probe="3">آماده‌سازی منوها</li>
+      </ol>
+    </div>
 
     {# —— Step 0: Welcome —— #}
     <div class="auth-form setup-step" data-step="0" hidden>
@@ -111,8 +122,52 @@
 
     {# —— Step 4: Done —— #}
     <div class="auth-form setup-step" data-step="4" hidden>
-      <h2 class="setup-title" style="text-align:center">۴ · تمام شد</h2>
-      <p class="muted setup-lead">راه‌اندازی ذخیره شد. خلاصه:</p>
+      <h2 class="setup-title">۴ · سطح دسترسی</h2>
+      <p class="muted setup-lead">خلاصه نقش پاسارگارد برای این نصب — منوها از همین سطح زنده می‌آیند.</p>
+      {% if pg_audit is defined and pg_audit and pg_audit.ok %}
+      <div class="setup-audit">
+        <div class="setup-audit-head">
+          <span class="setup-audit-badge {% if pg_audit.pg_is_owner %}is-owner{% else %}is-limited{% endif %}">{{ pg_audit.account_label }}</span>
+          {% if pg_audit.username %}
+          <code class="setup-audit-user" dir="ltr">{{ pg_audit.username }}</code>
+          {% endif %}
+          {% if pg_audit.role_name %}
+          <span class="muted">{{ pg_audit.role_name }}</span>
+          {% endif %}
+        </div>
+        {% if pg_audit.features %}
+        <div class="setup-audit-block">
+          <small class="muted">منوی پاسارگارد</small>
+          <div class="setup-audit-chips">
+            {% for feat in pg_audit.features %}
+            <span class="identity-chip">{{ feat.label }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        {% else %}
+        <p class="muted setup-audit-empty">هیچ بخش پاسارگارد برای این نقش فعال نیست.</p>
+        {% endif %}
+        {% if pg_audit.limits %}
+        <dl class="setup-audit-kvs">
+          {% for row in pg_audit.limits %}
+          <div>
+            <dt>{{ row.label }}</dt>
+            <dd>{{ row.value }}</dd>
+          </div>
+          {% endfor %}
+        </dl>
+        {% endif %}
+        <ul class="setup-audit-flags">
+          <li class="{% if pg_audit.can_manage_representatives %}is-yes{% else %}is-no{% endif %}">
+            {% if pg_audit.can_manage_representatives %}ساخت نماینده / ادمین مجاز است
+            {% else %}ساخت نماینده و ادمین دیگر مجاز نیست{% endif %}
+          </li>
+          <li class="is-yes">فروشگاه این نصب کامل است (پلن، سفارش، تنظیمات)</li>
+        </ul>
+      </div>
+      {% elif pg_audit is defined and pg_audit and pg_audit.error %}
+      <div class="flash warn">{{ pg_audit.error }}</div>
+      {% endif %}
       <div class="setup-summary">
         <div class="setup-copy-block">
           <small class="muted">آدرس پنل</small>
@@ -154,7 +209,7 @@
     1: 'حساب مدیر وب‌پنل',
     2: 'اتصال ربات تلگرام',
     3: 'پاسارگارد و تنظیمات وب',
-    4: 'خلاصه و ورود'
+    4: 'خلاصه دسترسی و ورود'
   };
 
   function showErr(msg){
@@ -168,6 +223,8 @@
 
   function showStep(n){
     step = n;
+    const probe = document.getElementById('setup-probe');
+    if (probe) probe.hidden = true;
     document.querySelectorAll('.setup-step').forEach(el => {
       const s = parseInt(el.getAttribute('data-step'), 10);
       const on = s === n;
@@ -184,6 +241,7 @@
     showErr('');
     const url = new URL(location.href);
     url.searchParams.set('step', String(n));
+    url.searchParams.delete('pg_warn');
     history.replaceState(null, '', url);
   }
 
@@ -283,7 +341,71 @@
       if (!port || port < 1 || port > 65535) {
         e.preventDefault();
         showErr('پورت وب نامعتبر است.');
+        return;
       }
+      e.preventDefault();
+      runPgAccessProbe(otherForm);
+    });
+  }
+
+  function setProbeStep(n, fill){
+    const items = document.querySelectorAll('#setup-probe-steps li');
+    items.forEach((li, i) => {
+      li.classList.toggle('is-done', i < n);
+      li.classList.toggle('is-on', i === n);
+    });
+    const bar = document.getElementById('setup-probe-fill');
+    if (bar) bar.style.width = Math.max(8, Math.min(100, fill)) + '%';
+  }
+
+  function runPgAccessProbe(form){
+    const probe = document.getElementById('setup-probe');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const cap = document.getElementById('step-caption');
+    showErr('');
+    form.hidden = true;
+    if (probe) probe.hidden = false;
+    if (cap) cap.textContent = 'بررسی سطح دسترسی';
+    if (submitBtn) submitBtn.disabled = true;
+    let tick = 0;
+    setProbeStep(0, 18);
+    const timer = setInterval(() => {
+      tick += 1;
+      if (tick === 1) setProbeStep(1, 42);
+      else if (tick === 2) setProbeStep(2, 68);
+      else if (tick >= 3) setProbeStep(3, 86);
+    }, 420);
+    const body = new URLSearchParams(new FormData(form));
+    fetch(form.action, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Accept': 'application/json',
+        'X-Requested-With': 'setup-probe',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: body.toString(),
+    }).then(async (res) => {
+      let data = null;
+      try { data = await res.json(); } catch (_) { data = null; }
+      clearInterval(timer);
+      if (!res.ok || !data || !data.ok) {
+        form.hidden = false;
+        if (probe) probe.hidden = true;
+        if (submitBtn) submitBtn.disabled = false;
+        if (cap) cap.textContent = captions[3] || '';
+        showErr((data && data.error) || 'بررسی دسترسی ناموفق بود.');
+        return;
+      }
+      setProbeStep(3, 100);
+      window.location.assign(data.next || '/setup?step=4');
+    }).catch(() => {
+      clearInterval(timer);
+      if (submitBtn) submitBtn.disabled = false;
+      if (cap) cap.textContent = captions[3] || '';
+      form.hidden = false;
+      if (probe) probe.hidden = true;
+      showErr('اتصال برقرار نشد. دوباره تلاش کنید.');
     });
   }
 
