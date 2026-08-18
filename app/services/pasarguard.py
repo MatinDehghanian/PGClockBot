@@ -27,6 +27,15 @@ class PasarGuardError(Exception):
         return humanize_pg_validation_error(base)[:500]
 
 
+def is_pg_permission_denied(exc: Exception) -> bool:
+    """True when PasarGuard refused a resource (not a transport outage).
+
+    Limited roles often 403 on ``/api/admins``, hosts, nodes, or templates
+    even after a valid token — callers must not paint that as «قطع اتصال».
+    """
+    return isinstance(exc, PasarGuardError) and exc.status_code in (403, 404, 405)
+
+
 def _pg_error_detail(body: Any) -> str | None:
     if body is None:
         return None

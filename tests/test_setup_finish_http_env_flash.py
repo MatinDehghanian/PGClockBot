@@ -38,16 +38,19 @@ class SetupFinishHttpTests(unittest.TestCase):
     def test_template_wraps_flash_and_forces_http_nav(self):
         html = (ROOT / "app/web/templates/setup.html").read_text(encoding="utf-8")
         self.assertIn('class="flash-copy"', html)
-        self.assertIn('class="env-fname" dir="ltr"', html)
+        self.assertIn("فایل env را امن نگه دارید", html)
+        self.assertNotIn(".env", html.split("setup-finish-form")[0])
         self.assertIn("setup-finish-form", html)
         self.assertIn("window.location.replace", html)
         self.assertIn("base.protocol = 'http:'", html)
         self.assertIn("finish_login_url", html)
+        self.assertIn("progress.hidden = (n >= 4)", html)
+        self.assertIn(".setup-probe[hidden]", (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8"))
 
     def test_css_isolates_env_fname(self):
-        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn("code.env-fname", css)
-        self.assertIn("unicode-bidi: isolate", css)
+        html = (ROOT / "app/web/templates/setup.html").read_text(encoding="utf-8")
+        self.assertIn("فایل env را امن نگه دارید", html)
+        self.assertNotIn("code.env-fname", html)
 
     def test_setup_page_passes_finish_login_url(self):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")

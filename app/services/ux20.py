@@ -120,10 +120,10 @@ async def check_pg_connection(*, reseller_user_id: int | None = None, session: A
             "version": str(version) if version else None,
             "base_url": getattr(pg, "base_url", None),
         }
-    except Exception as exc:
+    except Exception:
         return {
             "ok": False,
-            "error": str(exc) or "اتصال به پاسارگارد برقرار نشد",
+            "error": "اتصال به پاسارگارد برقرار نشد",
             "version": None,
             "base_url": None,
         }

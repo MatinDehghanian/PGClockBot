@@ -51,7 +51,7 @@ class ConstraintBoxesTests(unittest.TestCase):
         for rel in ("app/web/templates/reseller_home.html", "app/web/templates/pg_home.html"):
             src = Path(rel).read_text(encoding="utf-8")
             self.assertNotIn("c.hint", src)
-            self.assertIn("pg_quota_gauge", src)
+            self.assertIn("pg_overview_limit_board", src)
         gauges = Path("app/web/templates/_pg_quota_gauges.html").read_text(encoding="utf-8")
         self.assertIn("باقی‌مانده", gauges)
         self.assertNotIn("pg-gauge-pulse", gauges)
@@ -91,7 +91,7 @@ class WiringTests(unittest.TestCase):
         home = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
         self.assertIn("_home_ops.html", home)
         self.assertIn("pg_limits", home)
-        self.assertIn("home-quota-card", home)
+        self.assertIn("pg_overview_limit_board", home)
         self.assertNotIn("pg_limits.time", home)
         self.assertNotIn('class="meter"', home)
 
@@ -102,8 +102,10 @@ class WiringTests(unittest.TestCase):
         self.assertIn("کاربران", src)
         self.assertNotIn("VPN", src)
         self.assertNotIn('class="meter"', src)
-        self.assertIn("pg_quota_gauge", src)
-        self.assertIn("pg-quota-top", src)
+        self.assertIn("pg_overview_limit_board", src)
+        cards = Path("app/web/templates/_pg_limit_cards.html").read_text(encoding="utf-8")
+        self.assertIn("pg_quota_gauge", cards)
+        self.assertIn("pg-quota-top", cards)
         gauges = Path("app/web/templates/_pg_quota_gauges.html").read_text(encoding="utf-8")
         self.assertIn("باقی‌مانده {{ meter.remain_text }}", gauges)
         self.assertIn("ratio_text", Path("app/services/pg_overview.py").read_text(encoding="utf-8"))
@@ -111,8 +113,10 @@ class WiringTests(unittest.TestCase):
     def test_dashboard_status_is_badge_not_box(self):
         # Status badge lives on reseller web home / PG overview, not bot نمای کلی
         src = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
-        self.assertIn("pg_limits.status_label", src)
-        self.assertIn('class="badge {{ pg_limits.status_badge', src)
+        self.assertIn("pg_overview_limit_board", src)
+        cards = Path("app/web/templates/_pg_limit_cards.html").read_text(encoding="utf-8")
+        self.assertIn("ov.status_label", cards)
+        self.assertIn("ov.status_badge", cards)
         self.assertNotIn("<span>وضعیت</span>", src)
         self.assertNotIn("VPN", src)
 

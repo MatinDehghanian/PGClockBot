@@ -93,22 +93,20 @@ class PgQuotaGaugeUiTests(unittest.TestCase):
 
     def test_pg_home_banners_and_order(self):
         src = (ROOT / "app/web/templates/pg_home.html").read_text(encoding="utf-8")
-        ban_i = src.find("pg_quota_exhausted_banners")
-        top_i = src.find("pg-quota-top")
+        board_i = src.find("pg_overview_limit_board")
         grid_i = src.find("home-panel-grid")
-        self.assertGreater(ban_i, 0)
-        self.assertGreater(top_i, ban_i)
-        self.assertGreater(grid_i, top_i)
-        self.assertIn("pg-quota-gauges", src)
-        self.assertNotIn("فقط کاربران این حساب", src)
+        self.assertGreater(board_i, 0)
+        self.assertGreater(grid_i, board_i)
+        self.assertIn("pg-quota-gauges", (ROOT / "app/web/templates/_pg_limit_cards.html").read_text(encoding="utf-8"))
+        self.assertIn("staff.pg_is_owner", src)
+        self.assertNotIn("{% if not is_admin %}", src)
 
     def test_reseller_home_banners_at_top(self):
         src = (ROOT / "app/web/templates/reseller_home.html").read_text(encoding="utf-8")
-        ban_i = src.find("pg_quota_exhausted_banners")
-        gauges_i = src.find("pg-quota-gauges")
-        self.assertGreater(ban_i, 0)
-        self.assertGreater(gauges_i, ban_i)
-        self.assertIn("pg-quota-gauges-embed", src)
+        board_i = src.find("pg_overview_limit_board")
+        self.assertGreater(board_i, 0)
+        self.assertIn("کیف پول", src)
+        self.assertIn("pg_overview_limit_board", src)
 
 
 if __name__ == "__main__":

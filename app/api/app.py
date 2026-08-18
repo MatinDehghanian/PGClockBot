@@ -2067,7 +2067,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             plan_limit_issue,
             staff_can_create_pg_template,
         )
-        from app.services.pg_quota import load_staff_limit_snapshot
+        from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
         from app.services.shop_scope import is_platform_admin
 
         plans = await list_catalog_plans(session, staff, include_trial=True)
@@ -2170,6 +2170,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "pg_roles": pg_roles,
                 "gift_codes": gift_codes,
                 "pg_limit_snapshot": limit_snapshot,
+                "pg_limit_cards": limit_snapshot_cards(limit_snapshot),
                 "plan_limit_issues": plan_limit_issues,
                 "trial_limit_issue": trial_limit_issue,
                 "custom_limit_issue": custom_limit_msg,
@@ -2562,17 +2563,19 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     async def _plans_context(session: AsyncSession, request: Request, staff: dict, extra: dict | None = None):
         from app.services.plans_catalog import list_catalog_plans, load_pg_plan_options
-        from app.services.pg_quota import load_staff_limit_snapshot
+        from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
 
         plans = await list_catalog_plans(session, staff, include_trial=True)
         templates, groups, pg_error = await load_pg_plan_options(staff, session=session)
+        snap = await load_staff_limit_snapshot(staff)
         ctx = {
             "staff": staff,
             "plans": plans,
             "templates": templates,
             "groups": groups,
             "pg_error": pg_error,
-            "pg_limit_snapshot": await load_staff_limit_snapshot(staff),
+            "pg_limit_snapshot": snap,
+            "pg_limit_cards": limit_snapshot_cards(snap),
             "flash_err": request.query_params.get("err"),
             "flash_ok": request.query_params.get("ok"),
         }

@@ -87,6 +87,19 @@
     </div>
   </div>
 
+  {% if wallet_card %}
+  <div class="card home-conn-card">
+    <h2>کیف پول</h2>
+    <p class="muted">موجودی فروشگاه همین حساب</p>
+    <p class="home-balance"><strong>{{ wallet_card.balance_fa }}</strong></p>
+  </div>
+  {% endif %}
+
+  {% if pg_limits and pg_limits.ready %}
+  {% from "_pg_limit_cards.html" import pg_overview_limit_board %}
+  {{ pg_overview_limit_board(pg_limits) }}
+  {% endif %}
+
   {% include "_home_ops.html" %}
 </div>
 {% endblock %}

@@ -220,7 +220,10 @@ async def pg_home_bundle() -> tuple[dict[str, Any], dict[str, Any]]:
         "version": None,
     }
     try:
+        from app.services.pasarguard import is_pg_permission_denied
+
         pg = get_pg()
+        await pg.ensure_token()
         admins, groups, hosts, nodes, stats = await asyncio.gather(
             pg.get_admins_simple(),
             pg.get_groups_simple(),
@@ -229,39 +232,41 @@ async def pg_home_bundle() -> tuple[dict[str, Any], dict[str, Any]]:
             pg.get_system_stats(),
             return_exceptions=True,
         )
+        # Token already proved reachability. 403 on admins/hosts/nodes is a
+        # limited role, not a dropped connection.
+        summary["ok"] = True
         if isinstance(nodes, Exception):
-            nodes_status["error"] = str(nodes) or "خطا در دریافت نودها"
-            nodes_status["overall"] = "err"
+            if is_pg_permission_denied(nodes):
+                nodes_status["ok"] = True
+                nodes_status["overall"] = "neutral"
+            else:
+                nodes_status["error"] = "خطا در دریافت نودها"
+                nodes_status["overall"] = "err"
             nodes = []
         else:
             nodes_status = _summarize_nodes(nodes if isinstance(nodes, list) else [])
 
-        if any(isinstance(x, Exception) for x in (admins, groups, hosts)):
-            errs = [str(x) for x in (admins, groups, hosts) if isinstance(x, Exception)]
-            summary["error"] = errs[0] if errs else "خطا در دریافت آمار پاسارگارد"
-        else:
-            summary.update(
-                {
-                    "ok": True,
-                    "admins": len(admins or []),
-                    "groups": len(groups or []),
-                    "hosts": len(hosts or []),
-                    "nodes": nodes_status["total"],
-                }
-            )
-            if isinstance(stats, dict):
-                for key in ("total_user", "users_active", "users", "total_users"):
-                    if key in stats and isinstance(stats[key], (int, float)):
-                        summary["users"] = int(stats[key])
-                        break
-                ver = stats.get("version")
-                if ver:
-                    summary["version"] = str(ver)
-            elif isinstance(stats, Exception):
-                # counts still usable even if /system fails
-                pass
-    except Exception as exc:
-        summary["error"] = str(exc) or "اتصال به پاسارگارد برقرار نشد"
+        def _count(payload: Any) -> int:
+            return len(payload) if isinstance(payload, list) else 0
+
+        summary.update(
+            {
+                "admins": _count(admins),
+                "groups": _count(groups),
+                "hosts": _count(hosts),
+                "nodes": nodes_status["total"],
+            }
+        )
+        if isinstance(stats, dict):
+            for key in ("total_user", "users_active", "users", "total_users"):
+                if key in stats and isinstance(stats[key], (int, float)):
+                    summary["users"] = int(stats[key])
+                    break
+            ver = stats.get("version")
+            if ver:
+                summary["version"] = str(ver)
+    except Exception:
+        summary["error"] = "اتصال به پاسارگارد برقرار نشد"
         nodes_status["error"] = summary["error"]
         nodes_status["overall"] = "err"
     return summary, nodes_status

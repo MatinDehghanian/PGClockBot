@@ -2302,6 +2302,10 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   background: var(--foreground);
   border-color: var(--foreground);
 }
+.setup-progress[hidden],
+.setup-probe[hidden] {
+  display: none !important;
+}
 .setup-probe {
   display: flex;
   flex-direction: column;
@@ -2416,6 +2420,20 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 }
 .setup-audit-kvs dt { color: var(--muted-fg); }
 .setup-audit-kvs dd { margin: 0; font-weight: 600; }
+.setup-audit-limits {
+  margin-top: var(--space-1);
+}
+.pg-limit-board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.pg-limit-board .home-periods-head {
+  margin: 0;
+}
+.pg-limit-constraints {
+  margin-top: var(--space-1);
+}
 .setup-audit-flags {
   list-style: none;
   margin: 0;

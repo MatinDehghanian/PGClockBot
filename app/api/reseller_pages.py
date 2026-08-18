@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings, normalize_pg_base_url
 from app.db.models import BotUser, ResellerPlan, ResellerProfile, Role
 from app.services.pasarguard import get_pg
-from app.services.pg_quota import load_staff_limit_snapshot
+from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
 from app.services.resellers import (
     DEFAULT_FEATURE_PERMS,
     FEATURE_PERMS,
@@ -1114,6 +1114,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             for x in (plan.pg_group_ids or "").split(",")
             if x.strip()
         }
+        snap = await load_staff_limit_snapshot(staff)
         return render(
             request,
             "reseller_plan_edit.html",
@@ -1124,7 +1125,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 "selected_perms": with_shop_settings(
                     parse_perms(plan.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
                 ),
-                "pg_limit_snapshot": await load_staff_limit_snapshot(staff),
+                "pg_limit_snapshot": snap,
+                "pg_limit_cards": limit_snapshot_cards(snap),
                 "pg_roles": roles,
                 "groups": groups,
                 "plan_group_ids": plan_group_ids,

@@ -10,13 +10,8 @@
 </div>
 
 {% if pg_error %}<div class="flash warn">پاسارگارد: {{ pg_error }}</div>{% endif %}
-{% if pg_limit_snapshot and pg_limit_snapshot.restricted %}
-<div class="flash warn">
-  سقف این حساب:
-  {% if pg_limit_snapshot.per_user_data_max %} هر کاربر حداکثر <b>{{ pg_limit_snapshot.per_user_data_max | bytes }}</b>{% endif %}
-  {% if pg_limit_snapshot.per_user_expire_max %} · حداکثر زمان <b>{{ (pg_limit_snapshot.per_user_expire_max // 86400) or 1 }}</b> روز{% endif %}
-</div>
-{% endif %}
+{% from "_pg_limit_cards.html" import pg_snapshot_limit_board %}
+{{ pg_snapshot_limit_board(pg_limit_cards) }}
 
 <div class="card">
   <form method="post" action="/plans/{{ plan.id }}/edit" class="form-stack">

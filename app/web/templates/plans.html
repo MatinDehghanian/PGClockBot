@@ -15,15 +15,8 @@
 
 {# flash_ok / flash_err rendered once in base.html #}
 {% if pg_error %}<div class="flash warn">پاسارگارد: {{ pg_error }} — پلن‌ها را می‌توانید ذخیره کنید ولی تحویل نیاز به اتصال دارد.</div>{% endif %}
-{% if pg_limit_snapshot and pg_limit_snapshot.restricted %}
-<div class="flash warn">
-  سقف زنده این حساب پاسارگارد:
-  {% if pg_limit_snapshot.per_user_data_max %} هر کاربر حداکثر <b>{{ pg_limit_snapshot.per_user_data_max | bytes }}</b>{% endif %}
-  {% if pg_limit_snapshot.per_user_expire_max %} · هر کاربر حداکثر <b>{{ (pg_limit_snapshot.per_user_expire_max // 86400) or 1 }}</b> روز{% endif %}
-  {% if pg_limit_snapshot.max_users %} · سقف کل کاربران <b>{{ pg_limit_snapshot.max_users }}</b>{% endif %}
-  {% if pg_limit_snapshot.account_data_limit %} · سقف حجم اکانت <b>{{ pg_limit_snapshot.account_data_limit | bytes }}</b>{% endif %}
-</div>
-{% endif %}
+{% from "_pg_limit_cards.html" import pg_snapshot_limit_board %}
+{{ pg_snapshot_limit_board(pg_limit_cards, heading='سقف حساب پاسارگارد', caption='پلن‌ها نباید از محدودیت زنده این نقش بیشتر باشند') }}
 
 {% set trial_on = values.get('trial_enabled') in ['1','true','yes','on'] %}
 {% set custom_on = values.get('custom_plan_enabled') in ['1','true','yes','on'] %}
@@ -567,12 +560,9 @@
     {# —— Reseller —— #}
     {% if is_platform_admin %}
     <div id="panel-reseller" class="plan-panel" hidden>
-      {% if pg_limit_snapshot and pg_limit_snapshot.restricted %}
-      <div class="flash warn">
-        ظرفیت نمایندگی‌ها از سقف زنده ادمین اصلی بیشتر نمی‌شود:
-        {% if pg_limit_snapshot.max_users %}<b>{{ pg_limit_snapshot.max_users }}</b> کاربر{% endif %}
-        {% if pg_limit_snapshot.account_data_limit %} · <b>{{ pg_limit_snapshot.account_data_limit | bytes }}</b> حجم کل{% endif %}
-      </div>
+      {% if pg_limit_cards %}
+      {% from "_pg_limit_cards.html" import pg_snapshot_limit_board %}
+      {{ pg_snapshot_limit_board(pg_limit_cards, heading='سقف ظرفیت نماینده', caption='ظرفیت نمایندگی‌ها از سقف زنده ادمین اصلی بیشتر نمی‌شود') }}
       {% endif %}
       <form method="post" action="/resellers/plans" class="form-stack" id="reseller-plan-form">
         <input type="hidden" name="billing_mode" id="reseller-billing-mode" value="fixed" />

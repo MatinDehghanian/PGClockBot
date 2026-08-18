@@ -9,7 +9,7 @@
       <p id="step-caption">راه‌اندازی اولیه پنل</p>
     </div>
 
-    <div class="setup-progress" id="setup-progress" aria-hidden="true">
+    <div class="setup-progress" id="setup-progress" aria-hidden="true"{% if show_done %} hidden{% endif %}>
       <span data-dot="0"></span>
       <span data-dot="1"></span>
       <span data-dot="2"></span>
@@ -148,14 +148,19 @@
         <p class="muted setup-audit-empty">هیچ بخش پاسارگارد برای این نقش فعال نیست.</p>
         {% endif %}
         {% if pg_audit.limits %}
-        <dl class="setup-audit-kvs">
+        <div class="home-panel-grid setup-audit-limits">
           {% for row in pg_audit.limits %}
-          <div>
-            <dt>{{ row.label }}</dt>
-            <dd>{{ row.value }}</dd>
+          <div class="stat">
+            <div class="stat-top">
+              <span class="stat-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
+              </span>
+              <span>{{ row.label }}</span>
+            </div>
+            <strong>{{ row.value }}</strong>
           </div>
           {% endfor %}
-        </dl>
+        </div>
         {% endif %}
         <ul class="setup-audit-flags">
           <li class="{% if pg_audit.can_manage_representatives %}is-yes{% else %}is-no{% endif %}">
@@ -182,7 +187,7 @@
       </div>
       <div class="flash warn">
         <div class="flash-copy">
-          فایل <code class="env-fname" dir="ltr">.env</code> را امن نگه دارید. با زدن دکمه زیر، پنل و ربات به‌صورت خودکار ری‌استارت می‌شوند.
+          <span>فایل env را امن نگه دارید. با زدن دکمه زیر، پنل و ربات به‌صورت خودکار ری‌استارت می‌شوند.</span>
         </div>
       </div>
       <form method="post" action="/setup/finish" id="setup-finish-form">
@@ -225,6 +230,8 @@
     step = n;
     const probe = document.getElementById('setup-probe');
     if (probe) probe.hidden = true;
+    const progress = document.getElementById('setup-progress');
+    if (progress) progress.hidden = (n >= 4);
     document.querySelectorAll('.setup-step').forEach(el => {
       const s = parseInt(el.getAttribute('data-step'), 10);
       const on = s === n;
@@ -365,6 +372,8 @@
     showErr('');
     form.hidden = true;
     if (probe) probe.hidden = false;
+    const dots = document.getElementById('setup-progress');
+    if (dots) dots.hidden = true;
     if (cap) cap.textContent = 'بررسی سطح دسترسی';
     if (submitBtn) submitBtn.disabled = true;
     let tick = 0;
@@ -392,6 +401,8 @@
       if (!res.ok || !data || !data.ok) {
         form.hidden = false;
         if (probe) probe.hidden = true;
+        const dots = document.getElementById('setup-progress');
+        if (dots) dots.hidden = false;
         if (submitBtn) submitBtn.disabled = false;
         if (cap) cap.textContent = captions[3] || '';
         showErr((data && data.error) || 'بررسی دسترسی ناموفق بود.');
@@ -405,6 +416,8 @@
       if (cap) cap.textContent = captions[3] || '';
       form.hidden = false;
       if (probe) probe.hidden = true;
+      const dots = document.getElementById('setup-progress');
+      if (dots) dots.hidden = false;
       showErr('اتصال برقرار نشد. دوباره تلاش کنید.');
     });
   }

@@ -350,11 +350,26 @@ async def build_reseller_pg_overview(
                 return out
         admin = None
         try:
-            admin = await pg.get_admin(owner)
+            current = await pg.get_current_admin()
+            if isinstance(current, dict):
+                got = str(current.get("username") or "").strip()
+                if not owner or (got and got.lower() == owner.lower()):
+                    admin = current
+                    if got:
+                        owner = got
+                        out["username"] = got
         except Exception:
             admin = None
         if not isinstance(admin, dict):
-            out["error"] = f"ادمین «{owner}» در پاسارگارد یافت نشد"
+            try:
+                admin = await pg.get_admin(owner)
+            except Exception:
+                admin = None
+        if not isinstance(admin, dict):
+            out["error"] = (
+                "حساب پاسارگارد خوانده نشد. "
+                "اگر ورود پنل پاسارگارد با همین یوزر موفق است، نقش را برای خواندن حساب خودتان بررسی کنید."
+            )
             return out
 
         role_id = staff.get("pg_role_id")

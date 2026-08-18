@@ -27,7 +27,7 @@ class ResellerNavSplitTests(unittest.TestCase):
         home = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
         self.assertIn("_home_ops.html", home)
         self.assertIn("pg_limits", home)
-        self.assertIn("home-quota-card", home)
+        self.assertIn("pg_overview_limit_board", home)
         ops = Path("app/web/templates/_home_ops.html").read_text(encoding="utf-8")
         self.assertIn("'/dashboard'", ops)
         self.assertIn("portal_bot_href = '/dashboard'", home)

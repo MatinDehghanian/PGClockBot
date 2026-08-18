@@ -125,6 +125,47 @@ async def _safe_pg_health(*, reseller_user_id: int | None = None, session: Async
         await rollback_quiet(session)
         return {"ok": False, "error": "بررسی اتصال ناموفق", "version": None}
 
+
+async def _staff_wallet_card(session: AsyncSession, staff: dict) -> dict | None:
+    """Shop wallet for the signed-in staff BotUser, if one is linked."""
+    from app.db.models import BotUser, OrgPrincipal
+    from app.services.formatting import format_toman
+
+    uid = staff.get("bot_user_id")
+    if not uid:
+        pid = staff.get("org_principal_id")
+        if pid:
+            try:
+                principal = await session.get(OrgPrincipal, int(pid))
+            except Exception:
+                principal = None
+            if principal is not None and principal.bot_user_id:
+                uid = principal.bot_user_id
+    if not uid and is_platform_admin(staff):
+        from app.config import get_settings
+
+        raw_ids = getattr(get_settings(), "admin_ids", None) or ()
+        tids = []
+        for x in raw_ids:
+            try:
+                tids.append(int(x))
+            except (TypeError, ValueError):
+                continue
+        if tids:
+            row = (
+                await session.execute(select(BotUser).where(BotUser.telegram_id == int(tids[0])))
+            ).scalar_one_or_none()
+            if row is not None:
+                uid = row.id
+    if not uid:
+        return None
+    user = await session.get(BotUser, int(uid))
+    if user is None:
+        return None
+    bal = int(user.wallet_balance or 0)
+    return {"balance": bal, "balance_fa": format_toman(bal)}
+
+
 async def _reseller_shop_stats(session: AsyncSession, rid: int) -> dict[str, int]:
     """Single round-trip aggregate counts for a reseller shop dashboard."""
     users_expr = (
@@ -258,6 +299,8 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "periods": periods,
                     "action_center": action,
                     "dashboard_degraded": True,
+                    "pg_limits": None,
+                    "wallet_card": None,
                 },
             )
         return (
@@ -320,6 +363,25 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             action_center = await _safe_action_center(
                 session, reseller_id=None, expire_days=expire_days
             )
+            pg_limits = None
+            wallet_card = None
+            if staff.get("pg_is_owner") is False:
+                from app.services.pg_overview import build_reseller_pg_overview
+
+                try:
+                    ov = await build_reseller_pg_overview(staff, session=session)
+                    if ov.get("ready"):
+                        pg_limits = ov
+                except Exception:
+                    logger.exception("hybrid owner home pg limits failed")
+                    await rollback_quiet(session)
+                    pg_limits = None
+                try:
+                    wallet_card = await _staff_wallet_card(session, staff)
+                except Exception:
+                    logger.exception("hybrid owner home wallet failed")
+                    await rollback_quiet(session)
+                    wallet_card = None
             return (
                 "home.html",
                 {
@@ -331,6 +393,8 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "periods": periods,
                     "action_center": action_center,
                     "dashboard_degraded": False,
+                    "pg_limits": pg_limits,
+                    "wallet_card": wallet_card,
                 },
             )
 

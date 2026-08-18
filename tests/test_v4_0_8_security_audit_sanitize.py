@@ -15,7 +15,7 @@ class PlansPgErrorSanitizeTests(unittest.IsolatedAsyncioTestCase):
 
         admin = {"role": "admin"}
         mock_pg = MagicMock()
-        mock_pg.get_user_templates_simple = AsyncMock(
+        mock_pg.ensure_token = AsyncMock(
             side_effect=RuntimeError("SECRET_HOST:8443 token=abc")
         )
         with patch("app.services.plans_catalog.get_pg", return_value=mock_pg):
@@ -26,6 +26,26 @@ class PlansPgErrorSanitizeTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("SECRET_HOST", err)
         self.assertNotIn("token=abc", err)
         self.assertIn("پاسارگارد", err)
+
+    async def test_catalog_forbidden_is_not_disconnect(self):
+        from app.services.pasarguard import PasarGuardError
+        from app.services.plans_catalog import load_pg_plan_options
+
+        admin = {"role": "admin"}
+        mock_pg = MagicMock()
+        mock_pg.ensure_token = AsyncMock(return_value="tok")
+        mock_pg.get_user_templates_simple = AsyncMock(
+            side_effect=PasarGuardError("SECRET_HOST forbidden", 403)
+        )
+        mock_pg.get_user_templates = AsyncMock(
+            side_effect=PasarGuardError("SECRET_HOST forbidden", 403)
+        )
+        mock_pg.get_groups_simple = AsyncMock(return_value=[{"id": 1, "name": "g"}])
+        with patch("app.services.plans_catalog.get_pg", return_value=mock_pg):
+            templates, groups, err = await load_pg_plan_options(admin, session=None)
+        self.assertEqual(templates, [])
+        self.assertEqual(len(groups), 1)
+        self.assertIsNone(err)
 
 
 class PlansSoftFailSanitizeTests(unittest.TestCase):
