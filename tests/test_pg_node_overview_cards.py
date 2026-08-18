@@ -122,6 +122,10 @@ class PgOverviewSurfaceTests(unittest.TestCase):
     def test_css_node_board(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".pg-node-tile", css)
+        tile = css.split(".pg-node-tile {\n", 1)[1].split("}", 1)[0]
+        self.assertIn("background: rgba(59, 130, 246, 0.12);", tile)
+        light = css.split('html[data-theme="light"] .pg-node-tile {\n', 1)[1].split("}", 1)[0]
+        self.assertIn("background: rgba(37, 99, 235, 0.10);", light)
         self.assertIn(".pg-live-rates", css)
         self.assertIn(".pg-metric-unit", css)
         self.assertIn(".pg-metric-val-rate", css)

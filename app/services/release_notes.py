@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "7.6.8": [
+        "نود پاسارگارد: بکگراند tile بیرونی دقیقاً همرنگ دکمه پرایمری",
+        "بدون مایگریشن؛ ریستور: تگ v7.6.7",
+    ],
     "7.6.7": [
         "نمای کلی ربات: ستون # به حداقل عرض مثل مدیریت مالی (رفع قانون ۵۰٪ ستون اول)",
         "بدون مایگریشن؛ ریستور: تگ v7.6.6",

@@ -6365,7 +6365,7 @@ html[data-theme="light"] .pg-node-tabs .tab-btn.active:active {
   padding: var(--space-2);
   border-radius: var(--radius-sm, 12px);
   border: 1px solid color-mix(in srgb, #3d8fd1 22%, var(--border));
-  background: color-mix(in srgb, #3d8fd1 10%, var(--bg-card));
+  background: rgba(59, 130, 246, 0.12);
   min-width: 0;
   width: 100%;
   box-sizing: border-box;
@@ -6532,7 +6532,7 @@ html[data-theme="light"] .pg-node-tabs .tab-btn.active:active {
   z-index: 1;
 }
 html[data-theme="light"] .pg-node-tile {
-  background: color-mix(in srgb, #2563eb 7%, #fff);
+  background: rgba(37, 99, 235, 0.10);
 }
 html[data-theme="light"] .pg-node-metric {
   background: color-mix(in srgb, var(--muted) 40%, #fff);
