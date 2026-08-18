@@ -63,9 +63,10 @@ async def _validate_reseller_capacity_inputs(
     included_users: int = 0,
     addon_gb: int = 0,
     addon_users: int = 0,
+    session: AsyncSession | None = None,
 ) -> None:
     """Single-package guard for limited independent installs before save."""
-    snapshot = await load_staff_limit_snapshot(staff)
+    snapshot = await load_staff_limit_snapshot(staff, session=session)
     if not snapshot.get("restricted"):
         return
     from app.services.formatting import format_bytes
@@ -958,7 +959,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             try:
                 addon_gb, addon_users = _addon_fields_from_form(form, plan_kind)
                 await _validate_reseller_capacity_inputs(
-                    staff, addon_gb=addon_gb, addon_users=addon_users
+                    staff, addon_gb=addon_gb, addon_users=addon_users, session=session
                 )
             except ValueError as e:
                 return RedirectResponse(
@@ -1038,6 +1039,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 staff,
                 included_gb=_parse_nonneg_int(form, "included_gb"),
                 included_users=_parse_nonneg_int(form, "included_users"),
+                session=session,
             )
         except ValueError as e:
             return RedirectResponse(
@@ -1114,7 +1116,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             for x in (plan.pg_group_ids or "").split(",")
             if x.strip()
         }
-        snap = await load_staff_limit_snapshot(staff)
+        snap = await load_staff_limit_snapshot(staff, session=session)
         return render(
             request,
             "reseller_plan_edit.html",
@@ -1168,7 +1170,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             try:
                 addon_gb, addon_users = _addon_fields_from_form(form, plan_kind)
                 await _validate_reseller_capacity_inputs(
-                    staff, addon_gb=addon_gb, addon_users=addon_users
+                    staff, addon_gb=addon_gb, addon_users=addon_users, session=session
                 )
             except ValueError as e:
                 return RedirectResponse(
@@ -1230,6 +1232,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 staff,
                 included_gb=_parse_nonneg_int(form, "included_gb"),
                 included_users=_parse_nonneg_int(form, "included_users"),
+                session=session,
             )
         except ValueError as e:
             return RedirectResponse(

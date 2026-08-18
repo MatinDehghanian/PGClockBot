@@ -824,7 +824,7 @@ def register_pg_pages(
         if await _assert_owned_user(staff, user_id, session=session) is None:
             return RedirectResponse(f"/pg/users?err={_q('دسترسی ندارید')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/users?err={_q(qe.message)}", status_code=303)
         return None
@@ -980,7 +980,7 @@ def register_pg_pages(
         if not staff_pg_action(staff, "templates", "create"):
             return RedirectResponse(f"/pg/templates?err={_q('اجازه ساخت ندارید')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/templates?err={_q(qe.message)}", status_code=303)
         form = await request.form()
@@ -1029,7 +1029,7 @@ def register_pg_pages(
         if not template_allowed_for_staff(staff, template_id):
             return RedirectResponse(f"/pg/templates?err={_q('تمپلیت خارج از دسترسی شماست')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/templates?err={_q(qe.message)}", status_code=303)
         form = await request.form()
@@ -1072,7 +1072,7 @@ def register_pg_pages(
         if not template_allowed_for_staff(staff, template_id):
             return RedirectResponse(f"/pg/templates?err={_q('تمپلیت خارج از دسترسی شماست')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/templates?err={_q(qe.message)}", status_code=303)
         try:
@@ -1143,7 +1143,7 @@ def register_pg_pages(
         if not staff_pg_action(staff, "groups", "create"):
             return RedirectResponse(f"/pg/groups?err={_q('اجازه ساخت ندارید')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/groups?err={_q(qe.message)}", status_code=303)
         form = await request.form()
@@ -1179,7 +1179,7 @@ def register_pg_pages(
         if not groups_allowed_for_staff(staff, [group_id]):
             return RedirectResponse(f"/pg/groups?err={_q('گروه خارج از دسترسی شماست')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/groups?err={_q(qe.message)}", status_code=303)
         form = await request.form()
@@ -1211,7 +1211,7 @@ def register_pg_pages(
         if not groups_allowed_for_staff(staff, [group_id]):
             return RedirectResponse(f"/pg/groups?err={_q('گروه خارج از دسترسی شماست')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/groups?err={_q(qe.message)}", status_code=303)
         try:
@@ -1270,7 +1270,7 @@ def register_pg_pages(
         if not staff_pg_action(staff, "hosts", "create"):
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه ساخت ندارید')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
         addrs = _addr_set(address)
@@ -1319,7 +1319,7 @@ def register_pg_pages(
         if not staff_pg_action(staff, "hosts", "update"):
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه ویرایش ندارید')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
         addrs = _addr_set(address)
@@ -1366,7 +1366,7 @@ def register_pg_pages(
         if not staff_pg_action(staff, "hosts", "update"):
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه ندارید')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
         try:
@@ -1393,7 +1393,7 @@ def register_pg_pages(
         if not staff_pg_action(staff, "hosts", "delete"):
             return RedirectResponse(f"/pg/hosts?err={_q('اجازه حذف ندارید')}", status_code=303)
         try:
-            await assert_can_mutate_owned_users(staff)
+            await assert_can_mutate_owned_users(staff, session=session)
         except PgQuotaError as qe:
             return RedirectResponse(f"/pg/hosts?err={_q(qe.message)}", status_code=303)
         try:

@@ -274,7 +274,7 @@ async def list_catalog_plans(
     return plans
 
 
-async def plan_limit_issue(staff: dict | None, plan: Plan | None) -> str | None:
+async def plan_limit_issue(staff: dict | None, plan: Plan | None, *, session=None) -> str | None:
     """Return a human message when a saved user-facing plan exceeds live PG limits."""
     if not plan or not staff:
         return None
@@ -292,6 +292,7 @@ async def plan_limit_issue(staff: dict | None, plan: Plan | None) -> str | None:
             data_limit=data_limit,
             duration_days=int(plan.duration_days or 0),
             label="پلن",
+            session=session,
         )
     except PgQuotaError as exc:
         return exc.message

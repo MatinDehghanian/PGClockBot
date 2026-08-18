@@ -2074,13 +2074,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             values = {}
         else:
             values = await get_all_settings(session, reseller_id=rid)
-        limit_snapshot = await load_staff_limit_snapshot(staff)
+        limit_snapshot = await load_staff_limit_snapshot(staff, session=session)
         plan_limit_issues: dict[int, str] = {}
         for p in sale_plans:
-            issue = await plan_limit_issue(staff, p)
+            issue = await plan_limit_issue(staff, p, session=session)
             if issue:
                 plan_limit_issues[int(p.id)] = issue
-        trial_limit_issue = await plan_limit_issue(staff, trial) if trial else None
+        trial_limit_issue = await plan_limit_issue(staff, trial, session=session) if trial else None
         try:
             custom_limit_msg = custom_range_limit_issue(
                 min_gb=float(values.get("custom_plan_min_gb") or 1),
@@ -2208,6 +2208,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 data_limit=int(gb * (1024**3)) if gb is not None else None,
                 duration_days=duration_days,
                 label="پلن فروش",
+                session=session,
             )
         except PgQuotaError as e:
             return RedirectResponse(f"/plans?err={quote(e.message)}", status_code=303)
@@ -2334,6 +2335,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 data_limit=int(gb * (1024**3)) if gb is not None else None,
                 duration_days=days,
                 label="پلن تست",
+                session=session,
             )
         except PgQuotaError as e:
             return RedirectResponse(f"/plans?err={quote(e.message)}", status_code=303)
@@ -2442,6 +2444,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 max_gb=float(str(form.get("custom_plan_max_gb") or "500") or "500"),
                 min_days=max(1, int(float(str(form.get("custom_plan_min_days") or "1") or "1"))),
                 max_days=max(1, int(float(str(form.get("custom_plan_max_days") or "365") or "365"))),
+                session=session,
             )
         except (PgQuotaError, ValueError) as e:
             return RedirectResponse(
@@ -2561,7 +2564,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         plans = await list_catalog_plans(session, staff, include_trial=True)
         templates, groups, pg_error = await load_pg_plan_options(staff, session=session)
-        snap = await load_staff_limit_snapshot(staff)
+        snap = await load_staff_limit_snapshot(staff, session=session)
         ctx = {
             "staff": staff,
             "plans": plans,
@@ -2633,6 +2636,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 data_limit=int(gb * (1024**3)) if gb is not None else None,
                 duration_days=duration_days,
                 label="ویرایش پلن",
+                session=session,
             )
         except PgQuotaError as e:
             return RedirectResponse(

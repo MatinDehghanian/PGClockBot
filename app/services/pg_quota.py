@@ -1,8 +1,12 @@
 """Enforce PasarGuard admin role quotas for restricted staff.
 
 Mirrors PasarGuard ``RoleLimits`` + limited-admin write gate so resellers
-(and credentialed staff) cannot exceed the same role limits when acting
-through PGClock — whether via own credentials or (legacy) owner-token paths.
+and credentialed staff cannot exceed the same role limits when acting
+through PGClock.
+
+Quota load/enforce uses the actor's own PasarGuard client (env client for
+Hybrid Owner / explicit Owner Principal). Never Owner ``get_pg()`` to read
+another admin's limits.
 """
 
 from __future__ import annotations
@@ -230,27 +234,134 @@ def _check_max_users(admin: dict, limits: dict[str, Any], *, need: int = 1) -> N
         )
 
 
-async def _load_admin_and_role(staff: dict) -> tuple[dict, dict | None]:
-    owner = str(staff.get("pg_admin_username") or "").strip()
-    if not owner:
+def _staff_uses_env_pg_client(staff: dict) -> bool:
+    """True when this staff's PG identity is the process env client.
+
+    Explicit Owner Principal and Hybrid Owner (``role=admin`` +
+    ``pg_is_owner is False``) both authenticate as the ``.env`` PasarGuard
+    account — ``get_pg()`` is *their* client, not a parent token.
+    """
+    from app.services.shop_scope import is_platform_admin
+
+    if is_platform_admin(staff):
+        return True
+    return staff.get("role") == "admin" and staff.get("pg_is_owner") is False
+
+
+async def _quota_pg_client(
+    staff: dict,
+    *,
+    session: Any | None = None,
+    client: Any | None = None,
+):
+    """Return the actor's own PG client. Never Owner token for another admin."""
+    if client is not None:
+        return client
+    if _staff_uses_env_pg_client(staff):
+        from app.services.pasarguard import get_pg
+
+        return get_pg()
+    from app.services.pg_read import PgReadDenied, staff_pg_read_client
+
+    try:
+        return await staff_pg_read_client(session, staff)
+    except PgReadDenied as e:
+        raise PgQuotaError(e.message) from e
+
+
+async def _client_for_named_pg_admin(
+    *,
+    session: Any | None,
+    username: str,
+    reseller_user_id: int | None = None,
+    client: Any | None = None,
+):
+    """Own-credential client for a linked shop/staff PG admin. Never Owner token."""
+    if client is not None:
+        return client
+    from app.services.pasarguard import (
+        PasarGuardError,
+        get_pg_for_reseller,
+        get_pg_for_staff,
+    )
+
+    try:
+        if reseller_user_id:
+            if session is None:
+                raise PgQuotaError("نشست پایگاه‌داده برای خواندن سقف فروشگاه لازم است")
+            return await get_pg_for_reseller(session, int(reseller_user_id))
+        if session is None:
+            raise PgQuotaError(
+                "خواندن سقف پاسارگارد بدون اعتبارنامه این حساب ممکن نیست"
+            )
+        from sqlalchemy import func, select
+
+        from app.db.models import ResellerProfile
+
+        uname = str(username).strip().lower()
+        profile = (
+            await session.execute(
+                select(ResellerProfile).where(
+                    func.lower(ResellerProfile.pg_admin_username) == uname
+                )
+            )
+        ).scalar_one_or_none()
+        if profile and getattr(profile, "user_id", None):
+            return await get_pg_for_reseller(session, int(profile.user_id))
+        return await get_pg_for_staff(session, pg_username=username)
+    except PgQuotaError:
+        raise
+    except PasarGuardError as e:
+        raise PgQuotaError(e.user_message(fallback=str(e))) from e
+    except Exception as e:
+        raise PgQuotaError(str(e) or "خواندن سقف پاسارگارد ناموفق بود") from e
+
+
+def _admin_username(admin: Mapping[str, Any] | None) -> str:
+    if not isinstance(admin, dict):
+        return ""
+    return str(admin.get("username") or "").strip()
+
+
+async def _load_admin_and_role(
+    staff: dict,
+    *,
+    session: Any | None = None,
+    client: Any | None = None,
+) -> tuple[dict, dict | None]:
+    expected = str(staff.get("pg_admin_username") or "").strip()
+    if not expected:
         raise PgQuotaError("ادمین پاسارگارد برای این حساب تنظیم نشده است")
 
-    from app.services.pasarguard import get_pg
-
-    pg = get_pg()
+    pg = await _quota_pg_client(staff, session=session, client=client)
     admin = None
     try:
         current = await pg.get_current_admin()
-        if isinstance(current, dict):
-            got = str(current.get("username") or "").strip()
-            if not owner or (got and got.lower() == owner.lower()):
-                admin = current
     except Exception:
-        admin = None
+        current = None
+    if isinstance(current, dict) and current:
+        got = _admin_username(current)
+        if got and got.lower() != expected.lower():
+            raise PgQuotaError(
+                f"سقف پاسارگارد باید با حساب «{expected}» خوانده شود، نه «{got}»"
+            )
+        if got and got.lower() == expected.lower():
+            admin = current
     if not isinstance(admin, dict) or not admin:
-        admin = await pg.get_admin(owner)
+        try:
+            fetched_admin = await pg.get_admin(expected)
+        except Exception:
+            fetched_admin = None
+        if isinstance(fetched_admin, dict) and fetched_admin:
+            got = _admin_username(fetched_admin)
+            if got and got.lower() != expected.lower():
+                raise PgQuotaError(
+                    f"سقف پاسارگارد باید با حساب «{expected}» خوانده شود، نه «{got}»"
+                )
+            if got and got.lower() == expected.lower():
+                admin = fetched_admin
     if not isinstance(admin, dict) or not admin:
-        raise PgQuotaError(f"ادمین «{owner}» در پاسارگارد یافت نشد")
+        raise PgQuotaError(f"ادمین «{expected}» در پاسارگارد یافت نشد")
 
     role: dict | None = admin.get("role") if isinstance(admin.get("role"), dict) else None
     role_id = staff.get("pg_role_id")
@@ -266,7 +377,12 @@ async def _load_admin_and_role(staff: dict) -> tuple[dict, dict | None]:
     return admin, role
 
 
-async def load_staff_limit_snapshot(staff: dict) -> dict[str, Any]:
+async def load_staff_limit_snapshot(
+    staff: dict,
+    *,
+    session: Any | None = None,
+    client: Any | None = None,
+) -> dict[str, Any]:
     """Return the actor's effective live PasarGuard limits for UI/policy use."""
     if not staff_needs_quota_check(staff):
         return {
@@ -288,7 +404,7 @@ async def load_staff_limit_snapshot(staff: dict) -> dict[str, Any]:
             "hwid_max": None,
         }
 
-    admin, role = await _load_admin_and_role(staff)
+    admin, role = await _load_admin_and_role(staff, session=session, client=client)
     limits = merge_role_limits(admin, role)
     max_users = _as_int(limits.get("max_users")) or _as_int(admin.get("max_users"))
     current_users = (
@@ -401,11 +517,13 @@ async def assert_user_plan_within_limits(
     data_limit: int | None,
     duration_days: int | None,
     label: str = "پلن",
+    session: Any | None = None,
+    client: Any | None = None,
 ) -> None:
     """Reject plan definitions that exceed the live PG per-user limits."""
     if not staff_needs_quota_check(staff):
         return
-    admin, role = await _load_admin_and_role(staff)
+    admin, role = await _load_admin_and_role(staff, session=session, client=client)
     assert_admin_can_write(admin, role)
     limits = merge_role_limits(admin, role)
     expire_ts = None
@@ -427,6 +545,8 @@ async def assert_custom_plan_range_within_limits(
     min_days: int,
     max_days: int,
     label: str = "پلن دلخواه",
+    session: Any | None = None,
+    client: Any | None = None,
 ) -> None:
     """Validate custom-plan range settings against the live PG per-user limits."""
     if max_gb < min_gb:
@@ -442,12 +562,16 @@ async def assert_custom_plan_range_within_limits(
         data_limit=_bytes(min_gb),
         duration_days=int(min_days),
         label=f"{label} (حداقل)",
+        session=session,
+        client=client,
     )
     await assert_user_plan_within_limits(
         staff,
         data_limit=_bytes(max_gb),
         duration_days=int(max_days),
         label=f"{label} (حداکثر)",
+        session=session,
+        client=client,
     )
 
 
@@ -481,12 +605,14 @@ async def assert_can_create_user(
     hwid_limit: int | None = None,
     from_template: bool = False,
     quantity: int = 1,
+    session: Any | None = None,
+    client: Any | None = None,
 ) -> None:
     """Enforce quotas before creating a user that will be owned by this staff."""
     if not staff_needs_quota_check(staff):
         return
 
-    admin, role = await _load_admin_and_role(staff)
+    admin, role = await _load_admin_and_role(staff, session=session, client=client)
     assert_admin_can_write(admin, role)
     limits = merge_role_limits(admin, role)
     _check_max_users(admin, limits, need=max(1, int(quantity or 1)))
@@ -518,12 +644,14 @@ async def assert_can_modify_user(
     data_limit_changed: bool = True,
     expire_changed: bool = True,
     hwid_changed: bool = True,
+    session: Any | None = None,
+    client: Any | None = None,
 ) -> None:
     """Enforce per-user volume/time/HWID bounds before modify (no max_users check)."""
     if not staff_needs_quota_check(staff):
         return
 
-    admin, role = await _load_admin_and_role(staff)
+    admin, role = await _load_admin_and_role(staff, session=session, client=client)
     assert_admin_can_write(admin, role)
     limits = merge_role_limits(admin, role)
 
@@ -541,11 +669,16 @@ async def assert_can_modify_user(
         _check_hwid_bounds(limits, hwid_limit, require_finite=True)
 
 
-async def assert_can_mutate_owned_users(staff: dict) -> None:
+async def assert_can_mutate_owned_users(
+    staff: dict,
+    *,
+    session: Any | None = None,
+    client: Any | None = None,
+) -> None:
     """Block enable/disable/reset/revoke/delete when admin is limited/disabled."""
     if not staff_needs_quota_check(staff):
         return
-    admin, role = await _load_admin_and_role(staff)
+    admin, role = await _load_admin_and_role(staff, session=session, client=client)
     assert_admin_can_write(admin, role)
 
 
@@ -558,11 +691,14 @@ async def assert_reseller_can_deliver(
     hwid_limit: int | None = None,
     from_template: bool = False,
     quantity: int = 1,
+    session: Any | None = None,
+    reseller_user_id: int | None = None,
+    client: Any | None = None,
 ) -> None:
     """Quota check for shop delivery assigned to a reseller PG admin.
 
     Fail closed when the shop has no PG admin link — otherwise create-as-owner
-    would bypass every role quota.
+    would bypass every role quota. Uses the shop's own PG client, never Owner.
     """
     uname = str(pg_admin_username or "").strip()
     if not uname:
@@ -574,6 +710,15 @@ async def assert_reseller_can_deliver(
         "pg_admin_username": uname,
         "pg_role_id": pg_role_id,
     }
+    if reseller_user_id:
+        staff["bot_user_id"] = int(reseller_user_id)
+    own_client = client
+    if own_client is None and (session is not None or reseller_user_id):
+        own_client = await _client_for_named_pg_admin(
+            session=session,
+            username=uname,
+            reseller_user_id=reseller_user_id,
+        )
     await assert_can_create_user(
         staff,
         data_limit=data_limit,
@@ -581,6 +726,8 @@ async def assert_reseller_can_deliver(
         hwid_limit=hwid_limit,
         from_template=from_template,
         quantity=quantity,
+        session=session,
+        client=own_client,
     )
 
 
@@ -592,6 +739,9 @@ async def assert_reseller_can_renew(
     expire_ts: int | None = None,
     hwid_limit: int | None = None,
     from_template: bool = False,
+    session: Any | None = None,
+    reseller_user_id: int | None = None,
+    client: Any | None = None,
 ) -> None:
     """Quota check for shop renewal modifying a reseller-owned user."""
     uname = str(pg_admin_username or "").strip()
@@ -604,8 +754,17 @@ async def assert_reseller_can_renew(
         "pg_admin_username": uname,
         "pg_role_id": pg_role_id,
     }
+    if reseller_user_id:
+        staff["bot_user_id"] = int(reseller_user_id)
+    own_client = client
+    if own_client is None and (session is not None or reseller_user_id):
+        own_client = await _client_for_named_pg_admin(
+            session=session,
+            username=uname,
+            reseller_user_id=reseller_user_id,
+        )
     if from_template:
-        await assert_can_mutate_owned_users(staff)
+        await assert_can_mutate_owned_users(staff, session=session, client=own_client)
         return
     await assert_can_modify_user(
         staff,
@@ -615,4 +774,6 @@ async def assert_reseller_can_renew(
         data_limit_changed=data_limit is not None,
         expire_changed=expire_ts is not None,
         hwid_changed=hwid_limit is not None,
+        session=session,
+        client=own_client,
     )

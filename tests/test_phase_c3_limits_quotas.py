@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 from app.services.pg_quota import (
     PgQuotaError,
@@ -16,6 +16,14 @@ from app.services.pg_quota import (
 from app.services.pasarguard import build_user_create_payload, build_user_modify_payload
 
 GB = 1024**3
+
+
+def _quota_client(admin, role=None):
+    client = AsyncMock()
+    client.get_current_admin = AsyncMock(return_value=admin)
+    client.get_admin = AsyncMock(return_value=admin)
+    client.get_admin_role = AsyncMock(return_value=role if role is not None else {"limits": {}})
+    return client
 
 
 class HwidBoundsHelperTests(unittest.TestCase):
@@ -36,19 +44,16 @@ class HwidCreateQuotaTests(unittest.IsolatedAsyncioTestCase):
                 "max_hwid_per_user": 2,
             }
         }
-        with patch("app.services.pasarguard.get_pg") as get_pg:
-            client = AsyncMock()
-            client.get_admin = AsyncMock(return_value=admin)
-            client.get_admin_role = AsyncMock(return_value=role)
-            get_pg.return_value = client
-            with self.assertRaises(PgQuotaError) as ctx:
-                await assert_can_create_user(
-                    {"role": "reseller", "pg_admin_username": "r1", "pg_role_id": 1},
-                    data_limit=5 * GB,
-                    expire_ts=int(time.time()) + 7 * 86400,
-                    hwid_limit=5,
-                )
-            self.assertIn("HWID", ctx.exception.message)
+        client = _quota_client(admin, role)
+        with self.assertRaises(PgQuotaError) as ctx:
+            await assert_can_create_user(
+                {"role": "reseller", "pg_admin_username": "r1", "pg_role_id": 1},
+                data_limit=5 * GB,
+                expire_ts=int(time.time()) + 7 * 86400,
+                hwid_limit=5,
+                client=client,
+            )
+        self.assertIn("HWID", ctx.exception.message)
 
     async def test_hwid_below_min_rejected(self):
         admin = {"username": "r1", "status": "active", "total_users": 0}
@@ -60,19 +65,16 @@ class HwidCreateQuotaTests(unittest.IsolatedAsyncioTestCase):
                 "max_hwid_per_user": 5,
             }
         }
-        with patch("app.services.pasarguard.get_pg") as get_pg:
-            client = AsyncMock()
-            client.get_admin = AsyncMock(return_value=admin)
-            client.get_admin_role = AsyncMock(return_value=role)
-            get_pg.return_value = client
-            with self.assertRaises(PgQuotaError) as ctx:
-                await assert_can_create_user(
-                    {"role": "reseller", "pg_admin_username": "r1", "pg_role_id": 1},
-                    data_limit=5 * GB,
-                    expire_ts=int(time.time()) + 7 * 86400,
-                    hwid_limit=1,
-                )
-            self.assertIn("حداقل", ctx.exception.message)
+        client = _quota_client(admin, role)
+        with self.assertRaises(PgQuotaError) as ctx:
+            await assert_can_create_user(
+                {"role": "reseller", "pg_admin_username": "r1", "pg_role_id": 1},
+                data_limit=5 * GB,
+                expire_ts=int(time.time()) + 7 * 86400,
+                hwid_limit=1,
+                client=client,
+            )
+        self.assertIn("حداقل", ctx.exception.message)
 
     async def test_omitted_hwid_defaults_to_role_max(self):
         admin = {"username": "r1", "status": "active", "total_users": 0}
@@ -83,18 +85,15 @@ class HwidCreateQuotaTests(unittest.IsolatedAsyncioTestCase):
                 "max_hwid_per_user": 3,
             }
         }
-        with patch("app.services.pasarguard.get_pg") as get_pg:
-            client = AsyncMock()
-            client.get_admin = AsyncMock(return_value=admin)
-            client.get_admin_role = AsyncMock(return_value=role)
-            get_pg.return_value = client
-            # None hwid → defaults to max=3 → passes
-            await assert_can_create_user(
-                {"role": "reseller", "pg_admin_username": "r1", "pg_role_id": 1},
-                data_limit=5 * GB,
-                expire_ts=int(time.time()) + 7 * 86400,
-                hwid_limit=None,
-            )
+        client = _quota_client(admin, role)
+        # None hwid → defaults to max=3 → passes
+        await assert_can_create_user(
+            {"role": "reseller", "pg_admin_username": "r1", "pg_role_id": 1},
+            data_limit=5 * GB,
+            expire_ts=int(time.time()) + 7 * 86400,
+            hwid_limit=None,
+            client=client,
+        )
 
     async def test_valid_hwid(self):
         admin = {"username": "r1", "status": "active", "total_users": 0}
@@ -108,17 +107,14 @@ class HwidCreateQuotaTests(unittest.IsolatedAsyncioTestCase):
                 "max_hwid_per_user": 4,
             }
         }
-        with patch("app.services.pasarguard.get_pg") as get_pg:
-            client = AsyncMock()
-            client.get_admin = AsyncMock(return_value=admin)
-            client.get_admin_role = AsyncMock(return_value=role)
-            get_pg.return_value = client
-            await assert_can_create_user(
-                {"role": "reseller", "pg_admin_username": "r1", "pg_role_id": 1},
-                data_limit=5 * GB,
-                expire_ts=int(time.time()) + 14 * 86400,
-                hwid_limit=2,
-            )
+        client = _quota_client(admin, role)
+        await assert_can_create_user(
+            {"role": "reseller", "pg_admin_username": "r1", "pg_role_id": 1},
+            data_limit=5 * GB,
+            expire_ts=int(time.time()) + 14 * 86400,
+            hwid_limit=2,
+            client=client,
+        )
 
     async def test_owner_bypass(self):
         await assert_can_create_user(
@@ -131,19 +127,16 @@ class HwidModifyQuotaTests(unittest.IsolatedAsyncioTestCase):
     async def test_modify_rejects_over_max(self):
         admin = {"username": "r1", "status": "active"}
         role = {"limits": {"max_hwid_per_user": 2}}
-        with patch("app.services.pasarguard.get_pg") as get_pg:
-            client = AsyncMock()
-            client.get_admin = AsyncMock(return_value=admin)
-            client.get_admin_role = AsyncMock(return_value=role)
-            get_pg.return_value = client
-            with self.assertRaises(PgQuotaError):
-                await assert_can_modify_user(
-                    {"role": "reseller", "pg_admin_username": "r1", "pg_role_id": 1},
-                    hwid_limit=9,
-                    hwid_changed=True,
-                    data_limit_changed=False,
-                    expire_changed=False,
-                )
+        client = _quota_client(admin, role)
+        with self.assertRaises(PgQuotaError):
+            await assert_can_modify_user(
+                {"role": "reseller", "pg_admin_username": "r1", "pg_role_id": 1},
+                hwid_limit=9,
+                hwid_changed=True,
+                data_limit_changed=False,
+                expire_changed=False,
+                client=client,
+            )
 
 
 class PayloadHwidTests(unittest.TestCase):
@@ -173,17 +166,14 @@ class ExistingQuotaStillWorks(unittest.IsolatedAsyncioTestCase):
             "total_users": 2,
             "permission_overrides": {"max_users": 2},
         }
-        with patch("app.services.pasarguard.get_pg") as get_pg:
-            client = AsyncMock()
-            client.get_admin = AsyncMock(return_value=admin)
-            client.get_admin_role = AsyncMock(return_value={"limits": {}})
-            get_pg.return_value = client
-            with self.assertRaises(PgQuotaError):
-                await assert_can_create_user(
-                    {"role": "reseller", "pg_admin_username": "r1"},
-                    data_limit=1 * GB,
-                    expire_ts=int(time.time()) + 86400,
-                )
+        client = _quota_client(admin)
+        with self.assertRaises(PgQuotaError):
+            await assert_can_create_user(
+                {"role": "reseller", "pg_admin_username": "r1"},
+                data_limit=1 * GB,
+                expire_ts=int(time.time()) + 86400,
+                client=client,
+            )
 
 
 if __name__ == "__main__":

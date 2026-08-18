@@ -1281,7 +1281,7 @@ async def pg_create_username(
             await message.answer("اجازه این عمل را ندارید", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
             return
         try:
-            await assert_can_create_user(gate.staff or {}, from_template=True)
+            await assert_can_create_user(gate.staff or {}, from_template=True, session=session, client=gate.pg_client)
         except PgQuotaError as qe:
             await message.answer(f"❌ {qe.message}")
             return
@@ -1426,6 +1426,8 @@ async def pg_create_days(
             data_limit=data_limit if gb > 0 else None,
             expire_ts=expire_ts if days > 0 else None,
             from_template=False,
+            session=session,
+            client=gate.pg_client,
         )
     except PgQuotaError as qe:
         await message.answer(f"❌ {qe.message}")
