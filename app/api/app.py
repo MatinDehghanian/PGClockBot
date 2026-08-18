@@ -435,12 +435,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             user["bot_user_id"] = int(bot_user_id)
             if profile.pg_admin_username:
                 user["pg_admin_username"] = profile.pg_admin_username
-            # Prefer live PG role (same as pg_staff) so limited-role ACL stays in sync
-            # even when local profile.pg_role_id is stale.
-            from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
-            from app.services.pg_staff_access import resolve_pg_role_id_for_admin
+            # Live GET /api/admin nested role — same source as quota boxes.
+            from app.services.pg_access import enrich_staff_pg_from_role, resolve_acl_from_client
 
-            role_id = int(profile.pg_role_id) if profile.pg_role_id else None
             pg_client = None
             if profile.pg_admin_username:
                 try:
@@ -449,19 +446,19 @@ def create_api_app(lifespan=None) -> FastAPI:
                     pg_client = await get_pg_for_reseller(session, int(profile.user_id))
                 except Exception:
                     pg_client = None
-                if pg_client is not None:
-                    live_role = await resolve_pg_role_id_for_admin(
-                        profile.pg_admin_username, client=pg_client
-                    )
-                    if live_role:
-                        role_id = int(live_role)
-            if role_id:
-                user["pg_role_id"] = int(role_id)
-                if pg_client is not None:
-                    features, role = await resolve_reseller_pg_features(
-                        int(role_id), client=pg_client
-                    )
-                    user = enrich_staff_pg_from_role(user, features, role)
+            user.pop("pg_permissions", None)
+            if pg_client is not None:
+                features, role, _admin = await resolve_acl_from_client(
+                    pg_client, username=profile.pg_admin_username
+                )
+                user = enrich_staff_pg_from_role(user, features, role)
+                if isinstance(role, dict) and role.get("id") is not None:
+                    try:
+                        user["pg_role_id"] = int(role["id"])
+                    except (TypeError, ValueError):
+                        pass
+            elif profile.pg_role_id:
+                user["pg_role_id"] = int(profile.pg_role_id)
             # Principal from the server-loaded ResellerProfile only.
             # Cookie org_principal_id / parent / depth / scope are not selectors.
             from app.services.org_principals import (
@@ -484,12 +481,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                 user, principal, visible_principal_ids=visible
             )
         elif user.get("role") == "pg_staff":
-            from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
+            from app.services.pg_access import enrich_staff_pg_from_role, resolve_acl_from_client
             from app.services.pg_staff_access import (
                 PG_ACCESS_DENIED_MSG,
                 access_by_web_username,
                 enforce_pg_admin_web_gate,
-                resolve_pg_role_id_for_admin,
                 staff_has_stored_pg_password,
             )
 
@@ -512,7 +508,6 @@ def create_api_app(lifespan=None) -> FastAPI:
             user["pg_staff_id"] = int(row.id)
             # Phase C5: advertise stored PG password so menus/reads match client selection
             user["pg_credentials_ready"] = staff_has_stored_pg_password(row)
-            # Prefer cached role id; refresh live when PasarGuard is reachable
             if row.pg_role_id:
                 user["pg_role_id"] = int(row.pg_role_id)
             pg_client = None
@@ -522,19 +517,18 @@ def create_api_app(lifespan=None) -> FastAPI:
                 pg_client = await get_pg_for_staff(session, staff_id=int(row.id))
             except Exception:
                 pg_client = None
-            role_id = await resolve_pg_role_id_for_admin(
-                row.pg_username, client=pg_client
-            ) if pg_client is not None else None
-            if role_id:
-                user["pg_role_id"] = int(role_id)
-            if user.get("pg_role_id") and pg_client is not None:
-                features, role = await resolve_reseller_pg_features(
-                    user.get("pg_role_id"), client=pg_client
+            user.pop("pg_permissions", None)
+            features, role = [], None
+            if pg_client is not None:
+                features, role, _admin = await resolve_acl_from_client(
+                    pg_client, username=row.pg_username
                 )
-            else:
-                features, role = [], None
-            # Owner-equivalent PG admins still get mapped features via is_owner on role
             user = enrich_staff_pg_from_role(user, features, role)
+            if isinstance(role, dict) and role.get("id") is not None:
+                try:
+                    user["pg_role_id"] = int(role["id"])
+                except (TypeError, ValueError):
+                    pass
             if not (user.get("pg_permissions") or []):
                 # No mapped features → deny panel use
                 raise NotAuthenticated(login_error=PG_ACCESS_DENIED_MSG)

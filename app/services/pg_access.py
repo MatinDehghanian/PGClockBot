@@ -37,31 +37,122 @@ PG_FEATURE_LABELS: dict[str, str] = {
 }
 
 # Short-lived cache: role_id → (monotonic_at, features, raw_role)
+# Menus must track GET /api/admin like quotas — keep this only as a fallback.
 _ROLE_CACHE: dict[int, tuple[float, list[str], dict]] = {}
-_ROLE_CACHE_TTL = 60.0
+_ROLE_CACHE_TTL = 8.0
 
 # Platform env-credential capability cache: key → (monotonic_at, payload)
 _PLATFORM_CAPS_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
-_PLATFORM_CAPS_TTL = 60.0
+_PLATFORM_CAPS_TTL = 8.0
 
 
 def clear_platform_pg_capability_cache() -> None:
     """Drop cached Owner PG ACL (call after setup / PG credential changes)."""
     _PLATFORM_CAPS_CACHE.clear()
+    _ROLE_CACHE.clear()
+
+
+def _nested_role(admin: dict | None) -> dict | None:
+    if not isinstance(admin, dict):
+        return None
+    nested = admin.get("role")
+    return nested if isinstance(nested, dict) else None
+
+
+def _role_is_present(role: dict | None) -> bool:
+    if not isinstance(role, dict):
+        return False
+    return bool(
+        role.get("id") is not None
+        or role.get("name")
+        or role.get("permissions") is not None
+        or "is_owner" in role
+    )
 
 
 def _admin_looks_like_pg_owner(admin: dict | None, role: dict | None) -> bool:
-    """True when PasarGuard marks this account as panel owner / sudo."""
-    if isinstance(role, dict) and role.get("is_owner"):
-        return True
+    """True when PasarGuard marks this account as panel owner.
+
+    PasarGuard itself uses ``role.is_owner`` (not leftover ``is_sudo``).
+    Legacy sudo/superuser only counts when no role object exists.
+    """
+    effective = role if _role_is_present(role) else _nested_role(admin)
+    if _role_is_present(effective):
+        return bool(effective.get("is_owner"))
     if not isinstance(admin, dict):
         return False
-    if admin.get("is_owner") or admin.get("is_sudo") or admin.get("is_superuser"):
-        return True
-    nested = admin.get("role")
-    if isinstance(nested, dict) and nested.get("is_owner"):
-        return True
-    return False
+    return bool(admin.get("is_owner") or admin.get("is_sudo") or admin.get("is_superuser"))
+
+
+def acl_from_admin_payload(admin: dict | None) -> tuple[list[str], dict | None, bool]:
+    """Map a live ``GET /api/admin`` payload to (features, role, pg_is_owner).
+
+    Nested ``role.permissions`` is the same matrix the PasarGuard panel uses
+    for this signed-in admin — quotas already read this object every page.
+    """
+    role = _nested_role(admin)
+    pg_is_owner = _admin_looks_like_pg_owner(admin, role)
+    if pg_is_owner:
+        out_role = dict(role) if isinstance(role, dict) else {"is_owner": True}
+        out_role["is_owner"] = True
+        return full_pg_owner_features(), out_role, True
+    features = map_pg_role_to_features(role) if role else []
+    return list(features or []), role, False
+
+
+async def resolve_acl_from_client(
+    client: Any, *, username: str | None = None
+) -> tuple[list[str], dict | None, dict | None]:
+    """Live ACL for the token holder: current admin nested role, then role-id fallback."""
+    admin: dict | None = None
+    try:
+        current = await client.get_current_admin()
+        if isinstance(current, dict) and current:
+            admin = current
+    except Exception:
+        admin = None
+    if not isinstance(admin, dict):
+        admin = None
+    features, role, _owner = acl_from_admin_payload(admin)
+    if _role_is_present(role):
+        return list(features or []), role, admin
+    uname = (username or "").strip()
+    if not uname and isinstance(admin, dict):
+        uname = str(admin.get("username") or "").strip()
+    role_id = None
+    if isinstance(admin, dict):
+        for key in ("role_id", "admin_role_id"):
+            if admin.get(key) is not None:
+                try:
+                    role_id = int(admin[key])
+                    break
+                except (TypeError, ValueError):
+                    pass
+        nested = _nested_role(admin)
+        if role_id is None and isinstance(nested, dict) and nested.get("id") is not None:
+            try:
+                role_id = int(nested["id"])
+            except (TypeError, ValueError):
+                role_id = None
+    if role_id is None and uname:
+        try:
+            from app.services.pg_staff_access import resolve_pg_role_id_for_admin
+
+            live = await resolve_pg_role_id_for_admin(uname, client=client)
+            if live:
+                role_id = int(live)
+        except Exception:
+            role_id = None
+    if role_id:
+        features, role = await resolve_reseller_pg_features(role_id, client=client)
+        if _admin_looks_like_pg_owner(admin, role):
+            features = full_pg_owner_features()
+            if isinstance(role, dict):
+                role = dict(role)
+                role["is_owner"] = True
+            else:
+                role = {"is_owner": True, "id": role_id}
+    return list(features or []), role, admin
 
 
 def full_pg_owner_features() -> list[str]:
@@ -185,31 +276,24 @@ async def resolve_platform_pg_capabilities(
                     except (TypeError, ValueError):
                         pass
 
-        role: dict | None = None
-        if role_id is not None:
-            # Always use this probe's client — never the process-wide Owner
-            # singleton (stale during setup, or a different tenant).
+        features, role, pg_is_owner = acl_from_admin_payload(admin)
+        # Nested role on GET /api/admin is live (same source as quotas).
+        # GET /admin-roles/{id} is a fallback only — it was cached separately
+        # and kept revoked node/host menus visible after PasarGuard edits.
+        if not _role_is_present(role) and role_id is not None:
             features, role = await resolve_reseller_pg_features(
                 role_id, client=client
             )
-        else:
-            features, role = [], None
-        # Limited roles often cannot GET /admin-roles/{id}; the nested role
-        # on the admin object is the same matrix they already authenticated with.
-        if not role and isinstance(nested_role, dict) and (
-            nested_role.get("permissions") or nested_role.get("is_owner")
-        ):
-            role = nested_role
-            features = map_pg_role_to_features(role)
-
-        pg_is_owner = _admin_looks_like_pg_owner(admin, role)
-        if pg_is_owner:
-            features = full_pg_owner_features()
-            if not role:
-                role = {"is_owner": True, "permissions": {}}
-            else:
-                role = dict(role)
-                role["is_owner"] = True
+            pg_is_owner = _admin_looks_like_pg_owner(admin, role)
+            if pg_is_owner:
+                features = full_pg_owner_features()
+                if not role:
+                    role = {"is_owner": True, "permissions": {}}
+                else:
+                    role = dict(role)
+                    role["is_owner"] = True
+            elif role:
+                features = map_pg_role_to_features(role)
 
         payload = {
             "ok": True,

@@ -64,6 +64,7 @@ tests/test_plans_catalog_hybrid_owner_scope.py
 tests/test_hybrid_owner_pg_clamp.py
 tests/test_hybrid_owner_quota_gate.py
 tests/test_hybrid_quota_boxes.py
+tests/test_live_pg_menus.py
 
 # --- Multi-tenant scale / performance hardening ---
 tests/test_bot_users_reseller_id_index.py

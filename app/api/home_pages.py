@@ -334,8 +334,9 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             from app.services.home_overview import empty_home_overview
 
             await recover_session(session)
+            show_pg_nodes = "pg_nodes" in (staff.get("pg_permissions") or [])
             try:
-                overview = await build_home_overview(session)
+                overview = await build_home_overview(session, include_nodes=show_pg_nodes)
             except Exception:
                 logger.exception("build_home_overview failed")
                 await rollback_quiet(session)
@@ -395,6 +396,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "dashboard_degraded": False,
                     "pg_limits": pg_limits,
                     "wallet_card": wallet_card,
+                    "show_pg_nodes": show_pg_nodes,
                 },
             )
 

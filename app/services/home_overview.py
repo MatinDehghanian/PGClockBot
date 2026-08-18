@@ -197,7 +197,7 @@ async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
     }
 
 
-async def pg_home_bundle() -> tuple[dict[str, Any], dict[str, Any]]:
+async def pg_home_bundle(*, include_nodes: bool = True) -> tuple[dict[str, Any], dict[str, Any]]:
     """Fetch PasarGuard summary + node status in one pass (shared nodes call)."""
     nodes_status = {
         "ok": False,
@@ -224,18 +224,26 @@ async def pg_home_bundle() -> tuple[dict[str, Any], dict[str, Any]]:
 
         pg = get_pg()
         await pg.ensure_token()
+
+        async def _no_nodes():
+            return []
+
+        node_call = pg.get_nodes_simple() if include_nodes else _no_nodes()
         admins, groups, hosts, nodes, stats = await asyncio.gather(
             pg.get_admins_simple(),
             pg.get_groups_simple(),
             pg.get_hosts(),
-            pg.get_nodes_simple(),
+            node_call,
             pg.get_system_stats(),
             return_exceptions=True,
         )
         # Token already proved reachability. 403 on admins/hosts/nodes is a
         # limited role, not a dropped connection.
         summary["ok"] = True
-        if isinstance(nodes, Exception):
+        if not include_nodes:
+            nodes_status = {**_empty_nodes(), "ok": True, "overall": "neutral"}
+            nodes = []
+        elif isinstance(nodes, Exception):
             if is_pg_permission_denied(nodes):
                 nodes_status["ok"] = True
                 nodes_status["overall"] = "neutral"
@@ -442,10 +450,13 @@ def empty_home_overview() -> dict[str, Any]:
     }
 
 
-async def build_home_overview(session: AsyncSession) -> dict[str, Any]:
+async def build_home_overview(
+    session: AsyncSession, *, include_nodes: bool = True
+) -> dict[str, Any]:
     """Build admin home payloads; never raise — partial failures return defaults.
 
     Host CPU/RAM live on bot/PG overviews now — skipped here for a faster /home.
+    ``include_nodes`` is False when the live PG role has no nodes permission.
     """
     import logging
 
@@ -456,7 +467,7 @@ async def build_home_overview(session: AsyncSession) -> dict[str, Any]:
     # Platform admin overview only — pass main token explicitly (no silent fallback).
     bot_task = check_bot_connection(current_setup_values().get("BOT_TOKEN"))
     bot_sum_task = bot_panel_summary(session)
-    pg_task = pg_home_bundle()
+    pg_task = pg_home_bundle(include_nodes=include_nodes)
 
     bot, bot_sum, pg_pair = await asyncio.gather(
         bot_task, bot_sum_task, pg_task, return_exceptions=True

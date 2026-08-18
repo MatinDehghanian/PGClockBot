@@ -635,8 +635,7 @@ async def resolve_principal_web_session(
     out.pop("pg_password_enc", None)
 
     # Refresh PG capability matrices from this Principal's PG admin (not Owner).
-    from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
-    from app.services.pg_staff_access import resolve_pg_role_id_for_admin
+    from app.services.pg_access import enrich_staff_pg_from_role, resolve_acl_from_client
     from app.services.principal_pg_authz import apply_level1_pg_local_safety
 
     pg_uname = out.get("pg_admin_username")
@@ -668,19 +667,12 @@ async def resolve_principal_web_session(
         )
     except Exception:
         pg_client = None
-    live = await resolve_pg_role_id_for_admin(pg_uname, client=pg_client) if pg_client else None
-    try:
-        role_id = int(live) if live else None
-    except (TypeError, ValueError):
-        role_id = None
     role = None
-    if role_id:
-        out["pg_role_id"] = int(role_id)
-        features, role = await resolve_reseller_pg_features(
-            int(role_id), client=pg_client
+    if pg_client is not None:
+        features, role, _admin = await resolve_acl_from_client(
+            pg_client, username=pg_uname
         )
         if not features and role is None:
-            # PG unavailable / role missing → deny capabilities (fail closed)
             out["pg_permissions"] = []
             out["pg_actions"] = {}
             out["pg_user_actions"] = {}
@@ -689,6 +681,11 @@ async def resolve_principal_web_session(
         else:
             out = enrich_staff_pg_from_role(out, features, role)
             out["pg_capabilities_ok"] = True
+            if isinstance(role, dict) and role.get("id") is not None:
+                try:
+                    out["pg_role_id"] = int(role["id"])
+                except (TypeError, ValueError):
+                    pass
     else:
         out["pg_permissions"] = []
         out["pg_actions"] = {}

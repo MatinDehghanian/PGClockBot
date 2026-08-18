@@ -124,29 +124,49 @@ class ResolvePlatformCapsTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("pg_nodes", caps["features"])
         self.assertNotIn("pg_admins", caps["features"])
 
-    async def test_sudo_admin_gets_owner_features(self):
+    async def test_sudo_admin_without_role_gets_owner_features(self):
         from app.services.pg_access import clear_platform_pg_capability_cache, resolve_platform_pg_capabilities
 
         clear_platform_pg_capability_cache()
-        admin = {"username": "root", "is_sudo": True, "role_id": 1}
+        admin = {"username": "root", "is_sudo": True}
         with patch("app.services.pasarguard.get_pg") as gp:
             client = AsyncMock()
             client.ensure_token = AsyncMock(return_value="tok")
+            client.get_current_admin = AsyncMock(return_value=admin)
             client.get_admin = AsyncMock(return_value=admin)
             gp.return_value = client
-            with patch(
-                "app.services.pg_access.resolve_reseller_pg_features",
-                new=AsyncMock(return_value=([], {"id": 1})),
-            ):
-                with patch("app.config.get_settings") as gs:
-                    gs.return_value.pg_username = "root"
-                    gs.return_value.pg_password = "x"
-                    gs.return_value.pg_base_url = "https://pg.example"
-                    caps = await resolve_platform_pg_capabilities(use_cache=False)
+            with patch("app.config.get_settings") as gs:
+                gs.return_value.pg_username = "root"
+                gs.return_value.pg_password = "x"
+                gs.return_value.pg_base_url = "https://pg.example"
+                caps = await resolve_platform_pg_capabilities(use_cache=False)
         self.assertTrue(caps["ok"])
         self.assertTrue(caps["pg_is_owner"])
         self.assertIn("pg_admins", caps["features"])
         self.assertIn("pg_nodes", caps["features"])
+
+    async def test_sudo_flag_does_not_override_non_owner_role(self):
+        from app.services.pg_access import clear_platform_pg_capability_cache, resolve_platform_pg_capabilities
+
+        clear_platform_pg_capability_cache()
+        role = _limited_role()
+        role["id"] = 2
+        admin = {"username": "op", "is_sudo": True, "role": role}
+        with patch("app.services.pasarguard.get_pg") as gp:
+            client = AsyncMock()
+            client.ensure_token = AsyncMock(return_value="tok")
+            client.get_current_admin = AsyncMock(return_value=admin)
+            gp.return_value = client
+            with patch("app.config.get_settings") as gs:
+                gs.return_value.pg_username = "op"
+                gs.return_value.pg_password = "x"
+                gs.return_value.pg_base_url = "https://pg.example"
+                caps = await resolve_platform_pg_capabilities(use_cache=False)
+        self.assertTrue(caps["ok"])
+        self.assertFalse(caps["pg_is_owner"])
+        self.assertNotIn("pg_nodes", caps["features"])
+        self.assertNotIn("pg_admins", caps["features"])
+        self.assertIn("pg_users", caps["features"])
 
 
 if __name__ == "__main__":

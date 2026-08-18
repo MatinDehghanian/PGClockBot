@@ -533,8 +533,7 @@ async def _staff_for_reseller_l1(
 ) -> dict[str, Any]:
     from app.services.authz import resolve_shop_permissions_from_profile
     from app.services.org_principals import attach_org_principal_fields
-    from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
-    from app.services.pg_staff_access import resolve_pg_role_id_for_admin
+    from app.services.pg_access import enrich_staff_pg_from_role, resolve_acl_from_client
 
     visible = await visible_principal_ids(session, principal)
     perms = resolve_shop_permissions_from_profile(profile) or []
@@ -546,7 +545,6 @@ async def _staff_for_reseller_l1(
     }
     if profile.pg_admin_username:
         staff["pg_admin_username"] = profile.pg_admin_username
-    role_id = int(profile.pg_role_id) if profile.pg_role_id else None
     pg_client = None
     if profile.pg_admin_username:
         try:
@@ -555,19 +553,18 @@ async def _staff_for_reseller_l1(
             pg_client = await get_pg_for_reseller(session, int(profile.user_id))
         except Exception:
             pg_client = None
-        if pg_client is not None:
-            live = await resolve_pg_role_id_for_admin(
-                profile.pg_admin_username, client=pg_client
-            )
-            if live:
-                role_id = int(live)
-    if role_id:
-        staff["pg_role_id"] = int(role_id)
-        if pg_client is not None:
-            features, role = await resolve_reseller_pg_features(
-                int(role_id), client=pg_client
-            )
-            staff = enrich_staff_pg_from_role(staff, features, role)
+    if pg_client is not None:
+        features, role, _admin = await resolve_acl_from_client(
+            pg_client, username=profile.pg_admin_username
+        )
+        staff = enrich_staff_pg_from_role(staff, features, role)
+        if isinstance(role, dict) and role.get("id") is not None:
+            try:
+                staff["pg_role_id"] = int(role["id"])
+            except (TypeError, ValueError):
+                pass
+    elif profile.pg_role_id:
+        staff["pg_role_id"] = int(profile.pg_role_id)
     staff["pg_credentials_ready"] = bool(
         profile.pg_admin_password_enc or principal.pg_password_enc
     )
@@ -584,8 +581,7 @@ async def _staff_for_principal_l2(
 ) -> dict[str, Any] | None:
     """Web-shaped staff for a resolved L2 Bot operator (same AuthzContext as Web L2)."""
     from app.services.org_principals import attach_org_principal_fields
-    from app.services.pg_access import enrich_staff_pg_from_role, resolve_reseller_pg_features
-    from app.services.pg_staff_access import resolve_pg_role_id_for_admin
+    from app.services.pg_access import enrich_staff_pg_from_role, resolve_acl_from_client
     from app.services.principal_pg_authz import apply_level1_pg_local_safety
     from app.services.principal_web_identity import ROLE_PRINCIPAL
 
@@ -625,7 +621,6 @@ async def _staff_for_principal_l2(
         staff["pg_credentials_ready"] = False
         staff["pg_capabilities_ok"] = False
     else:
-        live = None
         pg_client = None
         try:
             from app.services.pasarguard import get_pg_for_principal
@@ -637,20 +632,8 @@ async def _staff_for_principal_l2(
             pg_client = None
         if pg_client is not None:
             try:
-                live = await resolve_pg_role_id_for_admin(
-                    str(pg_uname), client=pg_client
-                )
-            except Exception:
-                live = None
-        try:
-            role_id = int(live) if live else None
-        except (TypeError, ValueError):
-            role_id = None
-        if role_id and pg_client is not None:
-            staff["pg_role_id"] = int(role_id)
-            try:
-                features, role = await resolve_reseller_pg_features(
-                    int(role_id), client=pg_client
+                features, role, _admin = await resolve_acl_from_client(
+                    pg_client, username=str(pg_uname)
                 )
             except Exception:
                 features, role = [], None
@@ -663,6 +646,11 @@ async def _staff_for_principal_l2(
             else:
                 staff = enrich_staff_pg_from_role(staff, features, role)
                 staff["pg_capabilities_ok"] = True
+                if isinstance(role, dict) and role.get("id") is not None:
+                    try:
+                        staff["pg_role_id"] = int(role["id"])
+                    except (TypeError, ValueError):
+                        pass
         else:
             staff["pg_permissions"] = []
             staff["pg_actions"] = {}
