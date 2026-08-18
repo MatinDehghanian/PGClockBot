@@ -12,7 +12,7 @@
 </div>
 {%- endmacro %}
 
-{% macro pg_snapshot_limit_board(cards, heading='سقف حساب پاسارگارد', caption='محدودیت زنده همین نقش') -%}
+{% macro pg_snapshot_limit_board(cards, heading='سقف حساب پاسارگارد', caption='محدودیت زنده همین نقش', box_captions=true) -%}
 {% if cards %}
 <section class="card pg-limit-board" aria-label="{{ heading }}">
   <header class="home-periods-head">
@@ -21,7 +21,7 @@
   </header>
   <div class="home-panel-grid">
     {% for c in cards %}
-    {{ pg_limit_stat(c.label, c.value, c.caption or '') }}
+    {{ pg_limit_stat(c.label, c.value, (c.caption or '') if box_captions else '') }}
     {% endfor %}
   </div>
 </section>

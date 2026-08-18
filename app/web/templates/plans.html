@@ -16,7 +16,7 @@
 {# flash_ok / flash_err rendered once in base.html #}
 {% if pg_error %}<div class="flash warn">پاسارگارد: {{ pg_error }} — پلن‌ها را می‌توانید ذخیره کنید ولی تحویل نیاز به اتصال دارد.</div>{% endif %}
 {% from "_pg_limit_cards.html" import pg_snapshot_limit_board %}
-{{ pg_snapshot_limit_board(pg_limit_cards, heading='سقف حساب پاسارگارد', caption='پلن‌ها نباید از محدودیت زنده این نقش بیشتر باشند') }}
+{{ pg_snapshot_limit_board(pg_limit_cards, heading='سقف حساب پاسارگارد', caption='', box_captions=false) }}
 
 {% set trial_on = values.get('trial_enabled') in ['1','true','yes','on'] %}
 {% set custom_on = values.get('custom_plan_enabled') in ['1','true','yes','on'] %}
