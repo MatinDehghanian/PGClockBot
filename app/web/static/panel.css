@@ -2014,6 +2014,26 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   border-color: rgba(255, 255, 255, 0.08);
 }
 
+/* Status column: chips sit in a row when there is room, wrap with a real gap. */
+.status-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  max-width: 100%;
+}
+.status-tags .badge {
+  margin: 0;
+  flex: 0 1 auto;
+}
+@media (min-width: 1101px) {
+  .status-tags {
+    flex-wrap: nowrap;
+    width: max-content;
+  }
+}
+
 .flash {
   display: flex;
   align-items: center;
