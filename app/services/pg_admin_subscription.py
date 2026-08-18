@@ -234,6 +234,76 @@ async def _apply_pg_capacity(
     await pg.modify_admin(uname, payload)
 
 
+async def _assert_owner_capacity_budget(
+    session: AsyncSession,
+    *,
+    target_pg_username: str,
+    next_total_gb: int,
+    next_total_users: int,
+) -> None:
+    """Do not oversell child-admin capacity beyond the installer's live PG budget."""
+    from app.config import get_settings
+    from app.services.pg_quota import _as_int, merge_role_limits
+
+    owner_username = normalize_pg_username(getattr(get_settings(), "pg_username", None))
+    if not owner_username or normalize_pg_username(target_pg_username) == owner_username:
+        return
+
+    from app.services.pasarguard import get_pg
+
+    pg = get_pg()
+    admin = await pg.get_admin(owner_username)
+    if not isinstance(admin, dict) or not admin:
+        return
+    role = admin.get("role") if isinstance(admin.get("role"), dict) else None
+    limits = merge_role_limits(admin, role)
+    owner_gb_limit_bytes = max(
+        0, _as_int(limits.get("data_limit")) or _as_int(admin.get("data_limit")) or 0
+    )
+    owner_gb_limit = int(owner_gb_limit_bytes / GB) if owner_gb_limit_bytes > 0 else 0
+    owner_user_limit = max(
+        0, _as_int(limits.get("max_users")) or _as_int(admin.get("max_users")) or 0
+    )
+
+    rows = list(
+        (
+            await session.execute(
+                select(PgAdminSubscription).where(
+                    PgAdminSubscription.access_status == STATUS_ACTIVE
+                )
+            )
+        ).scalars().all()
+    )
+    sold_gb = 0
+    sold_users = 0
+    target = normalize_pg_username(target_pg_username)
+    for row in rows:
+        uname = normalize_pg_username(getattr(row, "pg_username", None))
+        if not uname or uname == owner_username:
+            continue
+        total_gb = int(getattr(row, "base_gb", 0) or 0) + int(
+            getattr(row, "extra_gb_purchased", 0) or 0
+        )
+        total_users = int(getattr(row, "base_users", 0) or 0) + int(
+            getattr(row, "extra_users_purchased", 0) or 0
+        )
+        if uname == target:
+            sold_gb += max(0, int(next_total_gb))
+            sold_users += max(0, int(next_total_users))
+        else:
+            sold_gb += max(0, total_gb)
+            sold_users += max(0, total_users)
+
+    if owner_gb_limit > 0 and sold_gb > owner_gb_limit:
+        raise ValueError(
+            f"ظرفیت فروخته‌شده نمایندگی از سقف حجم ادمین اصلی بیشتر می‌شود ({sold_gb} از {owner_gb_limit} گیگ)"
+        )
+    if owner_user_limit > 0 and sold_users > owner_user_limit:
+        raise ValueError(
+            f"ظرفیت فروخته‌شده نمایندگی از سقف کاربر ادمین اصلی بیشتر می‌شود ({sold_users} از {owner_user_limit})"
+        )
+
+
 async def sync_pg_capacity_from_sub(session: AsyncSession, sub: PgAdminSubscription) -> None:
     from app.services.pasarguard import get_pg
 
@@ -295,6 +365,12 @@ async def start_or_refresh_subscription(
     sub.expiry_disabled_user_ids = None
     sub.warn_sent_at = None
     await session.flush()
+    await _assert_owner_capacity_budget(
+        session,
+        target_pg_username=sub.pg_username,
+        next_total_gb=int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0),
+        next_total_users=int(sub.base_users or 0) + int(sub.extra_users_purchased or 0),
+    )
     if apply_pg_limits and (sub.base_gb or sub.base_users or sub.extra_gb_purchased or sub.extra_users_purchased):
         await sync_pg_capacity_from_sub(session, sub)
     return sub
@@ -512,6 +588,8 @@ async def renew_subscription(
             )
         await session.commit()
         logger.exception("renew failed admin=%s", sub.pg_username)
+        if isinstance(e, ValueError) and str(e).strip():
+            raise ValueError(str(e)) from e
         raise ValueError("تمدید ناموفق بود — در صورت کسر، مبلغ بازگردانده شد") from e
 
     await session.commit()
@@ -574,6 +652,12 @@ async def apply_addon_plan(
     sub.extra_gb_purchased = int(sub.extra_gb_purchased or 0) + add_gb
     sub.extra_users_purchased = int(sub.extra_users_purchased or 0) + add_users
     try:
+        await _assert_owner_capacity_budget(
+            session,
+            target_pg_username=sub.pg_username,
+            next_total_gb=int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0),
+            next_total_users=int(sub.base_users or 0) + int(sub.extra_users_purchased or 0),
+        )
         await sync_pg_capacity_from_sub(session, sub)
     except Exception as e:
         if charge_wallet and payer is not None and price > 0:
@@ -587,6 +671,8 @@ async def apply_addon_plan(
                 commit=False,
             )
         await session.commit()
+        if isinstance(e, ValueError) and str(e).strip():
+            raise ValueError(str(e)) from e
         raise ValueError("اعمال بسته در پاسارگارد ناموفق بود — مبلغ بازگردانده شد") from e
 
     await session.commit()
@@ -617,6 +703,12 @@ async def record_unit_extra(
     if users:
         sub.extra_users_purchased = int(sub.extra_users_purchased or 0) + max(0, int(users))
     await session.flush()
+    await _assert_owner_capacity_budget(
+        session,
+        target_pg_username=sub.pg_username,
+        next_total_gb=int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0),
+        next_total_users=int(sub.base_users or 0) + int(sub.extra_users_purchased or 0),
+    )
     return sub
 
 

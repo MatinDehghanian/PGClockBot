@@ -89,12 +89,15 @@ async def resolve_platform_pg_capabilities(
     from app.services.pasarguard import PasarGuardClient, PasarGuardError
 
     settings = get_settings()
-    uname = (username if username is not None else settings.pg_username or "").strip()
-    pwd = (
-        password if password is not None else (settings.pg_password or "")
-    ).replace("\r", "").strip()
+    env_username = getattr(settings, "pg_username", None)
+    env_password = getattr(settings, "pg_password", None)
+    env_base_url = getattr(settings, "pg_base_url", None)
+    uname = (username if username is not None else env_username or "").strip()
+    pwd = (password if password is not None else (env_password or "")).replace(
+        "\r", ""
+    ).strip()
     # base_url override only for setup probe (temporary client)
-    cache_key = f"{(base_url or settings.pg_base_url or '').rstrip('/')}|{uname.lower()}"
+    cache_key = f"{(base_url or env_base_url or '').rstrip('/')}|{uname.lower()}"
     now = time.monotonic()
     if use_cache and username is None and password is None and base_url is None:
         hit = _PLATFORM_CAPS_CACHE.get(cache_key)

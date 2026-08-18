@@ -256,6 +256,129 @@ async def _load_admin_and_role(staff: dict) -> tuple[dict, dict | None]:
     return admin, role
 
 
+async def load_staff_limit_snapshot(staff: dict) -> dict[str, Any]:
+    """Return the actor's effective live PasarGuard limits for UI/policy use."""
+    if not staff_needs_quota_check(staff):
+        return {
+            "restricted": False,
+            "admin": None,
+            "role": None,
+            "limits": {},
+            "max_users": None,
+            "current_users": None,
+            "remaining_users": None,
+            "account_data_limit": None,
+            "account_used_traffic": None,
+            "account_remaining_traffic": None,
+            "per_user_data_min": None,
+            "per_user_data_max": None,
+            "per_user_expire_min": None,
+            "per_user_expire_max": None,
+            "hwid_min": None,
+            "hwid_max": None,
+        }
+
+    admin, role = await _load_admin_and_role(staff)
+    limits = merge_role_limits(admin, role)
+    max_users = _as_int(limits.get("max_users")) or _as_int(admin.get("max_users"))
+    current_users = (
+        _as_int(admin.get("total_users"))
+        or _as_int(admin.get("users_count"))
+        or 0
+    )
+    account_data_limit = _as_int(admin.get("data_limit")) or _as_int(
+        limits.get("data_limit")
+    )
+    used_traffic = _as_int(admin.get("used_traffic")) or _as_int(
+        admin.get("traffic_used")
+    ) or 0
+    remaining_users = (
+        max(0, int(max_users) - int(current_users))
+        if max_users is not None and max_users > 0
+        else None
+    )
+    remaining_traffic = (
+        max(0, int(account_data_limit) - int(used_traffic))
+        if account_data_limit is not None and account_data_limit > 0
+        else None
+    )
+    hmin, hmax = hwid_bounds(limits)
+    return {
+        "restricted": True,
+        "admin": admin,
+        "role": role,
+        "limits": limits,
+        "max_users": max_users,
+        "current_users": current_users,
+        "remaining_users": remaining_users,
+        "account_data_limit": account_data_limit,
+        "account_used_traffic": used_traffic,
+        "account_remaining_traffic": remaining_traffic,
+        "per_user_data_min": _as_int(limits.get("data_limit_min")),
+        "per_user_data_max": _as_int(limits.get("data_limit_max")),
+        "per_user_expire_min": _as_int(limits.get("expire_min")),
+        "per_user_expire_max": _as_int(limits.get("expire_max")),
+        "hwid_min": hmin,
+        "hwid_max": hmax,
+    }
+
+
+async def assert_user_plan_within_limits(
+    staff: dict,
+    *,
+    data_limit: int | None,
+    duration_days: int | None,
+    label: str = "پلن",
+) -> None:
+    """Reject plan definitions that exceed the live PG per-user limits."""
+    if not staff_needs_quota_check(staff):
+        return
+    admin, role = await _load_admin_and_role(staff)
+    assert_admin_can_write(admin, role)
+    limits = merge_role_limits(admin, role)
+    expire_ts = None
+    days = int(duration_days or 0)
+    if days > 0:
+        expire_ts = int(datetime.now(timezone.utc).timestamp()) + days * 86400
+    try:
+        _check_data_limit_bounds(limits, data_limit, require_finite=True)
+        _check_expire_bounds(limits, expire_ts, require_finite=True)
+    except PgQuotaError as exc:
+        raise PgQuotaError(f"{label}: {exc.message}") from exc
+
+
+async def assert_custom_plan_range_within_limits(
+    staff: dict,
+    *,
+    min_gb: float,
+    max_gb: float,
+    min_days: int,
+    max_days: int,
+    label: str = "پلن دلخواه",
+) -> None:
+    """Validate custom-plan range settings against the live PG per-user limits."""
+    if max_gb < min_gb:
+        raise PgQuotaError(f"{label}: حداکثر حجم نمی‌تواند کمتر از حداقل حجم باشد")
+    if max_days < min_days:
+        raise PgQuotaError(f"{label}: حداکثر مدت نمی‌تواند کمتر از حداقل مدت باشد")
+
+    def _bytes(gb: float) -> int:
+        return int(float(gb) * (1024**3))
+
+    await assert_user_plan_within_limits(
+        staff,
+        data_limit=_bytes(min_gb),
+        duration_days=int(min_days),
+        label=f"{label} (حداقل)",
+    )
+    await assert_user_plan_within_limits(
+        staff,
+        data_limit=_bytes(max_gb),
+        duration_days=int(max_days),
+        label=f"{label} (حداکثر)",
+    )
+
+
 def staff_needs_quota_check(staff: dict) -> bool:
     """Full platform Owner (true PasarGuard sudo) acts as sudo — no PG capacity gate.
 

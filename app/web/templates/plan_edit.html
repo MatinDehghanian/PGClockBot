@@ -10,6 +10,13 @@
 </div>
 
 {% if pg_error %}<div class="flash warn">پاسارگارد: {{ pg_error }}</div>{% endif %}
+{% if pg_limit_snapshot and pg_limit_snapshot.restricted %}
+<div class="flash warn">
+  سقف این حساب:
+  {% if pg_limit_snapshot.per_user_data_max %} هر کاربر حداکثر <b>{{ pg_limit_snapshot.per_user_data_max | bytes }}</b>{% endif %}
+  {% if pg_limit_snapshot.per_user_expire_max %} · حداکثر زمان <b>{{ (pg_limit_snapshot.per_user_expire_max // 86400) or 1 }}</b> روز{% endif %}
+</div>
+{% endif %}
 
 <div class="card">
   <form method="post" action="/plans/{{ plan.id }}/edit" class="form-stack">
@@ -22,11 +29,12 @@
       </label>
       <label class="form-field">مدت (روز)
         <input name="duration_days" type="number" min="1" required value="{{ plan.duration_days }}" />
+        {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_expire_max %}<small class="muted">سقف زنده: {{ (pg_limit_snapshot.per_user_expire_max // 86400) or 1 }} روز</small>{% endif %}
       </label>
       <label class="form-field">حجم (گیگ)
         
         <input name="data_limit_gb" type="number" step="0.1" min="0" value="{{ plan.data_limit_gb if plan.data_limit_gb is not none else '' }}" placeholder="نامحدود" />
-        <small class="muted">خالی = نامحدود</small>
+        <small class="muted">خالی = نامحدود{% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_data_max %} — سقف زنده: {{ pg_limit_snapshot.per_user_data_max | bytes }}{% endif %}</small>
       </label>
     </div>
 

@@ -11,6 +11,14 @@
   <a class="btn btn-ghost" href="/plans#reseller-plans">بازگشت</a>
 </div>
 
+{% if pg_limit_snapshot and pg_limit_snapshot.restricted %}
+<div class="flash warn">
+  سقف زنده ادمین اصلی:
+  {% if pg_limit_snapshot.max_users %}<b>{{ pg_limit_snapshot.max_users }}</b> کاربر{% endif %}
+  {% if pg_limit_snapshot.account_data_limit %} · <b>{{ pg_limit_snapshot.account_data_limit | bytes }}</b> حجم کل{% endif %}
+</div>
+{% endif %}
+
 {# flash_ok / flash_err rendered once in base.html #}
 
 <div class="card">
@@ -73,15 +81,17 @@
     <div class="form-row" id="edit-duration-field">
       <label class="form-field">مدت اشتراک (روز)
         <input name="duration_days" type="number" min="0" value="{{ plan.duration_days or 0 }}" />
-        <small class="muted">۰ = بدون محدودیت زمان</small>
+        <small class="muted">۰ = بدون محدودیت زمان روی اشتراک محلی</small>
       </label>
     </div>
     <div class="form-row" id="edit-included-fields">
       <label class="form-field">حجم پایه (گیگ)
         <input name="included_gb" type="number" min="0" value="{{ plan.included_gb or 0 }}" />
+        {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.account_data_limit %}<small class="muted">سقف هر پلن: {{ pg_limit_snapshot.account_data_limit | bytes }}</small>{% endif %}
       </label>
       <label class="form-field">کاربر پایه
         <input name="included_users" type="number" min="0" value="{{ plan.included_users or 0 }}" />
+        {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.max_users %}<small class="muted">سقف هر پلن: {{ pg_limit_snapshot.max_users }} کاربر</small>{% endif %}
       </label>
     </div>
     <div class="form-row" id="edit-addon-fields" {% if not is_addon %}hidden{% endif %}>

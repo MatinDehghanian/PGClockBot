@@ -2059,7 +2059,15 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.plans_catalog import catalog_owner_id, list_catalog_plans, load_pg_plan_options, staff_can_create_pg_template
+        from app.services.plans_catalog import (
+            catalog_owner_id,
+            custom_range_limit_issue,
+            list_catalog_plans,
+            load_pg_plan_options,
+            plan_limit_issue,
+            staff_can_create_pg_template,
+        )
+        from app.services.pg_quota import load_staff_limit_snapshot
         from app.services.shop_scope import is_platform_admin
 
         plans = await list_catalog_plans(session, staff, include_trial=True)
@@ -2072,6 +2080,23 @@ def create_api_app(lifespan=None) -> FastAPI:
             values = {}
         else:
             values = await get_all_settings(session, reseller_id=rid)
+        limit_snapshot = await load_staff_limit_snapshot(staff)
+        plan_limit_issues: dict[int, str] = {}
+        for p in sale_plans:
+            issue = await plan_limit_issue(staff, p)
+            if issue:
+                plan_limit_issues[int(p.id)] = issue
+        trial_limit_issue = await plan_limit_issue(staff, trial) if trial else None
+        try:
+            custom_limit_msg = custom_range_limit_issue(
+                min_gb=float(values.get("custom_plan_min_gb") or 1),
+                max_gb=float(values.get("custom_plan_max_gb") or 500),
+                min_days=int(float(values.get("custom_plan_min_days") or 1)),
+                max_days=int(float(values.get("custom_plan_max_days") or 365)),
+                snapshot=limit_snapshot,
+            )
+        except (TypeError, ValueError):
+            custom_limit_msg = "تنظیمات پلن دلخواه نامعتبر است"
         trial_group_ids = set()
         if trial and trial.pg_group_ids:
             trial_group_ids = {x.strip() for x in trial.pg_group_ids.split(",") if x.strip()}
@@ -2144,6 +2169,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "feature_perms": feature_perms,
                 "pg_roles": pg_roles,
                 "gift_codes": gift_codes,
+                "pg_limit_snapshot": limit_snapshot,
+                "plan_limit_issues": plan_limit_issues,
+                "trial_limit_issue": trial_limit_issue,
+                "custom_limit_issue": custom_limit_msg,
                 "open_gifts": request.query_params.get("gifts") in {"1", "true", "yes"},
                 "flash_err": request.query_params.get("err"),
                 "flash_ok": request.query_params.get("ok"),
@@ -2166,6 +2195,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         from urllib.parse import quote
 
+        from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
         from app.services.plans_catalog import (
             groups_allowed_for_staff,
             parse_group_ids_from_form,
@@ -2177,6 +2207,15 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         form = await request.form()
         gb = float(data_limit_gb) if str(data_limit_gb).strip() else None
+        try:
+            await assert_user_plan_within_limits(
+                staff,
+                data_limit=int(gb * (1024**3)) if gb is not None else None,
+                duration_days=duration_days,
+                label="پلن فروش",
+            )
+        except PgQuotaError as e:
+            return RedirectResponse(f"/plans?err={quote(e.message)}", status_code=303)
         tpl = None
         group_csv = None
         try:
@@ -2271,6 +2310,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         from urllib.parse import quote
 
+        from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
         from app.services.plans_catalog import (
             groups_allowed_for_staff,
             parse_group_ids_from_form,
@@ -2293,6 +2333,15 @@ def create_api_app(lifespan=None) -> FastAPI:
             days = 1
         gb_raw = str(form.get("data_limit_gb") or "").strip()
         gb = float(gb_raw) if gb_raw else None
+        try:
+            await assert_user_plan_within_limits(
+                staff,
+                data_limit=int(gb * (1024**3)) if gb is not None else None,
+                duration_days=days,
+                label="پلن تست",
+            )
+        except PgQuotaError as e:
+            return RedirectResponse(f"/plans?err={quote(e.message)}", status_code=303)
         mode = str(form.get("mode") or "custom")
         tpl = None
         group_csv = None
@@ -2376,6 +2425,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         from urllib.parse import quote
 
+        from app.services.pg_quota import PgQuotaError, assert_custom_plan_range_within_limits
         from app.services.plans_catalog import (
             groups_allowed_for_staff,
             parse_group_ids_from_form,
@@ -2390,6 +2440,19 @@ def create_api_app(lifespan=None) -> FastAPI:
         except ShopScopeError as e:
             return RedirectResponse(f"/plans?err={quote(e.message)}", status_code=303)
         enabled = str(form.get("custom_plan_enabled") or "") in {"1", "on", "true", "yes"}
+        try:
+            await assert_custom_plan_range_within_limits(
+                staff,
+                min_gb=float(str(form.get("custom_plan_min_gb") or "1") or "1"),
+                max_gb=float(str(form.get("custom_plan_max_gb") or "500") or "500"),
+                min_days=max(1, int(float(str(form.get("custom_plan_min_days") or "1") or "1"))),
+                max_days=max(1, int(float(str(form.get("custom_plan_max_days") or "365") or "365"))),
+            )
+        except (PgQuotaError, ValueError) as e:
+            return RedirectResponse(
+                f"/plans?err={quote(getattr(e, 'message', str(e)))}",
+                status_code=303,
+            )
         await set_setting(
             session, "custom_plan_enabled", "1" if enabled else "0", reseller_id=owner_id
         )
@@ -2499,6 +2562,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     async def _plans_context(session: AsyncSession, request: Request, staff: dict, extra: dict | None = None):
         from app.services.plans_catalog import list_catalog_plans, load_pg_plan_options
+        from app.services.pg_quota import load_staff_limit_snapshot
 
         plans = await list_catalog_plans(session, staff, include_trial=True)
         templates, groups, pg_error = await load_pg_plan_options(staff, session=session)
@@ -2508,6 +2572,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             "templates": templates,
             "groups": groups,
             "pg_error": pg_error,
+            "pg_limit_snapshot": await load_staff_limit_snapshot(staff),
             "flash_err": request.query_params.get("err"),
             "flash_ok": request.query_params.get("ok"),
         }
@@ -2551,6 +2616,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
         from app.services.plans_catalog import (
             get_owned_plan,
             groups_allowed_for_staff,
@@ -2564,6 +2630,18 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         form = await request.form()
         gb = float(data_limit_gb) if str(data_limit_gb).strip() else None
+        try:
+            await assert_user_plan_within_limits(
+                staff,
+                data_limit=int(gb * (1024**3)) if gb is not None else None,
+                duration_days=duration_days,
+                label="ویرایش پلن",
+            )
+        except PgQuotaError as e:
+            return RedirectResponse(
+                "/plans/%d/edit?err=%s" % (plan_id, quote(e.message)),
+                status_code=303,
+            )
         tpl = None
         group_csv = None
 

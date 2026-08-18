@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Plan
 from app.services.pasarguard import as_list, get_pg
+from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
 from app.services.shop_scope import ShopScopeError, is_platform_admin, shop_owner_id
 
 log = logging.getLogger(__name__)
@@ -257,6 +259,74 @@ async def list_catalog_plans(
     if not include_trial:
         plans = [p for p in plans if not p.is_trial]
     return plans
+
+
+async def plan_limit_issue(staff: dict | None, plan: Plan | None) -> str | None:
+    """Return a human message when a saved user-facing plan exceeds live PG limits."""
+    if not plan or not staff:
+        return None
+    try:
+        data_limit = (
+            int(float(plan.data_limit_gb) * (1024**3))
+            if plan.data_limit_gb is not None
+            else None
+        )
+    except (TypeError, ValueError):
+        return "حجم پلن نامعتبر است"
+    try:
+        await assert_user_plan_within_limits(
+            staff,
+            data_limit=data_limit,
+            duration_days=int(plan.duration_days or 0),
+            label="پلن",
+        )
+    except PgQuotaError as exc:
+        return exc.message
+    if plan.pg_template_id and not template_allowed_for_staff(staff, int(plan.pg_template_id)):
+        return "تمپلیت انتخاب‌شده دیگر در دسترس این حساب نیست"
+    if plan.pg_group_ids:
+        try:
+            gids = [
+                int(x.strip()) for x in str(plan.pg_group_ids).split(",") if x.strip()
+            ]
+        except (TypeError, ValueError):
+            return "گروه‌های پلن نامعتبر است"
+        if gids and not groups_allowed_for_staff(staff, gids):
+            return "یکی از گروه‌های این پلن دیگر در دسترس این حساب نیست"
+    return None
+
+
+def custom_range_limit_issue(
+    *,
+    min_gb: float,
+    max_gb: float,
+    min_days: int,
+    max_days: int,
+    snapshot: dict[str, Any] | None,
+) -> str | None:
+    """Pure UI hint from a preloaded quota snapshot for custom-plan settings."""
+    snap = snapshot or {}
+    if not snap.get("restricted"):
+        return None
+    data_max = snap.get("per_user_data_max")
+    if data_max is not None and data_max > 0:
+        try:
+            if int(float(max_gb) * (1024**3)) > int(data_max):
+                from app.services.formatting import format_bytes
+
+                return f"حداکثر حجم پلن دلخواه نمی‌تواند بیشتر از {format_bytes(data_max)} باشد"
+        except (TypeError, ValueError):
+            return "حداکثر حجم پلن دلخواه نامعتبر است"
+    expire_max = snap.get("per_user_expire_max")
+    if expire_max is not None and expire_max > 0:
+        now = datetime.now(timezone.utc).timestamp()
+        seconds = int(max_days or 0) * 86400
+        if seconds <= 0:
+            return "حداکثر مدت پلن دلخواه باید مشخص باشد"
+        if now + seconds - now > int(expire_max):
+            days = max(1, int(int(expire_max) / 86400))
+            return f"حداکثر مدت پلن دلخواه نمی‌تواند بیشتر از {days} روز باشد"
+    return None
 
 
 async def get_owned_plan(

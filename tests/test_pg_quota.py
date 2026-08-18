@@ -9,8 +9,11 @@ from unittest.mock import AsyncMock, patch
 from app.services.pg_quota import (
     PgQuotaError,
     assert_admin_can_write,
+    assert_custom_plan_range_within_limits,
     assert_can_create_user,
     assert_can_modify_user,
+    assert_user_plan_within_limits,
+    load_staff_limit_snapshot,
     merge_role_limits,
     staff_needs_quota_check,
 )
@@ -205,6 +208,64 @@ class ModifyQuotaTests(unittest.IsolatedAsyncioTestCase):
                     {"role": "reseller", "pg_admin_username": "r1", "pg_role_id": 1},
                     data_limit=50 * GB,
                     expire_ts=int(time.time()) + 86400,
+                )
+
+
+class PlanQuotaTests(unittest.IsolatedAsyncioTestCase):
+    async def test_load_staff_limit_snapshot(self):
+        admin = {
+            "username": "r1",
+            "status": "active",
+            "total_users": 3,
+            "used_traffic": 4 * GB,
+            "data_limit": 40 * GB,
+        }
+        role = {"limits": {"data_limit_max": 5 * GB, "expire_max": 30 * 86400}}
+        with patch("app.services.pasarguard.get_pg") as get_pg:
+            client = AsyncMock()
+            client.get_admin = AsyncMock(return_value=admin)
+            client.get_admin_role = AsyncMock(return_value=role)
+            get_pg.return_value = client
+            snap = await load_staff_limit_snapshot(
+                {"role": "reseller", "pg_admin_username": "r1", "pg_role_id": 9}
+            )
+        self.assertTrue(snap["restricted"])
+        self.assertEqual(snap["current_users"], 3)
+        self.assertEqual(snap["account_remaining_traffic"], 36 * GB)
+        self.assertEqual(snap["per_user_data_max"], 5 * GB)
+
+    async def test_user_plan_above_limit_denied_early(self):
+        admin = {"username": "r1", "status": "active", "data_limit": 40 * GB}
+        role = {"limits": {"data_limit_max": 5 * GB, "expire_max": 30 * 86400}}
+        with patch("app.services.pasarguard.get_pg") as get_pg:
+            client = AsyncMock()
+            client.get_admin = AsyncMock(return_value=admin)
+            client.get_admin_role = AsyncMock(return_value=role)
+            get_pg.return_value = client
+            with self.assertRaises(PgQuotaError) as ctx:
+                await assert_user_plan_within_limits(
+                    {"role": "reseller", "pg_admin_username": "r1", "pg_role_id": 9},
+                    data_limit=30 * GB,
+                    duration_days=365,
+                    label="پلن فروش",
+                )
+        self.assertIn("پلن فروش", ctx.exception.message)
+
+    async def test_custom_range_above_limit_denied(self):
+        admin = {"username": "r1", "status": "active", "data_limit": 40 * GB}
+        role = {"limits": {"data_limit_max": 5 * GB, "expire_max": 30 * 86400}}
+        with patch("app.services.pasarguard.get_pg") as get_pg:
+            client = AsyncMock()
+            client.get_admin = AsyncMock(return_value=admin)
+            client.get_admin_role = AsyncMock(return_value=role)
+            get_pg.return_value = client
+            with self.assertRaises(PgQuotaError):
+                await assert_custom_plan_range_within_limits(
+                    {"role": "reseller", "pg_admin_username": "r1", "pg_role_id": 9},
+                    min_gb=1,
+                    max_gb=30,
+                    min_days=1,
+                    max_days=365,
                 )
 
 

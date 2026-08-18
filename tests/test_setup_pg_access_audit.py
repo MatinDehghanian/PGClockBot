@@ -203,6 +203,16 @@ class WizardAndKeyboardSurfaceTests(unittest.TestCase):
         self.assertIn("_admin_hub_kb", admin)
         self.assertNotIn("kb.admin_reply_keyboard()", admin)
 
+    def test_plans_use_live_quota_validation(self) -> None:
+        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        self.assertIn("assert_user_plan_within_limits", src)
+        self.assertIn("assert_custom_plan_range_within_limits", src)
+        plans = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        self.assertIn("plan_limit_issues", plans)
+        self.assertIn("pg_limit_snapshot", plans)
+        reseller = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
+        self.assertIn("_validate_reseller_capacity_inputs", reseller)
+
 
 class ResolveProbeUsesOwnClientTests(unittest.IsolatedAsyncioTestCase):
     async def test_setup_probe_passes_temporary_client(self) -> None:

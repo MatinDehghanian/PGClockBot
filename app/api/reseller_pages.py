@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings, normalize_pg_base_url
 from app.db.models import BotUser, ResellerPlan, ResellerProfile, Role
 from app.services.pasarguard import get_pg
+from app.services.pg_quota import load_staff_limit_snapshot
 from app.services.resellers import (
     DEFAULT_FEATURE_PERMS,
     FEATURE_PERMS,
@@ -53,6 +54,34 @@ def _require_rep_mgmt(staff: dict) -> None:
         assert_staff_can_manage_representatives(staff)
     except RepresentativeUnifyError:
         raise HTTPException(status_code=403, detail="forbidden")
+
+
+async def _validate_reseller_capacity_inputs(
+    staff: dict,
+    *,
+    included_gb: int = 0,
+    included_users: int = 0,
+    addon_gb: int = 0,
+    addon_users: int = 0,
+) -> None:
+    """Single-package guard for limited independent installs before save."""
+    snapshot = await load_staff_limit_snapshot(staff)
+    if not snapshot.get("restricted"):
+        return
+    from app.services.formatting import format_bytes
+
+    total_gb = max(0, int(included_gb or 0)) + max(0, int(addon_gb or 0))
+    total_users = max(0, int(included_users or 0)) + max(0, int(addon_users or 0))
+    cap_gb = snapshot.get("account_data_limit")
+    cap_users = snapshot.get("max_users")
+    if cap_gb is not None and cap_gb > 0 and total_gb * (1024**3) > int(cap_gb):
+        raise ValueError(
+            f"ظرفیت این پلن از سقف حجم ادمین اصلی بیشتر است (حداکثر {format_bytes(cap_gb)})"
+        )
+    if cap_users is not None and cap_users > 0 and total_users > int(cap_users):
+        raise ValueError(
+            f"ظرفیت این پلن از سقف کاربر ادمین اصلی بیشتر است (حداکثر {int(cap_users)})"
+        )
 
 
 def _redirect_reseller_edit(user_id: int, *, ok: str | None = None, err: str | None = None):
@@ -928,6 +957,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         if _is_addon_plan_kind(plan_kind):
             try:
                 addon_gb, addon_users = _addon_fields_from_form(form, plan_kind)
+                await _validate_reseller_capacity_inputs(
+                    staff, addon_gb=addon_gb, addon_users=addon_users
+                )
             except ValueError as e:
                 return RedirectResponse(
                     f"/plans?err={_q(str(e))}#reseller-plans", status_code=303
@@ -999,6 +1031,17 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         if not pg_role_raw.isdigit():
             return RedirectResponse(
                 f"/plans?err={_q('نقش پاسارگارد الزامی است')}#reseller-plans",
+                status_code=303,
+            )
+        try:
+            await _validate_reseller_capacity_inputs(
+                staff,
+                included_gb=_parse_nonneg_int(form, "included_gb"),
+                included_users=_parse_nonneg_int(form, "included_users"),
+            )
+        except ValueError as e:
+            return RedirectResponse(
+                f"/plans?err={_q(str(e))}#reseller-plans",
                 status_code=303,
             )
         plan = ResellerPlan(
@@ -1081,6 +1124,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 "selected_perms": with_shop_settings(
                     parse_perms(plan.web_permissions) or parse_perms(DEFAULT_FEATURE_PERMS)
                 ),
+                "pg_limit_snapshot": await load_staff_limit_snapshot(staff),
                 "pg_roles": roles,
                 "groups": groups,
                 "plan_group_ids": plan_group_ids,
@@ -1121,6 +1165,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         if _is_addon_plan_kind(plan_kind):
             try:
                 addon_gb, addon_users = _addon_fields_from_form(form, plan_kind)
+                await _validate_reseller_capacity_inputs(
+                    staff, addon_gb=addon_gb, addon_users=addon_users
+                )
             except ValueError as e:
                 return RedirectResponse(
                     f"/resellers/plans/{plan_id}/edit?err={_q(str(e))}", status_code=303
@@ -1174,6 +1221,17 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         if not pg_group_ids:
             return RedirectResponse(
                 f"/resellers/plans/{plan_id}/edit?err={_q('حداقل یک گروه پاسارگارد الزامی است')}",
+                status_code=303,
+            )
+        try:
+            await _validate_reseller_capacity_inputs(
+                staff,
+                included_gb=_parse_nonneg_int(form, "included_gb"),
+                included_users=_parse_nonneg_int(form, "included_users"),
+            )
+        except ValueError as e:
+            return RedirectResponse(
+                f"/resellers/plans/{plan_id}/edit?err={_q(str(e))}",
                 status_code=303,
             )
         if billing_mode == "payg":
