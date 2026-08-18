@@ -490,11 +490,34 @@ class PasarGuardClient:
         data = await self.request("GET", "/api/admins/simple")
         return as_list(data, "admins")
 
+    async def get_current_admin(self) -> dict | None:
+        """The authenticated admin's own account (``GET /api/admin``).
+
+        PasarGuard's panel uses this for the signed-in user. It does **not**
+        require ``admins.read``, so a role that can only create users still
+        receives its own ``AdminDetails`` (nested ``role`` / limits).
+
+        Returns the admin dict, or ``None`` if the payload is empty. HTTP
+        errors propagate as ``PasarGuardError`` so callers can tell a missing
+        route (404) from a real outage.
+        """
+        data = await self.request("GET", "/api/admin")
+        if isinstance(data, dict):
+            if data.get("username") or data.get("id") is not None or data.get("role"):
+                return data
+            inner = data.get("admin")
+            if isinstance(inner, dict) and (
+                inner.get("username") or inner.get("id") is not None or inner.get("role")
+            ):
+                return inner
+        return None
+
     async def get_admin(self, username: str) -> dict | None:
         """Fetch one admin (with usage metrics) by username.
 
-        Prefer direct by-username endpoints first — limited roles often cannot
-        list ``/api/admins`` even when they can read their own account.
+        Prefer the current-admin endpoint when the requested name is *this*
+        token, then direct by-username paths. Limited roles often cannot list
+        ``/api/admins`` even when they can read their own account.
         """
         _gate, admin = await self.get_admin_gate(username)
         return admin
@@ -520,6 +543,25 @@ class PasarGuardClient:
 
         def _not_found(exc: Exception) -> bool:
             return isinstance(exc, PasarGuardError) and exc.status_code == 404
+
+        def _username_matches(payload: dict | None) -> bool:
+            if not isinstance(payload, dict):
+                return False
+            got = str(payload.get("username") or "").strip()
+            return bool(got) and got.lower() == username.lower()
+
+        # Own account first: no admins.read required. Never treat the token
+        # holder's record as a *different* admin being looked up.
+        try:
+            current = await self.get_current_admin()
+            if _username_matches(current):
+                return "ok", current
+        except Exception as exc:
+            # 403/404/405: endpoint hidden or forbidden on this role/version.
+            # Keep looking; do not flip a later confirmed-404 into unreachable.
+            status = getattr(exc, "status_code", None)
+            if not _not_found(exc) and status not in (403, 405):
+                saw_transport_error = True
 
         for path in (
             f"/api/admin/by-username/{enc}",

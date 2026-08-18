@@ -265,5 +265,104 @@ class ResolveProbeUsesOwnClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(captured["role_id"], 9)
 
 
+class LimitedAdminSelfLoginTests(unittest.IsolatedAsyncioTestCase):
+    def _own_client(self, **methods) -> AsyncMock:
+        fake_client = AsyncMock()
+        fake_client.ensure_token = AsyncMock(return_value="tok")
+        fake_client.close = AsyncMock()
+        fake_client.base_url = "https://pg.example"
+        fake_client._client = AsyncMock()
+        fake_client._client.aclose = AsyncMock()
+        for name, value in methods.items():
+            setattr(fake_client, name, value)
+        return fake_client
+
+    async def test_directory_miss_uses_current_admin_nested_role(self) -> None:
+        """Limited PG admin (users.create only): token OK, /api/admins 403.
+
+        Setup must succeed via GET /api/admin and stay Hybrid (not PG owner).
+        """
+        from app.services.pg_access import (
+            clear_platform_pg_capability_cache,
+            resolve_platform_pg_capabilities,
+            staff_from_platform_caps,
+            staff_has_pg_admins_create,
+        )
+
+        clear_platform_pg_capability_cache()
+        nested = {
+            "id": 9,
+            "name": "Seller",
+            "is_owner": False,
+            "permissions": {"users": {"create": True}},
+        }
+        fake_client = self._own_client(
+            get_current_admin=AsyncMock(
+                return_value={"username": "84104", "role": nested, "is_sudo": False}
+            ),
+            get_admin=AsyncMock(return_value=None),
+        )
+        with (
+            patch("app.services.pasarguard.PasarGuardClient", return_value=fake_client),
+            patch(
+                "app.services.pg_access.resolve_reseller_pg_features",
+                new=AsyncMock(return_value=([], None)),
+            ),
+            patch("app.config.get_settings") as gs,
+        ):
+            gs.return_value.pg_username = "env"
+            gs.return_value.pg_password = "envpw"
+            gs.return_value.pg_base_url = "https://stale.example"
+            caps = await resolve_platform_pg_capabilities(
+                username="84104",
+                password="secret",
+                base_url="https://pg.example",
+                use_cache=False,
+            )
+        self.assertTrue(caps["ok"])
+        self.assertIsNone(caps.get("error"))
+        self.assertEqual(caps["username"], "84104")
+        self.assertFalse(caps["pg_is_owner"])
+        self.assertIn("pg_users", caps["features"])
+        self.assertNotIn("pg_admins", caps["features"])
+        staff = staff_from_platform_caps(caps)
+        self.assertFalse(staff_has_pg_admins_create(staff))
+        fake_client.get_admin.assert_not_awaited()
+
+    async def test_token_ok_stubs_admin_when_self_and_directory_fail(self) -> None:
+        from app.services.pg_access import (
+            clear_platform_pg_capability_cache,
+            resolve_platform_pg_capabilities,
+        )
+
+        clear_platform_pg_capability_cache()
+        fake_client = self._own_client(
+            get_current_admin=AsyncMock(return_value=None),
+            get_admin=AsyncMock(return_value=None),
+        )
+        with (
+            patch("app.services.pasarguard.PasarGuardClient", return_value=fake_client),
+            patch(
+                "app.services.pg_access.resolve_reseller_pg_features",
+                new=AsyncMock(return_value=([], None)),
+            ),
+            patch("app.config.get_settings") as gs,
+        ):
+            gs.return_value.pg_username = "env"
+            gs.return_value.pg_password = "envpw"
+            gs.return_value.pg_base_url = "https://stale.example"
+            caps = await resolve_platform_pg_capabilities(
+                username="lim",
+                password="secret",
+                base_url="https://pg.example",
+                use_cache=False,
+            )
+        self.assertTrue(caps["ok"])
+        self.assertEqual(caps["username"], "lim")
+        self.assertEqual(caps["features"], [])
+        self.assertFalse(caps["pg_is_owner"])
+        self.assertEqual((caps.get("admin") or {}).get("username"), "lim")
+
+
 if __name__ == "__main__":
     unittest.main()

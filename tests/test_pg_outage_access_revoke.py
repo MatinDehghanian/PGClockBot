@@ -91,6 +91,55 @@ class AdminGateNetworkErrorTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await client.close()
 
+    async def test_current_admin_self_is_ok_when_directory_forbidden(self):
+        client = _make_client()
+        try:
+            async def _req(method, path, **kwargs):
+                if path == "/api/admin":
+                    return {"username": "84104", "id": 12, "is_active": True}
+                raise PasarGuardError("forbidden", 403)
+
+            with patch.object(client, "request", new=AsyncMock(side_effect=_req)):
+                gate, admin = await client.get_admin_gate("84104")
+            self.assertEqual(gate, "ok")
+            self.assertEqual((admin or {}).get("username"), "84104")
+        finally:
+            await client.close()
+
+    async def test_current_admin_self_is_not_another_username(self):
+        client = _make_client()
+        try:
+            async def _req(method, path, **kwargs):
+                if path == "/api/admin":
+                    return {"username": "owner", "id": 1, "is_active": True}
+                raise PasarGuardError("not found", 404)
+
+            with patch.object(
+                client, "request", new=AsyncMock(side_effect=_req)
+            ), patch.object(client, "get_admins", new=AsyncMock(return_value=[])):
+                gate, admin = await client.get_admin_gate("alice")
+            self.assertEqual(gate, "missing")
+            self.assertIsNone(admin)
+        finally:
+            await client.close()
+
+    async def test_current_admin_403_then_confirmed_404_is_missing(self):
+        client = _make_client()
+        try:
+            async def _req(method, path, **kwargs):
+                if path == "/api/admin":
+                    raise PasarGuardError("forbidden", 403)
+                raise PasarGuardError("not found", 404)
+
+            with patch.object(
+                client, "request", new=AsyncMock(side_effect=_req)
+            ), patch.object(client, "get_admins", new=AsyncMock(return_value=[])):
+                gate, admin = await client.get_admin_gate("some_admin")
+            self.assertEqual(gate, "missing")
+            self.assertIsNone(admin)
+        finally:
+            await client.close()
+
 
 class PgStaffOutageDoesNotRevokeTests(unittest.IsolatedAsyncioTestCase):
     async def test_gate_unreachable_never_classified_as_missing(self):

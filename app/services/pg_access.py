@@ -149,13 +149,25 @@ async def resolve_platform_pg_capabilities(
             client = get_pg()
 
         await client.ensure_token()
-        admin = await client.get_admin(uname)
+        # Token success already proves the account exists. Directory lookup
+        # (GET /api/admins, /api/admin/{id}) often 403s for roles that only
+        # have users.create — use GET /api/admin (self) first, then directory,
+        # then a username stub so setup never treats a valid login as
+        # "admin not found / wrong password".
+        admin: dict | None = None
+        try:
+            current = await client.get_current_admin()
+            if isinstance(current, dict) and current:
+                admin = current
+                got = str(current.get("username") or "").strip()
+                if got:
+                    uname = got
+        except Exception:
+            admin = None
         if not isinstance(admin, dict):
-            empty["error"] = "ادمین پاسارگارد یافت نشد"
-            empty["ok"] = False
-            if use_cache and not own_client:
-                _PLATFORM_CAPS_CACHE[cache_key] = (now, dict(empty))
-            return empty
+            admin = await client.get_admin(uname)
+        if not isinstance(admin, dict):
+            admin = {"username": uname}
 
         role_id = None
         nested_role = admin.get("role")
