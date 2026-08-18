@@ -6562,8 +6562,9 @@ html[data-theme="light"] .pg-node-tabs .tab-btn.active:active {
   gap: var(--space-2);
   padding: var(--space-2);
   border-radius: var(--radius-sm, 12px);
-  border: 1px solid color-mix(in srgb, #3d8fd1 22%, var(--border));
-  background: rgba(59, 130, 246, 0.12);
+  /* Same chrome as dashboard .home-period sales boxes */
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
   min-width: 0;
   width: 100%;
   box-sizing: border-box;
@@ -6730,7 +6731,7 @@ html[data-theme="light"] .pg-node-tabs .tab-btn.active:active {
   z-index: 1;
 }
 html[data-theme="light"] .pg-node-tile {
-  background: rgba(37, 99, 235, 0.10);
+  background: rgba(0, 0, 0, 0.02);
 }
 html[data-theme="light"] .pg-node-metric {
   background: color-mix(in srgb, var(--muted) 40%, #fff);

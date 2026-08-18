@@ -123,9 +123,14 @@ class PgOverviewSurfaceTests(unittest.TestCase):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".pg-node-tile", css)
         tile = css.split(".pg-node-tile {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("background: rgba(59, 130, 246, 0.12);", tile)
+        period = css.split(".home-period {\n", 1)[1].split("}", 1)[0]
+        self.assertIn("background: rgba(255, 255, 255, 0.03);", tile)
+        self.assertIn("border: 1px solid var(--border);", tile)
+        self.assertIn("background: rgba(255, 255, 255, 0.03);", period)
         light = css.split('html[data-theme="light"] .pg-node-tile {\n', 1)[1].split("}", 1)[0]
-        self.assertIn("background: rgba(37, 99, 235, 0.10);", light)
+        light_period = css.split('html[data-theme="light"] .home-period {\n', 1)[1].split("}", 1)[0]
+        self.assertIn("background: rgba(0, 0, 0, 0.02);", light)
+        self.assertIn("background: rgba(0, 0, 0, 0.02);", light_period)
         self.assertIn(".pg-live-rates", css)
         self.assertIn(".pg-metric-unit", css)
         self.assertIn(".pg-metric-val-rate", css)
