@@ -22,6 +22,7 @@ from app.services.formatting import (
 from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.pasarguard import get_pg
 from app.services.tickets import get_ticket, list_open_tickets, reply_ticket
+from app.services.updates import local_version
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 
