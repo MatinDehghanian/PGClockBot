@@ -163,10 +163,12 @@ def require_bot_owner_handler(fn: Callable[..., Awaitable[Any]]):
     ``role=admin`` / ``is_platform_admin`` are never sufficient. Shop bots deny.
     Injects ``session`` even when the original signature omitted it so reply-nav
     and the dispatcher share the same check.
+
+    Do not set ``__wrapped__``: aiogram 3.x ``inspect.unwrap`` would reach the
+    inner handler, drop ``session`` from DI, and false-deny the real Owner.
     """
     orig_sig = inspect.signature(fn)
 
-    @functools.wraps(fn)
     async def wrapper(*args: Any, **kwargs: Any):
         from aiogram.types import CallbackQuery, Message
 
@@ -221,6 +223,10 @@ def require_bot_owner_handler(fn: Callable[..., Awaitable[Any]]):
         return await fn(*args, **call_kwargs)
 
     wrapper.__signature__ = _owner_handler_signature(fn)
+    wrapper.__name__ = getattr(fn, "__name__", "wrapper")
+    wrapper.__doc__ = fn.__doc__
+    wrapper.__module__ = fn.__module__
+    wrapper.__qualname__ = getattr(fn, "__qualname__", wrapper.__name__)
     return wrapper
 
 

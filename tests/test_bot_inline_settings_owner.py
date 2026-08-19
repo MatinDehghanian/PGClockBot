@@ -16,6 +16,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from aiogram.dispatcher.event.handler import CallableObject
+
 from app.bot.auth import require_bot_owner_handler
 from app.bot.handlers.admin_settings import settings_hub
 
@@ -34,7 +36,32 @@ class InlineSettingsOwnerGateTests(unittest.IsolatedAsyncioTestCase):
         sig = inspect.signature(_hub)
         self.assertIn("session", sig.parameters)
         self.assertIn("callback", sig.parameters)
-        self.assertNotIn("session", inspect.signature(_hub.__wrapped__).parameters)
+        self.assertFalse(hasattr(_hub, "__wrapped__"))
+
+    def test_aiogram_callable_object_sees_session_for_settings_hub(self):
+        co = CallableObject(callback=settings_hub)
+        self.assertIn("session", co.params)
+
+    async def test_aiogram_call_path_passes_session_to_owner_gate(self):
+        cb = AsyncMock()
+        cb.data = "adm:settings"
+        cb.answer = AsyncMock()
+        state = AsyncMock()
+        db_user = SimpleNamespace(role="admin", telegram_id=42)
+        session = MagicMock(spec=AsyncSession)
+        co = CallableObject(callback=settings_hub)
+        data = {
+            "session": session,
+            "db_user": db_user,
+            "state": state,
+        }
+        prepared = co._prepare_kwargs(data)
+
+        with patch("app.bot.auth.require_bot_owner", AsyncMock(return_value=True)) as gate:
+            await settings_hub(cb, **prepared)
+
+        gate.assert_awaited()
+        self.assertIs(gate.await_args.args[0], session)
 
     async def test_owner_inline_settings_with_injected_session_reaches_hub(self):
         cb = AsyncMock()

@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.1.6": [
+        "ربات: دکمه اینلاین «⬅️ تنظیمات» دیگر مالک واقعی را با خطای دسترسی رد نمی‌کند (اصلاح نهایی aiogram 3)",
+        "بدون مایگریشن جدید نسبت به ۸.۱.۵؛ ریستور: تگ v8.1.5",
+    ],
     "8.1.5": [
         "ربات: دکمه «داشبورد» دیگر با خطای local_version از کار نمی‌افتد",
         "بدون مایگریشن جدید نسبت به ۸.۱.۴؛ ریستور: تگ v8.1.4",
