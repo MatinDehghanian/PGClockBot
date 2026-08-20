@@ -44,7 +44,7 @@ class HostGaugesUnitTests(unittest.TestCase):
 
 class OverviewSurfaceTests(unittest.TestCase):
     def test_home_has_no_gauges_or_metrics_poll(self):
-        home = (ROOT / "app/web/templates/home.html").read_text(encoding="utf-8")
+        home = (ROOT / "app/web/templates/_home_dash_body.html").read_text(encoding="utf-8")
         self.assertNotIn("home-gauge", home)
         self.assertNotIn("/home/metrics", home)
         self.assertIn("home-conn", home)
