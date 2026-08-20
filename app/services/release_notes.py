@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.1.14": [
+        "متغیرهای پیام: دکمه کپی نزدیک‌تر به باکس توکن؛ دکمه تنظیمات هر بخش با استایل پرایمری",
+        "بدون مایگریشن جدید نسبت به ۸.۱.۱۳؛ ریستور: تگ restore/pre-msg-vars-copy-gap-v8.1.13 و v8.1.13",
+    ],
     "8.1.13": [
         "متغیرهای پیام: بازطراحی هم‌سبک با جداول card-flush پنل؛ فشرده و بدون کپشن/مقالهٔ راهنما",
         "کپی استاندارد کنار باکس توکن؛ لینک تنظیمات هر بخش کنار عنوان همان گروه",

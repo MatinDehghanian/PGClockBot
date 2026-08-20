@@ -8550,7 +8550,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .msg-vars-token-cell {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 2px;
   max-width: 100%;
 }
 .msg-vars-token-box {
@@ -8577,8 +8577,9 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 }
 @media (max-width: 720px) {
   .msg-vars-token-cell {
-    width: 100%;
-    justify-content: space-between;
+    width: auto;
+    max-width: 100%;
+    flex-wrap: wrap;
   }
   .msg-vars-token-cell .btn {
     flex: 0 0 auto;
