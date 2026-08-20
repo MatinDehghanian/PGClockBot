@@ -31,7 +31,7 @@ from app.services.loyalty import (
     referral_link,
     referral_stats,
 )
-from app.services.safe_format import safe_format
+from app.services.message_variables import DOMAIN_REFERRAL, render_message_template
 from app.services.users import get_all_settings, get_setting, on, set_setting
 
 router = Router(name="loyalty")
@@ -132,7 +132,13 @@ async def build_referral_text(session: AsyncSession, db_user: BotUser, uname: st
         pass
     stats = await referral_stats(session, db_user.id)
     try:
-        body = safe_format(ui["referral_text"], code=db_user.referral_code, link=link)
+        body = render_message_template(
+            ui["referral_text"],
+            domain=DOMAIN_REFERRAL,
+            code=db_user.referral_code,
+            link=link,
+            shop_title=ui.get("shop_title") or "",
+        )
     except Exception:
         body = f"کد دعوت: <code>{db_user.referral_code}</code>\n{link}"
     extra = "\n".join(

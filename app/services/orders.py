@@ -130,14 +130,16 @@ def _random_username(
     prefix = (prefix or "clk").strip() or "clk"
     suffix = suffix or ""
     if pattern and pattern.strip():
-        from app.services.safe_format import safe_format
+        from app.services.message_variables import DOMAIN_NAMING, render_message_template
 
-        built = safe_format(
+        built = render_message_template(
             pattern,
+            domain=DOMAIN_NAMING,
             prefix=prefix,
             random=random_part,
             suffix=suffix,
             id=id_part,
+            html=False,
         ).strip()
         if built and "{" not in built:
             return built

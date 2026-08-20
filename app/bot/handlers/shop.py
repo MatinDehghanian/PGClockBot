@@ -34,7 +34,7 @@ from app.services.orders import (
     wholesale_tier_percent,
 )
 from app.services.users import get_all_settings, on
-from app.services.safe_format import safe_format
+from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 
 router = Router(name="shop")
 
@@ -1425,10 +1425,14 @@ async def pay_card_cb(
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
     try:
-        body = safe_format(ui["card_pay_text"], 
+        body = render_message_template(
+            ui["card_pay_text"],
+            domain=DOMAIN_PAYMENT,
             amount=amount,
             card=ui.get("card_number") or "—",
             holder=ui.get("card_holder") or "—",
+            shop_title=ui.get("shop_title") or "",
+            payment_id=payment.id,
         )
     except Exception:
         body = f"مبلغ {amount} را کارت به کارت کنید و رسید بفرستید."
@@ -1469,12 +1473,25 @@ async def pay_gateway_cb(
     link = (ui.get("gateway_link") or "").strip()
     if link:
         try:
-            link = safe_format(link, amount=order.amount, order_id=order.id, payment_id=payment.id)
+            link = render_message_template(
+                link,
+                domain=DOMAIN_PAYMENT,
+                amount=order.amount,
+                order_id=order.id,
+                payment_id=payment.id,
+                html=False,
+            )
         except Exception:
             pass
     try:
-        body = safe_format(ui.get("gateway_pay_text") or "", 
-            amount=amount, order_id=order.id, name=name
+        body = render_message_template(
+            ui.get("gateway_pay_text") or "",
+            domain=DOMAIN_PAYMENT,
+            amount=amount,
+            order_id=order.id,
+            gateway_name=name,
+            shop_title=ui.get("shop_title") or "",
+            payment_id=payment.id,
         )
     except Exception:
         body = f"مبلغ {amount} را از طریق {name} پرداخت کنید و رسید بفرستید."
@@ -1523,11 +1540,15 @@ async def pay_crypto_cb(
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
     try:
-        body = safe_format(ui.get("crypto_pay_text") or "", 
+        body = render_message_template(
+            ui.get("crypto_pay_text") or "",
+            domain=DOMAIN_PAYMENT,
             amount=amount,
             asset=ui.get("crypto_asset") or "USDT",
             network=ui.get("crypto_network") or "—",
             address=address,
+            shop_title=ui.get("shop_title") or "",
+            payment_id=payment.id,
         )
     except Exception:
         body = (

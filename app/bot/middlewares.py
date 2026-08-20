@@ -468,12 +468,14 @@ def force_join_block_message(
     listed = "\n".join(f"• {c}" for c in blocked)
     custom_text = (custom or "").strip()
     if custom_text:
-        if "{channels}" in custom_text:
-            try:
-                return custom_text.format(channels=listed or "—")
-            except Exception:
-                return custom_text.replace("{channels}", listed or "—")
-        return custom_text
+        from app.services.message_variables import DOMAIN_FORCE_JOIN, render_message_template
+
+        return render_message_template(
+            custom_text,
+            domain=DOMAIN_FORCE_JOIN,
+            channels=listed or "—",
+            html=True,
+        )
 
     only_unverified = bool(unverified) and not missing
     if only_unverified:

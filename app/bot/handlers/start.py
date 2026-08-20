@@ -14,7 +14,7 @@ from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
 from app.services.pasarguard import extract_sub_token, get_pg
 from app.services.users import get_all_settings, on
-from app.services.safe_format import safe_format
+from app.services.message_variables import DOMAIN_USER, render_message_template
 
 router = Router(name="start")
 
@@ -89,7 +89,14 @@ async def render_home(
         welcome = ui.get("welcome_text", "")
         title = ui.get("shop_title", "")
         try:
-            body = safe_format(welcome, name=db_user.full_name or "دوست عزیز")
+            body = render_message_template(
+                welcome,
+                domain=DOMAIN_USER,
+                user_name=db_user.full_name or "دوست عزیز",
+                user_id=getattr(db_user, "telegram_id", "") or "",
+                username=(f"@{db_user.username}" if getattr(db_user, "username", None) else ""),
+                shop_title=title or "",
+            )
         except Exception:
             body = welcome
         text = format_message(f"✨ {title}", body)

@@ -1021,6 +1021,15 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_admin=require_admin,
         get_db=get_db,
     )
+    from app.api.message_variables_pages import register_message_variables_pages
+
+    register_message_variables_pages(
+        app,
+        render=render,
+        require_perm=require_perm,
+        require_admin=require_admin,
+        get_db=get_db,
+    )
     from app.api.backup_pages import register_backup_pages
 
     register_backup_pages(app, render=render, require_admin=require_admin, get_db=get_db)

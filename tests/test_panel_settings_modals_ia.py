@@ -89,9 +89,12 @@ class DomainModalTemplateTests(unittest.TestCase):
         src = (TEMPLATES / "base.html").read_text(encoding="utf-8")
         bot = src.split("nav-section-bot", 1)[1].split("nav-section-pg", 1)[0]
         loyalty_i = bot.find("باشگاه مشتریان")
+        vars_i = bot.find("متغیرهای پیام")
         settings_i = bot.find(">تنظیمات</span>")
         self.assertGreater(loyalty_i, 0)
-        self.assertGreater(settings_i, loyalty_i)
+        self.assertGreater(vars_i, loyalty_i)
+        self.assertGreater(settings_i, vars_i)
+        self.assertIn("/message-variables", bot)
 
     def test_settings_html_no_supports_or_payment_branches(self):
         html = (TEMPLATES / "settings.html").read_text(encoding="utf-8")
