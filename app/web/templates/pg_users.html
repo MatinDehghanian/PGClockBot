@@ -110,6 +110,31 @@
     </tbody>
   </table>
   </div>
+  {% if pager and (pager.has_prev or pager.has_next) %}
+  <nav class="list-pager" aria-label="صفحه‌بندی کاربران">
+    <p class="list-pager-meta">
+      {% if pager.pages and pager.total is not none %}
+      صفحه {{ pager.page }} از {{ pager.pages }}
+      <span aria-hidden="true">·</span>
+      {{ pager.total }} کاربر
+      {% else %}
+      صفحه {{ pager.page }}
+      {% endif %}
+    </p>
+    <div class="list-pager-actions">
+      {% if pager.has_prev %}
+      <a class="btn btn-ghost btn-sm" href="/pg/users?page={{ pager.prev_page }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">قبلی</a>
+      {% else %}
+      <span class="btn btn-ghost btn-sm" aria-disabled="true">قبلی</span>
+      {% endif %}
+      {% if pager.has_next %}
+      <a class="btn btn-ghost btn-sm" href="/pg/users?page={{ pager.next_page }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">بعدی</a>
+      {% else %}
+      <span class="btn btn-ghost btn-sm" aria-disabled="true">بعدی</span>
+      {% endif %}
+    </div>
+  </nav>
+  {% endif %}
   {% endif %}
 </div>
 

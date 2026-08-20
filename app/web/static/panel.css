@@ -8134,6 +8134,96 @@ html[data-theme="light"] .sk-bone::after {
   );
 }
 
+/* —— Shell-first widget loading (centered, design-token spinner) —— */
+.panel-widgets-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: min(52vh, 28rem);
+  padding: var(--section-gap) var(--space-2);
+  box-sizing: border-box;
+  animation: panel-widgets-loading-in var(--motion-med) var(--ease-out) both;
+}
+.panel-widgets-loading-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  text-align: center;
+  max-width: 18rem;
+}
+.panel-widgets-loading-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+}
+.panel-widgets-loading-ring {
+  display: block;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--pg-line) 28%, var(--border));
+  border-top-color: var(--pg-line);
+  animation: panel-widgets-spin 0.85s linear infinite;
+}
+.panel-widgets-loading-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--foreground);
+}
+.panel-widgets-loading-cap {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+@keyframes panel-widgets-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes panel-widgets-loading-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel-widgets-loading,
+  .panel-widgets-loading-ring {
+    animation: none;
+  }
+}
+
+/* —— List pagination (heavy tables) —— */
+.list-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+.list-pager-meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted-fg);
+  font-variant-numeric: tabular-nums;
+}
+.list-pager-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+.list-pager-actions .btn[aria-disabled="true"],
+.list-pager-actions .btn:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
 
 /* —— Telegram button color settings (settings → رنگبندی) —— */
 /* Section heads: same title↔caption unit as .card h2 + .update-card-caption */

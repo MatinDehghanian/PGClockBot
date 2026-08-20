@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.1.11": [
+        "نمای پاسارگارد: جای‌نگهدار بارگذاری ویجت‌ها وسط صفحه و هم‌سبک با توکن‌های طراحی پنل",
+        "کاربران پاسارگارد: صفحه‌بندی امن ۵۰تایی با حفظ جستجو؛ بدون تغییر auth/ACL",
+        "بدون مایگریشن جدید نسبت به ۸.۱.۱۰",
+    ],
     "8.1.10": [
         "نمای پاسارگارد /pg: شل سریع بعد از مجوز pg_overview؛ ویجت‌ها از /pg/body با همان مجوز پر می‌شوند",
         "اسکریپت زنده نود/CPU بیرون از محتوای swap می‌ماند و بعد از پر شدن DOM دوباره کار می‌کند",

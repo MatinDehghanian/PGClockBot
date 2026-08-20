@@ -513,6 +513,15 @@ def register_pg_pages(
         staff: dict = Depends(require_pg_perm("pg_users")),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.services.list_query import (
+            DEFAULT_LIST_PAGE_SIZE,
+            build_list_pager,
+            extract_list_total,
+            filter_by_search,
+            list_offset,
+            normalize_search_q,
+            parse_list_page,
+        )
         from app.services.pg_read import PgReadDenied, staff_pg_read_client
 
         err = request.query_params.get("err")
@@ -521,17 +530,24 @@ def register_pg_pages(
         form_modal = (request.query_params.get("modal") or "").strip()
         form_uid = (request.query_params.get("uid") or "").strip()
         q = (request.query_params.get("q") or "").strip()
+        page = parse_list_page(request.query_params.get("page"))
+        page_size = DEFAULT_LIST_PAGE_SIZE
         users: list[dict] = []
+        users_total: int | None = None
+        pager: dict = build_list_pager(
+            page=page, page_size=page_size, fetched=0, total=None
+        )
         templates: list[dict] = []
         groups: list[dict] = []
         access = staff.get("pg_access") or {}
         require_template = bool(access.get("require_template")) and not _is_pg_owner_principal(staff)
         try:
-            from app.services.list_query import filter_by_search, normalize_search_q
-
             search_q = normalize_search_q(q)
             pg = await staff_pg_read_client(session, staff)
-            params: dict = {"offset": 0, "limit": 200}
+            params: dict = {
+                "offset": list_offset(page, page_size),
+                "limit": page_size,
+            }
             if search_q:
                 # Remote API may be exact/prefix; keep hint + local casefold substring
                 params["username"] = search_q
@@ -548,8 +564,10 @@ def register_pg_pages(
                 raise data
             if isinstance(data, dict):
                 users = as_list(data, "users") or []
+                users_total = extract_list_total(data)
             elif isinstance(data, list):
                 users = data
+            fetched = len(users)
             users = _filter_owned_users(users, staff)
             if search_q:
 
@@ -573,13 +591,24 @@ def register_pg_pages(
                         data_wide = await pg.get_users(**params_wide)
                         if isinstance(data_wide, dict):
                             users = as_list(data_wide, "users") or []
+                            users_total = extract_list_total(data_wide)
                         elif isinstance(data_wide, list):
                             users = data_wide
+                            users_total = None
+                        fetched = len(users)
                         users = _filter_owned_users(users, staff)
                         filtered = filter_by_search(users, search_q, _user_search_parts)
                     except Exception:
                         filtered = []
+                        fetched = 0
                 users = filtered
+            pager = build_list_pager(
+                page=page,
+                page_size=page_size,
+                fetched=fetched,
+                total=users_total,
+                scoped_len=len(users),
+            )
             for u in users:
                 if not isinstance(u, dict):
                     continue
@@ -619,6 +648,7 @@ def register_pg_pages(
                 templates=templates,
                 groups=groups,
                 q=q,
+                pager=pager,
                 flash_err=err,
                 flash_ok=ok,
                 form_err=form_err,

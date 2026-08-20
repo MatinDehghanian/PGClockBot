@@ -120,14 +120,37 @@ class PanelShellFirstContractTests(unittest.TestCase):
         self.assertIn("widgets_deferred", home)
         self.assertIn("_pg_dash_body.html", home)
         self.assertIn("_panel_widgets_defer.html", home)
+        self.assertIn("_panel_widgets_loading.html", home)
         self.assertIn("_pg_live_metrics_script.html", home)
+        self.assertNotIn("در حال بارگذاری آمار پاسارگارد…", home)
         body = (ROOT / "app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
         self.assertIn('id="pg-dash"', body)
+        loading = (ROOT / "app/web/templates/_panel_widgets_loading.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("panel-widgets-loading", loading)
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn(".panel-widgets-loading", css)
+        self.assertIn("min-height: min(52vh", css)
         defer = (ROOT / "app/web/templates/_panel_widgets_defer.html").read_text(encoding="utf-8")
         self.assertIn("panel-widgets-ready", defer)
         live = (ROOT / "app/web/templates/_pg_live_metrics_script.html").read_text(encoding="utf-8")
         self.assertIn("panel-widgets-ready", live)
         self.assertIn("function els()", live)
+
+    def test_pg_users_paginated(self):
+        src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
+        users_fn = src[src.find("async def pg_users") : src.find("async def pg_users_create")]
+        self.assertIn("parse_list_page", users_fn)
+        self.assertIn("DEFAULT_LIST_PAGE_SIZE", users_fn)
+        self.assertIn("build_list_pager", users_fn)
+        self.assertNotIn('"limit": 200', users_fn)
+        self.assertIn('Depends(require_pg_perm("pg_users"))', users_fn)
+        tmpl = (ROOT / "app/web/templates/pg_users.html").read_text(encoding="utf-8")
+        self.assertIn("list-pager", tmpl)
+        self.assertIn("pager.has_next", tmpl)
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn(".list-pager", css)
 
     def test_pg_body_skips_sidebar_unread(self):
         from app.services.panel_tickets import should_skip_unread_count
