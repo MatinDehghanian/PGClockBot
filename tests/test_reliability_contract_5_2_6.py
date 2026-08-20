@@ -46,11 +46,13 @@ class HomeDegradedNoFakeDisconnect(unittest.TestCase):
         self.assertIn("unchecked", src)
         # Old band-aid that painted Bot/PG as قطع
         self.assertNotIn('"error": "بارگذاری ناقص"', src)
-        # Render must be outside data try so template bugs stay diagnosable
-        self.assertIn("Render is intentionally outside", src)
+        # Body fragment / full page render stays outside data try (diagnosable 500s).
+        self.assertIn("_render_home_result", src)
+        self.assertIn("home_dashboard_body", src)
 
     def test_templates_handle_unchecked_conn(self):
-        for name in ("home.html", "reseller_home.html"):
+        # Markup lives in dash body partials (home.html only includes them).
+        for name in ("_home_dash_body.html", "_reseller_home_dash_body.html"):
             tpl = (ROOT / "app/web/templates" / name).read_text(encoding="utf-8")
             self.assertIn("unchecked", tpl, msg=name)
             self.assertIn("dashboard_degraded", tpl, msg=name)

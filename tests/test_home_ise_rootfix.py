@@ -227,9 +227,9 @@ class PanelRedirectAndSecretTests(unittest.TestCase):
         )
         self.assertIn("۲ رسید", html)
         # Guard against regressing to ac.items (dict method).
-        home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
+        home = Path("app/web/templates/_home_dash_body.html").read_text(encoding="utf-8")
         ops = Path("app/web/templates/_home_ops.html").read_text(encoding="utf-8")
-        reseller = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
+        reseller = Path("app/web/templates/_reseller_home_dash_body.html").read_text(encoding="utf-8")
         self.assertIn("_home_ops.html", home)
         self.assertIn("_home_ops.html", reseller)
         self.assertIn("ac.entries", ops)

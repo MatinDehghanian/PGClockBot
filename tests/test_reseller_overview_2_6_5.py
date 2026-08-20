@@ -24,7 +24,7 @@ class ResellerNavSplitTests(unittest.TestCase):
         self.assertNotIn("pg_limits", dash)
 
     def test_reseller_home_has_bot_and_pg_panels(self):
-        home = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
+        home = Path("app/web/templates/_reseller_home_dash_body.html").read_text(encoding="utf-8")
         self.assertIn("_home_ops.html", home)
         self.assertIn("pg_limits", home)
         self.assertIn("pg_overview_limit_board", home)

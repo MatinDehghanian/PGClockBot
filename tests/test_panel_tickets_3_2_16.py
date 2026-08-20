@@ -127,8 +127,8 @@ class TemplateNavTests(unittest.TestCase):
         self.assertIn("flash warn home-update-banner", pg)
         self.assertIn(">مشاهده</a>", pg)
 
-        rh = (ROOT / "app/web/templates/reseller_home.html").read_text(encoding="utf-8")
-        home = (ROOT / "app/web/templates/home.html").read_text(encoding="utf-8")
+        rh = (ROOT / "app/web/templates/_reseller_home_dash_body.html").read_text(encoding="utf-8")
+        home = (ROOT / "app/web/templates/_home_dash_body.html").read_text(encoding="utf-8")
         home_ops = (ROOT / "app/web/templates/_home_ops.html").read_text(encoding="utf-8")
         for src in (rh, home):
             self.assertIn('{% include "_home_ops.html" %}', src)

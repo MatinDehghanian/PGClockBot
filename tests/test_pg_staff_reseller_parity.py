@@ -48,7 +48,7 @@ class ConstraintBoxesTests(unittest.TestCase):
             self.assertNotIn("hint", b)
 
     def test_templates_omit_constraint_captions(self):
-        for rel in ("app/web/templates/reseller_home.html", "app/web/templates/pg_home.html"):
+        for rel in ("app/web/templates/_reseller_home_dash_body.html", "app/web/templates/pg_home.html"):
             src = Path(rel).read_text(encoding="utf-8")
             self.assertNotIn("c.hint", src)
             self.assertIn("pg_overview_limit_board", src)
@@ -88,7 +88,7 @@ class WiringTests(unittest.TestCase):
         self.assertGreater(panels_i, else_i)
         self.assertNotIn('class="meter"', dash)
         # Web dashboard for reseller: portals + periods + optional PG quota
-        home = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
+        home = Path("app/web/templates/_reseller_home_dash_body.html").read_text(encoding="utf-8")
         self.assertIn("_home_ops.html", home)
         self.assertIn("pg_limits", home)
         self.assertIn("pg_overview_limit_board", home)
@@ -112,7 +112,7 @@ class WiringTests(unittest.TestCase):
 
     def test_dashboard_status_is_badge_not_box(self):
         # Status badge lives on reseller web home / PG overview, not bot نمای کلی
-        src = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
+        src = Path("app/web/templates/_reseller_home_dash_body.html").read_text(encoding="utf-8")
         self.assertIn("pg_overview_limit_board", src)
         cards = Path("app/web/templates/_pg_limit_cards.html").read_text(encoding="utf-8")
         self.assertIn("ov.status_label", cards)
@@ -125,7 +125,7 @@ class WiringTests(unittest.TestCase):
         self.assertIn('<small class="muted">گروه دریافت‌کننده', src)
 
     def test_ram_percent_in_ring_amount_under_title(self):
-        home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
+        home = Path("app/web/templates/_home_dash_body.html").read_text(encoding="utf-8")
         gauges = Path("app/web/templates/_host_resource_gauges.html").read_text(
             encoding="utf-8"
         )
