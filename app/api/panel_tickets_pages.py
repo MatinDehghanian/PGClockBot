@@ -273,22 +273,36 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             from app.services.support_contacts import get_support_contacts
             from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
 
-            rid = None if staff.get("role") == "admin" else shop_owner_id(staff)
-            ctx["support_contacts"] = await get_support_contacts(session, reseller_id=rid)
-            values = await get_all_settings(session, reseller_id=rid)
-            ctx["values"] = values
-            names = TAB_SETTING_GROUPS.get("supports") or []
-            ctx["support_text_tab_groups"] = names
-            ctx["support_text_groups"] = {
-                n: SETTING_GROUPS[n] for n in names if n in SETTING_GROUPS
-            }
-            if staff.get("role") != "admin":
-                ctx["supports_save_action"] = "/shop-supports/save"
-                ctx["supports_delete_action"] = "/shop-supports/delete"
-                ctx["support_text_action"] = (
-                    "/shop-settings?tab=supports&next="
-                    + quote("/tickets?supports=1&stab=text")
-                )
+            # Owner settings only for real Owner. Missing shop scope → empty, never Owner fallback.
+            if is_platform_admin(staff):
+                ctx["support_contacts"] = await get_support_contacts(session, reseller_id=None)
+                values = await get_all_settings(session)
+                ctx["values"] = values
+                names = TAB_SETTING_GROUPS.get("supports") or []
+                ctx["support_text_tab_groups"] = names
+                ctx["support_text_groups"] = {
+                    n: SETTING_GROUPS[n] for n in names if n in SETTING_GROUPS
+                }
+            else:
+                rid = shop_owner_id(staff)
+                if rid:
+                    ctx["support_contacts"] = await get_support_contacts(
+                        session, reseller_id=rid
+                    )
+                    values = await get_all_settings(session, reseller_id=rid)
+                    ctx["values"] = values
+                    names = TAB_SETTING_GROUPS.get("supports") or []
+                    ctx["support_text_tab_groups"] = names
+                    ctx["support_text_groups"] = {
+                        n: SETTING_GROUPS[n] for n in names if n in SETTING_GROUPS
+                    }
+                    ctx["supports_save_action"] = "/shop-supports/save"
+                    ctx["supports_delete_action"] = "/shop-supports/delete"
+                    ctx["support_text_action"] = (
+                        "/shop-settings?tab=supports&next="
+                        + quote("/tickets?supports=1&stab=text")
+                    )
+                # else: leave empty defaults — fail-closed
 
         return render(request, "tickets.html", ctx)
 
