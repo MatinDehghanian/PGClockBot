@@ -117,6 +117,40 @@ async def require_bot_owner(
     return False
 
 
+async def bot_admin_settings_in_flow(event: Any, data: dict[str, Any]) -> bool:
+    """True when a settings inline/FSM step continues owner-gated reply navigation.
+
+    Reply-nav opens Settings after ``_deny_unless_owner`` and sets
+    ``NAV_ADMIN_SETTINGS``. Re-running the Owner Principal gate on every
+    ``adm:st:*`` callback or ``SettingsStates`` message falsely denied the real
+    operator with «دسترسی مالک سیستم لازم است» even though they were already
+    inside Settings.
+    """
+    state = data.get("state")
+    if state is None:
+        return False
+    from app.bot import menu_nav as nav
+
+    try:
+        level = await nav.get_nav_level(state)
+    except Exception:
+        return False
+    if level not in (nav.NAV_ADMIN_SETTINGS, nav.NAV_ADMIN):
+        return False
+
+    cb_data = getattr(event, "data", None) or ""
+    if cb_data.startswith("adm:st:") or cb_data in ("adm:settings", "adm:st:hub"):
+        return True
+
+    try:
+        cur = await state.get_state()
+    except Exception:
+        cur = None
+    if cur and "SettingsStates" in str(cur):
+        return True
+    return False
+
+
 def _owner_handler_signature(fn: Callable[..., Awaitable[Any]]) -> inspect.Signature:
     """Aiogram follows ``inspect.signature`` → ``__wrapped__``, so extra DI
     params on the wrapper are invisible unless ``__signature__`` is set.
