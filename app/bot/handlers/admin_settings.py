@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -10,8 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
-from app.bot.auth import is_platform_admin as _is_admin
-from app.bot.auth import require_bot_owner_handler
+from app.bot.auth import bot_admin_settings_in_flow, is_platform_admin as _is_admin
+from app.bot.auth import require_bot_owner
 from app.db.models import BotUser, Plan
 from app.services.notifications import NOTIFY_PREFS
 from app.services.pasarguard import get_pg
@@ -24,6 +25,71 @@ from app.services.support_contacts import (
 from app.services.users import get_all_settings, get_setting, on, set_setting
 
 router = Router(name="admin_settings")
+
+
+async def _ensure_settings_actor(
+    *,
+    session: AsyncSession | None,
+    db_user: BotUser | None,
+    callback: CallbackQuery | None = None,
+    message: Message | None = None,
+    state: FSMContext | None = None,
+    is_reseller_bot: bool = False,
+) -> bool:
+    """Owner gate for settings handlers.
+
+    Inside owner-gated reply navigation (``NAV_ADMIN_SETTINGS``), skip the
+    redundant Principal re-check that false-denied the real Owner. Outside that
+    flow, enforce the same Owner gate as other admin routers.
+    """
+    event = callback or message
+    if (
+        event is not None
+        and state is not None
+        and await bot_admin_settings_in_flow(event, {"state": state})
+    ):
+        if not _is_admin(db_user):
+            text = "ادمین نیستید"
+            if callback is not None:
+                await callback.answer(text, show_alert=True)
+            elif message is not None:
+                await message.answer(text)
+            return False
+        return True
+    return await require_bot_owner(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        callback=callback,
+        message=message,
+    )
+
+
+def settings_actor_required(fn):
+    """Apply ``_ensure_settings_actor`` before settings router handlers."""
+    sig = inspect.signature(fn)
+
+    async def wrapper(*args, **kwargs):
+        bound = sig.bind_partial(*args, **kwargs)
+        a = bound.arguments
+        if not await _ensure_settings_actor(
+            session=a.get("session"),
+            db_user=a.get("db_user"),
+            callback=a.get("callback"),
+            message=a.get("message"),
+            state=a.get("state"),
+            is_reseller_bot=bool(a.get("is_reseller_bot", False)),
+        ):
+            return None
+        call_kwargs = {k: v for k, v in kwargs.items() if k in sig.parameters}
+        return await fn(*args, **call_kwargs)
+
+    wrapper.__signature__ = sig
+    wrapper.__name__ = getattr(fn, "__name__", "wrapper")
+    wrapper.__doc__ = fn.__doc__
+    wrapper.__module__ = fn.__module__
+    wrapper.__qualname__ = getattr(fn, "__qualname__", wrapper.__name__)
+    return wrapper
 
 # ---------------------------------------------------------------------------
 # Navigation tree: hub → section → (optional subsection) → fields
@@ -545,9 +611,14 @@ async def settings_hub(
     await _render_hub(callback, refresh_keyboard=False)
 
 
+@settings_actor_required
 @router.callback_query(F.data.startswith("adm:st:sec:"))
-@require_bot_owner_handler
-async def settings_section(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def settings_section(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -556,9 +627,14 @@ async def settings_section(callback: CallbackQuery, session: AsyncSession, db_us
     await _render_section(callback, session, sec_id)
 
 
+@settings_actor_required
 @router.callback_query(F.data.startswith("adm:st:sub:"))
-@require_bot_owner_handler
-async def settings_sub(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def settings_sub(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -572,9 +648,14 @@ async def settings_sub(callback: CallbackQuery, session: AsyncSession, db_user: 
 # ----- toggle / edit -----
 
 
+@settings_actor_required
 @router.callback_query(F.data.startswith("adm:st:tog:"))
-@require_bot_owner_handler
-async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def settings_toggle(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -594,8 +675,8 @@ async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_use
     await _rerender_after_key(callback, session, key)
 
 
+@settings_actor_required
 @router.callback_query(F.data.startswith("adm:st:edit:"))
-@require_bot_owner_handler
 async def settings_edit_ask(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
@@ -628,8 +709,8 @@ async def settings_edit_ask(
         )
 
 
+@settings_actor_required
 @router.message(SettingsStates.edit_value)
-@require_bot_owner_handler
 async def settings_edit_save(
     message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
@@ -683,9 +764,14 @@ async def settings_edit_save(
     )
 
 
+@settings_actor_required
 @router.callback_query(F.data == "adm:st:menu:layout")
-@require_bot_owner_handler
-async def menu_layout_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def menu_layout_toggle(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -695,11 +781,16 @@ async def menu_layout_toggle(callback: CallbackQuery, session: AsyncSession, db_
     await _render_sub(callback, session, "menu", "layout")
 
 
+@settings_actor_required
 @router.callback_query(
     F.data.startswith("adm:st:menu:up:") | F.data.startswith("adm:st:menu:dn:")
 )
-@require_bot_owner_handler
-async def menu_reorder(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def menu_reorder(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -733,9 +824,15 @@ async def menu_reorder(callback: CallbackQuery, session: AsyncSession, db_user: 
 # ----- Supports -----
 
 
+@settings_actor_required
 @router.callback_query(F.data == "adm:st:sup:add")
-@require_bot_owner_handler
-async def support_add_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
+async def support_add_start(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+):
+    _ = session
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -749,9 +846,15 @@ async def support_add_start(callback: CallbackQuery, state: FSMContext, db_user:
         )
 
 
+@settings_actor_required
 @router.message(SettingsStates.support_title)
-@require_bot_owner_handler
-async def support_title_msg(message: Message, state: FSMContext, db_user: BotUser):
+async def support_title_msg(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+):
+    _ = session
     if not _is_admin(db_user):
         await state.clear()
         await message.answer("ادمین نیستید")
@@ -772,8 +875,8 @@ async def support_title_msg(message: Message, state: FSMContext, db_user: BotUse
     )
 
 
+@settings_actor_required
 @router.message(SettingsStates.support_telegram)
-@require_bot_owner_handler
 async def support_telegram_msg(
     message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
@@ -807,9 +910,14 @@ async def support_telegram_msg(
     )
 
 
+@settings_actor_required
 @router.callback_query(F.data.startswith("adm:st:sup:v:"))
-@require_bot_owner_handler
-async def support_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def support_view(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -841,9 +949,14 @@ async def support_view(callback: CallbackQuery, session: AsyncSession, db_user: 
         await callback.message.edit_text(text, reply_markup=_kb(rows))
 
 
+@settings_actor_required
 @router.callback_query(F.data.startswith("adm:st:sup:tog:"))
-@require_bot_owner_handler
-async def support_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def support_toggle(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -883,8 +996,8 @@ async def support_toggle(callback: CallbackQuery, session: AsyncSession, db_user
     await callback.message.edit_text(text, reply_markup=_kb(rows))
 
 
+@settings_actor_required
 @router.callback_query(F.data.startswith("adm:st:sup:edit:"))
-@require_bot_owner_handler
 async def support_edit_start(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
@@ -906,9 +1019,14 @@ async def support_edit_start(
         )
 
 
+@settings_actor_required
 @router.callback_query(F.data.startswith("adm:st:sup:del:"))
-@require_bot_owner_handler
-async def support_delete(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def support_delete(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -939,8 +1057,8 @@ async def _ensure_trial(session: AsyncSession) -> Plan:
     return trial
 
 
+@settings_actor_required
 @router.callback_query(F.data == "adm:st:trial:name")
-@require_bot_owner_handler
 async def trial_ask_name(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -951,8 +1069,8 @@ async def trial_ask_name(callback: CallbackQuery, state: FSMContext, db_user: Bo
         await callback.message.answer("نام پلن تست:", reply_markup=kb.cancel_reply())
 
 
+@settings_actor_required
 @router.message(SettingsStates.trial_name)
-@require_bot_owner_handler
 async def trial_save_name(
     message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
@@ -978,8 +1096,8 @@ async def trial_save_name(
     )
 
 
+@settings_actor_required
 @router.callback_query(F.data == "adm:st:trial:days")
-@require_bot_owner_handler
 async def trial_ask_days(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -990,8 +1108,8 @@ async def trial_ask_days(callback: CallbackQuery, state: FSMContext, db_user: Bo
         await callback.message.answer("مدت به روز:", reply_markup=kb.cancel_reply())
 
 
+@settings_actor_required
 @router.message(SettingsStates.trial_days)
-@require_bot_owner_handler
 async def trial_save_days(
     message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
@@ -1022,8 +1140,8 @@ async def trial_save_days(
     )
 
 
+@settings_actor_required
 @router.callback_query(F.data == "adm:st:trial:gb")
-@require_bot_owner_handler
 async def trial_ask_gb(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -1034,8 +1152,8 @@ async def trial_ask_gb(callback: CallbackQuery, state: FSMContext, db_user: BotU
         await callback.message.answer("حجم به گیگ (۰ = نامحدود):", reply_markup=kb.cancel_reply())
 
 
+@settings_actor_required
 @router.message(SettingsStates.trial_gb)
-@require_bot_owner_handler
 async def trial_save_gb(
     message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
@@ -1066,9 +1184,13 @@ async def trial_save_gb(
     )
 
 
+@settings_actor_required
 @router.callback_query(F.data == "adm:st:trial:tpl")
-@require_bot_owner_handler
-async def trial_pick_tpl(callback: CallbackQuery, db_user: BotUser):
+async def trial_pick_tpl(
+    callback: CallbackQuery,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -1098,9 +1220,14 @@ async def trial_pick_tpl(callback: CallbackQuery, db_user: BotUser):
         await callback.message.edit_text("تمپلیت را انتخاب کنید:", reply_markup=_kb(rows))
 
 
+@settings_actor_required
 @router.callback_query(F.data.startswith("adm:st:trial:settpl:"))
-@require_bot_owner_handler
-async def trial_set_tpl(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def trial_set_tpl(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
@@ -1113,8 +1240,8 @@ async def trial_set_tpl(callback: CallbackQuery, session: AsyncSession, db_user:
     await _render_trial(callback, session)
 
 
+@settings_actor_required
 @router.callback_query(F.data == "adm:st:trial:grp")
-@require_bot_owner_handler
 async def trial_pick_grp(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
@@ -1170,8 +1297,8 @@ async def _show_trial_groups(callback: CallbackQuery, state: FSMContext) -> None
         await callback.message.edit_text("گروه(ها) را انتخاب کنید:", reply_markup=_kb(rows))
 
 
+@settings_actor_required
 @router.callback_query(F.data.startswith("adm:st:trial:toggrp:"))
-@require_bot_owner_handler
 async def trial_tog_grp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
@@ -1187,8 +1314,8 @@ async def trial_tog_grp(callback: CallbackQuery, state: FSMContext, db_user: Bot
     await _show_trial_groups(callback, state)
 
 
+@settings_actor_required
 @router.callback_query(F.data == "adm:st:trial:grpdone")
-@require_bot_owner_handler
 async def trial_grp_done(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser
 ):
