@@ -2,7 +2,7 @@
 
 **Tag:** `v8.1.12`  
 **App version:** `8.1.12`  
-**Restore point:** tag `v8.1.11`
+**Restore point:** tag `restore/pre-message-variables-v8.1.11` (@ `v8.1.11`)
 
 ---
 
