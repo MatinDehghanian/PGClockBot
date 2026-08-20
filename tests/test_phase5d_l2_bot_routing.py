@@ -536,9 +536,15 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(OWNER_REQUIRED_MESSAGE, cb2.answer.await_args.args[0])
                 cb3 = _fake_cb("adm:settings")
                 await settings_hub(
-                    cb3, _fake_state(), fx.l2_user, session=session, staff=fake_staff
+                    cb3, session, fx.l2_user, _fake_state()
                 )
-                self.assertIn(OWNER_REQUIRED_MESSAGE, cb3.answer.await_args.args[0])
+                # Inline back is navigation, not an Owner trap.
+                if cb3.answer.await_args and cb3.answer.await_args.args:
+                    self.assertNotIn(
+                        OWNER_REQUIRED_MESSAGE, cb3.answer.await_args.args[0]
+                    )
+                cb3.message.edit_text.assert_awaited()
+                cb3.message.answer.assert_not_awaited()
                 cb4 = _fake_cb("adm:plans")
                 await plans_hub(
                     cb4, session, fx.l2_user, _fake_state(), staff=fake_staff

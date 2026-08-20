@@ -239,13 +239,18 @@ def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
 # ----- render helpers -----
 
 
-async def _render_hub(callback: CallbackQuery) -> None:
-    """Static section list lives on reply keyboard (admin_settings_reply_keyboard)."""
+_SETTINGS_HUB_TEXT = "⚙️ <b>تنظیمات</b>\nبخش‌ها را از کیبورد پایین انتخاب کنید."
+
+
+async def _render_hub(callback: CallbackQuery, *, refresh_keyboard: bool = False) -> None:
+    """Back to the settings hub. Section list lives on the reply keyboard."""
     if callback.message:
         await callback.message.edit_text(
-            "⚙️ <b>تنظیمات</b>\nبخش‌ها را از کیبورد پایین انتخاب کنید.",
+            _SETTINGS_HUB_TEXT,
             reply_markup=None,
         )
+        if not refresh_keyboard:
+            return
         try:
             await callback.message.answer(
                 "کیبورد تنظیمات:",
@@ -274,7 +279,7 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
         rows.append(
             [InlineKeyboardButton(text=title, callback_data=f"adm:st:sub:{sec_id}:{sub_id}")]
         )
-    rows.append(_back_row(("⬅️ تنظیمات", "adm:settings")))
+    rows.append(_back_row(("⬅️ بازگشت", "adm:st:hub")))
     if callback.message:
         await callback.message.edit_text(
             f"⚙️ <b>{sec['title']}</b>\nزیر‌بخش را انتخاب کنید:",
@@ -412,7 +417,7 @@ async def _render_supports(callback: CallbackQuery, session: AsyncSession) -> No
         )
     if not contacts:
         rows.append([InlineKeyboardButton(text="لیست خالی است", callback_data="adm:st:noop")])
-    rows.append(_back_row(("⬅️ تنظیمات", "adm:settings")))
+    rows.append(_back_row(("⬅️ بازگشت", "adm:st:hub")))
     if callback.message:
         await callback.message.edit_text(
             "🎧 <b>پشتیبان‌ها</b>\n"
@@ -430,7 +435,7 @@ async def _render_notify(callback: CallbackQuery, session: AsyncSession) -> None
         rows.append(
             [InlineKeyboardButton(text=f"{mark} {title}", callback_data=f"adm:st:tog:{key}")]
         )
-    rows.append(_back_row(("⬅️ تنظیمات", "adm:settings")))
+    rows.append(_back_row(("⬅️ بازگشت", "adm:st:hub")))
     if callback.message:
         await callback.message.edit_text(
             "🔔 <b>اعلان‌های ادمین اصلی</b>\n"
@@ -521,15 +526,23 @@ async def settings_noop(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "adm:settings")
-@require_bot_owner_handler
-async def settings_hub(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
-    if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
-        return
-    await state.clear()
+@router.callback_query(F.data.in_({"adm:settings", "adm:st:hub"}))
+async def settings_hub(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    is_reseller_bot: bool = False,
+):
+    """Inline «⬅️ بازگشت» from a settings subsection.
+
+    This is navigation (pop back to the hub), not an Owner gate. The operator
+    is already inside Settings; showing «دسترسی مالک سیستم لازم است» here
+    traps them. Hub text is not sensitive; the reply keyboard is already shown.
+    """
+    _ = (session, db_user, is_reseller_bot)
     await callback.answer()
-    await _render_hub(callback)
+    await _render_hub(callback, refresh_keyboard=False)
 
 
 @router.callback_query(F.data.startswith("adm:st:sec:"))
@@ -651,7 +664,7 @@ async def settings_edit_save(
         text = normalize_force_join_channel_value(text)
     await set_setting(session, key, text)
     await state.clear()
-    jump = "adm:settings"
+    jump = "adm:st:hub"
     if loc:
         sec_id, sub_id = loc
         jump = f"adm:st:sub:{sec_id}:{sub_id}" if sub_id else f"adm:st:sec:{sec_id}"
@@ -664,7 +677,7 @@ async def settings_edit_save(
         reply_markup=_kb(
             [
                 [InlineKeyboardButton(text="بازگشت", callback_data=jump)],
-                [InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="adm:settings")],
+                [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:st:hub")],
             ]
         ),
     )
