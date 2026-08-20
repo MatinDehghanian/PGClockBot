@@ -16,7 +16,7 @@ from app.bot import keyboards as kb
 from app.config import get_settings
 from app.services.pasarguard import get_pg
 from app.services.qrcode_gen import make_subscription_qr
-from app.services.safe_format import safe_format
+from app.services.message_variables import DOMAIN_ORDER, DOMAIN_WALLET, render_message_template
 from app.services.users import get_all_settings, on
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,21 @@ def _subscription_success_body(ui: dict[str, str], order) -> str:
     raw = (ui.get("purchase_success_text") or "").strip()
     if not raw:
         return f"سفارش #{order.id} با موفقیت فعال شد."
-    success = safe_format(raw, order_id=order.id).strip()
+    plan_name = ""
+    try:
+        plan = getattr(order, "plan", None)
+        if plan is not None:
+            plan_name = getattr(plan, "name", "") or ""
+    except Exception:
+        plan_name = ""
+    success = render_message_template(
+        raw,
+        domain=DOMAIN_ORDER,
+        order_id=order.id,
+        plan_name=plan_name,
+        shop_title=ui.get("shop_title") or "",
+        url=getattr(order, "subscription_url", None) or "",
+    ).strip()
     return success or f"سفارش #{order.id} با موفقیت فعال شد."
 
 
@@ -129,11 +143,13 @@ async def build_delivery_content(
     if payment and payment.is_wallet_topup:
         title = ui.get("wallet_success_title") or "💰 شارژ کیف پول"
         amount_txt = format_toman(payment.amount, get_settings().currency)
-        body = safe_format(
+        body = render_message_template(
             ui.get("wallet_success_text")
             or "✅ مبلغ {amount} به کیف پول شما اضافه شد.",
+            domain=DOMAIN_WALLET,
             amount=amount_txt,
             payment_id=payment.id,
+            shop_title=ui.get("shop_title") or "",
         ).strip()
         if not body:
             body = f"✅ کیف پول شما {amount_txt} شارژ شد."

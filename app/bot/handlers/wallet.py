@@ -17,7 +17,7 @@ from app.services.orders import attach_receipt, create_wallet_topup
 from app.services.receipts import process_receipt
 from app.services.users import get_all_settings, on
 from app.services.wallet import list_activity
-from app.services.safe_format import safe_format
+from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 
 router = Router(name="wallet")
 
@@ -285,10 +285,14 @@ async def _topup_instructions(
     rows: list[list[InlineKeyboardButton]] = []
     if method == PaymentMethod.CARD.value:
         try:
-            body = safe_format(ui["card_pay_text"], 
+            body = render_message_template(
+                ui["card_pay_text"],
+                domain=DOMAIN_PAYMENT,
                 amount=amount,
                 card=ui.get("card_number") or "—",
                 holder=ui.get("card_holder") or "—",
+                shop_title=ui.get("shop_title") or "",
+                payment_id=payment.id,
             )
         except Exception:
             body = (
@@ -301,12 +305,25 @@ async def _topup_instructions(
         link = (ui.get("gateway_link") or "").strip()
         if link:
             try:
-                link = safe_format(link, amount=payment.amount, order_id=0, payment_id=payment.id)
+                link = render_message_template(
+                    link,
+                    domain=DOMAIN_PAYMENT,
+                    amount=payment.amount,
+                    order_id=0,
+                    payment_id=payment.id,
+                    html=False,
+                )
             except Exception:
                 pass
         try:
-            body = safe_format(ui.get("gateway_pay_text") or "", 
-                amount=amount, order_id=0, name=name
+            body = render_message_template(
+                ui.get("gateway_pay_text") or "",
+                domain=DOMAIN_PAYMENT,
+                amount=amount,
+                order_id=0,
+                gateway_name=name,
+                shop_title=ui.get("shop_title") or "",
+                payment_id=payment.id,
             )
         except Exception:
             body = f"مبلغ {amount} را از طریق {name} پرداخت کنید."
@@ -316,11 +333,15 @@ async def _topup_instructions(
     else:
         address = (ui.get("crypto_address") or "").strip() or "—"
         try:
-            body = safe_format(ui.get("crypto_pay_text") or "", 
+            body = render_message_template(
+                ui.get("crypto_pay_text") or "",
+                domain=DOMAIN_PAYMENT,
                 amount=amount,
                 asset=ui.get("crypto_asset") or "USDT",
                 network=ui.get("crypto_network") or "—",
                 address=address,
+                shop_title=ui.get("shop_title") or "",
+                payment_id=payment.id,
             )
         except Exception:
             body = f"{ui.get('crypto_asset') or 'USDT'}: <code>{address}</code>\nمبلغ تقریبی {amount}"

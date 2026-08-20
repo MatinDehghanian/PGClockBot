@@ -838,7 +838,7 @@ SETTING_GROUPS = {
             "welcome_text",
             "پیام خوش‌آمد (/start)",
             "textarea",
-            "اولین پیامی که کاربر بعد از استارت می‌بیند. متغیر: {name}",
+            "اولین پیامی که کاربر بعد از استارت می‌بیند. متغیرها: {user_name} (قدیمی: {name})، {shop_title} — فهرست کامل: /message-variables",
         ),
     ],
     "متن پیام‌ها": [
@@ -847,14 +847,14 @@ SETTING_GROUPS = {
         ("empty_services_text", "وقتی سرویسی ندارد", "textarea", "پیام بخش سرویس‌های من اگر لیست خالی باشد"),
         ("shop_empty_text", "وقتی پلنی نیست", "textarea", "پیام فروشگاه اگر پلن فعالی نباشد"),
         ("delivery_title", "عنوان پیام تحویل سرویس", "text", "مثلاً: ✅ سرویس آماده است"),
-        ("purchase_success_text", "متن موفقیت خرید", "textarea", "متغیر: {order_id} — پیام کوتاه موفقیت (جزئیات روی QR است)"),
-        ("wallet_success_text", "متن موفقیت شارژ کیف پول", "textarea", "متغیر: {amount}"),
+        ("purchase_success_text", "متن موفقیت خرید", "textarea", "متغیرها: {order_id} {plan_name} — فهرست: /message-variables"),
+        ("wallet_success_text", "متن موفقیت شارژ کیف پول", "textarea", "متغیرها: {amount} {payment_id}"),
     ],
     "متن پشتیبانی ربات": [
         ("support_text", "متن صفحه پشتیبانی", "textarea", "بالای دکمه/فرم پشتیبانی در ربات نمایش داده می‌شود"),
     ],
     "متن دعوت دوستان": [
-        ("referral_text", "متن دعوت دوستان", "textarea", "متغیرها: {code} و {link}"),
+        ("referral_text", "متن دعوت دوستان", "textarea", "متغیرها: {code} {link} — فهرست: /message-variables"),
     ],
     "متن دکمه‌های منو": [
         ("btn_shop", "دکمه خرید", "text", ""),
@@ -1027,7 +1027,7 @@ SETTING_GROUPS = {
     "QR اشتراک": [
         ("qr_enabled", "ارسال خودکار QR", "toggle", "بعد از تحویل سرویس، QR لینک اشتراک فرستاده می‌شود"),
         ("show_sub_link_in_text", "نمایش لینک در کپشن QR", "toggle", "لینک متنی هم در کپشن QR باشد"),
-        ("qr_caption", "کپشن عکس QR", "textarea", "جزئیات لینک/حجم/زمان خودکار اضافه می‌شود. متغیر: {url}"),
+        ("qr_caption", "کپشن عکس QR", "textarea", "جزئیات لینک/حجم/زمان خودکار اضافه می‌شود. متغیر: {url} یا {sub_link}"),
         ("qr_background", "عکس پس‌زمینه QR", "image", "اختیاری — PNG/JPG"),
     ],
     "روش‌های پرداخت": [
@@ -1069,8 +1069,8 @@ SETTING_GROUPS = {
     ],
     "درگاه پرداخت": [
         ("gateway_name", "نام درگاه", "text", "مثلاً زرین‌پال"),
-        ("gateway_link", "لینک درگاه / صفحه پرداخت", "text", "می‌تواند شامل {amount} یا {order_id} باشد"),
-        ("gateway_pay_text", "راهنمای درگاه", "textarea", "متغیرها: {amount} {order_id} {name}"),
+        ("gateway_link", "لینک درگاه / صفحه پرداخت", "text", "می‌تواند شامل {amount} یا {order_id} یا {payment_id} باشد"),
+        ("gateway_pay_text", "راهنمای درگاه", "textarea", "متغیرها: {amount} {order_id} {gateway_name} (قدیمی: {name})"),
         ("btn_pay_gateway", "متن دکمه درگاه", "text", ""),
     ],
     "رمزارز": [
@@ -1117,7 +1117,7 @@ SETTING_GROUPS = {
             "force_join_msg",
             "متن پیام عضویت اجباری",
             "textarea",
-            "پیام بالای دکمه‌های اینلاین. اختیاری: {channels} برای لیست متنی کانال‌ها (معمولاً لازم نیست — کانال‌ها روی دکمه‌اند)",
+            "پیام بالای دکمه‌های اینلاین. اختیاری: {channels} — فهرست کامل متغیرها: /message-variables",
         ),
         ("btn_force_join", "متن پیش‌فرض دکمه لینک کانال", "text", "اگر عنوان کانال خالی باشد"),
         ("btn_force_join_check", "متن دکمه بررسی عضویت", "text", "دکمه «عضو شدم»"),

@@ -88,14 +88,26 @@
   }
   function fillVars(text){
     return String(text||'')
+      .replaceAll('{user_name}','کاربر')
       .replaceAll('{name}','کاربر')
+      .replaceAll('{shop_title}', val('shop_title','کلاک بات'))
+      .replaceAll('{user_id}','123456789')
+      .replaceAll('{username}','@user')
       .replaceAll('{order_id}','1024')
+      .replaceAll('{plan_name}','پلن نمونه')
       .replaceAll('{amount}','۵۰٬۰۰۰ تومان')
+      .replaceAll('{payment_id}','88')
+      .replaceAll('{gateway_name}','درگاه')
       .replaceAll('{code}','CLK42')
       .replaceAll('{link}','https://t.me/example_bot?start=CLK42')
       .replaceAll('{card}','6037-****-****-1234')
       .replaceAll('{holder}','نام دارنده')
-      .replaceAll('{url}','https://example.com/sub/demo');
+      .replaceAll('{asset}','USDT')
+      .replaceAll('{network}','TRC20')
+      .replaceAll('{address}','TXyz…')
+      .replaceAll('{url}','https://example.com/sub/demo')
+      .replaceAll('{sub_link}','https://example.com/sub/demo')
+      .replaceAll('{channels}','• @channel');
   }
   function renderReplyKeys(items, opts){
     if (!keysEl) return;

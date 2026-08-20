@@ -31,7 +31,8 @@ class SafeFormatTests(unittest.TestCase):
 
     def test_delivery_uses_safe_format(self):
         src = (ROOT / "app/services/delivery.py").read_text(encoding="utf-8")
-        self.assertIn("safe_format", src)
+        # Catalog-backed renderer (wraps safe_format); never str.format on templates.
+        self.assertIn("render_message_template", src)
         self.assertNotIn('.format(order_id=order.id)', src)
         self.assertNotIn("body.format(", src)
 

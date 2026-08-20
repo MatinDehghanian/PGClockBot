@@ -20,7 +20,6 @@ from app.bot.menu_nav import restore_main_reply, user_has_services
 from app.db.models import BotUser, Order, Role, UserService
 from app.services.formatting import format_message
 from app.services.users import get_all_settings
-from app.services.safe_format import safe_format
 
 router = Router(name="reply_nav")
 
