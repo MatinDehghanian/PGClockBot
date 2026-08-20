@@ -32,15 +32,19 @@ def register_message_variables_pages(
         is_owner = is_explicit_owner_staff(staff) or bool(staff.get("web_owner"))
         # Resellers / non-Owner staff: hide Owner-only naming vars (no capability leak).
         include_owner = is_owner
-        groups = catalog_groups(include_owner_only=include_owner)
-        settings_href = "/settings" if is_owner or staff.get("role") == "admin" else "/shop-settings"
+        settings_base = (
+            "/settings" if is_owner or staff.get("role") == "admin" else "/shop-settings"
+        )
+        groups = catalog_groups(
+            include_owner_only=include_owner,
+            settings_base=settings_base,
+        )
         return render(
             request,
             "message_variables.html",
             {
                 "staff": staff,
                 "groups": groups,
-                "settings_href": settings_href,
                 "include_owner_only": include_owner,
             },
         )

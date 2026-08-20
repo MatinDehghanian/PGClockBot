@@ -43,6 +43,29 @@ DOMAIN_LABELS_FA: dict[str, str] = {
     DOMAIN_QR: "کپشن QR",
 }
 
+# Relative to bot settings base, or absolute panel path for modal-hosted texts.
+DOMAIN_SETTINGS_PATH: dict[str, str] = {
+    DOMAIN_SHOP: "?tab=welcome",
+    DOMAIN_USER: "?tab=welcome",
+    DOMAIN_ORDER: "?tab=messages",
+    DOMAIN_WALLET: "?tab=messages",
+    DOMAIN_PAYMENT: "/finance?tab=orders&settings=payment",
+    DOMAIN_REFERRAL: "/loyalty?settings=referral",
+    DOMAIN_FORCE_JOIN: "?tab=forcejoin",
+    DOMAIN_NAMING: "?tab=naming",
+    DOMAIN_QR: "?tab=qr",
+}
+
+
+def domain_settings_href(domain: str, settings_base: str) -> str:
+    """Deep-link to the place that edits texts for this domain."""
+    path = DOMAIN_SETTINGS_PATH.get(domain) or ""
+    if not path:
+        return settings_base
+    if path.startswith("/"):
+        return path
+    return f"{settings_base}{path}"
+
 # Setting keys → domain used when rendering that field.
 SETTING_DOMAIN: dict[str, str] = {
     "welcome_text": DOMAIN_USER,
@@ -286,8 +309,12 @@ def vars_for_domain(domain: str, *, include_owner_only: bool = True) -> list[Mes
     return out
 
 
-def catalog_groups(*, include_owner_only: bool = True) -> list[dict[str, Any]]:
-    """UI-ready groups: domain label + variables (canonical keys only)."""
+def catalog_groups(
+    *,
+    include_owner_only: bool = True,
+    settings_base: str = "/settings",
+) -> list[dict[str, Any]]:
+    """UI-ready groups: domain label + variables + settings deep-link."""
     groups: list[dict[str, Any]] = []
     for domain, label in DOMAIN_LABELS_FA.items():
         items = vars_for_domain(domain, include_owner_only=include_owner_only)
@@ -297,6 +324,7 @@ def catalog_groups(*, include_owner_only: bool = True) -> list[dict[str, Any]]:
             {
                 "domain": domain,
                 "label": label,
+                "settings_href": domain_settings_href(domain, settings_base),
                 "vars": [
                     {
                         "key": v.key,

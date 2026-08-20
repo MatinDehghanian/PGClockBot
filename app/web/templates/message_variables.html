@@ -5,26 +5,10 @@
 <div class="page-head">
   <div>
     {{ page_title('bot-settings', 'متغیرهای پیام') }}
-    <p class="muted page-sub">جای‌نگهدارهای امن برای متن‌های ربات — فقط <span class="mono" dir="ltr">&#123;name&#125;</span> ساده</p>
-  </div>
-  <div class="page-head-actions">
-    <a class="btn btn-ghost" href="{{ settings_href }}">رفتن به تنظیمات</a>
   </div>
 </div>
 
-<section class="msg-vars-intro" aria-label="راهنمای امنیت">
-  <div class="msg-vars-intro-card">
-    <h2 class="msg-vars-intro-title">چطور استفاده کنید</h2>
-    <ul class="msg-vars-intro-list">
-      <li>در متن تنظیمات، متغیر را دقیقاً به شکل <span class="mono" dir="ltr">&#123;order_id&#125;</span> بنویسید.</li>
-      <li>فقط متغیرهای همان بخش کار می‌کنند؛ متغیر غریبه‌ها عوض نمی‌شود و داده‌ای نشت نمی‌کند.</li>
-      <li>از نوشتن <span class="mono" dir="ltr">&#123;user.__class__&#125;</span> یا سینتکس پیچیده خودداری کنید — پشتیبانی نمی‌شود.</li>
-      <li>توکن ربات، رمز ادمین و شناسه‌های سیستم در این لیست نیستند و نباید در متن‌ها بیایند.</li>
-    </ul>
-  </div>
-</section>
-
-<nav class="section-tabs msg-vars-jump" role="navigation" aria-label="گروه‌های متغیر">
+<nav class="section-tabs" role="navigation" aria-label="گروه‌های متغیر">
   {% for g in groups %}
   <a href="#mv-{{ g.domain }}">{{ g.label }}</a>
   {% endfor %}
@@ -32,70 +16,48 @@
 
 <div class="msg-vars-stack">
   {% for g in groups %}
-  <section class="msg-vars-group" id="mv-{{ g.domain }}">
-    <header class="msg-vars-group-head">
-      <h2 class="msg-vars-group-title">{{ g.label }}</h2>
-      <span class="muted msg-vars-group-count">{{ g.vars|length }} متغیر</span>
-    </header>
-    <div class="msg-vars-list" role="list">
-      {% for v in g.vars %}
-      <article class="msg-vars-row" role="listitem">
-        <div class="msg-vars-row-main">
-          <button type="button" class="msg-vars-token" data-copy="{{ v.token }}" title="کپی" dir="ltr">
-            <code>{{ v.token }}</code>
-            <span class="msg-vars-copy-hint" aria-hidden="true">کپی</span>
-          </button>
-          <div class="msg-vars-copy">
-            <strong class="msg-vars-name">{{ v.title_fa }}</strong>
-            <p class="msg-vars-desc">{{ v.description_fa }}</p>
-            {% if v.aliases %}
-            <p class="msg-vars-alias muted">نام قدیمی: {% for a in v.aliases %}<code class="mono" dir="ltr">{{ a }}</code>{% if not loop.last %}، {% endif %}{% endfor %}</p>
-            {% endif %}
-          </div>
-        </div>
-        <div class="msg-vars-example" dir="auto">
-          <span class="muted">مثال</span>
-          <code class="mono">{{ v.example or '—' }}</code>
-        </div>
-      </article>
-      {% endfor %}
+  <section class="card card-flush" id="mv-{{ g.domain }}">
+    <div class="card-flush-head">
+      <h2>{{ g.label }}</h2>
+      <div class="actions">
+        <a class="btn btn-ghost btn-sm" href="{{ g.settings_href }}">تنظیمات</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table-compact">
+        <thead>
+          <tr>
+            <th>متغیر</th>
+            <th>عنوان</th>
+            <th class="col-hide-sm">مثال</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in g.vars %}
+          <tr title="{{ v.description_fa }}">
+            <td>
+              <div class="msg-vars-token-cell">
+                <code class="msg-vars-token-box mono" dir="ltr">{{ v.token }}</code>
+                <button type="button" class="btn btn-ghost btn-sm"
+                        data-copy="{{ v.token }}"
+                        data-copy-idle="کپی">کپی</button>
+              </div>
+            </td>
+            <td>
+              {{ v.title_fa }}
+              {% if v.aliases %}
+              <span class="muted msg-vars-alias">
+                {% for a in v.aliases %}<code class="mono" dir="ltr">{{ a }}</code>{% if not loop.last %}، {% endif %}{% endfor %}
+              </span>
+              {% endif %}
+            </td>
+            <td class="mono muted col-hide-sm" dir="auto">{{ v.example or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </section>
   {% endfor %}
 </div>
-
-<div class="msg-vars-toast" id="msg-vars-toast" hidden role="status">کپی شد</div>
-
-<script>
-(function(){
-  var toast = document.getElementById('msg-vars-toast');
-  var hideTimer = null;
-  function flash(){
-    if (!toast) return;
-    toast.hidden = false;
-    toast.classList.add('is-on');
-    if (hideTimer) clearTimeout(hideTimer);
-    hideTimer = setTimeout(function(){
-      toast.classList.remove('is-on');
-      toast.hidden = true;
-    }, 1200);
-  }
-  document.querySelectorAll('.msg-vars-token[data-copy]').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var t = btn.getAttribute('data-copy') || '';
-      if (!t) return;
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(t).then(flash).catch(function(){
-          try {
-            var ta = document.createElement('textarea');
-            ta.value = t; document.body.appendChild(ta); ta.select();
-            document.execCommand('copy'); document.body.removeChild(ta);
-            flash();
-          } catch (e) {}
-        });
-      }
-    });
-  });
-})();
-</script>
 {% endblock %}

@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.1.13": [
+        "متغیرهای پیام: بازطراحی هم‌سبک با جداول card-flush پنل؛ فشرده و بدون کپشن/مقالهٔ راهنما",
+        "کپی استاندارد کنار باکس توکن؛ لینک تنظیمات هر بخش کنار عنوان همان گروه",
+        "بدون مایگریشن جدید نسبت به ۸.۱.۱۲؛ ریستور: تگ restore/pre-msg-vars-redesign-v8.1.12 و v8.1.12",
+    ],
     "8.1.12": [
         "صفحه «متغیرهای پیام» در سایدبار ربات (قبل از تنظیمات): کاتالوگ امن جای‌نگهدارها با کپی یک‌کلیکی",
         "رندر متن‌های ربات از طریق کاتالوگ دامنه‌دار + safe_format؛ باگ عضویت اجباری (.format) رفع شد",
