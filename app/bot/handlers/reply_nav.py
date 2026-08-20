@@ -1218,9 +1218,9 @@ async def _soft_admin(
             await bubble.edit_text("مخاطب را از کیبورد پایین انتخاب کنید.")
         elif data.startswith("adm:broadcast:aud:"):
             await admin_h.adm_broadcast_audience(cb, db_user, state, session=session)
-        elif data == "adm:settings":
+        elif data in {"adm:settings", "adm:st:hub"}:
             if state is not None:
-                await settings_h.settings_hub(cb, state, db_user, session=session)
+                await settings_h.settings_hub(cb, session, db_user, state)
             else:
                 await bubble.edit_text("⚙️ تنظیمات را از کیبورد پایین انتخاب کنید.")
         else:

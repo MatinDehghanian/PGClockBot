@@ -32,6 +32,11 @@ class _BlockPlatformAdminOnResellerBot(BaseMiddleware):
         return await handler(event, data)
 
 
+# In-flow settings back (⬅️ بازگشت). Already inside the settings UI — must
+# navigate, not trap the operator behind an Owner-principal alert.
+_SETTINGS_NAV_BACK = frozenset({"adm:settings", "adm:st:hub"})
+
+
 class _RequireBotOwnerPrincipal(BaseMiddleware):
     """H4 — admin routers require explicit Owner Principal (not role alone).
 
@@ -47,6 +52,8 @@ class _RequireBotOwnerPrincipal(BaseMiddleware):
     ) -> Any:
         if data.get("is_reseller_bot"):
             return None
+        if (getattr(event, "data", None) or "") in _SETTINGS_NAV_BACK:
+            return await handler(event, data)
         from app.bot.auth import is_bot_owner_principal
 
         ok = await is_bot_owner_principal(
@@ -57,7 +64,10 @@ class _RequireBotOwnerPrincipal(BaseMiddleware):
         if not ok:
             from aiogram.types import CallbackQuery, Message
 
-            if isinstance(event, CallbackQuery):
+            answer = getattr(event, "answer", None)
+            if isinstance(event, CallbackQuery) or (
+                callable(answer) and hasattr(event, "data")
+            ):
                 try:
                     await event.answer("دسترسی مالک سیستم لازم است", show_alert=True)
                 except Exception:
