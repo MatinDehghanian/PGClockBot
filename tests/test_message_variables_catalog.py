@@ -11,6 +11,7 @@ from app.services.message_variables import (
     DOMAIN_PAYMENT,
     DOMAIN_USER,
     catalog_groups,
+    domain_settings_href,
     render_message_template,
 )
 from app.services.safe_format import looks_like_format_injection, safe_format
@@ -41,14 +42,35 @@ class MessageVariablesCatalogTests(unittest.TestCase):
         bot = src.split("nav-section-bot", 1)[1].split("nav-section-pg", 1)[0]
         self.assertLess(bot.find("/message-variables"), bot.find(">تنظیمات</span>"))
 
-    def test_page_template_exists(self):
-        self.assertTrue((ROOT / "app/web/templates/message_variables.html").exists())
+    def test_page_template_panel_aligned(self):
         html = (ROOT / "app/web/templates/message_variables.html").read_text(encoding="utf-8")
-        self.assertIn("msg-vars-token", html)
-        # Intro examples must use HTML entities — never raw {name} in template source.
-        self.assertNotIn("{name}", html)
-        self.assertNotIn("{order_id}", html)
-        self.assertIn("&#123;order_id&#125;", html)
+        self.assertIn("card card-flush", html)
+        self.assertIn("table-compact", html)
+        self.assertIn("msg-vars-token-box", html)
+        self.assertIn('data-copy="{{ v.token }}"', html)
+        self.assertIn("data-copy-idle", html)
+        self.assertIn("g.settings_href", html)
+        self.assertNotIn("page-sub", html)
+        self.assertNotIn("msg-vars-intro", html)
+        self.assertNotIn("msg-vars-toast", html)
+
+    def test_domain_settings_deep_links(self):
+        self.assertEqual(
+            domain_settings_href("user", "/settings"),
+            "/settings?tab=welcome",
+        )
+        self.assertEqual(
+            domain_settings_href("payment", "/shop-settings"),
+            "/finance?tab=orders&settings=payment",
+        )
+        self.assertEqual(
+            domain_settings_href("referral", "/settings"),
+            "/loyalty?settings=referral",
+        )
+        groups = catalog_groups(settings_base="/shop-settings")
+        by_domain = {g["domain"]: g["settings_href"] for g in groups}
+        self.assertEqual(by_domain["force_join"], "/shop-settings?tab=forcejoin")
+        self.assertEqual(by_domain["qr"], "/shop-settings?tab=qr")
 
     def test_page_requires_shop_settings(self):
         src = (ROOT / "app/api/message_variables_pages.py").read_text(encoding="utf-8")
@@ -99,7 +121,6 @@ class MessageVariablesRenderTests(unittest.TestCase):
             ["@a"], custom="عضو شوید:\n{channels}"
         )
         self.assertIn("• @a", msg)
-        # XSS-ish channel label escaped
         msg2 = force_join_block_message(
             ["<script>"], custom="{channels}"
         )
