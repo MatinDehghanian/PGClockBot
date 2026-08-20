@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.1.15": [
+        "Shop/Settings: Finance و Supports دیگر با scope خالی به تنظیمات Owner برنمی‌گردند (fail-closed)",
+        "Principal/Sub-Rep با ResellerProfile معتبر می‌تواند Shop Settings همان فروشگاه را باز و ذخیره کند",
+        "بدون مایگریشن جدید نسبت به ۸.۱.۱۴؛ ریستور: تگ restore/pre-shop-settings-scope-v8.1.14 و v8.1.14",
+    ],
     "8.1.14": [
         "متغیرهای پیام: دکمه کپی نزدیک‌تر به باکس توکن؛ دکمه تنظیمات هر بخش با استایل پرایمری",
         "بدون مایگریشن جدید نسبت به ۸.۱.۱۳؛ ریستور: تگ restore/pre-msg-vars-copy-gap-v8.1.13 و v8.1.13",

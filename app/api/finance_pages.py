@@ -228,9 +228,8 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         }
 
         if can_finance_settings:
-            rid = None if staff.get("role") == "admin" else shop_owner_id(staff)
-            values = await get_all_settings(session, reseller_id=rid)
-            ctx["values"] = values
+            # Owner/platform settings only for real Owner. Scoped staff without
+            # resolvable shop_owner_id must NOT fall through to Owner settings.
             pay_groups_names, pay_groups = _groups_for_tab("payment")
             bill_groups_names, bill_groups = _groups_for_tab("billing")
             ctx["payment_tab_groups"] = pay_groups_names
@@ -238,7 +237,8 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             ctx["billing_tab_groups"] = bill_groups_names
             ctx["billing_groups"] = bill_groups
             next_base = f"/finance?tab={tab}"
-            if staff.get("role") == "admin":
+            if is_platform_admin(staff):
+                ctx["values"] = await get_all_settings(session)
                 ctx["payment_settings_action"] = (
                     f"/settings?tab=payment&next={quote(next_base + '&settings=payment')}"
                 )
@@ -250,15 +250,19 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                     + quote(next_base + "&settings=payment")
                 )
             else:
-                ctx["payment_settings_action"] = (
-                    f"/shop-settings?tab=payment&next={quote(next_base + '&settings=payment')}"
-                )
-                ctx["can_billing_settings"] = False
-                ctx["can_pending_orders"] = True
-                ctx["finance_pending_action"] = (
-                    "/shop-settings/cancel-pending-orders?next="
-                    + quote(next_base + "&settings=payment")
-                )
+                rid = shop_owner_id(staff)
+                if rid:
+                    ctx["values"] = await get_all_settings(session, reseller_id=rid)
+                    ctx["payment_settings_action"] = (
+                        f"/shop-settings?tab=payment&next={quote(next_base + '&settings=payment')}"
+                    )
+                    ctx["can_billing_settings"] = False
+                    ctx["can_pending_orders"] = True
+                    ctx["finance_pending_action"] = (
+                        "/shop-settings/cancel-pending-orders?next="
+                        + quote(next_base + "&settings=payment")
+                    )
+                # else: leave values={} — fail-closed / degraded, no Owner fallback
 
         fetch_limit = 500 if search_q else 100
 

@@ -114,9 +114,16 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             return {"ok": False, "error": f"عدم اتصال به تلگرام: {exc}"}
 
     def _rid(staff: dict) -> int | None:
+        """Server-side shop tenant only (session → shop_owner_id). Never form/query."""
         from app.services.shop_scope import shop_owner_id
 
         return shop_owner_id(staff)
+
+    def _is_owner_settings_actor(staff: dict) -> bool:
+        """Real Owner (or legacy role=admin chrome) → platform /settings, not shop."""
+        from app.services.shop_scope import is_platform_admin
+
+        return bool(is_platform_admin(staff) or staff.get("role") == "admin")
 
     def _deny_scope() -> RedirectResponse:
         return RedirectResponse(
@@ -138,10 +145,12 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         staff: dict = Depends(shop_dep),
         session: AsyncSession = Depends(get_db),
     ):
-        if staff.get("role") == "admin":
+        # Scope from authenticated session only — not role=="reseller" alone.
+        if _is_owner_settings_actor(staff):
             return RedirectResponse("/settings", status_code=303)
-        if staff.get("role") != "reseller":
-            return RedirectResponse("/login", status_code=303)
+        rid = _rid(staff)
+        if not rid:
+            return _deny_scope()
 
         tab = (request.query_params.get("tab") or "welcome").strip()
         if tab == "security":
@@ -161,9 +170,6 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if tab not in allowed_tabs:
             tab = "welcome"
 
-        rid = _rid(staff)
-        if not rid:
-            return _deny_scope()
         values = await get_all_settings(session, reseller_id=rid)
         values["show_reseller_apply"] = "0"
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
@@ -259,9 +265,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         staff: dict = Depends(shop_dep),
         session: AsyncSession = Depends(get_db),
     ):
-        if staff.get("role") != "reseller":
+        if _is_owner_settings_actor(staff):
             return RedirectResponse("/settings", status_code=303)
-
         rid = _rid(staff)
         if not rid:
             return _deny_scope()
@@ -270,6 +275,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             return RedirectResponse("/shop-settings", status_code=303)
 
         form = await request.form()
+        # Ignore any client-supplied reseller_id — authority is session scope only.
         profile = await _load_profile(session, rid)
         if not profile:
             return RedirectResponse("/logout", status_code=303)
@@ -424,7 +430,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         staff: dict = Depends(shop_dep),
         session: AsyncSession = Depends(get_db),
     ):
-        if staff.get("role") != "reseller":
+        if _is_owner_settings_actor(staff):
             return RedirectResponse("/finance?tab=orders&settings=payment", status_code=303)
         rid = _rid(staff)
         if not rid:
@@ -453,7 +459,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         session: AsyncSession = Depends(get_db),
     ):
         """Save shop Telegram notify prefs — ResellerSetting only, ACL-filtered."""
-        if staff.get("role") != "reseller":
+        if _is_owner_settings_actor(staff):
             return RedirectResponse("/settings", status_code=303)
         rid = _rid(staff)
         if not rid:
@@ -495,7 +501,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         staff: dict = Depends(shop_dep),
         session: AsyncSession = Depends(get_db),
     ):
-        if staff.get("role") != "reseller":
+        if _is_owner_settings_actor(staff):
             return RedirectResponse("/settings", status_code=303)
         from app.bot.keyboards import DEFAULT_MENU_ORDER
 
@@ -529,7 +535,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         staff: dict = Depends(shop_dep),
         session: AsyncSession = Depends(get_db),
     ):
-        if staff.get("role") != "reseller":
+        if _is_owner_settings_actor(staff):
             return RedirectResponse("/tickets?supports=1", status_code=303)
         from app.services.support_contacts import upsert_support_contact
 
@@ -569,7 +575,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         staff: dict = Depends(shop_dep),
         session: AsyncSession = Depends(get_db),
     ):
-        if staff.get("role") != "reseller":
+        if _is_owner_settings_actor(staff):
             return RedirectResponse("/tickets?supports=1", status_code=303)
         from app.services.support_contacts import delete_support_contact
 
