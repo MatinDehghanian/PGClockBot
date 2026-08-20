@@ -42,7 +42,9 @@
 
 {% if widgets_deferred %}
 <div id="pg-dash" class="pg-dash" aria-busy="true">
-  <p class="muted" style="margin:1rem 0">در حال بارگذاری آمار پاسارگارد…</p>
+  {% set loading_title = 'در حال بارگذاری آمار' %}
+  {% set loading_cap = 'پاسارگارد' %}
+  {% include "_panel_widgets_loading.html" %}
 </div>
 {% include "_panel_widgets_defer.html" %}
 {% else %}
