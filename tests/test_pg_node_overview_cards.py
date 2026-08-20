@@ -105,7 +105,7 @@ class NodeOverviewBuilderTests(unittest.TestCase):
 
 class PgOverviewSurfaceTests(unittest.TestCase):
     def test_pg_home_has_node_tiles_not_simple_table(self):
-        pg = (ROOT / "app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        pg = (ROOT / "app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
         self.assertIn("pg-node-tile", pg)
         self.assertIn("data-pg-live-up-num", pg)
         self.assertIn("pg-metric-unit", pg)
@@ -152,7 +152,7 @@ class PgOverviewSurfaceTests(unittest.TestCase):
         self.assertNotIn("background:", body)
 
     def test_pg_home_node_meta_parts(self):
-        pg = (ROOT / "app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        pg = (ROOT / "app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
         self.assertIn("data-pg-node-cpu-cores-num", pg)
         self.assertIn("data-pg-node-cpu-cores-unit", pg)
         self.assertIn("data-pg-node-mem-used", pg)

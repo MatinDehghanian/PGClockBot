@@ -41,6 +41,9 @@
     var next = tmp.firstElementChild;
     if (next && root.parentNode) {
       root.parentNode.replaceChild(next, root);
+      document.dispatchEvent(new CustomEvent('panel-widgets-ready', {
+        detail: { id: next.id || '' }
+      }));
     }
   }).catch(function () {
     /* Keep unchecked shell — never invent disconnected state. */

@@ -23,6 +23,8 @@ class PgSpacingAlignTests(unittest.TestCase):
         home = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
         self.assertIn('class="page-head"', home)
         self.assertNotIn("pg_tabs(", home)
+        dash = Path("app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
+        self.assertNotIn("pg_tabs(", dash)
 
 
 if __name__ == "__main__":

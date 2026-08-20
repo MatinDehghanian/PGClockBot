@@ -1,0 +1,163 @@
+{% if staff.pg_is_owner %}
+{# Re-queries DOM each tick so shell-first /pg/body swap still refreshes live metrics. #}
+<script>
+(function () {
+  function els() {
+    var liveRoot = document.querySelector('[data-pg-nodes-live][data-metrics-url]');
+    var hostRoot = document.querySelector('[data-host-gauges]');
+    return {
+      liveRoot: liveRoot,
+      hostRoot: hostRoot,
+      url: (liveRoot && liveRoot.getAttribute('data-metrics-url')) || '/pg/metrics',
+      liveUpNum: document.querySelector('[data-pg-live-up-num]'),
+      liveUpUnit: document.querySelector('[data-pg-live-up-unit]'),
+      liveDownNum: document.querySelector('[data-pg-live-down-num]'),
+      liveDownUnit: document.querySelector('[data-pg-live-down-unit]'),
+      grid: document.querySelector('[data-pg-node-grid]'),
+      tabsNav: document.querySelector('[data-pg-node-tabs]'),
+      cpuEl: hostRoot && hostRoot.querySelector('[data-host-cpu-val]'),
+      memEl: hostRoot && hostRoot.querySelector('[data-host-mem-val]'),
+      memHint: hostRoot && hostRoot.querySelector('[data-host-mem-hint]'),
+      coresEl: hostRoot && hostRoot.querySelector('[data-host-cpu-cores]'),
+      cpuGauge: hostRoot && hostRoot.querySelector('[data-metric="cpu"]'),
+      memGauge: hostRoot && hostRoot.querySelector('[data-metric="mem"]')
+    };
+  }
+  function setGauge(article, pct, tone) {
+    if (!article) return;
+    var ring = article.querySelector('.home-gauge-ring');
+    if (ring && pct != null) ring.style.setProperty('--p', String(pct));
+    article.className = 'home-gauge home-gauge-' + (tone || 'neutral');
+  }
+  function fmtPct(n) {
+    if (n == null || isNaN(n)) return '—';
+    return Math.round(n) + '٪';
+  }
+  function setParts(numEl, unitEl, parts) {
+    var p = parts || {};
+    if (numEl) numEl.textContent = (p.num != null && p.num !== '') ? p.num : '—';
+    if (unitEl) unitEl.textContent = p.unit || '';
+  }
+  function setMeter(tile, kind, pct, text, tone) {
+    var box = tile.querySelector('[data-pg-node-' + kind + '-meter]');
+    if (!box) return;
+    var p = (pct == null || isNaN(pct)) ? 0 : Math.max(0, Math.min(100, Number(pct)));
+    box.style.setProperty('--p', String(p));
+    box.className = 'pg-node-meter pg-node-meter-' + (tone || 'neutral');
+    var pctEl = box.querySelector('[data-pg-node-' + kind + ']');
+    if (pctEl) pctEl.textContent = text || '—';
+  }
+  function badgeClass(kind) {
+    if (kind === 'ok') return 'badge connected';
+    if (kind === 'warn') return 'badge connecting';
+    if (kind === 'err') return 'badge danger';
+    return 'badge neutral';
+  }
+  function setMetaParts(wrap, visible, applyFn) {
+    if (!wrap) return;
+    if (!visible) {
+      wrap.hidden = true;
+      applyFn(wrap);
+      return;
+    }
+    wrap.hidden = false;
+    applyFn(wrap);
+  }
+  function applyNode(tile, n) {
+    if (!tile || !n) return;
+    var st = tile.querySelector('[data-pg-node-status]');
+    if (st) {
+      st.textContent = n.status || '—';
+      st.className = badgeClass(n.status_kind || 'neutral');
+    }
+    var cpuMeta = tile.querySelector('[data-pg-node-cpu-meta]');
+    var cp = n.cpu_cores_parts || {};
+    setMetaParts(cpuMeta, !!(cp.num && cp.unit), function (wrap) {
+      var numEl = wrap.querySelector('[data-pg-node-cpu-cores-num]');
+      var unitEl = wrap.querySelector('[data-pg-node-cpu-cores-unit]');
+      if (numEl) numEl.textContent = cp.num || '';
+      if (unitEl) unitEl.textContent = cp.unit || '';
+    });
+    var memMeta = tile.querySelector('[data-pg-node-mem-meta]');
+    var mp = n.mem_parts || {};
+    setMetaParts(memMeta, !!mp.unit, function (wrap) {
+      var usedEl = wrap.querySelector('[data-pg-node-mem-used]');
+      var totEl = wrap.querySelector('[data-pg-node-mem-total]');
+      var unitEl = wrap.querySelector('[data-pg-node-mem-unit]');
+      if (usedEl) usedEl.textContent = mp.used || '';
+      if (totEl) totEl.textContent = mp.total || '';
+      if (unitEl) unitEl.textContent = mp.unit || '';
+    });
+    setMeter(tile, 'cpu', n.cpu_percent, n.cpu_text, n.cpu_tone);
+    setMeter(tile, 'mem', n.mem_percent, n.mem_text, n.mem_tone);
+    setParts(tile.querySelector('[data-pg-node-up-num]'), tile.querySelector('[data-pg-node-up-unit]'), n.traffic_up);
+    setParts(tile.querySelector('[data-pg-node-down-num]'), tile.querySelector('[data-pg-node-down-unit]'), n.traffic_down);
+    setParts(tile.querySelector('[data-pg-node-rate-up-num]'), tile.querySelector('[data-pg-node-rate-up-unit]'), n.rate_up_parts);
+    setParts(tile.querySelector('[data-pg-node-rate-down-num]'), tile.querySelector('[data-pg-node-rate-down-unit]'), n.rate_down_parts);
+  }
+  async function tickNodes() {
+    if (document.hidden) return;
+    var e = els();
+    if (!e.liveRoot && !e.hostRoot && !e.grid) return;
+    try {
+      var r = await fetch(e.url + (e.url.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now(), {
+        cache: 'no-store',
+        credentials: 'same-origin'
+      });
+      if (!r.ok) return;
+      var d = await r.json();
+      if (e.cpuEl) e.cpuEl.textContent = fmtPct(d.cpu_percent);
+      if (e.memEl) e.memEl.textContent = fmtPct(d.memory_percent);
+      if (e.memHint && (d.memory_ratio_text || (d.memory_used_text && d.memory_total_text))) {
+        e.memHint.textContent = d.memory_ratio_text || (d.memory_used_text + ' / ' + d.memory_total_text);
+      }
+      if (e.coresEl && d.cpu_cores) {
+        e.coresEl.hidden = false;
+        e.coresEl.textContent = d.cpu_cores + ' هسته';
+      }
+      setGauge(e.cpuGauge, d.cpu_percent, d.cpu_tone);
+      setGauge(e.memGauge, d.memory_percent, d.mem_tone);
+      if (d.live) {
+        if (e.liveUpNum) e.liveUpNum.textContent = d.live.rate_up_num || '—';
+        if (e.liveUpUnit) e.liveUpUnit.textContent = d.live.rate_up_unit || '';
+        if (e.liveDownNum) e.liveDownNum.textContent = d.live.rate_down_num || '—';
+        if (e.liveDownUnit) e.liveDownUnit.textContent = d.live.rate_down_unit || '';
+      }
+      if (e.grid && Array.isArray(d.nodes)) {
+        d.nodes.forEach(function (n) {
+          if (n == null || n.id == null) return;
+          var tile = e.grid.querySelector('[data-pg-node-tile][data-node-id="' + String(n.id) + '"]');
+          applyNode(tile, n);
+        });
+      }
+    } catch (err) {}
+  }
+  document.addEventListener('click', function (ev) {
+    var tabsNav = document.querySelector('[data-pg-node-tabs]');
+    var grid = document.querySelector('[data-pg-node-grid]');
+    if (!tabsNav || !grid) return;
+    var btn = ev.target && ev.target.closest ? ev.target.closest('[data-pg-node-tab]') : null;
+    if (!btn || !tabsNav.contains(btn)) return;
+    var id = btn.getAttribute('data-pg-node-tab');
+    if (id == null || id === '') return;
+    tabsNav.querySelectorAll('[data-pg-node-tab]').forEach(function (b) {
+      var on = b === btn;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    grid.querySelectorAll('[data-pg-node-tile]').forEach(function (tile) {
+      var match = String(tile.getAttribute('data-node-id')) === String(id);
+      tile.hidden = !match;
+    });
+  });
+  setInterval(tickNodes, 5000);
+  setTimeout(tickNodes, 2500);
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) tickNodes();
+  });
+  document.addEventListener('panel-widgets-ready', function () {
+    tickNodes();
+  });
+})();
+</script>
+{% endif %}
