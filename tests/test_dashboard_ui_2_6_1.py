@@ -71,7 +71,7 @@ class RamRingTests(unittest.TestCase):
         dash = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
         self.assertIn("_host_resource_gauges.html", dash)
         self.assertIn("/dashboard/metrics", dash)
-        home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
+        home = Path("app/web/templates/_home_dash_body.html").read_text(encoding="utf-8")
         self.assertNotIn("home-gauge", home)
 
 

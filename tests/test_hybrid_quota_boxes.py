@@ -68,7 +68,7 @@ class PgHomeBundlePermissionTests(unittest.IsolatedAsyncioTestCase):
 
 class SurfaceContractTests(unittest.TestCase):
     def test_home_shows_wallet_and_limit_board_for_hybrid(self):
-        home = (ROOT / "app/web/templates/home.html").read_text(encoding="utf-8")
+        home = (ROOT / "app/web/templates/_home_dash_body.html").read_text(encoding="utf-8")
         self.assertIn("wallet_card", home)
         self.assertIn("کیف پول", home)
         self.assertIn("pg_overview_limit_board", home)

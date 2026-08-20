@@ -102,7 +102,7 @@ class PgQuotaGaugeUiTests(unittest.TestCase):
         self.assertNotIn("{% if not is_admin %}", src)
 
     def test_reseller_home_banners_at_top(self):
-        src = (ROOT / "app/web/templates/reseller_home.html").read_text(encoding="utf-8")
+        src = (ROOT / "app/web/templates/_reseller_home_dash_body.html").read_text(encoding="utf-8")
         board_i = src.find("pg_overview_limit_board")
         self.assertGreater(board_i, 0)
         self.assertIn("کیف پول", src)

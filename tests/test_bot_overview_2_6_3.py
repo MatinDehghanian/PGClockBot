@@ -40,7 +40,7 @@ class RamMetaStyleTests(unittest.TestCase):
         self.assertIn("num-ratio", mem)
         self.assertNotIn("home-gauge-amount", mem)
         self.assertNotIn("<strong", mem.split("home-gauge-meta")[1])
-        home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
+        home = Path("app/web/templates/_home_dash_body.html").read_text(encoding="utf-8")
         self.assertNotIn("data-metric=\"mem\"", home)
 
     def test_ram_ltr_forced_right_on_desktop(self):

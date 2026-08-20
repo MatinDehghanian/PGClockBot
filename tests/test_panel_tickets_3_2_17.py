@@ -34,7 +34,7 @@ class DashboardLinkTests(unittest.TestCase):
         # reseller_home.html / home.html later generalized this into the
         # Action Center work-queue card, which renders each item's own href
         # (tickets is one of several entry kinds there) — see _home_ops.html.
-        for name in ("reseller_home.html", "home.html"):
+        for name in ("_reseller_home_dash_body.html", "_home_dash_body.html"):
             src = (ROOT / "app/web/templates" / name).read_text(encoding="utf-8")
             self.assertIn('{% include "_home_ops.html" %}', src)
         ops = (ROOT / "app/web/templates/_home_ops.html").read_text(encoding="utf-8")

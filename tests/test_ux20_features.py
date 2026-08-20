@@ -96,7 +96,7 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertFalse((root / "magic_links.html").is_file())
 
     def test_home_overview_only_no_pg_open_or_old_shortcuts(self):
-        home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
+        home = Path("app/web/templates/_home_dash_body.html").read_text(encoding="utf-8")
         self.assertNotIn("ورود به پاسارگارد", home)
         self.assertNotIn("tools/gift-codes", home)
         self.assertNotIn("tools/export", home)

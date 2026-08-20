@@ -801,6 +801,26 @@ def create_api_app(lifespan=None) -> FastAPI:
         return await call_next(request)
 
     @app.middleware("http")
+    async def panel_timing_middleware(request: Request, call_next):
+        """Observation-only timing for panel HTML/JSON — never touches auth/ACL."""
+        from app.services.panel_timing import (
+            begin,
+            finish_log,
+            server_timing_header,
+            should_time,
+        )
+
+        if request.method != "GET" or not should_time(request.url.path):
+            return await call_next(request)
+        begin(request)
+        response = await call_next(request)
+        snap = finish_log(request, status_code=getattr(response, "status_code", 0) or 0)
+        hdr = server_timing_header(snap)
+        if hdr:
+            response.headers.setdefault("Server-Timing", hdr)
+        return response
+
+    @app.middleware("http")
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")

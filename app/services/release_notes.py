@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.1.9": [
+        "وب‌پنل: اندازه‌گیری زمان لود صفحات (Server-Timing) بدون تغییر auth/ACL",
+        "داشبورد /home: شل سریع بعد از احراز هویت؛ ویجت‌های نمایشی از /home/body با همان require_staff پر می‌شوند",
+        "Timeout کوتاه فقط برای probeهای نمایشی (نه Allow/Deny)؛ موازی‌سازی امن بدون اشتراک session",
+        "بدون مایگریشن جدید نسبت به ۸.۱.۸؛ ریستور: تگ restore/pre-panel-safe-speed-v8.1.8 و v8.1.8",
+    ],
     "8.1.8": [
         "ربات: همه دکمه‌های اینلاین داخل تنظیمات (مثل افزودن پشتیبان) بعد از ورود از کیبورد دیگر خطای دسترسی مالک نمی‌دهند",
         "بدون مایگریشن جدید نسبت به ۸.۱.۷؛ ریستور: تگ v8.1.7",

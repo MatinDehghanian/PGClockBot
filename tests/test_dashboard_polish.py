@@ -66,9 +66,9 @@ class DashboardPolishSourceTests(unittest.TestCase):
         self.assertNotIn("margin-bottom: var(--space-2);", block)
 
     def test_home_and_dashboard_share_panel_classes(self):
-        home = Path("app/web/templates/home.html").read_text(encoding="utf-8")
+        home = Path("app/web/templates/_home_dash_body.html").read_text(encoding="utf-8")
         dash = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
-        reseller_home = Path("app/web/templates/reseller_home.html").read_text(encoding="utf-8")
+        reseller_home = Path("app/web/templates/_reseller_home_dash_body.html").read_text(encoding="utf-8")
         ops = Path("app/web/templates/_home_ops.html").read_text(encoding="utf-8")
         self.assertIn("_home_ops.html", home)
         self.assertIn("_home_ops.html", reseller_home)

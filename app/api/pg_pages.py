@@ -250,8 +250,16 @@ def register_pg_pages(
         staff: dict = Depends(require_pg_perm("pg_overview")),
         session: AsyncSession = Depends(get_db),
     ):
+        """Authz via require_pg_perm before any HTML.
+
+        Display PG API probes use a short timeout (never allow/deny). Full HTML
+        shell-first swap is not used here because owner live-metrics scripts
+        must remain in the initial document (innerHTML would drop them).
+        """
+        from app.services.panel_timing import mark
         from app.services.pg_overview import build_reseller_pg_overview, is_server_stat_key
 
+        mark(request, "handler")
         err = None
         stats_rows: list[tuple[str, str]] = []
         nodes = []
@@ -259,14 +267,17 @@ def register_pg_pages(
         counts = {"admins": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0}
         reseller_overview = None
         host_gauges = None
-        try:
+
+        async def _load_display_widgets():
+            nonlocal err, stats_rows, nodes, nodes_overview, counts
+            nonlocal reseller_overview, host_gauges
             if _is_pg_owner_principal(staff):
                 from app.services.host_gauges import gauges_from_pg_system_stats
                 from app.services.node_traffic import build_nodes_overview
 
                 pg = get_pg()
                 # Full nodes (uplink/downlink) + realtime (CPU/RAM/speeds) for owner overview
-                raw, nodes, admins, groups, hosts, realtime = await asyncio.gather(
+                raw, nodes_raw, admins, groups, hosts, realtime = await asyncio.gather(
                     pg.get_system_stats(),
                     pg.get_nodes(),
                     pg.get_admins_simple(),
@@ -315,7 +326,7 @@ def register_pg_pages(
                             break
                 elif isinstance(raw, Exception):
                     err = str(raw)
-                nodes = nodes if isinstance(nodes, list) else []
+                nodes = nodes_raw if isinstance(nodes_raw, list) else []
                 rt = realtime if not isinstance(realtime, Exception) else None
                 try:
                     nodes_overview = build_nodes_overview(nodes, rt)
@@ -331,8 +342,21 @@ def register_pg_pages(
                 # Limited Hybrid Owner / reseller / pg_staff: tenant-safe overview
                 reseller_overview = await build_reseller_pg_overview(staff, session=session)
                 # Keep overview.error in template; don't blank the page via flash_err
+
+        try:
+            await asyncio.wait_for(
+                _load_display_widgets(),
+                timeout=3.0,
+            )
+        except asyncio.TimeoutError:
+            import logging
+
+            logging.getLogger(__name__).info(
+                "pg_home display widgets timed out after 3.0s — serving partial shell"
+            )
         except Exception as e:
             err = str(e)
+
         ticket_alert = None
         if not _is_admin(staff) and staff.get("role") in {"reseller", "pg_staff", "principal"}:
             from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
@@ -371,6 +395,7 @@ def register_pg_pages(
         pg_external_url = await resolve_pg_open_url(
             session, is_admin=_is_pg_owner_principal(staff)
         )
+        mark(request, "page_data")
         return render(
             request,
             "pg_home.html",

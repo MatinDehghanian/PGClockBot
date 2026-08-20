@@ -113,17 +113,33 @@ async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None,
 
 
 async def _safe_pg_health(*, reseller_user_id: int | None = None, session: AsyncSession | None = None):
+    """Display-only PG reachability — never used for allow/deny."""
     from app.services.db_safe import rollback_quiet
+    from app.services.panel_display_timeout import display_await
     from app.services.ux20 import check_pg_connection
 
-    try:
-        return await check_pg_connection(
-            reseller_user_id=reseller_user_id, session=session
-        )
-    except Exception:
-        logger.exception("pg_health failed reseller_user_id=%s", reseller_user_id)
-        await rollback_quiet(session)
-        return {"ok": False, "error": "بررسی اتصال ناموفق", "version": None}
+    async def _probe():
+        try:
+            return await check_pg_connection(
+                reseller_user_id=reseller_user_id, session=session
+            )
+        except Exception:
+            logger.exception("pg_health failed reseller_user_id=%s", reseller_user_id)
+            if session is not None:
+                await rollback_quiet(session)
+            # Unchecked — never paint a false «قطع» for a probe failure.
+            return dict(_UNCHECKED_CONN)
+
+    return await display_await(
+        _probe(),
+        fallback=dict(_UNCHECKED_CONN),
+        label="pg_health",
+    )
+
+
+def _wants_full_widgets(request: Request) -> bool:
+    """Escape hatch: ?full=1 forces classic single-response render."""
+    return (request.query_params.get("full") or "").strip() == "1"
 
 
 async def _staff_wallet_card(session: AsyncSession, staff: dict) -> dict | None:
@@ -242,9 +258,28 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.panel_inbox import build_inbox_context
+        from app.services.panel_timing import mark
 
+        mark(request, "handler")
         ctx = await build_inbox_context(session, request, staff)
+        mark(request, "page_data")
         return render(request, "inbox.html", ctx)
+
+    async def _render_home_result(request: Request, result, *, as_body_fragment: bool):
+        if isinstance(result, RedirectResponse):
+            return result
+        template, ctx = result
+        ctx = dict(ctx)
+        # Body fragment must never re-trigger defer (no nested fetch loop).
+        ctx["widgets_deferred"] = False
+        if as_body_fragment:
+            partial = (
+                "_home_dash_body.html"
+                if template == "home.html"
+                else "_reseller_home_dash_body.html"
+            )
+            return render(request, partial, ctx)
+        return render(request, template, ctx)
 
     @app.get("/home", response_class=HTMLResponse)
     async def home_dashboard(
@@ -252,17 +287,38 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        """Build context fail-soft; render outside so template bugs stay diagnosable 500s.
+        """Auth/tenant/ACL complete via require_staff before any HTML.
 
-        Never invent «قطع» for Bot/PG/Nodes when data load failed — use unchecked
-        + dashboard_degraded banner instead (false-disconnected regression).
+        Default: fast shell with unchecked display widgets, then /home/body fills in.
+        ``?full=1`` keeps classic single-response behavior.
         """
         from app.services.db_safe import rollback_quiet
         from app.services.identity_chrome import resolve_staff_home
+        from app.services.panel_timing import mark
 
+        mark(request, "handler")
         dest_kind, dest_target = resolve_staff_home(staff)
         if dest_kind == "redirect":
             return RedirectResponse(dest_target, status_code=303)
+
+        want_full = _wants_full_widgets(request)
+        if not want_full:
+            try:
+                result = await _fast_home_shell(staff, session)
+            except Exception:
+                logger.exception("home fast shell failed; serving degraded shell")
+                await rollback_quiet(session)
+                result = _degraded_home_shell(staff)
+            mark(request, "page_data")
+            if isinstance(result, RedirectResponse):
+                return result
+            template, ctx = result
+            ctx = dict(ctx)
+            ctx["widgets_deferred"] = True
+            ctx["widgets_body_url"] = "/home/body"
+            # Intentionally not dashboard_degraded — shell is planned, not failed.
+            ctx["dashboard_degraded"] = False
+            return render(request, template, ctx)
 
         try:
             result = await _home_dashboard_context(request, staff, session)
@@ -270,12 +326,40 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             logger.exception("home_dashboard data build failed; serving degraded shell")
             await rollback_quiet(session)
             result = _degraded_home_shell(staff)
+        mark(request, "page_data")
+        # Render is intentionally outside the data try/except: Jinja/KeyError must
+        # hit the global handler with a ref=, not paint fake connection failures.
         if isinstance(result, RedirectResponse):
             return result
         template, ctx = result
-        # Render is intentionally outside the data try/except: Jinja/KeyError must
-        # hit the global handler with a ref=, not paint fake connection failures.
+        ctx = dict(ctx)
+        ctx["widgets_deferred"] = False
         return render(request, template, ctx)
+
+    @app.get("/home/body", response_class=HTMLResponse)
+    async def home_dashboard_body(
+        request: Request,
+        staff: dict = Depends(require_staff),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Widget HTML only — re-runs the same require_staff authz as /home."""
+        from app.services.db_safe import rollback_quiet
+        from app.services.identity_chrome import resolve_staff_home
+        from app.services.panel_timing import mark
+
+        mark(request, "handler")
+        dest_kind, dest_target = resolve_staff_home(staff)
+        if dest_kind == "redirect":
+            return RedirectResponse(dest_target, status_code=303)
+
+        try:
+            result = await _home_dashboard_context(request, staff, session)
+        except Exception:
+            logger.exception("home_dashboard body build failed; serving degraded shell")
+            await rollback_quiet(session)
+            result = _degraded_home_shell(staff)
+        mark(request, "page_data")
+        return await _render_home_result(request, result, as_body_fragment=True)
 
     def _degraded_home_shell(staff: dict):
         from app.services.home_overview import empty_period_stats
@@ -327,29 +411,116 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             },
         )
 
+    async def _fast_home_shell(staff, session):
+        """Post-auth shell: local flags only — no Telegram/PG decorative probes."""
+        from app.services.home_overview import empty_period_stats
+        from app.services.identity_chrome import resolve_staff_home
+
+        dest_kind, dest_target = resolve_staff_home(staff)
+        if dest_kind == "redirect":
+            return RedirectResponse(dest_target, status_code=303)
+
+        periods = empty_period_stats()
+        action = dict(_EMPTY_ACTION)
+        if dest_target == "home.html" or is_platform_admin(staff):
+            show_pg_nodes = "pg_nodes" in (staff.get("pg_permissions") or [])
+            return (
+                "home.html",
+                {
+                    "staff": staff,
+                    "overview": _unchecked_overview(),
+                    "pg_health": dict(_UNCHECKED_CONN),
+                    "funnel_enabled": False,
+                    "funnel": dict(_EMPTY_FUNNEL),
+                    "periods": periods,
+                    "action_center": action,
+                    "dashboard_degraded": False,
+                    "pg_limits": None,
+                    "wallet_card": None,
+                    "show_pg_nodes": show_pg_nodes,
+                },
+            )
+
+        rid = shop_owner_id(staff)
+        if not rid:
+            if staff.get("pg_permissions"):
+                return RedirectResponse("/pg", status_code=303)
+            return RedirectResponse("/security", status_code=303)
+
+        from app.db.models import ResellerProfile
+        from app.services.db_safe import recover_session, rollback_quiet
+        from app.services.resellers import bot_needs_setup
+
+        await recover_session(session)
+        try:
+            profile = (
+                await session.execute(
+                    select(ResellerProfile).where(ResellerProfile.user_id == int(rid))
+                )
+            ).scalar_one_or_none()
+        except Exception:
+            logger.exception("reseller home shell profile load failed rid=%s", rid)
+            await rollback_quiet(session)
+            profile = None
+
+        return (
+            "reseller_home.html",
+            {
+                "staff": staff,
+                "stats": empty_shop_stats(),
+                "pg_limits": None,
+                "bot_setup_needed": bot_needs_setup(profile),
+                "bot": {
+                    "ok": None,
+                    "error": None,
+                    "username": None,
+                    "name": None,
+                    "unchecked": True,
+                },
+                "billing_card": None,
+                "pg_health": dict(_UNCHECKED_CONN),
+                "funnel_enabled": False,
+                "funnel": dict(_EMPTY_FUNNEL),
+                "periods": periods,
+                "action_center": action,
+                "dashboard_degraded": False,
+            },
+        )
+
     async def _home_dashboard_context(request, staff, session):
         # Platform admin: server + both panels.
         if is_platform_admin(staff):
             from app.services.db_safe import recover_session, rollback_quiet
             from app.services.home_overview import empty_home_overview
+            from app.services.panel_display_timeout import display_await
 
             await recover_session(session)
             show_pg_nodes = "pg_nodes" in (staff.get("pg_permissions") or [])
             try:
-                overview = await build_home_overview(session, include_nodes=show_pg_nodes)
+                overview = await display_await(
+                    build_home_overview(session, include_nodes=show_pg_nodes),
+                    fallback=_unchecked_overview(),
+                    label="home_overview",
+                )
             except Exception:
                 logger.exception("build_home_overview failed")
                 await rollback_quiet(session)
                 overview = empty_home_overview()
             from app.services.users import get_all_settings, on
 
+            # settings uses session; pg_health (platform) does not — safe to gather.
             try:
-                ui = await get_all_settings(session, reseller_id=None)
+                ui, pg_health = await asyncio.gather(
+                    get_all_settings(session, reseller_id=None),
+                    _safe_pg_health(),
+                )
             except Exception:
-                logger.exception("home get_all_settings failed")
+                logger.exception("home settings/health gather failed")
                 await rollback_quiet(session)
                 ui = {}
-            pg_health = await _safe_pg_health()
+                pg_health = dict(_UNCHECKED_CONN)
+            if not isinstance(ui, dict):
+                ui = {}
             funnel_enabled = on(ui.get("funnel_tracking_enabled", "1"))
             funnel = (
                 await _safe_funnel(session, reseller_id=None)
@@ -360,6 +531,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 expire_days = int(ui.get("action_center_expire_days") or 3)
             except (TypeError, ValueError):
                 expire_days = 3
+            # Same AsyncSession — must stay sequential.
             periods = await _safe_periods(session, reseller_id=None)
             action_center = await _safe_action_center(
                 session, reseller_id=None, expire_days=expire_days
@@ -370,8 +542,12 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 from app.services.pg_overview import build_reseller_pg_overview
 
                 try:
-                    ov = await build_reseller_pg_overview(staff, session=session)
-                    if ov.get("ready"):
+                    ov = await display_await(
+                        build_reseller_pg_overview(staff, session=session),
+                        fallback=None,
+                        label="hybrid_home_pg_limits",
+                    )
+                    if ov and ov.get("ready"):
                         pg_limits = ov
                 except Exception:
                     logger.exception("hybrid owner home pg limits failed")
@@ -411,6 +587,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         from app.db.models import ResellerProfile
         from app.services.db_safe import recover_session, rollback_quiet
         from app.services.home_overview import check_bot_connection
+        from app.services.panel_display_timeout import display_await
         from app.services.resellers import bot_needs_setup
 
         await recover_session(session)
@@ -427,45 +604,55 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             profile = None
 
         bot_setup_needed = bot_needs_setup(profile)
-        try:
-            stats = (
-                await _reseller_shop_stats(session, int(rid))
-                if not bot_setup_needed
-                else empty_shop_stats()
-            )
-        except Exception:
-            logger.exception("reseller home stats failed rid=%s", rid)
-            await rollback_quiet(session)
-            stats = empty_shop_stats()
-        # Tenant bot only — never probe platform BOT_TOKEN (empty must stay unset).
-        bot_token = ((profile.bot_token if profile else None) or "").strip()
-        main_token = (get_settings().bot_token or "").strip()
-        if not bot_token or (main_token and bot_token == main_token):
-            bot = {
-                "ok": False,
-                "error": "توکن تنظیم نشده" if not bot_token else "توکن نامعتبر",
-                "username": None,
-                "name": None,
-            }
-        else:
+
+        async def _stats_task():
+            if bot_setup_needed:
+                return empty_shop_stats()
             try:
-                bot = await check_bot_connection(bot_token)
+                return await _reseller_shop_stats(session, int(rid))
             except Exception:
-                logger.exception("reseller home bot probe failed rid=%s", rid)
-                bot = {
+                logger.exception("reseller home stats failed rid=%s", rid)
+                await rollback_quiet(session)
+                return empty_shop_stats()
+
+        async def _bot_task():
+            # Tenant bot only — never probe platform BOT_TOKEN.
+            bot_token = ((profile.bot_token if profile else None) or "").strip()
+            main_token = (get_settings().bot_token or "").strip()
+            if not bot_token or (main_token and bot_token == main_token):
+                return {
                     "ok": False,
-                    "error": "بررسی ربات ناموفق",
+                    "error": "توکن تنظیم نشده" if not bot_token else "توکن نامعتبر",
                     "username": None,
                     "name": None,
                 }
+            unchecked_bot = {
+                "ok": None,
+                "error": None,
+                "username": None,
+                "name": None,
+                "unchecked": True,
+            }
+            return await display_await(
+                check_bot_connection(bot_token),
+                fallback=unchecked_bot,
+                label="reseller_bot_probe",
+            )
+
+        # stats uses session; bot probe does not — safe to gather.
+        stats, bot = await asyncio.gather(_stats_task(), _bot_task())
 
         pg_limits = None
         if staff.get("pg_admin_username"):
             from app.services.pg_overview import build_reseller_pg_overview
 
             try:
-                ov = await build_reseller_pg_overview(staff, session=session)
-                if ov.get("ready"):
+                ov = await display_await(
+                    build_reseller_pg_overview(staff, session=session),
+                    fallback=None,
+                    label="reseller_home_pg_overview",
+                )
+                if ov and ov.get("ready"):
                     pg_limits = ov
                     try:
                         from app.services.ux20 import maybe_warn_reseller_capacity
@@ -507,6 +694,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             logger.exception("reseller home get_all_settings failed rid=%s", rid)
             await rollback_quiet(session)
             ui = {}
+        # Reseller pg_health may use session — after settings, not gathered with it.
         pg_health = await _safe_pg_health(
             reseller_user_id=int(rid) if staff.get("pg_admin_username") else None,
             session=session if staff.get("pg_admin_username") else None,
