@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.1.10": [
+        "نمای پاسارگارد /pg: شل سریع بعد از مجوز pg_overview؛ ویجت‌ها از /pg/body با همان مجوز پر می‌شوند",
+        "اسکریپت زنده نود/CPU بیرون از محتوای swap می‌ماند و بعد از پر شدن DOM دوباره کار می‌کند",
+        "فرار اضطراری: /pg?full=1؛ بدون SPA و بدون تغییر auth/ACL",
+        "بدون مایگریشن جدید نسبت به ۸.۱.۹؛ ریستور: تگ restore/pre-pg-shell-first-v8.1.9 و v8.1.9",
+    ],
     "8.1.9": [
         "وب‌پنل: اندازه‌گیری زمان لود صفحات (Server-Timing) بدون تغییر auth/ACL",
         "داشبورد /home: شل سریع بعد از احراز هویت؛ ویجت‌های نمایشی از /home/body با همان require_staff پر می‌شوند",

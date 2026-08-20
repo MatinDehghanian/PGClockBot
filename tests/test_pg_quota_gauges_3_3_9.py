@@ -92,7 +92,7 @@ class PgQuotaGaugeUiTests(unittest.TestCase):
         self.assertIn("height: auto", gauge)
 
     def test_pg_home_banners_and_order(self):
-        src = (ROOT / "app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        src = (ROOT / "app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
         board_i = src.find("pg_overview_limit_board")
         grid_i = src.find("home-panel-grid")
         self.assertGreater(board_i, 0)

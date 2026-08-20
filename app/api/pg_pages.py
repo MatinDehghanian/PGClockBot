@@ -244,31 +244,65 @@ def register_pg_pages(
     require_pg_perm,
     get_db,
 ):
-    @app.get("/pg", response_class=HTMLResponse)
-    async def pg_home(
-        request: Request,
-        staff: dict = Depends(require_pg_perm("pg_overview")),
-        session: AsyncSession = Depends(get_db),
-    ):
-        """Authz via require_pg_perm before any HTML.
+    def _wants_full_pg_widgets(request: Request) -> bool:
+        return (request.query_params.get("full") or "").strip() == "1"
 
-        Display PG API probes use a short timeout (never allow/deny). Full HTML
-        shell-first swap is not used here because owner live-metrics scripts
-        must remain in the initial document (innerHTML would drop them).
-        """
-        from app.services.panel_timing import mark
+    async def _pg_chrome_context(request: Request, staff: dict, session: AsyncSession) -> dict:
+        """Local/fast chrome after authz — ticket alert, remediation, open URL."""
+        ticket_alert = None
+        if not _is_admin(staff) and staff.get("role") in {"reseller", "pg_staff", "principal"}:
+            from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
+
+            ticket_alert = await panel_ticket_dashboard_alert(
+                session,
+                staff,
+                unread=getattr(request.state, "panel_tickets_unread", None),
+            )
+
+        staff_remediation = None
+        if staff.get("role") == "pg_staff":
+            from app.services.pg_staff_access import (
+                access_by_web_username,
+                staff_remediation_flags,
+                staff_username_aligned,
+            )
+
+            login_u = (staff.get("username") or "").strip()
+            staff_row = await access_by_web_username(session, login_u) if login_u else None
+            if staff_row is not None:
+                flags = staff_remediation_flags(staff_row)
+                if flags["needs_remediation"]:
+                    staff_remediation = {
+                        **flags,
+                        "can_self_serve": staff_username_aligned(staff_row),
+                        "web_username": staff_row.web_username,
+                        "pg_username": staff_row.pg_username,
+                    }
+
+        from app.services.ux20 import resolve_pg_open_url
+
+        pg_external_url = await resolve_pg_open_url(
+            session, is_admin=_is_pg_owner_principal(staff)
+        )
+        return {
+            "ticket_alert": ticket_alert,
+            "staff_remediation": staff_remediation,
+            "pg_external_url": pg_external_url or None,
+        }
+
+    async def _pg_display_widgets(staff: dict, session: AsyncSession) -> dict:
+        """Decorative PG overview data — never used for allow/deny."""
         from app.services.pg_overview import build_reseller_pg_overview, is_server_stat_key
 
-        mark(request, "handler")
         err = None
         stats_rows: list[tuple[str, str]] = []
-        nodes = []
+        nodes: list = []
         nodes_overview = None
         counts = {"admins": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0}
         reseller_overview = None
         host_gauges = None
 
-        async def _load_display_widgets():
+        async def _load():
             nonlocal err, stats_rows, nodes, nodes_overview, counts
             nonlocal reseller_overview, host_gauges
             if _is_pg_owner_principal(staff):
@@ -276,7 +310,6 @@ def register_pg_pages(
                 from app.services.node_traffic import build_nodes_overview
 
                 pg = get_pg()
-                # Full nodes (uplink/downlink) + realtime (CPU/RAM/speeds) for owner overview
                 raw, nodes_raw, admins, groups, hosts, realtime = await asyncio.gather(
                     pg.get_system_stats(),
                     pg.get_nodes(),
@@ -288,7 +321,6 @@ def register_pg_pages(
                 )
                 if isinstance(raw, dict):
                     host_gauges = gauges_from_pg_system_stats(raw)
-                    # Keys already shown in the merged overview counts — skip duplicates
                     _count_dup_keys = {
                         "total_user",
                         "total_users",
@@ -339,81 +371,109 @@ def register_pg_pages(
                 counts["groups"] = len(groups) if isinstance(groups, list) else 0
                 counts["hosts"] = len(hosts) if isinstance(hosts, list) else 0
             else:
-                # Limited Hybrid Owner / reseller / pg_staff: tenant-safe overview
                 reseller_overview = await build_reseller_pg_overview(staff, session=session)
-                # Keep overview.error in template; don't blank the page via flash_err
 
         try:
-            await asyncio.wait_for(
-                _load_display_widgets(),
-                timeout=3.0,
-            )
+            await asyncio.wait_for(_load(), timeout=3.0)
         except asyncio.TimeoutError:
             import logging
 
             logging.getLogger(__name__).info(
-                "pg_home display widgets timed out after 3.0s — serving partial shell"
+                "pg display widgets timed out after 3.0s — serving partial data"
             )
         except Exception as e:
             err = str(e)
 
-        ticket_alert = None
-        if not _is_admin(staff) and staff.get("role") in {"reseller", "pg_staff", "principal"}:
-            from app.api.panel_tickets_pages import panel_ticket_dashboard_alert
+        return {
+            "err": err,
+            "stats_rows": stats_rows,
+            "nodes": nodes if _is_pg_owner_principal(staff) else [],
+            "nodes_overview": nodes_overview,
+            "counts": counts,
+            "reseller_overview": reseller_overview,
+            "host_gauges": host_gauges,
+        }
 
-            ticket_alert = await panel_ticket_dashboard_alert(
-                session,
+    @app.get("/pg", response_class=HTMLResponse)
+    async def pg_home(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_overview")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Authz via require_pg_perm before any HTML.
+
+        Default: fast chrome shell, then /pg/body fills decorative widgets.
+        ``?full=1`` keeps classic single-response behavior.
+        Live-metrics script stays in the shell and re-queries DOM after swap.
+        """
+        from app.services.panel_timing import mark
+
+        mark(request, "handler")
+        chrome = await _pg_chrome_context(request, staff, session)
+        want_full = _wants_full_pg_widgets(request)
+
+        if not want_full:
+            mark(request, "page_data")
+            ctx = _pg_ctx(
                 staff,
-                unread=getattr(request.state, "panel_tickets_unread", None),
-            )
-
-        # Phase D3 Q3: staff overview CTA when enc missing or username mismatched
-        staff_remediation = None
-        if staff.get("role") == "pg_staff":
-            from app.services.pg_staff_access import (
-                access_by_web_username,
-                staff_remediation_flags,
-                staff_username_aligned,
-            )
-
-            # Cookie auth only — no SessionMiddleware; never touch request.session
-            login_u = (staff.get("username") or "").strip()
-            staff_row = await access_by_web_username(session, login_u) if login_u else None
-            if staff_row is not None:
-                flags = staff_remediation_flags(staff_row)
-                if flags["needs_remediation"]:
-                    staff_remediation = {
-                        **flags,
-                        # Self-serve /security only when username already equals PG
-                        "can_self_serve": staff_username_aligned(staff_row),
-                        "web_username": staff_row.web_username,
-                        "pg_username": staff_row.pg_username,
-                    }
-
-        from app.services.ux20 import resolve_pg_open_url
-
-        pg_external_url = await resolve_pg_open_url(
-            session, is_admin=_is_pg_owner_principal(staff)
-        )
-        mark(request, "page_data")
-        return render(
-            request,
-            "pg_home.html",
-            _pg_ctx(
-                staff,
-                stats_rows=stats_rows,
-                nodes=nodes if _is_pg_owner_principal(staff) else [],
-                counts=counts,
-                reseller_overview=reseller_overview,
-                flash_err=err,
+                stats_rows=[],
+                nodes=[],
+                counts={"admins": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0},
+                reseller_overview=None,
+                flash_err=None,
                 active="pg",
-                ticket_alert=ticket_alert,
-                staff_remediation=staff_remediation,
-                pg_external_url=pg_external_url or None,
-                host_gauges=host_gauges,
-                nodes_overview=nodes_overview,
-            ),
+                host_gauges=None,
+                nodes_overview=None,
+                **chrome,
+            )
+            ctx["widgets_deferred"] = True
+            ctx["widgets_body_url"] = "/pg/body"
+            return render(request, "pg_home.html", ctx)
+
+        widgets = await _pg_display_widgets(staff, session)
+        mark(request, "page_data")
+        ctx = _pg_ctx(
+            staff,
+            stats_rows=widgets["stats_rows"],
+            nodes=widgets["nodes"],
+            counts=widgets["counts"],
+            reseller_overview=widgets["reseller_overview"],
+            flash_err=widgets["err"],
+            active="pg",
+            host_gauges=widgets["host_gauges"],
+            nodes_overview=widgets["nodes_overview"],
+            **chrome,
         )
+        ctx["widgets_deferred"] = False
+        return render(request, "pg_home.html", ctx)
+
+    @app.get("/pg/body", response_class=HTMLResponse)
+    async def pg_home_body(
+        request: Request,
+        staff: dict = Depends(require_pg_perm("pg_overview")),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Widget HTML only — re-runs the same require_pg_perm as /pg."""
+        from app.services.panel_timing import mark
+
+        mark(request, "handler")
+        chrome = await _pg_chrome_context(request, staff, session)
+        widgets = await _pg_display_widgets(staff, session)
+        mark(request, "page_data")
+        ctx = _pg_ctx(
+            staff,
+            stats_rows=widgets["stats_rows"],
+            nodes=widgets["nodes"],
+            counts=widgets["counts"],
+            reseller_overview=widgets["reseller_overview"],
+            flash_err=widgets["err"],
+            active="pg",
+            host_gauges=widgets["host_gauges"],
+            nodes_overview=widgets["nodes_overview"],
+            **chrome,
+        )
+        ctx["widgets_deferred"] = False
+        return render(request, "_pg_dash_body.html", ctx)
 
     @app.get("/pg/metrics")
     async def pg_host_metrics_json(

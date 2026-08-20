@@ -48,7 +48,7 @@ class ConstraintBoxesTests(unittest.TestCase):
             self.assertNotIn("hint", b)
 
     def test_templates_omit_constraint_captions(self):
-        for rel in ("app/web/templates/_reseller_home_dash_body.html", "app/web/templates/pg_home.html"):
+        for rel in ("app/web/templates/_reseller_home_dash_body.html", "app/web/templates/_pg_dash_body.html"):
             src = Path(rel).read_text(encoding="utf-8")
             self.assertNotIn("c.hint", src)
             self.assertIn("pg_overview_limit_board", src)
@@ -96,7 +96,7 @@ class WiringTests(unittest.TestCase):
         self.assertNotIn('class="meter"', home)
 
     def test_pg_home_no_time_boxes(self):
-        src = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        src = Path("app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
         self.assertNotIn("زمان کل", src)
         self.assertNotIn("زمان باقیمانده", src)
         self.assertIn("کاربران", src)

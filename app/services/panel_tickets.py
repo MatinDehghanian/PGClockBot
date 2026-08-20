@@ -77,6 +77,7 @@ SKIP_UNREAD_PATHS = frozenset(
         "/home/body",
         "/dashboard/metrics",
         "/pg/metrics",
+        "/pg/body",
         "/update/status",
         "/settings/ssl/progress",
         "/backup/status",

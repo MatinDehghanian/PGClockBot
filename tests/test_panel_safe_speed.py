@@ -102,12 +102,38 @@ class PanelShellFirstContractTests(unittest.TestCase):
 
     def test_pg_keeps_require_pg_perm_and_display_timeout(self):
         src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
-        pg = src[src.find("async def pg_home") : src.find("async def pg_host_metrics_json")]
+        pg = src[src.find("async def pg_home") : src.find("async def pg_home_body")]
         self.assertIn('Depends(require_pg_perm("pg_overview"))', pg)
-        self.assertIn("asyncio.wait_for", pg)
-        self.assertIn("mark(request, \"handler\")", pg)
+        self.assertIn("_pg_chrome_context", src)
+        self.assertIn("_pg_display_widgets", src)
+        self.assertIn('"/pg/body"', src)
+        self.assertIn("widgets_deferred", pg)
+        # Body route re-runs same perm.
+        body = src[src.find("async def pg_home_body") : src.find("async def pg_host_metrics_json")]
+        self.assertIn('Depends(require_pg_perm("pg_overview"))', body)
+        self.assertIn('"_pg_dash_body.html"', body)
         # No SPA nav.
         self.assertNotIn("panelNavigate", src)
+
+    def test_pg_shell_first_templates(self):
+        home = (ROOT / "app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        self.assertIn("widgets_deferred", home)
+        self.assertIn("_pg_dash_body.html", home)
+        self.assertIn("_panel_widgets_defer.html", home)
+        self.assertIn("_pg_live_metrics_script.html", home)
+        body = (ROOT / "app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
+        self.assertIn('id="pg-dash"', body)
+        defer = (ROOT / "app/web/templates/_panel_widgets_defer.html").read_text(encoding="utf-8")
+        self.assertIn("panel-widgets-ready", defer)
+        live = (ROOT / "app/web/templates/_pg_live_metrics_script.html").read_text(encoding="utf-8")
+        self.assertIn("panel-widgets-ready", live)
+        self.assertIn("function els()", live)
+
+    def test_pg_body_skips_sidebar_unread(self):
+        from app.services.panel_tickets import should_skip_unread_count
+
+        self.assertTrue(should_skip_unread_count("/pg/body", "GET"))
+        self.assertFalse(should_skip_unread_count("/pg", "GET"))
 
     def test_middleware_registered_observation_only(self):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")

@@ -157,7 +157,7 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertNotIn('href="/pg">بروزرسانی', src)
 
     def test_pg_home_stats_uses_home_panel(self):
-        src = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        src = Path("app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
         self.assertIn("home-panel home-panel-pg", src)
         self.assertIn("home-panel-grid", src)
         self.assertIn("آمار پنل", src)

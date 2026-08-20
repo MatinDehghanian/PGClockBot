@@ -11,6 +11,8 @@ CSS = ROOT / "app/web/static/panel.css"
 JS = ROOT / "app/web/static/panel.js"
 BASE = ROOT / "app/web/templates/base.html"
 PG_HOME = ROOT / "app/web/templates/pg_home.html"
+PG_DASH = ROOT / "app/web/templates/_pg_dash_body.html"
+PG_LIVE = ROOT / "app/web/templates/_pg_live_metrics_script.html"
 
 
 class NavSkeletonNoDelayTests(unittest.TestCase):
@@ -60,9 +62,14 @@ class PgOverviewFooterGapTests(unittest.TestCase):
         content = html.split("{% block content %}", 1)[1].split("{% endblock %}", 1)[0]
         self.assertNotIn("<script>", content)
         self.assertIn("{% block page_scripts %}", html)
-        scripts = html.split("{% block page_scripts %}", 1)[1]
-        self.assertIn("data-pg-node-grid", scripts)
-        self.assertIn("tickNodes", scripts)
+        self.assertIn("_pg_live_metrics_script.html", html)
+        # Widget markup lives in dash body; live poller stays outside content.
+        dash = PG_DASH.read_text(encoding="utf-8")
+        self.assertIn("data-pg-node-grid", dash)
+        self.assertNotIn("<script>", dash)
+        live = PG_LIVE.read_text(encoding="utf-8")
+        self.assertIn("tickNodes", live)
+        self.assertIn("panel-widgets-ready", live)
 
 
 if __name__ == "__main__":
