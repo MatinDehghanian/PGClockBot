@@ -96,7 +96,7 @@ async def _custom_link_summary(session: AsyncSession) -> tuple[str, InlineKeyboa
         "✨ <b>اتصال پلن دلخواه</b>\n\n"
         f"فروش: {'فعال' if enabled else 'خاموش'}\n"
         f"پاسارگارد: {link}\n\n"
-        "قیمت و محدوده → تنظیمات ← سرویس و دسترسی ← پلن دلخواه"
+        "قیمت و محدوده → پلن‌ها ← پلن دلخواه (یا وب‌پنل)"
     )
     rows = [
         [

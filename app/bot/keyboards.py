@@ -286,6 +286,8 @@ REPLY_ACTION_RES_PREVIEW = "res_preview"
 REPLY_ACTION_RES_ADD_REP = "res_add_rep"
 REPLY_ACTION_ADMIN_USERS = "adm_users"
 REPLY_ACTION_ADMIN_SETTINGS = "adm_settings"
+REPLY_ACTION_ADM_ST_PANEL = "adm_st_panel"
+REPLY_ACTION_RES_ST_PANEL = "res_st_panel"
 REPLY_ACTION_ADMIN_BROADCAST = "adm_broadcast"
 REPLY_ACTION_ADMIN_RESELLERS = "adm_resellers"
 REPLY_ACTION_ADMIN_BACKUP = "adm_backup"
@@ -517,14 +519,15 @@ def _admin_resellers_submenu_entries(ui: dict | None = None) -> list[tuple[str, 
 
 def _admin_settings_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     _ = ui
-    # Labels MUST match admin_settings.SECTIONS[*]["title"]
+    # Labels MUST match admin_settings.SECTIONS[*]["title"] for HUB_ORDER keys
     return [
-        ("adm_st_shop", "فروشگاه و متون"),
-        ("adm_st_menu", "کیبورد اصلی"),
+        ("adm_st_shop", "فروشگاه"),
+        ("adm_st_menu", "منو"),
         ("adm_st_pay", "پرداخت"),
         ("adm_st_support", "پشتیبان‌ها"),
-        ("adm_st_service", "سرویس و دسترسی"),
+        ("adm_st_access", "دسترسی"),
         ("adm_st_notify", "اعلان‌ها"),
+        (REPLY_ACTION_ADM_ST_PANEL, "🌐 وب‌پنل"),
     ]
 
 
@@ -618,13 +621,14 @@ def _reseller_settings_submenu_entries(ui: dict | None = None) -> list[tuple[str
     _ = ui
     # Labels MUST match reseller_settings.SECTIONS[*]["title"] / HUB_ORDER
     return [
-        ("res_st_shop", "فروشگاه و متون"),
-        ("res_st_menu", "کیبورد اصلی"),
+        ("res_st_shop", "فروشگاه"),
+        ("res_st_menu", "منو"),
         ("res_st_pay", "پرداخت"),
         ("res_st_support", "پشتیبان‌ها"),
-        ("res_st_access", "دسترسی و QR"),
-        ("res_st_bot", "ربات اختصاصی"),
-        ("res_st_notify", "نوتیفیکیشن‌ها"),
+        ("res_st_access", "دسترسی"),
+        ("res_st_notify", "اعلان‌ها"),
+        ("res_st_bot", "ربات"),
+        (REPLY_ACTION_RES_ST_PANEL, "🌐 وب‌پنل"),
     ]
 
 

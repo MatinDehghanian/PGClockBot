@@ -781,7 +781,7 @@ async def open_admin_settings_hub(
         session,
         db_user,
         nav.NAV_ADMIN_SETTINGS,
-        text="⚙️ <b>تنظیمات</b>\nاز کیبورد پایین یک بخش را انتخاب کنید:",
+        text="⚙️ <b>تنظیمات سریع</b>\nاز کیبورد پایین یک بخش را انتخاب کنید.\nظاهر، رنگ، گزارش روزانه → وب‌پنل.",
         state=state,
         push=push,
     )
@@ -918,9 +918,10 @@ async def open_reseller_settings_hub(
         db_user,
         nav.NAV_RESELLER_SETTINGS,
         text=(
-            "⚙️ <b>تنظیمات فروشگاه</b>\n"
+            "⚙️ <b>تنظیمات سریع فروشگاه</b>\n"
             f"ربات: <code>{bot_line}</code>\n"
-            "بخش‌ها از کیبورد پایین — بدون تنظیمات پلتفرم."
+            "بخش‌ها از کیبورد پایین — فقط محدودهٔ همین فروشگاه.\n"
+            "ظاهر، رنگ، گزارش روزانه → وب‌پنل."
         ),
         state=state,
         push=push,
@@ -1616,6 +1617,19 @@ async def _soft_reseller(
         return
     if action.startswith("res_st_"):
         sec = action.replace("res_st_", "", 1)
+        if sec == "panel":
+            from app.services.resellers import get_reseller_panel_base_url, has_bot_perm
+
+            if not has_bot_perm(profile, "shop_settings"):
+                await message.answer("دسترسی تنظیمات فروشگاه ندارید.")
+                return
+            base = (await get_reseller_panel_base_url(session) or "").rstrip("/")
+            url = f"{base}/shop-settings" if base else "/shop-settings"
+            await message.answer(
+                "🌐 <b>تنظیمات کامل فروشگاه در وب‌پنل</b>\n"
+                f"<code>{url}</code>"
+            )
+            return
         bubble = await message.answer("⏳")
         cb = _SoftCallback(bubble, f"res:st:sec:{sec}")
         try:
@@ -1746,6 +1760,8 @@ async def reply_main_nav(
         "res_st_access",
         "res_st_bot",
         "res_st_notify",
+        kb.REPLY_ACTION_RES_ST_PANEL,
+        kb.REPLY_ACTION_ADM_ST_PANEL,
         kb.REPLY_ACTION_REV_OK,
         kb.REPLY_ACTION_REV_NO,
         kb.REPLY_ACTION_SVC_LINK,
@@ -2244,8 +2260,48 @@ async def reply_main_nav(
         await _soft_admin(
             message, session, db_user, "adm:resellers:add", state, is_reseller_bot=is_reseller_bot
         )
+    elif action == kb.REPLY_ACTION_ADM_ST_PANEL:
+        if not await _deny_unless_owner(
+            message, session, db_user, is_reseller_bot=is_reseller_bot
+        ):
+            return
+        from app.bot.handlers.admin_settings import _panel_settings_url
+
+        url = await _panel_settings_url(session, for_shop=False)
+        await message.answer(
+            "🌐 <b>تنظیمات کامل وب‌پنل</b>\n"
+            "ظاهر ربات، رنگ دکمه‌ها، گزارش روزانه، لینک‌ها و متن‌های بلند:\n"
+            f"<code>{url}</code>"
+        )
+    elif action == kb.REPLY_ACTION_RES_ST_PANEL:
+        from app.services.reseller_access import load_reseller_actor
+        from app.services.resellers import get_reseller_panel_base_url, has_bot_perm
+
+        if not is_reseller_bot:
+            await open_reseller_creds(message, session, db_user)
+            return
+        owner_id, profile = await load_reseller_actor(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        if not owner_id or not profile or not has_bot_perm(profile, "shop_settings"):
+            await message.answer("دسترسی تنظیمات فروشگاه ندارید.")
+            return
+        base = (await get_reseller_panel_base_url(session) or "").rstrip("/")
+        url = f"{base}/shop-settings" if base else "/shop-settings"
+        await message.answer(
+            "🌐 <b>تنظیمات کامل فروشگاه در وب‌پنل</b>\n"
+            "ظاهر، رنگ، گزارش روزانه و متن‌های بلند:\n"
+            f"<code>{url}</code>\n"
+            "فقط همین فروشگاه — بدون دسترسی به تنظیمات پلتفرم."
+        )
     elif action.startswith("adm_st_"):
         sec = action.replace("adm_st_", "", 1)
+        # Legacy reply keyboards used «سرویس و دسترسی»; ops fields moved to access.
+        if sec == "service":
+            sec = "access"
         await _soft_admin(
             message,
             session,

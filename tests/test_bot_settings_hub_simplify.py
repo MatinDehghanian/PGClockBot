@@ -1,0 +1,141 @@
+"""Bot settings hub simplification — IA + security invariants."""
+
+from __future__ import annotations
+
+import unittest
+from types import SimpleNamespace
+
+
+class BotSettingsHubIATests(unittest.TestCase):
+    def test_admin_hub_order_and_titles(self):
+        from app.bot.handlers.admin_settings import HUB_ORDER, SECTIONS
+        from app.bot.keyboards import _admin_settings_submenu_entries
+
+        self.assertEqual(
+            HUB_ORDER, ["shop", "menu", "pay", "support", "access", "notify"]
+        )
+        self.assertNotIn("service", HUB_ORDER)
+        self.assertIn("service", SECTIONS)  # deep plans callbacks still resolve
+        self.assertIn("access", SECTIONS)
+        self.assertEqual(SECTIONS["shop"]["title"], "فروشگاه")
+        self.assertEqual(SECTIONS["menu"]["title"], "منو")
+        self.assertEqual(SECTIONS["access"]["title"], "دسترسی")
+
+        labels = [lab for _, lab in _admin_settings_submenu_entries()]
+        self.assertEqual(
+            labels,
+            ["فروشگاه", "منو", "پرداخت", "پشتیبان‌ها", "دسترسی", "اعلان‌ها", "🌐 وب‌پنل"],
+        )
+        self.assertNotIn("سرویس و دسترسی", labels)
+        self.assertNotIn("فروشگاه و متون", labels)
+
+    def test_reseller_hub_aligned_with_acl_surface(self):
+        from app.bot.handlers.reseller_settings import HUB_ORDER, SECTIONS
+        from app.bot.keyboards import _reseller_settings_submenu_entries
+
+        self.assertEqual(
+            HUB_ORDER,
+            ["shop", "menu", "pay", "support", "access", "notify", "bot"],
+        )
+        self.assertEqual(SECTIONS["notify"]["title"], "اعلان‌ها")
+        self.assertEqual(SECTIONS["bot"]["title"], "ربات")
+        labels = [lab for _, lab in _reseller_settings_submenu_entries()]
+        self.assertEqual(
+            labels,
+            [
+                "فروشگاه",
+                "منو",
+                "پرداخت",
+                "پشتیبان‌ها",
+                "دسترسی",
+                "اعلان‌ها",
+                "ربات",
+                "🌐 وب‌پنل",
+            ],
+        )
+
+    def test_access_owns_qr_and_force_not_service(self):
+        from app.bot.handlers.admin_settings import SECTIONS, _owner_screen_for_key
+
+        access_keys = {
+            f[0]
+            for sub in SECTIONS["access"]["subs"]
+            if isinstance(sub[2], list)
+            for f in sub[2]
+        }
+        self.assertIn("force_join_enabled", access_keys)
+        self.assertIn("qr_enabled", access_keys)
+        service_subs = {s[0] for s in SECTIONS["service"]["subs"]}
+        self.assertNotIn("qr", service_subs)
+        self.assertNotIn("force", service_subs)
+        self.assertEqual(_owner_screen_for_key("force_join_enabled"), ("access", "force"))
+        self.assertEqual(_owner_screen_for_key("show_sub_link_in_text"), ("access", "qr"))
+
+    def test_shop_catalog_is_slim(self):
+        from app.bot.handlers.admin_settings import SECTIONS as admin_s
+        from app.bot.handlers.reseller_settings import SECTIONS as res_s
+
+        for sections in (admin_s, res_s):
+            sub_ids = {s[0] for s in sections["shop"]["subs"]}
+            self.assertIn("identity", sub_ids)
+            self.assertIn("btn_labels", sub_ids)
+            self.assertNotIn("help_texts", sub_ids)
+            self.assertNotIn("sys_texts", sub_ids)
+            btn = next(s[2] for s in sections["shop"]["subs"] if s[0] == "btn_labels")
+            keys = [f[0] for f in btn]
+            self.assertIn("btn_wholesale", keys)
+            self.assertNotIn("btn_guide", keys)
+            self.assertNotIn("btn_miniapp", keys)
+            self.assertNotIn("btn_reseller_apply", keys)
+
+    def test_reply_map_reseller_new_labels(self):
+        from app.bot.keyboards import reply_action_map, reseller_settings_reply_keyboard
+
+        ui = {
+            "menu_layout": "compact",
+            "btn_back": "⬅️ بازگشت",
+            "btn_menu_home": "🏠 منوی اصلی",
+        }
+        profile = SimpleNamespace(
+            is_active=True,
+            web_permissions="dashboard,plans,orders,payments,tickets,stats,shop_settings",
+        )
+        mapping = reply_action_map(
+            "reseller",
+            ui=ui,
+            include_submenus=True,
+            is_reseller_bot=True,
+            profile=profile,
+        )
+        self.assertEqual(mapping["فروشگاه"], "res_st_shop")
+        self.assertEqual(mapping["ربات"], "res_st_bot")
+        self.assertEqual(mapping["اعلان‌ها"], "res_st_notify")
+        self.assertEqual(mapping["🌐 وب‌پنل"], "res_st_panel")
+        self.assertNotIn("فروشگاه و متون", mapping)
+        flat = [b.text for row in reseller_settings_reply_keyboard(ui).keyboard for b in row]
+        self.assertIn("فروشگاه", flat)
+        self.assertIn("🌐 وب‌پنل", flat)
+
+    def test_user_cannot_see_settings_hub_labels(self):
+        from app.bot.keyboards import reply_action_map
+
+        ui = {"btn_menu_home": "🏠 منوی اصلی", "btn_back": "⬅️ بازگشت", "menu_order": "shop"}
+        mapping = reply_action_map("user", ui=ui, include_submenus=True, is_reseller_bot=False)
+        self.assertNotIn("فروشگاه", mapping)
+        self.assertNotIn("🌐 وب‌پنل", mapping)
+        self.assertNotIn("اعلان‌ها", mapping)
+
+    def test_admin_settings_blocked_on_reseller_bot_map(self):
+        from app.bot.keyboards import reply_action_map
+
+        ui = {"btn_menu_home": "🏠 منوی اصلی", "btn_back": "⬅️ بازگشت"}
+        mapping = reply_action_map(
+            "admin", ui=ui, include_submenus=True, is_reseller_bot=True
+        )
+        self.assertNotIn("فروشگاه", mapping)
+        self.assertNotIn("adm_st_shop", mapping.values())
+        self.assertNotIn("adm_st_panel", mapping.values())
+
+
+if __name__ == "__main__":
+    unittest.main()

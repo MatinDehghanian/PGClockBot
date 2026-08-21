@@ -30,50 +30,38 @@ router = Router(name="reseller_settings")
 Field = tuple[str, str, str]
 
 SECTIONS: dict[str, dict] = {
+    # Same IA as owner hub — shop-scoped only (no platform keys).
     "shop": {
-        "title": "فروشگاه و متون",
+        "title": "فروشگاه",
         "subs": [
             ("identity", "نام و خوش‌آمد", [
                 ("shop_title", "نام فروشگاه", "text"),
                 ("welcome_text", "پیام /start", "textarea"),
             ]),
-            ("help_texts", "راهنما و دعوت", [
-                ("guide_text", "راهنما", "textarea"),
-                ("faq_text", "سوالات متداول", "textarea"),
+            ("texts", "متن‌های ضروری", [
                 ("support_text", "متن پشتیبانی", "textarea"),
                 ("referral_text", "متن دعوت", "textarea"),
-            ]),
-            ("sys_texts", "پیام‌های سیستم", [
-                ("empty_services_text", "بدون سرویس", "textarea"),
-                ("shop_empty_text", "فروشگاه خالی", "textarea"),
-                ("delivery_title", "عنوان تحویل", "text"),
                 ("purchase_success_text", "موفقیت خرید", "textarea"),
-                ("wallet_success_text", "موفقیت شارژ", "textarea"),
                 ("payment_reject_text", "رد پرداخت", "textarea"),
             ]),
-            ("btn_labels", "متن دکمه‌های کیبورد / منو", [
+            ("btn_labels", "متن دکمه‌های اصلی", [
                 ("btn_shop", "خرید", "text"),
                 ("btn_services", "سرویس‌ها", "text"),
                 ("btn_wallet", "کیف پول", "text"),
                 ("btn_support", "پشتیبانی", "text"),
-                ("btn_guide", "راهنما", "text"),
-                ("btn_faq", "سوالات", "text"),
                 ("btn_loyalty", "باشگاه مشتریان", "text"),
                 ("btn_referral", "دعوت دوستان", "text"),
-                ("btn_menu_home", "منوی اصلی (کیبورد)", "text"),
-                ("btn_back", "بازگشت (زیر پیام)", "text"),
-                ("btn_cancel", "انصراف", "text"),
-                ("btn_renew", "تمدید", "text"),
-                ("btn_sub_link", "لینک/QR", "text"),
                 ("btn_wholesale", "فروش عمده", "text"),
+                ("btn_menu_home", "منوی اصلی", "text"),
+                ("btn_back", "بازگشت", "text"),
             ]),
         ],
     },
     "menu": {
-        "title": "کیبورد اصلی",
+        "title": "منو",
         "subs": [
             ("layout", "چیدمان کیبورد", "menu_layout"),
-            ("order", "دکمه‌های فعال / ترتیب", "menu_order"),
+            ("order", "ترتیب دکمه‌ها", "menu_order"),
         ],
     },
     "pay": {
@@ -92,20 +80,17 @@ SECTIONS: dict[str, dict] = {
                 ("card_number", "شماره کارت", "text"),
                 ("card_holder", "صاحب کارت", "text"),
                 ("card_pay_text", "راهنمای پرداخت", "textarea"),
-                ("btn_pay_card", "متن دکمه", "text"),
             ]),
             ("gateway", "درگاه", [
                 ("gateway_name", "نام درگاه", "text"),
                 ("gateway_link", "لینک", "text"),
                 ("gateway_pay_text", "راهنما", "textarea"),
-                ("btn_pay_gateway", "متن دکمه", "text"),
             ]),
             ("crypto", "رمزارز", [
                 ("crypto_asset", "رمزارز", "text"),
                 ("crypto_network", "شبکه", "text"),
                 ("crypto_address", "آدرس ولت", "text"),
                 ("crypto_pay_text", "راهنما", "textarea"),
-                ("btn_pay_crypto", "متن دکمه", "text"),
             ]),
         ],
     },
@@ -114,7 +99,7 @@ SECTIONS: dict[str, dict] = {
         "kind": "supports",
     },
     "access": {
-        "title": "دسترسی و QR",
+        "title": "دسترسی",
         "subs": [
             ("qr", "QR اشتراک", [
                 ("qr_enabled", "ارسال خودکار QR", "toggle"),
@@ -124,23 +109,24 @@ SECTIONS: dict[str, dict] = {
             ("force", "کانال اجباری", [
                 ("force_join_enabled", "فعال", "toggle"),
                 ("force_join_channel", "کانال‌ها (هر خط یکی)", "text"),
-                ("force_join_msg", "متن پیام عضویت (بالای دکمه‌های اینلاین)", "textarea"),
-                ("btn_force_join", "متن پیش‌فرض دکمه لینک کانال", "text"),
+                ("force_join_msg", "متن پیام عضویت", "textarea"),
+                ("btn_force_join", "متن دکمه لینک کانال", "text"),
                 ("btn_force_join_check", "متن دکمه بررسی", "text"),
             ]),
         ],
     },
-    "bot": {
-        "title": "ربات اختصاصی",
-        "kind": "bot",
-    },
     "notify": {
-        "title": "نوتیفیکیشن‌ها",
+        "title": "اعلان‌ها",
         "kind": "notify",
+    },
+    # Own shop bot token only — never platform BOT_TOKEN.
+    "bot": {
+        "title": "ربات",
+        "kind": "bot",
     },
 }
 
-HUB_ORDER = ["shop", "menu", "pay", "support", "access", "bot", "notify"]
+HUB_ORDER = ["shop", "menu", "pay", "support", "access", "notify", "bot"]
 
 
 class ResellerSettingsStates(StatesGroup):
@@ -294,17 +280,32 @@ class _Scoped:
             reset_shop_reseller_id(self._token)
 
 
-async def _render_hub(callback: CallbackQuery, profile):
+async def _render_hub(callback: CallbackQuery, session: AsyncSession, profile):
     """Hub chrome is on reply keyboard; keep a short note under the message."""
     bot_line = f"@{profile.bot_username}" if profile.bot_username else "توکن ثبت نشده"
     text = (
-        "⚙️ <b>تنظیمات فروشگاه</b>\n\n"
+        "⚙️ <b>تنظیمات سریع فروشگاه</b>\n\n"
         f"ربات: <code>{bot_line}</code>\n"
         "بخش‌ها را از کیبورد پایین انتخاب کنید.\n"
-        "فقط تنظیمات مجاز فروشگاه شما — بدون تنظیمات پلتفرم."
+        "فقط محدودهٔ همین فروشگاه — بدون تنظیمات پلتفرم.\n"
+        "ظاهر، رنگ، گزارش روزانه → وب‌پنل."
     )
+    rows: list[list[InlineKeyboardButton]] = []
+    from app.services.resellers import get_reseller_panel_base_url
+
+    base = (await get_reseller_panel_base_url(session) or "").rstrip("/")
+    if base.startswith("http"):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🌐 تنظیمات کامل در وب‌پنل",
+                    url=f"{base}/shop-settings",
+                )
+            ]
+        )
+    markup = _kb(rows) if rows else None
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=None)
+        await safe_edit_text(callback.message, text, reply_markup=markup)
         try:
             await callback.message.answer(
                 "کیبورد تنظیمات:",
@@ -354,9 +355,11 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
                 [InlineKeyboardButton(text="⬅️ تنظیمات", callback_data="res:st:hub")],
             ]
             text = (
-                "🤖 <b>ربات اختصاصی</b>\n\n"
+                "🤖 <b>ربات فروشگاه</b>\n\n"
                 f"یوزرنیم: <code>{uname}</code>\n"
-                "توکن را فقط از @BotFather بگیرید. پس از تغییر، ربات ظرف چند ثانیه وصل می‌شود."
+                "فقط توکن <b>همین فروشگاه</b> را از @BotFather بگیرید.\n"
+                "توکن ربات اصلی/پلتفرم اینجا کار نمی‌کند و ذخیره نمی‌شود به‌عنوان پلتفرم.\n"
+                "پس از تغییر، ربات ظرف چند ثانیه وصل می‌شود."
             )
             if callback.message:
                 await safe_edit_text(callback.message, text, reply_markup=_kb(rows))
@@ -508,7 +511,7 @@ async def settings_hub(callback: CallbackQuery, session: AsyncSession, db_user: 
         return
     await state.clear()
     await callback.answer()
-    await _render_hub(callback, profile)
+    await _render_hub(callback, session, profile)
 
 
 @router.callback_query(F.data.startswith("res:st:sec:"))
