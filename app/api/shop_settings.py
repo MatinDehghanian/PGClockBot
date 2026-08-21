@@ -256,6 +256,30 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             )
             ctx["notify_items"] = shop_notify_catalog(perms)
             ctx["notify_prefs"] = await get_shop_notify_prefs(session, rid)
+            # Ops/capacity keys are Owner-only — keep shop notifications = user alerts.
+            groups = {
+                name: fields
+                for name, fields in groups.items()
+                if name == "هشدار سرویس کاربر"
+            }
+            ctx["groups"] = groups
+            ctx["tab_groups"] = list(groups.keys())
+        elif tab == "daily_report":
+            from app.services.daily_report import (
+                ACTOR_SHOP,
+                DEFAULT_REPORT_TEMPLATE,
+                metric_groups_for_ui,
+                parse_metric_keys,
+            )
+
+            actor = ACTOR_SHOP
+            ctx["daily_report_actor"] = actor
+            ctx["daily_report_metric_groups"] = metric_groups_for_ui(actor)
+            ctx["daily_report_enabled_metrics"] = parse_metric_keys(
+                values.get("admin_daily_report_metrics"), actor=actor
+            )
+            if not (values.get("admin_daily_report_template") or "").strip():
+                values["admin_daily_report_template"] = DEFAULT_REPORT_TEMPLATE
 
         return render(request, "shop_settings.html", ctx)
 
@@ -380,6 +404,22 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
 
                     val = normalize_force_join_channel_value(val)
                 payload[key] = val
+
+        if tab == "daily_report":
+            from app.services.daily_report import (
+                ACTOR_SHOP,
+                metrics_for_actor,
+                serialize_metric_keys,
+            )
+
+            chosen = [
+                m.key
+                for m in metrics_for_actor(ACTOR_SHOP)
+                if form.get(f"m_{m.key}")
+            ]
+            payload["admin_daily_report_metrics"] = serialize_metric_keys(
+                chosen, actor=ACTOR_SHOP
+            )
 
         uploads = DATA_DIR / "uploads"
         uploads.mkdir(parents=True, exist_ok=True)

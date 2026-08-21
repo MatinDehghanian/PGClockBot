@@ -107,7 +107,41 @@
       .replaceAll('{address}','TXyz…')
       .replaceAll('{url}','https://example.com/sub/demo')
       .replaceAll('{sub_link}','https://example.com/sub/demo')
-      .replaceAll('{channels}','• @channel');
+      .replaceAll('{channels}','• @channel')
+      .replaceAll('{admin_name}','علی')
+      .replaceAll('{period_label}','روزانه')
+      .replaceAll('{day}','۲۹')
+      .replaceAll('{month_name}','مرداد')
+      .replaceAll('{year}','۱۴۰۵')
+      .replaceAll('{date_from}','۱۴۰۵/۵/۲۹')
+      .replaceAll('{date_to}','۱۴۰۵/۵/۳۰')
+      .replaceAll('{users_new}','۳')
+      .replaceAll('{orders_new}','۵')
+      .replaceAll('{orders_delivered}','۴')
+      .replaceAll('{revenue_today}','۱٬۲۰۰٬۰۰۰ تومان')
+      .replaceAll('{services_new}','۴')
+      .replaceAll('{pending}','۲')
+      .replaceAll('{tickets_open}','۱')
+      .replaceAll('{failures}','۰')
+      .replaceAll('{funnel_pay_start}','۸')
+      .replaceAll('{funnel_receipt}','۶')
+      .replaceAll('{funnel_delivered}','۵')
+      .replaceAll('{users_total}','۱۲۰')
+      .replaceAll('{orders_total}','۸۰')
+      .replaceAll('{services_total}','۷۵')
+      .replaceAll('{revenue_total}','۱۲٬۰۰۰٬۰۰۰ تومان')
+      .replaceAll('{resellers_active}','۴');
+  }
+  function fillDailyReport(text){
+    var t = String(text||'');
+    var boxes = form ? form.querySelectorAll('input[type="checkbox"][name^="m_"]') : [];
+    boxes.forEach(function(box){
+      var key = (box.getAttribute('name')||'').replace(/^m_/, '');
+      if (!key) return;
+      var token = '{'+key+'}';
+      if (!box.checked) t = t.split(token).join('');
+    });
+    return fillVars(t);
   }
   function renderReplyKeys(items, opts){
     if (!keysEl) return;
@@ -180,6 +214,11 @@
       showKeys = true;
       const hint = document.getElementById('pv-hint');
       if (hint) hint.textContent = 'پیش‌نمایش زنده رنگ دکمه‌ها — سفید / آبی / سبز / قرمز مطابق تلگرام.';
+    } else if (tab === 'daily_report') {
+      var defTpl = '📊 گزارش روزانه\n\n👤 ادمین: {admin_name}\n📅 دوره: {period_label}\n📆 روز: {day}\n🗓️ ماه: {month_name}\n📅 سال: {year}\n📅 از: {date_from}\n📅 تا: {date_to}\n\n📊 فعالیت:\n• کاربران جدید: {users_new}\n• سفارش‌ها: {orders_new}\n• تحویل‌شده: {orders_delivered}\n• درآمد امروز: {revenue_today}';
+      text = fillDailyReport(val('admin_daily_report_template', values.admin_daily_report_template || defTpl));
+      const hint = document.getElementById('pv-hint');
+      if (hint) hint.textContent = 'پیش‌نمایش گزارش روزانه — با خاموش کردن آمار، مقدار آن در پیش‌نمایش خالی می‌شود.';
     }
     if (showKeys) {
       const order = menuOrder();

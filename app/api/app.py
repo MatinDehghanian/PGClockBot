@@ -3675,6 +3675,22 @@ def create_api_app(lifespan=None) -> FastAPI:
             prefs = await get_notify_prefs(session)
             ctx["notify_prefs"] = prefs
             ctx["notify_items"] = NOTIFY_PREFS
+        elif tab == "daily_report":
+            from app.services.daily_report import (
+                ACTOR_OWNER,
+                DEFAULT_REPORT_TEMPLATE,
+                metric_groups_for_ui,
+                parse_metric_keys,
+            )
+
+            actor = ACTOR_OWNER
+            ctx["daily_report_actor"] = actor
+            ctx["daily_report_metric_groups"] = metric_groups_for_ui(actor)
+            ctx["daily_report_enabled_metrics"] = parse_metric_keys(
+                values.get("admin_daily_report_metrics"), actor=actor
+            )
+            if not (values.get("admin_daily_report_template") or "").strip():
+                values["admin_daily_report_template"] = DEFAULT_REPORT_TEMPLATE
         elif tab == "update":
             from app.services.panel_update import clear_idle_status, update_page_context
             from app.services.updates import clear_update_cache
@@ -4111,6 +4127,21 @@ def create_api_app(lifespan=None) -> FastAPI:
 
                     val = normalize_force_join_channel_value(val)
                 payload[key] = val
+        if tab == "daily_report":
+            from app.services.daily_report import (
+                ACTOR_OWNER,
+                metrics_for_actor,
+                serialize_metric_keys,
+            )
+
+            chosen = [
+                m.key
+                for m in metrics_for_actor(ACTOR_OWNER)
+                if form.get(f"m_{m.key}")
+            ]
+            payload["admin_daily_report_metrics"] = serialize_metric_keys(
+                chosen, actor=ACTOR_OWNER
+            )
         uploads = DATA_DIR / "uploads"
         uploads.mkdir(parents=True, exist_ok=True)
         max_image_bytes = 5 * 1024 * 1024

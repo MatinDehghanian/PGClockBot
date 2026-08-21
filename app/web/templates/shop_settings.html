@@ -11,11 +11,15 @@
 
 {{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path) }}
 
-<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','colors'] %}has-preview{% endif %}">
+<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','colors','daily_report'] %}has-preview{% endif %}">
   <div class="settings-main">
 
   {% if tab == 'notifications' %}
     {% include "_shop_settings_notifications.html" %}
+
+  {% elif tab == 'daily_report' %}
+    {% set settings_action = '/shop-settings?tab=daily_report' %}
+    {% include "_settings_daily_report.html" %}
 
   {% elif tab == 'bot' %}
     <form method="post" action="/shop-settings?tab=bot" class="settings-form">
@@ -151,7 +155,7 @@
 
   {% if tab == 'appearance' %}
   {% include "_tg_preview_appearance.html" %}
-  {% elif tab in ['menu','welcome','messages','buttons','qr','colors'] %}
+  {% elif tab in ['menu','welcome','messages','buttons','qr','colors','daily_report'] %}
   {% include "_tg_preview_chat.html" %}
   {% endif %}
 </div>
@@ -159,7 +163,7 @@
 {% if tab == 'appearance' %}
 {% include "_tg_preview_appearance_js.html" %}
 {% endif %}
-{% if tab in ['menu','welcome','messages','buttons','qr','colors'] %}
+{% if tab in ['menu','welcome','messages','buttons','qr','colors','daily_report'] %}
 {% include "_tg_preview_chat_js.html" %}
 {% endif %}
 {% if tab == 'menu' %}

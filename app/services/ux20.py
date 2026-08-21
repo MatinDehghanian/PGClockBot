@@ -966,28 +966,24 @@ async def maybe_warn_reseller_capacity(
 
 
 async def build_admin_daily_report(session: AsyncSession) -> str:
-    from app.services.formatting import format_toman
-    from app.services.home_overview import bot_panel_summary
+    """Backward-compatible Owner report (platform shop only)."""
+    from app.services.daily_report import (
+        ACTOR_OWNER,
+        DEFAULT_REPORT_TEMPLATE,
+        build_daily_report,
+    )
+    from app.services.users import get_setting
 
-    bs = await bot_panel_summary(session)
-    ac = await build_action_center(session, reseller_id=None)
-    funnel = await funnel_summary(session, reseller_id=None, days=1)
-    lines = [
-        "📊 <b>گزارش روزانه کلاک‌بات</b>",
-        "",
-        f"کاربران: <b>{bs.get('users', 0)}</b>",
-        f"سفارش‌ها: <b>{bs.get('orders', 0)}</b>",
-        f"درآمد تحویل‌شده: <b>{format_toman(int(bs.get('revenue') or 0))}</b>",
-        f"رسید معلق: <b>{ac.get('pending', 0)}</b>",
-        f"تیکت باز: <b>{ac.get('tickets', 0)}</b>",
-        f"تحویل ناموفق: <b>{ac.get('failures', 0)}</b>",
-        "",
-        "رفتار کاربر امروز:",
-        f"· شروع پرداخت: {funnel.get('pay_start', 0)}",
-        f"· رسید: {funnel.get('receipt', 0)}",
-        f"· تحویل: {funnel.get('delivered', 0)}",
-    ]
-    return "\n".join(lines)
+    template = await get_setting(session, "admin_daily_report_template", "")
+    metrics = await get_setting(session, "admin_daily_report_metrics", "")
+    return await build_daily_report(
+        session,
+        reseller_id=None,
+        actor=ACTOR_OWNER,
+        admin_name="مالک سیستم",
+        template=template or DEFAULT_REPORT_TEMPLATE,
+        metrics_raw=metrics,
+    )
 
 
 def shop_bundle_to_json(data: dict[str, Any]) -> str:
