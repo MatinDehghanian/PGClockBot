@@ -86,11 +86,11 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
             profile=profile,
         )
         self.assertEqual(mapping["⚙️ تنظیمات فروشگاه"], "res_settings")
-        self.assertEqual(mapping["فروشگاه و متون"], "res_st_shop")
-        self.assertEqual(mapping["ربات اختصاصی"], "res_st_bot")
+        self.assertEqual(mapping["فروشگاه"], "res_st_shop")
+        self.assertEqual(mapping["ربات"], "res_st_bot")
         self.assertEqual(mapping["➕ پلن جدید"], "res_plan_add")
         flat = [b.text for row in reseller_settings_reply_keyboard(ui).keyboard for b in row]
-        self.assertIn("فروشگاه و متون", flat)
+        self.assertIn("فروشگاه", flat)
         self.assertIn("⬅️ بازگشت", flat)
 
     def test_reseller_map_fail_closed_without_profile(self):

@@ -100,51 +100,37 @@ def settings_actor_required(fn):
 Field = tuple[str, str, str]
 
 SECTIONS: dict[str, dict] = {
+    # Ops remote-control: short identity + essentials only.
     "shop": {
-        "title": "فروشگاه و متون",
+        "title": "فروشگاه",
         "subs": [
             ("identity", "نام و خوش‌آمد", [
                 ("shop_title", "نام فروشگاه", "text"),
                 ("welcome_text", "پیام /start", "textarea"),
             ]),
-            ("help_texts", "راهنما و دعوت", [
-                ("guide_text", "راهنما", "textarea"),
-                ("faq_text", "سوالات متداول", "textarea"),
+            ("texts", "متن‌های ضروری", [
                 ("support_text", "متن پشتیبانی", "textarea"),
                 ("referral_text", "متن دعوت", "textarea"),
-            ]),
-            ("sys_texts", "پیام‌های سیستم", [
-                ("empty_services_text", "بدون سرویس", "textarea"),
-                ("shop_empty_text", "فروشگاه خالی", "textarea"),
-                ("delivery_title", "عنوان تحویل", "text"),
                 ("purchase_success_text", "موفقیت خرید", "textarea"),
-                ("wallet_success_text", "موفقیت شارژ", "textarea"),
                 ("payment_reject_text", "رد پرداخت", "textarea"),
             ]),
-            ("btn_labels", "متن دکمه‌های کیبورد / منو", [
+            ("btn_labels", "متن دکمه‌های اصلی", [
                 ("btn_shop", "خرید", "text"),
                 ("btn_services", "سرویس‌ها", "text"),
                 ("btn_wallet", "کیف پول", "text"),
                 ("btn_support", "پشتیبانی", "text"),
-                ("btn_guide", "راهنما", "text"),
-                ("btn_faq", "سوالات", "text"),
                 ("btn_referral", "دعوت", "text"),
-                ("btn_reseller_apply", "درخواست نمایندگی", "text"),
-                ("btn_miniapp", "مینی‌اپ (اینلاین)", "text"),
                 ("btn_wholesale", "فروش عمده", "text"),
-                ("btn_menu_home", "منوی اصلی (کیبورد)", "text"),
-                ("btn_back", "بازگشت (زیر پیام)", "text"),
-                ("btn_cancel", "انصراف", "text"),
-                ("btn_renew", "تمدید", "text"),
-                ("btn_sub_link", "لینک/QR", "text"),
+                ("btn_menu_home", "منوی اصلی", "text"),
+                ("btn_back", "بازگشت", "text"),
             ]),
         ],
     },
     "menu": {
-        "title": "کیبورد اصلی",
+        "title": "منو",
         "subs": [
             ("layout", "چیدمان کیبورد", "menu_layout"),
-            ("order", "دکمه‌های فعال / ترتیب", "menu_order"),
+            ("order", "ترتیب دکمه‌ها", "menu_order"),
         ],
     },
     "pay": {
@@ -163,31 +149,25 @@ SECTIONS: dict[str, dict] = {
                 ("card_number", "شماره کارت", "text"),
                 ("card_holder", "صاحب کارت", "text"),
                 ("card_pay_text", "راهنمای پرداخت", "textarea"),
-                ("btn_pay_card", "متن دکمه", "text"),
             ]),
             ("gateway", "درگاه", [
                 ("gateway_name", "نام درگاه", "text"),
                 ("gateway_link", "لینک", "text"),
                 ("gateway_pay_text", "راهنما", "textarea"),
-                ("btn_pay_gateway", "متن دکمه", "text"),
             ]),
             ("crypto", "رمزارز", [
                 ("crypto_asset", "رمزارز", "text"),
                 ("crypto_network", "شبکه", "text"),
                 ("crypto_address", "آدرس ولت", "text"),
                 ("crypto_pay_text", "راهنما", "textarea"),
-                ("btn_pay_crypto", "متن دکمه", "text"),
             ]),
-            ("stars", "استارز تلگرام", [
+            ("stars", "استارز", [
                 ("stars_toman_per_star", "تومان هر استارز", "number"),
                 ("stars_title", "عنوان فاکتور", "text"),
                 ("stars_description", "توضیح فاکتور", "text"),
-                ("btn_pay_stars", "متن دکمه", "text"),
             ]),
-            ("pay_extra", "سایر", [
+            ("pay_extra", "پاداش دعوت", [
                 ("referral_bonus", "پاداش دعوت", "number"),
-                ("btn_pay_wallet", "متن دکمه کیف پول", "text"),
-                ("btn_pay_discount", "متن دکمه تخفیف", "text"),
             ]),
         ],
     },
@@ -195,14 +175,10 @@ SECTIONS: dict[str, dict] = {
         "title": "پشتیبان‌ها",
         "kind": "supports",
     },
-    "service": {
-        "title": "سرویس و دسترسی",
+    # Day-to-day access controls (hub-facing).
+    "access": {
+        "title": "دسترسی",
         "subs": [
-            ("naming", "نام در پاسارگارد", [
-                ("pg_username_prefix", "پیشوند", "text"),
-                ("pg_username_suffix", "پسوند", "text"),
-                ("pg_username_pattern", "الگو", "text"),
-            ]),
             ("qr", "QR اشتراک", [
                 ("qr_enabled", "ارسال خودکار QR", "toggle"),
                 ("show_sub_link_in_text", "لینک در کپشن", "toggle"),
@@ -211,9 +187,21 @@ SECTIONS: dict[str, dict] = {
             ("force", "کانال اجباری", [
                 ("force_join_enabled", "فعال", "toggle"),
                 ("force_join_channel", "کانال‌ها (هر خط یکی)", "text"),
-                ("force_join_msg", "متن پیام عضویت (بالای دکمه‌های اینلاین)", "textarea"),
-                ("btn_force_join", "متن پیش‌فرض دکمه لینک کانال", "text"),
+                ("force_join_msg", "متن پیام عضویت", "textarea"),
+                ("btn_force_join", "متن دکمه لینک کانال", "text"),
                 ("btn_force_join_check", "متن دکمه بررسی", "text"),
+            ]),
+        ],
+    },
+    # Deep plan/naming tools — kept for callback compatibility (plans hub),
+    # not listed on the settings reply keyboard (HUB_ORDER).
+    "service": {
+        "title": "پلن تست و نام‌گذاری",
+        "subs": [
+            ("naming", "نام در پاسارگارد", [
+                ("pg_username_prefix", "پیشوند", "text"),
+                ("pg_username_suffix", "پسوند", "text"),
+                ("pg_username_pattern", "الگو", "text"),
             ]),
             ("trial", "پلن تست", "trial"),
             ("custom", "پلن دلخواه", "custom"),
@@ -225,7 +213,8 @@ SECTIONS: dict[str, dict] = {
     },
 }
 
-HUB_ORDER = ["shop", "menu", "pay", "support", "service", "notify"]
+# Reply-keyboard hub only — deep «service» stays reachable via plans callbacks.
+HUB_ORDER = ["shop", "menu", "pay", "support", "access", "notify"]
 
 
 CUSTOM_PRICE: list[Field] = [
@@ -305,15 +294,66 @@ def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
 # ----- render helpers -----
 
 
-_SETTINGS_HUB_TEXT = "⚙️ <b>تنظیمات</b>\nبخش‌ها را از کیبورد پایین انتخاب کنید."
+_SETTINGS_HUB_TEXT = (
+    "⚙️ <b>تنظیمات سریع</b>\n"
+    "بخش‌ها را از کیبورد پایین انتخاب کنید.\n"
+    "ظاهر، رنگ، گزارش روزانه و متن‌های بلند → وب‌پنل."
+)
+
+
+async def _panel_settings_url(
+    session: AsyncSession | None = None,
+    *,
+    for_shop: bool = False,
+) -> str:
+    """Public panel URL for deep settings — never embeds tokens or secrets.
+
+    Fail-soft: if env/settings are incomplete (tests, misconfig), return a
+    relative path so hub chrome still renders without a Telegram URL button.
+    """
+    if for_shop:
+        from app.services.resellers import get_reseller_panel_base_url
+
+        if session is None:
+            return "/shop-settings"
+        try:
+            base = (await get_reseller_panel_base_url(session) or "").rstrip("/")
+        except Exception:
+            return "/shop-settings"
+        return f"{base}/shop-settings" if base else "/shop-settings"
+    try:
+        from app.services.setup_wizard import default_panel_base_url
+
+        base = (default_panel_base_url() or "").rstrip("/")
+    except Exception:
+        return "/settings"
+    return f"{base}/settings" if base else "/settings"
+
+
+async def _panel_link_row(
+    session: AsyncSession | None = None,
+    *,
+    for_shop: bool = False,
+) -> list[InlineKeyboardButton]:
+    url = await _panel_settings_url(session, for_shop=for_shop)
+    if not url.startswith("http"):
+        return []
+    return [
+        InlineKeyboardButton(text="🌐 تنظیمات کامل در وب‌پنل", url=url),
+    ]
 
 
 async def _render_hub(callback: CallbackQuery, *, refresh_keyboard: bool = False) -> None:
     """Back to the settings hub. Section list lives on the reply keyboard."""
+    rows: list[list[InlineKeyboardButton]] = []
+    panel_row = await _panel_link_row(for_shop=False)
+    if panel_row:
+        rows.append(panel_row)
+    markup = _kb(rows) if rows else None
     if callback.message:
         await callback.message.edit_text(
             _SETTINGS_HUB_TEXT,
-            reply_markup=None,
+            reply_markup=markup,
         )
         if not refresh_keyboard:
             return
@@ -541,7 +581,7 @@ async def _render_trial(callback: CallbackQuery, session: AsyncSession) -> None:
         [InlineKeyboardButton(text="حجم (گیگ)", callback_data="adm:st:trial:gb")],
         [InlineKeyboardButton(text="تمپلیت پاسارگارد", callback_data="adm:st:trial:tpl")],
         [InlineKeyboardButton(text="گروه پاسارگارد", callback_data="adm:st:trial:grp")],
-        _back_row(("⬅️ بازگشت", "adm:st:sec:service")),
+        _back_row(("⬅️ پلن‌ها", "adm:plans:kind:users:trial")),
     ]
     if callback.message:
         await callback.message.edit_text(
@@ -554,19 +594,21 @@ def _owner_screen_for_key(key: str) -> tuple[str, str] | None:
     """Return (sec_id, sub_id) that owns this key for re-render after toggle/edit."""
     if key.startswith("notify_"):
         return ("notify", "")
-    if key.startswith("show_"):
-        return ("menu", "vis")
     if key == "menu_layout":
         return ("menu", "layout")
     if key == "trial_enabled":
         return ("service", "trial")
     if key.startswith("custom_plan_"):
         return ("service", "custom")
+    # Prefer exact field ownership (e.g. show_sub_link_in_text under access/qr)
     for sec_id, sec in SECTIONS.items():
         for sub in sec.get("subs") or []:
             payload = sub[2]
             if isinstance(payload, list) and any(f[0] == key for f in payload):
                 return (sec_id, sub[0])
+    # Legacy menu visibility flags (show_shop, …) — reorder screen
+    if key.startswith("show_"):
+        return ("menu", "order")
     return None
 
 
