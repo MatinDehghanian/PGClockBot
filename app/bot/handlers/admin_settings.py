@@ -306,17 +306,27 @@ async def _panel_settings_url(
     *,
     for_shop: bool = False,
 ) -> str:
-    """Public panel URL for deep settings — never embeds tokens or secrets."""
+    """Public panel URL for deep settings — never embeds tokens or secrets.
+
+    Fail-soft: if env/settings are incomplete (tests, misconfig), return a
+    relative path so hub chrome still renders without a Telegram URL button.
+    """
     if for_shop:
         from app.services.resellers import get_reseller_panel_base_url
 
         if session is None:
             return "/shop-settings"
-        base = (await get_reseller_panel_base_url(session) or "").rstrip("/")
+        try:
+            base = (await get_reseller_panel_base_url(session) or "").rstrip("/")
+        except Exception:
+            return "/shop-settings"
         return f"{base}/shop-settings" if base else "/shop-settings"
-    from app.services.setup_wizard import default_panel_base_url
+    try:
+        from app.services.setup_wizard import default_panel_base_url
 
-    base = (default_panel_base_url() or "").rstrip("/")
+        base = (default_panel_base_url() or "").rstrip("/")
+    except Exception:
+        return "/settings"
     return f"{base}/settings" if base else "/settings"
 
 
