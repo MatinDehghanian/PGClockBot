@@ -2289,7 +2289,10 @@ async def reply_main_nav(
         if not owner_id or not profile or not has_bot_perm(profile, "shop_settings"):
             await message.answer("دسترسی تنظیمات فروشگاه ندارید.")
             return
-        base = (await get_reseller_panel_base_url(session) or "").rstrip("/")
+        try:
+            base = (await get_reseller_panel_base_url(session) or "").rstrip("/")
+        except Exception:
+            base = ""
         url = f"{base}/shop-settings" if base else "/shop-settings"
         await message.answer(
             "🌐 <b>تنظیمات کامل فروشگاه در وب‌پنل</b>\n"
