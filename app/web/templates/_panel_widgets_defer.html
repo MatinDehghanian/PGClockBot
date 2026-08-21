@@ -1,6 +1,7 @@
 {# Progressive widget fill — shell already passed server authz.
    Body URL re-runs the same Depends authz; shell permission does not grant body.
-   redirect:manual avoids injecting login HTML into #home-dash / #pg-dash. #}
+   redirect:manual avoids injecting login HTML into #home-dash / #pg-dash.
+   Include this as early as possible in the page so the body fetch overlaps HTML parse. #}
 {% set body_url = widgets_body_url or '/home/body' %}
 <noscript>
   <div class="flash warn home-update-banner">
@@ -13,17 +14,16 @@
 </noscript>
 <script>
 (function () {
-  var root = document.getElementById('home-dash') || document.getElementById('pg-dash');
-  if (!root) return;
   var url = {{ body_url|tojson }};
-  fetch(url, {
+  var fetchOpts = {
     credentials: 'same-origin',
     redirect: 'manual',
     headers: {
       'Accept': 'text/html',
       'X-Requested-With': 'XMLHttpRequest'
     }
-  }).then(function (r) {
+  };
+  var pending = fetch(url, fetchOpts).then(function (r) {
     if (r.type === 'opaqueredirect' || r.status === 301 || r.status === 302 || r.status === 303) {
       window.location.href = '/login';
       return null;
@@ -34,8 +34,12 @@
     }
     if (!r.ok) throw new Error('widgets body ' + r.status);
     return r.text();
-  }).then(function (html) {
+  });
+
+  function swap(html) {
     if (!html) return;
+    var root = document.getElementById('home-dash') || document.getElementById('pg-dash');
+    if (!root) return false;
     var tmp = document.createElement('div');
     tmp.innerHTML = String(html).trim();
     var next = tmp.firstElementChild;
@@ -45,7 +49,20 @@
         detail: { id: next.id || '' }
       }));
     }
-  }).catch(function () {
+    return true;
+  }
+
+  function applyWhenReady(html) {
+    if (swap(html)) return;
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { swap(html); });
+      return;
+    }
+    /* Root still missing (rare) — one animation-frame retry. */
+    requestAnimationFrame(function () { swap(html); });
+  }
+
+  pending.then(applyWhenReady).catch(function () {
     /* Keep unchecked shell — never invent disconnected state. */
   });
 })();

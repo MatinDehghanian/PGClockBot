@@ -453,12 +453,19 @@ def register_pg_pages(
         staff: dict = Depends(require_pg_perm("pg_overview")),
         session: AsyncSession = Depends(get_db),
     ):
-        """Widget HTML only — re-runs the same require_pg_perm as /pg."""
+        """Widget HTML only — re-runs the same require_pg_perm as /pg.
+
+        Skips ticket/remediation chrome (already in the shell); only needs
+        ``pg_external_url`` for the open-PasarGuard link inside the dash body.
+        """
         from app.services.panel_timing import mark
+        from app.services.ux20 import resolve_pg_open_url
 
         mark(request, "handler")
-        chrome = await _pg_chrome_context(request, staff, session)
         widgets = await _pg_display_widgets(staff, session)
+        pg_external_url = await resolve_pg_open_url(
+            session, is_admin=_is_pg_owner_principal(staff)
+        )
         mark(request, "page_data")
         ctx = _pg_ctx(
             staff,
@@ -470,7 +477,9 @@ def register_pg_pages(
             active="pg",
             host_gauges=widgets["host_gauges"],
             nodes_overview=widgets["nodes_overview"],
-            **chrome,
+            ticket_alert=None,
+            staff_remediation=None,
+            pg_external_url=pg_external_url or None,
         )
         ctx["widgets_deferred"] = False
         return render(request, "_pg_dash_body.html", ctx)
