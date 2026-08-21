@@ -142,7 +142,7 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         home_src = Path("app/api/home_pages.py").read_text(encoding="utf-8")
         self.assertIn('"/inbox"', home_src)
         self.assertIn("build_inbox_context", home_src)
-        html = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        html = Path("app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
         self.assertIn("ورود به پاسارگارد", html)
         self.assertIn("آمار پنل", html)
         self.assertIn("pg_external_url", html)

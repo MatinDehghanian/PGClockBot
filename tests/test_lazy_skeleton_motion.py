@@ -32,6 +32,7 @@ class LazySkeletonTests(unittest.TestCase):
     def test_content_visible_by_default(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertNotIn("html.page-booting .page-surface", css)
+        self.assertIn("html.page-loading .page-load-veil", css)
         self.assertIn("html.page-loading .page-skeleton", css)
         self.assertNotIn("page-was-slow", css)
 

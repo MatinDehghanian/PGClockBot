@@ -8015,30 +8015,51 @@ html[data-theme="light"] .home-panel-neutral .home-panel-h {
   margin-top: 0;
 }
 
-/* —— Page skeleton + surface motion ——
-   Content stays visible by default. html.page-loading (departing page only,
-   after a short wait) shows skeleton while TTFB is slow. Arrived HTML is
-   never hidden and never fade-in delayed. */
+/* —— Page loading veil (departing document only, after short wait) ——
+   Matte clock overlay on top; arrived HTML paints immediately (page-ready).
+   Legacy .page-skeleton markup stays in DOM but never shows (veil replaces it). */
 .page-skeleton {
-  display: none;
-  flex-direction: column;
-  gap: var(--section-gap);
-  width: 100%;
-  padding: 0;
-  margin: 0 0 var(--section-gap);
-  pointer-events: none;
+  display: none !important;
 }
 html.page-loading .page-skeleton {
+  display: none !important;
+}
+.page-load-veil {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--background) 72%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+html.page-loading .page-load-veil {
   display: flex;
-  animation: page-skeleton-in var(--motion-med) var(--ease-out) both;
+  animation: panel-widgets-loading-in var(--motion-med) var(--ease-out) both;
+}
+.page-load-veil-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+.page-load-veil-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--foreground);
 }
 html.page-loading .page-surface {
-  opacity: 0;
-  visibility: hidden;
+  /* Keep layout under the matte veil — do not unmount / hide content. */
+  opacity: 1;
+  visibility: visible;
   pointer-events: none;
-  position: absolute;
-  inset-inline: 0;
-  width: 100%;
+  position: static;
+  filter: none;
 }
 html.page-ready .page-skeleton {
   display: none !important;
@@ -8171,6 +8192,58 @@ html[data-theme="light"] .sk-bone::after {
   width: 2.75rem;
   height: 2.75rem;
 }
+.panel-load-clock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+}
+.panel-load-clock-face {
+  position: relative;
+  display: block;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--pg-line) 42%, var(--border));
+  background: color-mix(in srgb, var(--bg-card, var(--card, #18181b)) 88%, transparent);
+  box-sizing: border-box;
+}
+.panel-load-clock-hand {
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  width: 2px;
+  margin-left: -1px;
+  transform-origin: 50% 100%;
+  border-radius: 1px;
+  background: var(--pg-line);
+}
+.panel-load-clock-hour {
+  height: 28%;
+  animation: panel-load-clock-hour 8s linear infinite;
+}
+.panel-load-clock-minute {
+  height: 40%;
+  background: color-mix(in srgb, var(--foreground) 78%, var(--pg-line));
+  animation: panel-load-clock-minute 2s linear infinite;
+}
+.panel-load-clock-hub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: var(--foreground);
+}
+@keyframes panel-load-clock-hour {
+  to { transform: rotate(360deg); }
+}
+@keyframes panel-load-clock-minute {
+  to { transform: rotate(360deg); }
+}
 .panel-widgets-loading-ring {
   display: block;
   width: 1.75rem;
@@ -8201,7 +8274,10 @@ html[data-theme="light"] .sk-bone::after {
 }
 @media (prefers-reduced-motion: reduce) {
   .panel-widgets-loading,
-  .panel-widgets-loading-ring {
+  .panel-widgets-loading-ring,
+  .panel-load-clock-hour,
+  .panel-load-clock-minute,
+  .page-load-veil {
     animation: none;
   }
 }

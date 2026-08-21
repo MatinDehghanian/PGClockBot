@@ -45,12 +45,16 @@ class PageSkeletonTests(unittest.TestCase):
     def test_base_has_skeleton_markup(self):
         html = BASE.read_text(encoding="utf-8")
         self.assertIn('id="page-skeleton"', html)
+        self.assertIn('id="page-load-veil"', html)
+        self.assertIn("panel-load-clock", html)
         self.assertIn("page-surface", html)
         self.assertIn("__pgPageReveal", html)
 
     def test_skeleton_css(self):
         css = CSS.read_text(encoding="utf-8")
+        self.assertIn("html.page-loading .page-load-veil", css)
         self.assertIn("html.page-loading .page-skeleton", css)
+        self.assertIn(".panel-load-clock", css)
         self.assertIn("@keyframes sk-shimmer", css)
         self.assertIn("@keyframes page-surface-in", css)
         self.assertNotIn("html.page-booting .page-surface", css)

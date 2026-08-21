@@ -43,7 +43,12 @@ class NavSkeletonNoDelayTests(unittest.TestCase):
     def test_content_visible_without_nav(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertNotIn("html.page-booting .page-surface", css)
+        self.assertIn("html.page-loading .page-load-veil", css)
         self.assertIn("html.page-loading .page-skeleton", css)
+        # Departing page stays painted under the matte veil (no blank flash).
+        block = css.split("html.page-loading .page-surface {", 1)[1].split("}", 1)[0]
+        self.assertIn("opacity: 1", block)
+        self.assertIn("visibility: visible", block)
 
 
 class PgOverviewFooterGapTests(unittest.TestCase):
