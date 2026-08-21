@@ -41,17 +41,16 @@
 {% endif %}
 
 {% if widgets_deferred %}
+{% include "_panel_widgets_defer.html" %}
 <div id="pg-dash" class="pg-dash" aria-busy="true">
   {% set loading_title = 'در حال بارگذاری آمار' %}
   {% set loading_cap = 'پاسارگارد' %}
   {% include "_panel_widgets_loading.html" %}
 </div>
-{% include "_panel_widgets_defer.html" %}
 {% else %}
 {% include "_pg_dash_body.html" %}
 {% endif %}
 {% endblock %}
-
 {% block page_scripts %}
 {% include "_pg_live_metrics_script.html" %}
 {% endblock %}

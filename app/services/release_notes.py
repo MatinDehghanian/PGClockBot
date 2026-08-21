@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.1.16": [
+        "مودال باشگاه: اسکرول افقی تب‌ها با چرخ‌ماوس/ترک‌پد روی خود تب‌ها (دیگر فقط نوار اسکرول نیست)",
+        "سرعت لود اول: واکشی /home/body و /pg/body زودتر شروع می‌شود؛ /pg/body دیگر کروم تیکت را دوباره نمی‌سازد",
+        "بدون مایگریشن جدید نسبت به ۸.۱.۱۵؛ ریستور: تگ restore/pre-modal-tabs-scroll-perf-v8.1.15 و v8.1.15",
+    ],
     "8.1.15": [
         "Shop/Settings: Finance و Supports دیگر با scope خالی به تنظیمات Owner برنمی‌گردند (fail-closed)",
         "Principal/Sub-Rep با ResellerProfile معتبر می‌تواند Shop Settings همان فروشگاه را باز و ذخیره کند",

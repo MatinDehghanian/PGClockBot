@@ -89,8 +89,17 @@ class PanelShellFirstContractTests(unittest.TestCase):
         home = (ROOT / "app/web/templates/home.html").read_text(encoding="utf-8")
         self.assertIn("_home_dash_body.html", home)
         self.assertIn("widgets_deferred", home)
+        # Fetch starts before heavy shell HTML so body overlaps parse.
+        self.assertLess(
+            home.find("_panel_widgets_defer.html"),
+            home.find("_home_dash_body.html"),
+        )
         reseller = (ROOT / "app/web/templates/reseller_home.html").read_text(encoding="utf-8")
         self.assertIn("_reseller_home_dash_body.html", reseller)
+        self.assertLess(
+            reseller.find("_panel_widgets_defer.html"),
+            reseller.find("_reseller_home_dash_body.html"),
+        )
         body = (ROOT / "app/web/templates/_home_dash_body.html").read_text(encoding="utf-8")
         self.assertIn('id="home-dash"', body)
 
@@ -123,6 +132,11 @@ class PanelShellFirstContractTests(unittest.TestCase):
         self.assertIn("_panel_widgets_loading.html", home)
         self.assertIn("_pg_live_metrics_script.html", home)
         self.assertNotIn("در حال بارگذاری آمار پاسارگارد…", home)
+        # Early fetch before loading placeholder.
+        self.assertLess(
+            home.find("_panel_widgets_defer.html"),
+            home.find('id="pg-dash"'),
+        )
         body = (ROOT / "app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
         self.assertIn('id="pg-dash"', body)
         loading = (ROOT / "app/web/templates/_panel_widgets_loading.html").read_text(
@@ -134,9 +148,17 @@ class PanelShellFirstContractTests(unittest.TestCase):
         self.assertIn("min-height: min(52vh", css)
         defer = (ROOT / "app/web/templates/_panel_widgets_defer.html").read_text(encoding="utf-8")
         self.assertIn("panel-widgets-ready", defer)
+        self.assertIn("DOMContentLoaded", defer)
         live = (ROOT / "app/web/templates/_pg_live_metrics_script.html").read_text(encoding="utf-8")
         self.assertIn("panel-widgets-ready", live)
         self.assertIn("function els()", live)
+
+    def test_pg_body_skips_ticket_chrome(self):
+        src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
+        body = src[src.find("async def pg_home_body") : src.find("async def pg_host_metrics_json")]
+        self.assertIn("resolve_pg_open_url", body)
+        self.assertIn("_pg_display_widgets", body)
+        self.assertNotIn("_pg_chrome_context", body)
 
     def test_pg_users_paginated(self):
         src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")

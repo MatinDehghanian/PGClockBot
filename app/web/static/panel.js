@@ -756,6 +756,25 @@
       return false;
     }
 
+    function tryScrollModalTabs(e, modal){
+      /* Vertical-only wheel guard was killing horizontal tab scroll (loyalty etc.). */
+      const t = e.target;
+      const tabs = t && t.closest ? t.closest('.modal-section-tabs') : null;
+      if (!tabs || !modal.contains(tabs)) return false;
+      if (tabs.scrollWidth <= tabs.clientWidth + 1) return false;
+      const dxRaw = e.deltaX || 0;
+      const dyRaw = e.deltaY || 0;
+      const dx = Math.abs(dxRaw) > Math.abs(dyRaw) ? dxRaw : dyRaw;
+      if (!dx) return false;
+      const before = tabs.scrollLeft;
+      const max = tabs.scrollWidth - tabs.clientWidth;
+      const next = Math.max(0, Math.min(max, before + dx));
+      if (next === before) return false;
+      tabs.scrollLeft = next;
+      e.preventDefault();
+      return true;
+    }
+
     function findScrollableAncestor(start, modal){
       let node = start;
       while (node && node !== modal && node !== document.body) {
@@ -787,6 +806,7 @@
           e.preventDefault();
           return;
         }
+        if (tryScrollModalTabs(e, modal)) return;
         const scroller = findScrollableAncestor(e.target, modal);
         if (!canScrollInside(scroller, e.deltaY)) {
           e.preventDefault();
@@ -804,6 +824,11 @@
             || e.target === modal
             || (e.target.classList && e.target.classList.contains('ui-modal-backdrop'))) {
           e.preventDefault();
+          return;
+        }
+        /* Let native horizontal pan work on overflowing modal tab strips. */
+        const tabs = e.target.closest && e.target.closest('.modal-section-tabs');
+        if (tabs && modal.contains(tabs) && tabs.scrollWidth > tabs.clientWidth + 1) {
           return;
         }
         if (!e.touches || !e.touches.length) return;

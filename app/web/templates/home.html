@@ -2,8 +2,8 @@
 {% from "macros.html" import page_title %}
 {% block title %}داشبورد{% endblock %}
 {% block content %}
-{% include "_home_dash_body.html" %}
 {% if widgets_deferred %}
 {% include "_panel_widgets_defer.html" %}
 {% endif %}
+{% include "_home_dash_body.html" %}
 {% endblock %}
