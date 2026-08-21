@@ -333,71 +333,85 @@ def _period_since_utc() -> dict[str, datetime]:
 async def shop_period_stats(
     session: AsyncSession, *, reseller_id: int | None = None
 ) -> dict[str, Any]:
-    """Sales-ish totals for امروز / ۷ روز / ۳۰ روز (shop-scoped)."""
+    """Sales-ish totals for امروز / ۷ روز / ۳۰ روز (shop-scoped).
+
+    Two aggregated queries (orders + users) instead of 12 sequential counts.
+    """
+    from sqlalchemy import case
+
     starts = _period_since_utc()
     out = empty_period_stats()
+    day_s, week_s, month_s = starts["day"], starts["week"], starts["month"]
 
-    for key, since in starts.items():
-        if reseller_id is None:
-            scope_orders = Order.reseller_id.is_(None)
-            scope_users = BotUser.reseller_id.is_(None)
-        else:
-            rid = int(reseller_id)
-            scope_orders = Order.reseller_id == rid
-            scope_users = BotUser.reseller_id == rid
+    if reseller_id is None:
+        scope_orders = Order.reseller_id.is_(None)
+        scope_users = BotUser.reseller_id.is_(None)
+    else:
+        rid = int(reseller_id)
+        scope_orders = Order.reseller_id == rid
+        scope_users = BotUser.reseller_id == rid
 
-        orders_n = int(
-            (
-                await session.execute(
-                    select(func.count())
-                    .select_from(Order)
-                    .where(Order.created_at >= since, scope_orders)
-                )
-            ).scalar()
-            or 0
+    def _sum_since(since, expr):
+        return func.coalesce(
+            func.sum(case((Order.created_at >= since, expr), else_=0)),
+            0,
         )
-        delivered_n = int(
-            (
-                await session.execute(
-                    select(func.count())
-                    .select_from(Order)
-                    .where(
-                        Order.created_at >= since,
-                        Order.status == "delivered",
-                        scope_orders,
-                    )
-                )
-            ).scalar()
-            or 0
+
+    delivered = Order.status == "delivered"
+    orders_row = (
+        await session.execute(
+            select(
+                _sum_since(day_s, 1),
+                _sum_since(day_s, case((delivered, 1), else_=0)),
+                _sum_since(day_s, case((delivered, Order.amount), else_=0)),
+                _sum_since(week_s, 1),
+                _sum_since(week_s, case((delivered, 1), else_=0)),
+                _sum_since(week_s, case((delivered, Order.amount), else_=0)),
+                _sum_since(month_s, 1),
+                _sum_since(month_s, case((delivered, 1), else_=0)),
+                _sum_since(month_s, case((delivered, Order.amount), else_=0)),
+            )
+            .select_from(Order)
+            .where(Order.created_at >= month_s, scope_orders)
         )
-        revenue_n = int(
-            (
-                await session.execute(
-                    select(func.coalesce(func.sum(Order.amount), 0)).where(
-                        Order.created_at >= since,
-                        Order.status == "delivered",
-                        scope_orders,
-                    )
-                )
-            ).scalar()
-            or 0
+    ).one()
+
+    def _users_since(since):
+        return func.coalesce(
+            func.sum(case((BotUser.created_at >= since, 1), else_=0)),
+            0,
         )
-        users_n = int(
-            (
-                await session.execute(
-                    select(func.count())
-                    .select_from(BotUser)
-                    .where(BotUser.created_at >= since, scope_users)
-                )
-            ).scalar()
-            or 0
+
+    users_row = (
+        await session.execute(
+            select(
+                _users_since(day_s),
+                _users_since(week_s),
+                _users_since(month_s),
+            )
+            .select_from(BotUser)
+            .where(BotUser.created_at >= month_s, scope_users)
         )
-        out[key] = {
-            "orders": orders_n,
-            "delivered": delivered_n,
-            "revenue": revenue_n,
-            "new_users": users_n,
-        }
+    ).one()
+
+    out["day"] = {
+        "orders": int(orders_row[0] or 0),
+        "delivered": int(orders_row[1] or 0),
+        "revenue": int(orders_row[2] or 0),
+        "new_users": int(users_row[0] or 0),
+    }
+    out["week"] = {
+        "orders": int(orders_row[3] or 0),
+        "delivered": int(orders_row[4] or 0),
+        "revenue": int(orders_row[5] or 0),
+        "new_users": int(users_row[1] or 0),
+    }
+    out["month"] = {
+        "orders": int(orders_row[6] or 0),
+        "delivered": int(orders_row[7] or 0),
+        "revenue": int(orders_row[8] or 0),
+        "new_users": int(users_row[2] or 0),
+    }
     return out
 
 

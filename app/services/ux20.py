@@ -176,51 +176,50 @@ async def build_action_center(
     tickets = int((await session.execute(tickets_q)).scalar() or 0)
     failures = int((await session.execute(fail_q)).scalar() or 0)
 
-    # Expiring services: approximate from UserService.created_at + plan.duration_days
+    # Expiring: only scan services that could expire in-window (created within
+    # max plan length), instead of loading the full service table.
     cutoff = _utcnow() + timedelta(days=expire_days)
-    svc_q = (
-        select(func.count())
-        .select_from(UserService)
-        .join(Plan, Plan.id == UserService.plan_id)
-        .join(BotUser, BotUser.id == UserService.bot_user_id)
-        .where(UserService.plan_id.is_not(None))
-    )
-    if reseller_id is None:
-        svc_q = svc_q.where(BotUser.reseller_id.is_(None))
-    else:
-        svc_q = svc_q.where(BotUser.reseller_id == int(reseller_id))
-
-    # Prefer rows that still need renew nudge / not fully notified expire
-    # Count services whose nominal expiry falls within window (created + days).
-    rows = (
-        await session.execute(
-            select(UserService.created_at, Plan.duration_days)
-            .select_from(UserService)
-            .join(Plan, Plan.id == UserService.plan_id)
-            .join(BotUser, BotUser.id == UserService.bot_user_id)
-            .where(
-                UserService.plan_id.is_not(None),
-                Plan.duration_days.is_not(None),
-                BotUser.reseller_id.is_(None)
-                if reseller_id is None
-                else BotUser.reseller_id == int(reseller_id),
-            )
-        )
-    ).all()
-    expiring = 0
     now = _utcnow()
-    for created, days in rows:
-        if not created or not days:
-            continue
-        try:
-            exp = created
-            if exp.tzinfo is None:
-                exp = exp.replace(tzinfo=timezone.utc)
-            exp = exp + timedelta(days=int(days))
-        except Exception:
-            continue
-        if now <= exp <= cutoff:
-            expiring += 1
+    max_days = int(
+        (
+            await session.execute(
+                select(func.coalesce(func.max(Plan.duration_days), 0)).select_from(Plan)
+            )
+        ).scalar()
+        or 0
+    )
+    expiring = 0
+    if max_days > 0:
+        scan_since = now - timedelta(days=max_days)
+        rows = (
+            await session.execute(
+                select(UserService.created_at, Plan.duration_days)
+                .select_from(UserService)
+                .join(Plan, Plan.id == UserService.plan_id)
+                .join(BotUser, BotUser.id == UserService.bot_user_id)
+                .where(
+                    UserService.plan_id.is_not(None),
+                    Plan.duration_days.is_not(None),
+                    UserService.created_at.is_not(None),
+                    UserService.created_at >= scan_since,
+                    BotUser.reseller_id.is_(None)
+                    if reseller_id is None
+                    else BotUser.reseller_id == int(reseller_id),
+                )
+            )
+        ).all()
+        for created, days in rows:
+            if not created or not days:
+                continue
+            try:
+                exp = created
+                if exp.tzinfo is None:
+                    exp = exp.replace(tzinfo=timezone.utc)
+                exp = exp + timedelta(days=int(days))
+            except Exception:
+                continue
+            if now <= exp <= cutoff:
+                expiring += 1
 
     items: list[dict[str, Any]] = []
     if pending:

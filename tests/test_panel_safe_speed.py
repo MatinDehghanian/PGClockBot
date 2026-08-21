@@ -89,13 +89,20 @@ class PanelShellFirstContractTests(unittest.TestCase):
         home = (ROOT / "app/web/templates/home.html").read_text(encoding="utf-8")
         self.assertIn("_home_dash_body.html", home)
         self.assertIn("widgets_deferred", home)
-        # Fetch starts before heavy shell HTML so body overlaps parse.
+        self.assertIn("_panel_widgets_loading.html", home)
+        self.assertIn('id="home-dash"', home)
+        # Fetch starts before loading placeholder so body overlaps parse.
+        self.assertLess(
+            home.find("_panel_widgets_defer.html"),
+            home.find('id="home-dash"'),
+        )
         self.assertLess(
             home.find("_panel_widgets_defer.html"),
             home.find("_home_dash_body.html"),
         )
         reseller = (ROOT / "app/web/templates/reseller_home.html").read_text(encoding="utf-8")
         self.assertIn("_reseller_home_dash_body.html", reseller)
+        self.assertIn("_panel_widgets_loading.html", reseller)
         self.assertLess(
             reseller.find("_panel_widgets_defer.html"),
             reseller.find("_reseller_home_dash_body.html"),
@@ -193,6 +200,31 @@ class PanelShellFirstContractTests(unittest.TestCase):
         self.assertIn("async def require_staff(", src)
         timing = src[src.find("panel_timing_middleware") : src.find("async def security_headers")]
         self.assertNotIn("require_staff", timing)
+
+    def test_home_body_ops_use_isolated_parallel_sessions(self):
+        src = (ROOT / "app/api/home_pages.py").read_text(encoding="utf-8")
+        self.assertIn("async def _parallel_home_ops(", src)
+        self.assertIn("async with SessionLocal() as s:", src)
+        self.assertIn("asyncio.gather(_funnel(), _periods(), _action())", src)
+        # Must not gather concurrent work on the request session.
+        self.assertNotIn(
+            "await asyncio.gather(\n                _safe_funnel(session",
+            src,
+        )
+
+    def test_loading_mark_is_clock(self):
+        loading = (ROOT / "app/web/templates/_panel_widgets_loading.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("panel-load-clock", loading)
+        self.assertNotIn("panel-widgets-loading-ring", loading)
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn(".panel-load-clock-face", css)
+        self.assertIn("html.page-loading .page-load-veil", css)
+        # PG ACL cache stays short — speed must not stale sidebar permissions.
+        acl = (ROOT / "app/services/pg_access.py").read_text(encoding="utf-8")
+        self.assertIn("_ROLE_CACHE_TTL = 8.0", acl)
+        self.assertIn("_PLATFORM_CAPS_TTL = 8.0", acl)
 
 
 if __name__ == "__main__":

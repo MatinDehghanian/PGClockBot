@@ -63,7 +63,7 @@ class ShopPeriodStatsTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_period_counts_today_delivered(self):
         from app.db.models import BotUser, Order, Role
-        from app.services.home_overview import shop_period_stats
+        from app.services.home_overview import _period_since_utc, shop_period_stats
 
         async with self.Session() as session:
             u = BotUser(
@@ -75,14 +75,16 @@ class ShopPeriodStatsTests(unittest.IsolatedAsyncioTestCase):
             session.add(u)
             await session.commit()
             await session.refresh(u)
-            now = datetime.now(timezone.utc)
+            starts = _period_since_utc()
+            # Anchor inside Tehran «today» so day/week/month all see the rows.
+            inside_today = starts["day"] + timedelta(hours=2)
             session.add(
                 Order(
                     user_id=u.id,
                     amount=50000,
                     status="delivered",
                     reseller_id=None,
-                    created_at=now - timedelta(hours=1),
+                    created_at=inside_today,
                 )
             )
             session.add(
@@ -91,15 +93,37 @@ class ShopPeriodStatsTests(unittest.IsolatedAsyncioTestCase):
                     amount=9000,
                     status="pending",
                     reseller_id=None,
-                    created_at=now - timedelta(hours=2),
+                    created_at=inside_today + timedelta(minutes=5),
                 )
             )
+            # Outside 30d window — must not inflate month aggregates.
+            session.add(
+                Order(
+                    user_id=u.id,
+                    amount=1000,
+                    status="delivered",
+                    reseller_id=None,
+                    created_at=starts["month"] - timedelta(days=15),
+                )
+            )
+            u.created_at = inside_today
             await session.commit()
             stats = await shop_period_stats(session, reseller_id=None)
-            self.assertGreaterEqual(stats["day"]["orders"], 2)
-            self.assertGreaterEqual(stats["day"]["delivered"], 1)
-            self.assertGreaterEqual(stats["day"]["revenue"], 50000)
+            self.assertEqual(stats["day"]["orders"], 2)
+            self.assertEqual(stats["day"]["delivered"], 1)
+            self.assertEqual(stats["day"]["revenue"], 50000)
             self.assertGreaterEqual(stats["day"]["new_users"], 1)
+            self.assertEqual(stats["week"]["orders"], 2)
+            self.assertEqual(stats["month"]["orders"], 2)
+            self.assertEqual(stats["month"]["revenue"], 50000)
+
+    async def test_period_stats_uses_two_queries(self):
+        src = Path("app/services/home_overview.py").read_text(encoding="utf-8")
+        fn = src[src.find("async def shop_period_stats") : src.find("def _empty_bot_summary")]
+        self.assertIn("Two aggregated queries", fn)
+        self.assertIn("func.sum(case(", fn)
+        # No per-period count loop.
+        self.assertNotIn("for key, since in starts.items()", fn)
 
 
 if __name__ == "__main__":

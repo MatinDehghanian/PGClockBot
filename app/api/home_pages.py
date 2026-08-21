@@ -112,6 +112,37 @@ async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None,
         return dict(_EMPTY_ACTION)
 
 
+async def _parallel_home_ops(*, reseller_id: int | None, funnel_enabled: bool, expire_days: int):
+    """Run funnel / periods / action-center on isolated sessions (safe gather)."""
+    from app.db.session import SessionLocal
+    from app.services.home_overview import empty_period_stats
+
+    async def _funnel():
+        if not funnel_enabled:
+            return dict(_EMPTY_FUNNEL)
+        async with SessionLocal() as s:
+            return await _safe_funnel(s, reseller_id=reseller_id)
+
+    async def _periods():
+        async with SessionLocal() as s:
+            return await _safe_periods(s, reseller_id=reseller_id)
+
+    async def _action():
+        async with SessionLocal() as s:
+            return await _safe_action_center(
+                s, reseller_id=reseller_id, expire_days=expire_days
+            )
+
+    funnel, periods, action = await asyncio.gather(_funnel(), _periods(), _action())
+    if not isinstance(periods, dict):
+        periods = empty_period_stats()
+    if not isinstance(action, dict):
+        action = dict(_EMPTY_ACTION)
+    if not isinstance(funnel, dict):
+        funnel = dict(_EMPTY_FUNNEL)
+    return funnel, periods, action
+
+
 async def _safe_pg_health(*, reseller_user_id: int | None = None, session: AsyncSession | None = None):
     """Display-only PG reachability — never used for allow/deny."""
     from app.services.db_safe import rollback_quiet
@@ -522,19 +553,14 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             if not isinstance(ui, dict):
                 ui = {}
             funnel_enabled = on(ui.get("funnel_tracking_enabled", "1"))
-            funnel = (
-                await _safe_funnel(session, reseller_id=None)
-                if funnel_enabled
-                else dict(_EMPTY_FUNNEL)
-            )
             try:
                 expire_days = int(ui.get("action_center_expire_days") or 3)
             except (TypeError, ValueError):
                 expire_days = 3
-            # Same AsyncSession — must stay sequential.
-            periods = await _safe_periods(session, reseller_id=None)
-            action_center = await _safe_action_center(
-                session, reseller_id=None, expire_days=expire_days
+            funnel, periods, action_center = await _parallel_home_ops(
+                reseller_id=None,
+                funnel_enabled=funnel_enabled,
+                expire_days=expire_days,
             )
             pg_limits = None
             wallet_card = None
@@ -700,18 +726,14 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             session=session if staff.get("pg_admin_username") else None,
         )
         funnel_enabled = on(ui.get("funnel_tracking_enabled", "1"))
-        funnel = (
-            await _safe_funnel(session, reseller_id=int(rid))
-            if funnel_enabled
-            else dict(_EMPTY_FUNNEL)
-        )
         try:
             expire_days = int(ui.get("action_center_expire_days") or 3)
         except (TypeError, ValueError):
             expire_days = 3
-        periods = await _safe_periods(session, reseller_id=int(rid))
-        action_center = await _safe_action_center(
-            session, reseller_id=int(rid), expire_days=expire_days
+        funnel, periods, action_center = await _parallel_home_ops(
+            reseller_id=int(rid),
+            funnel_enabled=funnel_enabled,
+            expire_days=expire_days,
         )
         return (
             "reseller_home.html",

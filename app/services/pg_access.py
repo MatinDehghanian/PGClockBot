@@ -39,6 +39,7 @@ PG_FEATURE_LABELS: dict[str, str] = {
 # Short-lived cache: role_id → (monotonic_at, features, raw_role)
 # Menus must track GET /api/admin like quotas — keep this only as a fallback.
 _ROLE_CACHE: dict[int, tuple[float, list[str], dict]] = {}
+# Keep short: sidebar/menus must stay near live GET /api/admin (stale ACL = wrong menus).
 _ROLE_CACHE_TTL = 8.0
 
 # Platform env-credential capability cache: key → (monotonic_at, payload)
