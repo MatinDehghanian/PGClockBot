@@ -51,6 +51,7 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("forcejoin", "کانال اجباری"),
     ("naming", "نام‌گذاری سرویس"),
     ("notifications", "نوتیفیکیشن"),
+    ("daily_report", "گزارش روزانه"),
     ("bot", "ربات اختصاصی"),
 ]
 
@@ -1097,6 +1098,10 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
         "btn_force_join_check",
         "notify_new_ticket",
         "show_miniapp",
+        "admin_daily_report_enabled",
+        "admin_daily_report_hour",
+        "admin_daily_report_template",
+        "admin_daily_report_metrics",
     )
     added = False
     for key in seed_keys:
@@ -1106,6 +1111,9 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
             # Shop-safe order: never seed platform miniapp / reseller_apply
             value = "shop,services,wallet,support,loyalty"
         elif key == "show_miniapp":
+            value = "0"
+        elif key == "admin_daily_report_enabled":
+            # Shops opt in — do not spam by default.
             value = "0"
         elif key not in DEFAULT_SETTINGS:
             continue

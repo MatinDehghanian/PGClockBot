@@ -73,10 +73,15 @@ class Ux20SettingsCatalogTests(unittest.TestCase):
         self.assertNotIn("brand_primary_color", DEFAULT_SETTINGS)
         self.assertIn("حالت تعمیرات و رسید", SETTING_GROUPS)
         self.assertIn("گزارش و عملیات", SETTING_GROUPS)
+        self.assertIn("گزارش روزانه", SETTING_GROUPS)
         self.assertIn("بکاپ زمان‌بندی", SETTING_GROUPS)
         self.assertIn("حالت تعمیرات و رسید", TAB_SETTING_GROUPS["payment"])
         self.assertIn("بکاپ زمان‌بندی", TAB_SETTING_GROUPS["backup"])
-
+        self.assertIn("گزارش روزانه", TAB_SETTING_GROUPS["daily_report"])
+        self.assertNotIn("admin_daily_report_enabled", TAB_SETTING_GROUPS["notifications"])
+        # notifications still lists group name but daily keys moved out of that group
+        ops_keys = {f[0] for f in SETTING_GROUPS["گزارش و عملیات"]}
+        self.assertNotIn("admin_daily_report_enabled", ops_keys)
 
 class Ux20TemplatePresenceTests(unittest.TestCase):
     def test_templates_exist(self):

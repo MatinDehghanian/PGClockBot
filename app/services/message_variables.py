@@ -30,6 +30,7 @@ DOMAIN_REFERRAL = "referral"
 DOMAIN_FORCE_JOIN = "force_join"
 DOMAIN_NAMING = "naming"
 DOMAIN_QR = "qr"
+DOMAIN_DAILY_REPORT = "daily_report"
 
 DOMAIN_LABELS_FA: dict[str, str] = {
     DOMAIN_SHOP: "فروشگاه (سراسری)",
@@ -41,6 +42,7 @@ DOMAIN_LABELS_FA: dict[str, str] = {
     DOMAIN_FORCE_JOIN: "عضویت اجباری",
     DOMAIN_NAMING: "نام‌گذاری پاسارگارد",
     DOMAIN_QR: "کپشن QR",
+    DOMAIN_DAILY_REPORT: "گزارش روزانه",
 }
 
 # Relative to bot settings base, or absolute panel path for modal-hosted texts.
@@ -54,6 +56,7 @@ DOMAIN_SETTINGS_PATH: dict[str, str] = {
     DOMAIN_FORCE_JOIN: "?tab=forcejoin",
     DOMAIN_NAMING: "?tab=naming",
     DOMAIN_QR: "?tab=qr",
+    DOMAIN_DAILY_REPORT: "?tab=daily_report",
 }
 
 
@@ -79,6 +82,7 @@ SETTING_DOMAIN: dict[str, str] = {
     "crypto_pay_text": DOMAIN_PAYMENT,
     "force_join_msg": DOMAIN_FORCE_JOIN,
     "pg_username_pattern": DOMAIN_NAMING,
+    "admin_daily_report_template": DOMAIN_DAILY_REPORT,
 }
 
 
@@ -286,6 +290,26 @@ _VARS: tuple[MessageVar, ...] = (
         owner_only=True,
     ),
 )
+
+# Daily-report placeholders — shared catalog with settings tab (role-filtered via owner_only).
+try:
+    from app.services.daily_report import ACTOR_OWNER, ACTOR_SHOP, ALL_METRICS
+
+    _DAILY_VARS: tuple[MessageVar, ...] = tuple(
+        MessageVar(
+            key=m.key,
+            title_fa=m.title_fa,
+            description_fa=m.description_fa,
+            example=m.example,
+            domains=frozenset({DOMAIN_DAILY_REPORT}),
+            html_escape=True,
+            owner_only=(ACTOR_SHOP not in m.actors and ACTOR_OWNER in m.actors),
+        )
+        for m in ALL_METRICS
+    )
+    _VARS = (*_VARS, *_DAILY_VARS)
+except Exception:  # pragma: no cover — catalog still loads if daily_report import fails
+    pass
 
 _BY_KEY: dict[str, MessageVar] = {v.key: v for v in _VARS}
 _ALIAS_TO_CANONICAL: dict[str, str] = {}

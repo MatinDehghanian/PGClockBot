@@ -779,6 +779,8 @@ DEFAULT_SETTINGS = {
     "admin_daily_report_enabled": "1",
     "admin_daily_report_hour": "0",
     "admin_daily_report_last": "",
+    "admin_daily_report_template": "",
+    "admin_daily_report_metrics": "",
     "backup_schedule_enabled": "1",
     "backup_schedule_hour": "3",
     "backup_include_env_scheduled": "0",
@@ -808,6 +810,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("naming", "نام‌گذاری سرویس"),
     ("forcejoin", "کانال اجباری"),
     ("notifications", "نوتیفیکیشن"),
+    ("daily_report", "گزارش روزانه"),
     ("bot", "ربات و اتصال"),
 ]
 
@@ -939,19 +942,27 @@ SETTING_GROUPS = {
             "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ از مدت سرویس مانده پیام برود",
         ),
     ],
-    "گزارش و عملیات": [
+    "گزارش روزانه": [
         (
             "admin_daily_report_enabled",
-            "گزارش شبانه تلگرام به ادمین",
+            "ارسال گزارش روزانه در تلگرام",
             "toggle",
-            "هر شب خلاصه فروش، رسید معلق، تیکت و تحویل ناموفق",
+            "هر روز در ساعت مشخص‌شده خلاصهٔ انتخابی به ادمین‌ها فرستاده می‌شود",
         ),
         (
             "admin_daily_report_hour",
-            "ساعت گزارش (۰–۲۳، UTC)",
+            "ساعت ارسال (۰–۲۳، UTC)",
             "number",
-            "مثلاً ۰ = نیمه‌شب UTC",
+            "مثلاً ۰ = نیمه‌شب UTC · ۲۰ = حدود نیمه‌شب تهران در تابستان",
         ),
+        (
+            "admin_daily_report_template",
+            "متن گزارش",
+            "textarea",
+            "متغیرها: {admin_name} {users_new} {revenue_today} … — فهرست کامل در همین تب و /message-variables",
+        ),
+    ],
+    "گزارش و عملیات": [
         (
             "action_center_expire_days",
             "پنجره سرویس‌های نزدیک انقضا (روز)",
@@ -1148,6 +1159,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "forcejoin": ["کانال اجباری"],
     "billing": ["مدیریت PAYG"],
     "notifications": ["هشدار سرویس کاربر", "گزارش و عملیات"],
+    "daily_report": ["گزارش روزانه"],
     "backup": ["بکاپ زمان‌بندی"],
     "pwa": [],
     "update": [],

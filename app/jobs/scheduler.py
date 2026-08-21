@@ -344,37 +344,121 @@ async def run_scheduled_backup() -> None:
 
 
 async def run_admin_daily_report(bot: Bot) -> None:
-    """Send nightly ops summary to platform admins."""
+    """Send nightly ops summary to platform admins and opted-in shops."""
     async with SessionLocal() as session:
         try:
             from datetime import datetime, timezone
 
-            from app.config import get_settings
-            from app.services.users import get_setting, on, set_setting
-            from app.services.ux20 import build_admin_daily_report
+            from sqlalchemy import select
 
-            if not on(await get_setting(session, "admin_daily_report_enabled", "1")):
-                return
-            try:
-                hour = int(await get_setting(session, "admin_daily_report_hour", "0") or 0)
-            except Exception:
-                hour = 0
+            from app.config import get_settings
+            from app.db.models import ResellerProfile
+            from app.services.daily_report import (
+                ACTOR_OWNER,
+                ACTOR_SHOP,
+                DEFAULT_REPORT_TEMPLATE,
+                build_daily_report,
+                shop_daily_report_chat_ids,
+            )
+            from app.services.reseller_bots import open_notify_bot_for_reseller
+            from app.services.users import get_all_settings, get_setting, on, set_setting
+
             now = datetime.now(timezone.utc)
-            if now.hour != max(0, min(23, hour)):
-                return
             day_key = now.strftime("%Y-%m-%d")
-            last = (await get_setting(session, "admin_daily_report_last", "")) or ""
-            if last == day_key:
-                return
-            text = await build_admin_daily_report(session)
-            ids = get_settings().admin_ids or []
-            for aid in ids:
+
+            # —— Platform Owner report ——
+            if on(await get_setting(session, "admin_daily_report_enabled", "1")):
                 try:
-                    await bot.send_message(int(aid), text, parse_mode="HTML")
+                    hour = int(await get_setting(session, "admin_daily_report_hour", "0") or 0)
                 except Exception:
-                    logger.debug("daily report send failed admin=%s", aid, exc_info=True)
-            await set_setting(session, "admin_daily_report_last", day_key)
-            await session.commit()
+                    hour = 0
+                if now.hour == max(0, min(23, hour)):
+                    last = (await get_setting(session, "admin_daily_report_last", "")) or ""
+                    if last != day_key:
+                        text = await build_daily_report(
+                            session,
+                            reseller_id=None,
+                            actor=ACTOR_OWNER,
+                            admin_name="مالک سیستم",
+                            template=(
+                                await get_setting(session, "admin_daily_report_template", "")
+                            )
+                            or DEFAULT_REPORT_TEMPLATE,
+                            metrics_raw=await get_setting(
+                                session, "admin_daily_report_metrics", ""
+                            ),
+                        )
+                        for aid in get_settings().admin_ids or []:
+                            try:
+                                await bot.send_message(int(aid), text, parse_mode="HTML")
+                            except Exception:
+                                logger.debug(
+                                    "daily report send failed admin=%s", aid, exc_info=True
+                                )
+                        await set_setting(session, "admin_daily_report_last", day_key)
+                        await session.commit()
+
+            # —— Shop reports (explicit reseller_id scope) ——
+            profiles = (
+                await session.execute(
+                    select(ResellerProfile).where(
+                        ResellerProfile.is_active.is_(True),
+                        ResellerProfile.bot_token.is_not(None),
+                    )
+                )
+            ).scalars().all()
+            for profile in profiles:
+                rid = int(profile.user_id)
+                ui = await get_all_settings(session, reseller_id=rid)
+                if not on(ui.get("admin_daily_report_enabled")):
+                    continue
+                try:
+                    hour = int(ui.get("admin_daily_report_hour") or 0)
+                except Exception:
+                    hour = 0
+                if now.hour != max(0, min(23, hour)):
+                    continue
+                if (ui.get("admin_daily_report_last") or "").strip() == day_key:
+                    continue
+                admin_name = (ui.get("shop_title") or profile.bot_username or "فروشگاه").strip()
+                text = await build_daily_report(
+                    session,
+                    reseller_id=rid,
+                    actor=ACTOR_SHOP,
+                    admin_name=admin_name,
+                    template=(ui.get("admin_daily_report_template") or "").strip()
+                    or DEFAULT_REPORT_TEMPLATE,
+                    metrics_raw=ui.get("admin_daily_report_metrics"),
+                )
+                shop_bot, should_close = await open_notify_bot_for_reseller(session, rid)
+                if shop_bot is None:
+                    continue
+                try:
+                    for chat_id in await shop_daily_report_chat_ids(session, rid):
+                        try:
+                            await shop_bot.send_message(
+                                int(chat_id), text, parse_mode="HTML"
+                            )
+                        except Exception:
+                            logger.debug(
+                                "daily report shop send failed rid=%s chat=%s",
+                                rid,
+                                chat_id,
+                                exc_info=True,
+                            )
+                    await set_setting(
+                        session,
+                        "admin_daily_report_last",
+                        day_key,
+                        reseller_id=rid,
+                    )
+                    await session.commit()
+                finally:
+                    if should_close:
+                        try:
+                            await shop_bot.session.close()
+                        except Exception:
+                            pass
         except Exception:
             logger.exception("admin daily report failed")
 
