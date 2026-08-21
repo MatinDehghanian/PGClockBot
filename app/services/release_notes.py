@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
-    "8.1.17": [
+    "8.2.0": [
         "تب «گزارش روزانه» (یکی‌مانده به آخر تنظیمات ربات): شخصی‌سازی آمار + متن قابل‌ویرایش + پیش‌نمایش زنده",
         "مالک و نماینده هرکدام فقط آمار محدودهٔ خود را می‌بینند/می‌فرستند؛ نمایندگان آمار مالک را ندارند",
         "بدون مایگریشن جدید نسبت به ۸.۱.۱۶؛ ریستور: تگ restore/pre-daily-report-customize-v8.1.16 و v8.1.16",

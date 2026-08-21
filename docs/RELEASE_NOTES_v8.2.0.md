@@ -1,7 +1,7 @@
-# PGClockBot v8.1.17 — Release Notes
+# PGClockBot v8.2.0 — Release Notes
 
-**Tag:** `v8.1.17`  
-**App version:** `8.1.17`  
+**Tag:** `v8.2.0`  
+**App version:** `8.2.0`  
 **Restore point:** tag `restore/pre-daily-report-customize-v8.1.16` (@ `v8.1.16`)
 
 ---
@@ -22,4 +22,4 @@
 
 ## Deploy
 
-In-panel update to `8.1.17` (no new migration). Hard-refresh the panel after update.
+In-panel update to `8.2.0` (no new migration). Hard-refresh the panel after update.
