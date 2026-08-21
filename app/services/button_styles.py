@@ -32,6 +32,8 @@ STYLE_ALIASES: dict[str, str] = {
     "adm_plan_add": "adm_plans_add",
     "adm_plan_custom": "shop_kind_custom",
     "adm_plan_trial": "shop_kind_trial",
+    # Legacy settings hub key (pre-8.2.1 «سرویس و دسترسی») → دسترسی
+    "adm_st_service": "adm_st_access",
 }
 
 # id must match reply action keys where applicable (shop, services, …).
@@ -180,13 +182,14 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "pg_nodes", "label": "نودهای پاسارگارد", "group": "پاسارگارد", "default": ""},
     {"id": "pg_group", "label": "ساخت گروه پاسارگارد", "group": "پاسارگارد", "default": "primary"},
     {"id": "pg_template", "label": "ساخت تمپلیت پاسارگارد", "group": "پاسارگارد", "default": "primary"},
-    # Admin settings sub
-    {"id": "adm_st_shop", "label": "تنظیمات: فروشگاه و متون", "group": "تنظیمات ادمین", "default": ""},
-    {"id": "adm_st_menu", "label": "تنظیمات: کیبورد اصلی", "group": "تنظیمات ادمین", "default": ""},
+    # Admin settings sub (reply hub — ids must match adm_st_* / adm_st_panel actions)
+    {"id": "adm_st_shop", "label": "تنظیمات: فروشگاه", "group": "تنظیمات ادمین", "default": ""},
+    {"id": "adm_st_menu", "label": "تنظیمات: منو", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_pay", "label": "تنظیمات: پرداخت", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_support", "label": "تنظیمات: پشتیبان‌ها", "group": "تنظیمات ادمین", "default": ""},
-    {"id": "adm_st_service", "label": "تنظیمات: سرویس و دسترسی", "group": "تنظیمات ادمین", "default": ""},
+    {"id": "adm_st_access", "label": "تنظیمات: دسترسی", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_notify", "label": "تنظیمات: اعلان‌ها", "group": "تنظیمات ادمین", "default": ""},
+    {"id": "adm_st_panel", "label": "تنظیمات: وب‌پنل", "group": "تنظیمات ادمین", "default": "primary"},
     # Backup sub
     {"id": "backup_create", "label": "ساخت بکاپ کامل", "group": "بکاپ", "default": "primary"},
     {"id": "backup_create_noenv", "label": "بکاپ بدون .env", "group": "بکاپ", "default": "primary"},
@@ -213,14 +216,15 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "res_loyalty", "label": "باشگاه مشتریان (نماینده)", "group": "منوی نماینده", "default": "success"},
     {"id": "res_settings", "label": "تنظیمات فروشگاه", "group": "منوی نماینده", "default": ""},
     {"id": "res_preview", "label": "پیش‌نمایش منوی کاربر", "group": "منوی نماینده", "default": ""},
-    # Reseller settings sub
+    # Reseller settings sub (reply hub — ids must match res_st_* / res_st_panel)
     {"id": "res_st_shop", "label": "تنظیمات نماینده: فروشگاه", "group": "تنظیمات نماینده", "default": ""},
-    {"id": "res_st_menu", "label": "تنظیمات نماینده: کیبورد", "group": "تنظیمات نماینده", "default": ""},
+    {"id": "res_st_menu", "label": "تنظیمات نماینده: منو", "group": "تنظیمات نماینده", "default": ""},
     {"id": "res_st_pay", "label": "تنظیمات نماینده: پرداخت", "group": "تنظیمات نماینده", "default": ""},
-    {"id": "res_st_support", "label": "تنظیمات نماینده: پشتیبانی", "group": "تنظیمات نماینده", "default": ""},
+    {"id": "res_st_support", "label": "تنظیمات نماینده: پشتیبان‌ها", "group": "تنظیمات نماینده", "default": ""},
     {"id": "res_st_access", "label": "تنظیمات نماینده: دسترسی", "group": "تنظیمات نماینده", "default": ""},
-    {"id": "res_st_bot", "label": "تنظیمات نماینده: ربات", "group": "تنظیمات نماینده", "default": ""},
     {"id": "res_st_notify", "label": "تنظیمات نماینده: اعلان‌ها", "group": "تنظیمات نماینده", "default": ""},
+    {"id": "res_st_bot", "label": "تنظیمات نماینده: ربات", "group": "تنظیمات نماینده", "default": ""},
+    {"id": "res_st_panel", "label": "تنظیمات نماینده: وب‌پنل", "group": "تنظیمات نماینده", "default": "primary"},
 ]
 
 CATALOG_BY_ID: dict[str, dict[str, str]] = {item["id"]: item for item in BUTTON_STYLE_CATALOG}

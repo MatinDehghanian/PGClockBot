@@ -136,6 +136,36 @@ class BotSettingsHubIATests(unittest.TestCase):
         self.assertNotIn("adm_st_shop", mapping.values())
         self.assertNotIn("adm_st_panel", mapping.values())
 
+    def test_colors_catalog_matches_settings_hub_actions(self):
+        from app.bot.handlers.admin_settings import HUB_ORDER
+        from app.bot.handlers.reseller_settings import HUB_ORDER as RES_HUB
+        from app.bot.keyboards import (
+            REPLY_ACTION_ADM_ST_PANEL,
+            REPLY_ACTION_RES_ST_PANEL,
+            _admin_settings_submenu_entries,
+            _reseller_settings_submenu_entries,
+        )
+        from app.services.button_styles import BUTTON_STYLE_CATALOG, STYLE_ALIASES
+
+        ids = {item["id"] for item in BUTTON_STYLE_CATALOG}
+        for sec in HUB_ORDER:
+            self.assertIn(f"adm_st_{sec}", ids, sec)
+        self.assertIn("adm_st_panel", ids)
+        self.assertEqual(STYLE_ALIASES.get("adm_st_service"), "adm_st_access")
+        self.assertNotIn("adm_st_service", ids)
+
+        for sec in RES_HUB:
+            self.assertIn(f"res_st_{sec}", ids, sec)
+        self.assertIn("res_st_panel", ids)
+
+        admin_actions = {a for a, _ in _admin_settings_submenu_entries()}
+        self.assertEqual(admin_actions & ids, admin_actions)
+        self.assertIn(REPLY_ACTION_ADM_ST_PANEL, admin_actions)
+
+        res_actions = {a for a, _ in _reseller_settings_submenu_entries()}
+        self.assertEqual(res_actions & ids, res_actions)
+        self.assertIn(REPLY_ACTION_RES_ST_PANEL, res_actions)
+
 
 if __name__ == "__main__":
     unittest.main()
