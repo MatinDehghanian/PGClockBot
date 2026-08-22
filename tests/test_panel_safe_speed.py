@@ -89,9 +89,9 @@ class PanelShellFirstContractTests(unittest.TestCase):
         home = (ROOT / "app/web/templates/home.html").read_text(encoding="utf-8")
         self.assertIn("_home_dash_body.html", home)
         self.assertIn("widgets_deferred", home)
-        self.assertIn("_panel_widgets_loading.html", home)
         self.assertIn('id="home-dash"', home)
-        # Fetch starts before loading placeholder so body overlaps parse.
+        # In-page clock removed — only global matte veil during /body.
+        self.assertNotIn("_panel_widgets_loading.html", home)
         self.assertLess(
             home.find("_panel_widgets_defer.html"),
             home.find('id="home-dash"'),
@@ -102,7 +102,7 @@ class PanelShellFirstContractTests(unittest.TestCase):
         )
         reseller = (ROOT / "app/web/templates/reseller_home.html").read_text(encoding="utf-8")
         self.assertIn("_reseller_home_dash_body.html", reseller)
-        self.assertIn("_panel_widgets_loading.html", reseller)
+        self.assertNotIn("_panel_widgets_loading.html", reseller)
         self.assertLess(
             reseller.find("_panel_widgets_defer.html"),
             reseller.find("_reseller_home_dash_body.html"),
@@ -136,29 +136,42 @@ class PanelShellFirstContractTests(unittest.TestCase):
         self.assertIn("widgets_deferred", home)
         self.assertIn("_pg_dash_body.html", home)
         self.assertIn("_panel_widgets_defer.html", home)
-        self.assertIn("_panel_widgets_loading.html", home)
+        self.assertNotIn("_panel_widgets_loading.html", home)
         self.assertIn("_pg_live_metrics_script.html", home)
         self.assertNotIn("در حال بارگذاری آمار پاسارگارد…", home)
-        # Early fetch before loading placeholder.
+        # Early fetch before empty mount.
         self.assertLess(
             home.find("_panel_widgets_defer.html"),
             home.find('id="pg-dash"'),
         )
         body = (ROOT / "app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
         self.assertIn('id="pg-dash"', body)
-        loading = (ROOT / "app/web/templates/_panel_widgets_loading.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("panel-widgets-loading", loading)
-        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn(".panel-widgets-loading", css)
-        self.assertIn("min-height: min(52vh", css)
         defer = (ROOT / "app/web/templates/_panel_widgets_defer.html").read_text(encoding="utf-8")
         self.assertIn("panel-widgets-ready", defer)
         self.assertIn("DOMContentLoaded", defer)
+        self.assertIn("armVeil", defer)
+        self.assertIn("page-loading", defer)
+        self.assertIn("__pgPageReveal", defer)
         live = (ROOT / "app/web/templates/_pg_live_metrics_script.html").read_text(encoding="utf-8")
         self.assertIn("panel-widgets-ready", live)
         self.assertIn("function els()", live)
+
+    def test_unified_matte_veil_loading(self):
+        """Shell-first pages use only #page-load-veil — no nested in-page clock."""
+        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
+        self.assertIn('id="page-load-veil"', base)
+        self.assertIn("panel-load-clock", base)
+        defer = (ROOT / "app/web/templates/_panel_widgets_defer.html").read_text(encoding="utf-8")
+        self.assertIn("armVeil", defer)
+        self.assertIn("finish()", defer)
+        for rel in (
+            "app/web/templates/home.html",
+            "app/web/templates/reseller_home.html",
+            "app/web/templates/pg_home.html",
+        ):
+            src = (ROOT / rel).read_text(encoding="utf-8")
+            self.assertNotIn("_panel_widgets_loading.html", src)
+            self.assertNotIn("panel-widgets-loading", src)
 
     def test_pg_body_skips_ticket_chrome(self):
         src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
@@ -213,11 +226,9 @@ class PanelShellFirstContractTests(unittest.TestCase):
         )
 
     def test_loading_mark_is_clock(self):
-        loading = (ROOT / "app/web/templates/_panel_widgets_loading.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("panel-load-clock", loading)
-        self.assertNotIn("panel-widgets-loading-ring", loading)
+        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
+        self.assertIn("panel-load-clock", base)
+        self.assertIn("page-load-veil", base)
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".panel-load-clock-face", css)
         self.assertIn("html.page-loading .page-load-veil", css)

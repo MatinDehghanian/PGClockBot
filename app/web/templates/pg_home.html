@@ -42,11 +42,8 @@
 
 {% if widgets_deferred %}
 {% include "_panel_widgets_defer.html" %}
-<div id="pg-dash" class="pg-dash" aria-busy="true">
-  {% set loading_title = 'در حال بارگذاری آمار' %}
-  {% set loading_cap = 'پاسارگارد' %}
-  {% include "_panel_widgets_loading.html" %}
-</div>
+{# Empty mount — matte clock veil covers until /pg/body swaps in. #}
+<div id="pg-dash" class="pg-dash" aria-busy="true"></div>
 {% else %}
 {% include "_pg_dash_body.html" %}
 {% endif %}
