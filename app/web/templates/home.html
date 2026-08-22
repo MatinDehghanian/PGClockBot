@@ -4,11 +4,8 @@
 {% block content %}
 {% if widgets_deferred %}
 {% include "_panel_widgets_defer.html" %}
-<div class="home-dash" id="home-dash" aria-busy="true">
-  {% set loading_title = 'در حال بارگذاری داشبورد' %}
-  {% set loading_cap = 'آمار و وضعیت' %}
-  {% include "_panel_widgets_loading.html" %}
-</div>
+{# Empty mount — matte clock veil covers until /home/body swaps in. #}
+<div class="home-dash" id="home-dash" aria-busy="true"></div>
 {% else %}
 {% include "_home_dash_body.html" %}
 {% endif %}

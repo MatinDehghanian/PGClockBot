@@ -1,7 +1,8 @@
 {# Progressive widget fill — shell already passed server authz.
    Body URL re-runs the same Depends authz; shell permission does not grant body.
    redirect:manual avoids injecting login HTML into #home-dash / #pg-dash.
-   Include this as early as possible in the page so the body fetch overlaps HTML parse. #}
+   Include this as early as possible in the page so the body fetch overlaps HTML parse.
+   Loading UI: only the global matte clock veil (#page-load-veil) — no in-page spinner. #}
 {% set body_url = widgets_body_url or '/home/body' %}
 <noscript>
   <div class="flash warn home-update-banner">
@@ -14,6 +15,39 @@
 </noscript>
 <script>
 (function () {
+  var html = document.documentElement;
+  var settled = false;
+  var prevReveal = window.__pgPageReveal;
+
+  function armVeil() {
+    html.classList.add('page-loading');
+    html.classList.remove('page-ready', 'page-booting');
+  }
+  function clearVeil() {
+    html.classList.remove('page-loading', 'page-booting');
+    html.classList.add('page-ready');
+  }
+  function finish() {
+    if (settled) return;
+    settled = true;
+    window.__pgPageReveal = prevReveal;
+    if (typeof window.__pgPageReveal === 'function') {
+      window.__pgPageReveal();
+    } else {
+      clearVeil();
+    }
+  }
+
+  /* Hold the matte clock until /body swaps — suppress early page-ready reveal. */
+  armVeil();
+  window.__pgPageReveal = function () {
+    if (settled) {
+      if (typeof prevReveal === 'function') prevReveal();
+      else clearVeil();
+    }
+    /* else: stay veiled until widgets finish */
+  };
+
   var url = {{ body_url|tojson }};
   var fetchOpts = {
     credentials: 'same-origin',
@@ -36,12 +70,12 @@
     return r.text();
   });
 
-  function swap(html) {
-    if (!html) return;
+  function swap(htmlText) {
+    if (!htmlText) return false;
     var root = document.getElementById('home-dash') || document.getElementById('pg-dash');
     if (!root) return false;
     var tmp = document.createElement('div');
-    tmp.innerHTML = String(html).trim();
+    tmp.innerHTML = String(htmlText).trim();
     var next = tmp.firstElementChild;
     if (next && root.parentNode) {
       root.parentNode.replaceChild(next, root);
@@ -52,18 +86,32 @@
     return true;
   }
 
-  function applyWhenReady(html) {
-    if (swap(html)) return;
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', function () { swap(html); });
+  function applyWhenReady(htmlText) {
+    if (htmlText) {
+      if (swap(htmlText)) {
+        finish();
+        return;
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+          swap(htmlText);
+          finish();
+        });
+        return;
+      }
+      requestAnimationFrame(function () {
+        swap(htmlText);
+        finish();
+      });
       return;
     }
-    /* Root still missing (rare) — one animation-frame retry. */
-    requestAnimationFrame(function () { swap(html); });
+    /* login redirects leave htmlText null — still drop the veil */
+    finish();
   }
 
   pending.then(applyWhenReady).catch(function () {
     /* Keep unchecked shell — never invent disconnected state. */
+    finish();
   });
 })();
 </script>

@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.2.4": [
+        "لودینگ یکپارچه: فقط ساعت مات سراسری؛ ساعت داخل /home و /pg حذف شد",
+        "تا آماده شدن /home/body و /pg/body همان پردهٔ مات می‌ماند (بدون دوبل لودینگ)",
+        "بدون مایگریشن جدید نسبت به ۸.۲.۳؛ ریستور: تگ restore/pre-unify-load-veil-v8.2.3 و v8.2.3",
+    ],
     "8.2.3": [
         "نوار CPU/RAM نودها همان رنگ دایره‌های گیج (همهٔ toneها؛ بدون شفافیت جدا)",
         "فوکوس/هاور/اکتیو کنترل‌ها و سلکت: گوشه تیز حذف شد (box-shadow به‌جای outline مستطیلی اندروید)",
