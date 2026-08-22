@@ -192,6 +192,8 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   top: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
   background: var(--bg-card);
   border-left: 1px solid var(--border);
   padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) calc(var(--space-2) + var(--safe-bottom));
@@ -212,6 +214,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   flex-direction: column;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-y: auto;
   -webkit-overflow-scrolling: touch;
 }
 .main-body {
@@ -3924,11 +3927,11 @@ form.settings-form > .actions.sticky-actions,
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
-    height: auto;
-    max-height: none;
-    min-height: 100vh;
-    min-height: 100dvh;
-    overflow: visible;
+    /* One scroll container (.main) — same as desktop; avoids body scroll jitter */
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
     /* Reserve space for fixed mobile topbar */
     padding-top: calc(var(--topbar-h) + var(--safe-top));
   }
@@ -3960,12 +3963,14 @@ form.settings-form > .actions.sticky-actions,
   .main {
     /* Bottom pad matches .side drawer so site-footer & side-foot share one baseline */
     padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));
-    min-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
-    height: auto;
-    max-height: none;
     flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
     width: 100%;
-    overflow: visible;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: auto;
+    -webkit-overflow-scrolling: touch;
     display: flex;
     flex-direction: column;
   }
@@ -4125,6 +4130,7 @@ form.settings-form > .actions.sticky-actions,
 
   .sticky-actions { margin: 0; width: 100%; }
   body.nav-open { overflow: hidden; }
+  body.nav-open .main { overflow: hidden !important; }
 
   .notify-row { flex-direction: row; }
   .actions { gap: var(--space-1); }
@@ -4775,8 +4781,8 @@ body.modal-open .side {
   line-height: 1.5;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  overscroll-behavior: none;
-  touch-action: none;
+  /* contain — trap overscroll inside modal chrome; none killed edge bounce */
+  overscroll-behavior: contain;
 }
 .ui-modal[hidden] { display: none !important; }
 .ui-modal.open { display: flex; }

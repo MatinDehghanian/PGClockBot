@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.2.8": [
+        "اسکرول صفحه و مودال: بازگشت طبیعی لبه (rubber-band) بدون لگ و پرش",
+        "موبایل: اسکرول فقط روی .main (نه body) — قفل مودال و فوتر پایدار",
+        "مودال: overscroll-behavior:contain + کمتر preventDefault در لبه محتوا",
+        "بدون مایگریشن؛ ریستور: تگ restore/pre-scroll-rubber-band-v8.2.7 و v8.2.7",
+    ],
     "8.2.7": [
         "فاصله کپشن انتخاب رنگ پلن از باکس select (هم‌تراز بخش رنگبندی تنظیمات)",
         "سایدبار: فاصله باکس پاسارگارد تا خط فوتر مثل فاصله ربات↔پاسارگارد (بدون تغییر فوتر)",

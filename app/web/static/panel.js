@@ -776,6 +776,11 @@
       return false;
     }
 
+    function isModalInteriorScroller(modal, scroller){
+      if (!modal || !scroller) return false;
+      return modal.contains(scroller);
+    }
+
     function tryScrollModalTabs(e, modal){
       /* Vertical-only wheel guard was killing horizontal tab scroll (loyalty etc.). */
       const t = e.target;
@@ -828,9 +833,10 @@
         }
         if (tryScrollModalTabs(e, modal)) return;
         const scroller = findScrollableAncestor(e.target, modal);
-        if (!canScrollInside(scroller, e.deltaY)) {
-          e.preventDefault();
-        }
+        if (canScrollInside(scroller, e.deltaY)) return;
+        /* Interior edge: overscroll-behavior:contain on .ui-modal-scroll blocks chain */
+        if (isModalInteriorScroller(modal, scroller)) return;
+        e.preventDefault();
       };
       const onTouchStart = (e) => {
         if (!e.touches || !e.touches.length) return;
@@ -855,9 +861,9 @@
         const dy = touchStartY - e.touches[0].clientY;
         if (Math.abs(dy) < 1) return;
         const scroller = findScrollableAncestor(e.target, modal);
-        if (!canScrollInside(scroller, dy)) {
-          e.preventDefault();
-        }
+        if (canScrollInside(scroller, dy)) return;
+        if (isModalInteriorScroller(modal, scroller)) return;
+        e.preventDefault();
       };
       document.addEventListener('touchstart', onTouchStart, { passive: true, capture: true });
       document.addEventListener('wheel', modalWheelGuard, { passive: false, capture: true });
