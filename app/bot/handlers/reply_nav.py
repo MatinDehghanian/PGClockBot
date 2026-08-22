@@ -161,6 +161,18 @@ class ReplyMenuTextFilter(BaseFilter):
             # «👥 کاربران» on PG keyboard must not resolve to admin hub users
             for key, label in kb._pg_submenu_entries(ui):
                 mapping[(label or "").strip()] = key
+        elif level == nav.NAV_ADMIN_OPS:
+            for key, label in kb._reply_admin_ops_entries(ui):
+                mapping[(label or "").strip()] = key
+        elif level == nav.NAV_ADMIN_PEOPLE:
+            for key, label in kb._reply_admin_people_entries(ui):
+                mapping[(label or "").strip()] = key
+        elif level == nav.NAV_ADMIN_PRODUCT:
+            for key, label in kb._reply_admin_product_entries(ui):
+                mapping[(label or "").strip()] = key
+        elif level == nav.NAV_ADMIN_SYSTEM:
+            for key, label in kb._reply_admin_system_entries(ui):
+                mapping[(label or "").strip()] = key
         elif level == nav.NAV_LOYALTY:
             for key, label in kb._loyalty_submenu_entries(ui):
                 mapping[(label or "").strip()] = key
@@ -173,11 +185,15 @@ class ReplyMenuTextFilter(BaseFilter):
             nav.NAV_ADMIN_PLANS_KIND,
             nav.NAV_ADMIN_PLANS_ADD_TYPE,
             nav.NAV_ADMIN_PG,
+            nav.NAV_ADMIN_OPS,
+            nav.NAV_ADMIN_PEOPLE,
+            nav.NAV_ADMIN_PRODUCT,
+            nav.NAV_ADMIN_SYSTEM,
             nav.NAV_LOYALTY,
             nav.NAV_ADMIN_LOYALTY,
         }:
-            # Prefer admin hub labels outside broadcast / plans / PG (avoid «نمایندگان» / «کاربران» collision)
-            for key, label in kb._reply_admin_entries(ui):
+            # Prefer 4-group hub labels on MAIN / NAV_ADMIN (avoid leaf collisions)
+            for key, label in kb._reply_admin_hub_entries(ui):
                 mapping[(label or "").strip()] = key
         if kb.is_home_text(text, ui):
             action = kb.REPLY_ACTION_HOME
@@ -1012,7 +1028,116 @@ async def open_admin_home(
         nav.NAV_ADMIN,
         text=(
             f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
-            "از کیبورد پایین بخش موردنظر را انتخاب کنید."
+            "از کیبورد پایین یک گروه را انتخاب کنید:\n"
+            "🗓 عملیات روزانه · 👤 افراد · 📦 محصول و PG · 🛠 سیستم"
+        ),
+        state=state,
+        push=push,
+    )
+
+
+async def open_admin_ops_hub(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+    is_reseller_bot: bool = False,
+) -> None:
+    if not await _deny_unless_owner(
+        message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
+        return
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_ADMIN_OPS,
+        text=(
+            "🗓 <b>عملیات روزانه</b>\n"
+            "داشبورد، سفارش‌ها، رسیدها و تیکت‌ها."
+        ),
+        state=state,
+        push=push,
+    )
+
+
+async def open_admin_people_hub(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+    is_reseller_bot: bool = False,
+) -> None:
+    if not await _deny_unless_owner(
+        message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
+        return
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_ADMIN_PEOPLE,
+        text=(
+            "👤 <b>افراد</b>\n"
+            "کاربران، نمایندگان و باشگاه مشتریان."
+        ),
+        state=state,
+        push=push,
+    )
+
+
+async def open_admin_product_hub(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+    is_reseller_bot: bool = False,
+) -> None:
+    if not await _deny_unless_owner(
+        message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
+        return
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_ADMIN_PRODUCT,
+        text=(
+            "📦 <b>محصول و PG</b>\n"
+            "پلن‌ها و عملیات پاسارگارد."
+        ),
+        state=state,
+        push=push,
+    )
+
+
+async def open_admin_system_hub(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+    is_reseller_bot: bool = False,
+) -> None:
+    if not await _deny_unless_owner(
+        message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
+        return
+    await nav.show_nav_keyboard(
+        message,
+        session,
+        db_user,
+        nav.NAV_ADMIN_SYSTEM,
+        text=(
+            "🛠 <b>سیستم</b>\n"
+            "تنظیمات، پیام همگانی، بکاپ و پیش‌نمایش."
         ),
         state=state,
         push=push,
@@ -1272,6 +1397,26 @@ async def handle_back(
     if level == nav.NAV_ADMIN:
         await open_admin_home(message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot)
         return
+    if level == nav.NAV_ADMIN_OPS:
+        await open_admin_ops_hub(
+            message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
+        return
+    if level == nav.NAV_ADMIN_PEOPLE:
+        await open_admin_people_hub(
+            message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
+        return
+    if level == nav.NAV_ADMIN_PRODUCT:
+        await open_admin_product_hub(
+            message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
+        return
+    if level == nav.NAV_ADMIN_SYSTEM:
+        await open_admin_system_hub(
+            message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
+        return
     if level == nav.NAV_ADMIN_PG:
         await open_pg_home(
             message,
@@ -1349,7 +1494,9 @@ async def handle_back(
         )
         return
     if level == nav.NAV_ADMIN_PLANS_AUDIENCE:
-        await open_admin_home(message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot)
+        await open_admin_product_hub(
+            message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
         return
     if level == nav.NAV_ADMIN_PLANS:
         await open_admin_plans_hub(
@@ -1767,11 +1914,24 @@ async def reply_main_nav(
         kb.REPLY_ACTION_SVC_LINK,
         kb.REPLY_ACTION_SVC_RENEW,
         kb.REPLY_ACTION_SVC_REFRESH,
-        # Keep admin hub stack when opening list screens
+        # Keep admin hub stack when opening list screens / group hubs
+        kb.REPLY_ACTION_ADM_HUB_OPS,
+        kb.REPLY_ACTION_ADM_HUB_PEOPLE,
+        kb.REPLY_ACTION_ADM_HUB_PRODUCT,
+        kb.REPLY_ACTION_ADM_HUB_SYSTEM,
+        kb.REPLY_ACTION_ADMIN,
         kb.REPLY_ACTION_ADMIN_DASH,
         kb.REPLY_ACTION_ADMIN_ORDERS,
         kb.REPLY_ACTION_ADMIN_PAYMENTS,
         kb.REPLY_ACTION_ADMIN_TICKETS,
+        kb.REPLY_ACTION_ADMIN_USERS,
+        kb.REPLY_ACTION_ADMIN_RESELLERS,
+        kb.REPLY_ACTION_ADMIN_SETTINGS,
+        kb.REPLY_ACTION_ADMIN_BROADCAST,
+        kb.REPLY_ACTION_ADMIN_BACKUP,
+        kb.REPLY_ACTION_ADMIN_PLANS,
+        kb.REPLY_ACTION_ADMIN_PG,
+        kb.REPLY_ACTION_ADMIN_PREVIEW,
         kb.REPLY_ACTION_ADM_USERS_LIST,
         kb.REPLY_ACTION_ADM_USERS_SEARCH,
         kb.REPLY_ACTION_ADM_USERS_WEB,
@@ -1959,6 +2119,22 @@ async def reply_main_nav(
         await open_reseller_creds(message, session, db_user)
     elif action == kb.REPLY_ACTION_ADMIN:
         await open_admin_home(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
+    elif action == kb.REPLY_ACTION_ADM_HUB_OPS:
+        await open_admin_ops_hub(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
+    elif action == kb.REPLY_ACTION_ADM_HUB_PEOPLE:
+        await open_admin_people_hub(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
+    elif action == kb.REPLY_ACTION_ADM_HUB_PRODUCT:
+        await open_admin_product_hub(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
+    elif action == kb.REPLY_ACTION_ADM_HUB_SYSTEM:
+        await open_admin_system_hub(
             message, session, db_user, state, is_reseller_bot=is_reseller_bot
         )
     elif action == kb.REPLY_ACTION_ADMIN_PREVIEW:

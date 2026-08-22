@@ -76,8 +76,8 @@ class ReplyKeyboardMenuTests(unittest.TestCase):
         self.assertEqual(mapping["🟢 خرید"], REPLY_ACTION_SHOP)
         self.assertEqual(mapping["🏠 منوی اصلی"], REPLY_ACTION_HOME)
 
-    def test_admin_reply_keyboard_includes_panel(self):
-        from app.bot.keyboards import REPLY_ACTION_ADMIN_ORDERS
+    def test_admin_reply_keyboard_includes_hub_groups(self):
+        from app.bot.keyboards import REPLY_ACTION_ADM_HUB_OPS, REPLY_ACTION_ADMIN_ORDERS
 
         ui = {
             "menu_layout": "compact",
@@ -88,10 +88,13 @@ class ReplyKeyboardMenuTests(unittest.TestCase):
         }
         mapping = reply_action_map("admin", ui=ui)
         self.assertEqual(mapping["🛒 سفارش‌ها"], REPLY_ACTION_ADMIN_ORDERS)
+        self.assertEqual(mapping["🗓 عملیات روزانه"], REPLY_ACTION_ADM_HUB_OPS)
         kb = main_reply_keyboard("admin", ui=ui)
         flat = [b.text for row in kb.keyboard for b in row]
-        self.assertIn("🛒 سفارش‌ها", flat)
-        self.assertIn("📊 داشبورد", flat)
+        self.assertIn("🗓 عملیات روزانه", flat)
+        self.assertIn("👤 افراد", flat)
+        self.assertNotIn("🛒 سفارش‌ها", flat)
+        self.assertNotIn("📊 داشبورد", flat)
 
 
 class UnifiedCredentialsMessageTests(unittest.TestCase):

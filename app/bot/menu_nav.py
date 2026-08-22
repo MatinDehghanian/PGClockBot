@@ -23,6 +23,10 @@ NAV_SUPPORT = "support"
 NAV_LOYALTY = "loyalty"
 NAV_ADMIN_LOYALTY = "admin_loyalty"
 NAV_ADMIN = "admin"
+NAV_ADMIN_OPS = "admin_ops"
+NAV_ADMIN_PEOPLE = "admin_people"
+NAV_ADMIN_PRODUCT = "admin_product"
+NAV_ADMIN_SYSTEM = "admin_system"
 NAV_ADMIN_PG = "admin_pg"
 NAV_ADMIN_USERS = "admin_users"
 NAV_ADMIN_RESELLERS = "admin_resellers"
@@ -315,6 +319,22 @@ async def show_nav_keyboard(
         markup = kb.admin_reply_keyboard(
             ui, pg_features=pg_feats, can_manage_representatives=can_reps
         )
+    elif level == NAV_ADMIN_OPS:
+        markup = kb.admin_ops_reply_keyboard(ui)
+    elif level == NAV_ADMIN_PEOPLE:
+        _, can_reps = await _platform_admin_menu_flags(
+            session, db_user, is_reseller_bot=is_reseller_bot
+        )
+        markup = kb.admin_people_reply_keyboard(
+            ui, can_manage_representatives=can_reps
+        )
+    elif level == NAV_ADMIN_PRODUCT:
+        pg_feats, _ = await _platform_admin_menu_flags(
+            session, db_user, is_reseller_bot=is_reseller_bot
+        )
+        markup = kb.admin_product_reply_keyboard(ui, pg_features=pg_feats)
+    elif level == NAV_ADMIN_SYSTEM:
+        markup = kb.admin_system_reply_keyboard(ui)
     elif level == NAV_ADMIN_PG:
         feats: frozenset[str] = frozenset()
         can_create = False
@@ -331,12 +351,7 @@ async def show_nav_keyboard(
             feats = frozenset()
             can_create = False
         if not feats:
-            _, can_reps = await _platform_admin_menu_flags(
-                session, db_user, is_reseller_bot=is_reseller_bot
-            )
-            markup = kb.admin_reply_keyboard(
-                ui, pg_features=feats, can_manage_representatives=can_reps
-            )
+            markup = kb.admin_product_reply_keyboard(ui, pg_features=feats)
         else:
             markup = kb.pg_reply_keyboard(ui, features=feats, can_create_user=can_create)
     elif level == NAV_ADMIN_USERS:

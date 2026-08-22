@@ -11,14 +11,27 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class CompactAdminMenuTests(unittest.TestCase):
     def test_admin_home_is_legacy_stub(self):
-        from app.bot.keyboards import admin_home, admin_reply_keyboard
+        from app.bot.keyboards import admin_home, admin_ops_reply_keyboard, admin_reply_keyboard
 
         kb = admin_home({"menu_layout": "compact"})
         # Inline hub gutted — live nav is reply keyboard
         self.assertEqual(len(kb.inline_keyboard), 1)
-        flat = [
+        hub = [
             b.text
             for row in admin_reply_keyboard(
+                {
+                    "menu_layout": "compact",
+                    "btn_back": "⬅️ بازگشت",
+                    "btn_menu_home": "🏠 منوی اصلی",
+                    "btn_adm_payments": "🧾 رسیدها",
+                }
+            ).keyboard
+            for b in row
+        ]
+        self.assertIn("🗓 عملیات روزانه", hub)
+        flat = [
+            b.text
+            for row in admin_ops_reply_keyboard(
                 {
                     "menu_layout": "compact",
                     "btn_back": "⬅️ بازگشت",
@@ -45,11 +58,13 @@ class CompactAdminMenuTests(unittest.TestCase):
         self.assertIn("🏠 نمای کلی", flat)
 
     def test_admin_main_menu_is_legacy_stub(self):
-        from app.bot.keyboards import admin_main_menu, admin_reply_keyboard
+        from app.bot.keyboards import admin_main_menu, admin_ops_reply_keyboard, admin_reply_keyboard
 
         kb = admin_main_menu({"menu_layout": "compact"})
         self.assertEqual(kb.inline_keyboard, [])
-        flat = [b.text for row in admin_reply_keyboard({"menu_layout": "compact", "btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"}).keyboard for b in row]
+        hub = [b.text for row in admin_reply_keyboard({"menu_layout": "compact", "btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"}).keyboard for b in row]
+        self.assertIn("🗓 عملیات روزانه", hub)
+        flat = [b.text for row in admin_ops_reply_keyboard({"menu_layout": "compact", "btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"}).keyboard for b in row]
         self.assertIn("📊 داشبورد", flat)
 
     def test_reseller_home_is_legacy_stub(self):

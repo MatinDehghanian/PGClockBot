@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.2.5": [
+        "منوی ادمین ربات: هاب ۴‌گروهه (عملیات روزانه / افراد / محصول و PG / سیستم) به‌جای ۱۳ دکمهٔ تخت",
+        "زیرمنوها، بازگشت، رنگ دکمه‌ها و ACL نمایندگان/PG با هاب هم‌تراز؛ لیبل‌ها روی ربات نماینده ثبت نمی‌شوند",
+        "بدون مایگریشن جدید نسبت به ۸.۲.۴؛ ریستور: تگ restore/pre-admin-hub-groups-v8.2.4 و v8.2.4",
+    ],
     "8.2.4": [
         "لودینگ یکپارچه: فقط ساعت مات سراسری؛ ساعت داخل /home و /pg حذف شد",
         "تا آماده شدن /home/body و /pg/body همان پردهٔ مات می‌ماند (بدون دوبل لودینگ)",

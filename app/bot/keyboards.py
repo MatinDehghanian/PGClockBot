@@ -275,6 +275,10 @@ REPLY_ACTION_RESELLER_APPLY = "reseller_apply"
 REPLY_ACTION_RESELLER = "reseller"
 REPLY_ACTION_CREDS = "reseller_creds"
 REPLY_ACTION_ADMIN = "admin"
+REPLY_ACTION_ADM_HUB_OPS = "adm_hub_ops"
+REPLY_ACTION_ADM_HUB_PEOPLE = "adm_hub_people"
+REPLY_ACTION_ADM_HUB_PRODUCT = "adm_hub_product"
+REPLY_ACTION_ADM_HUB_SYSTEM = "adm_hub_system"
 REPLY_ACTION_ADMIN_DASH = "adm_dash"
 REPLY_ACTION_ADMIN_ORDERS = "adm_orders"
 REPLY_ACTION_ADMIN_PAYMENTS = "adm_payments"
@@ -443,32 +447,79 @@ def _reply_user_entries(
     return entries
 
 
+def _reply_admin_hub_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    """Top-level admin groups (level 0 / NAV_ADMIN) — keeps the hub short."""
+    _ = ui
+    return [
+        (REPLY_ACTION_ADM_HUB_OPS, "🗓 عملیات روزانه"),
+        (REPLY_ACTION_ADM_HUB_PEOPLE, "👤 افراد"),
+        (REPLY_ACTION_ADM_HUB_PRODUCT, "📦 محصول و PG"),
+        (REPLY_ACTION_ADM_HUB_SYSTEM, "🛠 سیستم"),
+    ]
+
+
+def _reply_admin_ops_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    return [
+        (REPLY_ACTION_ADMIN_DASH, "📊 داشبورد"),
+        (REPLY_ACTION_ADMIN_ORDERS, _t(ui, "btn_adm_orders")),
+        (REPLY_ACTION_ADMIN_PAYMENTS, _t(ui, "btn_adm_payments")),
+        (REPLY_ACTION_ADMIN_TICKETS, _t(ui, "btn_adm_tickets")),
+    ]
+
+
+def _reply_admin_people_entries(
+    ui: dict | None = None,
+    *,
+    can_manage_representatives: bool = True,
+) -> list[tuple[str, str]]:
+    entries = [
+        (REPLY_ACTION_ADMIN_USERS, _t(ui, "btn_adm_users")),
+        (REPLY_ACTION_ADMIN_RESELLERS, "🤝 نمایندگان"),
+        (REPLY_ACTION_ADMIN_LOYALTY, "⭐ باشگاه مشتریان"),
+    ]
+    if not can_manage_representatives:
+        entries = [e for e in entries if e[0] != REPLY_ACTION_ADMIN_RESELLERS]
+    return entries
+
+
+def _reply_admin_product_entries(
+    ui: dict | None = None,
+    *,
+    pg_features: frozenset[str] | set[str] | None = None,
+) -> list[tuple[str, str]]:
+    entries = [
+        (REPLY_ACTION_ADMIN_PLANS, _t(ui, "btn_adm_plans")),
+        (REPLY_ACTION_ADMIN_PG, _t(ui, "btn_adm_pg")),
+    ]
+    if pg_features is not None and not pg_features:
+        entries = [e for e in entries if e[0] != REPLY_ACTION_ADMIN_PG]
+    return entries
+
+
+def _reply_admin_system_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    return [
+        (REPLY_ACTION_ADMIN_SETTINGS, _t(ui, "btn_adm_settings")),
+        (REPLY_ACTION_ADMIN_BROADCAST, _t(ui, "btn_adm_broadcast")),
+        (REPLY_ACTION_ADMIN_BACKUP, "💾 بکاپ / ریستور"),
+        (REPLY_ACTION_ADMIN_PREVIEW, _t(ui, "btn_adm_preview")),
+    ]
+
+
 def _reply_admin_entries(
     ui: dict | None = None,
     *,
     pg_features: frozenset[str] | set[str] | None = None,
     can_manage_representatives: bool = True,
 ) -> list[tuple[str, str]]:
-    entries = [
-        (REPLY_ACTION_ADMIN_DASH, "📊 داشبورد"),
-        (REPLY_ACTION_ADMIN_ORDERS, _t(ui, "btn_adm_orders")),
-        (REPLY_ACTION_ADMIN_PAYMENTS, _t(ui, "btn_adm_payments")),
-        (REPLY_ACTION_ADMIN_TICKETS, _t(ui, "btn_adm_tickets")),
-        (REPLY_ACTION_ADMIN_PLANS, _t(ui, "btn_adm_plans")),
-        (REPLY_ACTION_ADMIN_USERS, _t(ui, "btn_adm_users")),
-        (REPLY_ACTION_ADMIN_RESELLERS, "🤝 نمایندگان"),
-        (REPLY_ACTION_ADMIN_LOYALTY, "⭐ باشگاه مشتریان"),
-        (REPLY_ACTION_ADMIN_PG, _t(ui, "btn_adm_pg")),
-        (REPLY_ACTION_ADMIN_SETTINGS, _t(ui, "btn_adm_settings")),
-        (REPLY_ACTION_ADMIN_BROADCAST, _t(ui, "btn_adm_broadcast")),
-        (REPLY_ACTION_ADMIN_BACKUP, "💾 بکاپ / ریستور"),
-        (REPLY_ACTION_ADMIN_PREVIEW, _t(ui, "btn_adm_preview")),
+    """All admin leaf buttons (for action-map registration / ACL filtering)."""
+    return [
+        *_reply_admin_ops_entries(ui),
+        *_reply_admin_people_entries(
+            ui, can_manage_representatives=can_manage_representatives
+        ),
+        *_reply_admin_product_entries(ui, pg_features=pg_features),
+        *_reply_admin_system_entries(ui),
     ]
-    if not can_manage_representatives:
-        entries = [e for e in entries if e[0] != REPLY_ACTION_ADMIN_RESELLERS]
-    if pg_features is not None and not pg_features:
-        entries = [e for e in entries if e[0] != REPLY_ACTION_ADMIN_PG]
-    return entries
 
 
 def _pg_submenu_entries(
@@ -843,11 +894,9 @@ def main_reply_keyboard(
     home_label = _home_label(ui)
     home_footer: list[tuple[str, str]] = [(REPLY_ACTION_HOME, home_label)]
     if role == Role.ADMIN.value and not as_user:
-        entries = _reply_admin_entries(
-            ui,
-            pg_features=pg_features,
-            can_manage_representatives=can_manage_representatives,
-        )
+        # Platform admin: short 4-group hub (leaves live in group submenus)
+        _ = (pg_features, can_manage_representatives)  # ACL applied inside groups
+        entries = _reply_admin_hub_entries(ui)
         rows = _pack_reply_rows(entries, ui, footer=home_footer)
     else:
         # Preview / customer surface — never append staff-only buttons
@@ -868,17 +917,60 @@ def admin_reply_keyboard(
     pg_features: frozenset[str] | set[str] | None = None,
     can_manage_representatives: bool = True,
 ) -> ReplyKeyboardMarkup:
-    """Admin panel as an explicit submenu (with back + home)."""
+    """Admin hub groups as an explicit submenu (with back + home)."""
+    _ = (pg_features, can_manage_representatives)  # ACL applied inside groups
     rows = _pack_reply_rows(
-        _reply_admin_entries(
-            ui,
-            pg_features=pg_features,
-            can_manage_representatives=can_manage_representatives,
-        ),
+        _reply_admin_hub_entries(ui),
         ui,
         footer_row=_submenu_footer(ui),
     )
     return _reply_markup(rows, placeholder="پنل ادمین…")
+
+
+def admin_ops_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _reply_admin_ops_entries(ui),
+        ui,
+        footer_row=_submenu_footer(ui),
+    )
+    return _reply_markup(rows, placeholder="عملیات روزانه…")
+
+
+def admin_people_reply_keyboard(
+    ui: dict | None = None,
+    *,
+    can_manage_representatives: bool = True,
+) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _reply_admin_people_entries(
+            ui, can_manage_representatives=can_manage_representatives
+        ),
+        ui,
+        footer_row=_submenu_footer(ui),
+    )
+    return _reply_markup(rows, placeholder="افراد…")
+
+
+def admin_product_reply_keyboard(
+    ui: dict | None = None,
+    *,
+    pg_features: frozenset[str] | set[str] | None = None,
+) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _reply_admin_product_entries(ui, pg_features=pg_features),
+        ui,
+        footer_row=_submenu_footer(ui),
+    )
+    return _reply_markup(rows, placeholder="محصول و PG…")
+
+
+def admin_system_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _reply_admin_system_entries(ui),
+        ui,
+        footer_row=_submenu_footer(ui),
+    )
+    return _reply_markup(rows, placeholder="سیستم…")
 
 
 def wallet_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
@@ -1121,7 +1213,10 @@ def reply_action_map(
     reseller_actor = role == Role.RESELLER.value and is_reseller_bot
 
     if platform_admin:
+        # Leaves first; hub groups overwrite any accidental label collision
         for key, text in _reply_admin_entries(ui):
+            mapping[(text or "").strip()] = key
+        for key, text in _reply_admin_hub_entries(ui):
             mapping[(text or "").strip()] = key
     else:
         # On reseller bots, never expose platform-admin entry even if role string is admin
@@ -1185,8 +1280,10 @@ def reply_action_map(
                 mapping[(text or "").strip()] = key
             for key, text in _admin_plans_submenu_entries(ui):
                 mapping[(text or "").strip()] = key
-            # Hub labels win over any accidental submenu collisions
+            # Leaves then hub groups — hub labels win collisions
             for key, text in _reply_admin_entries(ui):
+                mapping[(text or "").strip()] = key
+            for key, text in _reply_admin_hub_entries(ui):
                 mapping[(text or "").strip()] = key
 
         # Legacy shop custom/wholesale labels (old reply keyboards) — route to kind flow
