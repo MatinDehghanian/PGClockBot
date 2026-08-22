@@ -814,6 +814,7 @@ tr.principal-row-l2 td:first-child {
 .update-meta-box > :last-child,
 .update-meta > div > :last-child,
 .ui-modal-panel > :last-child,
+.ui-modal-scroll > :last-child,
 .home-conn-card > :last-child,
 .home-dash > .card > :last-child,
 .auth-form > :last-child {
@@ -998,6 +999,12 @@ input, select, textarea {
   min-height: var(--btn-h);
   box-sizing: border-box;
 }
+input:hover, select:hover, textarea:hover,
+input:focus, select:focus, textarea:focus,
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+input:active, select:active, textarea:active {
+  border-radius: var(--control-radius);
+}
 /* Symmetric padding for text fields only — select keeps asymmetric room for chevron */
 input {
   padding: 0 var(--space-2);
@@ -1007,6 +1014,24 @@ textarea,
 select[multiple],
 select[size]:not([size="1"]),
 [contenteditable="true"] {
+  border-radius: var(--radius);
+}
+textarea:hover,
+textarea:focus,
+textarea:focus-visible,
+textarea:active,
+select[multiple]:hover,
+select[multiple]:focus,
+select[multiple]:focus-visible,
+select[multiple]:active,
+select[size]:not([size="1"]):hover,
+select[size]:not([size="1"]):focus,
+select[size]:not([size="1"]):focus-visible,
+select[size]:not([size="1"]):active,
+[contenteditable="true"]:hover,
+[contenteditable="true"]:focus,
+[contenteditable="true"]:focus-visible,
+[contenteditable="true"]:active {
   border-radius: var(--radius);
 }
 textarea {
@@ -1022,9 +1047,10 @@ textarea {
 input:focus, select:focus, textarea:focus, button:focus, a:focus {
   outline: none;
 }
+/* Box-shadow ring follows border-radius (Android/WebKit outline is often a sharp rect). */
 input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
-  outline: 1px solid rgba(161, 161, 170, 0.45);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 45%, transparent);
 }
 input:focus-visible, select:focus-visible, textarea:focus-visible {
   border-color: #3f3f46;
@@ -1112,6 +1138,15 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
   line-height: 1.25;
   text-align: right;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Lock radius on every interaction state — some Android browsers square :active/:focus. */
+.ui-select-toggle:hover,
+.ui-select-toggle:focus,
+.ui-select-toggle:focus-visible,
+.ui-select-toggle:active,
+.ui-select.open .ui-select-toggle {
+  border-radius: var(--control-radius);
 }
 .ui-select-sm .ui-select-toggle,
 .actions .ui-select .ui-select-toggle {
@@ -1123,6 +1158,10 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
 .ui-select.open .ui-select-toggle {
   border-color: #3f3f46;
   background: var(--control-bg-hover);
+}
+.ui-select-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 45%, transparent);
 }
 .ui-select.is-disabled .ui-select-toggle,
 .ui-select-toggle:disabled {
@@ -1207,6 +1246,13 @@ body > .ui-select-menu.is-ported[data-drop-up="1"] {
   text-align: right;
   cursor: pointer;
 }
+.ui-select-menu button:hover,
+.ui-select-menu button:focus,
+.ui-select-menu button:focus-visible,
+.ui-select-menu button:active,
+.ui-select-menu button.active {
+  border-radius: var(--menu-item-radius);
+}
 .ui-select-menu button:hover {
   background: var(--bg-hover);
   color: var(--foreground);
@@ -1215,6 +1261,10 @@ body > .ui-select-menu.is-ported[data-drop-up="1"] {
   background: var(--muted);
   color: var(--foreground);
   font-weight: 600;
+}
+.ui-select-menu button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 40%, transparent);
 }
 .ui-select-menu button:disabled {
   opacity: 0.45;
@@ -3237,18 +3287,16 @@ form.settings-form > .actions.sticky-actions,
 }
 
 /* Domain settings modals (finance / support / loyalty)
-   Scroll on the panel edge — same place as create-reseller / other modals. */
+   Outer panel clips to radius; .ui-modal-scroll (JS) owns the scrollbar. */
 .settings-modal-panel {
   display: flex;
   flex-direction: column;
   max-height: min(84vh, 900px);
-  /* Match .ui-modal-panel scrolling; do not nest a second scrollbar */
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
 }
+.settings-modal-panel .ui-modal-scroll > .ui-modal-head,
 .settings-modal-panel > .ui-modal-head {
   flex: 0 0 auto;
 }
@@ -3259,6 +3307,7 @@ form.settings-form > .actions.sticky-actions,
 .settings-modal-flash .flash {
   margin: 0;
 }
+.settings-modal-panel .ui-modal-scroll > .modal-section-tabs,
 .settings-modal-panel > .modal-section-tabs {
   flex: 0 0 auto;
   flex-wrap: nowrap;
@@ -3270,6 +3319,7 @@ form.settings-form > .actions.sticky-actions,
   margin-bottom: var(--space-2);
   padding-bottom: var(--space-0);
 }
+.settings-modal-panel .ui-modal-scroll > .modal-section-tabs .tab-btn,
 .settings-modal-panel > .modal-section-tabs .tab-btn {
   flex: 0 0 auto;
 }
@@ -4741,9 +4791,11 @@ body.modal-open .side {
   z-index: 1;
   width: min(560px, 100%);
   max-height: min(84vh, 900px);
-  overflow: auto;
+  /* Clip to radius — scrollbar lives on the inner .ui-modal-scroll shell */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
   padding: var(--space-3);
   border-radius: var(--radius);
@@ -4759,11 +4811,25 @@ body.modal-open .side {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
+.ui-modal-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  /* Stretch to panel edges so the scrollbar sits on the chrome edge,
+     still clipped by the panel's border-radius (fixes Android square overflow). */
+  margin: calc(-1 * var(--space-3));
+  padding: var(--space-3);
+  box-sizing: border-box;
+}
 .ui-modal-panel-lg { width: min(720px, 100%); }
 .ui-modal-panel-xl {
   width: min(720px, 100%);
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
 }
 .edit-modal-body {
   display: flex;
@@ -6700,7 +6766,8 @@ html[data-theme="light"] .pg-node-tabs .tab-btn.active:active {
   flex: 1 1 auto;
   height: 22px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--muted-fg) 12%, transparent);
+  /* Same track tone as .home-gauge-track */
+  background: color-mix(in srgb, var(--muted-fg) 18%, transparent);
   border: 1px solid var(--border);
   overflow: hidden;
 }
@@ -6711,18 +6778,19 @@ html[data-theme="light"] .pg-node-tabs .tab-btn.active:active {
   max-width: 100%;
   border-radius: inherit;
   background: var(--ok-fg);
-  opacity: 0.62;
-  transition: width .35s ease, background .25s ease, opacity .25s ease;
+  /* Full opacity — must match .home-gauge-val stroke tones exactly */
+  opacity: 1;
+  transition: width .35s ease, background .25s ease;
 }
-/* Same tone ladder as host gauge rings */
+/* Same tone ladder as host gauge rings (.home-gauge-*) */
 .pg-node-meter-ok .pg-node-meter-fill { background: var(--ok-fg); }
 .pg-node-meter-warn .pg-node-meter-fill { background: var(--warn-fg); }
 .pg-node-meter-caution .pg-node-meter-fill { background: var(--caution-fg, #fb923c); }
 .pg-node-meter-err .pg-node-meter-fill { background: var(--destructive-fg); }
 .pg-node-meter-neutral .pg-node-meter-fill {
-  background: color-mix(in srgb, var(--muted-fg) 55%, transparent);
+  background: var(--muted-fg);
 }
-/* Percent on the bar — no chip; fill stays translucent so text stays readable */
+/* Percent on the bar — soft halo keeps type readable on solid fills */
 .pg-node-meter-pct {
   position: absolute;
   inset-inline: 0;
@@ -6736,6 +6804,9 @@ html[data-theme="light"] .pg-node-tabs .tab-btn.active:active {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
   color: var(--foreground);
+  text-shadow:
+    0 0 8px color-mix(in srgb, var(--background) 88%, transparent),
+    0 1px 2px color-mix(in srgb, var(--background) 70%, transparent);
   pointer-events: none;
   line-height: 1;
   z-index: 1;
@@ -6976,8 +7047,8 @@ html[data-theme="light"] .pg-node-metric {
 }
 .home-portal:hover { transform: translateY(-1px); }
 .home-portal:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 55%, transparent);
 }
 .home-portal-bot {
   background: var(--bg-card);
@@ -6988,7 +7059,7 @@ html[data-theme="light"] .pg-node-metric {
   border-color: color-mix(in srgb, var(--bot-line) 55%, var(--border));
 }
 .home-portal-bot:focus-visible {
-  outline-color: color-mix(in srgb, var(--bot-line) 55%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bot-line) 55%, transparent);
 }
 .home-portal-pg {
   background: var(--bg-card);
@@ -7302,8 +7373,8 @@ html[data-theme="light"] .home-period {
   background: rgba(255, 255, 255, 0.07);
 }
 .home-action-item:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 55%, transparent);
 }
 .home-action-copy {
   display: flex;
@@ -8398,6 +8469,13 @@ html[data-theme="light"] .sk-bone::after {
   justify-content: space-between;
   gap: var(--space-1);
   transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.btn-color-card .ui-select[data-tone] .ui-select-toggle:hover,
+.btn-color-card .ui-select[data-tone] .ui-select-toggle:focus,
+.btn-color-card .ui-select[data-tone] .ui-select-toggle:focus-visible,
+.btn-color-card .ui-select[data-tone] .ui-select-toggle:active,
+.btn-color-card .ui-select[data-tone].open .ui-select-toggle {
+  border-radius: 999px;
 }
 .btn-color-card .ui-select[data-tone] .ui-select-toggle::before {
   content: "";

@@ -742,8 +742,28 @@
 
     function modalScrollRoot(modal){
       if (!modal) return null;
-      /* Always scroll the panel itself so the scrollbar sits on the same edge */
-      return modal.querySelector('.ui-modal-panel');
+      const panel = modal.querySelector('.ui-modal-panel');
+      if (!panel) return null;
+      /* Prefer the inner scroll shell so the panel can clip to border-radius. */
+      return panel.querySelector(':scope > .ui-modal-scroll') || panel;
+    }
+
+    function ensureModalScrollShell(modal){
+      const panel = modal && modal.querySelector('.ui-modal-panel');
+      if (!panel || panel.dataset.scrollShell === '1') return;
+      let scroll = null;
+      try {
+        scroll = panel.querySelector(':scope > .ui-modal-scroll');
+      } catch (e) {
+        scroll = Array.from(panel.children).find((c) => c.classList && c.classList.contains('ui-modal-scroll')) || null;
+      }
+      if (!scroll) {
+        scroll = document.createElement('div');
+        scroll.className = 'ui-modal-scroll';
+        while (panel.firstChild) scroll.appendChild(panel.firstChild);
+        panel.appendChild(scroll);
+      }
+      panel.dataset.scrollShell = '1';
     }
 
     function canScrollInside(el, deltaY){
@@ -905,6 +925,7 @@
       if (el.parentNode !== document.body) {
         document.body.appendChild(el);
       }
+      ensureModalScrollShell(el);
     }
     function prefersReducedMotion(){
       try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
@@ -1045,6 +1066,8 @@
       const thread = el.querySelector('.ticket-thread');
       if (thread) thread.scrollTop = thread.scrollHeight;
     });
+    /* Pre-wrap every modal so first open already clips the scrollbar to radius. */
+    document.querySelectorAll('.ui-modal').forEach((el) => ensureModalScrollShell(el));
     document.addEventListener('click', (e) => {
       const openBtn = e.target.closest('[data-modal-open]');
       if (openBtn) {
