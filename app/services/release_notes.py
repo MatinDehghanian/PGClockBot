@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.2.3": [
+        "نوار CPU/RAM نودها همان رنگ دایره‌های گیج (همهٔ toneها؛ بدون شفافیت جدا)",
+        "فوکوس/هاور/اکتیو کنترل‌ها و سلکت: گوشه تیز حذف شد (box-shadow به‌جای outline مستطیلی اندروید)",
+        "اسکرول‌بار مودال داخل گوشهٔ گرد پنل کلیپ می‌شود (شل داخلی ui-modal-scroll)",
+        "بدون مایگریشن جدید نسبت به ۸.۲.۲؛ ریستور: تگ restore/pre-node-select-modal-chrome-v8.2.2 و v8.2.2",
+    ],
     "8.2.2": [
         "سرعت داشبورد: آمار دوره‌ها با ۲ کوئری تجمیعی؛ قیف/دوره/صف‌کار موازی روی session جدا",
         "اسکن انقضای سرویس محدود به بازهٔ معقول (نه کل جدول)؛ کش ACL پاسارگارد کوتاه ماند (۸ث)",
