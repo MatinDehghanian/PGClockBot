@@ -382,6 +382,8 @@
         {% set global_suffix = values.get('pg_username_suffix','') %}
         {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
         {% include "_plan_naming_fields.html" %}
+        {% set plan_button_style = 'inherit' %}
+        {% include "_plan_button_style_field.html" %}
         <div class="actions">
           <button class="btn" type="submit">ذخیره پلن</button>
           <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
@@ -449,6 +451,12 @@
         {% set global_suffix = values.get('pg_username_suffix','') %}
         {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
         {% include "_plan_naming_fields.html" %}
+        {% if trial and trial.button_style is not none %}
+        {% set plan_button_style = trial.button_style if trial.button_style else '' %}
+        {% else %}
+        {% set plan_button_style = 'inherit' %}
+        {% endif %}
+        {% include "_plan_button_style_field.html" %}
         <div class="actions">
           <button class="btn" type="submit">ذخیره پلن تست</button>
           <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
@@ -526,6 +534,17 @@
         {% set global_suffix = values.get('pg_username_suffix','') %}
         {% set global_pattern = values.get('pg_username_pattern','{prefix}_{random}{suffix}') %}
         {% include "_plan_naming_fields.html" %}
+        {% set button_style_name = 'custom_plan_button_style' %}
+        {% set raw_custom_style = values.get('custom_plan_button_style') %}
+        {% if raw_custom_style is none or raw_custom_style == '' or raw_custom_style == 'inherit' %}
+        {% set plan_button_style = 'inherit' %}
+        {% else %}
+        {% set plan_button_style = raw_custom_style %}
+        {% endif %}
+        {% if plan_button_style not in ['inherit', 'primary', 'success', 'danger', ''] %}
+        {% set plan_button_style = 'inherit' %}
+        {% endif %}
+        {% include "_plan_button_style_field.html" %}
         <div class="actions">
           <button class="btn" type="submit">ذخیره پلن دلخواه</button>
           <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
@@ -694,6 +713,8 @@
         <div class="ui-switch-list">
           {{ switch('is_active', 'پلن فعال', checked=true) }}
         </div>
+        {% set plan_button_style = 'inherit' %}
+        {% include "_plan_button_style_field.html" %}
         <div class="actions">
           <button class="btn" type="submit">ذخیره پلن</button>
           <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>

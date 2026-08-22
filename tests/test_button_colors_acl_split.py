@@ -135,6 +135,57 @@ class PlanKindInheritanceTests(unittest.TestCase):
         self.assertEqual(payg.inline_keyboard[0][0].style, "success")
 
 
+class PlanButtonStyleOverrideTests(unittest.TestCase):
+    def test_parse_plan_button_style_form(self):
+        from app.services.button_styles import parse_plan_button_style_form
+
+        self.assertIsNone(parse_plan_button_style_form({"button_style": "inherit"}))
+        self.assertIsNone(parse_plan_button_style_form({"button_style": "__inherit__"}))
+        self.assertEqual(parse_plan_button_style_form({"button_style": "primary"}), "primary")
+        self.assertEqual(parse_plan_button_style_form({"button_style": "danger"}), "danger")
+        self.assertEqual(parse_plan_button_style_form({"button_style": ""}), "")
+        self.assertEqual(parse_plan_button_style_form({"button_style": "hacked"}), "")
+
+    def test_parse_plan_button_style_callback(self):
+        from app.services.button_styles import parse_plan_button_style_callback
+
+        self.assertIsNone(parse_plan_button_style_callback("inherit"))
+        self.assertIsNone(parse_plan_button_style_callback("default"))
+        self.assertEqual(parse_plan_button_style_callback("success"), "success")
+        self.assertEqual(parse_plan_button_style_callback("bogus"), "")
+
+    def test_resolve_plan_button_style_override(self):
+        from app.services.button_styles import resolve_plan_button_style, setting_key
+
+        ui = {setting_key("shop_kind_fixed"): "primary"}
+        inherited = SimpleNamespace(id=1, button_style=None, is_trial=False)
+        self.assertEqual(
+            resolve_plan_button_style(ui, inherited, kind="fixed", audience="users"),
+            "primary",
+        )
+        override = SimpleNamespace(id=2, button_style="danger", is_trial=False)
+        self.assertEqual(
+            resolve_plan_button_style(ui, override, kind="fixed", audience="users"),
+            "danger",
+        )
+        white = SimpleNamespace(id=3, button_style="", is_trial=False)
+        self.assertIsNone(resolve_plan_button_style(ui, white, kind="fixed", audience="users"))
+
+    def test_plans_keyboard_uses_per_plan_override(self):
+        from app.bot.keyboards import plans_keyboard
+        from app.services.button_styles import setting_key
+
+        plan = SimpleNamespace(id=9, name="VIP", price=1000, is_trial=False, button_style="success")
+        ui = {setting_key("shop_kind_fixed"): "danger"}
+        kb = plans_keyboard([plan], ui, kind="fixed", back_callback="shop:list")
+        self.assertEqual(kb.inline_keyboard[0][0].style, "success")
+
+    def test_reseller_api_persists_button_style(self):
+        src = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
+        self.assertIn("parse_plan_button_style_form", src)
+        self.assertIn("plan.button_style = button_style", src)
+
+
 class SecurityLeakRegressionTests(unittest.TestCase):
     def test_notify_and_btn_style_smuggle_guards_present(self):
         src = (ROOT / "app/api/shop_settings.py").read_text(encoding="utf-8")

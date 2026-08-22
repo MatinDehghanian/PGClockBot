@@ -50,6 +50,7 @@ class AdminPlansStates(StatesGroup):
     res_plan_addon_amount = State()
     res_plan_link = State()
     res_plan_role = State()
+    res_plan_color = State()
     res_plan_edit_field = State()
     trial_name = State()
     trial_days = State()
@@ -1371,6 +1372,27 @@ def _resplan_detail_text(plan: ResellerPlan) -> str:
     return format_reseller_plan_apply_detail(plan, currency=get_settings().currency)
 
 
+async def _show_resplan_color_picker(
+    target: CallbackQuery | Message,
+    *,
+    session: AsyncSession,
+    callback_prefix: str,
+    back_callback: str,
+) -> None:
+    ui = await get_all_settings(session)
+    markup = kb.plan_button_style_picker_keyboard(
+        callback_prefix=callback_prefix,
+        back_callback=back_callback,
+        ui=ui,
+    )
+    text = "🎨 <b>رنگ دکمه این پلن در ربات</b>\n\n«ارث از نوع پلن» همان رنگ بخش «نوع پلن» در تنظیمات رنگبندی است."
+    if isinstance(target, CallbackQuery):
+        if target.message:
+            await safe_edit_text(target.message, text, reply_markup=markup)
+    else:
+        await target.answer(text, reply_markup=markup)
+
+
 def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
     from app.services.pg_admin_subscription import is_addon_plan, is_subscription_plan
     from app.services.reseller_capacity import plan_allows_buy_extra
@@ -1391,6 +1413,12 @@ def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
         rows.extend(
             [
                 [InlineKeyboardButton(text="✏️ توضیح", callback_data=f"adm:resplan:edit:desc:{pid}")],
+                [
+                    InlineKeyboardButton(
+                        text="🎨 رنگ دکمه",
+                        callback_data=f"adm:resplan:colorpick:{pid}",
+                    )
+                ],
                 [
                     InlineKeyboardButton(
                         text="⏸ خاموش" if plan.is_active else "▶️ روشن",
@@ -1421,6 +1449,12 @@ def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
         [
             [InlineKeyboardButton(text="✏️ توضیح", callback_data=f"adm:resplan:edit:desc:{pid}")],
             [InlineKeyboardButton(text="🔐 دسترسی‌ها", callback_data=f"adm:resplan:perms:{pid}")],
+            [
+                InlineKeyboardButton(
+                    text="🎨 رنگ دکمه",
+                    callback_data=f"adm:resplan:colorpick:{pid}",
+                )
+            ],
             [
                 InlineKeyboardButton(
                     text=("✅ " if plan.create_pg_admin else "⬜️ ") + "ساخت ادمین PG",
@@ -2044,44 +2078,17 @@ async def resplan_addon_amount(
         return
     addon_gb = amount if plan_kind == "addon_volume" else 0
     addon_users = amount if plan_kind == "addon_users" else 0
-    from app.services.billing import sync_plan_billing_rate
-
-    plan = ResellerPlan(
-        name=data.get("res_plan_name") or "بسته اضافه",
-        price=price,
-        billing_mode="fixed",
-        commission_percent=0,
-        price_per_gb=0,
-        pg_group_ids=None,
-        plan_kind=plan_kind,
-        duration_days=0,
-        included_gb=0,
-        included_users=0,
-        addon_gb=addon_gb,
-        addon_users=addon_users,
-        renew_pricing_mode="fixed",
-        allow_buy_extra=False,
-        extra_gb_price=0,
-        extra_user_price=0,
-        renew_price=0,
-        can_approve_receipts=False,
-        web_permissions="",
-        bot_permissions="",
-        create_pg_admin=False,
-        create_web_access=False,
-        share_pg_panel_url=False,
-        pg_role_id=None,
-        is_active=True,
+    await state.update_data(
+        res_addon_gb=addon_gb,
+        res_addon_users=addon_users,
+        res_plan_create_kind="addon",
     )
-    session.add(plan)
-    await session.flush()
-    await sync_plan_billing_rate(session, plan)
-    await _persist(session)
-    await state.set_state(None)
-    await _answer_plans_saved(message, state, session, "بسته ذخیره شد ✅")
-    await message.answer(
-        _resplan_detail_text(plan),
-        reply_markup=_resplan_detail_keyboard(plan),
+    await state.set_state(AdminPlansStates.res_plan_color)
+    await _show_resplan_color_picker(
+        message,
+        session=session,
+        callback_prefix="adm:resplan:addcolor",
+        back_callback="adm:plans:aud:resellers",
     )
 
 
@@ -2313,29 +2320,147 @@ async def resplan_add_set_role(
         return
     group_csv = ",".join(str(x) for x in groups)
     mode = data.get("res_plan_mode") or "fixed"
+    await state.update_data(
+        res_plan_role_id=role_id,
+        res_plan_create_kind="subscription",
+    )
+    await state.set_state(AdminPlansStates.res_plan_color)
+    await callback.answer()
+    await _show_resplan_color_picker(
+        callback,
+        session=session,
+        callback_prefix="adm:resplan:addcolor",
+        back_callback="adm:plans:aud:resellers",
+    )
+
+
+@router.callback_query(F.data.startswith("adm:resplan:addcolor:"))
+@require_bot_owner_handler
+async def resplan_add_color(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    if await state.get_state() != AdminPlansStates.res_plan_color.state:
+        await callback.answer("ابتدا ساخت پلن را کامل کنید", show_alert=True)
+        return
+    from app.services.billing import sync_plan_billing_rate
+    from app.services.button_styles import parse_plan_button_style_callback
+
+    style = parse_plan_button_style_callback(callback.data.rsplit(":", 1)[-1])
+    data = await state.get_data()
+    create_kind = str(data.get("res_plan_create_kind") or "")
+    mode = data.get("res_plan_mode") or "fixed"
     try:
-        plan = await _save_reseller_plan(
-            session,
-            state,
-            commission_percent=int(data.get("res_plan_commission") or 0) if mode == "fixed" else 0,
-            price_per_gb=int(data.get("res_plan_rate_gb") or 0) if mode == "payg" else 0,
-            pg_group_ids=group_csv,
-            pg_role_id=role_id,
-        )
+        if create_kind == "addon":
+            plan_kind = str(data.get("res_plan_kind") or "")
+            plan = ResellerPlan(
+                name=data.get("res_plan_name") or "بسته اضافه",
+                price=int(data.get("res_plan_price") or 0),
+                billing_mode="fixed",
+                commission_percent=0,
+                price_per_gb=0,
+                pg_group_ids=None,
+                plan_kind=plan_kind,
+                duration_days=0,
+                included_gb=0,
+                included_users=0,
+                addon_gb=int(data.get("res_addon_gb") or 0),
+                addon_users=int(data.get("res_addon_users") or 0),
+                renew_pricing_mode="fixed",
+                allow_buy_extra=False,
+                extra_gb_price=0,
+                extra_user_price=0,
+                renew_price=0,
+                can_approve_receipts=False,
+                web_permissions="",
+                bot_permissions="",
+                create_pg_admin=False,
+                create_web_access=False,
+                share_pg_panel_url=False,
+                pg_role_id=None,
+                button_style=style,
+                is_active=True,
+            )
+            session.add(plan)
+            await session.flush()
+            await sync_plan_billing_rate(session, plan)
+            await _persist(session)
+            await session.refresh(plan)
+            saved_label = "بسته"
+        else:
+            plan = await _save_reseller_plan(
+                session,
+                state,
+                commission_percent=int(data.get("res_plan_commission") or 0) if mode == "fixed" else 0,
+                price_per_gb=int(data.get("res_plan_rate_gb") or 0) if mode == "payg" else 0,
+                pg_group_ids=",".join(str(int(x)) for x in (data.get("res_plan_groups") or [])),
+                pg_role_id=int(data.get("res_plan_role_id") or 0),
+                button_style=style,
+            )
+            saved_label = "PAYG" if mode == "payg" else "ثابت"
     except Exception:
         await callback.answer("ذخیره ناموفق بود", show_alert=True)
         return
     await state.set_state(None)
     await callback.answer("ذخیره شد")
-    label = "PAYG" if mode == "payg" else "ثابت"
     if callback.message:
         await safe_edit_text(
             callback.message,
-            f"پلن {label} #{plan.id} ذخیره شد ✅\n\n{_resplan_detail_text(plan)}",
+            f"پلن {saved_label} #{plan.id} ذخیره شد ✅\n\n{_resplan_detail_text(plan)}",
             reply_markup=_resplan_detail_keyboard(plan),
         )
         await sync_plans_reply_keyboard(
             callback.message, session, db_user, state, audience="resellers"
+        )
+
+
+@router.callback_query(F.data.startswith("adm:resplan:colorpick:"))
+@require_bot_owner_handler
+async def resplan_color_pick(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    pid = int(callback.data.rsplit(":", 1)[-1])
+    plan = await session.get(ResellerPlan, pid)
+    if not plan:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await callback.answer()
+    await _show_resplan_color_picker(
+        callback,
+        session=session,
+        callback_prefix=f"adm:resplan:setcolor:{pid}",
+        back_callback=f"adm:resplan:view:{pid}",
+    )
+
+
+@router.callback_query(F.data.startswith("adm:resplan:setcolor:"))
+@require_bot_owner_handler
+async def resplan_set_color(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) < 5:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    pid = int(parts[3])
+    from app.services.button_styles import parse_plan_button_style_callback
+
+    plan = await session.get(ResellerPlan, pid)
+    if not plan:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    plan.button_style = parse_plan_button_style_callback(parts[4])
+    await _persist(session)
+    await callback.answer("رنگ ذخیره شد")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            _resplan_detail_text(plan),
+            reply_markup=_resplan_detail_keyboard(plan),
         )
 
 
@@ -2383,6 +2508,7 @@ async def _save_reseller_plan(
     price_per_gb: int | None = None,
     pg_group_ids: str | None = None,
     pg_role_id: int | None = None,
+    button_style: str | None = None,
 ) -> ResellerPlan:
     from app.services.billing import sync_plan_billing_rate
 
@@ -2414,6 +2540,7 @@ async def _save_reseller_plan(
         bot_permissions=DEFAULT_FEATURE_PERMS,
         create_pg_admin=True,
         create_web_access=True,
+        button_style=button_style,
         is_active=True,
     )
     session.add(plan)

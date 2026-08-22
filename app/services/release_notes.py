@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.2.6": [
+        "رنگ دکمه برای هر پلن (کاربر و نماینده): در ساخت/ویرایش وب و ربات — «ارث از نوع پلن» یا سفید/آبی/سبز/قرمز",
+        "منوی انتخاب رنگ در فرم پلن‌ها همان tone-aware select صفحه «رنگبندی دکمه‌ها» است",
+        "پلن دلخواه: override امن با setting اختصاصی (بدون کلید btn_style_* جدید در کاتالوگ)",
+        "مایگریشن 0019_plan_button_style؛ ریستور: تگ restore/pre-plan-button-color-v8.2.5 و v8.2.5",
+    ],
     "8.2.5": [
         "منوی ادمین ربات: هاب ۴‌گروهه (عملیات روزانه / افراد / محصول و PG / سیستم) به‌جای ۱۳ دکمهٔ تخت",
         "زیرمنوها، بازگشت، رنگ دکمه‌ها و ACL نمایندگان/PG با هاب هم‌تراز؛ لیبل‌ها روی ربات نماینده ثبت نمی‌شوند",

@@ -2200,6 +2200,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "open_gifts": request.query_params.get("gifts") in {"1", "true", "yes"},
                 "flash_err": request.query_params.get("err"),
                 "flash_ok": request.query_params.get("ok"),
+                "plan_style_options": __import__(
+                    "app.services.button_styles", fromlist=["PLAN_BUTTON_STYLE_OPTIONS"]
+                ).PLAN_BUTTON_STYLE_OPTIONS,
             },
         )
 
@@ -2302,8 +2305,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     )
 
         from app.services.orders import parse_naming_form
+        from app.services.button_styles import parse_plan_button_style_form
 
         uname_prefix, uname_suffix, uname_pattern = parse_naming_form(form)
+        button_style = parse_plan_button_style_form(form)
 
         session.add(
             Plan(
@@ -2316,6 +2321,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 pg_username_prefix=uname_prefix,
                 pg_username_suffix=uname_suffix,
                 pg_username_pattern=uname_pattern,
+                button_style=button_style,
                 owner_reseller_id=owner_id,
                 description=description or None,
                 is_active=True,
@@ -2399,8 +2405,10 @@ def create_api_app(lifespan=None) -> FastAPI:
             group_csv = ",".join(str(i) for i in ids) if ids else None
 
         from app.services.orders import parse_naming_form
+        from app.services.button_styles import parse_plan_button_style_form
 
         uname_prefix, uname_suffix, uname_pattern = parse_naming_form(form)
+        button_style = parse_plan_button_style_form(form)
 
         q = select(Plan).where(Plan.is_trial.is_(True))
         if owner_id:
@@ -2420,6 +2428,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 pg_username_prefix=uname_prefix,
                 pg_username_suffix=uname_suffix,
                 pg_username_pattern=uname_pattern,
+                button_style=button_style,
                 owner_reseller_id=owner_id,
                 is_trial=True,
                 is_active=enabled,
@@ -2436,6 +2445,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             trial.pg_username_prefix = uname_prefix
             trial.pg_username_suffix = uname_suffix
             trial.pg_username_pattern = uname_pattern
+            trial.button_style = button_style
             trial.is_active = enabled
         await session.commit()
         return RedirectResponse(
@@ -2519,12 +2529,20 @@ def create_api_app(lifespan=None) -> FastAPI:
             )
             await set_setting(session, "custom_plan_template_id", "", reseller_id=owner_id)
         from app.services.orders import parse_naming_form
+        from app.services.button_styles import parse_custom_plan_button_style_form
 
         c_prefix, c_suffix, c_pattern = parse_naming_form(
             form,
             prefix_key="custom_plan_username_prefix",
             suffix_key="custom_plan_username_suffix",
             pattern_key="custom_plan_username_pattern",
+        )
+        custom_btn_style = parse_custom_plan_button_style_form(form)
+        await set_setting(
+            session,
+            "custom_plan_button_style",
+            "" if custom_btn_style is None else custom_btn_style,
+            reseller_id=owner_id,
         )
         await set_setting(
             session, "custom_plan_username_prefix", c_prefix or "", reseller_id=owner_id
@@ -2628,6 +2646,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         else:
             values = await get_all_settings(session, reseller_id=rid)
         ctx = await _plans_context(session, request, staff, {"plan": plan, "values": values})
+        from app.services.button_styles import PLAN_BUTTON_STYLE_OPTIONS
+
+        ctx["plan_style_options"] = PLAN_BUTTON_STYLE_OPTIONS
         return render(request, "plan_edit.html", ctx)
 
     @app.post("/plans/{plan_id}/edit")
@@ -2710,11 +2731,13 @@ def create_api_app(lifespan=None) -> FastAPI:
         plan.pg_template_id = tpl
         plan.pg_group_ids = group_csv
         from app.services.orders import parse_naming_form
+        from app.services.button_styles import parse_plan_button_style_form
 
         uname_prefix, uname_suffix, uname_pattern = parse_naming_form(form)
         plan.pg_username_prefix = uname_prefix
         plan.pg_username_suffix = uname_suffix
         plan.pg_username_pattern = uname_pattern
+        plan.button_style = parse_plan_button_style_form(form)
         await session.commit()
         return RedirectResponse(
             f"/plans?ok={quote('پلن به‌روزرسانی شد')}",
