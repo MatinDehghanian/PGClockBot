@@ -941,6 +941,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         session: AsyncSession = Depends(get_db),
     ):
         form = await request.form()
+        from app.services.button_styles import parse_plan_button_style_form
+
+        button_style = parse_plan_button_style_form(form)
         name = str(form.get("name") or "").strip()
         if not name:
             return RedirectResponse(f"/plans?err={_q('نام الزامی است')}#reseller-plans", status_code=303)
@@ -996,6 +999,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 create_web_access=False,
                 share_pg_panel_url=False,
                 pg_role_id=None,
+                button_style=button_style,
                 is_active=bool(form.get("is_active", "1")),
                 sort_order=sort_order,
             )
@@ -1077,6 +1081,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             create_web_access=True,
             share_pg_panel_url=bool(form.get("share_pg_panel_url")),
             pg_role_id=int(pg_role_raw) if pg_role_raw.isdigit() else None,
+            button_style=button_style,
             is_active=bool(form.get("is_active", "1")),
             sort_order=sort_order,
         )
@@ -1117,6 +1122,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             if x.strip()
         }
         snap = await load_staff_limit_snapshot(staff, session=session)
+        from app.services.button_styles import PLAN_BUTTON_STYLE_OPTIONS
+
         return render(
             request,
             "reseller_plan_edit.html",
@@ -1132,6 +1139,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 "pg_roles": roles,
                 "groups": groups,
                 "plan_group_ids": plan_group_ids,
+                "plan_style_options": PLAN_BUTTON_STYLE_OPTIONS,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -1148,12 +1156,16 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         if not plan:
             return RedirectResponse(f"/plans?err={_q('یافت نشد')}#reseller-plans", status_code=303)
         form = await request.form()
+        from app.services.button_styles import parse_plan_button_style_form
+
+        button_style = parse_plan_button_style_form(form)
         name = str(form.get("name") or "").strip()
         if not name:
             return RedirectResponse(
                 f"/resellers/plans/{plan_id}/edit?err={_q('نام الزامی است')}", status_code=303
             )
         plan.name = name
+        plan.button_style = button_style
         plan.description = str(form.get("description") or "").strip() or None
         try:
             plan.price = max(0, int(str(form.get("price") or "0").replace(",", "").replace("٬", "")))

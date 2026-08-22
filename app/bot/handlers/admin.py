@@ -155,6 +155,13 @@ def _plan_detail_keyboard(p: Plan, ui: dict | None = None) -> InlineKeyboardMark
         [kb._ikb("✏️ پسوند نام", callback_data=f"adm:plan:edit:suffix:{pid}", style=st)],
         [
             kb._ikb(
+                "🎨 رنگ دکمه",
+                callback_data=f"adm:plan:colorpick:{pid}",
+                style=st,
+            )
+        ],
+        [
+            kb._ikb(
                 "⏸ خاموش" if p.is_active else "▶️ روشن",
                 callback_data=f"adm:plan:toggle:{p.id}",
                 style=st,
@@ -214,6 +221,56 @@ async def _plan_detail_markup(session: AsyncSession, plan: Plan) -> InlineKeyboa
     ui = await get_all_settings(session)
     return _plan_detail_keyboard(plan, ui)
 
+
+async def _show_user_plan_color_picker(
+    target: CallbackQuery | Message,
+    *,
+    session: AsyncSession,
+    callback_prefix: str,
+    back_callback: str,
+) -> None:
+    ui = await get_all_settings(session)
+    markup = kb.plan_button_style_picker_keyboard(
+        callback_prefix=callback_prefix,
+        back_callback=back_callback,
+        ui=ui,
+    )
+    text = "🎨 <b>رنگ دکمه این پلن در ربات</b>\n\n«ارث از نوع پلن» همان رنگ بخش «نوع پلن» در تنظیمات رنگبندی است."
+    if isinstance(target, CallbackQuery):
+        if target.message:
+            await safe_edit_text(target.message, text, reply_markup=markup)
+    else:
+        await target.answer(text, reply_markup=markup)
+
+
+async def _pending_user_plan_finish(
+    session: AsyncSession,
+    state: FSMContext,
+    *,
+    button_style: str | None,
+) -> Plan:
+    data = await state.get_data()
+    tpl_id = data.get("pending_tpl_id")
+    group_ids = data.get("pending_group_ids")
+    if tpl_id is not None:
+        return await _finish_new_plan(
+            session,
+            state,
+            template_id=int(tpl_id),
+            group_ids=None,
+            button_style=button_style,
+        )
+    if group_ids:
+        return await _finish_new_plan(
+            session,
+            state,
+            template_id=None,
+            group_ids=str(group_ids),
+            button_style=button_style,
+        )
+    raise ValueError("pending PG link missing")
+
+
 router = Router(name="admin")
 
 
@@ -223,6 +280,7 @@ class AdminStates(StatesGroup):
     add_plan_days = State()
     add_plan_gb = State()
     add_plan_link = State()  # waiting for mode after basics
+    add_plan_color = State()  # Telegram button color before save
     plan_edit_field = State()
     make_reseller = State()
     ticket_reply = State()
@@ -861,6 +919,7 @@ async def _finish_new_plan(
     *,
     template_id: int | None = None,
     group_ids: str | None = None,
+    button_style: str | None = None,
 ) -> Plan:
     data = await state.get_data()
     name = str(data.get("name") or "").strip()
@@ -875,6 +934,7 @@ async def _finish_new_plan(
         data_limit_gb=data.get("gb"),
         pg_template_id=template_id,
         pg_group_ids=group_ids,
+        button_style=button_style,
         is_active=True,
     )
     session.add(plan)
@@ -884,6 +944,8 @@ async def _finish_new_plan(
     await state.update_data(
         new_plan=0,
         selected_groups=[],
+        pending_tpl_id=None,
+        pending_group_ids=None,
         name=None,
         price=None,
         days=None,
@@ -1056,22 +1118,18 @@ async def adm_plan_set_tpl(
     data = await state.get_data()
     creating = bool(data.get("new_plan") or plan_id == 0)
     if creating:
-        try:
-            plan = await _finish_new_plan(session, state, template_id=tpl_id, group_ids=None)
-        except Exception:
-            await callback.answer("ساخت پلن ناموفق بود", show_alert=True)
-            return
-        await callback.answer("ذخیره شد")
-        if callback.message:
-            text = (
-                f"پلن #{plan.id} با تمپلیت #{tpl_id} ساخته شد ✅\n\n"
-                + await _plan_detail_text(plan)
-            )
-            await safe_edit_text(
-                callback.message,
-                text,
-                reply_markup=await _plan_detail_markup(session, plan),
-            )
+        await state.update_data(
+            pending_tpl_id=tpl_id,
+            pending_group_ids=None,
+        )
+        await state.set_state(AdminStates.add_plan_color)
+        await callback.answer()
+        await _show_user_plan_color_picker(
+            callback,
+            session=session,
+            callback_prefix="adm:plan:newcolor",
+            back_callback="adm:plan:new:backlink",
+        )
         return
     plan = await session.get(Plan, plan_id)
     if not plan:
@@ -1127,22 +1185,18 @@ async def adm_plan_grp_done(
     group_csv = ",".join(str(x) for x in selected)
     creating = bool(data.get("new_plan") or plan_id == 0)
     if creating:
-        try:
-            plan = await _finish_new_plan(session, state, template_id=None, group_ids=group_csv)
-        except Exception:
-            await callback.answer("ساخت پلن ناموفق بود", show_alert=True)
-            return
-        await callback.answer("ذخیره شد")
-        if callback.message:
-            text = (
-                f"پلن #{plan.id} با گروه(ها) {group_csv} ساخته شد ✅\n\n"
-                + await _plan_detail_text(plan)
-            )
-            await safe_edit_text(
-                callback.message,
-                text,
-                reply_markup=await _plan_detail_markup(session, plan),
-            )
+        await state.update_data(
+            pending_tpl_id=None,
+            pending_group_ids=group_csv,
+        )
+        await state.set_state(AdminStates.add_plan_color)
+        await callback.answer()
+        await _show_user_plan_color_picker(
+            callback,
+            session=session,
+            callback_prefix="adm:plan:newcolor",
+            back_callback="adm:plan:new:backlink",
+        )
         return
     plan = await session.get(Plan, plan_id)
     if not plan:
@@ -1153,6 +1207,110 @@ async def adm_plan_grp_done(
     await session.commit()
     await state.update_data(selected_groups=[], new_plan=0)
     await callback.answer("ذخیره شد")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            await _plan_detail_text(plan),
+            reply_markup=await _plan_detail_markup(session, plan),
+        )
+
+
+@router.callback_query(F.data == "adm:plan:new:backlink")
+@require_bot_owner_handler
+async def adm_plan_new_back_link(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await state.set_state(AdminStates.add_plan_link)
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            "اتصال پاسارگارد را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="📋 از تمپلیت", callback_data="adm:plan:new:mode:tpl")],
+                    [InlineKeyboardButton(text="📁 با گروه (سفارشی)", callback_data="adm:plan:new:mode:grp")],
+                    [InlineKeyboardButton(text="❌ انصراف", callback_data="adm:plans")],
+                ]
+            ),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:plan:newcolor:"))
+@require_bot_owner_handler
+async def adm_plan_new_color(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    if await state.get_state() != AdminStates.add_plan_color.state:
+        await callback.answer("ابتدا اتصال پاسارگارد را انتخاب کنید", show_alert=True)
+        return
+    from app.services.button_styles import parse_plan_button_style_callback
+
+    style = parse_plan_button_style_callback(callback.data.rsplit(":", 1)[-1])
+    try:
+        plan = await _pending_user_plan_finish(session, state, button_style=style)
+    except Exception:
+        await callback.answer("ساخت پلن ناموفق بود", show_alert=True)
+        return
+    await callback.answer("ذخیره شد")
+    if callback.message:
+        link_note = ""
+        if plan.pg_template_id:
+            link_note = f" با تمپلیت #{plan.pg_template_id}"
+        elif plan.pg_group_ids:
+            link_note = f" با گروه(ها) {plan.pg_group_ids}"
+        text = f"پلن #{plan.id}{link_note} ساخته شد ✅\n\n" + await _plan_detail_text(plan)
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=await _plan_detail_markup(session, plan),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:plan:colorpick:"))
+@require_bot_owner_handler
+async def adm_plan_color_pick(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    pid = int(callback.data.rsplit(":", 1)[-1])
+    plan = await session.get(Plan, pid)
+    if not plan:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await callback.answer()
+    await _show_user_plan_color_picker(
+        callback,
+        session=session,
+        callback_prefix=f"adm:plan:setcolor:{pid}",
+        back_callback=f"adm:plan:view:{pid}",
+    )
+
+
+@router.callback_query(F.data.startswith("adm:plan:setcolor:"))
+@require_bot_owner_handler
+async def adm_plan_set_color(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) < 5:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    pid = int(parts[3])
+    from app.services.button_styles import parse_plan_button_style_callback
+
+    plan = await session.get(Plan, pid)
+    if not plan:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    plan.button_style = parse_plan_button_style_callback(parts[4])
+    await session.commit()
+    await callback.answer("رنگ ذخیره شد")
     if callback.message:
         await safe_edit_text(
             callback.message,

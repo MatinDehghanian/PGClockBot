@@ -731,6 +731,7 @@ DEFAULT_SETTINGS = {
     "custom_plan_username_prefix": "",
     "custom_plan_username_suffix": "",
     "custom_plan_username_pattern": "",
+    "custom_plan_button_style": "",
     # Wholesale / bulk sales
     "wholesale_enabled": "0",
     "wholesale_min_qty": "5",

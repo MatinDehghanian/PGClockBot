@@ -252,6 +252,48 @@ def normalize_style(raw: str | None) -> str:
     return ""
 
 
+# Plan form: inherit sentinel (stored as NULL) + explicit Telegram colors.
+PLAN_BUTTON_STYLE_OPTIONS: list[tuple[str, str, str]] = [
+    ("inherit", "ارث از نوع پلن", "default"),
+    *STYLE_OPTIONS,
+]
+
+
+def parse_plan_button_style_form(form, field: str = "button_style") -> str | None:
+    """Parse plan color from HTML form. Returns None = inherit kind color."""
+    if field not in form:
+        return None
+    raw = str(form.get(field, "")).strip().lower()
+    if raw in {"inherit", "__inherit__"}:
+        return None
+    return normalize_style(raw)
+
+
+def plan_button_style_form_value(stored: str | None) -> str:
+    """Map DB value → form select value."""
+    if stored is None:
+        return "inherit"
+    return normalize_style(stored)
+
+
+def parse_custom_plan_button_style_form(form) -> str | None:
+    """Persist custom-plan kind color override (setting key, not btn_style catalog)."""
+    if "custom_plan_button_style" not in form:
+        return None
+    raw = str(form.get("custom_plan_button_style", "")).strip().lower()
+    if raw in {"inherit", "__inherit__"}:
+        return None
+    return normalize_style(raw)
+
+
+def parse_plan_button_style_callback(raw: str) -> str | None:
+    """Parse bot inline color picker suffix. None = inherit kind color."""
+    v = (raw or "").strip().lower()
+    if v in {"inherit", "default", "__inherit__"}:
+        return None
+    return normalize_style(v)
+
+
 def get_button_style(
     ui: dict | None,
     button_id: str,
@@ -360,6 +402,61 @@ def plan_kind_style_id(kind: str | None) -> str | None:
     if k in {"resellers:payg", "reseller_payg"}:
         k = "payg"
     return PLAN_KIND_STYLE_IDS.get(k)
+
+
+def infer_user_plan_kind(plan: object | None) -> str:
+    if plan is not None and getattr(plan, "is_trial", False):
+        return "trial"
+    return "fixed"
+
+
+def infer_reseller_plan_kind(plan: object | None) -> str:
+    if plan is None:
+        return "res_fixed"
+    pk = (getattr(plan, "plan_kind", "") or "subscription").strip().lower()
+    if pk in {"addon_volume", "addon_users"}:
+        return "res_fixed"
+    bm = (getattr(plan, "billing_mode", "") or "fixed").strip().lower()
+    if bm == "payg":
+        return "payg"
+    return "res_fixed"
+
+
+def resolve_plan_button_style(
+    ui: dict | None,
+    plan: object | None,
+    *,
+    kind: str | None = None,
+    audience: str = "users",
+) -> str | None:
+    """Telegram inline style for one plan row — override then kind catalog."""
+    stored = getattr(plan, "button_style", None) if plan is not None else None
+    if stored is not None:
+        explicit = normalize_style(stored)
+        return explicit or None
+    if kind is None:
+        kind = (
+            infer_user_plan_kind(plan)
+            if (audience or "users") == "users"
+            else infer_reseller_plan_kind(plan)
+        )
+    sid = plan_kind_style_id(kind) or (
+        "shop_kind_fixed" if audience == "users" else "plan_res_fixed"
+    )
+    return style_or_none(ui, sid, fallback="primary")
+
+
+def resolve_custom_plan_button_style(ui: dict | None) -> str | None:
+    raw = (ui or {}).get("custom_plan_button_style")
+    if raw is not None and str(raw).strip() and str(raw).strip().lower() not in {
+        "inherit",
+        "none",
+    }:
+        explicit = normalize_style(str(raw))
+        if explicit:
+            return explicit
+        return None
+    return style_or_none(ui, "shop_kind_custom", fallback="primary")
 
 
 def catalog_item_allowed_for_reseller(item: dict[str, str]) -> bool:

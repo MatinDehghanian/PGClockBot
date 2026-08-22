@@ -125,6 +125,8 @@ class Plan(Base):
     pg_username_prefix: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     pg_username_suffix: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     pg_username_pattern: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # NULL = inherit plan-kind btn_style_*; "" = explicit Telegram default (white)
+    button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     # NULL = platform (admin) catalog; set for reseller-owned shop plans
     owner_reseller_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bot_users.id"), nullable=True, index=True
@@ -477,6 +479,8 @@ class ResellerPlan(Base):
     extra_gb_price: Mapped[int] = mapped_column(Integer, default=0)  # toman per extra GB
     extra_user_price: Mapped[int] = mapped_column(Integer, default=0)  # toman per extra user slot
     renew_price: Mapped[int] = mapped_column(Integer, default=0)  # 0 = use plan.price
+    # NULL = inherit plan-kind btn_style_*; "" = explicit Telegram default (white)
+    button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
