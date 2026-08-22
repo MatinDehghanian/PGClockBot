@@ -49,7 +49,7 @@ class KeyboardMenu357Tests(unittest.TestCase):
         self.assertEqual(len(kb.keyboard), 1)
         self.assertNotIn("شروع مجدد", kb.keyboard[0][0].text)
 
-    def test_admin_reply_has_extra_entries(self):
+    def test_admin_reply_has_hub_groups(self):
         ui = {
             "menu_layout": "compact",
             "btn_admin": "🛠 پنل",
@@ -61,10 +61,14 @@ class KeyboardMenu357Tests(unittest.TestCase):
             "btn_back": "⬅️ بازگشت",
         }
         flat = [b.text for row in main_reply_keyboard("admin", ui=ui).keyboard for b in row]
-        self.assertIn("👥 کاربران", flat)
-        self.assertIn("⚙️ تنظیمات", flat)
-        self.assertIn("📢 پیام گروهی", flat)
-        self.assertIn("📊 داشبورد", flat)
+        self.assertIn("🗓 عملیات روزانه", flat)
+        self.assertIn("👤 افراد", flat)
+        self.assertIn("📦 محصول و PG", flat)
+        self.assertIn("🛠 سیستم", flat)
+        self.assertNotIn("👥 کاربران", flat)
+        self.assertNotIn("⚙️ تنظیمات", flat)
+        self.assertNotIn("📢 پیام گروهی", flat)
+        self.assertNotIn("📊 داشبورد", flat)
 
 
 if __name__ == "__main__":

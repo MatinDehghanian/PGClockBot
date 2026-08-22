@@ -145,6 +145,10 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "loy_rewards", "label": "جوایز باشگاه", "group": "باشگاه مشتریان", "default": ""},
     {"id": "loy_history", "label": "تاریخچه باشگاه", "group": "باشگاه مشتریان", "default": ""},
     # ── Admin hub (platform bot only) ──────────────────────────────────────────
+    {"id": "adm_hub_ops", "label": "عملیات روزانه (هاب ادمین)", "group": "منوی ادمین", "default": "success"},
+    {"id": "adm_hub_people", "label": "افراد (هاب ادمین)", "group": "منوی ادمین", "default": "success"},
+    {"id": "adm_hub_product", "label": "محصول و PG (هاب ادمین)", "group": "منوی ادمین", "default": "success"},
+    {"id": "adm_hub_system", "label": "سیستم (هاب ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_dash", "label": "داشبورد ادمین", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_orders", "label": "سفارش‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_payments", "label": "رسیدها (ادمین)", "group": "منوی ادمین", "default": "success"},

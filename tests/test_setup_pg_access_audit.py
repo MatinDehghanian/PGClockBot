@@ -175,16 +175,24 @@ class WizardAndKeyboardSurfaceTests(unittest.TestCase):
         self.assertIn("setup_pg_access_audit", src)
 
     def test_admin_keyboard_hides_resellers_when_denied(self) -> None:
+        from app.bot.keyboards import admin_people_reply_keyboard
+
         ui = {"btn_adm_orders": "سفارش", "btn_adm_payments": "پرداخت", "btn_adm_tickets": "تیکت",
               "btn_adm_plans": "پلن", "btn_adm_users": "کاربران", "btn_adm_pg": "پاسارگارد",
               "btn_adm_settings": "تنظیمات", "btn_adm_broadcast": "پیام", "btn_adm_preview": "پیش‌نمایش",
               "btn_back": "بازگشت", "btn_menu_home": "خانه"}
-        hidden = [b.text for row in admin_reply_keyboard(ui, can_manage_representatives=False).keyboard for b in row]
-        shown = [b.text for row in admin_reply_keyboard(ui, can_manage_representatives=True).keyboard for b in row]
+        # Hub always shows «افراد»; ACL hides نمایندگان inside the people group
+        hub_hidden = [b.text for row in admin_reply_keyboard(ui, can_manage_representatives=False).keyboard for b in row]
+        hub_shown = [b.text for row in admin_reply_keyboard(ui, can_manage_representatives=True).keyboard for b in row]
+        self.assertIn("👤 افراد", hub_hidden)
+        self.assertIn("👤 افراد", hub_shown)
+        hidden = [b.text for row in admin_people_reply_keyboard(ui, can_manage_representatives=False).keyboard for b in row]
+        shown = [b.text for row in admin_people_reply_keyboard(ui, can_manage_representatives=True).keyboard for b in row]
         self.assertNotIn("🤝 نمایندگان", hidden)
         self.assertIn("🤝 نمایندگان", shown)
         main_hidden = [b.text for row in main_reply_keyboard("admin", ui=ui, can_manage_representatives=False).keyboard for b in row]
         self.assertNotIn("🤝 نمایندگان", main_hidden)
+        self.assertIn("👤 افراد", main_hidden)
 
     def test_sidebar_owner_resellers_uses_capability(self) -> None:
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")

@@ -135,7 +135,11 @@ async def bot_admin_settings_in_flow(event: Any, data: dict[str, Any]) -> bool:
         level = await nav.get_nav_level(state)
     except Exception:
         return False
-    if level not in (nav.NAV_ADMIN_SETTINGS, nav.NAV_ADMIN):
+    if level not in (
+        nav.NAV_ADMIN_SETTINGS,
+        nav.NAV_ADMIN,
+        nav.NAV_ADMIN_SYSTEM,
+    ):
         return False
 
     cb_data = getattr(event, "data", None) or ""

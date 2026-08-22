@@ -98,7 +98,7 @@ class ReplyKeyboard360Tests(unittest.TestCase):
         self.assertIn("🔵💳 کارت", tflat)
         self.assertNotIn("👛 کیف", tflat)  # no wallet method on topup
 
-    def test_admin_keyboard_has_dash_resellers_backup(self):
+    def test_admin_keyboard_has_hub_groups(self):
         ui = {
             "menu_layout": "compact",
             "btn_adm_orders": "🛒 سفارش‌ها",
@@ -106,9 +106,28 @@ class ReplyKeyboard360Tests(unittest.TestCase):
             "btn_back": "⬅️ بازگشت",
         }
         flat = [b.text for row in admin_reply_keyboard(ui).keyboard for b in row]
-        self.assertIn("📊 داشبورد", flat)
-        self.assertIn("🤝 نمایندگان", flat)
-        self.assertIn("💾 بکاپ / ریستور", flat)
+        self.assertIn("🗓 عملیات روزانه", flat)
+        self.assertIn("👤 افراد", flat)
+        self.assertIn("📦 محصول و PG", flat)
+        self.assertIn("🛠 سیستم", flat)
+        # Leaves live in group submenus, not the hub
+        self.assertNotIn("📊 داشبورد", flat)
+        self.assertNotIn("🤝 نمایندگان", flat)
+        self.assertNotIn("💾 بکاپ / ریستور", flat)
+
+        from app.bot.keyboards import (
+            admin_ops_reply_keyboard,
+            admin_people_reply_keyboard,
+            admin_system_reply_keyboard,
+        )
+
+        ops = [b.text for row in admin_ops_reply_keyboard(ui).keyboard for b in row]
+        people = [b.text for row in admin_people_reply_keyboard(ui).keyboard for b in row]
+        system = [b.text for row in admin_system_reply_keyboard(ui).keyboard for b in row]
+        self.assertIn("📊 داشبورد", ops)
+        self.assertIn("🛒 سفارش‌ها", ops)
+        self.assertIn("🤝 نمایندگان", people)
+        self.assertIn("💾 بکاپ / ریستور", system)
 
     def test_guide_still_removed(self):
         self.assertNotIn("guide", DEFAULT_MENU_ORDER)
@@ -141,10 +160,15 @@ class ReplyKeyboard360Tests(unittest.TestCase):
         mapping = reply_action_map("admin", ui=ui)
         # Flat map prefers admin hub «کاربران»; PG submenu wins at NAV_ADMIN_PG (reply_nav).
         self.assertEqual(mapping["👥 کاربران"], "adm_users")
+        self.assertEqual(mapping["🗓 عملیات روزانه"], "adm_hub_ops")
+        self.assertEqual(mapping["👤 افراد"], "adm_hub_people")
+        self.assertEqual(mapping["📦 محصول و PG"], "adm_hub_product")
+        self.assertEqual(mapping["🛠 سیستم"], "adm_hub_system")
         from pathlib import Path
 
         nav_src = Path("app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
         self.assertIn("NAV_ADMIN_PG", nav_src)
+        self.assertIn("NAV_ADMIN_OPS", nav_src)
         self.assertIn("_pg_submenu_entries", nav_src)
         self.assertEqual(REPLY_ACTION_PG_USERS, "pg_users")
 

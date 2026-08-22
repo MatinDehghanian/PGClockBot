@@ -35,6 +35,8 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
         ui = {"btn_menu_home": "🏠 منوی اصلی", "btn_back": "⬅️ بازگشت", "menu_order": "shop,wallet"}
         mapping = reply_action_map("user", ui=ui, include_submenus=True, is_reseller_bot=False)
         self.assertNotIn("📊 داشبورد", mapping)
+        self.assertNotIn("🗓 عملیات روزانه", mapping)
+        self.assertNotIn("👤 افراد", mapping)
         self.assertNotIn("💾 بکاپ / ریستور", mapping)
         self.assertNotIn("🆕 ساخت بکاپ کامل", mapping)
         self.assertNotIn("🖥 پاسارگارد", mapping)
@@ -47,6 +49,8 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
                 role, ui=ui, include_submenus=True, is_reseller_bot=True
             )
             self.assertNotIn("📊 داشبورد", mapping)
+            self.assertNotIn("🗓 عملیات روزانه", mapping)
+            self.assertNotIn("🛠 سیستم", mapping)
             self.assertNotIn("🆕 ساخت بکاپ کامل", mapping)
             self.assertNotIn("👥 کاربران VPN", mapping)
             # No platform admin entry forged onto reseller-bot maps
@@ -163,6 +167,8 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
         self.assertFalse(any("ساخت بکاپ" in t for t in ftexts))
 
     def test_admin_reply_still_has_core_entries(self):
+        from app.bot.keyboards import admin_ops_reply_keyboard, admin_system_reply_keyboard
+
         ui = {
             "menu_layout": "compact",
             "btn_adm_orders": "🛒 سفارش‌ها",
@@ -170,8 +176,13 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
             "btn_menu_home": "🏠 منوی اصلی",
         }
         flat = [b.text for row in admin_reply_keyboard(ui).keyboard for b in row]
-        self.assertIn("📊 داشبورد", flat)
-        self.assertIn("💾 بکاپ / ریستور", flat)
+        self.assertIn("🗓 عملیات روزانه", flat)
+        self.assertIn("🛠 سیستم", flat)
+        self.assertNotIn("📊 داشبورد", flat)
+        ops = [b.text for row in admin_ops_reply_keyboard(ui).keyboard for b in row]
+        system = [b.text for row in admin_system_reply_keyboard(ui).keyboard for b in row]
+        self.assertIn("📊 داشبورد", ops)
+        self.assertIn("💾 بکاپ / ریستور", system)
 
     def test_soft_admin_refuses_reseller_bot(self):
         from pathlib import Path

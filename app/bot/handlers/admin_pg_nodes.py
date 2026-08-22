@@ -604,7 +604,7 @@ async def pg_node_create_name(
     reseller_owner_id: int | None = None,
 ):
     if kb.is_cancel_text(message.text):
-        await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
+        await message.answer("انصراف.", reply_markup=kb.admin_product_reply_keyboard())
         await state.clear()
         return
     gate = await _pg_object_gate(
@@ -641,7 +641,7 @@ async def pg_node_create_address(
     reseller_owner_id: int | None = None,
 ):
     if kb.is_cancel_text(message.text):
-        await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
+        await message.answer("انصراف.", reply_markup=kb.admin_product_reply_keyboard())
         await state.clear()
         return
     gate = await _pg_object_gate(
@@ -681,7 +681,7 @@ async def pg_node_create_port(
     reseller_owner_id: int | None = None,
 ):
     if kb.is_cancel_text(message.text):
-        await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
+        await message.answer("انصراف.", reply_markup=kb.admin_product_reply_keyboard())
         await state.clear()
         return
     gate = await _pg_object_gate(
@@ -777,7 +777,7 @@ async def pg_node_create_core(
     reseller_owner_id: int | None = None,
 ):
     if kb.is_cancel_text(message.text):
-        await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
+        await message.answer("انصراف.", reply_markup=kb.admin_product_reply_keyboard())
         await state.clear()
         return
     gate = await _pg_object_gate(
@@ -816,7 +816,7 @@ async def pg_node_create_api_key(
     reseller_owner_id: int | None = None,
 ):
     if kb.is_cancel_text(message.text):
-        await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
+        await message.answer("انصراف.", reply_markup=kb.admin_product_reply_keyboard())
         await state.clear()
         return
     gate = await _pg_object_gate(
@@ -859,7 +859,7 @@ async def pg_node_create_server_ca(
     )
 
     if kb.is_cancel_text(message.text):
-        await message.answer("انصراف.", reply_markup=kb.admin_reply_keyboard())
+        await message.answer("انصراف.", reply_markup=kb.admin_product_reply_keyboard())
         await state.clear()
         return
     gate = await _pg_object_gate(
@@ -882,7 +882,7 @@ async def pg_node_create_server_ca(
     address = str(data.get("address") or "").strip()
     if not name or not address:
         await state.set_state(None)
-        await message.answer("اطلاعات ناقص — از ابتدا شروع کنید.", reply_markup=kb.admin_reply_keyboard())
+        await message.answer("اطلاعات ناقص — از ابتدا شروع کنید.", reply_markup=kb.admin_product_reply_keyboard())
         return
     payload: dict = {
         "name": name,
@@ -905,10 +905,10 @@ async def pg_node_create_server_ca(
         await message.answer(
             f"ساخت نود ناموفق: {_err_msg(e)}\n"
             "علت محتمل: فیلدهای الزامی ناقص (api_key/گواهی).",
-            reply_markup=kb.admin_reply_keyboard(),
+            reply_markup=kb.admin_product_reply_keyboard(),
         )
         return
-    await message.answer("نود ساخته شد ✅", reply_markup=kb.admin_reply_keyboard())
+    await message.answer("نود ساخته شد ✅", reply_markup=kb.admin_product_reply_keyboard())
     try:
         items = await list_scoped_pg_objects(gate, kind="nodes")
         await message.answer(

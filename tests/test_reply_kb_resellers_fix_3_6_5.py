@@ -34,17 +34,24 @@ class ResellersLabelCollisionTests(unittest.TestCase):
         self.assertNotEqual(mapping["🤝 نمایندگان"], "bc_aud_resellers")
 
     def test_broadcast_keyboard_unique_label(self):
-        from app.bot.keyboards import admin_broadcast_reply_keyboard, admin_reply_keyboard
+        from app.bot.keyboards import (
+            admin_broadcast_reply_keyboard,
+            admin_people_reply_keyboard,
+            admin_reply_keyboard,
+        )
 
         ui = {"btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی", "menu_layout": "compact"}
         admin_flat = [b.text for row in admin_reply_keyboard(ui).keyboard for b in row]
+        people_flat = [b.text for row in admin_people_reply_keyboard(ui).keyboard for b in row]
         bc_flat = [b.text for row in admin_broadcast_reply_keyboard(ui).keyboard for b in row]
-        self.assertIn("🤝 نمایندگان", admin_flat)
+        self.assertIn("👤 افراد", admin_flat)
+        self.assertNotIn("🤝 نمایندگان", admin_flat)
+        self.assertIn("🤝 نمایندگان", people_flat)
         self.assertIn("🤝 فقط نمایندگان", bc_flat)
         self.assertNotIn("🤝 نمایندگان", bc_flat)
 
     def test_classic_and_compact_both_reply(self):
-        from app.bot.keyboards import admin_reply_keyboard, admin_resellers_reply_keyboard
+        from app.bot.keyboards import admin_people_reply_keyboard, admin_reply_keyboard, admin_resellers_reply_keyboard
 
         for layout in ("classic", "compact"):
             ui = {
@@ -53,10 +60,12 @@ class ResellersLabelCollisionTests(unittest.TestCase):
                 "btn_menu_home": "🏠 منوی اصلی",
             }
             admin = admin_reply_keyboard(ui)
+            people = admin_people_reply_keyboard(ui)
             res = admin_resellers_reply_keyboard(ui)
             self.assertTrue(admin.keyboard)
+            self.assertTrue(people.keyboard)
             self.assertTrue(res.keyboard)
-            flat = [b.text for row in admin.keyboard for b in row]
+            flat = [b.text for row in people.keyboard for b in row]
             self.assertIn("🤝 نمایندگان", flat)
             if layout == "compact":
                 # paired rows (except possible odd last + footer)

@@ -257,7 +257,7 @@ async def backup_restore_confirm(message: Message, db_user: BotUser, state: FSMC
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.admin_system_reply_keyboard())
         return
     if text != "RESTORE":
         await message.answer(
@@ -357,6 +357,6 @@ async def backup_upload_cancel(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.admin_reply_keyboard())
+        await message.answer("لغو شد.", reply_markup=kb.admin_system_reply_keyboard())
         return
     await message.answer("یک فایل ZIP بفرستید یا انصراف.", reply_markup=kb.cancel_reply())
