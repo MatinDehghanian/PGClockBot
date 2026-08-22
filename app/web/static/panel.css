@@ -4707,6 +4707,10 @@ form.settings-form > .actions.sticky-actions,
   border: 1px solid color-mix(in srgb, var(--pg-line) 35%, var(--border));
   background: transparent;
 }
+/* Air below PasarGuard box before sidebar footer — match bot↔pg gap (--space-2) */
+.side-nav > .nav-section-pg:last-child {
+  margin-bottom: var(--space-1);
+}
 .nav-label-bot {
   color: var(--bot-line);
   font-weight: 600;
@@ -6790,7 +6794,7 @@ html[data-theme="light"] .pg-node-tabs .tab-btn.active:active {
 .pg-node-meter-neutral .pg-node-meter-fill {
   background: var(--muted-fg);
 }
-/* Percent on the bar — soft halo keeps type readable on solid fills */
+/* Percent on the bar — flip to white when fill covers center (no text-shadow halo) */
 .pg-node-meter-pct {
   position: absolute;
   inset-inline: 0;
@@ -6804,12 +6808,16 @@ html[data-theme="light"] .pg-node-tabs .tab-btn.active:active {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
   color: var(--foreground);
-  text-shadow:
-    0 0 8px color-mix(in srgb, var(--background) 88%, transparent),
-    0 1px 2px color-mix(in srgb, var(--background) 70%, transparent);
+  text-shadow: none;
   pointer-events: none;
   line-height: 1;
   z-index: 1;
+}
+html[data-theme="dark"] .pg-node-meter-pct {
+  color: #fff;
+}
+html[data-theme="light"] .pg-node-meter-pct.pg-node-meter-pct-on-fill {
+  color: #fff;
 }
 html[data-theme="light"] .pg-node-tile {
   background: rgba(0, 0, 0, 0.02);
@@ -8460,6 +8468,17 @@ html[data-theme="light"] .sk-bone::after {
 }
 .btn-color-card select.btn-color-select {
   width: 100%;
+}
+
+/* Plan create/edit — air between tone select and hint caption */
+.plan-color-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+.plan-color-field .plan-color-hint {
+  margin: 0;
 }
 
 /* Tone-aware select — chip / hamburger-tag look */

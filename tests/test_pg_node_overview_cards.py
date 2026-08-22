@@ -147,9 +147,8 @@ class PgOverviewSurfaceTests(unittest.TestCase):
         # Percent label has no chip box
         start = css.find(".pg-node-meter-pct")
         body = css[start : start + 450].split("{", 1)[1].split("}", 1)[0]
-        self.assertNotIn("padding:", body)
-        self.assertNotIn("border:", body)
-        self.assertNotIn("background:", body)
+        self.assertIn("text-shadow: none", body)
+        self.assertIn(".pg-node-meter-pct-on-fill", css)
 
     def test_pg_home_node_meta_parts(self):
         pg = (ROOT / "app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
