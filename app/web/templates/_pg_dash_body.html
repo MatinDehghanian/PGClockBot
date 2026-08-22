@@ -287,7 +287,7 @@
             </div>
             <div class="pg-node-meter pg-node-meter-{{ n.get('cpu_tone') or 'neutral' }}" style="--p: {{ cpu_p }}" data-pg-node-cpu-meter>
               <div class="pg-node-meter-track" aria-hidden="true"><i class="pg-node-meter-fill"></i></div>
-              <span class="pg-node-meter-pct" dir="ltr" data-pg-node-cpu>{{ n.get('cpu_text') or '—' }}</span>
+              <span class="pg-node-meter-pct{% if cpu_p >= 48 %} pg-node-meter-pct-on-fill{% endif %}" dir="ltr" data-pg-node-cpu>{{ n.get('cpu_text') or '—' }}</span>
             </div>
           </div>
           <div class="pg-node-metric pg-node-metric-res">
@@ -304,7 +304,7 @@
             </div>
             <div class="pg-node-meter pg-node-meter-{{ n.get('mem_tone') or 'neutral' }}" style="--p: {{ mem_p }}" data-pg-node-mem-meter>
               <div class="pg-node-meter-track" aria-hidden="true"><i class="pg-node-meter-fill"></i></div>
-              <span class="pg-node-meter-pct" dir="ltr" data-pg-node-mem>{{ n.get('mem_text') or '—' }}</span>
+              <span class="pg-node-meter-pct{% if mem_p >= 48 %} pg-node-meter-pct-on-fill{% endif %}" dir="ltr" data-pg-node-mem>{{ n.get('mem_text') or '—' }}</span>
             </div>
           </div>
           <div class="pg-node-metric">

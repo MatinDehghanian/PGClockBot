@@ -45,7 +45,10 @@
     box.style.setProperty('--p', String(p));
     box.className = 'pg-node-meter pg-node-meter-' + (tone || 'neutral');
     var pctEl = box.querySelector('[data-pg-node-' + kind + ']');
-    if (pctEl) pctEl.textContent = text || '—';
+    if (pctEl) {
+      pctEl.textContent = text || '—';
+      pctEl.classList.toggle('pg-node-meter-pct-on-fill', p >= 48);
+    }
   }
   function badgeClass(kind) {
     if (kind === 'ok') return 'badge connected';
