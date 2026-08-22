@@ -45,8 +45,9 @@ class ModalScrollLockTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(".settings-modal-panel {", css)
         block = css.split(".settings-modal-panel {", 1)[1].split("}", 1)[0]
-        self.assertIn("overflow-y: auto;", block)
-        self.assertNotIn("overflow: hidden !important;", block)
+        self.assertIn("overflow: hidden;", block)
+        self.assertIn("overscroll-behavior: contain;", block)
+        self.assertNotIn("overflow-y: auto;", block)
         body = css.split(".settings-modal-body {", 1)[1].split("}", 1)[0]
         self.assertIn("overflow: visible;", body)
 
@@ -57,7 +58,8 @@ class ModalScrollLockTests(unittest.TestCase):
         self.assertIn("installModalScrollGuards", js)
         self.assertIn("document.documentElement.classList.add('modal-open')", js)
         self.assertIn("Always-on guards", js)
-        self.assertIn("scroll the panel itself", js)
+        self.assertIn("Prefer the inner scroll shell", js)
+        self.assertIn("isModalInteriorScroller", js)
 
 
 if __name__ == "__main__":
