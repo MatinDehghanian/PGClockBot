@@ -29,6 +29,7 @@ from app.db.models import (
     RewardRedemption,
     UserService,
 )
+from app.services.formatting import bot_user_panel_label
 
 logger = logging.getLogger(__name__)
 
@@ -1567,7 +1568,7 @@ async def overview_metrics(
         top.append(
             {
                 "user_id": int(rid),
-                "label": (u.username or u.full_name or str(u.telegram_id)) if u else str(rid),
+                "label": bot_user_panel_label(u, fallback_id=int(rid)) if u else str(rid),
                 "count": int(cnt),
             }
         )

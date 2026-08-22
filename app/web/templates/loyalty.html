@@ -129,7 +129,7 @@
       {% for t in txs %}
         <tr>
           <td class="mono" data-sort-value="{{ t.id }}">{{ t.id }}</td>
-          <td class="mono" data-sort-value="{{ t.user_id }}">{{ t.user_id }}</td>
+          <td data-sort-value="{{ t.user_label }}">{{ t.user_label }}</td>
           <td class="mono" data-sort-value="{{ t.amount }}">{% if t.amount > 0 %}+{% endif %}{{ t.amount | num }}</td>
           <td class="mono" data-sort-value="{{ t.balance_after }}">{{ t.balance_after | num }}</td>
           <td data-sort-value="{{ t.description }}">{{ t.description }}</td>

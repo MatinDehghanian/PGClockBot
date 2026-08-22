@@ -58,19 +58,9 @@ async def _bot_ticket_in_scope(session: AsyncSession, staff: dict, ticket: Ticke
 
 
 def _bot_user_label(user: BotUser | None, user_id: int) -> str:
-    if not user:
-        return str(user_id)
-    name = (user.full_name or "").strip()
-    uname = (user.username or "").strip()
-    if name and uname:
-        return f"{name} (@{uname})"
-    if name:
-        return name
-    if uname:
-        return f"@{uname}"
-    if user.telegram_id:
-        return str(user.telegram_id)
-    return str(user_id)
+    from app.services.formatting import bot_user_panel_label
+
+    return bot_user_panel_label(user, fallback_id=user_id)
 
 
 async def _staff_sender_tg(session: AsyncSession, staff: dict) -> int:

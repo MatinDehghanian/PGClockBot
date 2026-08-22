@@ -16,6 +16,7 @@ from app.db.models import (
     PointsRule,
     PointsTransaction,
 )
+from app.services.formatting import bot_user_panel_label
 from app.services.loyalty import (
     EVENT_LABELS,
     REWARD_TYPE_LABELS,
@@ -98,7 +99,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
             ).scalars().all()
         )
         txs_q = (
-            select(PointsTransaction)
+            select(PointsTransaction, BotUser)
             .join(BotUser, BotUser.id == PointsTransaction.user_id)
             .order_by(PointsTransaction.id.desc())
             .limit(50)
@@ -108,7 +109,18 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         else:
             # Platform shop only — never list sibling/tenant loyalty txs as global.
             txs_q = txs_q.where(BotUser.reseller_id.is_(None))
-        txs = list((await session.execute(txs_q)).scalars().all())
+        txs = [
+            {
+                "id": tx.id,
+                "user_id": tx.user_id,
+                "user_label": bot_user_panel_label(user, fallback_id=tx.user_id),
+                "amount": tx.amount,
+                "balance_after": tx.balance_after,
+                "description": tx.description,
+                "created_at": tx.created_at,
+            }
+            for tx, user in (await session.execute(txs_q)).all()
+        ]
         loyalty_enabled = await get_setting(
             session, "loyalty_enabled", "1", reseller_id=scope
         )
