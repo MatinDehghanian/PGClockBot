@@ -32,6 +32,25 @@ def format_user_label(user: Any = None, *, telegram_id: int | None = None) -> st
     return "—"
 
 
+def bot_user_panel_label(user: Any = None, *, fallback_id: int | None = None) -> str:
+    """Plain-text user label for web tables (no HTML)."""
+    if user is None:
+        return str(fallback_id or "—")
+    name = (getattr(user, "full_name", None) or "").strip()
+    uname = (getattr(user, "username", None) or "").strip().lstrip("@")
+    if name and uname:
+        return f"{name} (@{uname})"
+    if uname:
+        return f"@{uname}"
+    if name:
+        return name
+    tid = getattr(user, "telegram_id", None)
+    if tid:
+        return str(tid)
+    uid = getattr(user, "id", None)
+    return str(uid or fallback_id or "—")
+
+
 def _byte_unit_table() -> tuple[tuple[float, str], ...]:
     """(divisor, Persian label) from smallest to largest."""
     return (

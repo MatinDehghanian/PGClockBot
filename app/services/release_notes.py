@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.2.9": [
+        "باشگاه مشتریان: ستون «کاربر» در تراکنش‌ها نام/@username (نه شناسه داخلی DB)",
+        "برترین معرف‌ها: همان قالب نام + @username مثل تیکت‌ها",
+        "بدون مایگریشن؛ ریستور: تگ restore/pre-loyalty-tx-label-v8.2.8 و v8.2.8",
+    ],
     "8.2.8": [
         "اسکرول صفحه و مودال: بازگشت طبیعی لبه (rubber-band) بدون لگ و پرش",
         "موبایل: اسکرول فقط روی .main (نه body) — قفل مودال و فوتر پایدار",
