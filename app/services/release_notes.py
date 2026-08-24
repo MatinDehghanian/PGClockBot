@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.2.10": [
+        "پیش‌نمایش زنده تنظیمات: پیش‌فرض بسته؛ فقط با دکمه «نمایش پیش‌نمایش» بارگذاری می‌شود",
+        "اسکرول/تایپ سبک‌تر؛ رندر با debounce؛ بستن پیش‌نمایش ستون sticky را برمی‌دارد",
+        "طراحی هم‌سبک کارت‌های تنظیمات؛ بدون تغییر ACL یا API",
+        "بدون مایگریشن؛ ریستور: تگ restore/pre-settings-preview-lazy-v8.2.9 و v8.2.9",
+    ],
     "8.2.9": [
         "باشگاه مشتریان: ستون «کاربر» در تراکنش‌ها نام/@username (نه شناسه داخلی DB)",
         "برترین معرف‌ها: همان قالب نام + @username مثل تیکت‌ها",

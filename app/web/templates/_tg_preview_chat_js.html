@@ -1,5 +1,13 @@
 <script>
 (function(){
+  const slot = document.querySelector('[data-tg-preview-slot][data-preview-kind="chat"]');
+  if (!slot) return;
+  const layout = document.getElementById('settings-layout')
+    || document.querySelector('.settings-layout.can-preview');
+  const gate = slot.querySelector('[data-tg-preview-gate]');
+  const panel = slot.querySelector('[data-tg-preview-panel]');
+  const openBtn = slot.querySelector('[data-tg-preview-open]');
+  const closeBtn = slot.querySelector('[data-tg-preview-close]');
   const form = document.getElementById('settings-form') || document.getElementById('menu-form');
   const tab = {{ tab|tojson }};
   const values = {{ values|tojson }};
@@ -13,7 +21,11 @@
   const qrFake = document.getElementById('pv-qr-fake');
   let focusKey = null;
   let qrObjectUrl = null;
+  let active = false;
+  let renderTimer = 0;
+  let menuObserver = null;
   const REMOVED_MENU = {guide:1, faq:1, restart:1, help:1};
+  const DEBOUNCE_MS = 180;
 
   function val(name, fallback){
     if (!form) return (values[name] || fallback || '');
@@ -146,7 +158,6 @@
   function renderReplyKeys(items, opts){
     if (!keysEl) return;
     opts = opts || {};
-    // items: string[] or {label,tone}[]
     const norm = (items || []).map(function(it){
       if (typeof it === 'string') return {label: it, tone: 'default'};
       return {label: it.label, tone: it.tone || 'default'};
@@ -172,6 +183,7 @@
     keysEl.innerHTML = html;
   }
   function render(){
+    if (!active) return;
     const shop = val('shop_title','کلاک بات');
     if (titleEl) titleEl.textContent = shop || 'کلاک بات';
     let text = '';
@@ -270,34 +282,87 @@
     if (textEl) textEl.innerHTML = esc(text).replace(/\n/g,'<br>');
     if (qrCard) qrCard.hidden = !showQr;
   }
-  if (form) {
-    form.addEventListener('input', render);
-    form.addEventListener('change', render);
-    form.addEventListener('focusin', (e) => {
-      const t = e.target;
-      if (t && t.name) {
-        focusKey = t.name;
-        render();
-      }
-    });
-    const qrFile = form.querySelector('input[type="file"][name="s_qr_background"]');
-    if (qrFile) {
-      qrFile.addEventListener('change', () => {
-        if (qrObjectUrl) { URL.revokeObjectURL(qrObjectUrl); qrObjectUrl = null; }
-        render();
-      });
+  function scheduleRender(){
+    if (!active) return;
+    if (renderTimer) clearTimeout(renderTimer);
+    renderTimer = window.setTimeout(function(){
+      renderTimer = 0;
+      render();
+    }, DEBOUNCE_MS);
+  }
+  function onFocusIn(e){
+    if (!active) return;
+    const t = e.target;
+    if (t && t.name) {
+      focusKey = t.name;
+      scheduleRender();
     }
   }
-  const mo = document.getElementById('menu_order');
-  if (mo) mo.addEventListener('change', render);
-  const ml = document.getElementById('menu_layout')
-    || document.getElementById('menu_layout_select')
-    || document.getElementById('menu_layout_ui');
-  if (ml) ml.addEventListener('change', render);
-  render();
-  const active = document.getElementById('active-list');
-  if (active && window.MutationObserver) {
-    new MutationObserver(render).observe(active, {childList:true, subtree:true});
+  function onQrFileChange(){
+    if (qrObjectUrl) { URL.revokeObjectURL(qrObjectUrl); qrObjectUrl = null; }
+    scheduleRender();
   }
+  function bindLive(){
+    if (form) {
+      form.addEventListener('input', scheduleRender);
+      form.addEventListener('change', scheduleRender);
+      form.addEventListener('focusin', onFocusIn);
+      const qrFile = form.querySelector('input[type="file"][name="s_qr_background"]');
+      if (qrFile) qrFile.addEventListener('change', onQrFileChange);
+    }
+    const mo = document.getElementById('menu_order');
+    if (mo) mo.addEventListener('change', scheduleRender);
+    const ml = document.getElementById('menu_layout')
+      || document.getElementById('menu_layout_select')
+      || document.getElementById('menu_layout_ui');
+    if (ml) ml.addEventListener('change', scheduleRender);
+    const activeList = document.getElementById('active-list');
+    if (activeList && window.MutationObserver) {
+      menuObserver = new MutationObserver(scheduleRender);
+      menuObserver.observe(activeList, {childList:true, subtree:true});
+    }
+  }
+  function unbindLive(){
+    if (form) {
+      form.removeEventListener('input', scheduleRender);
+      form.removeEventListener('change', scheduleRender);
+      form.removeEventListener('focusin', onFocusIn);
+      const qrFile = form.querySelector('input[type="file"][name="s_qr_background"]');
+      if (qrFile) qrFile.removeEventListener('change', onQrFileChange);
+    }
+    const mo = document.getElementById('menu_order');
+    if (mo) mo.removeEventListener('change', scheduleRender);
+    const ml = document.getElementById('menu_layout')
+      || document.getElementById('menu_layout_select')
+      || document.getElementById('menu_layout_ui');
+    if (ml) ml.removeEventListener('change', scheduleRender);
+    if (menuObserver) {
+      menuObserver.disconnect();
+      menuObserver = null;
+    }
+    if (renderTimer) {
+      clearTimeout(renderTimer);
+      renderTimer = 0;
+    }
+  }
+  function openPreview(){
+    if (active) return;
+    active = true;
+    if (gate) gate.hidden = true;
+    if (panel) panel.hidden = false;
+    if (layout) layout.classList.add('has-preview');
+    bindLive();
+    render();
+  }
+  function closePreview(){
+    if (!active) return;
+    active = false;
+    unbindLive();
+    if (panel) panel.hidden = true;
+    if (gate) gate.hidden = false;
+    if (layout) layout.classList.remove('has-preview');
+  }
+  if (openBtn) openBtn.addEventListener('click', openPreview);
+  if (closeBtn) closeBtn.addEventListener('click', closePreview);
 })();
 </script>

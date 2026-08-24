@@ -4314,15 +4314,35 @@ form.settings-form > .actions.sticky-actions,
   gap: var(--section-gap);
   align-items: start;
 }
+/* Two-column only while preview is open (lazy mount) */
 .settings-layout.has-preview {
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
 }
 .settings-main { min-width: 0; }
 .settings-tabs { margin-bottom: var(--page-title-gap); }
 
-.tg-preview-wrap {
+.tg-preview-slot { min-width: 0; }
+.tg-preview-gate {
+  margin-bottom: 0;
+}
+.tg-preview-gate .actions {
+  margin-top: var(--space-2);
+  justify-content: flex-start;
+}
+.tg-preview-toolbar {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: var(--space-1);
+}
+/* Sticky phone mock only when the live panel is open */
+.settings-layout.has-preview .tg-preview-wrap {
   position: sticky;
   top: var(--space-1);
+  align-self: start;
+}
+.tg-preview-wrap {
+  position: relative;
+  top: auto;
   align-self: start;
 }
 .tg-preview {
@@ -4661,9 +4681,11 @@ form.settings-form > .actions.sticky-actions,
   .settings-layout.has-preview {
     grid-template-columns: minmax(0, 1fr);
   }
-  .tg-preview-wrap {
+  .settings-layout.has-preview .tg-preview-wrap {
     position: relative;
     top: 0;
+  }
+  .tg-preview-slot {
     order: -1;
   }
   .tg-preview { min-height: 420px; }

@@ -11,7 +11,7 @@
 
 {{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path) }}
 
-<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','colors','daily_report'] %}has-preview{% endif %}">
+<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','colors','daily_report'] %}can-preview{% endif %}" id="settings-layout">
   <div class="settings-main">
 
   {% if tab == 'notifications' %}

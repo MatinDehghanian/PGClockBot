@@ -1,5 +1,13 @@
 <script>
 (function(){
+  const slot = document.querySelector('[data-tg-preview-slot][data-preview-kind="appearance"]');
+  if (!slot) return;
+  const layout = document.getElementById('settings-layout')
+    || document.querySelector('.settings-layout.can-preview');
+  const gate = slot.querySelector('[data-tg-preview-gate]');
+  const panel = slot.querySelector('[data-tg-preview-panel]');
+  const openBtn = slot.querySelector('[data-tg-preview-open]');
+  const closeBtn = slot.querySelector('[data-tg-preview-close]');
   const form = document.getElementById('appearance-form');
   if (!form) return;
   const nameEl = document.getElementById('ap-name');
@@ -13,6 +21,9 @@
   const pvImg = document.getElementById('ap-pv-img');
   const pvLetter = document.getElementById('ap-pv-letter');
   let objectUrl = null;
+  let active = false;
+  let renderTimer = 0;
+  const DEBOUNCE_MS = 180;
 
   function setAvatar(src, letter){
     if (pvImg) {
@@ -32,6 +43,7 @@
   }
 
   function render(){
+    if (!active) return;
     const name = (nameEl && nameEl.value) || 'نام ربات';
     if (pvName) pvName.textContent = name;
     if (pvEmptyName) pvEmptyName.textContent = name;
@@ -45,18 +57,53 @@
       setAvatar('', name);
     }
   }
-
-  form.addEventListener('input', render);
-  form.addEventListener('change', render);
-  if (photoEl) {
-    photoEl.addEventListener('change', () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-      objectUrl = null;
-      const f = photoEl.files && photoEl.files[0];
-      if (f) objectUrl = URL.createObjectURL(f);
+  function scheduleRender(){
+    if (!active) return;
+    if (renderTimer) clearTimeout(renderTimer);
+    renderTimer = window.setTimeout(function(){
+      renderTimer = 0;
       render();
-    });
+    }, DEBOUNCE_MS);
   }
-  render();
+  function onPhotoChange(){
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = null;
+    const f = photoEl && photoEl.files && photoEl.files[0];
+    if (f) objectUrl = URL.createObjectURL(f);
+    scheduleRender();
+  }
+  function bindLive(){
+    form.addEventListener('input', scheduleRender);
+    form.addEventListener('change', scheduleRender);
+    if (photoEl) photoEl.addEventListener('change', onPhotoChange);
+  }
+  function unbindLive(){
+    form.removeEventListener('input', scheduleRender);
+    form.removeEventListener('change', scheduleRender);
+    if (photoEl) photoEl.removeEventListener('change', onPhotoChange);
+    if (renderTimer) {
+      clearTimeout(renderTimer);
+      renderTimer = 0;
+    }
+  }
+  function openPreview(){
+    if (active) return;
+    active = true;
+    if (gate) gate.hidden = true;
+    if (panel) panel.hidden = false;
+    if (layout) layout.classList.add('has-preview');
+    bindLive();
+    render();
+  }
+  function closePreview(){
+    if (!active) return;
+    active = false;
+    unbindLive();
+    if (panel) panel.hidden = true;
+    if (gate) gate.hidden = false;
+    if (layout) layout.classList.remove('has-preview');
+  }
+  if (openBtn) openBtn.addEventListener('click', openPreview);
+  if (closeBtn) closeBtn.addEventListener('click', closePreview);
 })();
 </script>
