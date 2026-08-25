@@ -11,13 +11,16 @@
    - Close button is full-width (mobile-friendly)
 
 2. **Users table**
-   - Alert = orange dot only; risk = yellow badge (same size as role tags)
-   - Narrower service column; compact service picker with per-service boxes + alert dots
-   - Vertically aligned with row content (no tall ui-select)
-   - Edit modal open path fixed (`data-user-edit-open` + explicit `openModal`)
+   - Alert = orange dot only; risk = yellow badge (warn tokens)
+   - Narrower service column; compact picker matching control/menu radii
+   - Menu ported to `body` (avoids `.table-wrap` clip); sort values update on switch
+   - Edit modal: `data-user-edit-open` + explicit `openModal`
 
 3. **Finance reports**
    - Removed redundant day/week/month section-tabs (compare cards remain the selector)
+
+4. **Bot**
+   - Admin quick renew on user card; platform-shop scope on search / view / wallet credit
 
 ## Deploy
 
