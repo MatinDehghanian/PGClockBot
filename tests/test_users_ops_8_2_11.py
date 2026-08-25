@@ -101,12 +101,19 @@ class UsersOpsUiTests(unittest.TestCase):
         self.assertIn("نزدیک انقضا", users)
         self.assertNotIn("<th data-sort-type=\"text\">نقش</th>", users)
         self.assertIn("can_manage_users", users)
+        # Redesigned service cell: switcher + live volume/expiry + alert dot
+        # are always visible (desktop AND mobile) — no more static, dead-end
+        # mobile-only text summary hidden from interaction.
+        self.assertIn("users-svc-cell", users)
+        self.assertIn("users-svc-select", users)
+        self.assertNotIn("cell-name-meta", users)
 
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".alert-dot", css)
         self.assertIn(".users-row.is-focus", css)
         self.assertIn(".cell-name-tags", css)
-        self.assertIn(".cell-name-meta", css)
+        self.assertIn(".users-svc-cell", css)
+        self.assertIn(".users-svc-meta", css)
         self.assertIn("col-hide-sm", (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8"))
         self.assertIn("users-svc-boxed", css)
         self.assertIn(".badge.badge-risk", css)

@@ -86,9 +86,7 @@
         <th class="col-id col-hide-sm" data-sort-type="num">#</th>
         <th class="col-tg col-hide-sm" data-sort-type="num">تلگرام</th>
         <th class="col-name" data-sort-type="text">نام</th>
-        <th class="col-svc col-hide-sm" data-sort-type="text">سرویس</th>
-        <th class="col-vol col-hide-sm" data-sort-type="text">حجم</th>
-        <th class="col-exp col-hide-sm" data-sort-type="num">انقضا</th>
+        <th class="col-svc" data-sort-type="num" title="سرویس · حجم · انقضا">سرویس · حجم · انقضا</th>
         <th class="col-wallet col-hide-sm" data-sort-type="num">کیف پول</th>
         <th class="col-status" data-sort-type="text">وضعیت</th>
         {% if ops or manage %}<th class="col-actions"></th>{% endif %}
@@ -109,49 +107,45 @@
               <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
                 {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
               </span>
-              {% if row.has_alert %}<span class="alert-dot" title="اعلان فعال" aria-label="اعلان فعال"></span>{% endif %}
               {% if u.risk_flags %}<span class="badge badge-risk" title="پرچم ریسک فعال">ریسک</span>{% endif %}
-            </span>
-            {# Mobile-only summary — matches other tables that hide secondary cols #}
-            <span class="cell-name-meta">
-              {% if row.service_count == 0 %}
-              <span class="users-svc-meta-label muted">بدون سرویس</span>
-              {% else %}
-              <span class="users-svc-meta-label">{{ row.services[0].label }}</span>
-              <span class="cell-name-meta-sep" aria-hidden="true">·</span>
-              <span class="users-vol-cell">{{ row.volume_text }}</span>
-              <span class="cell-name-meta-sep" aria-hidden="true">·</span>
-              <span class="users-exp-cell">{{ row.expire_text }}</span>
-              {% endif %}
             </span>
           </div>
         </td>
-        <td class="col-svc col-hide-sm" data-sort-value="{{ row.service_count }}">
+        <td class="col-svc{% if row.has_alert %} has-svc-alert{% endif %}" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">
           {% if row.service_count == 0 %}
-          <span class="muted">—</span>
-          {% elif row.service_count == 1 %}
-          <span class="users-svc-one" title="{{ row.services[0].label }}">
-            <span class="users-svc-one-text">{{ row.services[0].label }}</span>
-            {% if row.services[0].has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
-          </span>
+          <div class="users-svc-cell">
+            <span class="muted users-svc-empty">بدون سرویس</span>
+          </div>
           {% else %}
-          <label class="users-svc-select-wrap">
-            <span class="sr-only">سرویس‌های کاربر</span>
-            <select class="select-sm users-svc-select" data-uid="{{ u.id }}" aria-label="سرویس‌های کاربر">
-              {% for s in row.services %}
-              <option value="{{ s.id }}"
-                      data-volume="{{ s.volume_text }}"
-                      data-expire="{{ s.expire_text }}"
-                      data-days="{{ s.days_left if s.days_left is not none else 9999 }}"
-                      data-alert="{{ '1' if s.has_alert else '0' }}"
-                      {% if loop.first %}selected{% endif %}>{{ s.label }}</option>
-              {% endfor %}
-            </select>
-          </label>
+          <div class="users-svc-cell">
+            {% if row.service_count == 1 %}
+            <span class="users-svc-name" title="{{ row.services[0].label }}">
+              <span class="users-svc-name-text">{{ row.services[0].label }}</span>
+              {% if row.services[0].has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
+            </span>
+            {% else %}
+            <label class="users-svc-select-wrap">
+              <span class="sr-only">سرویس‌های کاربر</span>
+              <select class="select-sm users-svc-select" data-uid="{{ u.id }}" aria-label="سرویس‌های کاربر">
+                {% for s in row.services %}
+                <option value="{{ s.id }}"
+                        data-volume="{{ s.volume_text }}"
+                        data-expire="{{ s.expire_text }}"
+                        data-days="{{ s.days_left if s.days_left is not none else 9999 }}"
+                        data-alert="{{ '1' if s.has_alert else '0' }}"
+                        {% if loop.first %}selected{% endif %}>{{ s.label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            {% endif %}
+            <span class="users-svc-meta">
+              <span class="users-vol-cell">{{ row.volume_text }}</span>
+              <span class="users-svc-meta-sep" aria-hidden="true">·</span>
+              <span class="users-exp-cell">{{ row.expire_text }}</span>
+            </span>
+          </div>
           {% endif %}
         </td>
-        <td class="col-vol col-hide-sm users-vol-cell" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
-        <td class="col-exp col-hide-sm users-exp-cell" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
         <td class="mono col-wallet col-hide-sm" dir="ltr" data-sort-value="{{ u.wallet_balance or 0 }}">{{ u.wallet_balance | num }}</td>
         <td class="col-status" data-sort-value="{{ '1' if u.is_blocked else '0' }}">
           {% if u.is_blocked %}
@@ -215,7 +209,7 @@
         {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="{% if ops or manage %}9{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
+      <tr><td colspan="{% if ops or manage %}8{% else %}7{% endif %}" class="muted">کاربری نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -294,37 +288,35 @@
   function syncSvcMeta(sel){
     var opt = sel.options[sel.selectedIndex];
     if (!opt) return;
-    var tr = sel.closest('tr');
-    if (!tr) return;
+    var cell = sel.closest('td.col-svc');
+    if (!cell) return;
     var volText = opt.getAttribute('data-volume') || '—';
     var expText = opt.getAttribute('data-expire') || '—';
     var days = opt.getAttribute('data-days') || '9999';
-    tr.querySelectorAll('.users-vol-cell').forEach(function(vol){
+    var hasAlert = opt.getAttribute('data-alert') === '1';
+    cell.querySelectorAll('.users-vol-cell').forEach(function(vol){
       vol.textContent = volText;
       vol.setAttribute('data-sort-value', volText);
     });
-    tr.querySelectorAll('.users-exp-cell').forEach(function(exp){
+    cell.querySelectorAll('.users-exp-cell').forEach(function(exp){
       exp.textContent = expText;
       exp.setAttribute('data-sort-value', days);
     });
-    var metaLabel = tr.querySelector('.users-svc-meta-label');
-    if (metaLabel) metaLabel.textContent = (opt.textContent || '').trim() || '—';
-    var cell = sel.closest('td.col-svc');
-    if (cell) {
-      var toggle = cell.querySelector('.ui-select-toggle');
-      var dot = cell.querySelector('.ui-select-toggle > .alert-dot');
-      if (opt.getAttribute('data-alert') === '1') {
-        if (!dot && toggle) {
-          dot = document.createElement('span');
-          dot.className = 'alert-dot';
-          dot.setAttribute('aria-hidden', 'true');
-          var caret = toggle.querySelector('.ui-select-caret');
-          if (caret) toggle.insertBefore(dot, caret);
-          else toggle.appendChild(dot);
-        }
-      } else if (dot) {
-        dot.remove();
+    cell.setAttribute('data-sort-value', days);
+    cell.classList.toggle('has-svc-alert', hasAlert);
+    var toggle = cell.querySelector('.ui-select-toggle');
+    var dot = cell.querySelector('.ui-select-toggle > .alert-dot');
+    if (hasAlert) {
+      if (!dot && toggle) {
+        dot = document.createElement('span');
+        dot.className = 'alert-dot';
+        dot.setAttribute('aria-hidden', 'true');
+        var caret = toggle.querySelector('.ui-select-caret');
+        if (caret) toggle.insertBefore(dot, caret);
+        else toggle.appendChild(dot);
       }
+    } else if (dot) {
+      dot.remove();
     }
   }
 

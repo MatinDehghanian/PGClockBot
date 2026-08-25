@@ -406,29 +406,6 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
 .cell-name-tags > .badge {
   flex: 0 0 auto;
 }
-/* Mobile summary under name (svc · volume · expiry) — desktop uses real columns */
-.cell-name-meta {
-  display: none;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 6px;
-  max-width: 100%;
-  margin-top: 2px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--muted-fg);
-}
-.cell-name-meta-sep {
-  opacity: 0.45;
-  flex: 0 0 auto;
-}
-.users-svc-meta-label {
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .badge.badge-risk {
   flex: 0 0 auto;
   color: var(--warn-fg, #fde047);
@@ -473,41 +450,77 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   background: color-mix(in srgb, var(--accent, #38bdf8) 10%, transparent);
 }
 .users-ops-table .col-svc {
-  width: 11rem;
-  max-width: 12rem;
-  min-width: 8.5rem;
+  width: 13.5rem;
+  max-width: 15rem;
+  min-width: 9.5rem;
   vertical-align: middle;
 }
 .users-ops-table td.col-svc {
   padding-block: var(--space-1);
 }
-.users-ops-table .col-vol,
-.users-ops-table .col-exp {
-  width: 5.5rem;
-  max-width: 6.5rem;
-  vertical-align: middle;
-  font-size: 12px;
-  white-space: nowrap;
-}
 .users-ops-table .col-name {
   min-width: 6.5rem;
   vertical-align: middle;
 }
-.users-svc-one {
+/* Merged service cell — one place to see AND switch a user's service, with
+   its live volume/expiry and a per-service alert dot. Same markup renders on
+   desktop and mobile; only column widths change at the breakpoints below, so
+   the switcher is always reachable instead of collapsing into static text. */
+.users-svc-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  max-width: 100%;
+  min-width: 0;
+}
+.users-svc-empty {
+  font-size: 12px;
+}
+.users-svc-name {
   display: inline-flex;
   align-items: center;
   gap: var(--space-0);
   max-width: 100%;
   min-width: 0;
-  font-size: 12px;
+  font-size: 12.5px;
+  font-weight: 500;
   line-height: 1.35;
   vertical-align: middle;
 }
-.users-svc-one-text {
+.users-svc-name-text {
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.users-svc-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--muted-fg);
+}
+.users-svc-meta-sep {
+  opacity: 0.45;
+  flex: 0 0 auto;
+}
+.users-vol-cell,
+.users-exp-cell {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Row-level cue for "this user has an active service alert" now lives on the
+   service cell itself (where the alert actually is), not just the name rail */
+.users-ops-table td.col-svc.has-svc-alert {
+  background: color-mix(in srgb, #f97316 6%, transparent);
 }
 /* Service select — panel ui-select; boxed options */
 .users-svc-select-wrap {
@@ -519,6 +532,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
 .users-svc-select-wrap .users-svc-select {
   width: 100%;
   max-width: 100%;
+  font-size: 12.5px;
 }
 /* Boxed option rows (ported menu keeps .users-svc-boxed on the menu node) */
 .ui-select-menu.users-svc-boxed {
@@ -618,17 +632,14 @@ html[data-theme="light"] .finance-report-panels .home-panel-grid > a.stat:hover 
 
 /* Users ops + finance reports — mobile */
 @media (max-width: 1100px) {
-  /* Same breakpoint as .col-hide-sm — show stacked meta under name */
-  .users-ops-table .cell-name-meta {
-    display: flex;
-  }
-  /* Only col-name/col-status/col-actions remain once col-hide-sm kicks in.
-     Auto layout sizes col-name to fit its longest unwrapped name, which can
-     exceed the viewport (long name + role/risk badges) and push col-actions
-     (the kebab menu) off-screen with no visible scroll hint — the row then
-     looks actionless/broken on narrow phones. Fixed layout + explicit widths
-     on the two side columns force col-name to the remaining space instead,
-     so the name/tags wrap or ellipsis and the kebab stays on-screen. */
+  /* Only col-name/col-svc/col-status/col-actions remain once col-hide-sm
+     kicks in (id/telegram/wallet hide). col-svc stays visible — it's the
+     switcher — so it needs an explicit width too, same reasoning as below:
+     auto layout would size col-name to fit its longest unwrapped name and
+     push col-actions (the kebab menu) off-screen with no visible scroll
+     hint. Fixed layout + explicit widths on the three side columns force
+     col-name to the remaining space, so name/tags/service all wrap or
+     ellipsis as needed and the kebab always stays on-screen. */
   .users-ops-table {
     table-layout: fixed;
   }
@@ -636,6 +647,12 @@ html[data-theme="light"] .finance-report-panels .home-panel-grid > a.stat:hover 
     width: auto;
     min-width: 0;
     max-width: none;
+  }
+  .users-ops-table th.col-svc,
+  .users-ops-table td.col-svc {
+    width: 7.5rem;
+    max-width: 7.5rem;
+    min-width: 0;
   }
   .users-ops-table th.col-status,
   .users-ops-table td.col-status {
@@ -655,7 +672,7 @@ html[data-theme="light"] .finance-report-panels .home-panel-grid > a.stat:hover 
     grid-template-columns: 1fr !important;
   }
   .users-svc-select-wrap,
-  .users-ops-table .users-svc-one {
+  .users-ops-table .users-svc-name {
     max-width: 100%;
   }
   .finance-report-panels .home-panel-grid {
@@ -663,6 +680,24 @@ html[data-theme="light"] .finance-report-panels .home-panel-grid > a.stat:hover 
   }
   .finance-report-compare {
     margin-bottom: var(--space-2);
+  }
+}
+@media (max-width: 480px) {
+  /* Tightest phones: trim the status column's own padding/font a touch —
+     freeing a little width for the service switcher, the thing the user
+     actually needs to reach — without hiding its text (still legible). */
+  .users-ops-table th.col-svc,
+  .users-ops-table td.col-svc {
+    width: 6.75rem;
+    max-width: 6.75rem;
+  }
+  .users-ops-table th.col-status,
+  .users-ops-table td.col-status {
+    width: 3.75rem;
+  }
+  .users-ops-table td.col-status .badge {
+    padding: 0 6px;
+    font-size: 10px;
   }
 }
 @media (max-width: 560px) {
