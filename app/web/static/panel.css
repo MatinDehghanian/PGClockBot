@@ -172,8 +172,14 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   grid-template-areas: "main side";
   height: 100vh;
   height: 100dvh;
+  /* --vvh is set from window.innerHeight by an inline <head> script (see
+     base.html) — always matches the *current* visible viewport, unlike dvh
+     which some mobile engines settle on a stale value for at first paint.
+     Last declaration wins and falls back to dvh if JS hasn't run yet. */
+  height: var(--vvh, 100dvh);
   max-height: 100vh;
   max-height: 100dvh;
+  max-height: var(--vvh, 100dvh);
   width: 100%;
   background: var(--background);
   overflow: hidden;
@@ -188,6 +194,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   width: var(--side-w);
   height: 100%;
   max-height: 100dvh;
+  max-height: var(--vvh, 100dvh);
   position: relative;
   top: 0;
   overflow-x: hidden;
@@ -208,6 +215,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   min-height: 0;
   height: 100%;
   max-height: 100dvh;
+  max-height: var(--vvh, 100dvh);
   /* Top / bottom chrome equal: --page-title-gap above content and below footer */
   padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));
   display: flex;
@@ -2512,6 +2520,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 .auth-wrap {
   min-height: 100vh;
   min-height: 100dvh;
+  min-height: var(--vvh, 100dvh);
   display: grid;
   place-items: center;
   padding: calc(var(--space-3) + var(--safe-top)) calc(var(--space-2) + var(--safe-right)) calc(var(--space-3) + var(--safe-bottom)) calc(var(--space-2) + var(--safe-left));
@@ -4205,11 +4214,16 @@ form.settings-form > .actions.sticky-actions,
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
-    /* One scroll container (.main) — fill visual viewport (dvh + fallback) */
+    /* One scroll container (.main) — fill visual viewport. --vvh (real
+       window.innerHeight, set in <head>) overrides dvh so height always
+       matches what's actually visible, even before the browser's own dvh
+       settles on first paint — this is the fix for the black bar. */
     min-height: 100vh;
     min-height: 100dvh;
+    min-height: var(--vvh, 100dvh);
     height: 100vh;
     height: 100dvh;
+    height: var(--vvh, 100dvh);
     max-height: none;
     overflow: hidden;
     /* Reserve space for fixed mobile topbar */
