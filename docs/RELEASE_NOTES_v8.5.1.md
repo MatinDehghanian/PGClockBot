@@ -20,7 +20,14 @@
    - Removed redundant day/week/month section-tabs (compare cards remain the selector)
 
 4. **Bot**
-   - Admin quick renew on user card; platform-shop scope on search / view / wallet credit
+   - Admin quick renew on user card; platform-shop scope on all admin user paths (search/view/message/wallet/services/block/delete/unreseller)
+
+## Security (pre-release audit)
+
+- Approved for release after scope/ACL/XSS review of users ops, DMs, edit fragment, finance reports/behavior, and bot soft callbacks
+- Admin bot: `_platform_shop_user` on sibling user callbacks + wallet/block/message/unreseller FSM saves
+- Finance **behavior** tab: fail-closed for non-platform staff without resolvable `shop_owner_id` (same as reports)
+- Web user routes remain `assert_bot_user_in_scope`; bulk DM Owner/shop-scoped; preview/message HTML escaped
 
 ## Deploy
 

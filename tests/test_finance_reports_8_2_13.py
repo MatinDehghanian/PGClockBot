@@ -99,6 +99,9 @@ class FinanceReportsUiTests(unittest.TestCase):
         self.assertIn("build_finance_report", pages)
         self.assertIn("shop_owner_id", pages)
         self.assertIn('tab = "reports"', pages)
+        # behavior + reports fail-closed when non-platform staff lack shop_owner_id
+        self.assertGreaterEqual(pages.count('محدوده فروشگاه مشخص نیست'), 2)
+        self.assertIn('tab == "behavior"', pages)
 
     def test_mobile_css(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
