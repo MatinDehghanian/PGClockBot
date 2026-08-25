@@ -1,12 +1,16 @@
 {% extends "base.html" %}
 {% from "macros.html" import row_actions, page_title %}
-{% block title %}کاربران بات{% endblock %}
-{% block content %}
+{#- Declared at template top level (outside any block) so both {% block content %}
+   and {% block page_scripts %} share the same values — {% set %} inside a block
+   is local to that block only and would silently leave `manage` etc. undefined
+   (falsy) in page_scripts, breaking the edit-modal loader with no visible error. #}
 {% set flt = filter or 'all' %}
 {% set c = counts or {} %}
 {% set manage = can_manage_users if can_manage_users is defined else is_admin %}
 {% set ops = can_user_ops if can_user_ops is defined else true %}
 {% set bulk_count = rows|length if flt != 'all' else 0 %}
+{% block title %}کاربران بات{% endblock %}
+{% block content %}
 <div class="page-head">
   <div>
     {{ page_title('users', 'کاربران بات') }}
@@ -149,7 +153,7 @@
         <td class="col-vol col-hide-sm users-vol-cell" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
         <td class="col-exp col-hide-sm users-exp-cell" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
         <td class="mono col-wallet col-hide-sm" dir="ltr" data-sort-value="{{ u.wallet_balance or 0 }}">{{ u.wallet_balance | num }}</td>
-        <td data-sort-value="{{ '1' if u.is_blocked else '0' }}">
+        <td class="col-status" data-sort-value="{{ '1' if u.is_blocked else '0' }}">
           {% if u.is_blocked %}
           <span class="badge blocked">مسدود</span>
           {% else %}

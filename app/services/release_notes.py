@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.5": [
+        "مودال ویرایش کاربر: رفع ریشه‌ای — متغیر manage در اسکوپ سراسری تمپلیت (نه داخل block) تا اسکریپت بارگذاری مودال همیشه رندر شود",
+        "جدول کاربران موبایل: table-layout: fixed تا ستون نام باقی‌مانده فضا را بگیرد؛ منوی عملیات دیگر خارج از صفحه نمی‌رود (تا ۲۸۰px)",
+        "فوتر: بازگشت به الگوی sticky-footer پایدار (flex:1 0 auto + margin-top:auto) و nudge با resize روی load/pageshow برای dvh موبایل",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.4",
+    ],
     "8.5.4": [
         "موبایل: نوار سیاه زیر صفحه — کشوی سایدبار با bottom:0 تا انتهای viewport (نه ارتفاع dvh کوتاه)",
         "جدول کاربران موبایل: مثل بقیه جداول — نام+وضعیت+اکشن؛ سرویس/حجم/انقضا زیر نام؛ تگ‌ها با اندازه استاندارد badge",
