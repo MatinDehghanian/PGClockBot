@@ -106,6 +106,9 @@ class FinanceReportsUiTests(unittest.TestCase):
         self.assertIn(".users-ops-stats", css)
         self.assertIn("grid-template-columns: 1fr !important", css)
         self.assertNotIn(".finance-report-periods", css)
+        self.assertIn(".users-svc-picker-menu.is-ported", css)
+        self.assertIn("--menu-radius", css.split(".users-svc-picker-menu", 1)[1].split(".users-svc-option", 1)[0])
+        self.assertIn("--control-radius", css.split(".users-svc-picker-toggle", 1)[1].split(".users-svc-picker-label", 1)[0])
 
     def test_bot_hooks(self):
         kb = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")

@@ -80,9 +80,12 @@ class UsersQuickUiTests(unittest.TestCase):
     def test_bot_message_hooks(self):
         kb = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
         self.assertIn("adm:users:msg:", kb)
+        self.assertIn("adm:users:renew:", kb)
         admin = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
         self.assertIn("adm_users_message_start", admin)
         self.assertIn("user_message", admin)
+        self.assertIn("adm_users_quick_renew", admin)
+        self.assertIn("_deny_if_outside_platform_shop", admin)
         res = (ROOT / "app/bot/handlers/reseller.py").read_text(encoding="utf-8")
         self.assertIn("res:usermsg:", res)
         self.assertIn("res:userrenew:", res)
