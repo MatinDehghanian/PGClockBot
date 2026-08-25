@@ -79,8 +79,8 @@ class RoleAndReasonUiTests(unittest.TestCase):
         self.assertIn("data-confirm-reason", delete)
         block = users.split("/users/{{ u.id }}/block", 1)[1].split("</form>", 1)[0]
         self.assertNotIn("data-confirm-reason", block)
-        self.assertIn("data-user-edit-open", users)
-        self.assertNotIn('data-modal-open="modal-user-edit"', users)
+        self.assertIn('data-modal-open="modal-user-edit"', users)
+        self.assertNotIn("data-user-edit-open", users)
         # Flash rendered once in base.html (above title), not under page-head
         self.assertNotIn("{% if flash_ok %}<div class=\"flash ok\">{{ flash_ok }}</div>{% endif %}", users)
 

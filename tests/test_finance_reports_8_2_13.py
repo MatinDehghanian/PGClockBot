@@ -109,9 +109,10 @@ class FinanceReportsUiTests(unittest.TestCase):
         self.assertIn(".users-ops-stats", css)
         self.assertIn("grid-template-columns: 1fr !important", css)
         self.assertNotIn(".finance-report-periods", css)
-        self.assertIn(".users-svc-picker-menu.is-ported", css)
-        self.assertIn("--menu-radius", css.split(".users-svc-picker-menu", 1)[1].split(".users-svc-option", 1)[0])
-        self.assertIn("--control-radius", css.split(".users-svc-picker-toggle", 1)[1].split(".users-svc-picker-label", 1)[0])
+        self.assertIn(".ui-select-menu.users-svc-boxed", css)
+        self.assertIn(".users-svc-meta", css)
+        self.assertIn("tg-preview-gate > .actions", css)
+        self.assertIn("mask-image: none", css.split(".section-tabs.is-scrollable", 1)[1].split(".section-tabs a", 1)[0])
 
     def test_bot_hooks(self):
         kb = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
@@ -137,11 +138,11 @@ class FinanceReportsUiTests(unittest.TestCase):
         from app.version import __version__
 
         parts = [int(x) for x in __version__.split(".")[:3]]
-        self.assertGreaterEqual(parts, [8, 5, 1])
+        self.assertGreaterEqual(parts, [8, 5, 2])
         self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"8.5.1"', notes)
-        self.assertTrue((ROOT / "docs/RELEASE_NOTES_v8.5.1.md").is_file())
+        self.assertIn('"8.5.2"', notes)
+        self.assertTrue((ROOT / "docs/RELEASE_NOTES_v8.5.2.md").is_file())
 
 
 if __name__ == "__main__":

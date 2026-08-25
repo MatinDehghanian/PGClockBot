@@ -94,10 +94,10 @@ class UsersOpsUiTests(unittest.TestCase):
         self.assertIn("users-ops-overview", users)
         self.assertIn("alert-dot", users)
         self.assertIn("badge-inline", users)
-        self.assertIn("users-svc-picker", users)
+        self.assertIn("users-svc-select", users)
         self.assertIn("badge-risk", users)
         self.assertNotIn("risk-dot", users)
-        self.assertNotIn("users-svc-select", users)
+        self.assertNotIn("users-svc-picker", users)
         self.assertIn("filter_key='expiring'", users)
         self.assertIn("نزدیک انقضا", users)
         self.assertNotIn("<th data-sort-type=\"text\">نقش</th>", users)
@@ -106,7 +106,8 @@ class UsersOpsUiTests(unittest.TestCase):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".alert-dot", css)
         self.assertIn(".users-row.is-focus", css)
-        self.assertIn(".users-svc-picker", css)
+        self.assertIn(".users-svc-meta", css)
+        self.assertIn("users-svc-boxed", css)
         self.assertIn(".badge.badge-risk", css)
         self.assertNotIn(".risk-dot {", css)
 
@@ -127,10 +128,12 @@ class UsersOpsUiTests(unittest.TestCase):
 
     def test_edit_modal_open_hook(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn("data-user-edit-open", users)
+        # Root path: panel.js data-modal-open — no parallel openUserEdit hook
+        self.assertIn('data-modal-open="modal-user-edit"', users)
+        self.assertNotIn("data-user-edit-open", users)
+        self.assertNotIn("openUserEdit", users)
         self.assertIn("modal-user-edit", users)
-        self.assertIn("openUserEdit", users)
-        self.assertIn("window.openModal", users)
+        self.assertIn("loadEdit", users)
 
     def test_bot_parity_hooks(self):
         admin = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
