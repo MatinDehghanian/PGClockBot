@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.13": [
+        "نوار سیاه موبایل — بازگشت به لایه‌بندی v8.5.3 (قبل از تغییرات v8.5.4–8.5.12): حذف position:fixed روی shell، حذف --vvh/visualViewport/ios-safari، main-body دیگر flex-grow نمی‌کند، footer بدون margin-top:auto — همان الگویی که قبل از sidebar bottom:0 و sticky footer کار می‌کرد",
+        "هدر موبایل: ارتفاع کمی بیشتر (--topbar-h 58px) و فاصله بالا/پایین محتوای هدر برابر (--topbar-pad-y)",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.12",
+    ],
     "8.5.12": [
         "نوار سیاه Safari iOS 26 — ریشه واقعی: Safari 26 دیگر theme-color را نمی‌خواند؛ رنگ نوار آدرس/تب پایین را از background المان‌های position:fixed کنار لبه viewport می‌گیرد. shell با پس‌زمینه #09090b و sidebar بسته (bottom:0) نوار را solid black می‌کرد — shell در ios-safari شفاف شد، theme-color=transparent، sidebar بسته دیگر bottom:0 ندارد",
         "بدون مایگریشن؛ ریستور: تگ v8.5.11",

@@ -82,22 +82,6 @@
       }, true);
     })();
 
-    /* iOS Safari: re-sync shell when visual viewport changes (tab/address bar).
-       Do NOT listen to visualViewport scroll — .main owns scroll; scroll events
-       would jitter the shell. */
-    (function () {
-      var d = document.documentElement;
-      if (!d.classList.contains('ios-safari') || !window.visualViewport) return;
-      function sync() {
-        if (typeof window.__pgSetVVH === 'function') window.__pgSetVVH();
-      }
-      window.visualViewport.addEventListener('resize', sync);
-      window.addEventListener('orientationchange', function () {
-        setTimeout(sync, 100);
-      });
-      sync();
-    })();
-
     /* Permanent no-zoom: keep focused text controls at ≥16px even if CSS regresses */
     (function () {
       const MIN = 16;
@@ -150,10 +134,9 @@
           });
         }
         const dark = resolve(pref) === 'dark';
-        const metaColor = document.getElementById('meta-theme-color');
-        if (metaColor && !root.classList.contains('ios-safari')) {
-          metaColor.setAttribute('content', dark ? '#09090b' : '#fafafa');
-        }
+        document.querySelectorAll('meta[name="theme-color"]').forEach(m => {
+          if (!m.media) m.setAttribute('content', dark ? '#09090b' : '#fafafa');
+        });
       }
       function setMenu(open){
         if (!menu || !toggle) return;

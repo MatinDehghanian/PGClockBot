@@ -29,7 +29,7 @@ class FooterRestore303Tests(unittest.TestCase):
         self.assertNotIn("--main-pad-", css)
         self.assertNotIn("padding-bottom: var(--chrome-pad-bottom)", css)
         mobile = css.split("@media (max-width: 900px)", 1)[1]
-        self.assertIn("html:has(.shell)", mobile)
+        self.assertNotIn("html:has(.shell)", mobile)
         self.assertIn(
             "padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));",
             css,
@@ -39,7 +39,6 @@ class FooterRestore303Tests(unittest.TestCase):
             "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));",
             css.split("@media (max-width: 900px)", 1)[1],
         )
-        self.assertIn("padding-bottom: 0;", css.split("@media (max-width: 900px)", 1)[1].split(".shell {", 1)[1])
 
     def test_side_scrolls_as_a_column(self):
         css = CSS.read_text(encoding="utf-8")
@@ -51,10 +50,11 @@ class FooterRestore303Tests(unittest.TestCase):
         )
         self.assertNotIn("padding-bottom: var(--chrome-pad-bottom)", css)
 
-    def test_site_footer_classic_sticky(self):
+    def test_site_footer_after_content_not_sticky(self):
         css = CSS.read_text(encoding="utf-8")
-        self.assertIn(".site-footer {\n  margin-top: auto;\n  padding-top: var(--page-title-gap);", css)
+        self.assertIn(".site-footer {\n  /* Sit after content", css)
         foot = css.split(".site-footer {\n", 1)[1].split("}", 1)[0]
+        self.assertIn("margin-top: 0;", foot)
         self.assertNotIn("position: fixed", foot)
         self.assertNotIn("position: sticky", foot)
 

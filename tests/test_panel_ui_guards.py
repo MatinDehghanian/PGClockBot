@@ -288,7 +288,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         foot = re.search(r"(?ms)^\.site-footer\s*\{([^}]+)\}", css)
         self.assertIsNotNone(foot)
         body = foot.group(1)
-        self.assertIn("margin-top: auto", body)
+        self.assertIn("margin-top: 0", body)
         # Align with .side-foot baseline
         self.assertIn("padding-top: var(--page-title-gap)", body)
         # star button should be shorter than primary --btn-h
@@ -379,14 +379,12 @@ class HtmlCommentBalanceGuardTests(unittest.TestCase):
             ),
         )
 
-    def test_base_html_theme_color_comment_closes_with_html_syntax(self):
+    def test_base_html_has_dual_theme_color_meta(self):
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("<!--", base)
-        # Regression guard for the exact typo that caused this: a `*/`
-        # (JS/CSS comment close) instead of `-->` right before the
-        # meta-theme-color tag.
-        self.assertNotIn("theme menu. */", base)
-        self.assertIn("theme menu. -->", base)
+        self.assertIn('meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)"', base)
+        self.assertIn('meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)"', base)
+        self.assertNotIn("meta-theme-color", base)
+        self.assertNotIn("--vvh", base)
 
 
 if __name__ == "__main__":

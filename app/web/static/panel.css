@@ -49,7 +49,8 @@
   --menu-radius: 16px;
   --menu-item-radius: 10px;
   --side-w: 248px;
-  --topbar-h: 52px;
+  --topbar-h: 58px;
+  --topbar-pad-y: var(--space-1);
   --btn-h: 36px;
   /* Spacing scale — 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 */
   --space-0: 4px;
@@ -172,14 +173,8 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   grid-template-areas: "main side";
   height: 100vh;
   height: 100dvh;
-  /* --vvh is set from window.innerHeight by an inline <head> script (see
-     base.html) — always matches the *current* visible viewport, unlike dvh
-     which some mobile engines settle on a stale value for at first paint.
-     Last declaration wins and falls back to dvh if JS hasn't run yet. */
-  height: var(--vvh, 100dvh);
   max-height: 100vh;
   max-height: 100dvh;
-  max-height: var(--vvh, 100dvh);
   width: 100%;
   background: var(--background);
   overflow: hidden;
@@ -194,7 +189,6 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   width: var(--side-w);
   height: 100%;
   max-height: 100dvh;
-  max-height: var(--vvh, 100dvh);
   position: relative;
   top: 0;
   overflow-x: hidden;
@@ -215,7 +209,6 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   min-height: 0;
   height: 100%;
   max-height: 100dvh;
-  max-height: var(--vvh, 100dvh);
   /* Top / bottom chrome equal: --page-title-gap above content and below footer */
   padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));
   display: flex;
@@ -226,11 +219,10 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   -webkit-overflow-scrolling: touch;
 }
 .main-body {
-  /* Grow to fill .main so .site-footer's margin-top:auto pins it to the
-     viewport bottom on short pages (classic sticky footer) — content itself
-     stays top-aligned, so there is never a visible gap either above or
-     below the footer, regardless of dvh timing on mobile. */
-  flex: 1 0 auto;
+  /* Content-sized only — do NOT flex-grow to fill the viewport.
+     Growing left a tall empty slab above the footer on short pages
+     (looked like a dark “box” until the first scroll / dvh change). */
+  flex: 0 0 auto;
   min-width: 0;
   width: 100%;
   display: flex;
@@ -2486,7 +2478,6 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 .auth-wrap {
   min-height: 100vh;
   min-height: 100dvh;
-  min-height: var(--vvh, 100dvh);
   display: grid;
   place-items: center;
   padding: calc(var(--space-3) + var(--safe-top)) calc(var(--space-2) + var(--safe-right)) calc(var(--space-3) + var(--safe-bottom)) calc(var(--space-2) + var(--safe-left));
@@ -2833,11 +2824,9 @@ code.env-fname {
 }
 
 .site-footer {
-  margin-top: auto;
+  /* Sit after content — no margin-top:auto filler gap (phantom box on short pages) */
+  margin-top: 0;
   padding-top: var(--page-title-gap);
-  /* Classic sticky footer: .main-body flex-grows above, this margin absorbs
-     the remaining space so the footer always sits flush with the viewport
-     bottom on short pages — no dead gap above or below it. */
   border-top: 1px solid var(--border);
   display: flex;
   flex-wrap: wrap;
@@ -4079,7 +4068,8 @@ form.settings-form > .actions.sticky-actions,
   justify-content: space-between;
   gap: var(--space-1);
   height: calc(var(--topbar-h) + var(--safe-top));
-  padding: var(--safe-top) var(--space-2) 0;
+  padding: calc(var(--safe-top) + var(--topbar-pad-y)) var(--space-2) var(--topbar-pad-y);
+  box-sizing: border-box;
   border-bottom: 1px solid var(--border);
   background: var(--bg-card);
   position: fixed;
@@ -4175,69 +4165,18 @@ form.settings-form > .actions.sticky-actions,
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
-  /* Lock page scroll — .main owns vertical scroll. Do NOT position:fixed html/body
-     or use -webkit-fill-available here: on iOS that shrinks the layout box and
-     leaves a dead black strip under the shell even when shell uses inset:0. */
-  html:has(.shell),
-  html:has(.shell) body {
-    margin: 0;
-    width: 100%;
-    height: var(--vvh, 100dvh);
-    max-height: var(--vvh, 100dvh);
-    overflow: hidden;
-    overscroll-behavior: none;
-    background: var(--background);
-  }
-
   .shell {
-    /* Explicit --vvh height (set synchronously in <head>) — NOT inset:0/height:auto,
-       which on iOS can paint shorter than the physical screen. */
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    width: 100%;
-    height: var(--vvh, 100dvh);
-    max-height: var(--vvh, 100dvh);
-    min-height: var(--vvh, 100dvh);
     display: flex;
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
+    /* One scroll container (.main) — same as desktop; avoids body scroll jitter */
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
     overflow: hidden;
-    background: var(--background);
-    /* Topbar reserve only — background extends through home-indicator safe area */
+    /* Reserve space for fixed mobile topbar */
     padding-top: calc(var(--topbar-h) + var(--safe-top));
-    padding-left: var(--safe-left);
-    padding-right: var(--safe-right);
-    padding-bottom: 0;
-  }
-
-  /* Safari 26 Liquid Glass: the bottom address/tab bar tint is sampled from
-     opaque position:fixed elements within ~3px of the viewport edge — NOT
-     theme-color. An opaque .shell bg (#09090b) at the bottom painted the
-     Safari toolbar solid black instead of the native glass effect. */
-  html.ios-safari .shell {
-    top: var(--vv-top, 0px);
-    background: transparent;
-  }
-  html.ios-safari .main {
-    background: var(--background);
-  }
-  /* Closed drawer still sits position:fixed — if bottom:0 Safari samples its
-     dark bg for the tab bar even when off-screen (transform alone doesn't help). */
-  html.ios-safari .side:not(.open) {
-    bottom: auto;
-    height: calc(var(--vvh, 100dvh) - var(--vv-top, 0px) - var(--topbar-h) - var(--safe-top));
-  }
-  html.ios-safari .topbar {
-    top: var(--vv-top, 0px);
-  }
-  html.ios-safari .side {
-    top: calc(var(--vv-top, 0px) + var(--topbar-h) + var(--safe-top));
-  }
-  html.ios-safari .side-backdrop {
-    top: calc(var(--vv-top, 0px) + var(--topbar-h) + var(--safe-top));
   }
 
   .topbar { display: flex; }
@@ -4247,11 +4186,10 @@ form.settings-form > .actions.sticky-actions,
     top: calc(var(--topbar-h) + var(--safe-top));
     right: 0;
     left: auto;
-    bottom: 0;
     width: min(300px, 86vw);
-    /* Stretch to viewport bottom — fixed 100dvh calc left a black body strip under the drawer */
-    height: auto;
-    max-height: none;
+    height: calc(100vh - var(--topbar-h) - var(--safe-top));
+    height: calc(100dvh - var(--topbar-h) - var(--safe-top));
+    max-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
     z-index: 50;
     transform: translateX(105%);
     transition: transform .2s ease;
@@ -4264,40 +4202,30 @@ form.settings-form > .actions.sticky-actions,
     padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));
   }
   .side.open { transform: translateX(0); }
-  /* Any residual gap under chrome matches drawer, not near-black body */
-  body.nav-open {
-    background: var(--bg-card);
-  }
 
   .main {
-    /* Desktop leaves height:100% / max-height:--vvh on .main — on mobile that
-       overshoots the shell content box (viewport − topbar pad − safe-bottom)
-       and leaves a persistent near-black strip under the footer. flex:1 1 0
-       + min-height:0 is the canonical “fill remaining flex space exactly”. */
-    height: auto;
-    max-height: none;
-    flex: 1 1 0;
+    /* Bottom pad matches .side drawer so site-footer & side-foot share one baseline */
+    padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));
+    flex: 1 1 auto;
     min-height: 0;
     min-width: 0;
     width: 100%;
-    padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));
     overflow-x: hidden;
     overflow-y: auto;
-    overscroll-behavior-y: contain;
+    overscroll-behavior-y: auto;
     -webkit-overflow-scrolling: touch;
     display: flex;
     flex-direction: column;
-    background: var(--background);
   }
-  .main-body { flex: 1 0 auto; min-height: 0; padding-bottom: var(--page-title-gap); }
+  .main-body { flex: 0 0 auto; padding-bottom: var(--page-title-gap); }
   .site-footer {
-    flex-shrink: 0;
+    /* Keep one row like .side-foot so both footer tops sit on the same line */
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
     justify-content: center;
     text-align: center;
-    margin-top: auto;
+    margin-top: 0;
     padding-top: var(--page-title-gap);
     gap: var(--space-1);
     min-height: calc(var(--page-title-gap) + 28px + var(--space-1));

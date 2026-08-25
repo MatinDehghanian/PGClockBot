@@ -4,104 +4,28 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="dark light" />
-  <!-- Single, unconditional theme-color tag — the HTML spec picks the FIRST
-       <meta name="theme-color"> whose `media` matches (an absent media always
-       "matches"), so a second, later, media-gated tag for the other scheme is
-       simply never reached; browsers never fall back to it. That's a spec'd
-       dead-code trap, not a rendering bug: keeping ONE tag and writing its
-       `content` ourselves (below, synchronously, before first paint) is the
-       only way to reliably drive the OS status/nav-bar color for both the
-       system preference AND an explicit user override in the theme menu. -->
-  <meta name="theme-color" content="#09090b" id="meta-theme-color" />
+  <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="{{ pwa_name|default('MrClockBot') }}" />
   <title>{% block title %}پنل مدیریت{% endblock %} · {{ pwa_name|default('MrClockBot') }}</title>
-  <script>
-  /* Resolve theme + viewport height synchronously in <head>, before first
-     paint — both feed the OS chrome (status/gesture-nav bar) and .shell's
-     sizing, so neither can lag a beat behind the very first frame. */
-  (function () {
-    var d = document.documentElement;
-    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    var isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
-      !!window.navigator.standalone;
-    if (isIOS) {
-      d.classList.add('ios');
-      if (isStandalone) d.classList.add('ios-standalone');
-      else d.classList.add('ios-safari');
-    }
-    var theme;
-    try {
-      var pref = localStorage.getItem('panel-theme') || 'system';
-      var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      theme = pref === 'light' ? 'light' : pref === 'dark' ? 'dark' : dark ? 'dark' : 'light';
-    } catch (e) { theme = 'dark'; }
-    d.setAttribute('data-theme', theme);
-    var metaColor = document.getElementById('meta-theme-color');
-    if (metaColor) {
-      /* Safari 26+ ignores theme-color for the tab/address bar — it samples
-         opaque fixed elements at the viewport edge instead (see ios-safari
-         shell CSS). Still set theme-color for PWA/Chrome/Android; in iOS
-         Safari in-browser use transparent so older Safari doesn't force solid
-         black chrome either. */
-      if (d.classList.contains('ios-safari')) {
-        metaColor.setAttribute('content', 'transparent');
-      } else {
-        metaColor.setAttribute('content', theme === 'light' ? '#fafafa' : '#09090b');
-      }
-    }
-
-    /* `100dvh` is supposed to track the browser's current toolbar state, but
-       on first paint several mobile engines (and installed/standalone PWAs,
-       which have no toolbar to begin with) report a stale value before the
-       real layout has settled — .shell (sized off dvh) ends up briefly
-       taller than the true visible viewport. Measuring window.innerHeight
-       ourselves is accurate to *this instant*; re-sampling it on the events
-       below AND for a few frames/ticks after load (not just on resize —
-       standalone PWAs may never fire one for this) self-heals any residual
-       drift without requiring the user to scroll first. */
-    function setVVH() {
-      var vv = window.visualViewport;
-      /* iOS Safari (in-browser, not Home Screen PWA): fixed elements anchor to
-         the layout viewport, but the *visible* area is visualViewport — smaller
-         and offset when the address/tab bars show. Size .shell to vv exactly. */
-      if (d.classList.contains('ios-safari') && vv) {
-        d.style.setProperty('--vvh', vv.height + 'px');
-        d.style.setProperty('--vv-top', vv.offsetTop + 'px');
-        return;
-      }
-      var h = window.innerHeight;
-      if (!h && vv) h = vv.height;
-      var ch = d.clientHeight;
-      if (ch > h) h = ch;
-      if (vv) {
-        var extent = (vv.height || 0) + (vv.offsetTop || 0);
-        if (extent > h) h = extent;
-      }
-      if (h) d.style.setProperty('--vvh', h + 'px');
-      d.style.removeProperty('--vv-top');
-    }
-    setVVH();
-    window.__pgSetVVH = setVVH;
-    window.addEventListener('resize', setVVH);
-    window.addEventListener('orientationchange', setVVH);
-    window.addEventListener('pageshow', setVVH);
-    document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') setVVH();
-    });
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', setVVH);
-    }
-  })();
-  </script>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/pwa/icon/180" />
   <link rel="stylesheet" href="/static/fonts.css?v={{ app_version }}" />
   <link rel="stylesheet" href="/static/panel.css?v={{ app_version }}" />
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
+  <script>
+  (function () {
+    try {
+      var pref = localStorage.getItem("panel-theme") || "system";
+      var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var theme = pref === "light" ? "light" : pref === "dark" ? "dark" : dark ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", theme);
+    } catch (e) {}
+  })();
+  </script>
   {% block head %}{% endblock %}
 </head>
 <body>

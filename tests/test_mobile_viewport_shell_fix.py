@@ -1,8 +1,7 @@
-"""Mobile shell must pin to the viewport (no body strip / black bar)."""
+"""Mobile shell uses the pre-v8.5.4 flex layout (no fixed shell / --vvh hacks)."""
 
 from __future__ import annotations
 
-import re
 import unittest
 from pathlib import Path
 
@@ -14,67 +13,52 @@ JS = ROOT / "app/web/static/panel.js"
 
 
 class MobileViewportShellFixTests(unittest.TestCase):
-    def test_mobile_shell_uses_explicit_vvh_height(self):
+    def test_mobile_shell_is_flex_not_fixed(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
-        self.assertIn("position: fixed;", shell)
-        self.assertIn("height: var(--vvh, 100dvh);", shell)
-        self.assertIn("min-height: var(--vvh, 100dvh);", shell)
-        self.assertNotIn("inset: 0;", shell)
-        self.assertNotIn("height: auto;", shell)
-        self.assertIn("padding-bottom: 0;", shell)
+        self.assertIn("display: flex;", shell)
+        self.assertIn("height: 100dvh;", shell)
+        self.assertIn("max-height: 100dvh;", shell)
+        self.assertNotIn("position: fixed;", shell)
+        self.assertNotIn("--vvh", shell)
 
-    def test_mobile_body_uses_vvh_not_fixed_fill_available(self):
+    def test_no_html_body_viewport_lock(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
-        block = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
-        self.assertIn("height: var(--vvh, 100dvh);", block)
-        self.assertIn("overflow: hidden;", block)
-        self.assertNotIn("position: fixed;", block)
-        self.assertNotIn("-webkit-fill-available", block)
+        self.assertNotIn("html:has(.shell)", mobile)
+        self.assertNotIn("ios-safari", mobile)
 
-    def test_mobile_main_drops_desktop_height_chain(self):
+    def test_mobile_main_body_does_not_flex_grow(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
-        main = mobile.split("  .main {", 1)[1].split("  .main-body", 1)[0]
-        self.assertIn("height: auto;", main)
-        self.assertIn("max-height: none;", main)
-        self.assertIn("flex: 1 1 0;", main)
-        self.assertNotRegex(main, r"max-height:\s*var\(--vvh")
+        main_body = mobile.split("  .main-body {", 1)[1].split("  .site-footer", 1)[0]
+        self.assertIn("flex: 0 0 auto;", main_body)
 
-    def test_vvh_covers_layout_viewport_on_ios(self):
+    def test_mobile_footer_sits_after_content(self):
+        css = CSS.read_text(encoding="utf-8")
+        mobile = css.split("@media (max-width: 900px)", 1)[1]
+        footer = mobile.split("  .site-footer {", 1)[1].split("  .footer-meta", 1)[0]
+        self.assertIn("margin-top: 0;", footer)
+
+    def test_base_has_no_vvh_script(self):
         html = BASE.read_text(encoding="utf-8")
-        block = html.split("function setVVH()", 1)[1].split("setVVH();", 1)[0]
-        self.assertIn("ios-safari", html)
-        self.assertIn("visualViewport", block)
-        self.assertIn("--vv-top", block)
-        self.assertIn("window.__pgSetVVH = setVVH", html)
+        self.assertNotIn("--vvh", html)
+        self.assertNotIn("ios-safari", html)
+        self.assertNotIn("visualViewport", html)
+        self.assertIn('meta name="theme-color"', html)
 
-    def test_ios_safari_shell_tracks_visual_viewport(self):
+    def test_panel_js_has_no_ios_viewport_sync(self):
+        js = JS.read_text(encoding="utf-8")
+        self.assertNotIn("ios-safari", js)
+        self.assertNotIn("__pgSetVVH", js)
+        self.assertNotIn("visualViewport", js)
+
+    def test_global_shell_uses_dvh_not_vvh(self):
         css = CSS.read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 900px)", 1)[1]
-        self.assertIn("html.ios-safari .shell", mobile)
-        self.assertIn("top: var(--vv-top, 0px);", mobile)
-        self.assertIn("background: transparent;", mobile.split("html.ios-safari .shell", 1)[1].split("}", 1)[0])
-        self.assertIn("html.ios-safari .main", mobile)
-        self.assertIn("html.ios-safari .side:not(.open)", mobile)
-        self.assertIn("html.ios-safari .topbar", mobile)
-
-    def test_ios_safari_theme_color_transparent(self):
-        html = BASE.read_text(encoding="utf-8")
-        self.assertIn("ios-safari", html)
-        self.assertIn("'transparent'", html)
-        js = JS.read_text(encoding="utf-8")
-        self.assertIn("ios-safari", js)
-        self.assertIn("!root.classList.contains('ios-safari')", js)
-
-    def test_no_scroll_nudge_on_load(self):
-        js = JS.read_text(encoding="utf-8")
-        self.assertNotIn("function nudge(el)", js)
-        self.assertNotIn("nudgeAll", js)
-        self.assertIn("ios-safari", js)
-        self.assertNotIn("resample()", BASE.read_text(encoding="utf-8"))
+        shell = css.split(".shell {", 1)[1].split(".side, .main", 1)[0]
+        self.assertIn("height: 100dvh;", shell)
+        self.assertNotIn("--vvh", shell)
 
 
 if __name__ == "__main__":
