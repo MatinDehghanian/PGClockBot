@@ -4213,9 +4213,22 @@ form.settings-form > .actions.sticky-actions,
     padding-bottom: 0;
   }
 
-  /* iOS Safari in-browser: shell tracks visualViewport (address/tab bars). */
+  /* Safari 26 Liquid Glass: the bottom address/tab bar tint is sampled from
+     opaque position:fixed elements within ~3px of the viewport edge — NOT
+     theme-color. An opaque .shell bg (#09090b) at the bottom painted the
+     Safari toolbar solid black instead of the native glass effect. */
   html.ios-safari .shell {
     top: var(--vv-top, 0px);
+    background: transparent;
+  }
+  html.ios-safari .main {
+    background: var(--background);
+  }
+  /* Closed drawer still sits position:fixed — if bottom:0 Safari samples its
+     dark bg for the tab bar even when off-screen (transform alone doesn't help). */
+  html.ios-safari .side:not(.open) {
+    bottom: auto;
+    height: calc(var(--vvh, 100dvh) - var(--vv-top, 0px) - var(--topbar-h) - var(--safe-top));
   }
   html.ios-safari .topbar {
     top: var(--vv-top, 0px);

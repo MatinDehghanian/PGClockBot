@@ -41,7 +41,18 @@
     } catch (e) { theme = 'dark'; }
     d.setAttribute('data-theme', theme);
     var metaColor = document.getElementById('meta-theme-color');
-    if (metaColor) metaColor.setAttribute('content', theme === 'light' ? '#fafafa' : '#09090b');
+    if (metaColor) {
+      /* Safari 26+ ignores theme-color for the tab/address bar — it samples
+         opaque fixed elements at the viewport edge instead (see ios-safari
+         shell CSS). Still set theme-color for PWA/Chrome/Android; in iOS
+         Safari in-browser use transparent so older Safari doesn't force solid
+         black chrome either. */
+      if (d.classList.contains('ios-safari')) {
+        metaColor.setAttribute('content', 'transparent');
+      } else {
+        metaColor.setAttribute('content', theme === 'light' ? '#fafafa' : '#09090b');
+      }
+    }
 
     /* `100dvh` is supposed to track the browser's current toolbar state, but
        on first paint several mobile engines (and installed/standalone PWAs,

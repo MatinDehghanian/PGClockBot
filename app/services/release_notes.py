@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.12": [
+        "نوار سیاه Safari iOS 26 — ریشه واقعی: Safari 26 دیگر theme-color را نمی‌خواند؛ رنگ نوار آدرس/تب پایین را از background المان‌های position:fixed کنار لبه viewport می‌گیرد. shell با پس‌زمینه #09090b و sidebar بسته (bottom:0) نوار را solid black می‌کرد — shell در ios-safari شفاف شد، theme-color=transparent، sidebar بسته دیگر bottom:0 ندارد",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.11",
+    ],
     "8.5.11": [
         "نوار سیاه iOS Safari: در مرورگر سافاری (نه PWA) المان‌های fixed به layout viewport می‌چسبند نه visualViewport — shell حالا با visualViewport.height و offsetTop (--vv-top) اندازه‌گیری می‌شود؛ topbar و sidebar هم هم‌تراز شدند",
         "بدون مایگریشن؛ ریستور: تگ v8.5.10",

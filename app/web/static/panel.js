@@ -151,7 +151,9 @@
         }
         const dark = resolve(pref) === 'dark';
         const metaColor = document.getElementById('meta-theme-color');
-        if (metaColor) metaColor.setAttribute('content', dark ? '#09090b' : '#fafafa');
+        if (metaColor && !root.classList.contains('ios-safari')) {
+          metaColor.setAttribute('content', dark ? '#09090b' : '#fafafa');
+        }
       }
       function setMenu(open){
         if (!menu || !toggle) return;

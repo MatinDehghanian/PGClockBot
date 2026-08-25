@@ -56,7 +56,18 @@ class MobileViewportShellFixTests(unittest.TestCase):
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn("html.ios-safari .shell", mobile)
         self.assertIn("top: var(--vv-top, 0px);", mobile)
+        self.assertIn("background: transparent;", mobile.split("html.ios-safari .shell", 1)[1].split("}", 1)[0])
+        self.assertIn("html.ios-safari .main", mobile)
+        self.assertIn("html.ios-safari .side:not(.open)", mobile)
         self.assertIn("html.ios-safari .topbar", mobile)
+
+    def test_ios_safari_theme_color_transparent(self):
+        html = BASE.read_text(encoding="utf-8")
+        self.assertIn("ios-safari", html)
+        self.assertIn("'transparent'", html)
+        js = JS.read_text(encoding="utf-8")
+        self.assertIn("ios-safari", js)
+        self.assertIn("!root.classList.contains('ios-safari')", js)
 
     def test_no_scroll_nudge_on_load(self):
         js = JS.read_text(encoding="utf-8")
