@@ -613,6 +613,29 @@ html[data-theme="light"] .finance-report-panels .home-panel-grid > a.stat:hover 
   .users-ops-table .cell-name-meta {
     display: flex;
   }
+  /* Only col-name/col-status/col-actions remain once col-hide-sm kicks in.
+     Auto layout sizes col-name to fit its longest unwrapped name, which can
+     exceed the viewport (long name + role/risk badges) and push col-actions
+     (the kebab menu) off-screen with no visible scroll hint — the row then
+     looks actionless/broken on narrow phones. Fixed layout + explicit widths
+     on the two side columns force col-name to the remaining space instead,
+     so the name/tags wrap or ellipsis and the kebab stays on-screen. */
+  .users-ops-table {
+    table-layout: fixed;
+  }
+  .users-ops-table .col-name {
+    width: auto;
+    min-width: 0;
+    max-width: none;
+  }
+  .users-ops-table th.col-status,
+  .users-ops-table td.col-status {
+    width: 5.5rem;
+  }
+  .users-ops-table th.col-actions,
+  .users-ops-table td.col-actions {
+    width: 2.75rem;
+  }
 }
 @media (max-width: 720px) {
   .users-ops-overview {
