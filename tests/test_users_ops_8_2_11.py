@@ -106,7 +106,8 @@ class UsersOpsUiTests(unittest.TestCase):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".alert-dot", css)
         self.assertIn(".users-row.is-focus", css)
-        self.assertIn(".users-svc-meta", css)
+        self.assertIn(".cell-name-tags", css)
+        self.assertIn(".col-vol", css)
         self.assertIn("users-svc-boxed", css)
         self.assertIn(".badge.badge-risk", css)
         self.assertNotIn(".risk-dot {", css)
@@ -128,12 +129,13 @@ class UsersOpsUiTests(unittest.TestCase):
 
     def test_edit_modal_open_hook(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        # Root path: panel.js data-modal-open — no parallel openUserEdit hook
         self.assertIn('data-modal-open="modal-user-edit"', users)
+        self.assertIn("data-modal-load=", users)
+        self.assertIn("panel:modal-load", users)
         self.assertNotIn("data-user-edit-open", users)
-        self.assertNotIn("openUserEdit", users)
-        self.assertIn("modal-user-edit", users)
         self.assertIn("loadEdit", users)
+        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
+        self.assertIn("panel:modal-load", js)
 
     def test_bot_parity_hooks(self):
         admin = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")

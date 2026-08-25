@@ -80,11 +80,11 @@
     <thead>
       <tr>
         <th class="col-id col-hide-sm" data-sort-type="num">#</th>
-        <th data-sort-type="num">تلگرام</th>
+        <th class="col-tg col-hide-xs" data-sort-type="num">تلگرام</th>
         <th class="col-name" data-sort-type="text">نام</th>
         <th class="col-svc" data-sort-type="text">سرویس</th>
-        <th class="col-hide-sm" data-sort-type="text">حجم</th>
-        <th class="col-hide-sm" data-sort-type="num">انقضا</th>
+        <th class="col-vol" data-sort-type="text">حجم</th>
+        <th class="col-exp" data-sort-type="num">انقضا</th>
         <th class="col-hide-sm" data-sort-type="num">کیف پول</th>
         <th class="col-status" data-sort-type="text">وضعیت</th>
         {% if ops or manage %}<th class="col-actions"></th>{% endif %}
@@ -97,16 +97,18 @@
           data-uid="{{ u.id }}"
           id="user-{{ u.id }}">
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.id }}">{{ u.id }}</td>
-        <td class="mono" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
-        <td data-sort-value="{{ u.full_name or u.username or '' }}">
-          <span class="cell-name">
+        <td class="mono col-tg col-hide-xs" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
+        <td class="col-name" data-sort-value="{{ u.full_name or u.username or '' }}">
+          <div class="cell-name">
             <span class="cell-name-text">{{ u.full_name or u.username or "—" }}</span>
-            <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %} badge-inline">
-              {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
+            <span class="cell-name-tags">
+              <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %} badge-inline">
+                {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
+              </span>
+              {% if row.has_alert %}<span class="alert-dot" title="اعلان فعال" aria-label="اعلان فعال"></span>{% endif %}
+              {% if u.risk_flags %}<span class="badge badge-risk badge-inline" title="پرچم ریسک فعال">ریسک</span>{% endif %}
             </span>
-            {% if row.has_alert %}<span class="alert-dot" title="اعلان فعال" aria-label="اعلان فعال"></span>{% endif %}
-            {% if u.risk_flags %}<span class="badge badge-risk badge-inline" title="پرچم ریسک فعال">ریسک</span>{% endif %}
-          </span>
+          </div>
         </td>
         <td class="col-svc" data-sort-value="{{ row.service_count }}">
           {% if row.service_count == 0 %}
@@ -131,16 +133,9 @@
             </select>
           </label>
           {% endif %}
-          {% if row.service_count > 0 %}
-          <div class="users-svc-meta" aria-label="حجم و انقضا">
-            <span class="users-vol-cell">{{ row.volume_text }}</span>
-            <span class="users-svc-meta-sep" aria-hidden="true">·</span>
-            <span class="users-exp-cell">{{ row.expire_text }}</span>
-          </div>
-          {% endif %}
         </td>
-        <td class="col-hide-sm users-vol-cell" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
-        <td class="col-hide-sm users-exp-cell" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
+        <td class="col-vol users-vol-cell" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
+        <td class="col-exp users-exp-cell" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.wallet_balance or 0 }}">{{ u.wallet_balance | num }}</td>
         <td data-sort-value="{{ '1' if u.is_blocked else '0' }}">
           {% if u.is_blocked %}
@@ -171,6 +166,8 @@
             {% if manage %}
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-user-edit"
+                    data-modal-load="/users/{{ u.id }}/edit?fragment=1"
+                    data-modal-load-target="user-edit-body"
                     data-edit-url="/users/{{ u.id }}/edit?fragment=1"
                     data-edit-title="ویرایش کاربر #{{ u.id }}">ویرایش</button>
             <form method="post" action="/users/{{ u.id }}/block"
@@ -315,7 +312,6 @@
 
   document.querySelectorAll('.users-svc-select').forEach(function(sel){
     sel.addEventListener('change', function(){ syncSvcMeta(sel); });
-    /* After panel ui-select enhance — sync meta + alert on the toggle */
     syncSvcMeta(sel);
   });
 
@@ -342,29 +338,67 @@
   }
 
   {% if manage %}
-  var body = document.getElementById('user-edit-body');
   var titleEl = document.getElementById('user-edit-title');
-  if (!body) return;
+  var loadSeq = 0;
+
+  function editBody(){
+    return document.getElementById('user-edit-body');
+  }
 
   async function loadEdit(url, title){
+    var body = editBody();
+    if (!body) return;
+    var seq = ++loadSeq;
     body.innerHTML = '<p class="muted">در حال بارگذاری…</p>';
     if (titleEl && title) titleEl.textContent = title;
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = null;
+    if (ctrl) {
+      timer = setTimeout(function(){ try { ctrl.abort(); } catch (e) {} }, 12000);
+    }
     try {
-      var resp = await fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'text/html' } });
+      var resp = await fetch(url, {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'text/html' },
+        signal: ctrl ? ctrl.signal : undefined,
+      });
+      if (timer) clearTimeout(timer);
+      if (seq !== loadSeq) return;
+      body = editBody();
+      if (!body) return;
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      body.innerHTML = await resp.text();
+      var html = await resp.text();
+      if (seq !== loadSeq) return;
+      body.innerHTML = html;
       if (typeof window.enhanceAllSelects === 'function') window.enhanceAllSelects(body);
       document.dispatchEvent(new CustomEvent('panel:dom-ready', { detail: { root: body } }));
     } catch (e) {
+      if (timer) clearTimeout(timer);
+      if (seq !== loadSeq) return;
+      body = editBody();
+      if (!body) return;
       body.innerHTML = '<div class="flash err">بارگذاری ویرایش ناموفق بود.</div>';
     }
   }
 
-  /* Panel standard: data-modal-open opens via panel.js; this only loads the fragment. */
+  /* panel.js dispatches panel:modal-load in the same click as openModal */
+  var panelLoadArmed = false;
+  document.addEventListener('panel:modal-load', function(ev){
+    var d = ev.detail || {};
+    if (d.id !== 'modal-user-edit') return;
+    if (!d.url) return;
+    panelLoadArmed = true;
+    loadEdit(d.url, d.title || 'ویرایش کاربر');
+    setTimeout(function(){ panelLoadArmed = false; }, 0);
+  });
+
+  /* Fallback when cached panel.js lacks panel:modal-load */
   document.addEventListener('click', function(e){
+    if (panelLoadArmed) return;
     var btn = e.target.closest('[data-modal-open="modal-user-edit"][data-edit-url]');
     if (!btn) return;
-    loadEdit(btn.getAttribute('data-edit-url'), btn.getAttribute('data-edit-title') || 'ویرایش کاربر');
+    var url = btn.getAttribute('data-modal-load') || btn.getAttribute('data-edit-url');
+    if (url) loadEdit(url, btn.getAttribute('data-edit-title') || 'ویرایش کاربر');
   });
 
   var openId = {{ (open_edit or '')|tojson }};

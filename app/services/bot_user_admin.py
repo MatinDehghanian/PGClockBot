@@ -79,6 +79,8 @@ async def load_user_services(
 
 async def service_snapshot(session: AsyncSession, service: UserService) -> ServiceSnapshot:
     """Live PG status for one shop service."""
+    import asyncio
+
     url = (service.subscription_url or "").strip() or None
     if not service.pg_user_id:
         return ServiceSnapshot(
@@ -96,7 +98,8 @@ async def service_snapshot(session: AsyncSession, service: UserService) -> Servi
         )
     try:
         pg = _pg_client_for_service(service)
-        info = await pg.get_user_by_id(int(service.pg_user_id))
+        # Cap wait so edit-modal fragment never hangs on slow PG (client timeout is 30s).
+        info = await asyncio.wait_for(pg.get_user_by_id(int(service.pg_user_id)), timeout=3.0)
         if not isinstance(info, dict):
             raise ValueError("پاسخ نامعتبر پاسارگارد")
         used = int(info.get("used_traffic") or 0)
@@ -134,6 +137,7 @@ async def service_snapshot(session: AsyncSession, service: UserService) -> Servi
         )
     except Exception as e:
         logger.debug("service snapshot failed id=%s: %s", service.id, e, exc_info=True)
+        err = "پاسارگارد پاسخ نداد" if isinstance(e, asyncio.TimeoutError) else str(e)[:160]
         return ServiceSnapshot(
             service=service,
             pg=None,
@@ -145,7 +149,7 @@ async def service_snapshot(session: AsyncSession, service: UserService) -> Servi
             days_left=None,
             expire_text="—",
             subscription_url=url,
-            error=str(e)[:160],
+            error=err,
         )
 
 
