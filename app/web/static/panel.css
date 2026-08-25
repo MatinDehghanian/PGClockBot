@@ -219,10 +219,9 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   -webkit-overflow-scrolling: touch;
 }
 .main-body {
-  /* Content-sized only — do NOT flex-grow to fill the viewport.
-     Growing left a tall empty slab above the footer on short pages
-     (looked like a dark “box” until the first scroll / dvh change). */
-  flex: 0 0 auto;
+  /* flex-shrink:0 — long pages must grow so .main scrolls content+footer together.
+     flex-shrink:1 + min-height:0 pinned the footer over overflowing content. */
+  flex: 1 0 auto;
   min-width: 0;
   width: 100%;
   display: flex;
@@ -2824,8 +2823,7 @@ code.env-fname {
 }
 
 .site-footer {
-  /* Sit after content — no margin-top:auto filler gap (phantom box on short pages) */
-  margin-top: 0;
+  margin-top: auto;
   padding-top: var(--page-title-gap);
   border-top: 1px solid var(--border);
   display: flex;
@@ -4217,7 +4215,7 @@ form.settings-form > .actions.sticky-actions,
     display: flex;
     flex-direction: column;
   }
-  .main-body { flex: 0 0 auto; padding-bottom: var(--page-title-gap); }
+  .main-body { flex: 1 0 auto; padding-bottom: var(--page-title-gap); }
   .site-footer {
     /* Keep one row like .side-foot so both footer tops sit on the same line */
     flex-direction: row;
@@ -4225,7 +4223,7 @@ form.settings-form > .actions.sticky-actions,
     align-items: center;
     justify-content: center;
     text-align: center;
-    margin-top: 0;
+    margin-top: auto;
     padding-top: var(--page-title-gap);
     gap: var(--space-1);
     min-height: calc(var(--page-title-gap) + 28px + var(--space-1));

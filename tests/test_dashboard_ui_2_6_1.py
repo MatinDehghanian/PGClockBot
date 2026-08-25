@@ -38,9 +38,7 @@ class PgDashboardCountsTests(unittest.TestCase):
 class FooterAndMobileTests(unittest.TestCase):
     def test_site_footer_matches_side_foot_padding(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn(".site-footer {\n  /* Sit after content", css)
-        self.assertIn("margin-top: 0;", css)
-        self.assertIn("padding-top: var(--page-title-gap);", css)
+        self.assertIn(".site-footer {\n  margin-top: auto;\n  padding-top: var(--page-title-gap);", css)
         self.assertIn(
             "padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));",
             css,

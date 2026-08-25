@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.14": [
+        "نوار سیاه موبایل — بازگشت دقیق به الگوی v8.2.8 (نسخه تأییدشده توسط کاربر): sticky footer با main-body { flex: 1 0 auto } و site-footer { margin-top: auto } — v8.5.13 اشتباهاً به v8.5.3 (بدون sticky footer) برگشته بود",
+        "هدر موبایل: ارتفاع 58px و فاصله بالا/پایین برابر (--topbar-pad-y) — بدون تغییر",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.13",
+    ],
     "8.5.13": [
         "نوار سیاه موبایل — بازگشت به لایه‌بندی v8.5.3 (قبل از تغییرات v8.5.4–8.5.12): حذف position:fixed روی shell، حذف --vvh/visualViewport/ios-safari، main-body دیگر flex-grow نمی‌کند، footer بدون margin-top:auto — همان الگویی که قبل از sidebar bottom:0 و sticky footer کار می‌کرد",
         "هدر موبایل: ارتفاع کمی بیشتر (--topbar-h 58px) و فاصله بالا/پایین محتوای هدر برابر (--topbar-pad-y)",

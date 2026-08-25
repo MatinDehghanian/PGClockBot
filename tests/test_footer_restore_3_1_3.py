@@ -50,11 +50,10 @@ class FooterRestore303Tests(unittest.TestCase):
         )
         self.assertNotIn("padding-bottom: var(--chrome-pad-bottom)", css)
 
-    def test_site_footer_after_content_not_sticky(self):
+    def test_site_footer_classic_sticky(self):
         css = CSS.read_text(encoding="utf-8")
-        self.assertIn(".site-footer {\n  /* Sit after content", css)
+        self.assertIn(".site-footer {\n  margin-top: auto;\n  padding-top: var(--page-title-gap);", css)
         foot = css.split(".site-footer {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("margin-top: 0;", foot)
         self.assertNotIn("position: fixed", foot)
         self.assertNotIn("position: sticky", foot)
 

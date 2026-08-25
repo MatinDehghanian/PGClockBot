@@ -29,17 +29,17 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertNotIn("html:has(.shell)", mobile)
         self.assertNotIn("ios-safari", mobile)
 
-    def test_mobile_main_body_does_not_flex_grow(self):
+    def test_mobile_main_body_sticky_footer_pattern(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         main_body = mobile.split("  .main-body {", 1)[1].split("  .site-footer", 1)[0]
-        self.assertIn("flex: 0 0 auto;", main_body)
+        self.assertIn("flex: 1 0 auto;", main_body)
 
-    def test_mobile_footer_sits_after_content(self):
+    def test_mobile_footer_sticky_like_v828(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         footer = mobile.split("  .site-footer {", 1)[1].split("  .footer-meta", 1)[0]
-        self.assertIn("margin-top: 0;", footer)
+        self.assertIn("margin-top: auto;", footer)
 
     def test_base_has_no_vvh_script(self):
         html = BASE.read_text(encoding="utf-8")
