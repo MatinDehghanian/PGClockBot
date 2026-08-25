@@ -399,6 +399,48 @@ def _order_actions(
     return rows
 
 
+@router.callback_query(F.data.startswith("adm:reports"))
+@require_bot_owner_handler
+async def adm_reports(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    raw = (callback.data or "adm:reports:week").split(":")
+    period = raw[-1] if len(raw) >= 3 else "week"
+    if period not in {"day", "week", "month"}:
+        period = "week"
+    await callback.answer()
+    from app.config import get_settings
+    from app.services.finance_reports import (
+        PERIOD_LABELS_FA,
+        build_finance_report,
+        format_finance_report_telegram,
+    )
+
+    report = await build_finance_report(session, reseller_id=None, period=period)
+    text = format_finance_report_telegram(
+        report, currency=get_settings().currency
+    )
+    text += "\n\n<i>جزئیات وب: /finance?tab=reports</i>"
+    rows = []
+    period_row = []
+    for key, fa in PERIOD_LABELS_FA.items():
+        mark = "✓ " if key == period else ""
+        period_row.append(
+            InlineKeyboardButton(
+                text=f"{mark}{fa}",
+                callback_data=f"adm:reports:{key}",
+            )
+        )
+    rows.append(period_row)
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
 @router.callback_query(F.data == "adm:orders")
 @require_bot_owner_handler
 async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):

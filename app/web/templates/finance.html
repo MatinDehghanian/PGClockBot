@@ -1,17 +1,21 @@
 {% extends "base.html" %}
 {% from "macros.html" import ord_status, pay_status, row_actions, page_title %}
 {% block title %}
-{%- if finance_tab == 'behavior' -%}رفتار کاربر
+{%- if finance_tab == 'reports' -%}گزارشات
+{%- elif finance_tab == 'behavior' -%}رفتار کاربر
 {%- elif finance_tab == 'payments' -%}پرداخت‌ها
 {%- elif finance_tab == 'delivery' -%}تحویل ناموفق
 {%- else -%}مدیریت مالی
 {%- endif -%}
 {% endblock %}
 {% block content %}
-{% set finance_tab = finance_tab or 'behavior' %}
+{% set finance_tab = finance_tab or 'reports' %}
 <div class="page-head">
   <div>
     {{ page_title('orders', 'مدیریت مالی') }}
+    {% if finance_tab == 'reports' %}
+    <p class="muted page-sub">گزارش فروش و کاربران · امروز · ۷ روز · ۳۰ روز</p>
+    {% endif %}
   </div>
   {% if can_finance_settings %}
   <button type="button" class="btn btn-ghost" data-modal-open="modal-finance-settings">تنظیمات</button>
@@ -20,6 +24,7 @@
 
 <nav class="section-tabs" role="tablist" aria-label="مدیریت مالی">
   {% if can_orders or can_payments %}
+  <a class="{% if finance_tab=='reports' %}active{% endif %}" href="/finance?tab=reports">گزارشات</a>
   <a class="{% if finance_tab=='behavior' %}active{% endif %}" href="/finance?tab=behavior">رفتار کاربر</a>
   {% endif %}
   {% if can_orders %}
@@ -33,7 +38,10 @@
   {% endif %}
 </nav>
 
-{% if finance_tab == 'behavior' and (can_orders or can_payments) %}
+{% if finance_tab == 'reports' and (can_orders or can_payments) %}
+{% include "_finance_reports.html" %}
+
+{% elif finance_tab == 'behavior' and (can_orders or can_payments) %}
 {% include "_funnel_panel.html" %}
 
 {% elif finance_tab == 'orders' and can_orders %}

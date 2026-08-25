@@ -462,6 +462,97 @@ a.cell-user-link:hover {
   border-bottom-color: var(--foreground);
 }
 
+/* —— Finance reports —— */
+.finance-report-periods {
+  margin-bottom: var(--section-gap);
+}
+a.home-period.finance-report-period {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+a.home-period.finance-report-period:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+a.home-period.finance-report-period.is-active {
+  border-color: color-mix(in srgb, var(--accent, #38bdf8) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent, #38bdf8) 10%, transparent);
+}
+.finance-report-panels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+  margin-bottom: var(--section-gap);
+}
+.finance-report-panels .home-panel {
+  height: auto;
+}
+.finance-report-panels .home-panel-grid > a.stat {
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.finance-report-panels .home-panel-grid > a.stat:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.finance-report-methods {
+  margin-bottom: var(--section-gap);
+}
+.finance-report-stamp {
+  margin: 0 0 var(--section-gap);
+  font-size: 12px;
+}
+html[data-theme="light"] a.home-period.finance-report-period:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+html[data-theme="light"] a.home-period.finance-report-period.is-active {
+  background: color-mix(in srgb, var(--accent, #0284c7) 8%, transparent);
+}
+html[data-theme="light"] .finance-report-panels .home-panel-grid > a.stat:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+/* Users ops + finance reports — mobile */
+@media (max-width: 720px) {
+  .users-ops-overview {
+    margin-bottom: var(--space-2);
+  }
+  .users-ops-stats {
+    display: grid;
+    grid-template-columns: 1fr !important;
+  }
+  .users-svc-select-wrap,
+  .users-svc-select,
+  .users-ops-table .users-svc-one {
+    max-width: 100%;
+  }
+  .users-ops-table .badge-inline {
+    font-size: 9px;
+    padding: 1px 5px;
+  }
+  .finance-report-panels .home-panel-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .finance-report-compare {
+    margin-bottom: var(--space-2);
+  }
+}
+@media (max-width: 560px) {
+  .page-head:has(+ .section-tabs) {
+    gap: var(--space-1);
+  }
+  .users-ops-table th.col-svc,
+  .users-ops-table td.col-svc {
+    max-width: 7.5rem;
+  }
+  .finance-report-panels .home-panel-grid {
+    grid-template-columns: 1fr;
+  }
+  .finance-report-periods {
+    margin-bottom: var(--space-2);
+  }
+}
+
 .side-foot {
   margin-top: auto;
   padding-top: var(--page-title-gap);

@@ -185,7 +185,12 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
 
     def test_finance_behavior_tab(self):
         html = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
+        self.assertIn("finance?tab=reports", html)
         self.assertIn("finance?tab=behavior", html)
+        self.assertLess(
+            html.find("finance?tab=reports"),
+            html.find("finance?tab=behavior"),
+        )
         self.assertIn("تحویل ناموفق", html)
         self.assertIn("retry-delivery", html)
         self.assertIn('_funnel_panel.html', html)

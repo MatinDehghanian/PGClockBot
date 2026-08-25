@@ -170,16 +170,22 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         can_billing_settings = staff.get("role") == "admin"
 
         tab = (request.query_params.get("tab") or "").strip()
-        if tab not in {"behavior", "orders", "payments", "delivery"}:
-            tab = "behavior" if (can_orders or can_payments) else "payments"
+        if tab not in {"reports", "behavior", "orders", "payments", "delivery"}:
+            tab = "reports" if (can_orders or can_payments) else "payments"
+        if tab == "reports" and not (can_orders or can_payments):
+            tab = "payments"
         if tab == "behavior" and not (can_orders or can_payments):
             tab = "payments"
         if tab == "orders" and not can_orders:
-            tab = "behavior" if can_payments else "payments"
+            tab = "reports" if can_payments else "payments"
         if tab == "payments" and not can_payments:
-            tab = "behavior" if can_orders else "orders"
+            tab = "reports" if can_orders else "orders"
         if tab == "delivery" and not can_orders:
-            tab = "behavior" if (can_orders or can_payments) else "payments"
+            tab = "reports" if (can_orders or can_payments) else "payments"
+
+        report_period = (request.query_params.get("period") or "week").strip().lower()
+        if report_period not in {"day", "week", "month"}:
+            report_period = "week"
 
         search_q = normalize_search_q(request.query_params.get("q"))
         open_settings = (request.query_params.get("settings") or "").strip()
@@ -225,6 +231,8 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 "receipt": 0,
                 "delivered": 0,
             },
+            "report": {},
+            "report_period": report_period,
         }
 
         if can_finance_settings:
@@ -266,7 +274,24 @@ def register_finance_pages(app, *, render, require_staff, get_db):
 
         fetch_limit = 500 if search_q else 100
 
-        if tab == "behavior" and (can_orders or can_payments):
+        if tab == "reports" and (can_orders or can_payments):
+            from app.services.db_safe import recover_session
+            from app.services.finance_reports import build_finance_report
+
+            await recover_session(session)
+            if is_platform_admin(staff):
+                rid = None
+            else:
+                rid = shop_owner_id(staff)
+                if not rid:
+                    ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
+                    return render(request, "finance.html", ctx)
+            ctx["report"] = await build_finance_report(
+                session, reseller_id=rid, period=report_period
+            )
+            ctx["report_period"] = report_period
+
+        elif tab == "behavior" and (can_orders or can_payments):
             from app.api.home_pages import _EMPTY_FUNNEL, _safe_funnel
             from app.services.db_safe import recover_session
 

@@ -1258,6 +1258,8 @@ async def _soft_admin(
     try:
         if data == "adm:orders":
             await admin_h.adm_orders(cb, session, db_user)
+        elif data.startswith("adm:reports"):
+            await admin_h.adm_reports(cb, session, db_user)
         elif data == "adm:payments":
             await admin_h.adm_payments(cb, session, db_user)
         elif data == "adm:tickets":
@@ -1798,6 +1800,7 @@ async def _soft_reseller(
         "res_dash": ("res:dash", "res_dash"),
         "res_users": ("res:users:0", "res_users"),
         "res_billing": ("res:billing", "res_billing"),
+        "res_reports": ("res:reports:week", "res_reports"),
         "res_stats": ("res:stats", "res_stats"),
         "res_orders": ("res:orders", "res_orders"),
         "res_payments": ("res:payments", "res_payments"),
@@ -1889,6 +1892,7 @@ async def reply_main_nav(
         "res_dash",
         "res_users",
         "res_billing",
+        "res_reports",
         "res_stats",
         "res_orders",
         "res_payments",
@@ -1921,6 +1925,7 @@ async def reply_main_nav(
         kb.REPLY_ACTION_ADM_HUB_SYSTEM,
         kb.REPLY_ACTION_ADMIN,
         kb.REPLY_ACTION_ADMIN_DASH,
+        kb.REPLY_ACTION_ADMIN_REPORTS,
         kb.REPLY_ACTION_ADMIN_ORDERS,
         kb.REPLY_ACTION_ADMIN_PAYMENTS,
         kb.REPLY_ACTION_ADMIN_TICKETS,
@@ -2147,6 +2152,10 @@ async def reply_main_nav(
     elif action == kb.REPLY_ACTION_ADMIN_DASH:
         await _soft_admin(
             message, session, db_user, "adm:dash", state, is_reseller_bot=is_reseller_bot
+        )
+    elif action == kb.REPLY_ACTION_ADMIN_REPORTS:
+        await _soft_admin(
+            message, session, db_user, "adm:reports:week", state, is_reseller_bot=is_reseller_bot
         )
     elif action == kb.REPLY_ACTION_ADMIN_ORDERS:
         await _soft_admin(

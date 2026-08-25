@@ -546,6 +546,63 @@ async def res_user_quick_renew(
         await callback.answer(f"خطا: {e}"[:160], show_alert=True)
 
 
+@router.callback_query(F.data.startswith("res:reports"))
+async def res_reports(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    """Shop-scoped finance report — same metrics as /finance?tab=reports."""
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    if not (
+        has_bot_perm(profile, "orders") or has_bot_perm(profile, "payments")
+    ):
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
+    raw = (callback.data or "res:reports:week").split(":")
+    period = raw[-1] if len(raw) >= 3 else "week"
+    if period not in {"day", "week", "month"}:
+        period = "week"
+    await callback.answer()
+    from app.services.finance_reports import (
+        PERIOD_LABELS_FA,
+        build_finance_report,
+        format_finance_report_telegram,
+    )
+
+    report = await build_finance_report(
+        session, reseller_id=int(owner_id), period=period
+    )
+    text = format_finance_report_telegram(
+        report, currency=get_settings().currency
+    )
+    text += "\n\n<i>جزئیات وب: /finance?tab=reports</i>"
+    rows = []
+    period_row = []
+    for key, fa in PERIOD_LABELS_FA.items():
+        mark = "✓ " if key == period else ""
+        period_row.append(
+            InlineKeyboardButton(
+                text=f"{mark}{fa}",
+                callback_data=f"res:reports:{key}",
+            )
+        )
+    rows.append(period_row)
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
 @router.callback_query(F.data == "res:stats")
 async def res_stats(
     callback: CallbackQuery,
