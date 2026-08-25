@@ -277,10 +277,8 @@ def build_manifest(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def service_worker_js() -> str:
     return """/* PGClockBot panel service worker — static shell only */
-const CACHE = 'pgclock-shell-v4';
+const CACHE = 'pgclock-shell-v5';
 const PRECACHE = [
-  '/static/fonts.css',
-  '/static/panel.css',
   '/static/logo.png',
   '/static/logo-64.png',
   '/manifest.webmanifest'
@@ -300,22 +298,41 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+function isVersionedPanelAsset(url) {
+  return url.pathname === '/static/panel.css' || url.pathname === '/static/panel.js';
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith('/static/') || url.pathname.startsWith('/pwa/')) {
+  if (!url.pathname.startsWith('/static/') && !url.pathname.startsWith('/pwa/')) return;
+
+  /* Network-first for versioned panel assets — cache-first here kept stale
+     broken CSS/JS from v8.5.4–8.5.12 fix attempts even after layout revert. */
+  if (isVersionedPanelAsset(url)) {
     event.respondWith(
-      caches.match(req).then((hit) =>
-        hit ||
-        fetch(req).then((res) => {
+      fetch(req).then((res) => {
+        if (res && res.ok) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
-          return res;
-        }).catch(() => hit)
-      )
+        }
+        return res;
+      }).catch(() => caches.match(req))
     );
+    return;
   }
+
+  event.respondWith(
+    caches.match(req).then((hit) =>
+      hit ||
+      fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy));
+        return res;
+      }).catch(() => hit)
+    )
+  );
 });
 """

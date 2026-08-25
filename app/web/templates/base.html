@@ -4,8 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="dark light" />
-  <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
-  <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#09090b" id="meta-theme-color" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -18,11 +17,24 @@
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
   <script>
   (function () {
+    var d = document.documentElement;
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    var isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+      !!window.navigator.standalone;
+    if (isIOS && !isStandalone) d.classList.add('ios-safari');
     try {
       var pref = localStorage.getItem("panel-theme") || "system";
       var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
       var theme = pref === "light" ? "light" : pref === "dark" ? "dark" : dark ? "dark" : "light";
-      document.documentElement.setAttribute("data-theme", theme);
+      d.setAttribute("data-theme", theme);
+      var meta = document.getElementById("meta-theme-color");
+      if (meta) {
+        /* Safari 26+ ignores theme-color for the tab bar — it samples fixed
+           elements at the viewport edge instead. transparent avoids forcing
+           solid black chrome; see ios-safari CSS in panel.css. */
+        meta.setAttribute("content", d.classList.contains("ios-safari") ? "transparent" : (theme === "light" ? "#fafafa" : "#09090b"));
+      }
     } catch (e) {}
   })();
   </script>

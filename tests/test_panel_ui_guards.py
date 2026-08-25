@@ -379,11 +379,10 @@ class HtmlCommentBalanceGuardTests(unittest.TestCase):
             ),
         )
 
-    def test_base_html_has_dual_theme_color_meta(self):
+    def test_base_html_has_meta_theme_color_and_ios_safari(self):
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn('meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)"', base)
-        self.assertIn('meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)"', base)
-        self.assertNotIn("meta-theme-color", base)
+        self.assertIn('id="meta-theme-color"', base)
+        self.assertIn("ios-safari", base)
         self.assertNotIn("--vvh", base)
 
 

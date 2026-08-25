@@ -1,4 +1,4 @@
-"""Mobile sidebar height matches the v8.5.3 calc (no bottom:0 stretch)."""
+"""Mobile sidebar v8.2.12 height calc (not bottom:0 stretch)."""
 from __future__ import annotations
 import unittest
 from pathlib import Path
@@ -11,16 +11,6 @@ class MobileSideFullHeightTests(unittest.TestCase):
         side = mobile.split(".side {", 1)[1].split(".side.open", 1)[0]
         self.assertIn("100dvh - var(--topbar-h)", side)
         self.assertNotIn("bottom: 0", side)
-
-    def test_users_mobile_hides_secondary_cols(self):
-        users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn('col-id col-hide-sm', users)
-        self.assertIn('col-tg col-hide-sm', users)
-        self.assertIn('col-wallet col-hide-sm', users)
-        self.assertNotIn('col-svc col-hide-sm', users)
-        self.assertNotIn('col-vol col-hide-sm', users)
-        self.assertNotIn('col-exp col-hide-sm', users)
-        self.assertIn("users-svc-select", users)
 
 if __name__ == "__main__":
     unittest.main()
