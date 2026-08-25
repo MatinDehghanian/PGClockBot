@@ -1689,6 +1689,22 @@ async def adm_users(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 USERS_PAGE_SIZE = 10
 
 
+def _deny_if_outside_platform_shop(user: BotUser | None) -> str | None:
+    """Owner admin tools are platform-shop only (reseller_id IS NULL)."""
+    if user is None:
+        return "یافت نشد"
+    if user.reseller_id is not None:
+        return "این کاربر متعلق به فروشگاه نماینده است"
+    return None
+
+
+async def _platform_shop_user(
+    session: AsyncSession, user_id: int
+) -> tuple[BotUser | None, str | None]:
+    user = await session.get(BotUser, int(user_id))
+    return user, _deny_if_outside_platform_shop(user)
+
+
 @router.callback_query(F.data.startswith("adm:users:list:"))
 @require_bot_owner_handler
 async def adm_users_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -1799,7 +1815,12 @@ async def adm_users_search(
     except ValueError:
         await message.answer("آیدی عددی معتبر بفرستید")
         return
-    result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))
+    result = await session.execute(
+        select(BotUser).where(
+            BotUser.telegram_id == tg_id,
+            BotUser.reseller_id.is_(None),
+        )
+    )
     user = result.scalar_one_or_none()
     await state.clear()
     from app.bot.tg_utils import seed_persistent_reply_kb
@@ -1807,30 +1828,11 @@ async def adm_users_search(
     await seed_persistent_reply_kb(message)
     if not user:
         await message.answer(
-            "کاربری با این آیدی یافت نشد.",
+            "کاربری با این آیدی در فروشگاه پلتفرم یافت نشد.",
             reply_markup=kb.admin_users_reply_keyboard(),
         )
         return
-    svc_count = await session.scalar(
-        select(func.count()).select_from(UserService).where(UserService.bot_user_id == user.id)
-    ) or 0
-    blocked = "بله 🚫" if user.is_blocked else "خیر"
-    text = (
-        f"👤 <b>{user.full_name or user.username or '—'}</b>\n\n"
-        f"آیدی تلگرام: <code>{user.telegram_id}</code>\n"
-        f"یوزرنیم: @{user.username or '—'}\n"
-        f"نقش: {user.role}\n"
-        f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
-        f"سرویس‌ها: {svc_count}\n"
-        f"مسدود: {blocked}"
-    )
-    ui = await get_all_settings(session)
-    await message.answer(
-        text,
-        reply_markup=kb.admin_user_actions(
-            user.id, is_blocked=user.is_blocked, role=user.role, ui=ui
-        ),
-    )
+    await _render_user_card(message, session, user)
 
 
 async def _render_user_card(
@@ -1879,6 +1881,7 @@ async def _render_user_card(
         role=user.role,
         confirm_delete=confirm_delete,
         ui=ui,
+        has_services=ops.service_count > 0,
     )
     if edit:
         try:
@@ -1897,12 +1900,9 @@ async def adm_users_message_start(
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
-    user = await session.get(BotUser, int(callback.data.split(":")[-1]))
-    if not user:
-        await callback.answer("یافت نشد", show_alert=True)
-        return
-    if user.reseller_id is not None:
-        await callback.answer("این کاربر متعلق به فروشگاه نماینده است", show_alert=True)
+    user, deny = await _platform_shop_user(session, int(callback.data.split(":")[-1]))
+    if deny:
+        await callback.answer(deny, show_alert=True)
         return
     await callback.answer()
     await state.set_state(AdminStates.user_message)
@@ -1928,10 +1928,10 @@ async def adm_users_message_send(
         return
     data = await state.get_data()
     uid = int(data.get("msg_user_id") or 0)
-    user = await session.get(BotUser, uid) if uid else None
+    user, deny = await _platform_shop_user(session, uid) if uid else (None, "یافت نشد")
     await state.clear()
-    if not user or user.reseller_id is not None:
-        await message.answer("کاربر نامعتبر.", reply_markup=kb.admin_users_reply_keyboard())
+    if deny:
+        await message.answer(deny, reply_markup=kb.admin_users_reply_keyboard())
         return
     from app.services.users_quick import send_staff_dm
 
@@ -1958,11 +1958,44 @@ async def adm_users_view(callback: CallbackQuery, session: AsyncSession, db_user
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     user = await session.get(BotUser, int(callback.data.split(":")[-1]))
-    if not user:
-        await callback.answer("یافت نشد", show_alert=True)
+    deny = _deny_if_outside_platform_shop(user)
+    if deny:
+        await callback.answer(deny, show_alert=True)
         return
     await callback.answer()
     if callback.message:
+        await _render_user_card(callback.message, session, user, edit=True)
+
+
+@router.callback_query(F.data.startswith("adm:users:renew:"))
+@require_bot_owner_handler
+async def adm_users_quick_renew(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    try:
+        uid = int((callback.data or "").rsplit(":", 1)[-1])
+    except ValueError:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    user = await session.get(BotUser, uid)
+    deny = _deny_if_outside_platform_shop(user)
+    if deny:
+        await callback.answer(deny, show_alert=True)
+        return
+    from app.services.users_quick import quick_renew_user
+
+    try:
+        _svc, label = await quick_renew_user(session, user)
+        await session.commit()
+        await callback.answer(f"تمدید شد: {label}"[:180], show_alert=True)
+    except ValueError as e:
+        await callback.answer(str(e)[:160], show_alert=True)
+    except Exception as e:
+        await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+    if callback.message and user:
         await _render_user_card(callback.message, session, user, edit=True)
 
 
@@ -1976,8 +2009,9 @@ async def adm_users_wallet_credit_ask(
         return
     user_id = int(callback.data.split(":")[-1])
     user = await session.get(BotUser, user_id)
-    if not user:
-        await callback.answer("یافت نشد", show_alert=True)
+    deny = _deny_if_outside_platform_shop(user)
+    if deny:
+        await callback.answer(deny, show_alert=True)
         return
     await state.set_state(AdminStates.user_wallet_credit)
     await state.update_data(admin_credit_user_id=user_id)
@@ -2000,10 +2034,10 @@ async def adm_users_wallet_credit_save(
         return
     data = await state.get_data()
     user_id = int(data.get("admin_credit_user_id") or 0)
-    user = await session.get(BotUser, user_id) if user_id else None
-    if not user:
+    user, deny = await _platform_shop_user(session, user_id) if user_id else (None, "یافت نشد")
+    if deny:
         await state.clear()
-        await message.answer("کاربر یافت نشد")
+        await message.answer(deny)
         return
     amount = parse_bot_int(message.text or "")
     if amount is None or amount < 1000:
@@ -2041,6 +2075,10 @@ async def adm_users_services(
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     user_id = int(callback.data.split(":")[-1])
+    _user, deny = await _platform_shop_user(session, user_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
+        return
     from app.services.bot_user_admin import list_service_snapshots, snapshot_telegram_lines
 
     snaps = await list_service_snapshots(session, user_id)
@@ -2087,6 +2125,10 @@ async def adm_users_service_one(
     parts = callback.data.split(":")
     user_id = int(parts[3])
     service_id = int(parts[4])
+    _user, deny = await _platform_shop_user(session, user_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
+        return
     from app.services.bot_user_admin import get_owned_service, service_snapshot, snapshot_telegram_lines
 
     try:
@@ -2118,6 +2160,10 @@ async def adm_users_service_link(
     parts = callback.data.split(":")
     user_id = int(parts[3])
     service_id = int(parts[4])
+    _user, deny = await _platform_shop_user(session, user_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
+        return
     from app.services.bot_user_admin import get_owned_service, service_snapshot
 
     try:
@@ -2151,6 +2197,10 @@ async def adm_users_service_renew(
     parts = callback.data.split(":")
     user_id = int(parts[3])
     service_id = int(parts[4])
+    _user, deny = await _platform_shop_user(session, user_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
+        return
     from app.services.bot_user_admin import (
         admin_renew_service,
         get_owned_service,
@@ -2195,6 +2245,10 @@ async def adm_users_service_extend(
     # adm:users:svcext:{uid}:{sid}:d30|g10
     user_id = int(parts[3])
     service_id = int(parts[4])
+    _user, deny = await _platform_shop_user(session, user_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
+        return
     token = parts[5] if len(parts) > 5 else ""
     extra_days = 0
     extra_gb = 0.0
@@ -2241,9 +2295,9 @@ async def adm_users_block(
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     user_id = int(callback.data.split(":")[-1])
-    user = await session.get(BotUser, user_id)
-    if not user:
-        await callback.answer("یافت نشد", show_alert=True)
+    user, deny = await _platform_shop_user(session, user_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
         return
     from app.services.users import is_protected_admin
 
@@ -2298,10 +2352,10 @@ async def adm_users_block_reason(
     if len(reason) < 3:
         await message.answer("علت خیلی کوتاه است — حداقل ۳ کاراکتر.")
         return
-    user = await session.get(BotUser, user_id)
-    if not user:
+    user, deny = await _platform_shop_user(session, user_id) if user_id else (None, "یافت نشد")
+    if deny:
         await state.clear()
-        await message.answer("کاربر یافت نشد.")
+        await message.answer(deny)
         return
     from app.services.notifications import notify_account_edit
     from app.services.users import is_protected_admin
@@ -2330,9 +2384,9 @@ async def adm_users_delask(callback: CallbackQuery, session: AsyncSession, db_us
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
-    user = await session.get(BotUser, int(callback.data.split(":")[-1]))
-    if not user:
-        await callback.answer("یافت نشد", show_alert=True)
+    user, deny = await _platform_shop_user(session, int(callback.data.split(":")[-1]))
+    if deny:
+        await callback.answer(deny, show_alert=True)
         return
     from app.services.users import is_protected_admin
 
@@ -2356,9 +2410,9 @@ async def adm_users_delete(callback: CallbackQuery, session: AsyncSession, db_us
     from app.services.notifications import notify_account_edit
     from app.services.users import delete_bot_user
 
-    user = await session.get(BotUser, user_id)
-    if not user:
-        await callback.answer("یافت نشد", show_alert=True)
+    user, deny = await _platform_shop_user(session, user_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
         return
     await notify_account_edit(
         session,
@@ -2396,9 +2450,9 @@ async def adm_users_unreseller_ask(
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     user_id = int(callback.data.split(":")[-1])
-    user = await session.get(BotUser, user_id)
-    if not user:
-        await callback.answer("یافت نشد", show_alert=True)
+    user, deny = await _platform_shop_user(session, user_id)
+    if deny:
+        await callback.answer(deny, show_alert=True)
         return
     from app.services.resellers import get_reseller_profile
 
@@ -2437,6 +2491,10 @@ async def adm_users_unreseller_reason(
     await state.clear()
     if not user_id:
         await message.answer("نشست منقضی شد. دوباره از کارت کاربر اقدام کنید.")
+        return
+    _user, deny = await _platform_shop_user(session, user_id)
+    if deny:
+        await message.answer(deny, reply_markup=kb.admin_users_reply_keyboard())
         return
 
     from app.services.resellers import notify_reseller_revoked, revoke_reseller

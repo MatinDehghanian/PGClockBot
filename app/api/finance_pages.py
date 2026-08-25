@@ -296,7 +296,13 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             from app.services.db_safe import recover_session
 
             await recover_session(session)
-            rid = None if is_platform_admin(staff) else shop_owner_id(staff)
+            if is_platform_admin(staff):
+                rid = None
+            else:
+                rid = shop_owner_id(staff)
+                if not rid:
+                    ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
+                    return render(request, "finance.html", ctx)
             ctx["funnel"] = await _safe_funnel(session, reseller_id=rid) or dict(
                 _EMPTY_FUNNEL
             )

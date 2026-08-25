@@ -88,13 +88,15 @@ class UserEditUiTests(unittest.TestCase):
         self.assertIn(".form-field.is-invalid", css)
         self.assertIn(".field-error", css)
 
-    def test_users_list_risk_dot_and_search_pad(self):
+    def test_users_list_risk_tag_and_search_pad(self):
         users = Path("app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn("risk-dot", users)
+        self.assertIn("badge-risk", users)
         self.assertIn("u.risk_flags", users)
         self.assertIn("cell-name", users)
+        self.assertNotIn("risk-dot", users)
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn(".risk-dot", css)
+        self.assertIn(".badge.badge-risk", css)
+        self.assertNotIn(".risk-dot {", css)
         self.assertIn(".card.card-flush > .search-bar:first-child", css)
         self.assertIn("padding-top: var(--card-pad)", css)
 

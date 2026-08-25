@@ -89,6 +89,9 @@ class FinanceReportsUiTests(unittest.TestCase):
         self.assertIn("/users?filter=expiring", partial)
         self.assertIn("/users?filter=low_volume", partial)
         self.assertIn("روش پرداخت", partial)
+        # Period compare cards are the selector — no duplicate section-tabs
+        self.assertNotIn("finance-report-periods", partial)
+        self.assertNotIn('role="tablist" aria-label="بازه گزارش"', partial)
 
     def test_finance_pages_default_and_scope(self):
         pages = (ROOT / "app/api/finance_pages.py").read_text(encoding="utf-8")
@@ -96,12 +99,19 @@ class FinanceReportsUiTests(unittest.TestCase):
         self.assertIn("build_finance_report", pages)
         self.assertIn("shop_owner_id", pages)
         self.assertIn('tab = "reports"', pages)
+        # behavior + reports fail-closed when non-platform staff lack shop_owner_id
+        self.assertGreaterEqual(pages.count('محدوده فروشگاه مشخص نیست'), 2)
+        self.assertIn('tab == "behavior"', pages)
 
     def test_mobile_css(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn("finance-report-panels", css)
         self.assertIn(".users-ops-stats", css)
         self.assertIn("grid-template-columns: 1fr !important", css)
+        self.assertNotIn(".finance-report-periods", css)
+        self.assertIn(".users-svc-picker-menu.is-ported", css)
+        self.assertIn("--menu-radius", css.split(".users-svc-picker-menu", 1)[1].split(".users-svc-option", 1)[0])
+        self.assertIn("--control-radius", css.split(".users-svc-picker-toggle", 1)[1].split(".users-svc-picker-label", 1)[0])
 
     def test_bot_hooks(self):
         kb = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
@@ -127,11 +137,11 @@ class FinanceReportsUiTests(unittest.TestCase):
         from app.version import __version__
 
         parts = [int(x) for x in __version__.split(".")[:3]]
-        self.assertGreaterEqual(parts, [8, 5, 0])
+        self.assertGreaterEqual(parts, [8, 5, 1])
         self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"8.5.0"', notes)
-        self.assertTrue((ROOT / "docs/RELEASE_NOTES_v8.5.0.md").is_file())
+        self.assertIn('"8.5.1"', notes)
+        self.assertTrue((ROOT / "docs/RELEASE_NOTES_v8.5.1.md").is_file())
 
 
 if __name__ == "__main__":

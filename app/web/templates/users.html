@@ -105,26 +105,42 @@
               {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
             </span>
             {% if row.has_alert %}<span class="alert-dot" title="اعلان فعال" aria-label="اعلان فعال"></span>{% endif %}
-            {% if u.risk_flags %}<span class="risk-dot" title="ریسک" aria-label="کاربر پرریسک"></span>{% endif %}
+            {% if u.risk_flags %}<span class="badge badge-risk badge-inline" title="پرچم ریسک فعال">ریسک</span>{% endif %}
           </span>
         </td>
         <td class="col-svc" data-sort-value="{{ row.service_count }}">
           {% if row.service_count == 0 %}
           <span class="muted">—</span>
           {% elif row.service_count == 1 %}
-          <span class="users-svc-one" title="{{ row.services[0].label }}">{{ row.services[0].label }}</span>
+          <span class="users-svc-one" title="{{ row.services[0].label }}">
+            <span class="users-svc-one-text">{{ row.services[0].label }}</span>
+            {% if row.services[0].has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
+          </span>
           {% else %}
-          <label class="users-svc-select-wrap">
-            <span class="sr-only">سرویس‌های کاربر</span>
-            <select class="select-sm users-svc-select" data-uid="{{ u.id }}" aria-label="سرویس‌های کاربر">
+          <div class="users-svc-picker" data-uid="{{ u.id }}">
+            <button type="button" class="users-svc-picker-toggle" aria-haspopup="listbox" aria-expanded="false" aria-label="سرویس‌های کاربر">
+              <span class="users-svc-picker-label">{{ row.services[0].label }}</span>
+              {% if row.services[0].has_alert %}<span class="alert-dot" aria-hidden="true"></span>{% endif %}
+              <svg class="users-svc-picker-caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+            </button>
+            <div class="users-svc-picker-menu" role="listbox" hidden>
               {% for s in row.services %}
-              <option value="{{ s.id }}"
-                      data-volume="{{ s.volume_text }}"
-                      data-expire="{{ s.expire_text }}"
-                      {% if loop.first %}selected{% endif %}>{{ s.label }}</option>
+              <button type="button"
+                      class="users-svc-option{% if loop.first %} is-active{% endif %}"
+                      role="option"
+                      data-sid="{{ s.id }}"
+                      data-label="{{ s.label | e }}"
+                      data-volume="{{ s.volume_text | e }}"
+                      data-expire="{{ s.expire_text | e }}"
+                      data-days="{{ s.days_left if s.days_left is not none else 9999 }}"
+                      data-alert="{{ '1' if s.has_alert else '0' }}"
+                      aria-selected="{{ 'true' if loop.first else 'false' }}">
+                <span class="users-svc-option-text">{{ s.label }}</span>
+                {% if s.has_alert %}<span class="alert-dot" title="اعلان" aria-label="اعلان"></span>{% endif %}
+              </button>
               {% endfor %}
-            </select>
-          </label>
+            </div>
+          </div>
           {% endif %}
         </td>
         <td class="col-hide-sm users-vol-cell" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
@@ -158,7 +174,7 @@
             {% endif %}
             {% if manage %}
             <button type="button" class="btn btn-ghost btn-sm"
-                    data-modal-open="modal-user-edit"
+                    data-user-edit-open
                     data-edit-url="/users/{{ u.id }}/edit?fragment=1"
                     data-edit-title="ویرایش کاربر #{{ u.id }}">ویرایش</button>
             <form method="post" action="/users/{{ u.id }}/block"
@@ -266,18 +282,139 @@
 {% block page_scripts %}
 <script>
 (function(){
-  document.querySelectorAll('.users-svc-select').forEach(function(sel){
-    sel.addEventListener('change', function(){
-      var opt = sel.options[sel.selectedIndex];
-      if (!opt) return;
-      var tr = sel.closest('tr');
-      if (!tr) return;
-      var vol = tr.querySelector('.users-vol-cell');
-      var exp = tr.querySelector('.users-exp-cell');
-      if (vol) vol.textContent = opt.getAttribute('data-volume') || '—';
-      if (exp) exp.textContent = opt.getAttribute('data-expire') || '—';
+  var PICKER_GAP = 8;
+
+  function restorePickerMenu(picker, menu){
+    if (!picker || !menu) return;
+    menu.classList.remove('is-ported');
+    menu.hidden = true;
+    ['top', 'left', 'right', 'bottom', 'width', 'minWidth', 'maxWidth', 'maxHeight', 'position', 'zIndex'].forEach(function(p){
+      menu.style[p] = '';
+    });
+    if (menu.parentNode !== picker) picker.appendChild(menu);
+  }
+
+  function placePickerMenu(picker, menu, toggle){
+    if (!picker || !menu || !toggle) return;
+    var rect = toggle.getBoundingClientRect();
+    if (menu.parentNode !== document.body) document.body.appendChild(menu);
+    menu.classList.add('is-ported');
+    menu.hidden = false;
+    var width = Math.max(rect.width, 140);
+    var maxW = Math.min(256, window.innerWidth - 16);
+    if (width > maxW) width = maxW;
+    menu.style.position = 'fixed';
+    menu.style.zIndex = '3400';
+    menu.style.width = width + 'px';
+    menu.style.minWidth = width + 'px';
+    menu.style.left = 'auto';
+    menu.style.right = Math.max(8, window.innerWidth - rect.right) + 'px';
+    var spaceBelow = window.innerHeight - rect.bottom - PICKER_GAP - 8;
+    var spaceAbove = rect.top - PICKER_GAP - 8;
+    var need = Math.min(menu.scrollHeight || 180, Math.min(224, window.innerHeight * 0.4));
+    if (spaceBelow < need && spaceAbove > spaceBelow) {
+      menu.style.top = 'auto';
+      menu.style.bottom = (window.innerHeight - rect.top + PICKER_GAP) + 'px';
+      menu.style.maxHeight = Math.max(120, spaceAbove) + 'px';
+    } else {
+      menu.style.bottom = 'auto';
+      menu.style.top = (rect.bottom + PICKER_GAP) + 'px';
+      menu.style.maxHeight = Math.max(120, spaceBelow) + 'px';
+    }
+  }
+
+  function closeAllSvcPickers(){
+    document.querySelectorAll('.users-svc-picker.is-open').forEach(function(p){
+      p.classList.remove('is-open');
+      var menu = p._svcMenu || document.querySelector('.users-svc-picker-menu.is-ported[data-owner="' + (p.dataset.ra || '') + '"]') || p.querySelector('.users-svc-picker-menu');
+      var toggle = p.querySelector('.users-svc-picker-toggle');
+      if (menu) restorePickerMenu(p, menu);
+      if (toggle) toggle.setAttribute('aria-expanded', 'false');
+    });
+    document.querySelectorAll('.users-svc-picker-menu.is-ported').forEach(function(menu){
+      var ownerId = menu.getAttribute('data-owner');
+      var picker = ownerId ? document.querySelector('.users-svc-picker[data-ra="' + ownerId + '"]') : null;
+      if (picker) restorePickerMenu(picker, menu);
+      else {
+        menu.classList.remove('is-ported');
+        menu.hidden = true;
+      }
+    });
+  }
+
+  document.querySelectorAll('.users-svc-picker').forEach(function(picker, idx){
+    var toggle = picker.querySelector('.users-svc-picker-toggle');
+    var menu = picker.querySelector('.users-svc-picker-menu');
+    var labelEl = picker.querySelector('.users-svc-picker-label');
+    if (!toggle || !menu) return;
+    var rid = 'usp-' + idx + '-' + Math.random().toString(36).slice(2, 7);
+    picker.dataset.ra = rid;
+    menu.setAttribute('data-owner', rid);
+    picker._svcMenu = menu;
+
+    toggle.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      var open = picker.classList.contains('is-open');
+      closeAllSvcPickers();
+      if (!open) {
+        picker.classList.add('is-open');
+        toggle.setAttribute('aria-expanded', 'true');
+        placePickerMenu(picker, menu, toggle);
+      }
+    });
+
+    menu.querySelectorAll('.users-svc-option').forEach(function(opt){
+      opt.addEventListener('click', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        menu.querySelectorAll('.users-svc-option').forEach(function(o){
+          o.classList.remove('is-active');
+          o.setAttribute('aria-selected', 'false');
+        });
+        opt.classList.add('is-active');
+        opt.setAttribute('aria-selected', 'true');
+        if (labelEl) labelEl.textContent = opt.getAttribute('data-label') || opt.textContent.trim();
+        var toggleDot = toggle.querySelector('.alert-dot');
+        if (opt.getAttribute('data-alert') === '1') {
+          if (!toggleDot) {
+            toggleDot = document.createElement('span');
+            toggleDot.className = 'alert-dot';
+            toggleDot.setAttribute('aria-hidden', 'true');
+            var caret = toggle.querySelector('.users-svc-picker-caret');
+            if (caret) toggle.insertBefore(toggleDot, caret);
+            else toggle.appendChild(toggleDot);
+          }
+        } else if (toggleDot) {
+          toggleDot.remove();
+        }
+        var tr = picker.closest('tr');
+        if (tr) {
+          var vol = tr.querySelector('.users-vol-cell');
+          var exp = tr.querySelector('.users-exp-cell');
+          var volText = opt.getAttribute('data-volume') || '—';
+          var expText = opt.getAttribute('data-expire') || '—';
+          var days = opt.getAttribute('data-days') || '9999';
+          if (vol) {
+            vol.textContent = volText;
+            vol.setAttribute('data-sort-value', volText);
+          }
+          if (exp) {
+            exp.textContent = expText;
+            exp.setAttribute('data-sort-value', days);
+          }
+        }
+        closeAllSvcPickers();
+      });
     });
   });
+
+  document.addEventListener('click', function(){ closeAllSvcPickers(); });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') closeAllSvcPickers();
+  });
+  window.addEventListener('resize', function(){ closeAllSvcPickers(); });
+  window.addEventListener('scroll', function(){ closeAllSvcPickers(); }, true);
 
   var focus = document.querySelector('tr.users-row.is-focus');
   if (focus && typeof focus.scrollIntoView === 'function') {
@@ -302,44 +439,62 @@
   }
 
   {% if manage %}
-  const body = document.getElementById('user-edit-body');
-  const titleEl = document.getElementById('user-edit-title');
-  if (!body) return;
+  (function(){
+    var body = document.getElementById('user-edit-body');
+    var titleEl = document.getElementById('user-edit-title');
+    if (!body) return;
 
-  async function loadEdit(url, title){
-    body.innerHTML = '<p class="muted">در حال بارگذاری…</p>';
-    if (titleEl && title) titleEl.textContent = title;
-    try {
-      const resp = await fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'text/html' } });
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      body.innerHTML = await resp.text();
-      if (typeof window.enhanceAllSelects === 'function') window.enhanceAllSelects(body);
-      document.dispatchEvent(new CustomEvent('panel:dom-ready', { detail: { root: body } }));
-    } catch (e) {
-      body.innerHTML = '<div class="flash err">بارگذاری ویرایش ناموفق بود.</div>';
+    async function loadEdit(url, title){
+      body.innerHTML = '<p class="muted">در حال بارگذاری…</p>';
+      if (titleEl && title) titleEl.textContent = title;
+      try {
+        var resp = await fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'text/html' } });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        body.innerHTML = await resp.text();
+        if (typeof window.enhanceAllSelects === 'function') window.enhanceAllSelects(body);
+        document.dispatchEvent(new CustomEvent('panel:dom-ready', { detail: { root: body } }));
+      } catch (err) {
+        body.innerHTML = '<div class="flash err">بارگذاری ویرایش ناموفق بود.</div>';
+      }
     }
-  }
 
-  document.addEventListener('click', function(e){
-    const btn = e.target.closest('[data-modal-open="modal-user-edit"][data-edit-url]');
-    if (!btn) return;
-    loadEdit(btn.getAttribute('data-edit-url'), btn.getAttribute('data-edit-title') || 'ویرایش کاربر');
-  });
-
-  const openId = {{ (open_edit or '')|tojson }};
-  const flashOk = {{ (flash_ok or '')|tojson }};
-  const flashErr = {{ (flash_err or '')|tojson }};
-  if (openId) {
-    let url = '/users/' + openId + '/edit?fragment=1';
-    if (flashOk) url += '&ok=' + encodeURIComponent(flashOk);
-    if (flashErr) url += '&err=' + encodeURIComponent(flashErr);
-    const open = function(){
+    function openUserEdit(btn){
+      if (!btn) return;
+      var url = btn.getAttribute('data-edit-url');
+      if (!url) return;
+      var title = btn.getAttribute('data-edit-title') || 'ویرایش کاربر';
+      closeAllSvcPickers();
       if (window.openModal) window.openModal('modal-user-edit');
-      loadEdit(url, 'ویرایش کاربر #' + openId);
-    };
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', open);
-    else setTimeout(open, 0);
-  }
+      loadEdit(url, title);
+      setTimeout(function(){
+        var openToggle = document.querySelector('.row-actions.open .row-actions-toggle');
+        if (openToggle) openToggle.click();
+      }, 0);
+    }
+
+    document.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-user-edit-open][data-edit-url]');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openUserEdit(btn);
+    });
+
+    var openId = {{ (open_edit or '')|tojson }};
+    var flashOk = {{ (flash_ok or '')|tojson }};
+    var flashErr = {{ (flash_err or '')|tojson }};
+    if (openId) {
+      var url = '/users/' + openId + '/edit?fragment=1';
+      if (flashOk) url += '&ok=' + encodeURIComponent(flashOk);
+      if (flashErr) url += '&err=' + encodeURIComponent(flashErr);
+      var open = function(){
+        if (window.openModal) window.openModal('modal-user-edit');
+        loadEdit(url, 'ویرایش کاربر #' + openId);
+      };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', open);
+      else setTimeout(open, 0);
+    }
+  })();
   {% endif %}
 })();
 </script>

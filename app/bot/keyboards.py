@@ -2627,6 +2627,7 @@ def admin_user_actions(
     role: str | None = None,
     confirm_delete: bool = False,
     ui: dict | None = None,
+    has_services: bool = False,
 ) -> InlineKeyboardMarkup:
     block_label = "🔓 رفع مسدودی" if is_blocked else "🚫 مسدود کردن"
     rows: list[list[InlineKeyboardButton]] = [
@@ -2645,6 +2646,16 @@ def admin_user_actions(
             InlineKeyboardButton(text=block_label, callback_data=f"adm:users:block:{user_id}"),
         ],
     ]
+    if has_services:
+        rows.insert(
+            1,
+            [
+                InlineKeyboardButton(
+                    text="🔄 تمدید سریع",
+                    callback_data=f"adm:users:renew:{user_id}",
+                )
+            ],
+        )
     if role == "reseller":
         rows.append(
             [
