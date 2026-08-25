@@ -4175,39 +4175,42 @@ form.settings-form > .actions.sticky-actions,
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
-  /* Body must never scroll on panel pages — .main owns vertical scroll.
-     position:fixed (not height:100%) is required on iOS/PWA so the page
-     cannot rubber-band and expose a body strip under the shell. */
+  /* Lock page scroll — .main owns vertical scroll. Do NOT position:fixed html/body
+     or use -webkit-fill-available here: on iOS that shrinks the layout box and
+     leaves a dead black strip under the shell even when shell uses inset:0. */
   html:has(.shell),
   html:has(.shell) body {
-    position: fixed;
-    inset: 0;
+    margin: 0;
     width: 100%;
-    height: 100%;
-    height: -webkit-fill-available;
+    height: var(--vvh, 100dvh);
+    max-height: var(--vvh, 100dvh);
     overflow: hidden;
     overscroll-behavior: none;
     background: var(--background);
   }
 
   .shell {
-    /* Pin to the physical viewport — immune to dvh/--vvh first-paint drift. */
+    /* Explicit --vvh height (set synchronously in <head>) — NOT inset:0/height:auto,
+       which on iOS can paint shorter than the physical screen. */
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: var(--vvh, 100dvh);
+    max-height: var(--vvh, 100dvh);
+    min-height: var(--vvh, 100dvh);
     display: flex;
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
-    height: auto;
-    min-height: 0;
-    max-height: none;
     overflow: hidden;
     background: var(--background);
-    /* Reserve space for fixed mobile topbar + home-indicator safe area */
+    /* Topbar reserve only — background extends through home-indicator safe area */
     padding-top: calc(var(--topbar-h) + var(--safe-top));
-    padding-bottom: var(--safe-bottom);
     padding-left: var(--safe-left);
     padding-right: var(--safe-right);
+    padding-bottom: 0;
   }
 
   .topbar { display: flex; }
@@ -4250,7 +4253,7 @@ form.settings-form > .actions.sticky-actions,
     min-height: 0;
     min-width: 0;
     width: 100%;
-    padding: var(--page-title-gap) var(--space-2) var(--page-title-gap);
+    padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: contain;

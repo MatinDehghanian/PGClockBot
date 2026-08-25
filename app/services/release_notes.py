@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.10": [
+        "نوار سیاه موبایل (iOS/Safari/PWA): position:fixed + inset:0 و -webkit-fill-available روی html/body باعث می‌شد shell کوتاه‌تر از صفحه رندر شود — حذف شد؛ shell حالا height: var(--vvh) صریح دارد و --vvh از innerHeight + clientHeight + visualViewport اندازه‌گیری می‌شود تا کل viewport پوشش داده شود",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.9",
+    ],
     "8.5.9": [
         "نوار سیاه موبایل — رفع واقعی: علت اصلی height:100% و max-height:--vvh دسکتاپ بود که روی موبایل override نمی‌شد و .main از shell بزرگ‌تر می‌شد؛ nudge/resample اسکرول (علت لرزش هنگام ورود) حذف شد؛ html/body با position:fixed قفل شد و safe-bottom به padding-bottom شل منتقل شد",
         "بدون مایگریشن؛ ریستور: تگ v8.5.8",

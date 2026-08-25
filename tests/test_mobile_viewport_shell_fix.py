@@ -14,23 +14,25 @@ JS = ROOT / "app/web/static/panel.js"
 
 
 class MobileViewportShellFixTests(unittest.TestCase):
-    def test_mobile_shell_is_fixed_inset(self):
+    def test_mobile_shell_uses_explicit_vvh_height(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
         self.assertIn("position: fixed;", shell)
-        self.assertIn("inset: 0;", shell)
-        self.assertIn("padding-bottom: var(--safe-bottom)", shell)
-        self.assertIn("height: auto;", shell)
-        self.assertNotRegex(shell, r"(?m)^\s*height:\s*var\(--vvh")
+        self.assertIn("height: var(--vvh, 100dvh);", shell)
+        self.assertIn("min-height: var(--vvh, 100dvh);", shell)
+        self.assertNotIn("inset: 0;", shell)
+        self.assertNotIn("height: auto;", shell)
+        self.assertIn("padding-bottom: 0;", shell)
 
-    def test_mobile_body_is_fixed_inset(self):
+    def test_mobile_body_uses_vvh_not_fixed_fill_available(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         block = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
-        self.assertIn("position: fixed;", block)
-        self.assertIn("inset: 0;", block)
+        self.assertIn("height: var(--vvh, 100dvh);", block)
         self.assertIn("overflow: hidden;", block)
+        self.assertNotIn("position: fixed;", block)
+        self.assertNotIn("-webkit-fill-available", block)
 
     def test_mobile_main_drops_desktop_height_chain(self):
         css = CSS.read_text(encoding="utf-8")
@@ -41,15 +43,12 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertIn("flex: 1 1 0;", main)
         self.assertNotRegex(main, r"max-height:\s*var\(--vvh")
 
-    def test_vvh_prefers_inner_height_not_visual_viewport(self):
+    def test_vvh_covers_layout_viewport_on_ios(self):
         html = BASE.read_text(encoding="utf-8")
         block = html.split("function setVVH()", 1)[1].split("setVVH();", 1)[0]
         self.assertIn("window.innerHeight", block)
-        self.assertNotRegex(
-            block,
-            r"visualViewport\.height\s*\)\s*\|\|\s*window\.innerHeight",
-            msg="visualViewport must not take precedence over innerHeight",
-        )
+        self.assertIn("clientHeight", block)
+        self.assertIn("visualViewport", block)
         self.assertIn("window.__pgSetVVH = setVVH", html)
 
     def test_no_scroll_nudge_on_load(self):

@@ -34,11 +34,12 @@ class FooterRestore303Tests(unittest.TestCase):
             "padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));",
             css,
         )
-        # Mobile safe-bottom lives on .shell padding; .main uses symmetric page pad
+        # Mobile safe-bottom on .main pad; .shell paints through home-indicator area
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) var(--page-title-gap);",
+            "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));",
             css.split("@media (max-width: 900px)", 1)[1],
         )
+        self.assertIn("padding-bottom: 0;", css.split("@media (max-width: 900px)", 1)[1].split(".shell {", 1)[1])
 
     def test_side_scrolls_as_a_column(self):
         css = CSS.read_text(encoding="utf-8")
