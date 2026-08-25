@@ -9,12 +9,6 @@
 {% set period = report_period or report.period or 'week' %}
 {% set methods = report.payment_methods or [] %}
 
-<nav class="section-tabs finance-report-periods" role="tablist" aria-label="بازه گزارش">
-  <a class="{% if period=='day' %}active{% endif %}" href="/finance?tab=reports&period=day">امروز</a>
-  <a class="{% if period=='week' %}active{% endif %}" href="/finance?tab=reports&period=week">۷ روز</a>
-  <a class="{% if period=='month' %}active{% endif %}" href="/finance?tab=reports&period=month">۳۰ روز</a>
-</nav>
-
 <section class="card home-periods-card finance-report-compare" aria-label="مقایسه بازه‌ها">
   <header class="home-periods-head">
     <h2>مقایسه فروش</h2>

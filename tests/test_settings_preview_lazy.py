@@ -25,6 +25,10 @@ class LazyPreviewMarkupTests(unittest.TestCase):
             self.assertIn("data-tg-preview-close", html)
             self.assertIn('data-tg-preview-panel hidden', html)
             self.assertIn("tg-preview-gate", html)
+            self.assertIn("tg-preview-card", html)
+            # Open/close swap inside the same card — gate is not a separate card
+            self.assertNotIn("card settings-card tg-preview-gate", html)
+            self.assertIn("tg-preview-close-btn", html)
 
     def test_layouts_start_without_has_preview(self):
         for path in (SETTINGS, SHOP):
@@ -64,6 +68,9 @@ class LazyPreviewCssTests(unittest.TestCase):
         self.assertIn("position: sticky;", block)
         self.assertIn(".tg-preview-gate", css)
         self.assertIn(".tg-preview-toolbar", css)
+        self.assertIn(".tg-preview-close-btn", css)
+        # Close control stretches full width (esp. mobile)
+        self.assertIn("width: 100%", css.split(".tg-preview-toolbar", 1)[1].split(".tg-preview-wrap", 1)[0])
 
 
 if __name__ == "__main__":
