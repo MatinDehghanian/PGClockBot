@@ -341,5 +341,53 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
             self.assertNotRegex(cleaned, r'btn-ghost[^>]*>\s*حذف\s*<')
 
 
+class HtmlCommentBalanceGuardTests(unittest.TestCase):
+    """An HTML comment closed the wrong way (e.g. a leftover JS-style `*/`
+    instead of `-->`) makes the browser swallow the *entire rest of the
+    document* into one giant unterminated comment — base.html alone breaking
+    this way once meant every page in the panel silently rendered empty.
+    Guard every template against ever regressing that class of bug again."""
+
+    def _find_unterminated(self, text: str) -> list[int]:
+        unterminated = []
+        idx = 0
+        while True:
+            start = text.find("<!--", idx)
+            if start == -1:
+                break
+            end = text.find("-->", start + 4)
+            if end == -1:
+                unterminated.append(start)
+                break
+            idx = end + 3
+        return unterminated
+
+    def test_no_unterminated_html_comments_in_any_template(self):
+        templates_dir = ROOT / "app/web/templates"
+        offenders = []
+        for path in sorted(templates_dir.rglob("*.html")):
+            text = path.read_text(encoding="utf-8")
+            for start in self._find_unterminated(text):
+                line_no = text.count("\n", 0, start) + 1
+                offenders.append(f"{path.relative_to(ROOT)}:{line_no}")
+        self.assertEqual(
+            offenders,
+            [],
+            msg=(
+                "Unterminated HTML comment(s) (missing '-->') would swallow "
+                f"the rest of the document as plain comment text: {offenders}"
+            ),
+        )
+
+    def test_base_html_theme_color_comment_closes_with_html_syntax(self):
+        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
+        self.assertIn("<!--", base)
+        # Regression guard for the exact typo that caused this: a `*/`
+        # (JS/CSS comment close) instead of `-->` right before the
+        # meta-theme-color tag.
+        self.assertNotIn("theme menu. */", base)
+        self.assertIn("theme menu. -->", base)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -82,11 +82,59 @@
       }, true);
     })();
 
-    /* The mobile black-bar-under-footer glitch (stale dvh on first paint) is
-       fixed at the source now: an inline <head> script in base.html measures
-       window.innerHeight synchronously (before first layout) into --vvh,
-       which .shell/.main/.side consume instead of dvh. Nothing to nudge
-       here anymore — see base.html for the real fix. */
+    /* Mobile black-bar glitch: the inline <head> script in base.html already
+       measures window.innerHeight synchronously into --vvh (before first
+       paint) and re-samples it on load/resize/visibility events, so .shell
+       itself is never mis-sized. What's left is OS-level: on an *installed*
+       (standalone) PWA, Android's gesture-navigation bar can briefly paint
+       its own default color before Chrome finishes applying the page's
+       theme-color to the system chrome — and, having no browser toolbar to
+       collapse, none of the viewport-resize events above ever fire for it.
+       The user's own report is the tell: it clears the instant they scroll.
+       A real (not synthetic) scroll is what nudges Chrome to re-sample —
+       dispatching a fake `resize` Event, as an earlier patch did, changes
+       nothing Chrome itself observes. So do that one real scroll ourselves,
+       on every one of .main/.side (whichever actually has overflow) plus
+       the window, immediately after first paint — imperceptible to the
+       user, but it's the same trigger that fixes it for them manually. */
+    (function () {
+      function nudge(el) {
+        if (!el) return;
+        var max = el === window
+          ? Math.max(0, (document.documentElement.scrollHeight || 0) - window.innerHeight)
+          : Math.max(0, el.scrollHeight - el.clientHeight);
+        if (max <= 0) return;
+        var get = () => (el === window ? window.scrollY : el.scrollTop);
+        var set = (v) => { if (el === window) window.scrollTo(0, v); else el.scrollTop = v; };
+        var before = get();
+        set(before + 2);
+        requestAnimationFrame(() => set(before));
+      }
+      function nudgeAll() {
+        nudge(window);
+        nudge(document.querySelector('.main'));
+        nudge(document.querySelector('.side'));
+      }
+      /* One nudge is not always enough — the OS chrome repaint this is working
+         around can itself still be mid-flight a frame or two after our own
+         first paint. Repeat over ~1s (mirrors the --vvh resample cadence in
+         base.html) so there's always a later attempt to catch it, without
+         ever being a visible/janky scroll to the user. */
+      var attempts = 0;
+      function scheduleOnce() {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          nudgeAll();
+          if (++attempts < 6) setTimeout(scheduleOnce, 150);
+        }));
+      }
+      function restart() { attempts = 0; scheduleOnce(); }
+      if (document.readyState === 'complete') restart();
+      else window.addEventListener('load', restart, { once: true });
+      window.addEventListener('pageshow', restart);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') restart();
+      });
+    })();
 
     /* Permanent no-zoom: keep focused text controls at ≥16px even if CSS regresses */
     (function () {
@@ -140,9 +188,8 @@
           });
         }
         const dark = resolve(pref) === 'dark';
-        document.querySelectorAll('meta[name="theme-color"]').forEach(m => {
-          if (!m.media) m.setAttribute('content', dark ? '#09090b' : '#fafafa');
-        });
+        const metaColor = document.getElementById('meta-theme-color');
+        if (metaColor) metaColor.setAttribute('content', dark ? '#09090b' : '#fafafa');
       }
       function setMenu(open){
         if (!menu || !toggle) return;
