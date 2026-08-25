@@ -230,7 +230,9 @@ class ScopedPgUserStatsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(out["user_stats"]["limited"], 1)
 
     def test_pg_home_renders_user_stats(self):
-        html = (ROOT / "app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        # pg_home.html now defers these widgets to _pg_dash_body.html (fast
+        # chrome shell + async body swap) — same markup, different file.
+        html = (ROOT / "app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
         self.assertIn("user_stats", html)
         self.assertIn("آنلاین", html)
         self.assertIn("کل کاربران من", html)

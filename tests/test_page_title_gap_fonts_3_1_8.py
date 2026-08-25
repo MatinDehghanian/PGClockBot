@@ -29,9 +29,14 @@ class PageTitleGapParityTests(unittest.TestCase):
         self.assertIn(".page-head {\n  display: flex;", css)
         head = css.split(".page-head {\n", 1)[1].split("}", 1)[0]
         self.assertIn("margin-bottom: var(--page-title-gap);", head)
-        # no asymmetric title→tabs shrink
-        self.assertNotIn(".page-head:has(+ .section-tabs)", css)
+        # No asymmetric title→tabs *margin* shrink — a later, narrower rule
+        # tightens the title's own internal flex `gap` (title vs. its inline
+        # action button) at the tightest phone breakpoint, which is a
+        # different property and does not affect the margin-bottom parity
+        # this test guards.
         self.assertNotIn(".page-head:has(+ .settings-tabs)", css)
+        section_tabs_rule = css.split(".page-head:has(+ .section-tabs) {", 1)[1].split("}", 1)[0]
+        self.assertNotIn("margin-bottom", section_tabs_rule)
 
     def test_pg_title_gap_identical_to_bot(self):
         css = CSS.read_text(encoding="utf-8")

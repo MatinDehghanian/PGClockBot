@@ -157,10 +157,22 @@ class OwnerBootstrapTests(unittest.IsolatedAsyncioTestCase):
 
 
 class BotUserIdUniqueIndexTests(unittest.TestCase):
-    def test_alembic_head_is_0018(self) -> None:
-        from app.db.alembic_runner import heads
+    def test_alembic_head_is_single_and_descends_from_0018(self) -> None:
+        # The exact head migration moves forward over time (0019, 0020, ...);
+        # what this test actually guards against is a *branched* migration
+        # history (multiple heads) and the org-principal unique-index
+        # migration (0018) being dropped or reordered out of the chain.
+        from app.db.alembic_runner import alembic_config, heads
+        from alembic.script import ScriptDirectory
 
-        self.assertEqual(heads(), ["0018_org_principal_single_owner"])
+        current_heads = heads()
+        self.assertEqual(len(current_heads), 1, f"expected a single alembic head, got {current_heads}")
+
+        script = ScriptDirectory.from_config(alembic_config())
+        ancestor_revisions = {
+            rev.revision for rev in script.iterate_revisions(current_heads[0], None)
+        }
+        self.assertIn("0018_org_principal_single_owner", ancestor_revisions)
 
     def test_migration_creates_partial_unique_index(self) -> None:
         from app.db.alembic_runner import upgrade_head

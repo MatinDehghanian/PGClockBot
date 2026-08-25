@@ -26,7 +26,9 @@ class NodeErrorBadgeTests(unittest.TestCase):
 
     def test_node_status_uses_danger_chip(self):
         nodes = (TEMPLATES / "pg_nodes.html").read_text(encoding="utf-8")
-        home = (TEMPLATES / "pg_home.html").read_text(encoding="utf-8")
+        # pg_home.html now defers node-status widgets to _pg_dash_body.html
+        # (fast chrome shell + async body swap) — same markup, different file.
+        home = (TEMPLATES / "_pg_dash_body.html").read_text(encoding="utf-8")
         self.assertIn("%}danger{", nodes)
         self.assertIn("%}danger{", home)
         self.assertNotIn("%}error{", nodes)
@@ -44,14 +46,17 @@ class BotTokenAutofocusTests(unittest.TestCase):
 class FlashSeverityTests(unittest.TestCase):
     def test_bot_setup_is_err_not_warn(self):
         dash = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8")
-        rh = (TEMPLATES / "reseller_home.html").read_text(encoding="utf-8")
+        # reseller_home.html now defers this to _reseller_home_dash_body.html
+        # (fast chrome shell + async body swap) — same markup, different file.
+        rh = (TEMPLATES / "_reseller_home_dash_body.html").read_text(encoding="utf-8")
         self.assertIn('class="flash err dash-bot-setup"', dash)
         self.assertIn('class="flash err dash-bot-setup"', rh)
         self.assertNotIn("flash warn dash-bot-setup", dash)
         self.assertNotIn("flash warn dash-bot-setup", rh)
 
     def test_update_available_is_warn(self):
-        home = (TEMPLATES / "home.html").read_text(encoding="utf-8")
+        # home.html (admin dashboard) also defers to _home_dash_body.html now.
+        home = (TEMPLATES / "_home_dash_body.html").read_text(encoding="utf-8")
         upd = (TEMPLATES / "_settings_update.html").read_text(encoding="utf-8")
         self.assertIn('class="flash warn home-update-banner"', home)
         self.assertIn(

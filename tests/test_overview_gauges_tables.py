@@ -57,7 +57,9 @@ class OverviewSurfaceTests(unittest.TestCase):
         self.assertNotIn("quick-links", dash)
 
     def test_pg_home_has_gauges_no_quick_access(self):
-        pg = (ROOT / "app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        # pg_home.html now defers these widgets to _pg_dash_body.html (fast
+        # chrome shell + async body swap) — same markup, different file.
+        pg = (ROOT / "app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
         self.assertIn("_host_resource_gauges.html", pg)
         self.assertIn("/pg/metrics", pg)
         self.assertNotIn("دسترسی سریع", pg)

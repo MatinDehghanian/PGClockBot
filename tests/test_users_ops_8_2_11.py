@@ -101,10 +101,14 @@ class UsersOpsUiTests(unittest.TestCase):
         self.assertIn("نزدیک انقضا", users)
         self.assertNotIn("<th data-sort-type=\"text\">نقش</th>", users)
         self.assertIn("can_manage_users", users)
-        # Redesigned service cell: switcher + live volume/expiry + alert dot
-        # are always visible (desktop AND mobile) — no more static, dead-end
-        # mobile-only text summary hidden from interaction.
-        self.assertIn("users-svc-cell", users)
+        # Service, volume and expiry are separate, always-visible columns
+        # (desktop AND mobile) — never merged into one cramped cell, never
+        # hidden behind col-hide-sm. Multi-service rows still get a full
+        # switcher (with live volume/expiry + alert dot); it just lives in
+        # its own column now instead of a stacked mini-summary.
+        self.assertIn('class="col-svc', users)
+        self.assertIn('class="col-vol', users)
+        self.assertIn('class="col-exp', users)
         self.assertIn("users-svc-select", users)
         self.assertNotIn("cell-name-meta", users)
 
@@ -112,8 +116,9 @@ class UsersOpsUiTests(unittest.TestCase):
         self.assertIn(".alert-dot", css)
         self.assertIn(".users-row.is-focus", css)
         self.assertIn(".cell-name-tags", css)
-        self.assertIn(".users-svc-cell", css)
-        self.assertIn(".users-svc-meta", css)
+        self.assertIn(".users-ops-table .col-svc", css)
+        self.assertIn(".users-ops-table .col-vol", css)
+        self.assertIn(".users-ops-table .col-exp", css)
         self.assertIn("col-hide-sm", (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8"))
         self.assertIn("users-svc-boxed", css)
         self.assertIn(".badge.badge-risk", css)

@@ -110,7 +110,7 @@ class FinanceReportsUiTests(unittest.TestCase):
         self.assertIn("grid-template-columns: 1fr !important", css)
         self.assertNotIn(".finance-report-periods", css)
         self.assertIn(".ui-select-menu.users-svc-boxed", css)
-        self.assertIn(".users-svc-cell", css)
+        self.assertIn(".users-ops-table .col-svc", css)
         self.assertIn("bottom: 0", css)
         self.assertIn("tg-preview-gate > .actions", css)
         self.assertIn("mask-image: none", css.split(".section-tabs.is-scrollable", 1)[1].split(".section-tabs a", 1)[0])

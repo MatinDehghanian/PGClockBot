@@ -129,12 +129,20 @@ class WebhookSecretTests(unittest.TestCase):
 
 class SetupGateTests(unittest.TestCase):
     def test_setup_gate_helpers_exist(self):
-        from app.services.setup_wizard import ensure_setup_gate_token, setup_gate_ok
+        import app.services.setup_wizard as setup_wizard
 
-        token = ensure_setup_gate_token()
-        self.assertTrue(len(token) >= 16)
-        self.assertTrue(setup_gate_ok(token))
-        self.assertFalse(setup_gate_ok("wrong-token"))
+        # ensure_setup_gate_token()/setup_gate_ok() both short-circuit to
+        # "no gate" once setup is complete — correct in production, but this
+        # test must exercise the *pending-setup* path regardless of whether
+        # this machine's own data/setup_complete.flag already exists (e.g.
+        # a dev box that has actually been through the wizard already).
+        with patch.object(setup_wizard, "is_setup_complete", return_value=False):
+            setup_wizard.revoke_setup_gate()
+            token = setup_wizard.ensure_setup_gate_token()
+            self.assertTrue(len(token) >= 16)
+            self.assertTrue(setup_wizard.setup_gate_ok(token))
+            self.assertFalse(setup_wizard.setup_gate_ok("wrong-token"))
+        setup_wizard.revoke_setup_gate()
 
 
 class SettingsReadPerfTests(unittest.TestCase):

@@ -80,13 +80,24 @@ SPACE_TOKEN_NAMES = {
 }
 
 
-def _raw_px_in_spacing(css: str) -> list[tuple[str, str, int]]:
-    bad: list[tuple[str, str, int]] = []
+def _raw_px_in_spacing(css: str) -> list[tuple[str, str, float]]:
+    bad: list[tuple[str, str, float]] = []
     for m in PROP_RE.finditer(css):
         prop, val = m.group("prop"), m.group("val")
-        for n in re.findall(r"(\d+)px", val):
-            num = int(n)
-            if num in ALLOWED_RAW_PX or num == 0:
+        # Decimal group is required so e.g. "-2.5px" is read as the single
+        # value 2.5, not misparsed as an unrelated bare "5px" (dropping the
+        # "2." prefix) — that bug double-counted half-pixel values before.
+        for n in re.findall(r"(\d+(?:\.\d+)?)px", val):
+            num = float(n)
+            if num == 0 or (num == int(num) and int(num) in ALLOWED_RAW_PX):
+                continue
+            if num != int(num):
+                # Half-pixel offsets only ever show up centering an
+                # absolutely-positioned, odd-sized element on its own axis
+                # (`left/top: 50%; margin: -Npx 0 0 -Npx` for an element
+                # 2N px wide) — a coordinate anchor, not a spacing-scale
+                # value, same exception already granted to the sr-only
+                # clip trick's raw -1px.
                 continue
             bad.append((prop, val.strip(), num))
     return bad

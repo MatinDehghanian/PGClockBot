@@ -15,7 +15,16 @@ class StaffHomeSessionCrashFix(unittest.TestCase):
         src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
         home = src[src.find("async def pg_home") : src.find("async def pg_users")]
         self.assertNotIn("request.session.get", home)
-        self.assertIn('staff.get("username")', home)
+        # staff.get("username") now lives in _pg_chrome_context(), a shared
+        # helper pg_home() calls for its ticket-alert/remediation chrome —
+        # still staff-dict-only (no request.session), just extracted so
+        # pg_home_body() can reuse the same fast-chrome logic.
+        self.assertIn("await _pg_chrome_context(request, staff, session)", home)
+        chrome_helper = src[
+            src.find("async def _pg_chrome_context") : src.find("async def pg_home")
+        ]
+        self.assertNotIn("request.session.get", chrome_helper)
+        self.assertIn('staff.get("username")', chrome_helper)
 
 
 class StaffEditPreservesActive(unittest.TestCase):

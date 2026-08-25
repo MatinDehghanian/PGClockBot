@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -434,7 +435,13 @@ class ButtonStyleTests(unittest.TestCase):
         self.assertEqual(STYLE_OPTIONS[0], ("", "سفید", "default"))
         self.assertNotIn("پیش‌فرض", "".join(label for _v, label, _t in STYLE_OPTIONS))
         settings_html = Path("app/web/templates/_settings_colors.html").read_text(encoding="utf-8")
-        self.assertNotIn("پیش‌فرض", settings_html)
+        # The actual invariant: no *style option* is labeled "پیش‌فرض" (that's
+        # already asserted on STYLE_OPTIONS itself above). A later caption
+        # legitimately uses the word in prose ("رنگ نوع پلن پیش‌فرض زیرمنوی
+        # همان نوع است" — explaining inheritance, not naming a color option),
+        # so scope this check to the rendered <option> tags only.
+        for opt_line in re.findall(r"<option\b[^>]*>[^<]*", settings_html):
+            self.assertNotIn("پیش‌فرض", opt_line)
         self.assertIn("style_options", settings_html)
         self.assertIn("button_style_sections", settings_html)
         labels = "".join(item["label"] for item in BUTTON_STYLE_CATALOG)

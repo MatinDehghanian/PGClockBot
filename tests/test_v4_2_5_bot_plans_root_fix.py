@@ -57,7 +57,15 @@ class UserGroupConfirmTests(unittest.TestCase):
         block = ADMIN[ADMIN.find("async def adm_plan_grp_done") : ADMIN.find("async def adm_plan_clear_link")]
         self.assertIn("safe_edit_text", block)
         self.assertIn("ساخت پلن ناموفق بود", block)
-        self.assertIn("await _finish_new_plan", block)
+        # The color-pick step (also in this slice) now calls a shared
+        # _pending_user_plan_finish() wrapper, which itself calls
+        # _finish_new_plan() — same defensive finish, one layer of reuse
+        # added so other color-pick entry points can share it too.
+        self.assertIn("await _pending_user_plan_finish", block)
+        wrapper = ADMIN[
+            ADMIN.find("async def _pending_user_plan_finish") : ADMIN.find("async def adm_plan_grp_done")
+        ]
+        self.assertIn("await _finish_new_plan", wrapper)
 
     def test_finish_new_plan_does_not_clear_before_read(self):
         block = ADMIN[ADMIN.find("async def _finish_new_plan") : ADMIN.find("@router.callback_query(F.data == \"adm:plan:new:mode:tpl\")")]

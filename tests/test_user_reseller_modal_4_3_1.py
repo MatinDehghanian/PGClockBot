@@ -36,10 +36,12 @@ class BotResellerServicesTests(unittest.TestCase):
 
 class UsersListFilterTests(unittest.TestCase):
     def test_users_page_excludes_pure_resellers(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        # This filter was later extracted out of app.py into a reusable
+        # pure_reseller_clause() in the users_ops service module.
+        src = (ROOT / "app/services/users_ops.py").read_text(encoding="utf-8")
         self.assertIn("pure_reseller", src)
         self.assertIn("has_shop_service", src)
-        self.assertIn("not_(pure_reseller)", src)
+        self.assertIn("not_(pure_reseller_clause())", src)
 
 
 class PendingOrderCleanupTests(unittest.TestCase):

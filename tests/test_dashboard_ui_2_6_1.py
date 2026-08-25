@@ -8,7 +8,11 @@ from pathlib import Path
 
 class PgDashboardCountsTests(unittest.TestCase):
     def test_pg_home_users_admins_first(self):
-        src = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
+        # pg_home.html now renders a fast chrome shell and defers the actual
+        # stat widgets (users/admins/groups counts) to _pg_dash_body.html,
+        # included directly on full page loads or swapped in async via
+        # /pg/body — same markup, just no longer inlined in pg_home.html.
+        src = Path("app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
         users_i = src.find(">کاربران</span>")
         admins_i = src.find(">ادمین‌ها</span>")
         groups_i = src.find(">گروه‌ها</span>")

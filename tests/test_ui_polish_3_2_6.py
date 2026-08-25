@@ -72,7 +72,10 @@ class CustomSelectTests(unittest.TestCase):
 
 class PgOverviewMergeTests(unittest.TestCase):
     def test_admin_overview_is_single_home_panel(self):
-        src = PG_HOME.read_text(encoding="utf-8")
+        # pg_home.html now defers this whole owner-vs-staff branch to
+        # _pg_dash_body.html (fast chrome shell + async body swap) — same
+        # markup/branching, different file.
+        src = (PG_HOME.parent / "_pg_dash_body.html").read_text(encoding="utf-8")
         # Admin branch: one merged panel, no separate top stats-grid
         admin = src.split("{% else %}", 1)[1]
         self.assertIn("home-panel home-panel-pg", admin)

@@ -19,12 +19,15 @@ class MobileSideFullHeightTests(unittest.TestCase):
         self.assertIn('col-id col-hide-sm', users)
         self.assertIn('col-tg col-hide-sm', users)
         self.assertIn('col-wallet col-hide-sm', users)
-        # The service cell (switcher + live volume/expiry + alert dot) is the
-        # thing users actually need on mobile, so it now stays visible on all
-        # breakpoints instead of collapsing into a static, non-interactive
-        # text summary under the name.
+        # Service / volume / expiry are the columns users actually need, so
+        # they stay visible (and separate) on every breakpoint instead of
+        # hiding or collapsing into a static text summary — the table simply
+        # scrolls horizontally on narrow phones if it must, same as any
+        # other data table in the panel.
         self.assertNotIn('col-svc col-hide-sm', users)
-        self.assertIn("users-svc-cell", users)
+        self.assertNotIn('col-vol col-hide-sm', users)
+        self.assertNotIn('col-exp col-hide-sm', users)
+        self.assertIn("users-svc-select", users)
 
 if __name__ == "__main__":
     unittest.main()
