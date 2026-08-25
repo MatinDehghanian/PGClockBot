@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from urllib.parse import quote
 
 from fastapi import Depends, Request
@@ -57,14 +58,27 @@ def _redirect_list_form(
 
 
 async def _require_scoped_user(
-    session: AsyncSession, staff: dict, user_id: int
-) -> BotUser | RedirectResponse:
+    session: AsyncSession,
+    staff: dict,
+    user_id: int,
+    *,
+    fragment: bool = False,
+) -> BotUser | RedirectResponse | HTMLResponse:
     user = await session.get(BotUser, int(user_id))
     if not user:
+        if fragment:
+            return HTMLResponse(
+                '<div class="flash err">کاربر یافت نشد</div>', status_code=404
+            )
         return RedirectResponse(f"/users?err={_q('کاربر یافت نشد')}", status_code=303)
     try:
         assert_bot_user_in_scope(staff, user)
     except ShopScopeError as e:
+        if fragment:
+            return HTMLResponse(
+                f'<div class="flash err">{html.escape(e.message)}</div>',
+                status_code=403,
+            )
         return RedirectResponse(f"/users?err={_q(e.message)}", status_code=303)
     return user
 
@@ -82,8 +96,11 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         from app.services.bot_user_admin import list_service_snapshots, list_wallet_txs
         from app.services.formatting import format_toman
 
-        loaded = await _require_scoped_user(session, staff, user_id)
-        if isinstance(loaded, RedirectResponse):
+        as_fragment = request.query_params.get("fragment") == "1"
+        loaded = await _require_scoped_user(
+            session, staff, user_id, fragment=as_fragment
+        )
+        if isinstance(loaded, (RedirectResponse, HTMLResponse)):
             return loaded
         user = loaded
 
@@ -109,7 +126,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             "flash_ok": request.query_params.get("ok"),
             "flash_err": request.query_params.get("err"),
         }
-        if request.query_params.get("fragment") == "1":
+        if as_fragment:
             return render(request, "_user_edit_body.html", ctx)
         return render(request, "user_edit.html", ctx)
 

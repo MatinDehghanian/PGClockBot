@@ -234,10 +234,20 @@
       const tabs = document.querySelectorAll('.section-tabs');
       if (!tabs.length) return;
       tabs.forEach(nav => {
-        const active = nav.querySelector('a.active');
-        if (!active || typeof active.scrollIntoView !== 'function') return;
+        const items = [...nav.querySelectorAll('a, .tab-btn')];
+        const active = nav.querySelector('a.active, .tab-btn.active');
+        if (!active) return;
+        /* First tab active: pin to inline-start. Centering/nearest can leave a
+           black gutter beside the first RTL pill on first paint. */
+        if (items[0] === active) {
+          try { nav.scrollLeft = 0; } catch (e) {}
+          return;
+        }
+        const nr = nav.getBoundingClientRect();
+        const ar = active.getBoundingClientRect();
+        if (ar.left >= nr.left - 2 && ar.right <= nr.right + 2) return;
+        if (typeof active.scrollIntoView !== 'function') return;
         try {
-          /* nearest — centering the first RTL tab scrolled a black edge fade into view */
           active.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'instant' in window ? 'instant' : 'auto' });
         } catch (_) {
           try { active.scrollIntoView(false); } catch (e) {}
@@ -1080,9 +1090,19 @@
       const openBtn = e.target.closest('[data-modal-open]');
       if (openBtn) {
         e.preventDefault();
+        const modalId = openBtn.getAttribute('data-modal-open');
+        const loadUrl = openBtn.getAttribute('data-modal-load') || openBtn.getAttribute('data-edit-url');
+        const loadTarget = openBtn.getAttribute('data-modal-load-target');
+        const loadTitle = openBtn.getAttribute('data-edit-title') || openBtn.getAttribute('data-modal-load-title');
         try { closeRowActions(); } catch (_) {}
         try { closeUiSelects(); } catch (_) {}
-        openModal(openBtn.getAttribute('data-modal-open'));
+        openModal(modalId);
+        /* Atomic fragment load — same click as open (page scripts can also listen). */
+        if (loadUrl) {
+          document.dispatchEvent(new CustomEvent('panel:modal-load', {
+            detail: { id: modalId, url: loadUrl, target: loadTarget, title: loadTitle, button: openBtn },
+          }));
+        }
         return;
       }
       const stripClose = e.target.closest('[data-modal-close-strip]');

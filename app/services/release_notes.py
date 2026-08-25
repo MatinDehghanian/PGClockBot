@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.3": [
+        "مودال ویرایش: بارگذاری اتمی با panel:modal-load + سقف ۳ثانیه برای PG (دیگر گیر روی در حال بارگذاری نمی‌ماند)",
+        "جدول کاربران: تگ‌ها حداکثر ۲تایی در ردیف؛ ستون سرویس پهن‌تر؛ حجم و انقضا ستون جدا در موبایل",
+        "باکس خالی زیر محتوا: حذف flex-grow روی main-body و margin-top:auto فوتر (ریشهٔ فاصلهٔ اول‌لود)",
+        "تب‌ها: تب اول دیگر gutter سیاه نمی‌سازد",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.2",
+    ],
     "8.5.2": [
         "مودال ویرایش کاربر: بازگشت به data-modal-open استاندارد پنل (بدون مسیر موازی)",
         "منوی سرویس: ui-select پنل + هر سرویس در باکس جدا با حاشیه؛ حجم/انقضا در موبایل زیر سرویس",

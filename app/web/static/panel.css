@@ -218,9 +218,10 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   -webkit-overflow-scrolling: touch;
 }
 .main-body {
-  /* flex-shrink:0 — long pages must grow so .main scrolls content+footer together.
-     flex-shrink:1 + min-height:0 pinned the footer over overflowing content. */
-  flex: 1 0 auto;
+  /* Content-sized only — do NOT flex-grow to fill the viewport.
+     Growing left a tall empty slab above the footer on short pages
+     (looked like a dark “box” until the first scroll / dvh change). */
+  flex: 0 0 auto;
   min-width: 0;
   width: 100%;
   display: flex;
@@ -370,17 +371,33 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
 }
 /* Risk indicator beside user name in lists — yellow tag (same size as role badges) */
 .cell-name {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-0);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   max-width: 100%;
   min-width: 0;
-  flex-wrap: wrap;
 }
 .cell-name-text {
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+/* Tags under name: up to 2 per row, rest wrap */
+.cell-name-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+}
+.cell-name-tags > .badge-inline,
+.cell-name-tags > .alert-dot {
+  flex: 0 1 auto;
+  max-width: calc(50% - 2px);
 }
 .badge.badge-risk {
   font-size: 10px;
@@ -429,12 +446,25 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   background: color-mix(in srgb, var(--accent, #38bdf8) 10%, transparent);
 }
 .users-ops-table .col-svc {
-  width: 9.5rem;
-  max-width: 9.5rem;
+  width: 11rem;
+  max-width: 12rem;
+  min-width: 8.5rem;
   vertical-align: middle;
 }
 .users-ops-table td.col-svc {
   padding-block: var(--space-1);
+}
+.users-ops-table .col-vol,
+.users-ops-table .col-exp {
+  width: 5.5rem;
+  max-width: 6.5rem;
+  vertical-align: middle;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.users-ops-table .col-name {
+  min-width: 6.5rem;
+  vertical-align: middle;
 }
 .users-svc-one {
   display: inline-flex;
@@ -452,7 +482,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Service select — panel ui-select; boxed options; mobile meta under cell */
+/* Service select — panel ui-select; boxed options */
 .users-svc-select-wrap {
   display: block;
   max-width: 100%;
@@ -462,28 +492,6 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
 .users-svc-select-wrap .users-svc-select {
   width: 100%;
   max-width: 100%;
-}
-.users-svc-meta {
-  display: none;
-  align-items: center;
-  gap: var(--space-0);
-  margin-top: 4px;
-  min-width: 0;
-  max-width: 100%;
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--muted-fg);
-}
-.users-svc-meta .users-vol-cell,
-.users-svc-meta .users-exp-cell {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.users-svc-meta-sep {
-  flex: 0 0 auto;
-  opacity: 0.55;
 }
 /* Boxed option rows (ported menu keeps .users-svc-boxed on the menu node) */
 .ui-select-menu.users-svc-boxed {
@@ -594,12 +602,16 @@ html[data-theme="light"] .finance-report-panels .home-panel-grid > a.stat:hover 
   .users-ops-table .users-svc-one {
     max-width: 100%;
   }
-  .users-ops-table .users-svc-meta {
-    display: flex;
-  }
   .users-ops-table .col-svc {
-    width: 8rem;
-    max-width: 8rem;
+    width: 10rem;
+    max-width: 11rem;
+    min-width: 8rem;
+  }
+  .users-ops-table .col-vol,
+  .users-ops-table .col-exp {
+    width: 4.75rem;
+    max-width: 5.5rem;
+    font-size: 11px;
   }
   .users-ops-table .badge-inline,
   .users-ops-table .badge-risk {
@@ -619,12 +631,18 @@ html[data-theme="light"] .finance-report-panels .home-panel-grid > a.stat:hover 
   }
   .users-ops-table th.col-svc,
   .users-ops-table td.col-svc {
-    max-width: 7.25rem;
-    width: 7.25rem;
+    max-width: 9.5rem;
+    width: 9.5rem;
+    min-width: 7.5rem;
   }
-  .finance-report-panels .home-panel-grid {
-    grid-template-columns: 1fr;
+  .users-ops-table .col-vol,
+  .users-ops-table .col-exp {
+    width: 4.25rem;
+    max-width: 4.75rem;
   }
+}
+@media (max-width: 420px) {
+  .col-hide-xs { display: none !important; }
 }
 
 .side-foot {
@@ -2819,7 +2837,8 @@ code.env-fname {
 }
 
 .site-footer {
-  margin-top: auto;
+  /* Sit after content — no margin-top:auto filler gap (phantom box on short pages) */
+  margin-top: 0;
   padding-top: var(--page-title-gap);
   border-top: 1px solid var(--border);
   display: flex;
@@ -4210,7 +4229,7 @@ form.settings-form > .actions.sticky-actions,
     display: flex;
     flex-direction: column;
   }
-  .main-body { flex: 1 0 auto; padding-bottom: var(--page-title-gap); }
+  .main-body { flex: 0 0 auto; padding-bottom: var(--page-title-gap); }
   .site-footer {
     /* Keep one row like .side-foot so both footer tops sit on the same line */
     flex-direction: row;
@@ -4218,7 +4237,7 @@ form.settings-form > .actions.sticky-actions,
     align-items: center;
     justify-content: center;
     text-align: center;
-    margin-top: auto;
+    margin-top: 0;
     padding-top: var(--page-title-gap);
     gap: var(--space-1);
     min-height: calc(var(--page-title-gap) + 28px + var(--space-1));
