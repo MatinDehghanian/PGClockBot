@@ -85,7 +85,13 @@
         {% set t = row.ticket %}
         <tr>
           <td class="mono">{{ t.id }}</td>
-          <td>{{ row.user_label }}</td>
+          <td>
+            {% if row.user_id %}
+            <a class="cell-user-link" href="/users?uid={{ row.user_id }}">{{ row.user_label }}</a>
+            {% else %}
+            {{ row.user_label }}
+            {% endif %}
+          </td>
           <td>{{ t.subject }}</td>
           <td>
             <span class="badge {% if t.status=='open' %}open{% elif t.status=='closed' %}neutral{% else %}answered{% endif %}">
@@ -249,7 +255,13 @@
 
     <div class="ticket-meta">
       <span class="badge {% if t.status=='open' %}open{% elif t.status=='closed' %}neutral{% else %}answered{% endif %}">{{ tkt_status(t.status) }}</span>
-      <span class="muted">کاربر: {{ active_tg_user_label }}</span>
+      <span class="muted">کاربر:
+        {% if active_tg_user and active_tg_user.id %}
+        <a class="cell-user-link" href="/users?uid={{ active_tg_user.id }}">{{ active_tg_user_label }}</a>
+        {% else %}
+        {{ active_tg_user_label }}
+        {% endif %}
+      </span>
     </div>
 
     <div class="ticket-thread" id="tg-ticket-thread">

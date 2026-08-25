@@ -2632,7 +2632,12 @@ def admin_user_actions(
                 text="📦 سرویس‌ها", callback_data=f"adm:users:svcs:{user_id}"
             ),
         ],
-        [InlineKeyboardButton(text=block_label, callback_data=f"adm:users:block:{user_id}")],
+        [
+            InlineKeyboardButton(
+                text="✉️ پیام", callback_data=f"adm:users:msg:{user_id}"
+            ),
+            InlineKeyboardButton(text=block_label, callback_data=f"adm:users:block:{user_id}"),
+        ],
     ]
     if role == "reseller":
         rows.append(

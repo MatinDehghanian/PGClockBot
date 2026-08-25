@@ -217,6 +217,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
         tg_rows = [
             {
                 "ticket": t,
+                "user_id": int(t.user_id),
                 "user_label": _bot_user_label(tg_users.get(int(t.user_id)), int(t.user_id)),
             }
             for t in tg_tickets

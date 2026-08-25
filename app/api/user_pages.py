@@ -27,6 +27,35 @@ def _redirect_user(user_id: int, *, ok: str | None = None, err: str | None = Non
     return RedirectResponse(f"/users?{'&'.join(qs)}", status_code=303)
 
 
+def _list_return_from_form(form) -> tuple[str, str | None]:
+    from app.services.users_ops import normalize_users_filter
+
+    fk = normalize_users_filter(str(form.get("return_filter") or form.get("filter") or "all"))
+    q = str(form.get("return_q") or form.get("q") or "").strip() or None
+    return fk, q
+
+
+def _redirect_list_form(
+    form,
+    *,
+    ok: str | None = None,
+    err: str | None = None,
+    uid: int | None = None,
+):
+    from app.services.users_ops import users_list_href
+
+    fk, q = _list_return_from_form(form)
+    href = users_list_href(filter_key=fk, uid=uid, q=q)
+    bits = []
+    if err:
+        bits.append(f"err={_q(err)}")
+    elif ok:
+        bits.append(f"ok={_q(ok)}")
+    if bits:
+        href += ("&" if "?" in href else "?") + "&".join(bits)
+    return RedirectResponse(href, status_code=303)
+
+
 async def _require_scoped_user(
     session: AsyncSession, staff: dict, user_id: int
 ) -> BotUser | RedirectResponse:
@@ -40,7 +69,9 @@ async def _require_scoped_user(
     return user
 
 
-def register_user_pages(app, *, render, require_admin, get_db) -> None:
+def register_user_pages(app, *, render, require_admin, get_db, require_perm=None) -> None:
+    require_ops = require_perm("dashboard") if require_perm else require_admin
+
     @app.get("/users/{user_id}/edit", response_class=HTMLResponse)
     async def user_edit_page(
         user_id: int,
@@ -116,6 +147,120 @@ def register_user_pages(app, *, render, require_admin, get_db) -> None:
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
         return _redirect_user(user_id, ok=f"کیف پول {amount:,} تومان شارژ شد")
+
+    @app.post("/users/{user_id}/message")
+    async def user_staff_message(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(require_ops),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.notifications import actor_label_from_staff
+        from app.services.users_quick import send_staff_dm
+
+        loaded = await _require_scoped_user(session, staff, user_id)
+        if isinstance(loaded, RedirectResponse):
+            return loaded
+        user = loaded
+        form = await request.form()
+        body = str(form.get("body") or form.get("text") or "")
+        try:
+            await send_staff_dm(
+                session, user, body, actor=actor_label_from_staff(staff)
+            )
+            await session.commit()
+        except ValueError as e:
+            return _redirect_list_form(form, err=str(e), uid=user_id)
+        except Exception:
+            return _redirect_list_form(form, err="ارسال پیام ناموفق بود", uid=user_id)
+        return _redirect_list_form(form, ok="پیام ارسال شد", uid=user_id)
+
+    @app.post("/users/{user_id}/quick-renew")
+    async def user_quick_renew(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(require_ops),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.users_quick import quick_renew_user
+
+        loaded = await _require_scoped_user(session, staff, user_id)
+        if isinstance(loaded, RedirectResponse):
+            return loaded
+        user = loaded
+        form = await request.form()
+        sid_raw = str(form.get("service_id") or "").strip()
+        service_id = int(sid_raw) if sid_raw.isdigit() else None
+        try:
+            svc, label = await quick_renew_user(session, user, service_id=service_id)
+            await session.commit()
+        except ValueError as e:
+            return _redirect_list_form(form, err=str(e), uid=user_id)
+        except Exception as e:
+            return _redirect_list_form(form, err=f"تمدید ناموفق: {e}", uid=user_id)
+        return _redirect_list_form(
+            form, ok=f"سرویس {label} تمدید شد", uid=user_id
+        )
+
+    @app.post("/users/bulk-message")
+    async def users_bulk_message(
+        request: Request,
+        staff: dict = Depends(require_ops),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.notifications import actor_label_from_staff
+        from app.services.platform_identity import is_explicit_owner_staff
+        from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
+        from app.services.users_ops import (
+            build_users_ops_page,
+            normalize_users_filter,
+            scoped_users_where,
+        )
+        from app.services.users_quick import MAX_BULK_RECIPIENTS, bulk_staff_dm
+
+        # Bulk is Owner-only (cross-customer blast) or reseller shop-scoped.
+        try:
+            scope = resolve_shop_scope_id(staff)
+        except ShopScopeError as e:
+            return RedirectResponse(f"/users?err={_q(e.message)}", status_code=303)
+        if scope is None and not is_explicit_owner_staff(staff):
+            return RedirectResponse(
+                f"/users?err={_q('دسترسی پیام گروهی ندارید')}", status_code=303
+            )
+
+        form = await request.form()
+        fk = normalize_users_filter(str(form.get("return_filter") or form.get("filter") or "all"))
+        if fk == "all":
+            return _redirect_list_form(
+                form, err="برای پیام گروهی یک فیلتر (مثلاً نزدیک انقضا) انتخاب کنید"
+            )
+        body = str(form.get("body") or form.get("text") or "")
+
+        result = await session.execute(
+            select(BotUser).where(scoped_users_where(scope)).order_by(BotUser.id.desc()).limit(200)
+        )
+        users = list(result.scalars().all())
+        rows, _counts, _fk = await build_users_ops_page(
+            session, users, filter_key=fk
+        )
+        targets = [r.user for r in rows if r.user and not r.user.is_blocked][
+            :MAX_BULK_RECIPIENTS
+        ]
+        if not targets:
+            return _redirect_list_form(form, err="گیرنده‌ای در این فیلتر نیست")
+        try:
+            stats = await bulk_staff_dm(
+                session, targets, body, actor=actor_label_from_staff(staff)
+            )
+            await session.commit()
+        except ValueError as e:
+            return _redirect_list_form(form, err=str(e))
+        except Exception:
+            return _redirect_list_form(form, err="ارسال گروهی ناموفق بود")
+        return _redirect_list_form(
+            form,
+            ok=f"پیام گروهی: {stats['ok']} موفق، {stats['fail']} ناموفق از {stats['total']}",
+        )
 
     @app.post("/users/{user_id}/services/{service_id}/renew")
     async def user_service_renew(

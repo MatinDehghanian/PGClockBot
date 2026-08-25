@@ -989,7 +989,13 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
-    register_user_pages(app, render=render, require_admin=require_admin, get_db=get_db)
+    register_user_pages(
+        app,
+        render=render,
+        require_admin=require_admin,
+        require_perm=require_perm,
+        get_db=get_db,
+    )
     from app.api.finance_pages import register_finance_pages
     register_finance_pages(
         app,
@@ -3188,6 +3194,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "flash_err": request.query_params.get("err"),
                 "open_edit": request.query_params.get("edit"),
                 "can_manage_users": is_explicit_owner_staff(staff),
+                "can_user_ops": True,
             },
         )
 

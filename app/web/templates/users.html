@@ -5,11 +5,20 @@
 {% set flt = filter or 'all' %}
 {% set c = counts or {} %}
 {% set manage = can_manage_users if can_manage_users is defined else is_admin %}
+{% set ops = can_user_ops if can_user_ops is defined else true %}
+{% set bulk_count = rows|length if flt != 'all' else 0 %}
 <div class="page-head">
   <div>
     {{ page_title('users', 'کاربران بات') }}
     <p class="muted page-sub">سرویس، حجم و انقضا · فیلتر و اعلان‌های عملیاتی</p>
   </div>
+  {% if ops and flt != 'all' and bulk_count > 0 %}
+  <div class="page-head-actions">
+    <button type="button" class="btn btn-ghost"
+            data-modal-open="modal-users-bulk"
+            data-bulk-count="{{ bulk_count }}">پیام گروهی ({{ bulk_count | num }})</button>
+  </div>
+  {% endif %}
 </div>
 {# flash_ok / flash_err rendered once in base.html (above title) #}
 
@@ -78,7 +87,7 @@
         <th class="col-hide-sm" data-sort-type="num">انقضا</th>
         <th class="col-hide-sm" data-sort-type="num">کیف پول</th>
         <th class="col-status" data-sort-type="text">وضعیت</th>
-        {% if manage %}<th class="col-actions"></th>{% endif %}
+        {% if ops or manage %}<th class="col-actions"></th>{% endif %}
       </tr>
     </thead>
     <tbody>
@@ -128,9 +137,26 @@
           <span class="badge active">فعال</span>
           {% endif %}
         </td>
-        {% if manage %}
+        {% if ops or manage %}
         <td class="col-actions">
           {% call row_actions() %}
+            {% if ops and not u.is_blocked %}
+            <button type="button" class="btn btn-ghost btn-sm"
+                    data-modal-open="modal-user-message"
+                    data-msg-uid="{{ u.id }}"
+                    data-msg-name="{{ u.full_name or u.username or u.telegram_id }}">پیام</button>
+            {% endif %}
+            {% if ops and row.service_count > 0 %}
+            <form method="post" action="/users/{{ u.id }}/quick-renew"
+                  data-confirm="سرویس بحرانی (نزدیک‌ترین انقضا) با پلن فعلی تمدید شود؟ مصرف ریست می‌شود."
+                  data-confirm-title="تمدید سریع"
+                  data-confirm-label="تمدید">
+              <input type="hidden" name="return_filter" value="{{ flt }}" />
+              {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
+              <button class="btn btn-sm" type="submit">تمدید</button>
+            </form>
+            {% endif %}
+            {% if manage %}
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-user-edit"
                     data-edit-url="/users/{{ u.id }}/edit?fragment=1"
@@ -158,17 +184,68 @@
               <button class="btn btn-sm btn-danger" type="submit">حذف</button>
             </form>
             {% endif %}
+            {% endif %}
           {% endcall %}
         </td>
         {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="{% if manage %}9{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
+      <tr><td colspan="{% if ops or manage %}9{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
 </div>
+
+{% if ops %}
+<div class="ui-modal" id="modal-user-message" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-msg-title">
+    <div class="ui-modal-head">
+      <h2 id="user-msg-title">پیام به کاربر</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form method="post" action="/users/0/message" class="form-stack" id="user-msg-form">
+      <input type="hidden" name="return_filter" value="{{ flt }}" />
+      {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
+      <p class="muted" id="user-msg-target">—</p>
+      <label class="form-field">متن پیام
+        <textarea name="body" rows="5" required maxlength="2000" placeholder="پیام کوتاه پشتیبانی…"></textarea>
+      </label>
+      <div class="actions">
+        <button type="submit" class="btn">ارسال</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="ui-modal" id="modal-users-bulk" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="users-bulk-title">
+    <div class="ui-modal-head">
+      <h2 id="users-bulk-title">پیام گروهی فیلتر</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form method="post" action="/users/bulk-message" class="form-stack"
+          data-confirm="پیام به کاربران همین فیلتر ارسال شود؟ (حداکثر ۴۰ نفر)"
+          data-confirm-title="تأیید پیام گروهی"
+          data-confirm-warn="1"
+          data-confirm-label="ارسال گروهی">
+      <input type="hidden" name="return_filter" value="{{ flt }}" />
+      {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
+      <p class="muted">فیلتر فعال: <strong>{{ flt }}</strong> · تا {{ bulk_count | num }} گیرنده (سقف ۴۰)</p>
+      <label class="form-field">متن پیام
+        <textarea name="body" rows="5" required maxlength="2000" placeholder="مثلاً سرویس شما به‌زودی منقضی می‌شود…"></textarea>
+      </label>
+      <div class="actions">
+        <button type="submit" class="btn">ارسال گروهی</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 
 {% if manage %}
 <div class="ui-modal" id="modal-user-edit" hidden>
@@ -205,6 +282,23 @@
   var focus = document.querySelector('tr.users-row.is-focus');
   if (focus && typeof focus.scrollIntoView === 'function') {
     try { focus.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
+  }
+
+  var msgForm = document.getElementById('user-msg-form');
+  var msgTitle = document.getElementById('user-msg-title');
+  var msgTarget = document.getElementById('user-msg-target');
+  if (msgForm) {
+    document.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-modal-open="modal-user-message"][data-msg-uid]');
+      if (!btn) return;
+      var uid = btn.getAttribute('data-msg-uid');
+      var name = btn.getAttribute('data-msg-name') || ('#' + uid);
+      msgForm.action = '/users/' + uid + '/message';
+      if (msgTitle) msgTitle.textContent = 'پیام به کاربر';
+      if (msgTarget) msgTarget.textContent = 'گیرنده: ' + name;
+      var ta = msgForm.querySelector('textarea[name="body"]');
+      if (ta) ta.value = '';
+    });
   }
 
   {% if manage %}

@@ -127,11 +127,15 @@ class UsersOpsUiTests(unittest.TestCase):
         self.assertIn("bot_user_alert_flags", res)
         self.assertIn("scoped_users_where(int(owner_id))", res)
 
-    def test_version(self):
+    def test_version_at_least_package(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "8.2.11")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "8.2.11")
+        # Package landed in 8.2.11; follow-up quick-ops may bump further.
+        parts = [int(x) for x in __version__.split(".")[:3]]
+        self.assertGreaterEqual(parts, [8, 2, 11])
+        self.assertEqual(
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__
+        )
 
 
 class ActionCenterExpiringHrefTests(unittest.IsolatedAsyncioTestCase):

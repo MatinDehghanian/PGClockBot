@@ -286,6 +286,7 @@ class AdminStates(StatesGroup):
     ticket_reply = State()
     user_search = State()
     user_wallet_credit = State()
+    user_message = State()
     revoke_reseller_reason = State()
     block_user_reason = State()
     broadcast_text = State()
@@ -1798,19 +1799,34 @@ async def _render_user_card(
     confirm_delete: bool = False,
     edit: bool = False,
 ) -> None:
-    svc_count = await session.scalar(
-        select(func.count()).select_from(UserService).where(UserService.bot_user_id == user.id)
-    ) or 0
+    from app.services.users_ops import (
+        bot_user_alert_flags,
+        build_user_ops_row,
+        load_services_by_user_ids,
+    )
+
+    by = await load_services_by_user_ids(session, [int(user.id)])
+    ops = build_user_ops_row(user, by.get(int(user.id), []))
+    flags = bot_user_alert_flags(ops)
     blocked = "بله 🚫" if user.is_blocked else "خیر"
+    alert_line = ""
+    if ops.has_alert:
+        bits = []
+        if ops.expiring:
+            bits.append(f"انقضا {ops.expire_text}")
+        if ops.low_volume:
+            bits.append(f"حجم {ops.volume_text}")
+        alert_line = "\n🔔 اعلان: " + " · ".join(bits) if bits else "\n🔔 اعلان فعال"
     text = (
-        f"👤 <b>{html.escape(user.full_name or user.username or '—')}</b>\n\n"
+        f"{flags} <b>{html.escape(user.full_name or user.username or '—')}</b>\n\n"
         f"آیدی تلگرام: <code>{user.telegram_id}</code>\n"
         f"یوزرنیم: @{html.escape(user.username or '—')}\n"
         f"نقش: {html.escape(user.role)}\n"
         f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
-        f"سرویس‌ها: {svc_count}\n"
-        f"مسدود: {blocked}\n\n"
-        f"<i>ویرایش کامل وب: /users/{user.id}/edit</i>"
+        f"سرویس‌ها: {ops.service_count}\n"
+        f"مسدود: {blocked}"
+        f"{alert_line}\n\n"
+        f"<i>وب‌پنل: /users?uid={user.id}</i>"
     )
     if confirm_delete:
         text += "\n\n⚠️ <b>حذف کامل برگشت‌ناپذیر است</b> (سفارش‌ها، سرویس‌ها، تیکت‌ها)."
@@ -1829,6 +1845,68 @@ async def _render_user_card(
         except Exception:
             pass
     await message.answer(text, reply_markup=markup)
+
+
+@router.callback_query(F.data.startswith("adm:users:msg:"))
+@require_bot_owner_handler
+async def adm_users_message_start(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    user = await session.get(BotUser, int(callback.data.split(":")[-1]))
+    if not user:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    if user.reseller_id is not None:
+        await callback.answer("این کاربر متعلق به فروشگاه نماینده است", show_alert=True)
+        return
+    await callback.answer()
+    await state.set_state(AdminStates.user_message)
+    await state.update_data(msg_user_id=int(user.id))
+    if callback.message:
+        await callback.message.answer(
+            f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b> را بفرستید:",
+            reply_markup=kb.cancel_reply(),
+        )
+
+
+@router.message(AdminStates.user_message)
+@require_bot_owner_handler
+async def adm_users_message_send(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        return
+    if kb.is_cancel_text(message.text):
+        await state.clear()
+        await message.answer("لغو شد.", reply_markup=kb.admin_users_reply_keyboard())
+        return
+    data = await state.get_data()
+    uid = int(data.get("msg_user_id") or 0)
+    user = await session.get(BotUser, uid) if uid else None
+    await state.clear()
+    if not user or user.reseller_id is not None:
+        await message.answer("کاربر نامعتبر.", reply_markup=kb.admin_users_reply_keyboard())
+        return
+    from app.services.users_quick import send_staff_dm
+
+    try:
+        await send_staff_dm(
+            session,
+            user,
+            message.text or "",
+            actor=str(db_user.telegram_id or db_user.id),
+        )
+        await session.commit()
+        await message.answer("پیام ارسال شد ✅", reply_markup=kb.admin_users_reply_keyboard())
+    except ValueError as e:
+        await message.answer(str(e), reply_markup=kb.admin_users_reply_keyboard())
+    except Exception as e:
+        await message.answer(f"خطا: {e}", reply_markup=kb.admin_users_reply_keyboard())
+    await _render_user_card(message, session, user)
 
 
 @router.callback_query(F.data.startswith("adm:users:view:"))
