@@ -1,4 +1,4 @@
-"""Finance reports tab + bot hooks (v8.2.13)."""
+"""Finance reports tab + bot hooks (released in v8.5.0)."""
 
 from __future__ import annotations
 
@@ -126,11 +126,12 @@ class FinanceReportsUiTests(unittest.TestCase):
     def test_version(self):
         from app.version import __version__
 
-        self.assertEqual(__version__, "8.2.13")
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "8.2.13")
+        parts = [int(x) for x in __version__.split(".")[:3]]
+        self.assertGreaterEqual(parts, [8, 5, 0])
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"8.2.13"', notes)
-        self.assertTrue((ROOT / "docs/RELEASE_NOTES_v8.2.13.md").is_file())
+        self.assertIn('"8.5.0"', notes)
+        self.assertTrue((ROOT / "docs/RELEASE_NOTES_v8.5.0.md").is_file())
 
 
 if __name__ == "__main__":
