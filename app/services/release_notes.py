@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.9": [
+        "نوار سیاه موبایل — رفع واقعی: علت اصلی height:100% و max-height:--vvh دسکتاپ بود که روی موبایل override نمی‌شد و .main از shell بزرگ‌تر می‌شد؛ nudge/resample اسکرول (علت لرزش هنگام ورود) حذف شد؛ html/body با position:fixed قفل شد و safe-bottom به padding-bottom شل منتقل شد",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.8",
+    ],
     "8.5.8": [
         "نوار سیاه موبایل — رفع قطعی: شل پنل در موبایل با position:fixed و inset:0 به viewport چسبیده (دیگر به dvh/--vvh وابسته نیست)، اسکرول body قفل شد تا پس‌زمینهٔ مشکی زیر شل دیده نشود، اندازه‌گیری --vvh فقط از window.innerHeight (نه visualViewport که گاهی اشتباه بود)، و nudge اسکرول حتی روی صفحات کوتاه (مثل داشبورد) هم اجرا می‌شود",
         "جدول کاربران: منوی انتخاب پلن عمودی وسط ردیف؛ دایره اعلان در منوی بازشونده کنار هر پلن دارای اعلان (بدون رنگ‌آمیزی کل ستون)؛ ستون انقضا فقط «X روز» یا «منقضی» — بدون تاریخ",

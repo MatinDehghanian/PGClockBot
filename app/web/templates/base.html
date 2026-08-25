@@ -56,23 +56,12 @@
     window.addEventListener('resize', setVVH);
     window.addEventListener('orientationchange', setVVH);
     window.addEventListener('pageshow', setVVH);
-    window.addEventListener('focus', setVVH);
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible') setVVH();
     });
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', setVVH);
-      window.visualViewport.addEventListener('scroll', setVVH);
     }
-    var resamples = 0;
-    function resample() {
-      setVVH();
-      if (++resamples < 12) {
-        (resamples < 6 ? window.requestAnimationFrame : setTimeout)(resample, resamples < 6 ? undefined : 120);
-      }
-    }
-    if (document.readyState === 'complete') resample();
-    else window.addEventListener('load', resample, { once: true });
   })();
   </script>
   <link rel="manifest" href="/manifest.webmanifest" />

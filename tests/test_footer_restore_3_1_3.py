@@ -34,10 +34,10 @@ class FooterRestore303Tests(unittest.TestCase):
             "padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));",
             css,
         )
-        # Mobile bottom pad matches .side drawer (space-2) so footers share one baseline
+        # Mobile safe-bottom lives on .shell padding; .main uses symmetric page pad
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));",
-            css,
+            "padding: var(--page-title-gap) var(--space-2) var(--page-title-gap);",
+            css.split("@media (max-width: 900px)", 1)[1],
         )
 
     def test_side_scrolls_as_a_column(self):

@@ -20,15 +20,26 @@ class MobileViewportShellFixTests(unittest.TestCase):
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
         self.assertIn("position: fixed;", shell)
         self.assertIn("inset: 0;", shell)
+        self.assertIn("padding-bottom: var(--safe-bottom)", shell)
         self.assertIn("height: auto;", shell)
         self.assertNotRegex(shell, r"(?m)^\s*height:\s*var\(--vvh")
 
-    def test_mobile_body_scroll_locked_when_shell_present(self):
+    def test_mobile_body_is_fixed_inset(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
-        self.assertIn("html:has(.shell)", mobile)
-        self.assertIn("overflow: hidden;", mobile)
-        self.assertIn("overscroll-behavior: none;", mobile)
+        block = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
+        self.assertIn("position: fixed;", block)
+        self.assertIn("inset: 0;", block)
+        self.assertIn("overflow: hidden;", block)
+
+    def test_mobile_main_drops_desktop_height_chain(self):
+        css = CSS.read_text(encoding="utf-8")
+        mobile = css.split("@media (max-width: 900px)", 1)[1]
+        main = mobile.split("  .main {", 1)[1].split("  .main-body", 1)[0]
+        self.assertIn("height: auto;", main)
+        self.assertIn("max-height: none;", main)
+        self.assertIn("flex: 1 1 0;", main)
+        self.assertNotRegex(main, r"max-height:\s*var\(--vvh")
 
     def test_vvh_prefers_inner_height_not_visual_viewport(self):
         html = BASE.read_text(encoding="utf-8")
@@ -41,11 +52,11 @@ class MobileViewportShellFixTests(unittest.TestCase):
         )
         self.assertIn("window.__pgSetVVH = setVVH", html)
 
-    def test_nudge_handles_short_pages(self):
+    def test_no_scroll_nudge_on_load(self):
         js = JS.read_text(encoding="utf-8")
-        block = js.split("function nudge(el)", 1)[1].split("function nudgeAll", 1)[0]
-        self.assertIn("minHeight", block)
-        self.assertIn("__pgSetVVH", js)
+        self.assertNotIn("function nudge(el)", js)
+        self.assertNotIn("nudgeAll", js)
+        self.assertNotIn("resample()", BASE.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
