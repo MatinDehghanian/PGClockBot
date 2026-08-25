@@ -15,10 +15,16 @@ class MobileSideFullHeightTests(unittest.TestCase):
 
     def test_users_mobile_hides_secondary_cols(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn('col-svc col-hide-sm', users)
-        self.assertIn('col-vol col-hide-sm', users)
-        self.assertIn('col-exp col-hide-sm', users)
-        self.assertIn("cell-name-meta", users)
+        # id / telegram / wallet stay hidden on mobile — they're secondary lookups.
+        self.assertIn('col-id col-hide-sm', users)
+        self.assertIn('col-tg col-hide-sm', users)
+        self.assertIn('col-wallet col-hide-sm', users)
+        # The service cell (switcher + live volume/expiry + alert dot) is the
+        # thing users actually need on mobile, so it now stays visible on all
+        # breakpoints instead of collapsing into a static, non-interactive
+        # text summary under the name.
+        self.assertNotIn('col-svc col-hide-sm', users)
+        self.assertIn("users-svc-cell", users)
 
 if __name__ == "__main__":
     unittest.main()

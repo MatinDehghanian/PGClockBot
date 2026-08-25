@@ -82,23 +82,11 @@
       }, true);
     })();
 
-    /* Some mobile browsers (older Safari/Chrome) settle `100dvh` on a stale
-       "large viewport" value at first paint and only recompute it once a
-       resize/scroll fires — until then .shell/.main can be a bit taller
-       than reality, leaving a thin dark strip below the footer that
-       disappears the moment the user scrolls. Nudge a recompute ourselves
-       right after load so the very first paint already matches reality. */
-    (function () {
-      let done = false;
-      function nudge() {
-        if (done) return;
-        done = true;
-        try { window.dispatchEvent(new Event('resize')); } catch (e) {}
-      }
-      if (document.readyState === 'complete') requestAnimationFrame(nudge);
-      else window.addEventListener('load', () => requestAnimationFrame(nudge), { once: true });
-      window.addEventListener('pageshow', () => { done = false; nudge(); });
-    })();
+    /* The mobile black-bar-under-footer glitch (stale dvh on first paint) is
+       fixed at the source now: an inline <head> script in base.html measures
+       window.innerHeight synchronously (before first layout) into --vvh,
+       which .shell/.main/.side consume instead of dvh. Nothing to nudge
+       here anymore — see base.html for the real fix. */
 
     /* Permanent no-zoom: keep focused text controls at ≥16px even if CSS regresses */
     (function () {

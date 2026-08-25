@@ -11,6 +11,32 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="{{ pwa_name|default('MrClockBot') }}" />
   <title>{% block title %}پنل مدیریت{% endblock %} · {{ pwa_name|default('MrClockBot') }}</title>
+  <script>
+  /* Root fix for the mobile "black bar" glitch: `100dvh` is SUPPOSED to track
+     the browser's current toolbar state, but on first paint several mobile
+     engines report a stale/large value before the toolbar has settled, so
+     .shell (sized off dvh) is briefly taller than the real visible viewport —
+     the gap under the footer paints as the near-black body background until
+     a scroll forces a relayout. Measuring window.innerHeight ourselves is
+     always accurate to *this instant*, and this runs synchronously in <head>
+     (before any layout/paint), so --vvh is correct from the very first
+     frame — no flash, no dependency on the engine's own dvh timing. */
+  (function () {
+    var d = document.documentElement;
+    function setVVH() {
+      var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+      if (h) d.style.setProperty('--vvh', h + 'px');
+    }
+    setVVH();
+    window.addEventListener('resize', setVVH);
+    window.addEventListener('orientationchange', setVVH);
+    window.addEventListener('pageshow', setVVH);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', setVVH);
+      window.visualViewport.addEventListener('scroll', setVVH);
+    }
+  })();
+  </script>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/pwa/icon/180" />
   <link rel="stylesheet" href="/static/fonts.css?v={{ app_version }}" />
