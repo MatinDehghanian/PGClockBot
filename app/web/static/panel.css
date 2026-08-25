@@ -4213,6 +4213,20 @@ form.settings-form > .actions.sticky-actions,
     padding-bottom: 0;
   }
 
+  /* iOS Safari in-browser: shell tracks visualViewport (address/tab bars). */
+  html.ios-safari .shell {
+    top: var(--vv-top, 0px);
+  }
+  html.ios-safari .topbar {
+    top: var(--vv-top, 0px);
+  }
+  html.ios-safari .side {
+    top: calc(var(--vv-top, 0px) + var(--topbar-h) + var(--safe-top));
+  }
+  html.ios-safari .side-backdrop {
+    top: calc(var(--vv-top, 0px) + var(--topbar-h) + var(--safe-top));
+  }
+
   .topbar { display: flex; }
 
   .side {

@@ -24,6 +24,15 @@
      sizing, so neither can lag a beat behind the very first frame. */
   (function () {
     var d = document.documentElement;
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    var isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+      !!window.navigator.standalone;
+    if (isIOS) {
+      d.classList.add('ios');
+      if (isStandalone) d.classList.add('ios-standalone');
+      else d.classList.add('ios-safari');
+    }
     var theme;
     try {
       var pref = localStorage.getItem('panel-theme') || 'system';
@@ -44,19 +53,25 @@
        standalone PWAs may never fire one for this) self-heals any residual
        drift without requiring the user to scroll first. */
     function setVVH() {
-      /* Measure the layout viewport height we must paint — on iOS/Safari
-         innerHeight alone can be shorter than the visible screen, leaving a
-         dead black strip under position:fixed shell (inset:0 does not help). */
+      var vv = window.visualViewport;
+      /* iOS Safari (in-browser, not Home Screen PWA): fixed elements anchor to
+         the layout viewport, but the *visible* area is visualViewport — smaller
+         and offset when the address/tab bars show. Size .shell to vv exactly. */
+      if (d.classList.contains('ios-safari') && vv) {
+        d.style.setProperty('--vvh', vv.height + 'px');
+        d.style.setProperty('--vv-top', vv.offsetTop + 'px');
+        return;
+      }
       var h = window.innerHeight;
-      if (!h && window.visualViewport) h = window.visualViewport.height;
+      if (!h && vv) h = vv.height;
       var ch = d.clientHeight;
       if (ch > h) h = ch;
-      if (window.visualViewport) {
-        var vv = window.visualViewport;
+      if (vv) {
         var extent = (vv.height || 0) + (vv.offsetTop || 0);
         if (extent > h) h = extent;
       }
       if (h) d.style.setProperty('--vvh', h + 'px');
+      d.style.removeProperty('--vv-top');
     }
     setVVH();
     window.__pgSetVVH = setVVH;

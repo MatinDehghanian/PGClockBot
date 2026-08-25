@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.11": [
+        "نوار سیاه iOS Safari: در مرورگر سافاری (نه PWA) المان‌های fixed به layout viewport می‌چسبند نه visualViewport — shell حالا با visualViewport.height و offsetTop (--vv-top) اندازه‌گیری می‌شود؛ topbar و sidebar هم هم‌تراز شدند",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.10",
+    ],
     "8.5.10": [
         "نوار سیاه موبایل (iOS/Safari/PWA): position:fixed + inset:0 و -webkit-fill-available روی html/body باعث می‌شد shell کوتاه‌تر از صفحه رندر شود — حذف شد؛ shell حالا height: var(--vvh) صریح دارد و --vvh از innerHeight + clientHeight + visualViewport اندازه‌گیری می‌شود تا کل viewport پوشش داده شود",
         "بدون مایگریشن؛ ریستور: تگ v8.5.9",

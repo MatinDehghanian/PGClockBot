@@ -46,15 +46,23 @@ class MobileViewportShellFixTests(unittest.TestCase):
     def test_vvh_covers_layout_viewport_on_ios(self):
         html = BASE.read_text(encoding="utf-8")
         block = html.split("function setVVH()", 1)[1].split("setVVH();", 1)[0]
-        self.assertIn("window.innerHeight", block)
-        self.assertIn("clientHeight", block)
+        self.assertIn("ios-safari", html)
         self.assertIn("visualViewport", block)
+        self.assertIn("--vv-top", block)
         self.assertIn("window.__pgSetVVH = setVVH", html)
+
+    def test_ios_safari_shell_tracks_visual_viewport(self):
+        css = CSS.read_text(encoding="utf-8")
+        mobile = css.split("@media (max-width: 900px)", 1)[1]
+        self.assertIn("html.ios-safari .shell", mobile)
+        self.assertIn("top: var(--vv-top, 0px);", mobile)
+        self.assertIn("html.ios-safari .topbar", mobile)
 
     def test_no_scroll_nudge_on_load(self):
         js = JS.read_text(encoding="utf-8")
         self.assertNotIn("function nudge(el)", js)
         self.assertNotIn("nudgeAll", js)
+        self.assertIn("ios-safari", js)
         self.assertNotIn("resample()", BASE.read_text(encoding="utf-8"))
 
 

@@ -82,6 +82,22 @@
       }, true);
     })();
 
+    /* iOS Safari: re-sync shell when visual viewport changes (tab/address bar).
+       Do NOT listen to visualViewport scroll — .main owns scroll; scroll events
+       would jitter the shell. */
+    (function () {
+      var d = document.documentElement;
+      if (!d.classList.contains('ios-safari') || !window.visualViewport) return;
+      function sync() {
+        if (typeof window.__pgSetVVH === 'function') window.__pgSetVVH();
+      }
+      window.visualViewport.addEventListener('resize', sync);
+      window.addEventListener('orientationchange', function () {
+        setTimeout(sync, 100);
+      });
+      sync();
+    })();
+
     /* Permanent no-zoom: keep focused text controls at ≥16px even if CSS regresses */
     (function () {
       const MIN = 16;
