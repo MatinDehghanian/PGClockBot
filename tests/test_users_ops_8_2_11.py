@@ -44,6 +44,8 @@ class UsersOpsUnitTests(unittest.TestCase):
         self.assertTrue(row.has_alert)
         self.assertEqual(row.service_count, 1)
         self.assertIn("گیگ", row.volume_text)
+        self.assertRegex(row.expire_text, r"\d+ روز")
+        self.assertNotIn("/", row.expire_text)
 
     def test_low_volume_flag(self):
         from app.services.users_ops import build_user_ops_row
@@ -113,6 +115,12 @@ class UsersOpsUiTests(unittest.TestCase):
         self.assertNotIn("cell-name-meta", users)
 
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
+        self.assertIn("users-svc-select-wrap", css)
+        self.assertIn(
+            "align-items: center",
+            css.split(".users-svc-select-wrap", 1)[1].split("}", 1)[0],
+        )
         self.assertIn(".alert-dot", css)
         self.assertIn(".users-row.is-focus", css)
         self.assertIn(".cell-name-tags", css)
@@ -121,6 +129,11 @@ class UsersOpsUiTests(unittest.TestCase):
         self.assertIn(".users-ops-table .col-exp", css)
         self.assertIn("col-hide-sm", (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8"))
         self.assertIn("users-svc-boxed", css)
+        self.assertIn("users-svc-menu-label", css)
+        self.assertNotIn("has-svc-alert", css)
+        self.assertIn("data-alert", js)
+        self.assertIn("users-svc-menu-label", js)
+        self.assertIn("syncUsersSvcToggleAlert", js)
         self.assertIn(".badge.badge-risk", css)
         self.assertNotIn(".risk-dot {", css)
 

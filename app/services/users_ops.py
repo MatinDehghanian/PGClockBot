@@ -180,13 +180,12 @@ def _summarize_service(
         bool(getattr(svc, "notified_expire", False)) and left is not None and left <= expire_days
     )
     if exp is not None:
-        expire_text = exp.astimezone().strftime("%Y/%m/%d")
         if left is None:
-            pass
+            expire_text = "—"
         elif left <= 0:
-            expire_text = f"{expire_text} · منقضی"
+            expire_text = "منقضی"
         else:
-            expire_text = f"{expire_text} · {left} روز"
+            expire_text = f"{left} روز"
     else:
         expire_text = "—"
 

@@ -489,20 +489,20 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Row-level cue for "this user has an active service alert" lives on the
-   service cell itself, where the alert dot actually renders */
-.users-ops-table td.col-svc.has-svc-alert {
-  background: color-mix(in srgb, #f97316 6%, transparent);
-}
-/* Service select — the plan-switch menu must stay fully legible: full-width
-   in its column, standard control height/font, boxed dropdown rows (below) —
-   never the cramped, ellipsis-everything treatment of a squeezed cell. */
+/* Row-level cue for "this user has an active service alert" — dot only, no cell tint */
 .users-svc-select-wrap {
-  display: block;
+  display: flex;
+  align-items: center;
   max-width: 100%;
   min-width: 0;
+  margin: 0;
 }
 .users-svc-select-wrap .ui-select,
+.users-svc-ui.ui-select {
+  margin-top: 0;
+  width: 100%;
+  max-width: 100%;
+}
 .users-svc-select-wrap .users-svc-select {
   width: 100%;
   max-width: 100%;
@@ -515,6 +515,10 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   padding: var(--space-0);
 }
 .ui-select-menu.users-svc-boxed button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
   border: 1px solid var(--border);
   background: var(--control-bg, var(--bg-elevated, var(--bg-card)));
   color: var(--muted-fg);
@@ -524,6 +528,14 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   white-space: normal;
   text-align: right;
   line-height: 1.35;
+}
+.users-svc-menu-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: inherit;
+}
+.ui-select-toggle .alert-dot {
+  flex: 0 0 auto;
 }
 .ui-select-menu.users-svc-boxed button:hover {
   background: var(--control-bg-hover, var(--bg-hover));
