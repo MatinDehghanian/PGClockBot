@@ -82,6 +82,24 @@
       }, true);
     })();
 
+    /* Some mobile browsers (older Safari/Chrome) settle `100dvh` on a stale
+       "large viewport" value at first paint and only recompute it once a
+       resize/scroll fires — until then .shell/.main can be a bit taller
+       than reality, leaving a thin dark strip below the footer that
+       disappears the moment the user scrolls. Nudge a recompute ourselves
+       right after load so the very first paint already matches reality. */
+    (function () {
+      let done = false;
+      function nudge() {
+        if (done) return;
+        done = true;
+        try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+      }
+      if (document.readyState === 'complete') requestAnimationFrame(nudge);
+      else window.addEventListener('load', () => requestAnimationFrame(nudge), { once: true });
+      window.addEventListener('pageshow', () => { done = false; nudge(); });
+    })();
+
     /* Permanent no-zoom: keep focused text controls at ≥16px even if CSS regresses */
     (function () {
       const MIN = 16;

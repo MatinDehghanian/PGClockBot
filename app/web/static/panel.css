@@ -218,10 +218,11 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   -webkit-overflow-scrolling: touch;
 }
 .main-body {
-  /* Content-sized only — do NOT flex-grow to fill the viewport.
-     Growing left a tall empty slab above the footer on short pages
-     (looked like a dark “box” until the first scroll / dvh change). */
-  flex: 0 0 auto;
+  /* Grow to fill .main so .site-footer's margin-top:auto pins it to the
+     viewport bottom on short pages (classic sticky footer) — content itself
+     stays top-aligned, so there is never a visible gap either above or
+     below the footer, regardless of dvh timing on mobile. */
+  flex: 1 0 auto;
   min-width: 0;
   width: 100%;
   display: flex;
@@ -2857,9 +2858,11 @@ code.env-fname {
 }
 
 .site-footer {
-  /* Sit after content — no margin-top:auto filler gap (phantom box on short pages) */
-  margin-top: 0;
+  margin-top: auto;
   padding-top: var(--page-title-gap);
+  /* Classic sticky footer: .main-body flex-grows above, this margin absorbs
+     the remaining space so the footer always sits flush with the viewport
+     bottom on short pages — no dead gap above or below it. */
   border-top: 1px solid var(--border);
   display: flex;
   flex-wrap: wrap;
@@ -4256,7 +4259,7 @@ form.settings-form > .actions.sticky-actions,
     display: flex;
     flex-direction: column;
   }
-  .main-body { flex: 0 0 auto; padding-bottom: var(--page-title-gap); }
+  .main-body { flex: 1 0 auto; padding-bottom: var(--page-title-gap); }
   .site-footer {
     /* Keep one row like .side-foot so both footer tops sit on the same line */
     flex-direction: row;
@@ -4264,7 +4267,7 @@ form.settings-form > .actions.sticky-actions,
     align-items: center;
     justify-content: center;
     text-align: center;
-    margin-top: 0;
+    margin-top: auto;
     padding-top: var(--page-title-gap);
     gap: var(--space-1);
     min-height: calc(var(--page-title-gap) + 28px + var(--space-1));
