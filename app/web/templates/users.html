@@ -86,7 +86,9 @@
         <th class="col-id col-hide-sm" data-sort-type="num">#</th>
         <th class="col-tg col-hide-sm" data-sort-type="num">تلگرام</th>
         <th class="col-name" data-sort-type="text">نام</th>
-        <th class="col-svc" data-sort-type="num" title="سرویس · حجم · انقضا">سرویس · حجم · انقضا</th>
+        <th class="col-svc" data-sort-type="text">سرویس</th>
+        <th class="col-vol" data-sort-type="text">حجم</th>
+        <th class="col-exp" data-sort-type="num">انقضا</th>
         <th class="col-wallet col-hide-sm" data-sort-type="num">کیف پول</th>
         <th class="col-status" data-sort-type="text">وضعیت</th>
         {% if ops or manage %}<th class="col-actions"></th>{% endif %}
@@ -111,41 +113,32 @@
             </span>
           </div>
         </td>
-        <td class="col-svc{% if row.has_alert %} has-svc-alert{% endif %}" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">
+        <td class="col-svc{% if row.has_alert %} has-svc-alert{% endif %}" data-sort-value="{{ row.services[0].label if row.service_count > 0 else '' }}">
           {% if row.service_count == 0 %}
-          <div class="users-svc-cell">
-            <span class="muted users-svc-empty">بدون سرویس</span>
-          </div>
+          <span class="muted">بدون سرویس</span>
+          {% elif row.service_count == 1 %}
+          <span class="users-svc-name" title="{{ row.services[0].label }}">
+            <span class="users-svc-name-text">{{ row.services[0].label }}</span>
+            {% if row.services[0].has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
+          </span>
           {% else %}
-          <div class="users-svc-cell">
-            {% if row.service_count == 1 %}
-            <span class="users-svc-name" title="{{ row.services[0].label }}">
-              <span class="users-svc-name-text">{{ row.services[0].label }}</span>
-              {% if row.services[0].has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
-            </span>
-            {% else %}
-            <label class="users-svc-select-wrap">
-              <span class="sr-only">سرویس‌های کاربر</span>
-              <select class="select-sm users-svc-select" data-uid="{{ u.id }}" aria-label="سرویس‌های کاربر">
-                {% for s in row.services %}
-                <option value="{{ s.id }}"
-                        data-volume="{{ s.volume_text }}"
-                        data-expire="{{ s.expire_text }}"
-                        data-days="{{ s.days_left if s.days_left is not none else 9999 }}"
-                        data-alert="{{ '1' if s.has_alert else '0' }}"
-                        {% if loop.first %}selected{% endif %}>{{ s.label }}</option>
-                {% endfor %}
-              </select>
-            </label>
-            {% endif %}
-            <span class="users-svc-meta">
-              <span class="users-vol-cell">{{ row.volume_text }}</span>
-              <span class="users-svc-meta-sep" aria-hidden="true">·</span>
-              <span class="users-exp-cell">{{ row.expire_text }}</span>
-            </span>
-          </div>
+          <label class="users-svc-select-wrap">
+            <span class="sr-only">سرویس‌های کاربر</span>
+            <select class="select-sm users-svc-select" data-uid="{{ u.id }}" aria-label="سرویس‌های کاربر">
+              {% for s in row.services %}
+              <option value="{{ s.id }}"
+                      data-volume="{{ s.volume_text }}"
+                      data-expire="{{ s.expire_text }}"
+                      data-days="{{ s.days_left if s.days_left is not none else 9999 }}"
+                      data-alert="{{ '1' if s.has_alert else '0' }}"
+                      {% if loop.first %}selected{% endif %}>{{ s.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
           {% endif %}
         </td>
+        <td class="col-vol users-vol-cell" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
+        <td class="col-exp users-exp-cell" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
         <td class="mono col-wallet col-hide-sm" dir="ltr" data-sort-value="{{ u.wallet_balance or 0 }}">{{ u.wallet_balance | num }}</td>
         <td class="col-status" data-sort-value="{{ '1' if u.is_blocked else '0' }}">
           {% if u.is_blocked %}
@@ -209,7 +202,7 @@
         {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="{% if ops or manage %}8{% else %}7{% endif %}" class="muted">کاربری نیست</td></tr>
+      <tr><td colspan="{% if ops or manage %}9{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -289,20 +282,21 @@
     var opt = sel.options[sel.selectedIndex];
     if (!opt) return;
     var cell = sel.closest('td.col-svc');
-    if (!cell) return;
+    var tr = sel.closest('tr');
+    if (!cell || !tr) return;
     var volText = opt.getAttribute('data-volume') || '—';
     var expText = opt.getAttribute('data-expire') || '—';
     var days = opt.getAttribute('data-days') || '9999';
     var hasAlert = opt.getAttribute('data-alert') === '1';
-    cell.querySelectorAll('.users-vol-cell').forEach(function(vol){
+    tr.querySelectorAll('.users-vol-cell').forEach(function(vol){
       vol.textContent = volText;
       vol.setAttribute('data-sort-value', volText);
     });
-    cell.querySelectorAll('.users-exp-cell').forEach(function(exp){
+    tr.querySelectorAll('.users-exp-cell').forEach(function(exp){
       exp.textContent = expText;
       exp.setAttribute('data-sort-value', days);
     });
-    cell.setAttribute('data-sort-value', days);
+    cell.setAttribute('data-sort-value', (opt.textContent || '').trim());
     cell.classList.toggle('has-svc-alert', hasAlert);
     var toggle = cell.querySelector('.ui-select-toggle');
     var dot = cell.querySelector('.ui-select-toggle > .alert-dot');

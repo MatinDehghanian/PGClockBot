@@ -449,43 +449,37 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   border-color: color-mix(in srgb, var(--accent, #38bdf8) 45%, var(--border));
   background: color-mix(in srgb, var(--accent, #38bdf8) 10%, transparent);
 }
+/* Users table — service / volume / expiry are three separate, always-visible
+   columns (never merged, never hidden below 1100px — id/telegram/wallet are
+   the ones that hide there). Each gets its own min-width so its content is
+   never cramped; if that pushes the table wider than the viewport, the
+   surrounding .table-wrap scrolls horizontally with its usual fade hint —
+   the exact same fallback every other table in the panel already uses, so
+   the users table now behaves like the rest of the app instead of hiding
+   or merging data to force a fit. */
 .users-ops-table .col-svc {
-  width: 13.5rem;
-  max-width: 15rem;
-  min-width: 9.5rem;
+  min-width: 10rem;
   vertical-align: middle;
 }
-.users-ops-table td.col-svc {
-  padding-block: var(--space-1);
+.users-ops-table .col-vol {
+  min-width: 6rem;
+  vertical-align: middle;
+}
+.users-ops-table .col-exp {
+  min-width: 7.5rem;
+  vertical-align: middle;
 }
 .users-ops-table .col-name {
   min-width: 6.5rem;
   vertical-align: middle;
 }
-/* Merged service cell — one place to see AND switch a user's service, with
-   its live volume/expiry and a per-service alert dot. Same markup renders on
-   desktop and mobile; only column widths change at the breakpoints below, so
-   the switcher is always reachable instead of collapsing into static text. */
-.users-svc-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  max-width: 100%;
-  min-width: 0;
-}
-.users-svc-empty {
-  font-size: 12px;
-}
 .users-svc-name {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-0);
+  gap: var(--space-1);
   max-width: 100%;
   min-width: 0;
-  font-size: 12.5px;
   font-weight: 500;
-  line-height: 1.35;
   vertical-align: middle;
 }
 .users-svc-name-text {
@@ -495,34 +489,14 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.users-svc-meta {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-  min-width: 0;
-  font-size: 11.5px;
-  line-height: 1.35;
-  color: var(--muted-fg);
-}
-.users-svc-meta-sep {
-  opacity: 0.45;
-  flex: 0 0 auto;
-}
-.users-vol-cell,
-.users-exp-cell {
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* Row-level cue for "this user has an active service alert" now lives on the
-   service cell itself (where the alert actually is), not just the name rail */
+/* Row-level cue for "this user has an active service alert" lives on the
+   service cell itself, where the alert dot actually renders */
 .users-ops-table td.col-svc.has-svc-alert {
   background: color-mix(in srgb, #f97316 6%, transparent);
 }
-/* Service select — panel ui-select; boxed options */
+/* Service select — the plan-switch menu must stay fully legible: full-width
+   in its column, standard control height/font, boxed dropdown rows (below) —
+   never the cramped, ellipsis-everything treatment of a squeezed cell. */
 .users-svc-select-wrap {
   display: block;
   max-width: 100%;
@@ -532,7 +506,6 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
 .users-svc-select-wrap .users-svc-select {
   width: 100%;
   max-width: 100%;
-  font-size: 12.5px;
 }
 /* Boxed option rows (ported menu keeps .users-svc-boxed on the menu node) */
 .ui-select-menu.users-svc-boxed {
@@ -631,38 +604,6 @@ html[data-theme="light"] .finance-report-panels .home-panel-grid > a.stat:hover 
 }
 
 /* Users ops + finance reports — mobile */
-@media (max-width: 1100px) {
-  /* Only col-name/col-svc/col-status/col-actions remain once col-hide-sm
-     kicks in (id/telegram/wallet hide). col-svc stays visible — it's the
-     switcher — so it needs an explicit width too, same reasoning as below:
-     auto layout would size col-name to fit its longest unwrapped name and
-     push col-actions (the kebab menu) off-screen with no visible scroll
-     hint. Fixed layout + explicit widths on the three side columns force
-     col-name to the remaining space, so name/tags/service all wrap or
-     ellipsis as needed and the kebab always stays on-screen. */
-  .users-ops-table {
-    table-layout: fixed;
-  }
-  .users-ops-table .col-name {
-    width: auto;
-    min-width: 0;
-    max-width: none;
-  }
-  .users-ops-table th.col-svc,
-  .users-ops-table td.col-svc {
-    width: 7.5rem;
-    max-width: 7.5rem;
-    min-width: 0;
-  }
-  .users-ops-table th.col-status,
-  .users-ops-table td.col-status {
-    width: 5.5rem;
-  }
-  .users-ops-table th.col-actions,
-  .users-ops-table td.col-actions {
-    width: 2.75rem;
-  }
-}
 @media (max-width: 720px) {
   .users-ops-overview {
     margin-bottom: var(--space-2);
@@ -671,33 +612,11 @@ html[data-theme="light"] .finance-report-panels .home-panel-grid > a.stat:hover 
     display: grid;
     grid-template-columns: 1fr !important;
   }
-  .users-svc-select-wrap,
-  .users-ops-table .users-svc-name {
-    max-width: 100%;
-  }
   .finance-report-panels .home-panel-grid {
     grid-template-columns: 1fr 1fr;
   }
   .finance-report-compare {
     margin-bottom: var(--space-2);
-  }
-}
-@media (max-width: 480px) {
-  /* Tightest phones: trim the status column's own padding/font a touch —
-     freeing a little width for the service switcher, the thing the user
-     actually needs to reach — without hiding its text (still legible). */
-  .users-ops-table th.col-svc,
-  .users-ops-table td.col-svc {
-    width: 6.75rem;
-    max-width: 6.75rem;
-  }
-  .users-ops-table th.col-status,
-  .users-ops-table td.col-status {
-    width: 3.75rem;
-  }
-  .users-ops-table td.col-status .badge {
-    padding: 0 6px;
-    font-size: 10px;
   }
 }
 @media (max-width: 560px) {
