@@ -649,9 +649,11 @@
           btn.setAttribute('aria-selected', btn.dataset.value === sel.value ? 'true' : 'false');
         });
         syncDisabled();
+        syncUsersSvcToggleAlert();
       }
       function rebuildOptions(){
         menu.innerHTML = '';
+        const isUsersSvc = sel.classList.contains('users-svc-select');
         Array.from(sel.options).forEach(opt => {
           if (opt.disabled && opt.value === '' && !opt.textContent.trim()) return;
           const btn = document.createElement('button');
@@ -659,7 +661,20 @@
           btn.setAttribute('role', 'option');
           btn.dataset.value = opt.value;
           if (opt.dataset && opt.dataset.tone) btn.dataset.tone = opt.dataset.tone;
-          btn.textContent = opt.textContent;
+          if (isUsersSvc) {
+            const optLabel = document.createElement('span');
+            optLabel.className = 'users-svc-menu-label';
+            optLabel.textContent = opt.textContent;
+            btn.appendChild(optLabel);
+            if (opt.getAttribute('data-alert') === '1') {
+              const dot = document.createElement('span');
+              dot.className = 'alert-dot';
+              dot.setAttribute('aria-hidden', 'true');
+              btn.appendChild(dot);
+            }
+          } else {
+            btn.textContent = opt.textContent;
+          }
           if (opt.disabled) btn.disabled = true;
           if (opt.value === sel.value) {
             btn.classList.add('active');
@@ -682,6 +697,24 @@
           menu.appendChild(btn);
         });
         syncLabel();
+      }
+      function syncUsersSvcToggleAlert(){
+        if (!sel.classList.contains('users-svc-select')) return;
+        const opt = sel.options[sel.selectedIndex];
+        const hasAlert = !!(opt && opt.getAttribute('data-alert') === '1');
+        let dot = toggle.querySelector(':scope > .alert-dot');
+        if (hasAlert) {
+          if (!dot) {
+            dot = document.createElement('span');
+            dot.className = 'alert-dot';
+            dot.setAttribute('aria-hidden', 'true');
+            const caretEl = toggle.querySelector('.ui-select-caret');
+            if (caretEl) toggle.insertBefore(dot, caretEl);
+            else toggle.appendChild(dot);
+          }
+        } else if (dot) {
+          dot.remove();
+        }
       }
       rebuildOptions();
       toggle.addEventListener('click', (ev) => {

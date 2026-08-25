@@ -113,7 +113,7 @@
             </span>
           </div>
         </td>
-        <td class="col-svc{% if row.has_alert %} has-svc-alert{% endif %}" data-sort-value="{{ row.services[0].label if row.service_count > 0 else '' }}">
+        <td class="col-svc" data-sort-value="{{ row.services[0].label if row.service_count > 0 else '' }}">
           {% if row.service_count == 0 %}
           <span class="muted">بدون سرویس</span>
           {% elif row.service_count == 1 %}
@@ -287,7 +287,6 @@
     var volText = opt.getAttribute('data-volume') || '—';
     var expText = opt.getAttribute('data-expire') || '—';
     var days = opt.getAttribute('data-days') || '9999';
-    var hasAlert = opt.getAttribute('data-alert') === '1';
     tr.querySelectorAll('.users-vol-cell').forEach(function(vol){
       vol.textContent = volText;
       vol.setAttribute('data-sort-value', volText);
@@ -297,21 +296,6 @@
       exp.setAttribute('data-sort-value', days);
     });
     cell.setAttribute('data-sort-value', (opt.textContent || '').trim());
-    cell.classList.toggle('has-svc-alert', hasAlert);
-    var toggle = cell.querySelector('.ui-select-toggle');
-    var dot = cell.querySelector('.ui-select-toggle > .alert-dot');
-    if (hasAlert) {
-      if (!dot && toggle) {
-        dot = document.createElement('span');
-        dot.className = 'alert-dot';
-        dot.setAttribute('aria-hidden', 'true');
-        var caret = toggle.querySelector('.ui-select-caret');
-        if (caret) toggle.insertBefore(dot, caret);
-        else toggle.appendChild(dot);
-      }
-    } else if (dot) {
-      dot.remove();
-    }
   }
 
   document.querySelectorAll('.users-svc-select').forEach(function(sel){
