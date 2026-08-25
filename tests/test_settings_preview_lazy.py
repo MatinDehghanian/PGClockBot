@@ -71,6 +71,11 @@ class LazyPreviewCssTests(unittest.TestCase):
         self.assertIn(".tg-preview-close-btn", css)
         # Close control stretches full width (esp. mobile)
         self.assertIn("width: 100%", css.split(".tg-preview-toolbar", 1)[1].split(".tg-preview-wrap", 1)[0])
+        # Open button also full-width on mobile (nested gate .actions)
+        self.assertIn("tg-preview-gate > .actions", css)
+        mobile_actions = css.split("/* Primary action rows:", 1)[1].split(".search-bar {", 1)[0]
+        self.assertIn("tg-preview-gate > .actions", mobile_actions)
+        self.assertIn("tg-preview-gate > .actions > .btn", mobile_actions)
 
 
 if __name__ == "__main__":

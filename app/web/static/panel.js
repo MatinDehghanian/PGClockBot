@@ -237,7 +237,8 @@
         const active = nav.querySelector('a.active');
         if (!active || typeof active.scrollIntoView !== 'function') return;
         try {
-          active.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'instant' in window ? 'instant' : 'auto' });
+          /* nearest — centering the first RTL tab scrolled a black edge fade into view */
+          active.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'instant' in window ? 'instant' : 'auto' });
         } catch (_) {
           try { active.scrollIntoView(false); } catch (e) {}
         }
@@ -504,6 +505,7 @@
 
       const wrap = document.createElement('div');
       wrap.className = 'ui-select' + (sel.classList.contains('select-sm') || (sel.closest('.actions') && !sel.classList.contains('select-block')) ? ' ui-select-sm' : '');
+      if (sel.classList.contains('users-svc-select')) wrap.classList.add('users-svc-ui');
       if (sel.disabled) wrap.classList.add('is-disabled');
 
       /* Build custom UI first, then park the native <select> outside any <label>.
@@ -529,7 +531,7 @@
       wrap.appendChild(toggle);
 
       const menu = document.createElement('div');
-      menu.className = 'ui-select-menu';
+      menu.className = 'ui-select-menu' + (sel.classList.contains('users-svc-select') ? ' users-svc-boxed' : '');
       menu.setAttribute('role', 'listbox');
       menu.hidden = true;
       wrap.appendChild(menu);
@@ -1078,6 +1080,8 @@
       const openBtn = e.target.closest('[data-modal-open]');
       if (openBtn) {
         e.preventDefault();
+        try { closeRowActions(); } catch (_) {}
+        try { closeUiSelects(); } catch (_) {}
         openModal(openBtn.getAttribute('data-modal-open'));
         return;
       }

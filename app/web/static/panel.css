@@ -452,127 +452,69 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Compact service picker — control/menu tokens; menu ported to body in JS */
-.users-svc-picker {
-  position: relative;
+/* Service select — panel ui-select; boxed options; mobile meta under cell */
+.users-svc-select-wrap {
   display: block;
   max-width: 100%;
   min-width: 0;
 }
-.users-svc-picker-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-0);
+.users-svc-select-wrap .ui-select,
+.users-svc-select-wrap .users-svc-select {
   width: 100%;
   max-width: 100%;
-  min-height: 32px;
-  height: 32px;
-  padding: 0 var(--space-1);
-  margin: 0;
-  border: 1px solid var(--input, var(--border));
-  border-radius: var(--control-radius);
-  background: var(--control-bg, var(--bg-elevated, var(--bg-card)));
-  color: inherit;
-  font: inherit;
-  font-size: 12px;
-  line-height: 1.25;
-  cursor: pointer;
-  text-align: right;
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
 }
-.users-svc-picker-toggle:hover {
-  background: var(--control-bg-hover, var(--bg-hover));
+.users-svc-meta {
+  display: none;
+  align-items: center;
+  gap: var(--space-0);
+  margin-top: 4px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted-fg);
 }
-.users-svc-picker.is-open .users-svc-picker-toggle {
-  border-color: color-mix(in srgb, var(--ring, var(--accent, #38bdf8)) 40%, var(--border));
-  background: var(--control-bg-hover, var(--bg-hover));
-}
-.users-svc-picker-label {
-  flex: 1 1 auto;
+.users-svc-meta .users-vol-cell,
+.users-svc-meta .users-exp-cell {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.users-svc-picker-caret {
+.users-svc-meta-sep {
   flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
-  margin-inline-start: auto;
-  opacity: 0.7;
-  stroke: var(--muted-fg, currentColor);
-  fill: none;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  opacity: 0.55;
 }
-.users-svc-picker-menu {
-  position: absolute;
-  z-index: 40;
-  top: calc(100% + var(--space-0));
-  right: 0;
-  left: auto;
-  min-width: 100%;
-  width: max(100%, 11rem);
-  max-width: min(16rem, 70vw);
-  max-height: min(14rem, 40vh);
-  overflow: auto;
+/* Boxed option rows (ported menu keeps .users-svc-boxed on the menu node) */
+.ui-select-menu.users-svc-boxed {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: var(--space-0);
   padding: var(--space-0);
+}
+.ui-select-menu.users-svc-boxed button {
   border: 1px solid var(--border);
-  border-radius: var(--menu-radius);
-  background: var(--bg-elevated, var(--bg-card));
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
-  box-sizing: border-box;
-}
-.users-svc-picker-menu.is-ported {
-  position: fixed !important;
-  z-index: 3400;
-  inset-inline: auto !important;
-  left: auto !important;
-  max-width: min(16rem, calc(100vw - 16px));
-}
-.users-svc-picker-menu[hidden] {
-  display: none !important;
-}
-.users-svc-option {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  width: 100%;
-  margin: 0;
-  min-height: 34px;
-  padding: 0 var(--space-1);
-  border: 0;
-  border-radius: var(--menu-item-radius);
-  background: transparent;
+  background: var(--control-bg, var(--bg-elevated, var(--bg-card)));
   color: var(--muted-fg);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.35;
+  border-radius: var(--menu-item-radius);
+  min-height: 36px;
+  padding: 6px var(--space-1);
+  white-space: normal;
   text-align: right;
-  cursor: pointer;
-  box-sizing: border-box;
+  line-height: 1.35;
 }
-.users-svc-option:hover {
-  background: var(--bg-hover);
+.ui-select-menu.users-svc-boxed button:hover {
+  background: var(--control-bg-hover, var(--bg-hover));
   color: var(--foreground);
+  border-color: color-mix(in srgb, var(--border) 70%, var(--foreground));
 }
-.users-svc-option.is-active {
+.ui-select-menu.users-svc-boxed button.active {
   background: color-mix(in srgb, var(--accent, #38bdf8) 12%, transparent);
   color: var(--foreground);
+  border-color: color-mix(in srgb, var(--accent, #38bdf8) 40%, var(--border));
+  font-weight: 600;
 }
-.users-svc-option-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+
 .users-row.is-focus > td {
   background: color-mix(in srgb, var(--accent, #38bdf8) 12%, transparent);
 }
@@ -648,9 +590,12 @@ html[data-theme="light"] .finance-report-panels .home-panel-grid > a.stat:hover 
     display: grid;
     grid-template-columns: 1fr !important;
   }
-  .users-svc-picker,
+  .users-svc-select-wrap,
   .users-ops-table .users-svc-one {
     max-width: 100%;
+  }
+  .users-ops-table .users-svc-meta {
+    display: flex;
   }
   .users-ops-table .col-svc {
     width: 8rem;
@@ -4407,10 +4352,17 @@ form.settings-form > .actions.sticky-actions,
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
     gap: var(--space-1);
+    padding-block: 2px;
+    padding-inline: 2px;
     padding-bottom: var(--space-1);
+    scroll-padding-inline: 8px;
+    /* No edge mask — RTL + pill tabs painted a black crescent beside the first tab */
+    -webkit-mask-image: none;
+    mask-image: none;
   }
   .section-tabs.is-scrollable {
-    mask-image: linear-gradient(to left, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+    -webkit-mask-image: none;
+    mask-image: none;
   }
   .section-tabs a,
   .section-tabs .tab-btn {
@@ -4454,6 +4406,8 @@ form.settings-form > .actions.sticky-actions,
   .settings-form .sticky-actions,
   .card > .actions,
   .settings-card > .actions,
+  .tg-preview-gate > .actions,
+  .tg-preview-card .tg-preview-gate > .actions,
   .edit-section > .actions,
   .ui-modal-panel > .actions,
   .ui-modal-panel .form-stack > .actions,
@@ -4480,6 +4434,9 @@ form.settings-form > .actions.sticky-actions,
   .card > .actions > .btn,
   .card > .actions > a.btn,
   .settings-card > .actions > .btn,
+  .tg-preview-gate > .actions > .btn,
+  .tg-preview-gate > .actions > a.btn,
+  .tg-preview-card .tg-preview-gate > .actions > .btn,
   .edit-section > .actions > .btn,
   .ui-modal-panel .form-stack > .actions > .btn,
   .ui-modal-panel .form-stack > .actions > button,
@@ -4498,6 +4455,7 @@ form.settings-form > .actions.sticky-actions,
   .settings-form .sticky-actions > :last-child:nth-child(odd),
   .card > .actions > :last-child:nth-child(odd),
   .settings-card > .actions > :last-child:nth-child(odd),
+  .tg-preview-gate > .actions > :last-child:nth-child(odd),
   .edit-section > .actions > :last-child:nth-child(odd),
   .ui-modal-panel > .actions > :last-child:nth-child(odd),
   .ui-modal-panel .form-stack > .actions > :last-child:nth-child(odd),
@@ -4622,6 +4580,10 @@ form.settings-form > .actions.sticky-actions,
 .tg-preview-gate .actions {
   margin-top: var(--space-2);
   justify-content: flex-start;
+  width: 100%;
+}
+.tg-preview-gate > .actions > .btn {
+  justify-content: center;
 }
 .tg-preview-panel {
   margin-top: var(--space-2);
