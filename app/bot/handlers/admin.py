@@ -1658,18 +1658,33 @@ async def adm_users_list(callback: CallbackQuery, session: AsyncSession, db_user
         page = 0
     page = max(0, page)
     await callback.answer()
-    total = await session.scalar(select(func.count()).select_from(BotUser)) or 0
+    from app.services.users_ops import (
+        bot_user_alert_flags,
+        build_user_ops_row,
+        load_services_by_user_ids,
+        scoped_users_where,
+    )
+
+    total = (
+        await session.scalar(
+            select(func.count()).select_from(BotUser).where(scoped_users_where(None))
+        )
+        or 0
+    )
     result = await session.execute(
         select(BotUser)
+        .where(scoped_users_where(None))
         .order_by(BotUser.id.desc())
         .offset(page * USERS_PAGE_SIZE)
         .limit(USERS_PAGE_SIZE)
     )
     users = list(result.scalars().all())
+    by_svc = await load_services_by_user_ids(session, [int(u.id) for u in users])
     rows = []
     for u in users:
-        name = (u.full_name or u.username or str(u.telegram_id))[:18]
-        flag = "🚫" if u.is_blocked else ("🤝" if u.role == Role.RESELLER.value else "👤")
+        ops = build_user_ops_row(u, by_svc.get(int(u.id), []))
+        name = (u.full_name or u.username or str(u.telegram_id))[:16]
+        flag = bot_user_alert_flags(ops)
         rows.append(
             [
                 InlineKeyboardButton(
@@ -1684,7 +1699,7 @@ async def adm_users_list(callback: CallbackQuery, session: AsyncSession, db_user
         f"👥 <b>لیست کاربران</b>\n"
         f"صفحه {page + 1} از {max(1, (total + USERS_PAGE_SIZE - 1) // USERS_PAGE_SIZE)}"
         f" · {total} نفر\n"
-        f"<i>برای جزئیات روی کاربر بزنید.</i>"
+        f"<i>🔔 اعلان · ⏰ انقضا · 📉 حجم — جزئیات در وب‌پنل /users</i>"
     )
     if callback.message:
         await callback.message.edit_text(
@@ -1702,7 +1717,7 @@ async def adm_users_webhint(callback: CallbackQuery, db_user: BotUser):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer(
-        "از وب‌پنل مسیر /users برای ایجاد، ویرایش و مدیریت کامل کاربران استفاده کنید.",
+        "وب‌پنل /users: فیلتر نزدیک‌انقضا، حجم‌کم، اعلان‌ها و ویرایش کامل کاربران.",
         show_alert=True,
     )
 

@@ -253,12 +253,14 @@ async def build_action_center(
             }
         )
     if expiring:
+        from app.services.users_ops import users_list_href
+
         items.append(
             {
                 "key": "expiring",
                 "title": f"{expiring} سرویس نزدیک انقضا",
                 "detail": f"تا {expire_days} روز آینده",
-                "href": "/users",
+                "href": users_list_href(filter_key="expiring"),
                 "tone": "neutral",
             }
         )

@@ -297,21 +297,35 @@ async def res_users_list(
         page = 0
     page = max(0, page)
     await callback.answer()
-    total = await session.scalar(
-        select(func.count()).select_from(BotUser).where(BotUser.reseller_id == owner_id)
-    ) or 0
+    from app.services.users_ops import (
+        bot_user_alert_flags,
+        build_user_ops_row,
+        load_services_by_user_ids,
+        scoped_users_where,
+    )
+
+    total = (
+        await session.scalar(
+            select(func.count())
+            .select_from(BotUser)
+            .where(scoped_users_where(int(owner_id)))
+        )
+        or 0
+    )
     result = await session.execute(
         select(BotUser)
-        .where(BotUser.reseller_id == owner_id)
+        .where(scoped_users_where(int(owner_id)))
         .order_by(BotUser.id.desc())
         .offset(page * RES_USERS_PAGE)
         .limit(RES_USERS_PAGE)
     )
     users = list(result.scalars().all())
+    by_svc = await load_services_by_user_ids(session, [int(u.id) for u in users])
     buttons: list[InlineKeyboardButton] = []
     for u in users:
-        name = (u.full_name or u.username or str(u.telegram_id))[:18]
-        flag = "🚫" if u.is_blocked else "👤"
+        ops = build_user_ops_row(u, by_svc.get(int(u.id), []))
+        name = (u.full_name or u.username or str(u.telegram_id))[:16]
+        flag = bot_user_alert_flags(ops)
         buttons.append(
             InlineKeyboardButton(
                 text=f"{flag} {name}",
@@ -329,7 +343,8 @@ async def res_users_list(
     text = (
         f"👥 <b>مشتریان من</b>\n"
         f"صفحه {page + 1} از {max(1, (total + RES_USERS_PAGE - 1) // RES_USERS_PAGE)}"
-        f" · {total} نفر"
+        f" · {total} نفر\n"
+        f"<i>🔔 اعلان · ⏰ انقضا · 📉 حجم — جزئیات در وب‌پنل /users</i>"
     )
     if not users:
         text += "\n\nهنوز مشتری ثبت‌شده‌ای ندارید."

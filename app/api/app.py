@@ -3116,26 +3116,33 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.get("/users", response_class=HTMLResponse)
     async def users_page(
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_perm("dashboard")),
         session: AsyncSession = Depends(get_db),
     ):
-        from sqlalchemy import and_, exists, not_
+        from app.services.platform_identity import is_explicit_owner_staff
+        from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
+        from app.services.users_ops import (
+            build_users_ops_page,
+            parse_focus_uid,
+            scoped_users_where,
+            users_list_href,
+        )
+
+        try:
+            scope = resolve_shop_scope_id(staff)
+        except ShopScopeError:
+            return RedirectResponse("/home", status_code=303)
 
         search_q = normalize_search_q(request.query_params.get("q"))
+        filter_raw = request.query_params.get("filter")
+        focus_uid = parse_focus_uid(request.query_params.get("uid"))
         fetch_limit = 500 if search_q else 200
 
-        # Pure resellers (role=reseller, no shop UserService) stay on /resellers only.
-        # Dual users (reseller + shop services) appear in both lists.
-        has_shop_service = exists(
-            select(UserService.id).where(UserService.bot_user_id == BotUser.id)
-        )
-        pure_reseller = and_(
-            BotUser.role == Role.RESELLER.value,
-            not_(has_shop_service),
-        )
+        # Shop scope: Owner → platform users only; reseller → own customers.
+        # Pure resellers (no shop services) stay on /resellers.
         result = await session.execute(
             select(BotUser)
-            .where(not_(pure_reseller))
+            .where(scoped_users_where(scope))
             .order_by(BotUser.id.desc())
             .limit(fetch_limit)
         )
@@ -3154,16 +3161,33 @@ def create_api_app(lifespan=None) -> FastAPI:
                     "مسدود" if u.is_blocked else "فعال",
                 ),
             )
+        rows, counts, filter_key = await build_users_ops_page(
+            session,
+            users,
+            filter_key=filter_raw,
+            focus_uid=focus_uid,
+        )
+        # Deep-link uid outside this shop → ignore (no cross-tenant leak).
+        if focus_uid and not any(int(r.user.id) == int(focus_uid) for r in rows):
+            in_fetched = any(int(u.id) == int(focus_uid) for u in users)
+            if not in_fetched:
+                focus_uid = None
         return render(
             request,
             "users.html",
             {
                 "staff": staff,
-                "users": users,
+                "rows": rows,
+                "users": [r.user for r in rows],
+                "counts": counts,
+                "filter": filter_key,
+                "focus_uid": focus_uid,
+                "filter_href": users_list_href,
                 "q": search_q,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
                 "open_edit": request.query_params.get("edit"),
+                "can_manage_users": is_explicit_owner_staff(staff),
             },
         )
 
