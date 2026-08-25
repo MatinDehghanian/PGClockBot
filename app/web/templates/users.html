@@ -80,12 +80,12 @@
     <thead>
       <tr>
         <th class="col-id col-hide-sm" data-sort-type="num">#</th>
-        <th class="col-tg col-hide-xs" data-sort-type="num">تلگرام</th>
+        <th class="col-tg col-hide-sm" data-sort-type="num">تلگرام</th>
         <th class="col-name" data-sort-type="text">نام</th>
-        <th class="col-svc" data-sort-type="text">سرویس</th>
-        <th class="col-vol" data-sort-type="text">حجم</th>
-        <th class="col-exp" data-sort-type="num">انقضا</th>
-        <th class="col-hide-sm" data-sort-type="num">کیف پول</th>
+        <th class="col-svc col-hide-sm" data-sort-type="text">سرویس</th>
+        <th class="col-vol col-hide-sm" data-sort-type="text">حجم</th>
+        <th class="col-exp col-hide-sm" data-sort-type="num">انقضا</th>
+        <th class="col-wallet col-hide-sm" data-sort-type="num">کیف پول</th>
         <th class="col-status" data-sort-type="text">وضعیت</th>
         {% if ops or manage %}<th class="col-actions"></th>{% endif %}
       </tr>
@@ -97,20 +97,32 @@
           data-uid="{{ u.id }}"
           id="user-{{ u.id }}">
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.id }}">{{ u.id }}</td>
-        <td class="mono col-tg col-hide-xs" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
+        <td class="mono col-tg col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
         <td class="col-name" data-sort-value="{{ u.full_name or u.username or '' }}">
           <div class="cell-name">
             <span class="cell-name-text">{{ u.full_name or u.username or "—" }}</span>
             <span class="cell-name-tags">
-              <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %} badge-inline">
+              <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
                 {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
               </span>
               {% if row.has_alert %}<span class="alert-dot" title="اعلان فعال" aria-label="اعلان فعال"></span>{% endif %}
-              {% if u.risk_flags %}<span class="badge badge-risk badge-inline" title="پرچم ریسک فعال">ریسک</span>{% endif %}
+              {% if u.risk_flags %}<span class="badge badge-risk" title="پرچم ریسک فعال">ریسک</span>{% endif %}
+            </span>
+            {# Mobile-only summary — matches other tables that hide secondary cols #}
+            <span class="cell-name-meta">
+              {% if row.service_count == 0 %}
+              <span class="users-svc-meta-label muted">بدون سرویس</span>
+              {% else %}
+              <span class="users-svc-meta-label">{{ row.services[0].label }}</span>
+              <span class="cell-name-meta-sep" aria-hidden="true">·</span>
+              <span class="users-vol-cell">{{ row.volume_text }}</span>
+              <span class="cell-name-meta-sep" aria-hidden="true">·</span>
+              <span class="users-exp-cell">{{ row.expire_text }}</span>
+              {% endif %}
             </span>
           </div>
         </td>
-        <td class="col-svc" data-sort-value="{{ row.service_count }}">
+        <td class="col-svc col-hide-sm" data-sort-value="{{ row.service_count }}">
           {% if row.service_count == 0 %}
           <span class="muted">—</span>
           {% elif row.service_count == 1 %}
@@ -134,9 +146,9 @@
           </label>
           {% endif %}
         </td>
-        <td class="col-vol users-vol-cell" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
-        <td class="col-exp users-exp-cell" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.wallet_balance or 0 }}">{{ u.wallet_balance | num }}</td>
+        <td class="col-vol col-hide-sm users-vol-cell" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
+        <td class="col-exp col-hide-sm users-exp-cell" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
+        <td class="mono col-wallet col-hide-sm" dir="ltr" data-sort-value="{{ u.wallet_balance or 0 }}">{{ u.wallet_balance | num }}</td>
         <td data-sort-value="{{ '1' if u.is_blocked else '0' }}">
           {% if u.is_blocked %}
           <span class="badge blocked">مسدود</span>
@@ -291,6 +303,8 @@
       exp.textContent = expText;
       exp.setAttribute('data-sort-value', days);
     });
+    var metaLabel = tr.querySelector('.users-svc-meta-label');
+    if (metaLabel) metaLabel.textContent = (opt.textContent || '').trim() || '—';
     var cell = sel.closest('td.col-svc');
     if (cell) {
       var toggle = cell.querySelector('.ui-select-toggle');

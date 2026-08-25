@@ -374,7 +374,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: var(--space-0);
   max-width: 100%;
   min-width: 0;
 }
@@ -386,23 +386,41 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   white-space: nowrap;
   font-weight: 500;
 }
-/* Tags under name: up to 2 per row, rest wrap */
+/* Role / risk chips — same .badge scale as tickets/finance (not tiny 9px) */
 .cell-name-tags {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-0);
   max-width: 100%;
 }
-.cell-name-tags > .badge-inline,
-.cell-name-tags > .alert-dot {
-  flex: 0 1 auto;
-  max-width: calc(50% - 2px);
+.cell-name-tags > .badge {
+  flex: 0 0 auto;
+}
+/* Mobile summary under name (svc · volume · expiry) — desktop uses real columns */
+.cell-name-meta {
+  display: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  max-width: 100%;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted-fg);
+}
+.cell-name-meta-sep {
+  opacity: 0.45;
+  flex: 0 0 auto;
+}
+.users-svc-meta-label {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .badge.badge-risk {
-  font-size: 10px;
-  padding: 1px 7px;
-  line-height: 1.35;
   flex: 0 0 auto;
   color: var(--warn-fg, #fde047);
   background: color-mix(in srgb, var(--warn, #eab308) 16%, transparent);
@@ -419,8 +437,8 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   flex: 0 0 auto;
 }
 .badge.badge-inline {
-  font-size: 10px;
-  padding: 1px 7px;
+  font-size: 11px;
+  padding: 2px 8px;
   line-height: 1.35;
   flex: 0 0 auto;
 }
@@ -590,6 +608,12 @@ html[data-theme="light"] .finance-report-panels .home-panel-grid > a.stat:hover 
 }
 
 /* Users ops + finance reports — mobile */
+@media (max-width: 1100px) {
+  /* Same breakpoint as .col-hide-sm — show stacked meta under name */
+  .users-ops-table .cell-name-meta {
+    display: flex;
+  }
+}
 @media (max-width: 720px) {
   .users-ops-overview {
     margin-bottom: var(--space-2);
@@ -602,22 +626,6 @@ html[data-theme="light"] .finance-report-panels .home-panel-grid > a.stat:hover 
   .users-ops-table .users-svc-one {
     max-width: 100%;
   }
-  .users-ops-table .col-svc {
-    width: 10rem;
-    max-width: 11rem;
-    min-width: 8rem;
-  }
-  .users-ops-table .col-vol,
-  .users-ops-table .col-exp {
-    width: 4.75rem;
-    max-width: 5.5rem;
-    font-size: 11px;
-  }
-  .users-ops-table .badge-inline,
-  .users-ops-table .badge-risk {
-    font-size: 9px;
-    padding: 1px 5px;
-  }
   .finance-report-panels .home-panel-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -628,17 +636,6 @@ html[data-theme="light"] .finance-report-panels .home-panel-grid > a.stat:hover 
 @media (max-width: 560px) {
   .page-head:has(+ .section-tabs) {
     gap: var(--space-1);
-  }
-  .users-ops-table th.col-svc,
-  .users-ops-table td.col-svc {
-    max-width: 9.5rem;
-    width: 9.5rem;
-    min-width: 7.5rem;
-  }
-  .users-ops-table .col-vol,
-  .users-ops-table .col-exp {
-    width: 4.25rem;
-    max-width: 4.75rem;
   }
 }
 @media (max-width: 420px) {
@@ -4182,10 +4179,12 @@ form.settings-form > .actions.sticky-actions,
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
-    /* One scroll container (.main) — same as desktop; avoids body scroll jitter */
+    /* One scroll container (.main) — fill visual viewport (dvh + fallback) */
+    min-height: 100vh;
+    min-height: 100dvh;
     height: 100vh;
     height: 100dvh;
-    max-height: 100dvh;
+    max-height: none;
     overflow: hidden;
     /* Reserve space for fixed mobile topbar */
     padding-top: calc(var(--topbar-h) + var(--safe-top));
@@ -4198,10 +4197,11 @@ form.settings-form > .actions.sticky-actions,
     top: calc(var(--topbar-h) + var(--safe-top));
     right: 0;
     left: auto;
+    bottom: 0;
     width: min(300px, 86vw);
-    height: calc(100vh - var(--topbar-h) - var(--safe-top));
-    height: calc(100dvh - var(--topbar-h) - var(--safe-top));
-    max-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
+    /* Stretch to viewport bottom — fixed 100dvh calc left a black body strip under the drawer */
+    height: auto;
+    max-height: none;
     z-index: 50;
     transform: translateX(105%);
     transition: transform .2s ease;
@@ -4214,6 +4214,10 @@ form.settings-form > .actions.sticky-actions,
     padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));
   }
   .side.open { transform: translateX(0); }
+  /* Any residual gap under chrome matches drawer, not near-black body */
+  body.nav-open {
+    background: var(--bg-card);
+  }
 
   .main {
     /* Bottom pad matches .side drawer so site-footer & side-foot share one baseline */
