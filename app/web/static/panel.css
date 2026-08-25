@@ -4163,25 +4163,34 @@ form.settings-form > .actions.sticky-actions,
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
+  /* Body must never scroll on panel pages — .main owns vertical scroll.
+     Without this lock, any late dvh/--vvh overshoot leaves a near-black
+     body strip under the shell and breaks sticky-footer math. */
+  html:has(.shell),
+  html:has(.shell) body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   .shell {
+    /* Pin to the physical viewport — immune to dvh/--vvh first-paint drift.
+       inset:0 replaces the height: var(--vvh) chain that still glitched on
+       some iOS/Android PWAs even after innerHeight resampling. */
+    position: fixed;
+    inset: 0;
     display: flex;
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
-    /* One scroll container (.main) — fill visual viewport. --vvh (real
-       window.innerHeight, set in <head>) overrides dvh so height always
-       matches what's actually visible, even before the browser's own dvh
-       settles on first paint — this is the fix for the black bar. */
-    min-height: 100vh;
-    min-height: 100dvh;
-    min-height: var(--vvh, 100dvh);
-    height: 100vh;
-    height: 100dvh;
-    height: var(--vvh, 100dvh);
+    height: auto;
+    min-height: 0;
     max-height: none;
     overflow: hidden;
     /* Reserve space for fixed mobile topbar */
     padding-top: calc(var(--topbar-h) + var(--safe-top));
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
   }
 
   .topbar { display: flex; }

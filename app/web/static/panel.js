@@ -82,35 +82,52 @@
       }, true);
     })();
 
-    /* Mobile black-bar glitch: the inline <head> script in base.html already
-       measures window.innerHeight synchronously into --vvh (before first
-       paint) and re-samples it on load/resize/visibility events, so .shell
-       itself is never mis-sized. What's left is OS-level: on an *installed*
-       (standalone) PWA, Android's gesture-navigation bar can briefly paint
-       its own default color before Chrome finishes applying the page's
-       theme-color to the system chrome — and, having no browser toolbar to
-       collapse, none of the viewport-resize events above ever fire for it.
-       The user's own report is the tell: it clears the instant they scroll.
-       A real (not synthetic) scroll is what nudges Chrome to re-sample —
-       dispatching a fake `resize` Event, as an earlier patch did, changes
-       nothing Chrome itself observes. So do that one real scroll ourselves,
-       on every one of .main/.side (whichever actually has overflow) plus
-       the window, immediately after first paint — imperceptible to the
-       user, but it's the same trigger that fixes it for them manually. */
+    /* Mobile black-bar glitch: layout is pinned with position:fixed .shell on
+       mobile (see panel.css), but installed PWAs can still briefly paint the
+       OS gesture-nav bar with the wrong color until a real scroll happens.
+       Re-measure --vvh and run an imperceptible scroll on whichever surface
+       can scroll — including short pages where .main has no overflow yet. */
     (function () {
+      function remeasure() {
+        if (typeof window.__pgSetVVH === 'function') window.__pgSetVVH();
+        else {
+          var h = window.innerHeight;
+          if (!h && window.visualViewport) h = window.visualViewport.height;
+          if (h) document.documentElement.style.setProperty('--vvh', h + 'px');
+        }
+        void document.documentElement.offsetHeight;
+      }
       function nudge(el) {
         if (!el) return;
-        var max = el === window
+        var isWin = el === window;
+        var node = isWin ? document.documentElement : el;
+        var max = isWin
           ? Math.max(0, (document.documentElement.scrollHeight || 0) - window.innerHeight)
           : Math.max(0, el.scrollHeight - el.clientHeight);
-        if (max <= 0) return;
-        var get = () => (el === window ? window.scrollY : el.scrollTop);
-        var set = (v) => { if (el === window) window.scrollTo(0, v); else el.scrollTop = v; };
+        var grew = false;
+        var prevMin = '';
+        if (!isWin && max <= 0) {
+          prevMin = el.style.minHeight;
+          el.style.minHeight = (el.clientHeight + 1) + 'px';
+          grew = true;
+          max = Math.max(0, el.scrollHeight - el.clientHeight);
+        }
+        if (max <= 0) {
+          if (grew) el.style.minHeight = prevMin;
+          return;
+        }
+        var get = () => (isWin ? window.scrollY : el.scrollTop);
+        var set = (v) => { if (isWin) window.scrollTo(0, v); else el.scrollTop = v; };
         var before = get();
         set(before + 2);
-        requestAnimationFrame(() => set(before));
+        requestAnimationFrame(function () {
+          set(before);
+          if (grew) el.style.minHeight = prevMin;
+          void (node && node.offsetHeight);
+        });
       }
       function nudgeAll() {
+        remeasure();
         nudge(window);
         nudge(document.querySelector('.main'));
         nudge(document.querySelector('.side'));

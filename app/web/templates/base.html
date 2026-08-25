@@ -44,10 +44,15 @@
        standalone PWAs may never fire one for this) self-heals any residual
        drift without requiring the user to scroll first. */
     function setVVH() {
-      var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+      /* innerHeight is the authoritative visible viewport; visualViewport.height
+         can lag or overshoot on first paint (especially iOS/PWA) and was the
+         source of the persistent black strip when preferred over innerHeight. */
+      var h = window.innerHeight;
+      if (!h && window.visualViewport) h = window.visualViewport.height;
       if (h) d.style.setProperty('--vvh', h + 'px');
     }
     setVVH();
+    window.__pgSetVVH = setVVH;
     window.addEventListener('resize', setVVH);
     window.addEventListener('orientationchange', setVVH);
     window.addEventListener('pageshow', setVVH);

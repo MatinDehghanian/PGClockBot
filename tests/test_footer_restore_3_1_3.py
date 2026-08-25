@@ -27,7 +27,9 @@ class FooterRestore303Tests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         self.assertNotIn("--chrome-pad", css)
         self.assertNotIn("--main-pad-", css)
-        self.assertNotIn("html:has(.shell)", css)
+        self.assertNotIn("padding-bottom: var(--chrome-pad-bottom)", css)
+        mobile = css.split("@media (max-width: 900px)", 1)[1]
+        self.assertIn("html:has(.shell)", mobile)
         self.assertIn(
             "padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));",
             css,
