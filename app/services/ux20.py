@@ -253,13 +253,40 @@ async def build_action_center(
             }
         )
     if expiring:
+        from app.services.users_ops import users_list_href
+
         items.append(
             {
                 "key": "expiring",
                 "title": f"{expiring} سرویس نزدیک انقضا",
                 "detail": f"تا {expire_days} روز آینده",
-                "href": "/users",
+                "href": users_list_href(filter_key="expiring"),
                 "tone": "neutral",
+            }
+        )
+
+    # Low volume: services still flagged by the alert scheduler (clears on renew).
+    low_q = (
+        select(func.count())
+        .select_from(UserService)
+        .join(BotUser, BotUser.id == UserService.bot_user_id)
+        .where(UserService.notified_traffic.is_(True))
+    )
+    if reseller_id is None:
+        low_q = low_q.where(BotUser.reseller_id.is_(None))
+    else:
+        low_q = low_q.where(BotUser.reseller_id == int(reseller_id))
+    low_volume = int((await session.execute(low_q)).scalar() or 0)
+    if low_volume:
+        from app.services.users_ops import users_list_href
+
+        items.append(
+            {
+                "key": "low_volume",
+                "title": f"{low_volume} سرویس با حجم کم",
+                "detail": "اعلان حجم فعال",
+                "href": users_list_href(filter_key="low_volume"),
+                "tone": "warn",
             }
         )
 
@@ -268,6 +295,7 @@ async def build_action_center(
         "tickets": tickets,
         "failures": failures,
         "expiring": expiring,
+        "low_volume": low_volume,
         # Key must NOT be named ``items`` — Jinja ``ac.items`` resolves to dict.items().
         "entries": items,
         "has_items": bool(items),

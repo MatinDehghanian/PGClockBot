@@ -1,0 +1,174 @@
+"""Users ops list: filters, alert dots, scoped deep-links (v8.2.11)."""
+
+from __future__ import annotations
+
+import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class UsersOpsUnitTests(unittest.TestCase):
+    def test_href_whitelist(self):
+        from app.services.users_ops import users_list_href
+
+        self.assertEqual(users_list_href(), "/users")
+        self.assertEqual(users_list_href(filter_key="expiring"), "/users?filter=expiring")
+        self.assertEqual(
+            users_list_href(filter_key="expiring", uid=42),
+            "/users?filter=expiring&uid=42",
+        )
+        self.assertEqual(users_list_href(filter_key="hack';drop"), "/users")
+        self.assertEqual(users_list_href(uid=-3), "/users")
+        self.assertEqual(users_list_href(uid="x"), "/users")
+
+    def test_build_row_expiring_and_alert(self):
+        from app.services.users_ops import build_user_ops_row
+
+        now = datetime(2026, 8, 20, tzinfo=timezone.utc)
+        plan = SimpleNamespace(name="ماهانه", duration_days=30, data_limit_gb=10.0)
+        svc = SimpleNamespace(
+            id=7,
+            pg_username="u7",
+            created_at=now - timedelta(days=28),
+            plan=plan,
+            notified_traffic=False,
+            notified_expire=False,
+        )
+        user = SimpleNamespace(id=1, is_blocked=False, role="user", risk_flags=None)
+        row = build_user_ops_row(user, [svc], expire_days=3, now=now)
+        self.assertTrue(row.expiring)
+        self.assertTrue(row.has_alert)
+        self.assertEqual(row.service_count, 1)
+        self.assertIn("گیگ", row.volume_text)
+
+    def test_low_volume_flag(self):
+        from app.services.users_ops import build_user_ops_row
+
+        now = datetime(2026, 8, 20, tzinfo=timezone.utc)
+        plan = SimpleNamespace(name="پلن", duration_days=90, data_limit_gb=50.0)
+        svc = SimpleNamespace(
+            id=1,
+            pg_username="x",
+            created_at=now - timedelta(days=1),
+            plan=plan,
+            notified_traffic=True,
+            notified_expire=False,
+        )
+        user = SimpleNamespace(id=2, is_blocked=False, role="user")
+        row = build_user_ops_row(user, [svc], expire_days=3, now=now)
+        self.assertTrue(row.low_volume)
+        self.assertTrue(row.has_alert)
+        self.assertFalse(row.expiring)
+
+    def test_filter_and_sort_focus(self):
+        from app.services.users_ops import (
+            UserOpsRow,
+            filter_ops_rows,
+            sort_ops_rows,
+            summarize_ops_counts,
+        )
+
+        def row(uid, *, expiring=False, alert=False, urgency=0):
+            r = UserOpsRow(user=SimpleNamespace(id=uid, is_blocked=False))
+            r.expiring = expiring
+            r.has_alert = alert
+            r.urgency = urgency
+            return r
+
+        rows = [row(1, urgency=1), row(2, expiring=True, alert=True, urgency=50)]
+        self.assertEqual(len(filter_ops_rows(rows, "expiring")), 1)
+        ordered = sort_ops_rows(rows, focus_uid=1)
+        self.assertEqual(ordered[0].user.id, 1)
+        counts = summarize_ops_counts(rows)
+        self.assertEqual(counts["expiring"], 1)
+        self.assertEqual(counts["alerts"], 1)
+
+
+class UsersOpsUiTests(unittest.TestCase):
+    def test_template_has_ops_chrome(self):
+        users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
+        self.assertIn("users-ops-overview", users)
+        self.assertIn("alert-dot", users)
+        self.assertIn("badge-inline", users)
+        self.assertIn("users-svc-select", users)
+        self.assertIn("filter_key='expiring'", users)
+        self.assertIn("نزدیک انقضا", users)
+        self.assertNotIn("<th data-sort-type=\"text\">نقش</th>", users)
+        self.assertIn("can_manage_users", users)
+
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn(".alert-dot", css)
+        self.assertIn(".users-row.is-focus", css)
+
+        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
+        self.assertIn("مشتریان", base)
+
+    def test_action_center_deep_link(self):
+        ux = (ROOT / "app/services/ux20.py").read_text(encoding="utf-8")
+        self.assertIn("users_list_href", ux)
+        self.assertIn('filter_key="expiring"', ux)
+
+    def test_api_scoped_users_page(self):
+        api = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        self.assertIn("require_perm(\"dashboard\")", api)
+        self.assertIn("scoped_users_where", api)
+        self.assertIn("build_users_ops_page", api)
+        self.assertIn("can_manage_users", api)
+
+    def test_bot_parity_hooks(self):
+        admin = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
+        self.assertIn("bot_user_alert_flags", admin)
+        self.assertIn("scoped_users_where(None)", admin)
+        res = (ROOT / "app/bot/handlers/reseller.py").read_text(encoding="utf-8")
+        self.assertIn("bot_user_alert_flags", res)
+        self.assertIn("scoped_users_where(int(owner_id))", res)
+
+    def test_version_at_least_package(self):
+        from app.version import __version__
+
+        # Package landed in 8.2.11; follow-up quick-ops may bump further.
+        parts = [int(x) for x in __version__.split(".")[:3]]
+        self.assertGreaterEqual(parts, [8, 2, 11])
+        self.assertEqual(
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__
+        )
+
+
+class ActionCenterExpiringHrefTests(unittest.IsolatedAsyncioTestCase):
+    async def test_expiring_href(self):
+        from app.services.ux20 import build_action_center
+
+        now = datetime.now(timezone.utc)
+        calls = {"n": 0}
+
+        async def _exec(_q):
+            calls["n"] += 1
+            m = MagicMock()
+            # pending, tickets, failures counts → 0
+            # then max(Plan.duration_days) → 30
+            # then service scan → one row in window
+            if calls["n"] <= 3:
+                m.scalar.return_value = 0
+                m.all.return_value = []
+            elif calls["n"] == 4:
+                m.scalar.return_value = 30
+                m.all.return_value = []
+            else:
+                m.scalar.return_value = 0
+                m.all.return_value = [(now - timedelta(days=28), 30)]
+            return m
+
+        session = AsyncMock()
+        session.execute = AsyncMock(side_effect=_exec)
+        out = await build_action_center(session, reseller_id=None, expire_days=3)
+        self.assertGreaterEqual(out["expiring"], 1)
+        exp = next(e for e in out["entries"] if e["key"] == "expiring")
+        self.assertEqual(exp["href"], "/users?filter=expiring")
+
+
+if __name__ == "__main__":
+    unittest.main()

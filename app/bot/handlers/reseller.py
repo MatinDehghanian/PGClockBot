@@ -4,7 +4,8 @@ import html
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +35,10 @@ from app.bot.tg_utils import safe_edit_text
 from app.services.users import get_all_settings
 
 router = Router(name="reseller")
+
+
+class ResellerStates(StatesGroup):
+    user_message = State()
 
 
 async def _actor(
@@ -297,21 +302,35 @@ async def res_users_list(
         page = 0
     page = max(0, page)
     await callback.answer()
-    total = await session.scalar(
-        select(func.count()).select_from(BotUser).where(BotUser.reseller_id == owner_id)
-    ) or 0
+    from app.services.users_ops import (
+        bot_user_alert_flags,
+        build_user_ops_row,
+        load_services_by_user_ids,
+        scoped_users_where,
+    )
+
+    total = (
+        await session.scalar(
+            select(func.count())
+            .select_from(BotUser)
+            .where(scoped_users_where(int(owner_id)))
+        )
+        or 0
+    )
     result = await session.execute(
         select(BotUser)
-        .where(BotUser.reseller_id == owner_id)
+        .where(scoped_users_where(int(owner_id)))
         .order_by(BotUser.id.desc())
         .offset(page * RES_USERS_PAGE)
         .limit(RES_USERS_PAGE)
     )
     users = list(result.scalars().all())
+    by_svc = await load_services_by_user_ids(session, [int(u.id) for u in users])
     buttons: list[InlineKeyboardButton] = []
     for u in users:
-        name = (u.full_name or u.username or str(u.telegram_id))[:18]
-        flag = "🚫" if u.is_blocked else "👤"
+        ops = build_user_ops_row(u, by_svc.get(int(u.id), []))
+        name = (u.full_name or u.username or str(u.telegram_id))[:16]
+        flag = bot_user_alert_flags(ops)
         buttons.append(
             InlineKeyboardButton(
                 text=f"{flag} {name}",
@@ -329,7 +348,8 @@ async def res_users_list(
     text = (
         f"👥 <b>مشتریان من</b>\n"
         f"صفحه {page + 1} از {max(1, (total + RES_USERS_PAGE - 1) // RES_USERS_PAGE)}"
-        f" · {total} نفر"
+        f" · {total} نفر\n"
+        f"<i>🔔 اعلان · ⏰ انقضا · 📉 حجم — جزئیات در وب‌پنل /users</i>"
     )
     if not users:
         text += "\n\nهنوز مشتری ثبت‌شده‌ای ندارید."
@@ -365,20 +385,222 @@ async def res_user_view(
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
-    blocked = "بله" if user.is_blocked else "خیر"
     from app.services.formatting import copyable
+    from app.services.users_ops import (
+        bot_user_alert_flags,
+        build_user_ops_row,
+        load_services_by_user_ids,
+    )
 
+    by = await load_services_by_user_ids(session, [int(user.id)])
+    ops = build_user_ops_row(user, by.get(int(user.id), []))
+    flags = bot_user_alert_flags(ops)
+    blocked = "بله" if user.is_blocked else "خیر"
     display = html.escape(user.full_name or user.username or "—")
+    alert_line = ""
+    if ops.has_alert:
+        bits = []
+        if ops.expiring:
+            bits.append(f"انقضا {ops.expire_text}")
+        if ops.low_volume:
+            bits.append(f"حجم {ops.volume_text}")
+        if bits:
+            alert_line = "\n🔔 " + " · ".join(bits)
     text = (
-        f"👤 <b>{display}</b>\n\n"
+        f"{flags} <b>{display}</b>\n\n"
         f"آیدی: {copyable(user.telegram_id)}\n"
         f"یوزرنیم: {copyable('@' + user.username) if user.username else '—'}\n"
         f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
+        f"سرویس‌ها: {ops.service_count}\n"
         f"مسدود: {blocked}"
+        f"{alert_line}\n\n"
+        f"<i>وب‌پنل: /users?uid={user.id}</i>"
     )
-    markup = None  # navigation via reply keyboard Back/Home
+    rows_kb: list[list[InlineKeyboardButton]] = []
+    if not user.is_blocked:
+        rows_kb.append(
+            [InlineKeyboardButton(text="✉️ پیام", callback_data=f"res:usermsg:{user.id}")]
+        )
+    if ops.service_count > 0:
+        rows_kb.append(
+            [
+                InlineKeyboardButton(
+                    text="🔄 تمدید سریع", callback_data=f"res:userrenew:{user.id}"
+                )
+            ]
+        )
+    markup = InlineKeyboardMarkup(inline_keyboard=rows_kb) if rows_kb else None
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=markup)
+
+
+@router.callback_query(F.data.startswith("res:usermsg:"))
+async def res_user_message_start(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    try:
+        uid = int((callback.data or "").rsplit(":", 1)[-1])
+    except ValueError:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    user = await session.get(BotUser, uid)
+    if not user or int(user.reseller_id or 0) != int(owner_id):
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
+    await callback.answer()
+    await state.set_state(ResellerStates.user_message)
+    await state.update_data(msg_user_id=int(user.id))
+    if callback.message:
+        await callback.message.answer(
+            f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b>:",
+            reply_markup=kb.cancel_reply(),
+        )
+
+
+@router.message(ResellerStates.user_message)
+async def res_user_message_send(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
+        await state.clear()
+        return
+    if kb.is_cancel_text(message.text):
+        await state.clear()
+        await message.answer("لغو شد.")
+        return
+    data = await state.get_data()
+    uid = int(data.get("msg_user_id") or 0)
+    user = await session.get(BotUser, uid) if uid else None
+    await state.clear()
+    if not user or int(user.reseller_id or 0) != int(owner_id):
+        await message.answer("دسترسی ندارید.")
+        return
+    from app.services.users_quick import send_staff_dm
+
+    try:
+        await send_staff_dm(
+            session,
+            user,
+            message.text or "",
+            actor=str(db_user.telegram_id or owner_id),
+        )
+        await session.commit()
+        await message.answer("پیام ارسال شد ✅")
+    except ValueError as e:
+        await message.answer(str(e))
+    except Exception as e:
+        await message.answer(f"خطا: {e}")
+
+
+@router.callback_query(F.data.startswith("res:userrenew:"))
+async def res_user_quick_renew(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    try:
+        uid = int((callback.data or "").rsplit(":", 1)[-1])
+    except ValueError:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    user = await session.get(BotUser, uid)
+    if not user or int(user.reseller_id or 0) != int(owner_id):
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
+    from app.services.users_quick import quick_renew_user
+
+    try:
+        _svc, label = await quick_renew_user(session, user)
+        await session.commit()
+        await callback.answer(f"تمدید شد: {label}"[:180], show_alert=True)
+    except ValueError as e:
+        await callback.answer(str(e)[:160], show_alert=True)
+    except Exception as e:
+        await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+
+
+@router.callback_query(F.data.startswith("res:reports"))
+async def res_reports(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    """Shop-scoped finance report — same metrics as /finance?tab=reports."""
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
+        await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    if not (
+        has_bot_perm(profile, "orders") or has_bot_perm(profile, "payments")
+    ):
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
+    raw = (callback.data or "res:reports:week").split(":")
+    period = raw[-1] if len(raw) >= 3 else "week"
+    if period not in {"day", "week", "month"}:
+        period = "week"
+    await callback.answer()
+    from app.services.finance_reports import (
+        PERIOD_LABELS_FA,
+        build_finance_report,
+        format_finance_report_telegram,
+    )
+
+    report = await build_finance_report(
+        session, reseller_id=int(owner_id), period=period
+    )
+    text = format_finance_report_telegram(
+        report, currency=get_settings().currency
+    )
+    text += "\n\n<i>جزئیات وب: /finance?tab=reports</i>"
+    rows = []
+    period_row = []
+    for key, fa in PERIOD_LABELS_FA.items():
+        mark = "✓ " if key == period else ""
+        period_row.append(
+            InlineKeyboardButton(
+                text=f"{mark}{fa}",
+                callback_data=f"res:reports:{key}",
+            )
+        )
+    rows.append(period_row)
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
 
 
 @router.callback_query(F.data == "res:stats")

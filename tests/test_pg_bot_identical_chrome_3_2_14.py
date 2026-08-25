@@ -44,10 +44,13 @@ class PgBotIdenticalTitleChromeTests(unittest.TestCase):
         self.assertIn('href="/pg/users"', base)
         self.assertIn('href="/pg/nodes"', base)
 
-    def test_users_bot_page_has_no_section_tabs(self):
+    def test_users_bot_page_keeps_page_head_with_filter_tabs(self):
+        """Users ops filters use section-tabs (like loyalty); title chrome stays page-head."""
         src = (TEMPLATES / "users.html").read_text(encoding="utf-8")
         self.assertIn('class="page-head"', src)
-        self.assertNotIn("section-tabs", src)
+        self.assertIn("section-tabs", src)
+        self.assertIn("فیلتر کاربران", src)
+        self.assertNotIn('class="pg-head"', src)
 
 
 if __name__ == "__main__":

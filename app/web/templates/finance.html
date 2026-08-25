@@ -1,17 +1,21 @@
 {% extends "base.html" %}
 {% from "macros.html" import ord_status, pay_status, row_actions, page_title %}
 {% block title %}
-{%- if finance_tab == 'behavior' -%}رفتار کاربر
+{%- if finance_tab == 'reports' -%}گزارشات
+{%- elif finance_tab == 'behavior' -%}رفتار کاربر
 {%- elif finance_tab == 'payments' -%}پرداخت‌ها
 {%- elif finance_tab == 'delivery' -%}تحویل ناموفق
 {%- else -%}مدیریت مالی
 {%- endif -%}
 {% endblock %}
 {% block content %}
-{% set finance_tab = finance_tab or 'behavior' %}
+{% set finance_tab = finance_tab or 'reports' %}
 <div class="page-head">
   <div>
     {{ page_title('orders', 'مدیریت مالی') }}
+    {% if finance_tab == 'reports' %}
+    <p class="muted page-sub">گزارش فروش و کاربران · امروز · ۷ روز · ۳۰ روز</p>
+    {% endif %}
   </div>
   {% if can_finance_settings %}
   <button type="button" class="btn btn-ghost" data-modal-open="modal-finance-settings">تنظیمات</button>
@@ -20,6 +24,7 @@
 
 <nav class="section-tabs" role="tablist" aria-label="مدیریت مالی">
   {% if can_orders or can_payments %}
+  <a class="{% if finance_tab=='reports' %}active{% endif %}" href="/finance?tab=reports">گزارشات</a>
   <a class="{% if finance_tab=='behavior' %}active{% endif %}" href="/finance?tab=behavior">رفتار کاربر</a>
   {% endif %}
   {% if can_orders %}
@@ -33,7 +38,10 @@
   {% endif %}
 </nav>
 
-{% if finance_tab == 'behavior' and (can_orders or can_payments) %}
+{% if finance_tab == 'reports' and (can_orders or can_payments) %}
+{% include "_finance_reports.html" %}
+
+{% elif finance_tab == 'behavior' and (can_orders or can_payments) %}
 {% include "_funnel_panel.html" %}
 
 {% elif finance_tab == 'orders' and can_orders %}
@@ -66,7 +74,13 @@
       {% set pname = o.plan.name if o.plan else (o.plan_id or "—") %}
       <tr>
         <td class="mono" data-sort-value="{{ o.id }}">{{ o.id }}</td>
-        <td data-sort-value="{{ uname }}">{{ uname }}</td>
+        <td data-sort-value="{{ uname }}">
+          {% if o.user and o.user.id %}
+          <a class="cell-user-link" href="/users?uid={{ o.user.id }}">{{ uname }}</a>
+          {% else %}
+          {{ uname }}
+          {% endif %}
+        </td>
         <td class="col-hide-sm" data-sort-value="{{ pname }}">{{ pname }}</td>
         <td class="mono" data-sort-value="{{ o.amount }}">{{ o.amount | num }}</td>
         <td data-sort-value="{{ o.status }}">
@@ -161,7 +175,13 @@
       {% set uname = (payer.full_name or payer.username or p.user_id) if payer else p.user_id %}
       <tr>
         <td class="mono" data-sort-value="{{ p.id }}">{{ p.id }}</td>
-        <td data-sort-value="{{ uname }}">{{ uname }}</td>
+        <td data-sort-value="{{ uname }}">
+          {% if payer and payer.id %}
+          <a class="cell-user-link" href="/users?uid={{ payer.id }}">{{ uname }}</a>
+          {% else %}
+          {{ uname }}
+          {% endif %}
+        </td>
         <td class="mono" data-sort-value="{{ p.amount }}">{{ "{:,}".format(p.amount).replace(",", "٬") }}</td>
         <td class="col-hide-sm" data-sort-value="{{ 'wallet' if p.is_wallet_topup else 'buy' }}">{{ "شارژ کیف" if p.is_wallet_topup else "خرید" }}</td>
         <td data-sort-value="{{ p.status }}">

@@ -281,6 +281,7 @@ REPLY_ACTION_ADM_HUB_PRODUCT = "adm_hub_product"
 REPLY_ACTION_ADM_HUB_SYSTEM = "adm_hub_system"
 REPLY_ACTION_ADMIN_DASH = "adm_dash"
 REPLY_ACTION_ADMIN_ORDERS = "adm_orders"
+REPLY_ACTION_ADMIN_REPORTS = "adm_reports"
 REPLY_ACTION_ADMIN_PAYMENTS = "adm_payments"
 REPLY_ACTION_ADMIN_TICKETS = "adm_tickets"
 REPLY_ACTION_ADMIN_PLANS = "adm_plans"
@@ -507,6 +508,7 @@ def _reply_admin_hub_entries(ui: dict | None = None) -> list[tuple[str, str]]:
 def _reply_admin_ops_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return [
         (REPLY_ACTION_ADMIN_DASH, "📊 داشبورد"),
+        (REPLY_ACTION_ADMIN_REPORTS, "📈 گزارشات"),
         (REPLY_ACTION_ADMIN_ORDERS, _t(ui, "btn_adm_orders")),
         (REPLY_ACTION_ADMIN_PAYMENTS, _t(ui, "btn_adm_payments")),
         (REPLY_ACTION_ADMIN_TICKETS, _t(ui, "btn_adm_tickets")),
@@ -814,6 +816,10 @@ def _reseller_submenu_entries(
     except Exception:
         # Fail closed — do not expose addon packs without a verified subscription plan
         pass
+    if shop_feature_allowed(key="orders", profile=profile) or shop_feature_allowed(
+        key="payments", profile=profile
+    ):
+        entries.append(("res_reports", "📈 گزارشات"))
     if shop_feature_allowed(key="stats", profile=profile):
         entries.append(("res_stats", "📊 آمار و کمیسیون"))
     if shop_feature_allowed(key="plans", profile=profile):
@@ -2632,7 +2638,12 @@ def admin_user_actions(
                 text="📦 سرویس‌ها", callback_data=f"adm:users:svcs:{user_id}"
             ),
         ],
-        [InlineKeyboardButton(text=block_label, callback_data=f"adm:users:block:{user_id}")],
+        [
+            InlineKeyboardButton(
+                text="✉️ پیام", callback_data=f"adm:users:msg:{user_id}"
+            ),
+            InlineKeyboardButton(text=block_label, callback_data=f"adm:users:block:{user_id}"),
+        ],
     ]
     if role == "reseller":
         rows.append(
