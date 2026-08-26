@@ -277,7 +277,7 @@ def build_manifest(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def service_worker_js() -> str:
     return """/* PGClockBot panel service worker — static shell only */
-const CACHE = 'pgclock-shell-v9';
+const CACHE = 'pgclock-shell-v10';
 const PRECACHE = [
   '/static/logo.png',
   '/static/logo-64.png',
@@ -291,15 +291,20 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
+  /* Skip taking over open pages — mid-load takeover aborts in-flight
+     CSS/font requests on iOS Safari (blank/unstyled panel). */
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    )
   );
 });
 
 function isVersionedPanelAsset(url) {
-  return url.pathname === '/static/panel.css' || url.pathname === '/static/panel.js';
+  return url.pathname === '/static/panel.css'
+    || url.pathname === '/static/panel.js'
+    || url.pathname === '/static/fonts.css'
+    || url.pathname.indexOf('/static/fonts/') === 0;
 }
 
 self.addEventListener('fetch', (event) => {
@@ -309,8 +314,8 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   if (!url.pathname.startsWith('/static/') && !url.pathname.startsWith('/pwa/')) return;
 
-  /* Network-first for versioned panel assets — cache-first here kept stale
-     broken CSS/JS from v8.5.4–8.5.12 fix attempts even after layout revert. */
+  /* Network-first for versioned panel + fonts — cache-first kept stale
+     broken CSS/JS and could cache a failed font response. Only store ok. */
   if (isVersionedPanelAsset(url)) {
     event.respondWith(
       fetch(req).then((res) => {
@@ -328,8 +333,10 @@ self.addEventListener('fetch', (event) => {
     caches.match(req).then((hit) =>
       hit ||
       fetch(req).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy));
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy));
+        }
         return res;
       }).catch(() => hit)
     )

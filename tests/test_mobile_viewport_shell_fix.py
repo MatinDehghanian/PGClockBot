@@ -1,4 +1,4 @@
-"""Mobile shell fills 100lvh; inner .main scrolls; overlay uses stable 100svh."""
+"""Mobile shell fills 100lvh; inner .main scrolls; no svh overlay inset."""
 
 from __future__ import annotations
 
@@ -32,16 +32,15 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertNotIn("--vvh", shell)
         self.assertIn("overflow: hidden;", shell)
 
-    def test_html_body_locked_document_stable_overlay(self):
+    def test_html_body_locked_to_lvh_no_overlay_inset(self):
         mobile = self._mobile()
         self.assertIn("html:has(.shell)", mobile)
         block = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
         self.assertIn("min-height: 100lvh;", block)
         self.assertIn("overflow: hidden;", block)
-        self.assertIn("--safari-overlay", block)
-        self.assertIn("100lvh - 100svh", block)
+        self.assertNotIn("--safari-overlay", block)
+        self.assertNotIn("100lvh - 100svh", block)
         self.assertNotIn("100lvh - 100dvh", block)
-        self.assertNotIn("calc(max(100vh, 100lvh) + 1px)", block)
 
     def test_mobile_main_is_inner_scroller_not_document(self):
         mobile = self._mobile()
@@ -50,7 +49,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertNotIn("max-height: 100dvh;", main)
         self.assertIn("overflow-y: auto;", main)
         self.assertIn("overscroll-behavior-y: auto;", main)
-        self.assertIn("--safari-overlay", main)
+        self.assertNotIn("--safari-overlay", main)
         self.assertIn(".main::after", main)
         self.assertIn("flex: 0 0 1px;", main)
         self.assertIn(
@@ -78,7 +77,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
         auth = css.split(".auth-wrap {", 1)[1].split("}", 1)[0]
         self.assertIn("min-height: 100lvh;", auth)
         self.assertNotIn("min-height: 100dvh;", auth)
-        self.assertIn("100lvh - 100svh", auth)
+        self.assertNotIn("100lvh - 100svh", auth)
         self.assertNotIn("100lvh - 100dvh", auth)
 
     def test_users_table_polish_restored(self):
@@ -107,8 +106,11 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_service_worker_network_first_panel_assets(self):
         pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v9", pwa)
+        self.assertIn("pgclock-shell-v10", pwa)
         self.assertIn("isVersionedPanelAsset", pwa)
+        self.assertIn("/static/fonts.css", pwa)
+        self.assertIn("/static/fonts/", pwa)
+        self.assertNotIn("self.clients.claim()", pwa)
         self.assertNotIn("'/static/panel.css'", pwa.split("PRECACHE")[1].split("];", 1)[0])
 
 
