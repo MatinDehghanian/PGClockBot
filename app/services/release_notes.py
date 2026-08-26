@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.26": [
+        "موبایل — ریشه فضای خالی پایین: desktop .main { height:100%; max-height:100dvh } روی موبایل bleed می‌کرد و ~99px زیر فوتر strip می‌ساخت",
+        "یک صاحب safe-area: padding-bottom روی .shell؛ .main فقط --foot-gap (16px) — بدون stack دوباره safe-bottom",
+        "سایدبار bottom:0 + height:auto (نه calc(100dvh))؛ حفظ pointer-events:none کشوی بسته و fix همبرگر از v8.5.25",
+        "بدون --vvh / visualViewport / 100lvh — همان 100dvh v8.2.8 + geometry probe؛ Service Worker cache v16",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.25",
+    ],
     "8.5.25": [
         "برگشت کامل v8.5.24 (--vvh و sidebar absolute) — علت خراب شدن اسکرول و همبرگر",
         "layout موبایل دوباره v8.2.8 (fixed + 100dvh) + pointer-events:none روی کشوی بسته",
