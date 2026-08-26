@@ -113,5 +113,10 @@
     /* Keep unchecked shell — never invent disconnected state. */
     finish();
   });
+
+  /* Never leave the departing page veiled if /body hangs or errors. */
+  window.setTimeout(function () {
+    finish();
+  }, 12000);
 })();
 </script>

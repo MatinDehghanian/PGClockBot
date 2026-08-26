@@ -32,7 +32,7 @@
       if (meta) {
         /* Safari 26+ ignores theme-color for the tab bar — it samples fixed
            elements at the viewport edge instead. transparent avoids forcing
-           solid black chrome; see ios-safari CSS in panel.css. */
+           solid black chrome; see html.ios-safari rules in panel.css. */
         meta.setAttribute("content", d.classList.contains("ios-safari") ? "transparent" : (theme === "light" ? "#fafafa" : "#09090b"));
       }
     } catch (e) {}

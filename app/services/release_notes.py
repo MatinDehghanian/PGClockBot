@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.20": [
+        "موبایل — ریشه‌یابی نهایی layout: بازگشت به شل v8.2.12 (100dvh + sticky footer) که در v8.2.8 تأیید شده بود",
+        "حذف hackهای v8.5.16–8.5.19 (--safari-overlay، قفل html/body، height:0 کشوی بسته) که باعث رفتن محتوا زیر هدر، فضای خالی زیر سایدبار، و صفحهٔ سیاه/لینک‌های خام می‌شد",
+        "Safari 26: فقط guard سبک ios-safari (shell شفاف + side بسته visibility:hidden) — بدون تغییر ابعاد layout",
+        "Service Worker cache v10 (network-first برای panel.css/js) + timeout 12s برای veil بارگذاری داشبورد",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.19",
+    ],
     "8.5.19": [
         "مرورگر (نه PWA): اسکرول سند + 100dvh نوار آدرس را وسط اسکرول جمع می‌کرد و پایین صفحه لگ/لرزش می‌داد — سند قفل است، فقط .main اسکرول می‌شود مثل PWA؛ inset پایدار 100lvh − 100svh (نه dvh)",
         "سایدبار باز: backdrop و کشو تا لبهٔ overlay chrome نمی‌روند تا Safari 26 نوار سالید نمونه‌برداری نکند؛ صفحات کوتاه با 1px داخل .main فنر می‌خورند",
