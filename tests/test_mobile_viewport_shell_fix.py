@@ -50,7 +50,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertNotIn("--safari-overlay", main)
         self.assertNotIn(".main::after", main)
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));",
             main,
         )
 
@@ -99,7 +99,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_service_worker_network_first_panel_assets(self):
         pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v10", pwa)
+        self.assertIn("pgclock-shell-v11", pwa)
         self.assertIn("isVersionedPanelAsset", pwa)
         self.assertNotIn("'/static/panel.css'", pwa.split("PRECACHE")[1].split("];", 1)[0])
 

@@ -31,12 +31,12 @@ class FooterRestore303Tests(unittest.TestCase):
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertNotIn("--chrome-pad", mobile)
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-4) calc(var(--foot-gap) + var(--safe-bottom));",
             css,
         )
         # Mobile safe-bottom on .main pad; .shell paints through home-indicator area
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));",
             css.split("@media (max-width: 900px)", 1)[1],
         )
 
@@ -45,7 +45,7 @@ class FooterRestore303Tests(unittest.TestCase):
         side = css.split(".side {\n", 1)[1].split(".main {", 1)[0]
         self.assertIn("overflow-y: auto;", side)
         self.assertIn(
-            "padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) calc(var(--space-2) + var(--safe-bottom));",
+            "padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));",
             side,
         )
         self.assertNotIn("padding-bottom: var(--chrome-pad-bottom)", css)

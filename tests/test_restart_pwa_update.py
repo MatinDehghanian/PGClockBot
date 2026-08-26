@@ -37,8 +37,10 @@ class PwaTests(unittest.TestCase):
         from app.services.pwa import service_worker_js
 
         sw = service_worker_js()
-        self.assertIn("pgclock-shell-v10", sw)
+        self.assertIn("pgclock-shell-v11", sw)
         self.assertIn("isVersionedPanelAsset", sw)
+        self.assertIn("/static/fonts.css", sw)
+        self.assertNotIn("self.clients.claim()", sw)
         self.assertNotIn("/pwa/icon/192", sw)
 
     def test_icon_from_logo(self):

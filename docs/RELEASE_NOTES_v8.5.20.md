@@ -4,38 +4,27 @@
 **App version:** `8.5.20`
 **Restore point:** tag `v8.5.19`
 
-## Root cause (confirmed)
+## Context
 
-v8.5.16–v8.5.19 stacked **conflicting viewport hacks** on top of the working v8.2.8/v8.2.12 mobile shell:
+v8.5.19 inset the open sidebar and page by `--safari-overlay: 100lvh − 100svh`. On iOS 26 that difference is huge, so the drawer and cards stopped far above the Safari bar (user screenshot). Intermittent blank/unstyled loads (duplicate logos, system fonts, empty page) came from the service worker calling `clients.claim()` mid-load (aborting CSS/font) and cache-first `/static/fonts/*`.
 
-| Hack | Symptom |
-|------|---------|
-| `--safari-overlay: max(0, 100lvh − 100svh)` on `.side` **and** extra `padding-bottom` | Empty solid strip under open sidebar (Safari screenshot) |
-| `html/body { height: 100lvh; overflow: hidden }` document lock | Content pushed under fixed topbar (Chrome screenshot) |
-| `.side:not(.open) { height: 0 !important }` on **all** mobile browsers | Broken first paint / stray unstyled nav links on black screen |
-| Replacing `100dvh` shell with `100lvh` + `max-height: none` | Footer drift, black bars, layout unlike confirmed-good v8.2.8 |
+## Fixes
 
-Reverting only footer CSS to v8.2.8 could not fix this — the broken rules lived in the **mobile `@media` block**, SW stale cache, and later versions reintroduced the hacks.
+1. **Geometry back to v8.5.17 (user-confirmed fill)**
+   - No `--safari-overlay`. Sidebar `bottom: 0`. Bottom pad is `--foot-gap` + safe-area.
+   - `html/body/.shell` still `100lvh` + `overflow: hidden` so there is no leftover strip below the shell.
 
-## Fix
+2. **Keep PWA-like scroll (no URL-bar jitter)**
+   - `.main` is the only scroller.
+   - Shared **`--foot-gap: 16px`** (`--space-2`) + `safe-bottom` under both `.site-footer` and `.side-foot` so they sit on one row. Shell/side/main fill `100lvh` with no leftover strip.
 
-1. **Restore v8.2.12 mobile layout verbatim**
-   - `.shell`: `height/max-height: 100dvh`, `padding-top` for fixed topbar
-   - `.side`: `height: calc(100dvh − topbar − safe-top)` — full drawer height
-   - `.main`: sole inner scroller, sticky footer unchanged
-   - No `--safari-overlay`, no document lock, no `height:0` drawer collapse
+3. **CSS / font load**
+   - Stop `clients.claim()` so a new SW cannot abort in-flight `panel.css` / fonts.
+   - Network-first for `fonts.css` and `/static/fonts/*`; only cache `ok` responses.
+   - SW cache **`pgclock-shell-v10`**.
 
-2. **Safari 26 sampling guard only** (from v8.5.15, no dimension changes)
-   - `html.ios-safari .shell { background: transparent }`
-   - `html.ios-safari .main { background: var(--background) }`
-   - `html.ios-safari .side:not(.open) { visibility: hidden }`
-
-3. **Loading safety** — `_panel_widgets_defer.html` 12s veil timeout so dashboard never stays blank forever
-
-4. **Service worker** — bump to `pgclock-shell-v10`, keep network-first for versioned `panel.css` / `panel.js`
+4. Kept users table tags, boxed service menu, inbox vertical centering, closed drawer `height: 0`.
 
 ## Deploy
 
-1. Update to **8.5.20**
-2. **Once per device:** Safari → clear website data for the panel domain **or** unregister the old service worker (Settings → Advanced → Website Data). Without this, cached v8.5.19 CSS may persist.
-3. Hard-refresh and verify on iPhone Safari + Chrome.
+In-panel update to **8.5.20**. Hard-refresh Safari once so `panel.css?v=8.5.20` and SW v10 load.

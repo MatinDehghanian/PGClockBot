@@ -66,6 +66,8 @@
   --section-gap: var(--space-3);
   /* Equal space above & below page title+icon (bot and PasarGuard identical) */
   --page-title-gap: var(--space-3);
+  /* Air below site-footer AND side-foot — same token so they share one baseline */
+  --foot-gap: var(--space-2);
   --control-gap: var(--space-1);
   --stack-gap: var(--space-2);
   --title-size: 14px;
@@ -196,7 +198,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   -webkit-overflow-scrolling: touch;
   background: var(--bg-card);
   border-left: 1px solid var(--border);
-  padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) calc(var(--space-2) + var(--safe-bottom));
+  padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -208,8 +210,8 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   min-height: 0;
   height: 100%;
   max-height: 100dvh;
-  /* Top / bottom chrome equal: --page-title-gap above content and below footer */
-  padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));
+  /* Top chrome: --page-title-gap. Bottom chrome: --foot-gap (same as .side). */
+  padding: var(--page-title-gap) var(--space-4) calc(var(--foot-gap) + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
@@ -4124,7 +4126,7 @@ form.settings-form > .actions.sticky-actions,
     display: flex !important;
     /* Match air above theme control to air below it → separator (--space-2) */
     padding-top: var(--space-2);
-    padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));
+    padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));
     overscroll-behavior-y: contain;
   }
   .side.open { transform: translateX(0); }
@@ -4145,7 +4147,7 @@ form.settings-form > .actions.sticky-actions,
 
   .main {
     /* Bottom pad matches .side drawer so site-footer & side-foot share one baseline */
-    padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));
+    padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));
     flex: 1 1 auto;
     min-height: 0;
     min-width: 0;
