@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.16": [
+        "نوار سیاه پایین موبایل — ریشه واقعی: ارتفاع شل و سایدبار با 100dvh به viewport کوچک محدود می‌شد در حالی که سند روی viewport بزرگ (100lvh) است؛ فاصلهٔ خالی با رنگ --background (#09090b) همان نوار سیاه بود. شل حالا 100lvh است، max-height:100dvh روی موبایل برداشته شد، سایدبار با bottom:0 تا انتهای صفحه می‌آید",
+        "اسکرول محتوا روی نوار (و نیامدن سایدبار روی آن) به‌خاطر overscroll زنجیره‌ای و سقف dvh سایدبار بود — overscroll-behavior: contain و کشوی تمام‌ارتفاع",
+        "حذف پس‌زمینهٔ شفاف شل (از v8.5.15) که فاصله را خالی‌تر نشان می‌داد؛ کشوی بسته در ios-safari از لبهٔ پایین جدا می‌ماند تا Safari 26 نوار تب را solid black نمونه‌برداری نکند",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.15",
+    ],
     "8.5.15": [
         "نوار سیاه موبایل — بازگشت کامل panel.css/panel.js به v8.2.12 (layout موبایل از v8.2.8 تا v8.2.12 اصلاً تغییر نکرده بود)",
         "ریشه واقعی (خارج از shell/footer): (۱) Service Worker با cache-first panel.css کهنه از fixهای v8.5.4–8.5.12 را نگه می‌داشت — network-first + cache v5؛ (۲) Safari 26+ رنگ نوار تب را از background المان‌های fixed کنار لبه viewport می‌گیرد — shell شفاف + side بسته visibility:hidden در ios-safari",
