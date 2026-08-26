@@ -11,40 +11,15 @@
   <meta name="apple-mobile-web-app-title" content="{{ pwa_name|default('MrClockBot') }}" />
   <title>{% block title %}پنل مدیریت{% endblock %} · {{ pwa_name|default('MrClockBot') }}</title>
   <script>
-  /* Theme + measured viewport height before first paint. Mobile shell/sidebar
-     size from --vvh (window.innerHeight), not 100dvh/100lvh CSS guesses. */
   (function () {
-    var d = document.documentElement;
-    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    var isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
-      !!window.navigator.standalone;
-    if (isIOS && !isStandalone) d.classList.add('ios-safari');
     try {
       var pref = localStorage.getItem("panel-theme") || "system";
       var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
       var theme = pref === "light" ? "light" : pref === "dark" ? "dark" : dark ? "dark" : "light";
-      d.setAttribute("data-theme", theme);
+      document.documentElement.setAttribute("data-theme", theme);
       var meta = document.getElementById("meta-theme-color");
       if (meta) meta.setAttribute("content", theme === "light" ? "#fafafa" : "#09090b");
     } catch (e) {}
-    function setVVH() {
-      var h = window.innerHeight;
-      if (window.visualViewport && window.visualViewport.height) {
-        h = Math.round(window.visualViewport.height);
-      }
-      if (h > 0) d.style.setProperty("--vvh", h + "px");
-    }
-    setVVH();
-    window.addEventListener("resize", setVVH);
-    window.addEventListener("orientationchange", setVVH);
-    window.addEventListener("pageshow", setVVH);
-    document.addEventListener("visibilitychange", function () {
-      if (document.visibilityState === "visible") setVVH();
-    });
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener("resize", setVVH);
-    }
   })();
   </script>
   <link rel="manifest" href="/manifest.webmanifest" />

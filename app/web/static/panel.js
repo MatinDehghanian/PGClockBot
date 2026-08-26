@@ -4,19 +4,29 @@
     const back = document.getElementById('side-backdrop');
     function setOpen(v){
       if (!side) return;
-      side.classList.toggle('open', v);
+      var open = !!v;
+      side.classList.toggle('open', open);
       if (back) {
-        back.hidden = !v;
-        back.classList.toggle('show', v);
-        back.setAttribute('aria-hidden', v ? 'false' : 'true');
+        back.hidden = !open;
+        back.classList.toggle('show', open);
+        back.setAttribute('aria-hidden', open ? 'false' : 'true');
       }
-      document.body.classList.toggle('nav-open', v);
-      if (btn) btn.setAttribute('aria-expanded', v ? 'true' : 'false');
+      document.body.classList.toggle('nav-open', open);
+      if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
     setOpen(false);
-    if (btn) btn.addEventListener('click', () => setOpen(!side.classList.contains('open')));
+    if (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen(!side.classList.contains('open'));
+      });
+    }
     if (back) back.addEventListener('click', () => setOpen(false));
     side && side.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setOpen(false)));
+    window.addEventListener('pageshow', function (e) {
+      setOpen(false);
+    });
 
     /* Permanent no-zoom: keep focused text controls at ≥16px even if CSS regresses */
     (function () {

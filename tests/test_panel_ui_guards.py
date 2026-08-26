@@ -382,8 +382,7 @@ class HtmlCommentBalanceGuardTests(unittest.TestCase):
     def test_base_html_has_meta_theme_color_and_ios_safari(self):
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
         self.assertIn('id="meta-theme-color"', base)
-        self.assertIn("ios-safari", base)
-        self.assertIn("--vvh", base)
+        self.assertNotIn("--vvh", base)
 
 
 if __name__ == "__main__":

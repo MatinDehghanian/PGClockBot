@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.25": [
+        "برگشت کامل v8.5.24 (--vvh و sidebar absolute) — علت خراب شدن اسکرول و همبرگر",
+        "layout موبایل دوباره v8.2.8 (fixed + 100dvh) + pointer-events:none روی کشوی بسته",
+        "همبرگر: z-index بالاتر + stopPropagation + بستن منو در pageshow",
+        "Service Worker cache v15 — حتماً Clear Website Data",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.24",
+    ],
     "8.5.24": [
         "موبایل — مسیر جدید (نه 100lvh/100dvh): ارتفاع واقعی با window.innerHeight → --vvh در <head> قبل از paint",
         "سایدبار دیگر position:fixed + calc(100dvh) نیست — داخل .shell با absolute و top/bottom:0 تا لبهٔ shell پر شود",

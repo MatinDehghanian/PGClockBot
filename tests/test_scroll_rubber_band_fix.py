@@ -26,7 +26,7 @@ class PageScrollContainerTests(unittest.TestCase):
         main = mobile.split("  .main {\n", 1)[1].split("}", 1)[0]
         self.assertIn("overflow: hidden;", shell)
         self.assertIn("overflow-y: auto;", main)
-        self.assertIn("var(--vvh", shell)
+        self.assertIn("100dvh", shell)
 
     def test_nav_open_locks_mobile_main_scroll(self):
         css = CSS.read_text(encoding="utf-8")

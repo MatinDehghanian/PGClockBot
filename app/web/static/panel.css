@@ -4087,34 +4087,35 @@ form.settings-form > .actions.sticky-actions,
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
-  /* Mobile: shell is the positioning root; sidebar/backdrop fill it with
-     absolute top/bottom — no fixed+calc(100dvh) viewport guessing. Shell
-     height comes from --vvh (measured in base.html before paint). */
+  /* Mobile layout — exact v8.2.8 geometry. Closed drawer must not steal taps. */
   .shell {
-    position: relative;
     display: flex;
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
-    height: var(--vvh, 100dvh);
-    min-height: var(--vvh, 100dvh);
-    max-height: var(--vvh, 100dvh);
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
     overflow: hidden;
     padding-top: calc(var(--topbar-h) + var(--safe-top));
-    background: var(--background);
   }
 
   .topbar { display: flex; }
 
+  .menu-toggle {
+    position: relative;
+    z-index: 60;
+  }
+
   .side {
-    position: absolute;
-    top: 0;
+    position: fixed;
+    top: calc(var(--topbar-h) + var(--safe-top));
     right: 0;
     left: auto;
-    bottom: 0;
     width: min(300px, 86vw);
-    height: auto;
-    max-height: none;
+    height: calc(100vh - var(--topbar-h) - var(--safe-top));
+    height: calc(100dvh - var(--topbar-h) - var(--safe-top));
+    max-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
     z-index: 50;
     transform: translateX(105%);
     transition: transform .2s ease;
@@ -4127,13 +4128,8 @@ form.settings-form > .actions.sticky-actions,
     overscroll-behavior-y: contain;
   }
   .side.open { transform: translateX(0); }
-
-  .side-backdrop {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
+  .side:not(.open) {
+    pointer-events: none;
   }
 
   .main {
