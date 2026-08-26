@@ -4112,10 +4112,18 @@ form.settings-form > .actions.sticky-actions,
     min-height: 100vh;
     min-height: 100lvh;
     min-height: max(100vh, 100lvh);
+    /* clip does not coerce overflow-y to auto (hidden would). visible keeps
+       the root scroller so iOS rubber-bands even when content is short. */
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-x: clip;
+    overflow-y: visible;
     overscroll-behavior-y: auto;
     -webkit-overflow-scrolling: touch;
+  }
+  html:has(.shell) body {
+    /* 1px past the layout viewport: page is always “scrollable”, so Safari
+       uses overlay chrome (not a solid slab) and short pages can bounce. */
+    min-height: calc(max(100vh, 100lvh) + 1px);
   }
 
   .shell {

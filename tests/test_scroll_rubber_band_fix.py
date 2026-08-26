@@ -31,7 +31,9 @@ class PageScrollContainerTests(unittest.TestCase):
         self.assertIn("overflow: visible;", main)
         self.assertNotIn("overflow-y: auto;", main)
         self.assertIn("min-height: 0;", main)
-        self.assertIn("overflow-y: auto;", html_block)
+        self.assertIn("overflow-y: visible;", html_block)
+        self.assertIn("overflow-x: clip;", html_block)
+        self.assertIn("calc(max(100vh, 100lvh) + 1px)", html_block)
 
 
     def test_nav_open_locks_mobile_main_scroll(self):

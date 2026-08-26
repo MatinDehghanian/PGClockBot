@@ -37,8 +37,10 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertIn("html:has(.shell)", mobile)
         block = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
         self.assertIn("min-height: 100lvh;", block)
-        self.assertIn("overflow-y: auto;", block)
+        self.assertIn("overflow-y: visible;", block)
+        self.assertIn("overflow-x: clip;", block)
         self.assertNotIn("overflow: hidden;", block)
+        self.assertIn("calc(max(100vh, 100lvh) + 1px)", block)
         self.assertIn("--safari-overlay", block)
         self.assertIn("100lvh - 100dvh", block)
 
