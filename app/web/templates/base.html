@@ -10,12 +10,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="{{ pwa_name|default('MrClockBot') }}" />
   <title>{% block title %}پنل مدیریت{% endblock %} · {{ pwa_name|default('MrClockBot') }}</title>
-  <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="/pwa/icon/180" />
-  <link rel="stylesheet" href="/static/fonts.css?v={{ app_version }}" />
-  <link rel="stylesheet" href="/static/panel.css?v={{ app_version }}" />
-  <link rel="icon" href="/static/logo-64.png" type="image/png" />
   <script>
+  /* Theme + measured viewport height before first paint. Mobile shell/sidebar
+     size from --vvh (window.innerHeight), not 100dvh/100lvh CSS guesses. */
   (function () {
     var d = document.documentElement;
     var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -29,15 +26,32 @@
       var theme = pref === "light" ? "light" : pref === "dark" ? "dark" : dark ? "dark" : "light";
       d.setAttribute("data-theme", theme);
       var meta = document.getElementById("meta-theme-color");
-      if (meta) {
-        /* Safari 26+ ignores theme-color for the tab bar — it samples fixed
-           elements at the viewport edge instead. transparent avoids forcing
-           solid black chrome; see html.ios-safari rules in panel.css. */
-        meta.setAttribute("content", d.classList.contains("ios-safari") ? "transparent" : (theme === "light" ? "#fafafa" : "#09090b"));
-      }
+      if (meta) meta.setAttribute("content", theme === "light" ? "#fafafa" : "#09090b");
     } catch (e) {}
+    function setVVH() {
+      var h = window.innerHeight;
+      if (window.visualViewport && window.visualViewport.height) {
+        h = Math.round(window.visualViewport.height);
+      }
+      if (h > 0) d.style.setProperty("--vvh", h + "px");
+    }
+    setVVH();
+    window.addEventListener("resize", setVVH);
+    window.addEventListener("orientationchange", setVVH);
+    window.addEventListener("pageshow", setVVH);
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") setVVH();
+    });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", setVVH);
+    }
   })();
   </script>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/pwa/icon/180" />
+  <link rel="stylesheet" href="/static/fonts.css?v={{ app_version }}" />
+  <link rel="stylesheet" href="/static/panel.css?v={{ app_version }}" />
+  <link rel="icon" href="/static/logo-64.png" type="image/png" />
   {% block head %}{% endblock %}
 </head>
 <body>

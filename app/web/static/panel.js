@@ -71,7 +71,7 @@
         }
         const dark = resolve(pref) === 'dark';
         const metaColor = document.getElementById('meta-theme-color');
-        if (metaColor && !root.classList.contains('ios-safari')) {
+        if (metaColor) {
           metaColor.setAttribute('content', dark ? '#09090b' : '#fafafa');
         }
       }
