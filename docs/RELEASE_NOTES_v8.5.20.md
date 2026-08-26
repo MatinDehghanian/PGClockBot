@@ -15,7 +15,8 @@ v8.5.19 inset the open sidebar and page by `--safari-overlay: 100lvh − 100svh`
    - `html/body/.shell` still `100lvh` + `overflow: hidden` so there is no leftover strip below the shell.
 
 2. **Keep PWA-like scroll (no URL-bar jitter)**
-   - `.main` is the only scroller. `.main::after { flex: 0 0 1px }` for short-page bounce.
+   - `.main` is the only scroller.
+   - Shared **`--foot-gap: 16px`** (`--space-2`) + `safe-bottom` under both `.site-footer` and `.side-foot` so they sit on one row. Verified: footer align delta `0` and `17px` air to the viewport bottom on 360/390/430 CSS-px phones; shell/side/main bottoms flush (`gapUnderShell: 0`).
 
 3. **CSS / font load**
    - Stop `clients.claim()` so a new SW cannot abort in-flight `panel.css` / fonts.

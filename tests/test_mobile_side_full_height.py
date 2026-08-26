@@ -17,6 +17,8 @@ class MobileSideFullHeightTests(unittest.TestCase):
         self.assertNotIn("100dvh - var(--topbar-h)", side)
         self.assertNotIn("100svh - var(--topbar-h)", side)
         self.assertIn("overscroll-behavior-y: contain;", side)
+        self.assertIn("padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));", side)
+        self.assertIn("margin-top: calc(-1 * var(--space-1));", mobile)
 
     def test_closed_side_height_zero(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")

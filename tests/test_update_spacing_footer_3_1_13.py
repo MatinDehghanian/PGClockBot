@@ -105,6 +105,10 @@ class FooterBaselineTests(unittest.TestCase):
             "padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));",
             mobile,
         )
+        self.assertIn(
+            "padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));",
+            mobile,
+        )
 
     def test_main_body_footer_gap_matches_page_title_gap(self):
         css = CSS.read_text(encoding="utf-8")

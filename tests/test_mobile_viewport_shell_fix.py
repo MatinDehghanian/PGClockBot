@@ -56,6 +56,8 @@ class MobileViewportShellFixTests(unittest.TestCase):
             "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));",
             main,
         )
+        self.assertIn("padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));", main)
+        self.assertIn(".side::after", main)
 
     def test_mobile_sticky_footer_like_v8212(self):
         mobile = self._mobile()
