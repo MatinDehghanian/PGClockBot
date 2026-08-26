@@ -42,7 +42,9 @@ def measure(page) -> dict:
       return {
         innerHeight: vh,
         docClientHeight: document.documentElement.clientHeight,
+        docScrollTop: document.documentElement.scrollTop || document.body.scrollTop,
         visualViewportHeight: window.visualViewport ? window.visualViewport.height : null,
+        mainOverflowY: cs(main, 'overflow-y'),
         shell: {
           bottom: shellR ? shellR.bottom : null,
           paddingBottom: cs(shell, 'padding-bottom'),
@@ -86,7 +88,15 @@ def main() -> None:
         is_long = "probe_long" in fixture.name
         long_bottom = None
         if is_long:
-            page.locator(".main").evaluate("el => { el.scrollTop = el.scrollHeight; }")
+            page.evaluate(
+                """() => {
+              const max = Math.max(
+                document.documentElement.scrollHeight - window.innerHeight,
+                0
+              );
+              window.scrollTo(0, max);
+            }"""
+            )
             long_bottom = measure(page)
 
         browser.close()
@@ -101,15 +111,18 @@ def main() -> None:
     checks = {
         "title_below_topbar": title["top"] >= topbar_bottom - tol,
         "main_fills_shell_content_box": main_shell_gap is not None and abs(main_shell_gap - SAFE_BOTTOM) <= tol,
-        "no_shell_viewport_gap": shell_gap is not None and abs(shell_gap) <= tol,
+        "main_not_scroller": short.get("mainOverflowY") == "visible",
         "main_max_height_unbounded": short["main"]["maxHeight"] in ("none", ""),
         "side_open_reaches_bottom": abs(side_open["bottom"] - vh) <= 4,
     }
+    if not is_long:
+        checks["no_shell_viewport_gap"] = shell_gap is not None and abs(shell_gap) <= tol
 
     if is_long:
         if long_bottom is not None:
             foot_to_main = long_bottom.get("gap_footer_to_main_bottom")
-            checks["long_scroll_reaches_footer"] = long_bottom["main"]["scrollTop"] > 0
+            checks["long_document_scrolled"] = (long_bottom.get("docScrollTop") or 0) > 0
+            checks["main_stays_non_scroller"] = long_bottom.get("main", {}).get("scrollTop", 0) == 0
             checks["footer_gap_is_foot_gap_only"] = (
                 foot_to_main is not None and abs(foot_to_main - FOOT_GAP) <= tol
             )

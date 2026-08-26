@@ -28,8 +28,10 @@ class PageScrollContainerTests(unittest.TestCase):
         self.assertIn("overflow-y: auto;", doc)
         self.assertIn("overflow: visible;", shell)
         self.assertNotIn("overflow: hidden;", shell)
-        self.assertIn("min-height: 100svh;", shell)
-        self.assertNotIn("height: 100dvh", shell)
+        self.assertIn("flex: 1 0 auto;", shell)
+        shell_block = shell.split("}", 1)[0]
+        for unit in ("100dvh", "100svh", "100lvh", "100vh"):
+            self.assertNotIn(unit, shell_block)
         self.assertIn("overflow: visible;", main)
         self.assertNotIn("overflow-y: auto;", main)
 

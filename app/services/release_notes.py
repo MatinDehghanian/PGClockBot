@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.28": [
+        "موبایل — fix نهایی bottom gap: یک scroll owner (document)؛ حذف nested .main scroll و height:100dvh روی shell",
+        "shell با flex:1 روی body پر می‌شود — بدون vh/dvh/svh/lvh و بدون --vvh/visualViewport JS",
+        "safe-bottom فقط روی .shell؛ foot-gap فقط روی .main — بدون stack دوباره",
+        "تست journey کامل: first load → scroll → bottom → top (short + long) + sidebar",
+        "Service Worker cache v18؛ ریستور: v8.5.27",
+    ],
     "8.5.27": [
         "موبایل — ریشه jump فضای پایین بعد از اولین scroll: nested scroll (.main overflow:auto) + height:100dvh روی .shell باعث می‌شد dvh در اولین paint بزرگ‌تر از visual viewport باشد؛ یک scroll dvh را recalc می‌کرد و gap می‌پرید",
         "یک scroll owner: document (html/body overflow-y:auto) — .main دیگر scroller نیست (overflow:visible)",

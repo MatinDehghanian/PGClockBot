@@ -18,12 +18,13 @@ class MobileViewportShellFixTests(unittest.TestCase):
     def _mobile(self) -> str:
         return CSS.read_text(encoding="utf-8").split("@media (max-width: 900px)", 1)[1]
 
-    def test_mobile_shell_uses_stable_svh_not_dvh(self):
+    def test_mobile_shell_uses_flex_fill_not_viewport_units(self):
         mobile = self._mobile()
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
-        self.assertIn("min-height: 100svh;", shell)
-        self.assertNotIn("height: 100dvh", shell)
-        self.assertNotIn("var(--vvh", shell)
+        self.assertIn("flex: 1 0 auto;", shell)
+        shell_block = shell.split("}", 1)[0]
+        for unit in ("100dvh", "100svh", "100lvh", "100vh", "var(--vvh"):
+            self.assertNotIn(unit, shell_block)
         self.assertIn("padding-bottom: var(--safe-bottom);", shell)
 
     def test_document_is_scroll_owner(self):
@@ -65,7 +66,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_service_worker_cache(self):
         pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v17", pwa)
+        self.assertIn("pgclock-shell-v18", pwa)
 
 
 if __name__ == "__main__":

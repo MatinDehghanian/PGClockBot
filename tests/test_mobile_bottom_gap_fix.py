@@ -23,10 +23,15 @@ class MobileBottomGapCssTests(unittest.TestCase):
         mobile = self._mobile()
         main = mobile.split("  .main {", 1)[1].split("  .main-body", 1)[0]
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
+        body = mobile.split("html:has(.shell) body {\n    min-height: 100%;", 1)[1].split("}", 1)[0]
         self.assertIn("overflow: visible;", main)
         self.assertNotIn("overflow-y: auto;", main)
-        self.assertIn("min-height: 100svh;", shell)
-        self.assertNotIn("height: 100dvh", shell.split("}", 1)[0])
+        self.assertIn("display: flex;", body)
+        self.assertIn("flex-direction: column;", body)
+        self.assertIn("flex: 1 0 auto;", shell)
+        shell_block = shell.split("}", 1)[0]
+        for unit in ("100dvh", "100svh", "100lvh", "100vh"):
+            self.assertNotIn(unit, shell_block)
 
     def test_shell_owns_safe_bottom_once(self):
         mobile = self._mobile()

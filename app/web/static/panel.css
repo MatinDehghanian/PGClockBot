@@ -4091,8 +4091,11 @@ form.settings-form > .actions.sticky-actions,
      Root cause (iOS): height:100dvh on .shell + overflow-y:auto on .main nested
      scroll. dvh matches layout viewport on first paint (taller than visual viewport
      with URL bar); first scroll recalculates dvh → shell shrinks → bottom gap jumps.
-     Fix: shell min-height:100svh only (stable across scroll); no fixed dvh height;
-     .main overflow:visible so geometry does not depend on visualViewport sync. */
+     Fix: normal document flow — shell height:auto, min-height:100% (no vh/dvh/svh);
+     .main overflow:visible; safe-bottom only on .shell, foot-gap only on .main. */
+  html:has(.shell) {
+    height: 100%;
+  }
   html:has(.shell),
   html:has(.shell) body {
     overflow-x: hidden;
@@ -4100,13 +4103,19 @@ form.settings-form > .actions.sticky-actions,
     overscroll-behavior-y: auto;
     -webkit-overflow-scrolling: touch;
   }
+  html:has(.shell) body {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
 
   .shell {
     display: flex;
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
-    min-height: 100svh;
+    flex: 1 0 auto;
+    min-height: 0;
     height: auto;
     max-height: none;
     overflow: visible;
