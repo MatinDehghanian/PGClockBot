@@ -4087,18 +4087,29 @@ form.settings-form > .actions.sticky-actions,
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
-  /* Mobile shell: 100dvh flex column; .main is the sole vertical scroller.
-     Safe-area bottom on .shell; .main keeps --foot-gap only. Closed drawer
-     must not steal taps (pointer-events:none). */
+  /* Mobile: document is the sole vertical scroller — NOT .main.
+     Root cause (iOS): height:100dvh on .shell + overflow-y:auto on .main nested
+     scroll. dvh matches layout viewport on first paint (taller than visual viewport
+     with URL bar); first scroll recalculates dvh → shell shrinks → bottom gap jumps.
+     Fix: shell min-height:100svh only (stable across scroll); no fixed dvh height;
+     .main overflow:visible so geometry does not depend on visualViewport sync. */
+  html:has(.shell),
+  html:has(.shell) body {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .shell {
     display: flex;
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
-    height: 100vh;
-    height: 100dvh;
-    max-height: 100dvh;
-    overflow: hidden;
+    min-height: 100svh;
+    height: auto;
+    max-height: none;
+    overflow: visible;
     padding-top: calc(var(--topbar-h) + var(--safe-top));
     padding-bottom: var(--safe-bottom);
     background: var(--background);
@@ -4137,20 +4148,14 @@ form.settings-form > .actions.sticky-actions,
   }
 
   .main {
-    /* Desktop leaves height:100% / max-height:100dvh — on mobile that overshoots the
-       shell content box (viewport − topbar − safe-bottom) and leaves a phantom strip
-       under the footer. flex:1 1 0 + min-height:0 fills remaining space exactly. */
     height: auto;
     max-height: none;
-    flex: 1 1 0;
+    flex: 1 0 auto;
     min-height: 0;
     min-width: 0;
     width: 100%;
     padding: var(--page-title-gap) var(--space-2) var(--foot-gap);
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: visible;
     display: flex;
     flex-direction: column;
   }
@@ -4310,7 +4315,6 @@ form.settings-form > .actions.sticky-actions,
 
   .sticky-actions { margin: 0; width: 100%; }
   body.nav-open { overflow: hidden; }
-  body.nav-open .main { overflow: hidden !important; }
 
   .notify-row { flex-direction: row; }
   .actions { gap: var(--space-1); }

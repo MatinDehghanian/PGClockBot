@@ -1,4 +1,4 @@
-"""Scroll rubber-band / overscroll fixes."""
+"""Scroll model — mobile uses document scroll, desktop keeps inner main scroll."""
 
 from __future__ import annotations
 
@@ -12,26 +12,32 @@ JS = ROOT / "app/web/static/panel.js"
 
 
 class PageScrollContainerTests(unittest.TestCase):
-    def test_main_and_side_allow_vertical_overscroll_bounce(self):
+    def test_desktop_main_allows_vertical_overscroll_bounce(self):
         css = CSS.read_text(encoding="utf-8")
         main = css.split(".main {\n", 1)[1].split("}", 1)[0]
         side = css.split(".side {\n", 1)[1].split(".main {", 1)[0]
         self.assertIn("overscroll-behavior-y: auto;", main)
         self.assertIn("overscroll-behavior-y: auto;", side)
 
-    def test_mobile_shell_scrolls_inner_main_only(self):
+    def test_mobile_document_is_scroll_owner_not_main(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         shell = mobile.split(".shell {\n", 1)[1].split("}", 1)[0]
         main = mobile.split("  .main {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("overflow: hidden;", shell)
-        self.assertIn("overflow-y: auto;", main)
-        self.assertIn("100dvh", shell)
+        doc = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
+        self.assertIn("overflow-y: auto;", doc)
+        self.assertIn("overflow: visible;", shell)
+        self.assertNotIn("overflow: hidden;", shell)
+        self.assertIn("min-height: 100svh;", shell)
+        self.assertNotIn("height: 100dvh", shell)
+        self.assertIn("overflow: visible;", main)
+        self.assertNotIn("overflow-y: auto;", main)
 
-    def test_nav_open_locks_mobile_main_scroll(self):
+    def test_nav_open_locks_document_scroll(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
-        self.assertIn("body.nav-open .main { overflow: hidden !important; }", mobile)
+        self.assertIn("body.nav-open { overflow: hidden; }", mobile)
+        self.assertNotIn("body.nav-open .main", mobile)
 
 
 class ModalOverscrollTests(unittest.TestCase):

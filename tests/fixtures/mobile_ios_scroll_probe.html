@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="stylesheet" href="../../app/web/static/panel.css" />
+  <style>
+    :root { --safe-top: 47px; --safe-bottom: 34px; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar mobile-only">
+      <div class="topbar-brand"><strong dir="ltr">Probe</strong></div>
+      <button type="button" class="menu-toggle" id="menu-toggle" aria-label="منو">
+        <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span>
+      </button>
+    </header>
+    <main class="main" id="main">
+      <div class="main-body">
+        <div class="page-head"><h1>Short page probe</h1></div>
+        <div class="card" id="last-content"><p>Last visible content block.</p></div>
+      </div>
+      <footer class="site-footer"><div class="footer-meta"><span>© footer</span></div></footer>
+    </main>
+  </div>
+  <script>
+    window.__measureGeometry = function(label) {
+      var shell = document.querySelector('.shell');
+      var main = document.getElementById('main');
+      var mainBody = document.querySelector('.main-body');
+      var footer = document.querySelector('.site-footer');
+      var last = document.getElementById('last-content');
+      var vv = window.visualViewport;
+      var cs = function(el, p) { return el ? getComputedStyle(el).getPropertyValue(p).trim() : ''; };
+      var rect = function(el) {
+        if (!el) return null;
+        var r = el.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, height: r.height };
+      };
+      var shellR = rect(shell);
+      var mainR = rect(main);
+      var footerR = rect(footer);
+      var lastR = rect(last);
+      var vvh = vv ? vv.height : null;
+      var vTop = vv ? vv.offsetTop : null;
+      var visualBottom = vvh != null && vTop != null ? vTop + vvh : window.innerHeight;
+      return {
+        label: label,
+        innerHeight: window.innerHeight,
+        docClientHeight: document.documentElement.clientHeight,
+        visualViewportHeight: vvh,
+        visualViewportOffsetTop: vTop,
+        visualViewportBottom: visualBottom,
+        shell: {
+          rect: shellR,
+          height: cs(shell, 'height'),
+          minHeight: cs(shell, 'min-height'),
+          maxHeight: cs(shell, 'max-height'),
+          overflow: cs(shell, 'overflow'),
+          paddingBottom: cs(shell, 'padding-bottom'),
+        },
+        main: {
+          rect: mainR,
+          clientHeight: main ? main.clientHeight : null,
+          scrollHeight: main ? main.scrollHeight : null,
+          scrollTop: main ? main.scrollTop : null,
+          height: cs(main, 'height'),
+          maxHeight: cs(main, 'max-height'),
+          overflow: cs(main, 'overflow-y'),
+          paddingBottom: cs(main, 'padding-bottom'),
+        },
+        mainBody: { rect: rect(mainBody) },
+        footer: { rect: footerR, paddingTop: cs(footer, 'padding-top') },
+        gaps: {
+          lastContent_to_mainScrollBottom: main && lastR ? (main.scrollTop + main.clientHeight) - (lastR.bottom - mainR.top) : null,
+          mainBottom_to_shellBottom: shellR && mainR ? shellR.bottom - mainR.bottom : null,
+          shellBottom_to_visualViewportBottom: shellR ? visualBottom - shellR.bottom : null,
+          footerBottom_to_visualViewportBottom: footerR ? visualBottom - footerR.bottom : null,
+          lastContent_to_visualViewportBottom: lastR ? visualBottom - lastR.bottom : null,
+        },
+        bodyScrollTop: document.documentElement.scrollTop || document.body.scrollTop,
+      };
+    };
+  </script>
+</body>
+</html>
