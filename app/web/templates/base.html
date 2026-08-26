@@ -42,21 +42,6 @@
 </head>
 <body>
   {% if staff is defined and staff %}
-  <script>
-  /* Next page paints immediately. Skeleton lives only on the departing
-     document while waiting — never hide arrived HTML, never min delay. */
-  (function () {
-    try {
-      var html = document.documentElement;
-      html.classList.remove("page-loading", "page-booting");
-      html.classList.add("page-ready");
-      window.__pgPageReveal = function () {
-        html.classList.remove("page-loading", "page-booting");
-        html.classList.add("page-ready");
-      };
-    } catch (e) {}
-  })();
-  </script>
   {% set path = request.url.path %}
   {% set perms = staff.get('permissions') or [] %}
   {% set pg_nav = staff.get('pg_permissions') or [] %}
@@ -334,43 +319,7 @@
     <div class="side-backdrop" id="side-backdrop" hidden aria-hidden="true"></div>
 
     <main class="main">
-      <div class="page-load-veil" id="page-load-veil" aria-hidden="true">
-        <div class="page-load-veil-inner" role="status" aria-live="polite">
-          <span class="panel-load-clock" aria-hidden="true">
-            <span class="panel-load-clock-face">
-              <span class="panel-load-clock-hand panel-load-clock-hour"></span>
-              <span class="panel-load-clock-hand panel-load-clock-minute"></span>
-              <span class="panel-load-clock-hub"></span>
-            </span>
-          </span>
-          <p class="page-load-veil-title">در حال بارگذاری</p>
-        </div>
-      </div>
-      <div class="page-skeleton" id="page-skeleton" aria-hidden="true">
-        <div class="sk-block sk-title">
-          <span class="sk-bone sk-ico"></span>
-          <span class="sk-bone sk-line sk-line-lg"></span>
-        </div>
-        <div class="sk-block sk-card">
-          <span class="sk-bone sk-line sk-line-md"></span>
-          <span class="sk-bone sk-line"></span>
-          <span class="sk-bone sk-line sk-line-sm"></span>
-          <div class="sk-grid">
-            <span class="sk-bone sk-tile"></span>
-            <span class="sk-bone sk-tile"></span>
-            <span class="sk-bone sk-tile"></span>
-            <span class="sk-bone sk-tile"></span>
-          </div>
-        </div>
-        <div class="sk-block sk-card">
-          <span class="sk-bone sk-line sk-line-md"></span>
-          <span class="sk-bone sk-row"></span>
-          <span class="sk-bone sk-row"></span>
-          <span class="sk-bone sk-row"></span>
-          <span class="sk-bone sk-row"></span>
-        </div>
-      </div>
-      <div class="main-body page-surface">
+      <div class="main-body">
         {# Page flashes stay above the title. When an edit/domain settings modal
            is reopening, the same message is shown inside the modal instead. #}
         {% set _domain_modal_open = open_supports_modal or open_loyalty_settings or (open_finance_settings|default('')|string|length > 0) %}
