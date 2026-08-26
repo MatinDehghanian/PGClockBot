@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl" data-theme="dark" class="ios-safari">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="stylesheet" href="../../app/web/static/panel.css" />
+  <style>
+    /* Simulate iPhone safe areas in headless probe */
+    :root {
+      --safe-top: 47px;
+      --safe-bottom: 34px;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar mobile-only">
+      <div class="topbar-brand"><strong dir="ltr">MrClockBot</strong></div>
+      <button type="button" class="menu-toggle" id="menu-toggle" aria-label="منو">
+        <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span>
+      </button>
+    </header>
+    <aside class="side" id="sidebar" aria-label="منوی اصلی">
+      <div class="side-theme"><button type="button" class="side-theme-btn"><span class="side-theme-text">تم</span></button></div>
+      <nav class="side-nav">
+        <div class="nav-section"><a href="#" class="nav-item"><span>باشگاه مشتریان</span></a></div>
+        <div class="nav-section"><a href="#" class="nav-item"><span>متغیرهای پیام</span></a></div>
+      </nav>
+      <div class="side-foot"><div class="side-foot-user"><span class="side-foot-name">admin</span></div></div>
+    </aside>
+    <div class="side-backdrop" id="side-backdrop" hidden></div>
+    <main class="main">
+      <div class="main-body page-surface">
+        <div class="page-head"><h1>وضعیت اتصال</h1></div>
+        <div class="card"><p>محتوای تست — باید زیر هدر نباشد و فوتر پایین main دیده شود.</p></div>
+      </div>
+      <footer class="site-footer"><div class="footer-meta"><span>© ۲۰۲۶ MrClockBot</span></div></footer>
+    </main>
+  </div>
+  <script>
+    document.getElementById('menu-toggle').addEventListener('click', function () {
+      var open = document.getElementById('sidebar').classList.toggle('open');
+      var back = document.getElementById('side-backdrop');
+      back.hidden = !open;
+      back.classList.toggle('show', open);
+    });
+  </script>
+</body>
+</html>

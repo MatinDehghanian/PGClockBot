@@ -102,7 +102,6 @@
 html, body {
   margin: 0;
   min-height: 100%;
-  min-height: 100lvh;
   width: 100%;
   background: var(--background);
   color: var(--foreground);
@@ -2405,7 +2404,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 
 .auth-wrap {
   min-height: 100vh;
-  min-height: 100lvh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: calc(var(--space-3) + var(--safe-top)) calc(var(--space-2) + var(--safe-right)) calc(var(--space-3) + var(--safe-bottom)) calc(var(--space-2) + var(--safe-left));
@@ -4091,28 +4090,19 @@ form.settings-form > .actions.sticky-actions,
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
-  /* Mobile: fill 100lvh. Document locked; .main is the scroller. */
-  html:has(.shell),
-  html:has(.shell) body {
-    height: 100vh;
-    height: 100lvh;
-    min-height: 100vh;
-    min-height: 100lvh;
-    overflow: hidden;
-    overscroll-behavior: none;
-  }
-
+  /* Mobile shell — v8.2.12 proven layout (100dvh, .main scrolls, sticky footer).
+     v8.5.16–8.5.19 viewport overlay hacks caused header overlap, sidebar gaps,
+     and blank pages — do not reintroduce document lock or drawer collapse. */
   .shell {
     display: flex;
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
     height: 100vh;
-    height: 100lvh;
-    min-height: 100vh;
-    min-height: 100lvh;
-    max-height: none;
+    height: 100dvh;
+    max-height: 100dvh;
     overflow: hidden;
+    /* Reserve space for fixed mobile topbar */
     padding-top: calc(var(--topbar-h) + var(--safe-top));
   }
 
@@ -4123,10 +4113,10 @@ form.settings-form > .actions.sticky-actions,
     top: calc(var(--topbar-h) + var(--safe-top));
     right: 0;
     left: auto;
-    bottom: 0;
     width: min(300px, 86vw);
-    height: auto;
-    max-height: none;
+    height: calc(100vh - var(--topbar-h) - var(--safe-top));
+    height: calc(100dvh - var(--topbar-h) - var(--safe-top));
+    max-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
     z-index: 50;
     transform: translateX(105%);
     transition: transform .2s ease;
@@ -4141,30 +4131,27 @@ form.settings-form > .actions.sticky-actions,
   }
   .side.open { transform: translateX(0); }
 
-  /* Closed drawer must not paint at the viewport bottom edge. Off-screen
-     translateX alone still leaves a fixed box from top→bottom; Safari 26
-     samples that opaque card bg. Collapse on every mobile viewport. */
-  .side:not(.open) {
-    top: auto;
-    bottom: auto;
-    height: 0 !important;
-    max-height: 0 !important;
-    padding: 0 !important;
-    border: 0 !important;
-    overflow: hidden;
+  /* Safari 26+ (iOS in-browser): tab/address bar tint is sampled from opaque
+     position:fixed backgrounds near the viewport edge — NOT theme-color.
+     Keep layout dimensions unchanged; only stop closed drawer from painting. */
+  html.ios-safari .shell {
+    background: transparent;
+  }
+  html.ios-safari .main {
+    background: var(--background);
+  }
+  html.ios-safari .side:not(.open) {
     visibility: hidden;
     pointer-events: none;
-    transform: none;
   }
 
   .main {
+    /* Bottom pad matches .side drawer so site-footer & side-foot share one baseline */
     padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));
     flex: 1 1 auto;
     min-height: 0;
     min-width: 0;
     width: 100%;
-    height: auto;
-    max-height: none;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: auto;
