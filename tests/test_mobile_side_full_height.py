@@ -16,6 +16,7 @@ class MobileSideFullHeightTests(unittest.TestCase):
         self.assertNotIn("100dvh - var(--topbar-h)", side)
         self.assertNotIn("100svh - var(--topbar-h)", side)
         self.assertIn("overscroll-behavior-y: contain;", side)
+        self.assertIn("--safari-overlay", side)
 
     def test_closed_side_height_zero(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")

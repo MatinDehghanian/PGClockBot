@@ -1,4 +1,4 @@
-"""Mobile shell fills 100lvh (layout viewport), not 100dvh/100svh (small viewport)."""
+"""Mobile shell fills 100lvh; short pages bounce; overlay inset tracks 100dvh."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
         self.assertIn("display: flex;", shell)
         self.assertIn("height: 100lvh;", shell)
+        self.assertIn("min-height: 100lvh;", shell)
         self.assertIn("max-height: none;", shell)
         self.assertNotIn("height: 100dvh;", shell)
         self.assertNotIn("max-height: 100dvh;", shell)
@@ -29,20 +30,34 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertNotIn("max-height: 100svh;", shell)
         self.assertNotIn("position: fixed;", shell)
         self.assertNotIn("--vvh", shell)
+        self.assertIn("overflow: visible;", shell)
 
-    def test_html_body_locked_to_lvh_when_shell_present(self):
+    def test_html_body_scrollable_lvh_not_locked(self):
         mobile = self._mobile()
         self.assertIn("html:has(.shell)", mobile)
         block = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
-        self.assertIn("height: 100lvh;", block)
-        self.assertIn("overflow: hidden;", block)
+        self.assertIn("min-height: 100lvh;", block)
+        self.assertIn("overflow-y: visible;", block)
+        self.assertIn("overflow-x: clip;", block)
+        self.assertNotIn("overflow: hidden;", block)
+        self.assertIn("calc(max(100vh, 100lvh) + 1px)", block)
+        self.assertIn("--safari-overlay", block)
+        self.assertIn("100lvh - 100dvh", block)
 
-    def test_mobile_main_unsets_desktop_dvh_max_height(self):
+    def test_mobile_main_document_scroll_and_overlay_pad(self):
         mobile = self._mobile()
         main = mobile.split("  .main {", 1)[1].split("  .main-body", 1)[0]
         self.assertIn("max-height: none;", main)
         self.assertNotIn("max-height: 100dvh;", main)
-        self.assertIn("overscroll-behavior-y: contain;", main)
+        self.assertIn("overflow: visible;", main)
+        self.assertNotIn("overflow-y: auto;", main)
+        self.assertNotIn("overscroll-behavior-y: contain;", main)
+        self.assertIn("overscroll-behavior-y: auto;", main)
+        self.assertIn("--safari-overlay", main)
+        self.assertIn(
+            "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));",
+            main,
+        )
 
     def test_mobile_sticky_footer_like_v8212(self):
         mobile = self._mobile()
@@ -64,6 +79,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
         auth = css.split(".auth-wrap {", 1)[1].split("}", 1)[0]
         self.assertIn("min-height: 100lvh;", auth)
         self.assertNotIn("min-height: 100dvh;", auth)
+        self.assertIn("100lvh - 100dvh", auth)
 
     def test_users_table_polish_restored(self):
         css = CSS.read_text(encoding="utf-8")
@@ -91,7 +107,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_service_worker_network_first_panel_assets(self):
         pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v7", pwa)
+        self.assertIn("pgclock-shell-v8", pwa)
         self.assertIn("isVersionedPanelAsset", pwa)
         self.assertNotIn("'/static/panel.css'", pwa.split("PRECACHE")[1].split("];", 1)[0])
 

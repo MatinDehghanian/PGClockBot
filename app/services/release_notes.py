@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.18": [
+        "موبایل: اسکرول فنری در صفحات کوتاه برگشت — overflow:hidden روی html/body سند را قفل می‌کرد و iOS روی .main بدون overflow فنر نمی‌دهد؛ اسکرول با خود سند است",
+        "فول‌اسکرین خودکار در همه سایزها: پس‌زمینه 100lvh (زیر نوار شناور Safari)؛ فاصله پایین محتوا max(0, 100lvh − 100dvh) تا فوتر روی لبهٔ دیده شود و با باز/بسته شدن نوار مرورگر جمع شود — بدون --vvh",
+        "جدول کاربران و وسط‌چین اعلان‌ها حفظ شد",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.17",
+    ],
     "8.5.17": [
         "نوار سیاه فوتر — ریشه تأییدشده: 100dvh/100svh شل را کوتاه‌تر از layout viewport می‌گذارد و --background (#09090b) در فاصله دیده می‌شود. شل موبایل 100lvh است، max-height:100dvh برداشته شد، سایدبار باز با bottom:0 تا لبه صفحه",
         "باقی‌مانده فوتر: پس‌زمینه شفاف html/body/shell/main از v8.5.16 حذف شد (همان فاصله را سیاه‌تر می‌کرد)؛ کشوی بسته روی همه موبایل height:0 می‌ماند؛ login (auth-wrap) هم 100lvh",
