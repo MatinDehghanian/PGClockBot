@@ -1,4 +1,4 @@
-"""Mobile shell — v8.2.8 geometry; closed drawer ignores taps."""
+"""Mobile shell — v8.2.8 geometry + root-cause bottom-gap fix."""
 
 from __future__ import annotations
 
@@ -23,12 +23,24 @@ class MobileViewportShellFixTests(unittest.TestCase):
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
         self.assertIn("height: 100dvh;", shell)
         self.assertNotIn("var(--vvh", shell)
+        self.assertIn("padding-bottom: var(--safe-bottom);", shell)
 
     def test_sidebar_fixed_with_pointer_events_guard(self):
         mobile = self._mobile()
         side = mobile.split(".side {", 1)[1].split(".side.open", 1)[0]
         self.assertIn("position: fixed;", side)
+        self.assertIn("bottom: 0;", side)
         self.assertIn("pointer-events: none;", mobile.split(".side:not(.open)", 1)[1][:120])
+
+    def test_mobile_main_is_inner_scroller(self):
+        mobile = self._mobile()
+        main = mobile.split("  .main {", 1)[1].split("  .main-body", 1)[0]
+        self.assertIn("overflow-y: auto;", main)
+        self.assertIn("height: auto;", main)
+        self.assertIn("max-height: none;", main)
+        self.assertIn("flex: 1 1 0;", main)
+        self.assertIn("padding: var(--page-title-gap) var(--space-2) var(--foot-gap);", main)
+        self.assertNotIn("calc(var(--foot-gap) + var(--safe-bottom))", main)
 
     def test_no_vvh_script(self):
         base = BASE.read_text(encoding="utf-8")
@@ -47,12 +59,18 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_hamburger_pageshow_reset(self):
         js = JS.read_text(encoding="utf-8")
-        self.assertIn('addEventListener(\'pageshow\'', js)
+        self.assertIn("addEventListener('pageshow'", js)
         self.assertIn("stopPropagation", js)
+
+    def test_no_ios_safari_layout_hacks(self):
+        mobile = self._mobile()
+        self.assertNotIn("html.ios-safari .shell", mobile)
+        side = mobile.split("  .side {", 1)[1].split("  .side.open", 1)[0]
+        self.assertNotIn("height: 0", side)
 
     def test_service_worker_cache(self):
         pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v15", pwa)
+        self.assertIn("pgclock-shell-v16", pwa)
 
 
 if __name__ == "__main__":
