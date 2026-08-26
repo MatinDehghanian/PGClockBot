@@ -100,6 +100,7 @@
 html, body {
   margin: 0;
   min-height: 100%;
+  min-height: 100lvh;
   width: 100%;
   background: var(--background);
   color: var(--foreground);
@@ -2402,7 +2403,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 
 .auth-wrap {
   min-height: 100vh;
-  min-height: 100dvh;
+  min-height: 100lvh;
   display: grid;
   place-items: center;
   padding: calc(var(--space-3) + var(--safe-top)) calc(var(--space-2) + var(--safe-right)) calc(var(--space-3) + var(--safe-bottom)) calc(var(--space-2) + var(--safe-left));
@@ -4088,17 +4089,34 @@ form.settings-form > .actions.sticky-actions,
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
+  /* iOS 26+: 100dvh is the *small* dynamic viewport, but the document layout
+     box stays at the large viewport (100lvh / 100vh). A 100dvh shell therefore
+     stops short of the real page bottom; html/body --background (#09090b)
+     shows through as the “black bar”. Sidebar never covered it because it was
+     also capped to 100dvh. Fill the layout viewport instead — no --vvh JS. */
+  html:has(.shell),
+  html:has(.shell) body {
+    height: 100%;
+    height: 100vh;
+    height: 100lvh;
+    min-height: 100%;
+    min-height: 100lvh;
+    overflow: hidden;
+  }
+
   .shell {
     display: flex;
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
-    /* 100svh = small viewport (browser chrome expanded). 100dvh jumps on first
-       paint when the URL/tab bar is showing, leaving a dead strip under the
-       shell that looks like a black bar until the user scrolls. */
+    /* One scroll container (.main) — same as desktop; avoids body scroll jitter */
+    height: 100%;
     height: 100vh;
-    height: 100svh;
-    max-height: 100svh;
+    height: 100lvh;
+    min-height: 100%;
+    min-height: 100lvh;
+    /* Must override the desktop dvh max-height or the shell stays short. */
+    max-height: none;
     overflow: hidden;
     /* Reserve space for fixed mobile topbar */
     padding-top: calc(var(--topbar-h) + var(--safe-top));
@@ -4111,10 +4129,10 @@ form.settings-form > .actions.sticky-actions,
     top: calc(var(--topbar-h) + var(--safe-top));
     right: 0;
     left: auto;
+    bottom: 0;
     width: min(300px, 86vw);
-    height: calc(100vh - var(--topbar-h) - var(--safe-top));
-    height: calc(100svh - var(--topbar-h) - var(--safe-top));
-    max-height: calc(100svh - var(--topbar-h) - var(--safe-top));
+    height: auto;
+    max-height: none;
     z-index: 50;
     transform: translateX(105%);
     transition: transform .2s ease;
@@ -4125,12 +4143,13 @@ form.settings-form > .actions.sticky-actions,
     /* Match air above theme control to air below it → separator (--space-2) */
     padding-top: var(--space-2);
     padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));
+    overscroll-behavior-y: contain;
   }
   .side.open { transform: translateX(0); }
 
   /* Closed drawer must not paint at the viewport bottom edge. Off-screen
      translateX alone still leaves a fixed box from top→bottom; Safari 26
-     samples that opaque card bg and paints a solid black tab bar. */
+     samples that opaque card bg. Collapse on every mobile viewport. */
   .side:not(.open) {
     top: auto;
     bottom: auto;
@@ -4144,18 +4163,6 @@ form.settings-form > .actions.sticky-actions,
     transform: none;
   }
 
-  /* Safari 26 Liquid Glass: no full-bleed opaque fill at the bottom edge.
-     Cards/topbar/open-drawer keep their own backgrounds; html/body/shell/main
-     stay transparent so the tab bar can frost instead of going solid black. */
-  html.ios-safari,
-  html.ios-safari body {
-    background: transparent;
-  }
-  html.ios-safari .shell,
-  html.ios-safari .main {
-    background: transparent;
-  }
-
   .main {
     /* Bottom pad matches .side drawer so site-footer & side-foot share one baseline */
     padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));
@@ -4163,9 +4170,12 @@ form.settings-form > .actions.sticky-actions,
     min-height: 0;
     min-width: 0;
     width: 100%;
+    height: auto;
+    /* Override the desktop dvh max-height so .main can fill the lvh shell. */
+    max-height: none;
     overflow-x: hidden;
     overflow-y: auto;
-    overscroll-behavior-y: auto;
+    overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
     display: flex;
     flex-direction: column;
@@ -8997,21 +9007,4 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   .msg-vars-token-cell .btn {
     flex: 0 0 auto;
   }
-}
-
-/* —— Safari 26 glass (must be last — wins over earlier bg fills) —— */
-html.ios-safari,
-html.ios-safari body,
-html.ios-safari .shell,
-html.ios-safari .main {
-  background-color: transparent !important;
-  background-image: none !important;
-}
-html.ios-safari .topbar,
-html.ios-safari .side.open,
-html.ios-safari .card,
-html.ios-safari .home-action-item {
-  /* keep local chrome opaque so content stays readable — not site-footer
-     (footer sits at the bottom edge Safari samples for Liquid Glass). */
-  background-color: var(--bg-card);
 }

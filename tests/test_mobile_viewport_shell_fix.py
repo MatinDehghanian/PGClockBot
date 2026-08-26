@@ -1,4 +1,4 @@
-"""Mobile shell uses 100svh + collapsed closed drawer (Safari glass / no black bar)."""
+"""Mobile shell fills 100lvh (layout viewport), not 100dvh/100svh (small viewport)."""
 
 from __future__ import annotations
 
@@ -14,31 +14,56 @@ PWA = ROOT / "app/services/pwa.py"
 
 
 class MobileViewportShellFixTests(unittest.TestCase):
-    def test_mobile_shell_uses_svh_not_dvh(self):
-        css = CSS.read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 900px)", 1)[1]
+    def _mobile(self) -> str:
+        return CSS.read_text(encoding="utf-8").split("@media (max-width: 900px)", 1)[1]
+
+    def test_mobile_shell_fills_lvh_not_dvh_or_svh(self):
+        mobile = self._mobile()
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
-        self.assertIn("height: 100svh;", shell)
-        self.assertIn("max-height: 100svh;", shell)
+        self.assertIn("display: flex;", shell)
+        self.assertIn("height: 100lvh;", shell)
+        self.assertIn("max-height: none;", shell)
         self.assertNotIn("height: 100dvh;", shell)
+        self.assertNotIn("max-height: 100dvh;", shell)
+        self.assertNotIn("height: 100svh;", shell)
+        self.assertNotIn("max-height: 100svh;", shell)
         self.assertNotIn("position: fixed;", shell)
+        self.assertNotIn("--vvh", shell)
 
-    def test_closed_side_collapses_off_bottom_edge(self):
-        css = CSS.read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 900px)", 1)[1]
-        self.assertIn(".side:not(.open)", mobile)
-        closed = mobile.split(".side:not(.open) {", 1)[1].split("}", 1)[0]
-        self.assertIn("height: 0 !important;", closed)
-        self.assertIn("visibility: hidden;", closed)
+    def test_html_body_locked_to_lvh_when_shell_present(self):
+        mobile = self._mobile()
+        self.assertIn("html:has(.shell)", mobile)
+        block = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
+        self.assertIn("height: 100lvh;", block)
+        self.assertIn("overflow: hidden;", block)
 
-    def test_ios_safari_no_full_bleed_dark_under_toolbar(self):
+    def test_mobile_main_unsets_desktop_dvh_max_height(self):
+        mobile = self._mobile()
+        main = mobile.split("  .main {", 1)[1].split("  .main-body", 1)[0]
+        self.assertIn("max-height: none;", main)
+        self.assertNotIn("max-height: 100dvh;", main)
+        self.assertIn("overscroll-behavior-y: contain;", main)
+
+    def test_mobile_sticky_footer_like_v8212(self):
+        mobile = self._mobile()
+        self.assertIn(".main-body { flex: 1 0 auto;", mobile)
+        footer = mobile.split("  .site-footer {", 1)[1].split("  .footer-meta", 1)[0]
+        self.assertIn("margin-top: auto;", footer)
+
+    def test_no_transparent_shell_sampling_hack(self):
         css = CSS.read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 900px)", 1)[1]
-        self.assertIn("html.ios-safari .shell,", mobile)
-        self.assertIn("html.ios-safari .main", mobile)
-        block = mobile.split("html.ios-safari .shell,", 1)[1].split("  .main {", 1)[0]
-        self.assertIn("background: transparent;", block)
-        self.assertNotIn("background: var(--background);", block)
+        self.assertNotIn("html.ios-safari .shell", css)
+        self.assertNotIn("html.ios-safari .main {", css)
+        html = BASE.read_text(encoding="utf-8")
+        self.assertIn("ios-safari", html)
+        self.assertIn('id="meta-theme-color"', html)
+        self.assertNotIn("--vvh", html)
+
+    def test_auth_wrap_uses_lvh(self):
+        css = CSS.read_text(encoding="utf-8")
+        auth = css.split(".auth-wrap {", 1)[1].split("}", 1)[0]
+        self.assertIn("min-height: 100lvh;", auth)
+        self.assertNotIn("min-height: 100dvh;", auth)
 
     def test_users_table_polish_restored(self):
         css = CSS.read_text(encoding="utf-8")
@@ -55,19 +80,20 @@ class MobileViewportShellFixTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         leading = css.split(".home-action-leading {", 1)[1].split("}", 1)[0]
         self.assertIn("align-items: center;", leading)
-        mobile = css.split("@media (max-width: 640px)", 1)[1]
-        self.assertNotIn(".home-action-item {\n    align-items: flex-start;", mobile)
+
+    def test_no_viewport_hack_scripts(self):
+        html = BASE.read_text(encoding="utf-8")
+        self.assertNotIn("--vvh", html)
+        self.assertNotIn("visualViewport", html)
+        js = JS.read_text(encoding="utf-8")
+        self.assertNotIn("__pgSetVVH", js)
+        self.assertNotIn("visualViewport", js)
 
     def test_service_worker_network_first_panel_assets(self):
         pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v6", pwa)
+        self.assertIn("pgclock-shell-v7", pwa)
         self.assertIn("isVersionedPanelAsset", pwa)
-
-    def test_base_ios_safari_theme_transparent(self):
-        html = BASE.read_text(encoding="utf-8")
-        self.assertIn("ios-safari", html)
-        self.assertIn('id="meta-theme-color"', html)
-        self.assertNotIn("--vvh", html)
+        self.assertNotIn("'/static/panel.css'", pwa.split("PRECACHE")[1].split("];", 1)[0])
 
 
 if __name__ == "__main__":
