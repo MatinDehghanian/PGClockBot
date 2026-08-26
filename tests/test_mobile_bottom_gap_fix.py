@@ -23,12 +23,14 @@ class MobileBottomGapCssTests(unittest.TestCase):
         mobile = self._mobile()
         main = mobile.split("  .main {", 1)[1].split("  .main-body", 1)[0]
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
-        body = mobile.split("html:has(.shell) body {\n    min-height: 100%;", 1)[1].split("}", 1)[0]
+        footer = mobile.split("  .site-footer {", 1)[1].split("  .footer-meta", 1)[0]
+        doc = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
         self.assertIn("overflow: visible;", main)
         self.assertNotIn("overflow-y: auto;", main)
-        self.assertIn("display: flex;", body)
-        self.assertIn("flex-direction: column;", body)
-        self.assertIn("flex: 1 0 auto;", shell)
+        self.assertIn("flex: 0 0 auto;", main)
+        self.assertIn("height: auto;", shell)
+        self.assertIn("min-height: 0;", doc)
+        self.assertIn("margin-top: 0;", footer)
         shell_block = shell.split("}", 1)[0]
         for unit in ("100dvh", "100svh", "100lvh", "100vh"):
             self.assertNotIn(unit, shell_block)
@@ -88,8 +90,8 @@ class MobileLayoutGeometryTests(unittest.TestCase):
 
     def test_short_page_shell_geometry(self):
         out = self._run("tests/fixtures/mobile_shell_probe.html")
-        # Document scroll: main fills shell content; footer gap = foot-gap only
         self.assertTrue(out["checks"]["footer_gap_is_foot_gap_only"])
+        self.assertTrue(out["checks"]["short_page_content_sized"])
 
 
 if __name__ == "__main__":

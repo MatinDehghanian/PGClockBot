@@ -18,10 +18,16 @@ class MobileViewportShellFixTests(unittest.TestCase):
     def _mobile(self) -> str:
         return CSS.read_text(encoding="utf-8").split("@media (max-width: 900px)", 1)[1]
 
-    def test_mobile_shell_uses_flex_fill_not_viewport_units(self):
+    def test_mobile_shell_content_flow_not_viewport_stretch(self):
         mobile = self._mobile()
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
-        self.assertIn("flex: 1 0 auto;", shell)
+        side = mobile.split("  .side {", 1)[1].split("  .side.open", 1)[0]
+        closed = mobile.split(".side:not(.open)", 1)[1][:200]
+        self.assertIn("height: auto;", shell)
+        self.assertNotIn("flex: 1 0 auto;", shell)
+        self.assertIn("padding-bottom: var(--safe-bottom);", side)
+        self.assertNotIn("var(--foot-gap) + var(--safe-bottom)", side)
+        self.assertIn("height: 0;", closed)
         shell_block = shell.split("}", 1)[0]
         for unit in ("100dvh", "100svh", "100lvh", "100vh", "var(--vvh"):
             self.assertNotIn(unit, shell_block)
@@ -66,7 +72,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_service_worker_cache(self):
         pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v18", pwa)
+        self.assertIn("pgclock-shell-v19", pwa)
 
 
 if __name__ == "__main__":

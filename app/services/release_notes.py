@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.29": [
+        "موبایل — micro-fix: gap زیر sidebar Safari — حذف stack دوباره foot-gap+safe-bottom روی .side (فقط safe-bottom)؛ collapse کشوی بسته (height:0) تا scroll height inflate نشود",
+        "موبایل — micro-fix: gap زیر footer در صفحات کوتاه — حذف body flex stretch + margin-top:auto footer؛ shell content-driven",
+        "مدل document-scroll بدون تغییر — بدون vh/dvh hack جدید",
+        "Service Worker cache v19؛ ریستور: v8.5.28",
+    ],
     "8.5.28": [
         "موبایل — fix نهایی bottom gap: یک scroll owner (document)؛ حذف nested .main scroll و height:100dvh روی shell",
         "shell با flex:1 روی body پر می‌شود — بدون vh/dvh/svh/lvh و بدون --vvh/visualViewport JS",
