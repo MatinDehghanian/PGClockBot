@@ -2408,7 +2408,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   display: grid;
   place-items: center;
   padding: calc(var(--space-3) + var(--safe-top)) calc(var(--space-2) + var(--safe-right)) calc(var(--space-3) + var(--safe-bottom)) calc(var(--space-2) + var(--safe-left));
-  padding-bottom: calc(var(--space-3) + var(--safe-bottom) + max(0px, 100lvh - 100dvh));
+  padding-bottom: calc(var(--space-3) + var(--safe-bottom) + max(0px, 100lvh - 100svh));
   background: var(--background);
 }
 .auth-panel {
@@ -4091,39 +4091,26 @@ form.settings-form > .actions.sticky-actions,
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
-  /* iOS in-browser (all sizes / toolbar states) — no --vvh JS:
-     • 100lvh paints the layout viewport, including *under* Safari’s floating
-       chrome. 100dvh is the visible box above that chrome.
-     • --safari-overlay = max(0, 100lvh − 100dvh) tracks the chrome automatically:
-       expanded toolbar → inset; collapsed / PWA → 0. Content + footer sit on
-       the visible bottom; the shell background still fills behind the bar.
-     • overflow:hidden on html/body (v8.5.17) made the document non-scrollable:
-       no rubber-band on short pages, and Safari kept a solid toolbar slab.
-       The document is the scroller so short pages bounce; .main must NOT be a
-       nested overflow:auto box (iOS does not bounce a non-overflowing one). */
+  /* In-browser vs PWA — no --vvh JS, no 100dvh in layout:
+     Document scroll + 100dvh overlay (v8.5.18) collapsed the URL bar while
+     padding reflowed → jitter at the bottom. PWA has no URL bar so it was
+     fine. Lock the document like a PWA; .main is the only scroller.
+     100lvh fills the layout viewport (paints under overlay chrome).
+     --safari-overlay uses 100svh (stable), never 100dvh. PWA: lvh≈svh → 0. */
   html:has(.shell) {
     --safari-overlay: 0px;
-    --safari-overlay: max(0px, 100lvh - 100dvh);
+    --safari-overlay: max(0px, 100lvh - 100svh);
   }
   html:has(.shell),
   html:has(.shell) body {
-    height: auto;
+    height: 100%;
+    height: 100vh;
+    height: 100lvh;
     min-height: 100%;
     min-height: 100vh;
     min-height: 100lvh;
-    min-height: max(100vh, 100lvh);
-    /* clip does not coerce overflow-y to auto (hidden would). visible keeps
-       the root scroller so iOS rubber-bands even when content is short. */
-    overflow-x: hidden;
-    overflow-x: clip;
-    overflow-y: visible;
-    overscroll-behavior-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  html:has(.shell) body {
-    /* 1px past the layout viewport: page is always “scrollable”, so Safari
-       uses overlay chrome (not a solid slab) and short pages can bounce. */
-    min-height: calc(max(100vh, 100lvh) + 1px);
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 
   .shell {
@@ -4134,19 +4121,24 @@ form.settings-form > .actions.sticky-actions,
     height: 100%;
     height: 100vh;
     height: 100lvh;
-    height: auto;
     min-height: 100%;
     min-height: 100vh;
     min-height: 100lvh;
-    min-height: max(100vh, 100lvh);
     /* Must override the desktop dvh max-height or the shell stays short. */
     max-height: none;
-    overflow: visible;
+    overflow: hidden;
     /* Reserve space for fixed mobile topbar */
     padding-top: calc(var(--topbar-h) + var(--safe-top));
   }
 
   .topbar { display: flex; }
+
+  /* Dark backdrop must not paint into the overlay chrome strip — Safari 26
+     samples that edge and the drawer then shows a solid bar. */
+  .side-backdrop,
+  .side-backdrop.show {
+    bottom: var(--safari-overlay, 0px);
+  }
 
   .side {
     position: fixed;
@@ -4154,6 +4146,7 @@ form.settings-form > .actions.sticky-actions,
     right: 0;
     left: auto;
     bottom: 0;
+    bottom: var(--safari-overlay, 0px);
     width: min(300px, 86vw);
     height: auto;
     max-height: none;
@@ -4189,8 +4182,8 @@ form.settings-form > .actions.sticky-actions,
   }
 
   .main {
-    /* Safe-area pad kept as a fallback; overlay inset added so the footer sits
-       on the visible bottom while .shell still paints under Safari chrome. */
+    /* Stable overlay inset (svh, not dvh) so the footer sits on the visible
+       bottom without reflowing when in-browser chrome animates. */
     padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));
     padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));
     padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom) + var(--safari-overlay, 0px));
@@ -4201,13 +4194,19 @@ form.settings-form > .actions.sticky-actions,
     height: auto;
     /* Override the desktop dvh max-height so .main can fill the lvh shell. */
     max-height: none;
-    /* visible — not auto/hidden: overflow-x:hidden would coerce y to auto and
-       recreate a nested scroller that cannot bounce on short pages. */
-    overflow: visible;
+    overflow-x: hidden;
+    overflow-y: auto;
     overscroll-behavior-y: auto;
     -webkit-overflow-scrolling: touch;
     display: flex;
     flex-direction: column;
+  }
+  /* 1px overflow inside .main — rubber-band on short pages without
+     scrolling the document (which would collapse the URL bar). */
+  .main::after {
+    content: "";
+    flex: 0 0 1px;
+    pointer-events: none;
   }
   .main-body { flex: 1 0 auto; padding-bottom: var(--page-title-gap); }
   .site-footer {
