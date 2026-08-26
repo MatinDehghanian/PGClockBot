@@ -19,16 +19,15 @@ class PageScrollContainerTests(unittest.TestCase):
         self.assertIn("overscroll-behavior-y: auto;", main)
         self.assertIn("overscroll-behavior-y: auto;", side)
 
-    def test_mobile_inner_main_scrolls_document_locked(self):
+    def test_mobile_shell_scrolls_inner_main_only(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         shell = mobile.split(".shell {\n", 1)[1].split("}", 1)[0]
         main = mobile.split("  .main {\n", 1)[1].split("}", 1)[0]
-        html_block = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
         self.assertIn("overflow: hidden;", shell)
         self.assertIn("overflow-y: auto;", main)
-        self.assertIn("overflow: hidden;", html_block)
-        self.assertIn("100lvh", html_block)
+        self.assertNotIn("html:has(.shell)", mobile)
+        self.assertIn("100dvh", shell)
 
     def test_nav_open_locks_mobile_main_scroll(self):
         css = CSS.read_text(encoding="utf-8")

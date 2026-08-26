@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.23": [
+        "موبایل — ترکیب جدید که قبلاً امتحان نشده: هندسهٔ تأییدشدهٔ v8.2.8 (100dvh + calc sidebar) بدون سیستم page-loading",
+        "حذف قفل html/body، 100lvh، bottom:0 سایدبار، و hackهای ios-safari transparent — همان چیزهایی که v8.5.17–8.5.22 تکرار می‌کردند",
+        "حفظ --foot-gap و swap بی‌صدا widgets /body از v8.5.22؛ Service Worker cache v13",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.22",
+    ],
     "8.5.22": [
         "حذف کامل سیستم لود صفحه (page-load-veil، skeleton، page-loading) — علت صفحهٔ سیاه و layout شکسته هنگام ورود",
         "پر کردن ارتفاع موبایل/PWA: shell و سایدبار با 100lvh + bottom:0 (100dvh نوار سیاه زیر محتوا می‌گذاشت)",

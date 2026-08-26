@@ -4087,30 +4087,16 @@ form.settings-form > .actions.sticky-actions,
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
-  /* Mobile: fill 100lvh (100dvh leaves a black strip on iOS when the URL bar
-     hides). Document locked; .main is the only scroller. No --safari-overlay,
-     no height:0 drawer collapse. */
-  html:has(.shell),
-  html:has(.shell) body {
-    height: 100vh;
-    height: 100lvh;
-    min-height: 100vh;
-    min-height: 100lvh;
-    overflow: hidden;
-    overscroll-behavior: none;
-    background: var(--background);
-  }
-
+  /* Mobile: v8.2.8 geometry (100dvh shell, calc sidebar height). No document
+     lock, no ios-safari hacks, no --safari-overlay, no height:0 drawer. */
   .shell {
     display: flex;
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
     height: 100vh;
-    height: 100lvh;
-    min-height: 100vh;
-    min-height: 100lvh;
-    max-height: none;
+    height: 100dvh;
+    max-height: 100dvh;
     overflow: hidden;
     padding-top: calc(var(--topbar-h) + var(--safe-top));
     background: var(--background);
@@ -4123,10 +4109,10 @@ form.settings-form > .actions.sticky-actions,
     top: calc(var(--topbar-h) + var(--safe-top));
     right: 0;
     left: auto;
-    bottom: 0;
     width: min(300px, 86vw);
-    height: auto;
-    max-height: none;
+    height: calc(100vh - var(--topbar-h) - var(--safe-top));
+    height: calc(100dvh - var(--topbar-h) - var(--safe-top));
+    max-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
     z-index: 50;
     transform: translateX(105%);
     transition: transform .2s ease;
@@ -4140,26 +4126,12 @@ form.settings-form > .actions.sticky-actions,
   }
   .side.open { transform: translateX(0); }
 
-  /* Safari 26+ samples fixed opaque edges for tab bar tint — not theme-color. */
-  html.ios-safari .shell {
-    background: transparent;
-  }
-  html.ios-safari .main {
-    background: var(--background);
-  }
-  html.ios-safari .side:not(.open) {
-    visibility: hidden;
-    pointer-events: none;
-  }
-
   .main {
     padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));
     flex: 1 1 auto;
     min-height: 0;
     min-width: 0;
     width: 100%;
-    height: auto;
-    max-height: none;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: auto;

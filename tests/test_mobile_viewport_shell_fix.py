@@ -1,4 +1,4 @@
-"""Mobile shell fills 100lvh; inner .main scrolls; no page-loading hacks."""
+"""Mobile shell uses v8.2.8 geometry; no page-loading hacks."""
 
 from __future__ import annotations
 
@@ -18,28 +18,22 @@ class MobileViewportShellFixTests(unittest.TestCase):
     def _mobile(self) -> str:
         return CSS.read_text(encoding="utf-8").split("@media (max-width: 900px)", 1)[1]
 
-    def test_mobile_shell_fills_lvh_not_dvh_cap(self):
+    def test_mobile_shell_uses_dvh_like_v828(self):
         mobile = self._mobile()
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
-        self.assertIn("height: 100lvh;", shell)
-        self.assertIn("min-height: 100lvh;", shell)
-        self.assertIn("max-height: none;", shell)
-        self.assertNotIn("max-height: 100dvh;", shell)
+        self.assertIn("height: 100dvh;", shell)
+        self.assertIn("max-height: 100dvh;", shell)
+        self.assertNotIn("height: 100lvh;", shell)
         self.assertNotIn("--safari-overlay", shell)
 
-    def test_document_locked_for_inner_scroll(self):
+    def test_no_document_lock_on_html_body(self):
         mobile = self._mobile()
-        self.assertIn("html:has(.shell)", mobile)
-        block = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
-        self.assertIn("overflow: hidden;", block)
-        self.assertIn("100lvh", block)
-        self.assertNotIn("100lvh - 100svh", mobile)
+        self.assertNotIn("html:has(.shell)", mobile)
 
     def test_mobile_main_is_inner_scroller(self):
         mobile = self._mobile()
         main = mobile.split("  .main {", 1)[1].split("  .main-body", 1)[0]
         self.assertIn("overflow-y: auto;", main)
-        self.assertIn("max-height: none;", main)
         self.assertIn(
             "padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));",
             main,
@@ -58,14 +52,14 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertNotIn(".page-load-veil", css)
         self.assertNotIn("html.page-loading", css)
 
-    def test_ios_safari_sampling_guard_only(self):
+    def test_no_ios_safari_layout_hacks(self):
         mobile = self._mobile()
-        self.assertIn("html.ios-safari .side:not(.open)", mobile)
-        self.assertNotIn(".side:not(.open) {", mobile)
+        self.assertNotIn("html.ios-safari .shell", mobile)
+        self.assertNotIn("height: 0 !important;", mobile)
 
     def test_service_worker_network_first_panel_assets(self):
         pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v12", pwa)
+        self.assertIn("pgclock-shell-v13", pwa)
         self.assertIn("isVersionedPanelAsset", pwa)
 
 
