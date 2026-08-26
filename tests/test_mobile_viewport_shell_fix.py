@@ -50,14 +50,11 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertIn("overflow-y: auto;", main)
         self.assertIn("overscroll-behavior-y: auto;", main)
         self.assertNotIn("--safari-overlay", main)
-        self.assertIn(".main::after", main)
-        self.assertIn("flex: 0 0 1px;", main)
+        self.assertNotIn(".main::after", main)
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));",
             main,
         )
-        self.assertIn("padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));", main)
-        self.assertIn(".side::after", main)
 
     def test_mobile_sticky_footer_like_v8212(self):
         mobile = self._mobile()

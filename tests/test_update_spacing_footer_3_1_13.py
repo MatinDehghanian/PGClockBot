@@ -68,7 +68,7 @@ class TitleGapParityTests(unittest.TestCase):
     def test_bot_title_above_and_below_use_same_token(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-4) calc(var(--foot-gap) + var(--safe-bottom));",
             css,
         )
         head = css.split(".page-head {\n", 1)[1].split("}", 1)[0]
@@ -98,11 +98,7 @@ class FooterBaselineTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));",
-            mobile,
-        )
-        self.assertIn(
-            "padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));",
             mobile,
         )
         self.assertIn(

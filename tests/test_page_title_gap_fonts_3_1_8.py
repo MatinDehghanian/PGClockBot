@@ -23,7 +23,7 @@ class PageTitleGapParityTests(unittest.TestCase):
     def test_main_top_matches_page_head_bottom(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-4) calc(var(--foot-gap) + var(--safe-bottom));",
             css,
         )
         self.assertIn(".page-head {\n  display: flex;", css)
@@ -35,8 +35,7 @@ class PageTitleGapParityTests(unittest.TestCase):
         # different property and does not affect the margin-bottom parity
         # this test guards.
         self.assertNotIn(".page-head:has(+ .settings-tabs)", css)
-        section_tabs_rule = css.split(".page-head:has(+ .section-tabs) {", 1)[1].split("}", 1)[0]
-        self.assertNotIn("margin-bottom", section_tabs_rule)
+        self.assertNotIn(".page-head:has(+ .section-tabs)", css)
 
     def test_pg_title_gap_identical_to_bot(self):
         css = CSS.read_text(encoding="utf-8")
@@ -45,7 +44,7 @@ class PageTitleGapParityTests(unittest.TestCase):
         self.assertIn("margin-bottom: var(--page-title-gap);", head)
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));",
             mobile,
         )
         self.assertIn(".page-head { margin-bottom: var(--page-title-gap);", mobile)

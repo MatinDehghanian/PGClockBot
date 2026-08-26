@@ -199,8 +199,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   -webkit-overflow-scrolling: touch;
   background: var(--bg-card);
   border-left: 1px solid var(--border);
-  padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) calc(var(--space-2) + var(--safe-bottom));
-  padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));
+  padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -212,9 +211,8 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   min-height: 0;
   height: 100%;
   max-height: 100dvh;
-  /* Top / bottom chrome equal: --page-title-gap above content and below footer */
-  padding: var(--page-title-gap) var(--space-4) calc(var(--page-title-gap) + var(--safe-bottom));
-  padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));
+  /* Top chrome: --page-title-gap. Bottom chrome: --foot-gap (same as .side). */
+  padding: var(--page-title-gap) var(--space-4) calc(var(--foot-gap) + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
@@ -4093,16 +4091,11 @@ form.settings-form > .actions.sticky-actions,
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
-  /* Fill the layout viewport (100lvh) like v8.5.17 — the user-confirmed
-     geometry. Do NOT inset by 100lvh−100svh: on iOS 26 that gap is huge and
-     shortens the sidebar + page (v8.5.19). Document stays locked so the URL
-     bar does not dance; .main is the scroller (no jitter). */
+  /* Mobile: fill 100lvh. Document locked; .main is the scroller. */
   html:has(.shell),
   html:has(.shell) body {
-    height: 100%;
     height: 100vh;
     height: 100lvh;
-    min-height: 100%;
     min-height: 100vh;
     min-height: 100lvh;
     overflow: hidden;
@@ -4114,16 +4107,12 @@ form.settings-form > .actions.sticky-actions,
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
-    height: 100%;
     height: 100vh;
     height: 100lvh;
-    min-height: 100%;
     min-height: 100vh;
     min-height: 100lvh;
-    /* Must override the desktop dvh max-height or the shell stays short. */
     max-height: none;
     overflow: hidden;
-    /* Reserve space for fixed mobile topbar */
     padding-top: calc(var(--topbar-h) + var(--safe-top));
   }
 
@@ -4147,7 +4136,6 @@ form.settings-form > .actions.sticky-actions,
     display: flex !important;
     /* Match air above theme control to air below it → separator (--space-2) */
     padding-top: var(--space-2);
-    padding-bottom: calc(var(--page-title-gap) + var(--safe-bottom));
     padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));
     overscroll-behavior-y: contain;
   }
@@ -4170,15 +4158,12 @@ form.settings-form > .actions.sticky-actions,
   }
 
   .main {
-    /* Bottom pad matches .side drawer so site-footer & side-foot share one baseline */
-    padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--safe-bottom));
-    padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));
+    padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));
     flex: 1 1 auto;
     min-height: 0;
     min-width: 0;
     width: 100%;
     height: auto;
-    /* Override the desktop dvh max-height so .main can fill the lvh shell. */
     max-height: none;
     overflow-x: hidden;
     overflow-y: auto;
@@ -4186,18 +4171,6 @@ form.settings-form > .actions.sticky-actions,
     -webkit-overflow-scrolling: touch;
     display: flex;
     flex-direction: column;
-  }
-  /* Same 1px spacer on both columns so footers stay on one row while
-     short pages can still rubber-band inside .main. */
-  .main::after,
-  .side::after {
-    content: "";
-    flex: 0 0 1px;
-    pointer-events: none;
-  }
-  /* .side uses gap — cancel it on the spacer or the drawer footer sits 8px higher */
-  .side::after {
-    margin-top: calc(-1 * var(--space-1));
   }
   .main-body { flex: 1 0 auto; padding-bottom: var(--page-title-gap); }
   .site-footer {
