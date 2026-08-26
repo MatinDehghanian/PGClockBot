@@ -19,16 +19,20 @@ class PageScrollContainerTests(unittest.TestCase):
         self.assertIn("overscroll-behavior-y: auto;", main)
         self.assertIn("overscroll-behavior-y: auto;", side)
 
-    def test_mobile_main_scrolls_inside_shell_not_body(self):
+    def test_mobile_document_scrolls_for_short_page_bounce(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         shell = mobile.split(".shell {\n", 1)[1].split("}", 1)[0]
         main = mobile.split("  .main {\n", 1)[1].split("}", 1)[0]
-        self.assertIn("overflow: hidden;", shell)
-        self.assertNotIn("overflow: visible;", shell)
-        self.assertIn("overflow-y: auto;", main)
+        html_block = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
+        # Nested overflow:auto on a short .main cannot rubber-band on iOS.
+        self.assertIn("overflow: visible;", shell)
+        self.assertNotIn("overflow: hidden;", shell)
+        self.assertIn("overflow: visible;", main)
+        self.assertNotIn("overflow-y: auto;", main)
         self.assertIn("min-height: 0;", main)
-        self.assertNotIn("overflow: visible;", main)
+        self.assertIn("overflow-y: auto;", html_block)
+
 
     def test_nav_open_locks_mobile_main_scroll(self):
         css = CSS.read_text(encoding="utf-8")
