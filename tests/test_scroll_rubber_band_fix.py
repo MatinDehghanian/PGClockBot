@@ -29,7 +29,7 @@ class PageScrollContainerTests(unittest.TestCase):
         self.assertIn("overflow-y: auto;", main)
         self.assertIn("min-height: 0;", main)
         self.assertIn("overflow: hidden;", html_block)
-        self.assertIn("100lvh - 100svh", html_block)
+        self.assertNotIn("100lvh - 100svh", html_block)
         self.assertNotIn("100lvh - 100dvh", html_block)
 
 

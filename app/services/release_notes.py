@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.20": [
+        "بازگشت هندسهٔ تأییدشدهٔ v8.5.17: سایدبار و صفحه دوباره 100lvh با bottom:0 — فاصلهٔ 100lvh−100svh در v8.5.19 روی iOS 26 خیلی بزرگ بود و همه چیز را کوتاه می‌کرد",
+        "فوتر سایدبار و فوتر صفحات با --foot-gap (۱۶px + safe-area) هم‌تراز و پایین‌تر؛ شل تا لبهٔ viewport پر می‌شود — بدون فضای خالی زیر صفحه یا کشو",
+        "اسکرول مثل PWA ماند (فقط .main) تا نوار آدرس نلرزد",
+        "لود خالی/بی‌فونت: Service Worker دیگر mid-load صفحه را قطع نمی‌کند؛ fonts.css و فایل فونت network-first و فقط پاسخ سالم کش می‌شود",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.19",
+    ],
     "8.5.19": [
         "مرورگر (نه PWA): اسکرول سند + 100dvh نوار آدرس را وسط اسکرول جمع می‌کرد و پایین صفحه لگ/لرزش می‌داد — سند قفل است، فقط .main اسکرول می‌شود مثل PWA؛ inset پایدار 100lvh − 100svh (نه dvh)",
         "سایدبار باز: backdrop و کشو تا لبهٔ overlay chrome نمی‌روند تا Safari 26 نوار سالید نمونه‌برداری نکند؛ صفحات کوتاه با 1px داخل .main فنر می‌خورند",

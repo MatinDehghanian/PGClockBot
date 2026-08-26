@@ -11,13 +11,13 @@ class MobileSideFullHeightTests(unittest.TestCase):
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         side = mobile.split(".side {", 1)[1].split(".side.open", 1)[0]
         self.assertIn("bottom: 0;", side)
-        self.assertIn("bottom: var(--safari-overlay, 0px);", side)
+        self.assertNotIn("--safari-overlay", side)
         self.assertIn("height: auto;", side)
         self.assertIn("max-height: none;", side)
         self.assertNotIn("100dvh - var(--topbar-h)", side)
         self.assertNotIn("100svh - var(--topbar-h)", side)
         self.assertIn("overscroll-behavior-y: contain;", side)
-        self.assertIn("--safari-overlay", side)
+        self.assertIn("padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));", side)
 
     def test_closed_side_height_zero(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
@@ -27,12 +27,12 @@ class MobileSideFullHeightTests(unittest.TestCase):
         self.assertIn("visibility: hidden;", closed)
         self.assertIn("bottom: auto;", closed)
 
-    def test_open_side_and_backdrop_stop_above_overlay_chrome(self):
+    def test_no_overlay_inset_on_backdrop(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertNotIn("--safari-overlay", css)
         mobile = css.split("@media (max-width: 900px)", 1)[1]
-        self.assertIn(".side-backdrop.show {", mobile)
-        back = mobile.split(".side-backdrop.show {", 1)[1].split("}", 1)[0]
-        self.assertIn("bottom: var(--safari-overlay, 0px);", back)
+        self.assertNotIn("100lvh - 100svh", mobile)
+        self.assertNotIn("100lvh - 100dvh", mobile)
 
 
 if __name__ == "__main__":
