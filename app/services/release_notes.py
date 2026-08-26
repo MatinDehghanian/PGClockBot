@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.16": [
+        "نوار سیاه موبایل — ریشه جدید: (۱) 100dvh در اولین paint با نوار Safari ناسازگار بود → 100svh؛ (۲) کشوی بسته با position:fixed تا پایین viewport هنوز رنگ نمونه‌برداری می‌شد → وقتی بسته است height:0؛ (۳) پس‌زمینه تیره روی .main زیر toolbar را solid black می‌کرد → در ios-safari شفاف؛ SW cache v6",
+        "جدول کاربران: بازگردانی تگ‌ها و منوی سرویس تأییدشده (v8.5.8) که با revert اشتباه به v8.2.12 خراب شده بود",
+        "اعلان‌ها / مرکز اقدام: آیتم‌ها عمودی وسط باکس",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.15",
+    ],
     "8.5.15": [
         "نوار سیاه موبایل — بازگشت کامل panel.css/panel.js به v8.2.12 (layout موبایل از v8.2.8 تا v8.2.12 اصلاً تغییر نکرده بود)",
         "ریشه واقعی (خارج از shell/footer): (۱) Service Worker با cache-first panel.css کهنه از fixهای v8.5.4–8.5.12 را نگه می‌داشت — network-first + cache v5؛ (۲) Safari 26+ رنگ نوار تب را از background المان‌های fixed کنار لبه viewport می‌گیرد — shell شفاف + side بسته visibility:hidden در ios-safari",

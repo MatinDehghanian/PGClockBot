@@ -370,16 +370,36 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
 }
 /* Risk indicator beside user name in lists */
 .cell-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-0);
   max-width: 100%;
   min-width: 0;
 }
 .cell-name-text {
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.cell-name-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-0);
+  max-width: 100%;
+}
+.cell-name-tags > .badge {
+  flex: 0 0 auto;
+}
+.badge.badge-risk {
+  flex: 0 0 auto;
+  color: var(--warn-fg, #fde047);
+  background: color-mix(in srgb, var(--warn, #eab308) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn, #eab308) 38%, transparent);
 }
 .risk-dot {
   display: inline-block;
@@ -390,7 +410,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn, #eab308) 28%, transparent);
   flex: 0 0 auto;
 }
-/* Entity alert (expiring / low volume) — distinct from risk-dot */
+/* Entity alert (expiring / low volume) — orange dot only */
 .alert-dot {
   display: inline-block;
   width: 8px;
@@ -401,8 +421,8 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   flex: 0 0 auto;
 }
 .badge.badge-inline {
-  font-size: 10px;
-  padding: 1px 7px;
+  font-size: 11px;
+  padding: 2px 8px;
   line-height: 1.35;
   flex: 0 0 auto;
 }
@@ -427,21 +447,96 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   border-color: color-mix(in srgb, var(--accent, #38bdf8) 45%, var(--border));
   background: color-mix(in srgb, var(--accent, #38bdf8) 10%, transparent);
 }
-.users-ops-table .users-svc-one {
-  display: inline-block;
-  max-width: 14rem;
+/* Users table — service / volume / expiry always-visible separate columns */
+.users-ops-table .col-svc {
+  min-width: 10rem;
+  vertical-align: middle;
+}
+.users-ops-table .col-vol {
+  min-width: 6rem;
+  vertical-align: middle;
+}
+.users-ops-table .col-exp {
+  min-width: 7.5rem;
+  vertical-align: middle;
+}
+.users-ops-table .col-name {
+  min-width: 6.5rem;
+  vertical-align: middle;
+}
+.users-svc-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  min-width: 0;
+  font-weight: 500;
+  vertical-align: middle;
+}
+.users-svc-name-text {
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: bottom;
 }
+/* Alert cue = dot only (no orange cell tint). Select vertically centered in row. */
 .users-svc-select-wrap {
-  display: block;
-  max-width: 14rem;
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
 }
-.users-svc-select {
+.users-svc-select-wrap .ui-select,
+.users-svc-ui.ui-select {
+  margin-top: 0;
   width: 100%;
-  max-width: 14rem;
+  max-width: 100%;
+}
+.users-svc-select-wrap .users-svc-select {
+  width: 100%;
+  max-width: 100%;
+}
+.ui-select-menu.users-svc-boxed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+  padding: var(--space-0);
+}
+.ui-select-menu.users-svc-boxed button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  border: 1px solid var(--border);
+  background: var(--control-bg, var(--bg-elevated, var(--bg-card)));
+  color: var(--muted-fg);
+  border-radius: var(--menu-item-radius);
+  min-height: 36px;
+  padding: 6px var(--space-1);
+  white-space: normal;
+  text-align: right;
+  line-height: 1.35;
+}
+.users-svc-menu-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: inherit;
+}
+.ui-select-toggle .alert-dot {
+  flex: 0 0 auto;
+}
+.ui-select-menu.users-svc-boxed button:hover {
+  background: var(--control-bg-hover, var(--bg-hover));
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--border) 70%, var(--foreground));
+}
+.ui-select-menu.users-svc-boxed button.active {
+  background: color-mix(in srgb, var(--accent, #38bdf8) 12%, transparent);
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--accent, #38bdf8) 40%, var(--border));
+  font-weight: 600;
 }
 .users-row.is-focus > td {
   background: color-mix(in srgb, var(--accent, #38bdf8) 12%, transparent);
@@ -3998,10 +4093,12 @@ form.settings-form > .actions.sticky-actions,
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
-    /* One scroll container (.main) — same as desktop; avoids body scroll jitter */
+    /* 100svh = small viewport (browser chrome expanded). 100dvh jumps on first
+       paint when the URL/tab bar is showing, leaving a dead strip under the
+       shell that looks like a black bar until the user scrolls. */
     height: 100vh;
-    height: 100dvh;
-    max-height: 100dvh;
+    height: 100svh;
+    max-height: 100svh;
     overflow: hidden;
     /* Reserve space for fixed mobile topbar */
     padding-top: calc(var(--topbar-h) + var(--safe-top));
@@ -4016,8 +4113,8 @@ form.settings-form > .actions.sticky-actions,
     left: auto;
     width: min(300px, 86vw);
     height: calc(100vh - var(--topbar-h) - var(--safe-top));
-    height: calc(100dvh - var(--topbar-h) - var(--safe-top));
-    max-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
+    height: calc(100svh - var(--topbar-h) - var(--safe-top));
+    max-height: calc(100svh - var(--topbar-h) - var(--safe-top));
     z-index: 50;
     transform: translateX(105%);
     transition: transform .2s ease;
@@ -4031,18 +4128,32 @@ form.settings-form > .actions.sticky-actions,
   }
   .side.open { transform: translateX(0); }
 
-  /* Safari 26+ (iOS in-browser): tab/address bar tint is sampled from opaque
-     position:fixed backgrounds near the viewport edge — NOT theme-color or the
-     mobile shell/footer flex rules (unchanged since v8.2.8). */
-  html.ios-safari .shell {
-    background: transparent;
-  }
-  html.ios-safari .main {
-    background: var(--background);
-  }
-  html.ios-safari .side:not(.open) {
+  /* Closed drawer must not paint at the viewport bottom edge. Off-screen
+     translateX alone still leaves a fixed box from top→bottom; Safari 26
+     samples that opaque card bg and paints a solid black tab bar. */
+  .side:not(.open) {
+    top: auto;
+    bottom: auto;
+    height: 0 !important;
+    max-height: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    overflow: hidden;
     visibility: hidden;
     pointer-events: none;
+    transform: none;
+  }
+
+  /* Safari 26 Liquid Glass: no full-bleed opaque fill at the bottom edge.
+     Cards/topbar/open-drawer keep their own backgrounds; html/body/shell/main
+     stay transparent so the tab bar can frost instead of going solid black. */
+  html.ios-safari,
+  html.ios-safari body {
+    background: transparent;
+  }
+  html.ios-safari .shell,
+  html.ios-safari .main {
+    background: transparent;
   }
 
   .main {
@@ -7464,7 +7575,7 @@ html[data-theme="light"] .home-period {
 }
 .home-action-leading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-1);
   min-width: 0;
   flex: 1 1 auto;
@@ -7476,7 +7587,6 @@ html[data-theme="light"] .home-period {
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
-  margin-top: 2px;
   color: var(--muted-fg);
 }
 .home-action-ico svg {
@@ -7522,9 +7632,6 @@ html[data-theme="light"] .home-period {
     flex: 0 0 auto;
     width: auto;
     justify-content: center;
-  }
-  .home-action-item {
-    align-items: flex-start;
   }
 }
 .home-conn {
@@ -8890,4 +8997,21 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   .msg-vars-token-cell .btn {
     flex: 0 0 auto;
   }
+}
+
+/* —— Safari 26 glass (must be last — wins over earlier bg fills) —— */
+html.ios-safari,
+html.ios-safari body,
+html.ios-safari .shell,
+html.ios-safari .main {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+html.ios-safari .topbar,
+html.ios-safari .side.open,
+html.ios-safari .card,
+html.ios-safari .home-action-item {
+  /* keep local chrome opaque so content stays readable — not site-footer
+     (footer sits at the bottom edge Safari samples for Liquid Glass). */
+  background-color: var(--bg-card);
 }

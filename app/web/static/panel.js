@@ -235,10 +235,21 @@
       const tabs = document.querySelectorAll('.section-tabs');
       if (!tabs.length) return;
       tabs.forEach(nav => {
-        const active = nav.querySelector('a.active');
-        if (!active || typeof active.scrollIntoView !== 'function') return;
+        const items = [...nav.querySelectorAll('a, .tab-btn')];
+        const active = nav.querySelector('a.active, .tab-btn.active');
+        if (!active) return;
+        /* First tab active: pin to inline-start. Centering/nearest can leave a
+           black gutter beside the first RTL pill on first paint. */
+        if (items[0] === active) {
+          try { nav.scrollLeft = 0; } catch (e) {}
+          return;
+        }
+        const nr = nav.getBoundingClientRect();
+        const ar = active.getBoundingClientRect();
+        if (ar.left >= nr.left - 2 && ar.right <= nr.right + 2) return;
+        if (typeof active.scrollIntoView !== 'function') return;
         try {
-          active.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'instant' in window ? 'instant' : 'auto' });
+          active.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'instant' in window ? 'instant' : 'auto' });
         } catch (_) {
           try { active.scrollIntoView(false); } catch (e) {}
         }
@@ -505,6 +516,7 @@
 
       const wrap = document.createElement('div');
       wrap.className = 'ui-select' + (sel.classList.contains('select-sm') || (sel.closest('.actions') && !sel.classList.contains('select-block')) ? ' ui-select-sm' : '');
+      if (sel.classList.contains('users-svc-select')) wrap.classList.add('users-svc-ui');
       if (sel.disabled) wrap.classList.add('is-disabled');
 
       /* Build custom UI first, then park the native <select> outside any <label>.
@@ -530,7 +542,7 @@
       wrap.appendChild(toggle);
 
       const menu = document.createElement('div');
-      menu.className = 'ui-select-menu';
+      menu.className = 'ui-select-menu' + (sel.classList.contains('users-svc-select') ? ' users-svc-boxed' : '');
       menu.setAttribute('role', 'listbox');
       menu.hidden = true;
       wrap.appendChild(menu);
@@ -568,9 +580,11 @@
           btn.setAttribute('aria-selected', btn.dataset.value === sel.value ? 'true' : 'false');
         });
         syncDisabled();
+        syncUsersSvcToggleAlert();
       }
       function rebuildOptions(){
         menu.innerHTML = '';
+        const isUsersSvc = sel.classList.contains('users-svc-select');
         Array.from(sel.options).forEach(opt => {
           if (opt.disabled && opt.value === '' && !opt.textContent.trim()) return;
           const btn = document.createElement('button');
@@ -578,7 +592,20 @@
           btn.setAttribute('role', 'option');
           btn.dataset.value = opt.value;
           if (opt.dataset && opt.dataset.tone) btn.dataset.tone = opt.dataset.tone;
-          btn.textContent = opt.textContent;
+          if (isUsersSvc) {
+            const optLabel = document.createElement('span');
+            optLabel.className = 'users-svc-menu-label';
+            optLabel.textContent = opt.textContent;
+            btn.appendChild(optLabel);
+            if (opt.getAttribute('data-alert') === '1') {
+              const dot = document.createElement('span');
+              dot.className = 'alert-dot';
+              dot.setAttribute('aria-hidden', 'true');
+              btn.appendChild(dot);
+            }
+          } else {
+            btn.textContent = opt.textContent;
+          }
           if (opt.disabled) btn.disabled = true;
           if (opt.value === sel.value) {
             btn.classList.add('active');
@@ -601,6 +628,24 @@
           menu.appendChild(btn);
         });
         syncLabel();
+      }
+      function syncUsersSvcToggleAlert(){
+        if (!sel.classList.contains('users-svc-select')) return;
+        const opt = sel.options[sel.selectedIndex];
+        const hasAlert = !!(opt && opt.getAttribute('data-alert') === '1');
+        let dot = toggle.querySelector(':scope > .alert-dot');
+        if (hasAlert) {
+          if (!dot) {
+            dot = document.createElement('span');
+            dot.className = 'alert-dot';
+            dot.setAttribute('aria-hidden', 'true');
+            const caretEl = toggle.querySelector('.ui-select-caret');
+            if (caretEl) toggle.insertBefore(dot, caretEl);
+            else toggle.appendChild(dot);
+          }
+        } else if (dot) {
+          dot.remove();
+        }
       }
       rebuildOptions();
       toggle.addEventListener('click', (ev) => {
@@ -1079,7 +1124,18 @@
       const openBtn = e.target.closest('[data-modal-open]');
       if (openBtn) {
         e.preventDefault();
-        openModal(openBtn.getAttribute('data-modal-open'));
+        const modalId = openBtn.getAttribute('data-modal-open');
+        const loadUrl = openBtn.getAttribute('data-modal-load') || openBtn.getAttribute('data-edit-url');
+        const loadTarget = openBtn.getAttribute('data-modal-load-target');
+        const loadTitle = openBtn.getAttribute('data-edit-title') || openBtn.getAttribute('data-modal-load-title');
+        try { closeRowActions(); } catch (_) {}
+        try { closeUiSelects(); } catch (_) {}
+        openModal(modalId);
+        if (loadUrl) {
+          document.dispatchEvent(new CustomEvent('panel:modal-load', {
+            detail: { id: modalId, url: loadUrl, target: loadTarget, title: loadTitle, button: openBtn },
+          }));
+        }
         return;
       }
       const stripClose = e.target.closest('[data-modal-close-strip]');
