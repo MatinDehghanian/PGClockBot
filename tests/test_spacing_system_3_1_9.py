@@ -181,10 +181,12 @@ class SpacingSemanticParityTests(unittest.TestCase):
             "padding: var(--page-title-gap) var(--space-4) calc(var(--foot-gap) + var(--safe-bottom));",
             css,
         )
+        mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));",
-            css,
+            "padding: var(--page-title-gap) var(--space-2) var(--foot-gap);",
+            mobile,
         )
+        self.assertIn("padding-bottom: var(--safe-bottom);", mobile.split(".shell {", 1)[1])
         head = css.split(".page-head {\n", 1)[1].split("}", 1)[0]
         self.assertIn("margin-bottom: var(--page-title-gap);", head)
 

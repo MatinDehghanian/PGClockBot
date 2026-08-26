@@ -44,9 +44,10 @@ class PageTitleGapParityTests(unittest.TestCase):
         self.assertIn("margin-bottom: var(--page-title-gap);", head)
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-2) var(--foot-gap);",
             mobile,
         )
+        self.assertIn("padding-bottom: var(--safe-bottom);", mobile.split(".shell {", 1)[1])
         self.assertIn(".page-head { margin-bottom: var(--page-title-gap);", mobile)
 
     def test_pg_pages_use_plain_page_head_like_bot(self):

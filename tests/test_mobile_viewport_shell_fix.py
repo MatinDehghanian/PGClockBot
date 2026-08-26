@@ -33,11 +33,12 @@ class MobileViewportShellFixTests(unittest.TestCase):
     def test_mobile_main_is_inner_scroller(self):
         mobile = self._mobile()
         main = mobile.split("  .main {", 1)[1].split("  .main-body", 1)[0]
+        shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
         self.assertIn("overflow-y: auto;", main)
-        self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));",
-            main,
-        )
+        self.assertIn("height: auto;", main)
+        self.assertIn("max-height: none;", main)
+        self.assertIn("padding: var(--page-title-gap) var(--space-2) var(--foot-gap);", main)
+        self.assertIn("padding-bottom: var(--safe-bottom);", shell)
 
     def test_no_page_loading_system(self):
         base = BASE.read_text(encoding="utf-8")
@@ -55,7 +56,8 @@ class MobileViewportShellFixTests(unittest.TestCase):
     def test_no_ios_safari_layout_hacks(self):
         mobile = self._mobile()
         self.assertNotIn("html.ios-safari .shell", mobile)
-        self.assertNotIn("height: 0 !important;", mobile)
+        side = mobile.split("  .side {", 1)[1].split("  .side.open", 1)[0]
+        self.assertNotIn("height: 0", side)
 
     def test_service_worker_network_first_panel_assets(self):
         pwa = PWA.read_text(encoding="utf-8")

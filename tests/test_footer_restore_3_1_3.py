@@ -30,14 +30,16 @@ class FooterRestore303Tests(unittest.TestCase):
         self.assertNotIn("padding-bottom: var(--chrome-pad-bottom)", css)
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertNotIn("--chrome-pad", mobile)
+        # Desktop .main: foot-gap + safe-bottom; mobile splits safe-bottom to .shell
         self.assertIn(
             "padding: var(--page-title-gap) var(--space-4) calc(var(--foot-gap) + var(--safe-bottom));",
             css,
         )
-        # Mobile safe-bottom on .main pad; .shell paints through home-indicator area
+        mobile = css.split("@media (max-width: 900px)", 1)[1]
+        self.assertIn("padding-bottom: var(--safe-bottom);", mobile.split(".shell {", 1)[1])
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));",
-            css.split("@media (max-width: 900px)", 1)[1],
+            "padding: var(--page-title-gap) var(--space-2) var(--foot-gap);",
+            mobile,
         )
 
     def test_side_scrolls_as_a_column(self):

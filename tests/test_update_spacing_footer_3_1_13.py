@@ -98,12 +98,13 @@ class FooterBaselineTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-2) var(--foot-gap);",
             mobile,
         )
+        self.assertIn("padding-bottom: var(--safe-bottom);", mobile.split(".shell {", 1)[1])
         self.assertIn(
             "padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));",
-            mobile,
+            mobile.split(".side {", 1)[1],
         )
 
     def test_main_body_footer_gap_matches_page_title_gap(self):

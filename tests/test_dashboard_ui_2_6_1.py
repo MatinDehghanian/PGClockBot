@@ -46,10 +46,12 @@ class FooterAndMobileTests(unittest.TestCase):
 
     def test_mobile_main_top_gap_increased(self):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
+        mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));",
-            css,
+            "padding: var(--page-title-gap) var(--space-2) var(--foot-gap);",
+            mobile,
         )
+        self.assertIn("padding-bottom: var(--safe-bottom);", mobile.split(".shell {", 1)[1])
 
 
 class SidebarHoverTests(unittest.TestCase):

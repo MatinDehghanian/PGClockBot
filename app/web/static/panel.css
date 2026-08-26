@@ -2401,7 +2401,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 
 .auth-wrap {
   min-height: 100vh;
-  min-height: 100lvh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: calc(var(--space-3) + var(--safe-top)) calc(var(--space-2) + var(--safe-right)) calc(var(--space-3) + var(--safe-bottom)) calc(var(--space-2) + var(--safe-left));
@@ -4087,8 +4087,8 @@ form.settings-form > .actions.sticky-actions,
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
-  /* Mobile: v8.2.8 geometry (100dvh shell, calc sidebar height). No document
-     lock, no ios-safari hacks, no --safari-overlay, no height:0 drawer. */
+  /* Mobile shell: 100dvh flex column; .main is the sole vertical scroller.
+     Safe-area bottom lives on .shell only — .main keeps --foot-gap for footer air. */
   .shell {
     display: flex;
     flex-direction: column;
@@ -4099,6 +4099,7 @@ form.settings-form > .actions.sticky-actions,
     max-height: 100dvh;
     overflow: hidden;
     padding-top: calc(var(--topbar-h) + var(--safe-top));
+    padding-bottom: var(--safe-bottom);
     background: var(--background);
   }
 
@@ -4109,10 +4110,10 @@ form.settings-form > .actions.sticky-actions,
     top: calc(var(--topbar-h) + var(--safe-top));
     right: 0;
     left: auto;
+    bottom: 0;
     width: min(300px, 86vw);
-    height: calc(100vh - var(--topbar-h) - var(--safe-top));
-    height: calc(100dvh - var(--topbar-h) - var(--safe-top));
-    max-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
+    height: auto;
+    max-height: none;
     z-index: 50;
     transform: translateX(105%);
     transition: transform .2s ease;
@@ -4127,11 +4128,16 @@ form.settings-form > .actions.sticky-actions,
   .side.open { transform: translateX(0); }
 
   .main {
-    padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));
-    flex: 1 1 auto;
+    /* Desktop leaves height:100% / max-height:100dvh — on mobile that overshoots the
+       shell content box (viewport − topbar − safe-bottom) and leaves a phantom strip
+       under the footer. flex:1 1 0 + min-height:0 fills remaining space exactly. */
+    height: auto;
+    max-height: none;
+    flex: 1 1 0;
     min-height: 0;
     min-width: 0;
     width: 100%;
+    padding: var(--page-title-gap) var(--space-2) var(--foot-gap);
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: auto;
