@@ -1,4 +1,4 @@
-"""Mobile shell fills 100lvh (layout viewport), not 100dvh (small viewport)."""
+"""Mobile shell fills 100lvh (layout viewport), not 100dvh/100svh (small viewport)."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
     def _mobile(self) -> str:
         return CSS.read_text(encoding="utf-8").split("@media (max-width: 900px)", 1)[1]
 
-    def test_mobile_shell_fills_lvh_not_dvh(self):
+    def test_mobile_shell_fills_lvh_not_dvh_or_svh(self):
         mobile = self._mobile()
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
         self.assertIn("display: flex;", shell)
@@ -25,6 +25,8 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertIn("max-height: none;", shell)
         self.assertNotIn("height: 100dvh;", shell)
         self.assertNotIn("max-height: 100dvh;", shell)
+        self.assertNotIn("height: 100svh;", shell)
+        self.assertNotIn("max-height: 100svh;", shell)
         self.assertNotIn("position: fixed;", shell)
         self.assertNotIn("--vvh", shell)
 
@@ -48,25 +50,48 @@ class MobileViewportShellFixTests(unittest.TestCase):
         footer = mobile.split("  .site-footer {", 1)[1].split("  .footer-meta", 1)[0]
         self.assertIn("margin-top: auto;", footer)
 
+    def test_no_transparent_shell_sampling_hack(self):
+        css = CSS.read_text(encoding="utf-8")
+        self.assertNotIn("html.ios-safari .shell", css)
+        self.assertNotIn("html.ios-safari .main {", css)
+        html = BASE.read_text(encoding="utf-8")
+        self.assertIn("ios-safari", html)
+        self.assertIn('id="meta-theme-color"', html)
+        self.assertNotIn("--vvh", html)
+
+    def test_auth_wrap_uses_lvh(self):
+        css = CSS.read_text(encoding="utf-8")
+        auth = css.split(".auth-wrap {", 1)[1].split("}", 1)[0]
+        self.assertIn("min-height: 100lvh;", auth)
+        self.assertNotIn("min-height: 100dvh;", auth)
+
+    def test_users_table_polish_restored(self):
+        css = CSS.read_text(encoding="utf-8")
+        self.assertIn(".cell-name-tags", css)
+        self.assertIn(".users-svc-name", css)
+        self.assertIn(".ui-select-menu.users-svc-boxed", css)
+        self.assertIn(".users-svc-ui.ui-select", css)
+        js = JS.read_text(encoding="utf-8")
+        self.assertIn("users-svc-ui", js)
+        self.assertIn("users-svc-boxed", js)
+        self.assertIn("syncUsersSvcToggleAlert", js)
+
+    def test_action_items_vertically_centered(self):
+        css = CSS.read_text(encoding="utf-8")
+        leading = css.split(".home-action-leading {", 1)[1].split("}", 1)[0]
+        self.assertIn("align-items: center;", leading)
+
     def test_no_viewport_hack_scripts(self):
         html = BASE.read_text(encoding="utf-8")
         self.assertNotIn("--vvh", html)
         self.assertNotIn("visualViewport", html)
-        self.assertNotIn("__pgSetVVH", html)
         js = JS.read_text(encoding="utf-8")
         self.assertNotIn("__pgSetVVH", js)
         self.assertNotIn("visualViewport", js)
 
-    def test_no_transparent_shell_sampling_hack(self):
-        mobile = self._mobile()
-        self.assertNotIn("html.ios-safari .shell", mobile)
-        html = BASE.read_text(encoding="utf-8")
-        self.assertIn("ios-safari", html)
-        self.assertIn('id="meta-theme-color"', html)
-
     def test_service_worker_network_first_panel_assets(self):
         pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v6", pwa)
+        self.assertIn("pgclock-shell-v7", pwa)
         self.assertIn("isVersionedPanelAsset", pwa)
         self.assertNotIn("'/static/panel.css'", pwa.split("PRECACHE")[1].split("];", 1)[0])
 
