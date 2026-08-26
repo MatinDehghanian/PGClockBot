@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.22": [
+        "حذف کامل سیستم لود صفحه (page-load-veil، skeleton، page-loading) — علت صفحهٔ سیاه و layout شکسته هنگام ورود",
+        "پر کردن ارتفاع موبایل/PWA: shell و سایدبار با 100lvh + bottom:0 (100dvh نوار سیاه زیر محتوا می‌گذاشت)",
+        "بدون --safari-overlay و بدون height:0 کشو — فقط guard سبک ios-safari برای Safari 26",
+        "widgets /body همچنان بی‌صدا swap می‌شود؛ Service Worker cache v12",
+        "بدون مایگریشن؛ ریستور: تگ v8.5.21",
+    ],
     "8.5.21": [
         "موبایل — ریشه‌یابی نهایی layout: بازگشت به شل v8.2.12 (100dvh + sticky footer) که در v8.2.8 تأیید شده بود",
         "حذف hackهای v8.5.16–8.5.20 (--safari-overlay، قفل html/body، height:0 کشوی بسته، 100lvh) که باعث رفتن محتوا زیر هدر، فضای خالی زیر سایدبار، و صفحهٔ سیاه/لینک‌های خام می‌شد",

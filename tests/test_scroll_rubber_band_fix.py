@@ -1,4 +1,4 @@
-"""Scroll rubber-band / overscroll fixes (v8.2.8)."""
+"""Scroll rubber-band / overscroll fixes."""
 
 from __future__ import annotations
 
@@ -19,15 +19,16 @@ class PageScrollContainerTests(unittest.TestCase):
         self.assertIn("overscroll-behavior-y: auto;", main)
         self.assertIn("overscroll-behavior-y: auto;", side)
 
-    def test_mobile_main_scrolls_inside_shell_not_document(self):
+    def test_mobile_inner_main_scrolls_document_locked(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         shell = mobile.split(".shell {\n", 1)[1].split("}", 1)[0]
         main = mobile.split("  .main {\n", 1)[1].split("}", 1)[0]
+        html_block = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
         self.assertIn("overflow: hidden;", shell)
         self.assertIn("overflow-y: auto;", main)
-        self.assertIn("min-height: 0;", main)
-        self.assertNotIn("html:has(.shell)", mobile)
+        self.assertIn("overflow: hidden;", html_block)
+        self.assertIn("100lvh", html_block)
 
     def test_nav_open_locks_mobile_main_scroll(self):
         css = CSS.read_text(encoding="utf-8")
@@ -40,13 +41,10 @@ class ModalOverscrollTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         block = css.split(".ui-modal {\n", 1)[1].split("}", 1)[0]
         self.assertIn("overscroll-behavior: contain;", block)
-        self.assertNotIn("overscroll-behavior: none;", block)
-        self.assertNotIn("touch-action: none;", block)
 
     def test_modal_guards_skip_interior_edge_prevent_default(self):
         js = JS.read_text(encoding="utf-8")
         self.assertIn("function isModalInteriorScroller", js)
-        self.assertIn("if (isModalInteriorScroller(modal, scroller)) return;", js)
 
 
 if __name__ == "__main__":

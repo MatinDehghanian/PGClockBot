@@ -1,4 +1,4 @@
-"""Lazy skeleton (slow loads only) + stronger panel motion."""
+"""Lazy skeleton removed — panel motion tokens remain."""
 
 from __future__ import annotations
 
@@ -12,29 +12,15 @@ JS = ROOT / "app/web/static/panel.js"
 BASE = ROOT / "app/web/templates/base.html"
 
 
-class LazySkeletonTests(unittest.TestCase):
-    def test_no_forced_min_delay_in_js(self):
+class NoLazySkeletonTests(unittest.TestCase):
+    def test_no_page_loading_in_js_or_base(self):
         js = JS.read_text(encoding="utf-8")
-        self.assertNotIn("minMs", js)
-        self.assertIn("__pgPageReveal", js)
-        self.assertIn("SKELETON_WAIT_MS", js)
-        self.assertNotIn("pg-page-nav", js)
-
-    def test_skeleton_from_nav_not_timer(self):
         html = BASE.read_text(encoding="utf-8")
-        self.assertNotIn("pg-page-nav", html)
-        self.assertIn("__pgPageReveal", html)
-        self.assertNotIn(", 280)", html)
-        self.assertNotIn('classList.add("page-booting")', html)
-        self.assertNotIn('classList.add("page-was-slow")', html)
-        self.assertNotIn("page-was-slow", html)
-
-    def test_content_visible_by_default(self):
         css = CSS.read_text(encoding="utf-8")
-        self.assertNotIn("html.page-booting .page-surface", css)
-        self.assertIn("html.page-loading .page-load-veil", css)
-        self.assertIn("html.page-loading .page-skeleton", css)
-        self.assertNotIn("page-was-slow", css)
+        self.assertNotIn("page-loading", js)
+        self.assertNotIn("page-loading", html)
+        self.assertNotIn("html.page-loading", css)
+        self.assertNotIn(".page-load-veil", css)
 
 
 class StrongerMotionTests(unittest.TestCase):
@@ -49,11 +35,6 @@ class StrongerMotionTests(unittest.TestCase):
         block = css.split("@keyframes ui-modal-in {", 1)[1].split("}", 1)[0]
         self.assertIn("translateY(18px)", block)
         self.assertIn("scale(.96)", block)
-
-    def test_button_hover_lift(self):
-        css = CSS.read_text(encoding="utf-8")
-        self.assertIn("transform: translateY(-1px);", css)
-        self.assertIn("transform: scale(0.96) translateY(0);", css)
 
 
 if __name__ == "__main__":

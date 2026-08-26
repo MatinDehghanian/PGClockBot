@@ -148,22 +148,21 @@ class PanelShellFirstContractTests(unittest.TestCase):
         self.assertIn('id="pg-dash"', body)
         defer = (ROOT / "app/web/templates/_panel_widgets_defer.html").read_text(encoding="utf-8")
         self.assertIn("panel-widgets-ready", defer)
-        self.assertIn("DOMContentLoaded", defer)
-        self.assertIn("armVeil", defer)
-        self.assertIn("page-loading", defer)
-        self.assertIn("__pgPageReveal", defer)
+        self.assertNotIn("armVeil", defer)
+        self.assertNotIn("page-loading", defer)
+        self.assertNotIn("__pgPageReveal", defer)
         live = (ROOT / "app/web/templates/_pg_live_metrics_script.html").read_text(encoding="utf-8")
         self.assertIn("panel-widgets-ready", live)
         self.assertIn("function els()", live)
 
-    def test_unified_matte_veil_loading(self):
-        """Shell-first pages use only #page-load-veil — no nested in-page clock."""
+    def test_deferred_widgets_load_silently(self):
+        """Deferred /body fetch swaps widgets with no global loading veil."""
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn('id="page-load-veil"', base)
-        self.assertIn("panel-load-clock", base)
+        self.assertNotIn('id="page-load-veil"', base)
+        self.assertNotIn('id="page-skeleton"', base)
         defer = (ROOT / "app/web/templates/_panel_widgets_defer.html").read_text(encoding="utf-8")
-        self.assertIn("armVeil", defer)
-        self.assertIn("finish()", defer)
+        self.assertNotIn("armVeil", defer)
+        self.assertNotIn("page-loading", defer)
         for rel in (
             "app/web/templates/home.html",
             "app/web/templates/reseller_home.html",
@@ -171,7 +170,6 @@ class PanelShellFirstContractTests(unittest.TestCase):
         ):
             src = (ROOT / rel).read_text(encoding="utf-8")
             self.assertNotIn("_panel_widgets_loading.html", src)
-            self.assertNotIn("panel-widgets-loading", src)
 
     def test_pg_body_skips_ticket_chrome(self):
         src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
@@ -225,13 +223,15 @@ class PanelShellFirstContractTests(unittest.TestCase):
             src,
         )
 
-    def test_loading_mark_is_clock(self):
+    def test_widget_loading_clock_partial_only(self):
+        """Clock spinner remains for optional in-page widget placeholder only."""
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("panel-load-clock", base)
-        self.assertIn("page-load-veil", base)
+        self.assertNotIn("page-load-veil", base)
+        loading = (ROOT / "app/web/templates/_panel_widgets_loading.html").read_text(encoding="utf-8")
+        self.assertIn("panel-load-clock", loading)
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".panel-load-clock-face", css)
-        self.assertIn("html.page-loading .page-load-veil", css)
+        self.assertNotIn("html.page-loading", css)
         # PG ACL cache stays short — speed must not stale sidebar permissions.
         acl = (ROOT / "app/services/pg_access.py").read_text(encoding="utf-8")
         self.assertIn("_ROLE_CACHE_TTL = 8.0", acl)

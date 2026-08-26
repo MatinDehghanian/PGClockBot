@@ -1,8 +1,7 @@
 {# Progressive widget fill — shell already passed server authz.
    Body URL re-runs the same Depends authz; shell permission does not grant body.
    redirect:manual avoids injecting login HTML into #home-dash / #pg-dash.
-   Include this as early as possible in the page so the body fetch overlaps HTML parse.
-   Loading UI: only the global matte clock veil (#page-load-veil) — no in-page spinner. #}
+   No loading veil — swap widgets silently when /body returns. #}
 {% set body_url = widgets_body_url or '/home/body' %}
 <noscript>
   <div class="flash warn home-update-banner">
@@ -15,39 +14,6 @@
 </noscript>
 <script>
 (function () {
-  var html = document.documentElement;
-  var settled = false;
-  var prevReveal = window.__pgPageReveal;
-
-  function armVeil() {
-    html.classList.add('page-loading');
-    html.classList.remove('page-ready', 'page-booting');
-  }
-  function clearVeil() {
-    html.classList.remove('page-loading', 'page-booting');
-    html.classList.add('page-ready');
-  }
-  function finish() {
-    if (settled) return;
-    settled = true;
-    window.__pgPageReveal = prevReveal;
-    if (typeof window.__pgPageReveal === 'function') {
-      window.__pgPageReveal();
-    } else {
-      clearVeil();
-    }
-  }
-
-  /* Hold the matte clock until /body swaps — suppress early page-ready reveal. */
-  armVeil();
-  window.__pgPageReveal = function () {
-    if (settled) {
-      if (typeof prevReveal === 'function') prevReveal();
-      else clearVeil();
-    }
-    /* else: stay veiled until widgets finish */
-  };
-
   var url = {{ body_url|tojson }};
   var fetchOpts = {
     credentials: 'same-origin',
@@ -57,7 +23,23 @@
       'X-Requested-With': 'XMLHttpRequest'
     }
   };
-  var pending = fetch(url, fetchOpts).then(function (r) {
+
+  function swap(htmlText) {
+    if (!htmlText) return;
+    var root = document.getElementById('home-dash') || document.getElementById('pg-dash');
+    if (!root) return;
+    var tmp = document.createElement('div');
+    tmp.innerHTML = String(htmlText).trim();
+    var next = tmp.firstElementChild;
+    if (next && root.parentNode) {
+      root.parentNode.replaceChild(next, root);
+      document.dispatchEvent(new CustomEvent('panel-widgets-ready', {
+        detail: { id: next.id || '' }
+      }));
+    }
+  }
+
+  fetch(url, fetchOpts).then(function (r) {
     if (r.type === 'opaqueredirect' || r.status === 301 || r.status === 302 || r.status === 303) {
       window.location.href = '/login';
       return null;
@@ -68,55 +50,13 @@
     }
     if (!r.ok) throw new Error('widgets body ' + r.status);
     return r.text();
-  });
-
-  function swap(htmlText) {
-    if (!htmlText) return false;
-    var root = document.getElementById('home-dash') || document.getElementById('pg-dash');
-    if (!root) return false;
-    var tmp = document.createElement('div');
-    tmp.innerHTML = String(htmlText).trim();
-    var next = tmp.firstElementChild;
-    if (next && root.parentNode) {
-      root.parentNode.replaceChild(next, root);
-      document.dispatchEvent(new CustomEvent('panel-widgets-ready', {
-        detail: { id: next.id || '' }
-      }));
-    }
-    return true;
-  }
-
-  function applyWhenReady(htmlText) {
-    if (htmlText) {
-      if (swap(htmlText)) {
-        finish();
-        return;
-      }
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () {
-          swap(htmlText);
-          finish();
-        });
-        return;
-      }
-      requestAnimationFrame(function () {
-        swap(htmlText);
-        finish();
-      });
+  }).then(function (htmlText) {
+    if (!htmlText) return;
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { swap(htmlText); }, { once: true });
       return;
     }
-    /* login redirects leave htmlText null — still drop the veil */
-    finish();
-  }
-
-  pending.then(applyWhenReady).catch(function () {
-    /* Keep unchecked shell — never invent disconnected state. */
-    finish();
-  });
-
-  /* Never leave the departing page veiled if /body hangs or errors. */
-  window.setTimeout(function () {
-    finish();
-  }, 12000);
+    swap(htmlText);
+  }).catch(function () {});
 })();
 </script>

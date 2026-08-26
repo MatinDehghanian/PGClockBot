@@ -759,9 +759,6 @@ tr.principal-row-l2 td:first-child {
   .ui-modal-panel,
   .ui-modal.open.is-closing .ui-modal-backdrop,
   .ui-modal.open.is-closing .ui-modal-panel,
-  .page-skeleton,
-  .page-surface,
-  .sk-bone,
   .flash {
     animation: none !important;
     transition: none !important;
@@ -2404,7 +2401,7 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 
 .auth-wrap {
   min-height: 100vh;
-  min-height: 100dvh;
+  min-height: 100lvh;
   display: grid;
   place-items: center;
   padding: calc(var(--space-3) + var(--safe-top)) calc(var(--space-2) + var(--safe-right)) calc(var(--space-3) + var(--safe-bottom)) calc(var(--space-2) + var(--safe-left));
@@ -4090,20 +4087,33 @@ form.settings-form > .actions.sticky-actions,
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
-  /* Mobile shell — v8.2.12 proven layout (100dvh, .main scrolls, sticky footer).
-     v8.5.16–8.5.19 viewport overlay hacks caused header overlap, sidebar gaps,
-     and blank pages — do not reintroduce document lock or drawer collapse. */
+  /* Mobile: fill 100lvh (100dvh leaves a black strip on iOS when the URL bar
+     hides). Document locked; .main is the only scroller. No --safari-overlay,
+     no height:0 drawer collapse. */
+  html:has(.shell),
+  html:has(.shell) body {
+    height: 100vh;
+    height: 100lvh;
+    min-height: 100vh;
+    min-height: 100lvh;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: var(--background);
+  }
+
   .shell {
     display: flex;
     flex-direction: column;
     grid-template-columns: none;
     grid-template-areas: none;
     height: 100vh;
-    height: 100dvh;
-    max-height: 100dvh;
+    height: 100lvh;
+    min-height: 100vh;
+    min-height: 100lvh;
+    max-height: none;
     overflow: hidden;
-    /* Reserve space for fixed mobile topbar */
     padding-top: calc(var(--topbar-h) + var(--safe-top));
+    background: var(--background);
   }
 
   .topbar { display: flex; }
@@ -4113,10 +4123,10 @@ form.settings-form > .actions.sticky-actions,
     top: calc(var(--topbar-h) + var(--safe-top));
     right: 0;
     left: auto;
+    bottom: 0;
     width: min(300px, 86vw);
-    height: calc(100vh - var(--topbar-h) - var(--safe-top));
-    height: calc(100dvh - var(--topbar-h) - var(--safe-top));
-    max-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
+    height: auto;
+    max-height: none;
     z-index: 50;
     transform: translateX(105%);
     transition: transform .2s ease;
@@ -4124,16 +4134,13 @@ form.settings-form > .actions.sticky-actions,
     border-top: 1px solid var(--border);
     grid-area: unset;
     display: flex !important;
-    /* Match air above theme control to air below it → separator (--space-2) */
     padding-top: var(--space-2);
     padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));
     overscroll-behavior-y: contain;
   }
   .side.open { transform: translateX(0); }
 
-  /* Safari 26+ (iOS in-browser): tab/address bar tint is sampled from opaque
-     position:fixed backgrounds near the viewport edge — NOT theme-color.
-     Keep layout dimensions unchanged; only stop closed drawer from painting. */
+  /* Safari 26+ samples fixed opaque edges for tab bar tint — not theme-color. */
   html.ios-safari .shell {
     background: transparent;
   }
@@ -4146,12 +4153,13 @@ form.settings-form > .actions.sticky-actions,
   }
 
   .main {
-    /* Bottom pad matches .side drawer so site-footer & side-foot share one baseline */
     padding: var(--page-title-gap) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));
     flex: 1 1 auto;
     min-height: 0;
     min-width: 0;
     width: 100%;
+    height: auto;
+    max-height: none;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: auto;
@@ -8313,154 +8321,9 @@ html[data-theme="light"] .home-panel-neutral .home-panel-h {
   margin-top: 0;
 }
 
-/* —— Page loading veil (departing document only, after short wait) ——
-   Matte clock overlay on top; arrived HTML paints immediately (page-ready).
-   Legacy .page-skeleton markup stays in DOM but never shows (veil replaces it). */
-.page-skeleton {
-  display: none !important;
-}
-html.page-loading .page-skeleton {
-  display: none !important;
-}
-.page-load-veil {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--background) 72%, transparent);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  pointer-events: none;
-}
-html.page-loading .page-load-veil {
-  display: flex;
-  animation: panel-widgets-loading-in var(--motion-med) var(--ease-out) both;
-}
-.page-load-veil-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  text-align: center;
-}
-.page-load-veil-title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--foreground);
-}
-html.page-loading .page-surface {
-  /* Keep layout under the matte veil — do not unmount / hide content. */
-  opacity: 1;
-  visibility: visible;
-  pointer-events: none;
-  position: static;
-  filter: none;
-}
-html.page-ready .page-skeleton {
-  display: none !important;
-}
-.page-surface {
-  opacity: 1;
-  visibility: visible;
-  position: static;
-}
-.sk-block {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
-}
-.sk-title {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--space-1);
-  min-height: 44px;
-}
-.sk-card {
-  padding: var(--card-pad);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-}
-.sk-bone {
-  display: block;
-  border-radius: var(--control-radius);
-  background: color-mix(in srgb, var(--muted) 85%, var(--foreground) 8%);
-  position: relative;
-  overflow: hidden;
-}
-.sk-bone::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, var(--foreground) 8%, transparent) 45%,
-    transparent 100%
-  );
-  transform: translateX(-120%);
-  animation: sk-shimmer 1.35s var(--ease-standard) infinite;
-}
-.sk-ico {
-  width: var(--space-4_5);
-  height: var(--space-4_5);
-  border-radius: 18px;
-  flex: 0 0 auto;
-}
-.sk-line {
-  height: 12px;
-  width: 100%;
-  max-width: 100%;
-}
-.sk-line-lg { width: min(220px, 55%); height: 18px; }
-.sk-line-md { width: min(160px, 42%); height: 13px; }
-.sk-line-sm { width: min(280px, 72%); }
-.sk-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-2);
-  margin-top: var(--space-1);
-}
-.sk-tile {
-  height: 72px;
-  border-radius: var(--radius);
-}
-.sk-row {
-  height: 36px;
-  border-radius: var(--menu-item-radius);
-}
-@keyframes sk-shimmer {
-  to { transform: translateX(120%); }
-}
-@keyframes page-skeleton-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes page-surface-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: none; }
-}
 @keyframes flash-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
-}
-@media (max-width: 720px) {
-  .sk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-html[data-theme="light"] .sk-bone {
-  background: color-mix(in srgb, var(--muted) 70%, #fff 30%);
-}
-html[data-theme="light"] .sk-bone::after {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.65) 45%,
-    transparent 100%
-  );
 }
 
 /* —— Shell-first widget loading (centered, design-token spinner) —— */
@@ -8574,8 +8437,7 @@ html[data-theme="light"] .sk-bone::after {
   .panel-widgets-loading,
   .panel-widgets-loading-ring,
   .panel-load-clock-hour,
-  .panel-load-clock-minute,
-  .page-load-veil {
+  .panel-load-clock-minute {
     animation: none;
   }
 }

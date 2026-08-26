@@ -1,4 +1,4 @@
-"""Panel motion system + page skeleton loading."""
+"""Panel motion system — page loading veil removed in v8.5.22."""
 
 from __future__ import annotations
 
@@ -33,41 +33,25 @@ class MotionTokensTests(unittest.TestCase):
 
     def test_reduced_motion_covers_chrome(self):
         css = CSS.read_text(encoding="utf-8")
-        self.assertIn("@media (prefers-reduced-motion: reduce)", css)
         idx = css.index("@media (prefers-reduced-motion: reduce)")
         block = css[idx : idx + 900]
         self.assertIn(".ui-modal-panel", block)
-        self.assertIn(".page-skeleton", block)
         self.assertIn(".nav-item", block)
 
 
-class PageSkeletonTests(unittest.TestCase):
-    def test_base_has_skeleton_markup(self):
+class NoPageLoadingTests(unittest.TestCase):
+    def test_base_has_no_skeleton_or_veil(self):
         html = BASE.read_text(encoding="utf-8")
-        self.assertIn('id="page-skeleton"', html)
-        self.assertIn('id="page-load-veil"', html)
-        self.assertIn("panel-load-clock", html)
-        self.assertIn("page-surface", html)
-        self.assertIn("__pgPageReveal", html)
+        self.assertNotIn('id="page-skeleton"', html)
+        self.assertNotIn('id="page-load-veil"', html)
+        self.assertNotIn("__pgPageReveal", html)
 
-    def test_skeleton_css(self):
-        css = CSS.read_text(encoding="utf-8")
-        self.assertIn("html.page-loading .page-load-veil", css)
-        self.assertIn("html.page-loading .page-skeleton", css)
-        self.assertIn(".panel-load-clock", css)
-        self.assertIn("@keyframes sk-shimmer", css)
-        self.assertIn("@keyframes page-surface-in", css)
-        self.assertNotIn("html.page-booting .page-surface", css)
-
-    def test_js_reveal_helpers(self):
+    def test_js_has_no_skeleton_nav_intercept(self):
         js = JS.read_text(encoding="utf-8")
-        self.assertIn("__pgPageReveal", js)
-        self.assertIn("page-ready", js)
+        self.assertNotIn("page-loading", js)
+        self.assertNotIn("SKELETON_WAIT_MS", js)
+        self.assertNotIn("armSkeleton", js)
         self.assertIn("function closeModal(el, opts)", js)
-        self.assertIn("is-closing", js)
-        self.assertIn("SKELETON_WAIT_MS", js)
-        self.assertNotIn("pg-page-nav", js)
-        self.assertNotIn("minMs", js)
 
 
 if __name__ == "__main__":
