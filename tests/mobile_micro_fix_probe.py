@@ -170,6 +170,7 @@ def main() -> None:
               position: cs.position,
               backgroundImage: cs.backgroundImage,
               backgroundColor: cs.backgroundColor,
+              matteColor: getComputedStyle(el, '::before').backgroundColor,
               shellH: document.querySelector('.shell').getBoundingClientRect().height,
               docSH: document.documentElement.scrollHeight,
             };
@@ -263,9 +264,13 @@ def main() -> None:
         errors.append("nav-clock: disarm must set hidden")
     if s_armed["pointerEvents"] != "none" or s_armed["position"] != "fixed":
         errors.append("nav-clock: must stay fixed + pointer-events:none")
-    bg = (s_armed.get("backgroundColor") or "").lower()
-    if bg in ("rgba(0, 0, 0, 0)", "transparent", "rgba(0,0,0,0)"):
-        errors.append("nav-clock: must use light matte background, not fully transparent")
+    blank = ("rgba(0, 0, 0, 0)", "transparent", "rgba(0,0,0,0)")
+    # The matte paints on ::before, never on the fixed box: Safari 26+ tints its
+    # own toolbars from the background of fixed boxes at the viewport edge.
+    if (s_armed.get("backgroundColor") or "").lower() not in blank:
+        errors.append("nav-clock: fixed box must stay transparent (browser-chrome tint)")
+    if (s_armed.get("matteColor") or "").lower() in blank:
+        errors.append("nav-clock: ::before must paint the light matte")
     if abs(s0["shellH"] - s_armed["shellH"]) > TOL or abs(s0["docSH"] - s_armed["docSH"]) > TOL:
         errors.append("nav-clock: must not change document/shell geometry")
 

@@ -50,6 +50,12 @@
   --menu-radius: 16px;
   --menu-item-radius: 10px;
   --side-w: 248px;
+  /* Mobile drawer width. Capped at 78vw so the fixed drawer never covers 80% of
+     the viewport width — that is the threshold above which Safari 26+ starts
+     tinting its bottom bar with the drawer's own background (invariant E). */
+  --drawer-w: min(300px, 78vw);
+  /* Drawer dim — painted by .side-backdrop::before, never by the fixed box */
+  --side-dim: rgba(0, 0, 0, 0.55);
   --topbar-h: 52px;
   --btn-h: 36px;
   /* Spacing scale — 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 */
@@ -4078,18 +4084,32 @@ form.settings-form > .actions.sticky-actions,
      The opaque .topbar (z-index 55) still draws above it, so the top chrome
      never looks dimmed. */
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  /* NO background/backdrop-filter on this fixed box — see ::before below. */
+  background: transparent;
   z-index: 45;
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--motion-med) var(--ease-standard);
-  /* Background containment lives HERE, never on html/body. Making the root
-     scroller unscrollable (overflow:hidden / touch-action:none) is what made
-     iOS Safari snap its bottom toolbar to the expanded state and stop painting
-     the strip it had covered — the solid bar that stayed after the drawer
-     closed. touch-action:none still lets the tap-to-close click through. */
+  /* Background containment lives HERE, never on html/body: an unscrollable root
+     scroller (overflow:hidden / touch-action:none) stops iOS Safari from
+     retracting its bottom toolbar and from compositing page pixels behind it.
+     touch-action:none still lets the tap-to-close click through. */
   touch-action: none;
   overscroll-behavior: contain;
+}
+/* The dim paints on a pseudo-element, never on the fixed box above.
+   Safari 26+ tints its own toolbars from the `background-color` /
+   `backdrop-filter` of position:fixed boxes that touch a viewport edge, and it
+   does NOT re-sample when that box goes away. A dim on .side-backdrop itself
+   therefore turned the bottom bar solid the moment the drawer opened and left
+   it solid after the drawer closed. Absolutely-positioned boxes and
+   pseudo-elements are invisible to that sampler, so the bar keeps reflecting
+   the html/body background — identical in every drawer state. */
+.side-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--side-dim);
 }
 .side-backdrop.show {
   display: block !important;
@@ -4109,12 +4129,10 @@ form.settings-form > .actions.sticky-actions,
 
       A) The root (viewport) is the only vertical scroller, and it must STAY
          scrollable at all times. Never set overflow/touch-action/overscroll on
-         html or body to block scrolling: iOS Safari reacts by snapping its
-         bottom toolbar to the expanded state and then stops painting the strip
-         the toolbar had covered. That black/solid bar sticks around after the
-         overlay closes, because Safari only retracts the toolbar again on a
-         real page scroll. Overlays contain background touches themselves
-         (.side-backdrop, .ui-modal-backdrop).
+         html or body to block scrolling: iOS Safari then keeps its bottom
+         toolbar expanded and stops compositing page pixels behind it, so the
+         strip it covers reads as a solid bar. Overlays contain background
+         touches themselves (.side-backdrop, .ui-modal-backdrop).
 
       B) Fill height is 100svh — the SMALLEST height the visible viewport can
          take. The footer is then reachable no matter how much retractable
@@ -4130,6 +4148,15 @@ form.settings-form > .actions.sticky-actions,
       D) .side / .side-backdrop are fixed to the viewport. html, body and .shell
          must never become scroll containers, or they would capture the fixed
          containing block and the drawer would follow page length.
+
+      E) Browser chrome tint: Safari 26+ colours its own top/bottom bars from
+         the background of position:fixed boxes touching a viewport edge, and
+         it does not re-sample when such a box disappears. Only .topbar may own
+         a background there (its --bg-card is the intended top-bar tint).
+         Overlays keep their fixed box transparent and paint on an absolute
+         child (.side-backdrop::before, .ui-modal-backdrop), so the bottom bar
+         always reflects the html/body background instead of freezing on an
+         overlay colour after the overlay closes.
   */
   html:has(.shell) {
     height: auto;
@@ -4189,14 +4216,14 @@ form.settings-form > .actions.sticky-actions,
     position: fixed;
     top: calc(var(--topbar-h) + var(--safe-top));
     bottom: 0;
-    width: min(300px, 86vw);
+    width: var(--drawer-w);
     height: auto;
     max-height: none;
     z-index: 50;
     left: auto;
     /* Slid with `right`, never `transform`: a transformed fixed box gets its own
        containing block on WebKit and stops tracking the viewport bottom. */
-    right: calc(-1 * min(300px, 86vw) - 24px);
+    right: calc(-1 * var(--drawer-w) - 24px);
     transition: right .2s ease;
     border-left: 1px solid var(--border);
     border-top: 1px solid var(--border);
@@ -6309,6 +6336,7 @@ html[data-theme="light"] {
   --accent-fg: var(--brand-fg);
   --accent-soft: rgba(234, 88, 12, 0.10);
   --danger: var(--destructive);
+  --side-dim: rgba(0, 0, 0, 0.32);
   --table-head-bg: color-mix(in srgb, var(--muted) 72%, var(--bg-card));
 }
 html[data-theme="light"] * { scrollbar-color: #d4d4d8 transparent; }
@@ -6644,7 +6672,6 @@ html[data-theme="light"] .ui-switch-track {
   background: #d4d4d8;
   border-color: #d4d4d8;
 }
-html[data-theme="light"] .side-backdrop.show { background: rgba(0, 0, 0, 0.32); }
 html[data-theme="light"] .side-theme-btn {
   background: rgba(24, 24, 27, 0.03);
 }
@@ -8542,10 +8569,21 @@ html[data-theme="light"] .home-panel-neutral .home-panel-h {
   padding: 0;
   border: 0;
   pointer-events: none;
-  /* Light matte — not the deleted full-page veil/skeleton system */
-  background: color-mix(in srgb, var(--background, #09090b) 72%, transparent);
+  /* Matte lives on the pseudo-element, not on this fixed box — invariant E */
+  background: transparent;
   opacity: 0;
   visibility: hidden;
+}
+.panel-nav-clock::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* Behind the clock face: this box is positioned, so without a negative
+     z-index it would paint over the in-flow dial. The fixed parent is a
+     stacking context (z-index: 200), so -1 stays inside the overlay. */
+  z-index: -1;
+  /* Light matte — not the deleted full-page veil/skeleton system */
+  background: color-mix(in srgb, var(--background, #09090b) 72%, transparent);
 }
 /* Revealed immediately by JS removing [hidden]. Do NOT use CSS animation-delay:
    WebKit freezes animation timelines when MPA navigation starts. Do NOT delay

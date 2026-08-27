@@ -367,7 +367,6 @@
     </div>
   </div>
   <script src="/static/panel.js?v={{ app_version }}" defer></script>
-  {% if request.query_params.get('vp') %}{% include "_viewport_probe.html" %}{% endif %}
   {% block page_scripts %}{% endblock %}
   {% else %}
     {% block auth %}{% endblock %}
