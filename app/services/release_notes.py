@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
     "8.5.36": [
-        "حفظ v8.5.34: هم‌ترازی فوتر، ساعت nav، اسکرول document",
-        "گپ short-page / سایدبار در Safari: fill و bottom با 100lvh (بدون --vvh)؛ shell شفاف برای glass",
-        "backdrop مرورگر=PWA (حذف blur اضافه که مات‌تر می‌کرد)",
+        "حفظ v8.5.34: هم‌ترازی فوتر، ساعت nav، اسکرول document — بدون svh/dvh/lvh ping-pong",
+        "backdrop مرورگر=PWA (حذف blur اضافه)",
         "بستن فوری سایدبار روی انتخاب منو قبل از لودینگ — یکسان در Safari و PWA",
+        "ios-safari: shell شفاف + کشوی بسته height:0 (نمونه‌برداری نوار سالید) — گپ short-page عمداً با واحد viewport جدید «حل» نشد",
         "SW v27؛ ریستور: v8.5.34",
     ],
     "8.5.35": [

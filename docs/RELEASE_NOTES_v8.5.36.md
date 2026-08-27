@@ -1,18 +1,20 @@
-# v8.5.36 — Short-page Safari fill + instant sidebar close
+# v8.5.36 — Instant sidebar close + backdrop parity (no vh ping-pong)
 
 ## Keep (v8.5.34)
 
 Footer inset unity, immediate nav clock, document scroll, no `--vvh`, no `fill-available` after `100svh`.
 
+## Explicitly NOT in this release
+
+Another `100svh` / `100dvh` / `100lvh` geometry swap for the short-page gap.
+That cycle moved the bug for dozens of releases and is rejected here.
+
 ## Fixes
 
-1. **Short page / open sidebar too high (Safari browser)**  
-   `html.ios-safari`: `min-height: 100lvh` on html/body/shell; open `.side` / backdrop `bottom: calc(100svh - 100lvh)` so they reach the large-viewport edge. Transparent shell keeps chrome glassable.
+1. **Browser backdrop too matte vs PWA** — removed ios-safari-only blur; same dim as PWA.
+2. **PWA: sidebar stayed open during loading** — close in capture **before** nav clock, with transition disabled for that close.
+3. **ios-safari glass sampling** — transparent shell + closed drawer `height: 0` (no opaque fixed paint at the bottom edge when closed).
 
-2. **Browser backdrop too matte vs PWA**  
-   Removed ios-safari-only blur/frost overlay — same backdrop opacity as PWA.
-
-3. **PWA: sidebar stayed open until after loading**  
-   Close sidebar in capture phase **before** arming nav clock, with `transition: none` for that close.
+Short-page / open-drawer gap remaining on device → next step is a minimal fixed-drawer repro on the same iPhone, not another viewport unit.
 
 SW: `pgclock-shell-v27`. Restore: `v8.5.34`.

@@ -97,8 +97,8 @@ class MobileViewportShellFixTests(unittest.TestCase):
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn("html.ios-safari .side:not(.open)", mobile)
         self.assertIn("height: 0 !important;", mobile)
-        self.assertIn("min-height: 100lvh;", mobile)
-        self.assertIn("bottom: calc(100svh - 100lvh);", mobile)
+        self.assertNotIn("min-height: 100lvh;", mobile)
+        self.assertNotIn("bottom: calc(100svh - 100lvh);", mobile)
         self.assertNotIn("backdrop-filter: blur(16px)", mobile)
         self.assertIn("side-nav-closing", mobile)
         base = BASE.read_text(encoding="utf-8")

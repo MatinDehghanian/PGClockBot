@@ -4214,26 +4214,17 @@ form.settings-form > .actions.sticky-actions,
   /*
     Safari in-browser (html.ios-safari) — v8.5.36
     KEEP v8.5.34: document scroll, --bottom-inset footer unity, nav clock, no --vvh,
-    never put -webkit-fill-available after 100svh.
+    never put -webkit-fill-available after 100svh, no svh/dvh/lvh ping-pong.
 
-    Device: short pages still left footer+sidebar too high with a solid strip under
-    the open drawer. 100svh fill matched the small viewport, but Safari's visible
-    bottom (above/at chrome) tracks the large viewport. Fill/pin to 100lvh so the
-    shell and fixed drawer reach that edge; chrome overlays with glass when shell
-    bg is transparent. Chromium headless: lvh===svh → probes unchanged.
+    Glass: transparent shell + collapsed closed drawer (Safari samples opaque
+    fixed paint at the bottom edge). Backdrop opacity matches PWA (no extra blur).
 
-    Backdrop: same opacity as PWA (no extra blur — browser looked too matte).
+    Short-page gap is NOT “fixed” here with another viewport unit — that cycle
+    failed for dozens of releases. Device minimal-repro comes next if still open.
   */
   html.ios-safari,
   html.ios-safari body {
     background: transparent;
-  }
-  html.ios-safari:has(.shell),
-  html.ios-safari:has(.shell) body,
-  html.ios-safari .shell {
-    min-height: 100%;
-    min-height: 100svh;
-    min-height: 100lvh;
   }
   html.ios-safari .shell {
     background: transparent;
@@ -4250,11 +4241,6 @@ form.settings-form > .actions.sticky-actions,
     border: 0 !important;
     overflow: hidden;
     visibility: hidden;
-  }
-  /* Extend open drawer+backdrop to large-viewport bottom (negative when lvh>svh). */
-  html.ios-safari .side.open,
-  html.ios-safari .side-backdrop.show {
-    bottom: calc(100svh - 100lvh);
   }
   /* Instant close on navigation — disable slide so PWA paints closed before unload */
   html.ios .side.side-nav-closing {
