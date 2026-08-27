@@ -18,6 +18,9 @@ class MobileViewportShellFixTests(unittest.TestCase):
     def _mobile(self) -> str:
         return CSS.read_text(encoding="utf-8").split("@media (max-width: 900px)", 1)[1]
 
+    def _css(self) -> str:
+        return CSS.read_text(encoding="utf-8")
+
     def test_mobile_shell_flex_fill_not_viewport_units(self):
         mobile = self._mobile()
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
@@ -33,7 +36,6 @@ class MobileViewportShellFixTests(unittest.TestCase):
         closed = mobile.split(".side:not(.open)", 1)[1][:160]
         self.assertNotIn("height: 0;", closed)
         shell_block = shell.split("}", 1)[0]
-        # shell may use min-height:100svh but must not lock height to a viewport unit
         for unit in ("100dvh", "100lvh", "100vh", "var(--vvh"):
             self.assertNotIn(f"height: {unit}", shell_block)
             self.assertNotIn(f"height:{unit}", shell_block)
@@ -68,7 +70,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertIn("pointer-events: none;", mobile.split(".side:not(.open)", 1)[1][:120])
 
     def test_bottom_inset_token_and_shared_footers(self):
-        css = CSS.read_text(encoding="utf-8")
+        css = self._css()
         self.assertIn("--bottom-inset:", css[:5000])
         self.assertIn("--footer-bar-h:", css[:5000])
         mobile = self._mobile()
@@ -82,32 +84,37 @@ class MobileViewportShellFixTests(unittest.TestCase):
     def test_no_vvh_or_visual_viewport_js(self):
         base = BASE.read_text(encoding="utf-8")
         js = JS.read_text(encoding="utf-8")
-        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        css = self._css()
         self.assertNotIn("--vvh", base)
         self.assertNotIn("--vvh", css)
         self.assertNotIn("visualViewport", base)
         self.assertNotIn("visualViewport", js)
         self.assertNotIn("__pgPinSafariOverlay", js)
-        ios = css.split("@media (max-width: 900px)", 1)[1].split("html.ios-safari", 1)[-1][:1200]
-        self.assertNotIn("100lvh", ios)
 
     def test_sw_fallback_ignores_query_for_panel_assets(self):
         sw = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v27", sw)
+        self.assertIn("pgclock-shell-v28", sw)
         self.assertIn("matchIgnoreSearch", sw)
         self.assertIn("isVersionedPanelAsset", sw)
 
-    def test_ios_safari_liquid_glass_rules(self):
-        css = CSS.read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 900px)", 1)[1]
+    def test_ios_drawer_glass_beats_light_theme_cascade(self):
+        """Light-theme .side { background:#fff } must not win over iOS glass."""
+        css = self._css()
+        light_at = css.find('html[data-theme="light"] .side')
+        glass_at = css.find("html.ios .side.open")
+        self.assertGreater(light_at, 0)
+        self.assertGreater(glass_at, light_at)
+        glass = css[glass_at : glass_at + 900]
+        self.assertIn("background: transparent !important;", glass)
+        self.assertIn("bottom: var(--bottom-inset);", glass)
+        self.assertIn("html.ios .side.open::before", css)
+        self.assertIn("html.ios .side-backdrop", css)
+        self.assertIn("background: rgba(0, 0, 0, 0.55) !important;", css)
+        mobile = self._mobile()
+        back = mobile.split(".side-backdrop,", 1)[1][:350]
+        self.assertIn("right: min(300px, 86vw);", back)
         self.assertIn("html.ios-safari .side:not(.open)", mobile)
         self.assertIn("height: 0 !important;", mobile)
-        self.assertIn("background-size: 100% calc(100% - var(--safe-bottom));", mobile)
-        self.assertIn("html.ios-safari .side.open", mobile)
-        self.assertIn("html.ios-safari .side-backdrop", mobile)
-        back = mobile.split("html.ios-safari .side-backdrop", 1)[1][:500]
-        self.assertIn("calc(100% - var(--safe-bottom))", back)
-        self.assertIn("backdrop-filter: none;", back)
         self.assertNotIn("min-height: 100lvh;", mobile)
         self.assertNotIn("bottom: calc(100svh - 100lvh);", mobile)
         self.assertNotIn("backdrop-filter: blur(16px)", mobile)
@@ -118,7 +125,6 @@ class MobileViewportShellFixTests(unittest.TestCase):
         js = JS.read_text(encoding="utf-8")
         self.assertIn("side-nav-closing", js)
         self.assertIn("setOpen(false, true)", js)
-        self.assertNotIn("visualViewport", js)
 
 
 if __name__ == "__main__":
