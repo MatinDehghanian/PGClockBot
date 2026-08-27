@@ -8457,7 +8457,7 @@ html[data-theme="light"] .home-panel-neutral .home-panel-h {
   }
 }
 
-/* —— Navigation clock (fixed; no veil / no geometry change) —— */
+/* —— Navigation clock (fixed; no opaque overlay / no geometry change) —— */
 .panel-nav-clock {
   position: fixed;
   inset: 0;

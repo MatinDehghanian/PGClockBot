@@ -29,7 +29,7 @@
     });
 
     /* Lightweight nav clock — fixed, pointer-events:none, no layout reflow.
-       Short delay avoids flash on fast navigations. Not the old page-load-veil. */
+       Short delay avoids flash on fast navigations. Independent of deleted veil. */
     (function () {
       const clock = document.getElementById('panel-nav-clock');
       if (!clock) return;
