@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.38": [
+        "جمع‌آوری گندکاری Liquid Glass از v8.5.35–37: حذف شفاف‌سازی shell/main/side که محتوا را از سایدبار رد می‌کرد و پایین صفحه را سفید می‌کرد",
+        "بازگشت به هندسهٔ opaque پایدار v8.5.34 (سایدبار و main دوباره رنگ کامل دارند)",
+        "حفظ بستن فوری سایدبار قبل از لودینگ؛ backdrop تمام‌عرض یکسان",
+        "SW v29؛ ریستور: v8.5.34",
+    ],
     "8.5.37": [
         "ریشه واقعی نوار سالید: قانون تم روشن background:#fff روی .side بعد از فیکس Liquid Glass می‌آمد و آن را می‌کشت — الان فیکس بعد از تم روشن است و برای Safari+PWA",
         "کشوی باز: رنگ کارت فقط تا بالای --bottom-inset (via ::before)؛ باند پایین واقعاً شفاف",

@@ -4208,37 +4208,11 @@ form.settings-form > .actions.sticky-actions,
   .side-backdrop.show {
     top: calc(var(--topbar-h) + var(--safe-top));
     bottom: 0;
-    /* Dim ONLY the main column — never the drawer gutter.
-       An undershooting drawer used to reveal this dim as a solid grey bar
-       under the sidebar; leaving the gutter undimmed shows glass/page instead. */
     left: 0;
-    right: min(300px, 86vw);
+    right: 0;
     transform: none;
   }
 
-  /*
-    Safari in-browser chrome sampling (html.ios-safari) — keep shell transparent
-    and collapse the closed drawer so off-screen fixed paint is not sampled.
-    Open-drawer opaque slab + backdrop parity are handled AFTER the light-theme
-    .side { background } rule (search “iOS drawer glass”) — cascade order matters.
-  */
-  html.ios-safari,
-  html.ios-safari body {
-    background: transparent;
-  }
-  html.ios-safari .shell {
-    background: transparent;
-  }
-  html.ios-safari .side:not(.open) {
-    top: auto;
-    bottom: auto;
-    height: 0 !important;
-    max-height: 0 !important;
-    padding: 0 !important;
-    border: 0 !important;
-    overflow: hidden;
-    visibility: hidden;
-  }
   /* Instant close on navigation — disable slide so PWA paints closed before unload */
   html.ios .side.side-nav-closing {
     transition: none !important;
@@ -6315,58 +6289,6 @@ html[data-theme="light"] *::-webkit-scrollbar-thumb { background: #d4d4d8; }
 html[data-theme="light"] .side,
 html[data-theme="light"] .topbar {
   background: #ffffff;
-}
-
-/*
-  iOS drawer glass (Safari + PWA) — MUST sit AFTER the light-theme .side
-  background rule. Equal-specificity earlier rules (v8.5.36) lost the cascade
-  so light theme kept a solid white slab through --bottom-inset forever.
-*/
-@media (max-width: 900px) {
-  /*
-    Opaque card fill via ::before that STOPS above --bottom-inset.
-    The inset padding band stays truly transparent (glass / page shows through).
-    Applies to html.ios — both ios-safari and ios-standalone (PWA).
-  */
-  html.ios .side.open {
-    background: transparent !important;
-    isolation: isolate;
-  }
-  html.ios .side.open::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 0;
-    left: 0;
-    bottom: var(--bottom-inset);
-    background: var(--bg-card);
-    z-index: -1;
-    pointer-events: none;
-  }
-  html.ios[data-theme="light"] .side.open::before {
-    background: #ffffff;
-  }
-
-  /* Same dim everywhere — no ios-safari-only gradient/blur overrides */
-  html.ios .side-backdrop,
-  html.ios .side-backdrop.show {
-    background: rgba(0, 0, 0, 0.55) !important;
-    background-image: none !important;
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-  }
-
-  /* Short-page main fill: no opaque paint in the bottom inset band (PWA+Safari) */
-  html.ios .main {
-    background-color: transparent !important;
-    background-image: linear-gradient(var(--background), var(--background));
-    background-repeat: no-repeat;
-    background-position: top left;
-    background-size: 100% calc(100% - var(--bottom-inset));
-  }
-  html.ios[data-theme="light"] .main {
-    background-image: linear-gradient(#fafafa, #fafafa);
-  }
 }
 
 html[data-theme="light"] .stat,
