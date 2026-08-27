@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.39": [
+        "ریشه نوار سفید تم تیره: نبود color-scheme:dark — Safari canvas را سفید می‌کشید؛ الان color-scheme و theme-color با تم هم‌گام‌اند",
+        "html/body/shell/main رنگ پس‌زمینهٔ صریح؛ سایدبار bottom:0 با background کامل",
+        "فوتر صفحه و side-foot یک ارتفاع ثابت (min=max با --footer-bar-h + --bottom-inset)؛ بدون قوانین موازی شفاف",
+        "حذف leftover تم transparent روی ios-safari؛ حفظ بستن فوری سایدبار؛ SW v30؛ ریستور: v8.5.34",
+    ],
     "8.5.38": [
         "جمع‌آوری گندکاری Liquid Glass از v8.5.35–37: حذف شفاف‌سازی shell/main/side که محتوا را از سایدبار رد می‌کرد و پایین صفحه را سفید می‌کرد",
         "بازگشت به هندسهٔ opaque پایدار v8.5.34 (سایدبار و main دوباره رنگ کامل دارند)",

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="color-scheme" content="dark light" />
+  <meta name="color-scheme" content="dark" id="meta-color-scheme" />
   <meta name="theme-color" content="#09090b" id="meta-theme-color" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -14,7 +14,7 @@
   (function () {
     try {
       var d = document.documentElement;
-      /* ios class: used only for instant sidebar-close (side-nav-closing). */
+      /* ios class: instant sidebar-close (side-nav-closing) only. */
       var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
         (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
       var isStandalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
@@ -28,7 +28,9 @@
       var theme = pref === "light" ? "light" : pref === "dark" ? "dark" : dark ? "dark" : "light";
       d.setAttribute("data-theme", theme);
       var meta = document.getElementById("meta-theme-color");
+      var scheme = document.getElementById("meta-color-scheme");
       if (meta) meta.setAttribute("content", theme === "light" ? "#fafafa" : "#09090b");
+      if (scheme) scheme.setAttribute("content", theme === "light" ? "light" : "dark");
     } catch (e) {}
   })();
   </script>

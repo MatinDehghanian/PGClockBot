@@ -154,10 +154,9 @@
         }
         const dark = resolve(pref) === 'dark';
         const metaColor = document.getElementById('meta-theme-color');
-        /* ios-safari: leave theme-color transparent (Safari 26 Liquid Glass). */
-        if (metaColor && !root.classList.contains('ios-safari')) {
-          metaColor.setAttribute('content', dark ? '#09090b' : '#fafafa');
-        }
+        const metaScheme = document.getElementById('meta-color-scheme');
+        if (metaColor) metaColor.setAttribute('content', dark ? '#09090b' : '#fafafa');
+        if (metaScheme) metaScheme.setAttribute('content', dark ? 'dark' : 'light');
       }
       function setMenu(open){
         if (!menu || !toggle) return;
