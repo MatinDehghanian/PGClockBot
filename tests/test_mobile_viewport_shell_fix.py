@@ -88,24 +88,25 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_sw_fallback_ignores_query_for_panel_assets(self):
         sw = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v26", sw)
+        self.assertIn("pgclock-shell-v27", sw)
         self.assertIn("matchIgnoreSearch", sw)
         self.assertIn("isVersionedPanelAsset", sw)
-
 
     def test_ios_safari_liquid_glass_rules(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn("html.ios-safari .side:not(.open)", mobile)
         self.assertIn("height: 0 !important;", mobile)
-        self.assertIn("html.ios-safari .side.open", mobile)
-        self.assertIn("background-size: 100% calc(100% - 3px);", mobile)
-        self.assertIn("backdrop-filter: blur(16px)", mobile)
+        self.assertIn("min-height: 100lvh;", mobile)
+        self.assertIn("bottom: calc(100svh - 100lvh);", mobile)
+        self.assertNotIn("backdrop-filter: blur(16px)", mobile)
+        self.assertIn("side-nav-closing", mobile)
         base = BASE.read_text(encoding="utf-8")
-        self.assertIn('ios-safari', base)
-        self.assertIn('ios-standalone', base)
+        self.assertIn("ios-safari", base)
+        self.assertIn("ios-standalone", base)
         js = JS.read_text(encoding="utf-8")
-        self.assertIn("ios-safari", js)
+        self.assertIn("side-nav-closing", js)
+        self.assertIn("setOpen(false, true)", js)
 
 
 if __name__ == "__main__":
