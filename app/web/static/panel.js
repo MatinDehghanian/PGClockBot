@@ -29,22 +29,17 @@
     });
 
     /* Lightweight nav clock — fixed, pointer-events:none, no layout reflow.
-       Short delay avoids flash on fast navigations. Independent of deleted veil. */
+       Arm by removing [hidden] immediately; CSS animation-delay (140ms) controls
+       visibility so the clock can still paint during slow full-page navigations
+       (setTimeout often never runs before document teardown). */
     (function () {
       const clock = document.getElementById('panel-nav-clock');
       if (!clock) return;
-      let timer = null;
-      const DELAY_MS = 140;
       function arm() {
-        clearTimeout(timer);
-        timer = setTimeout(function () {
-          clock.hidden = false;
-          clock.setAttribute('aria-hidden', 'false');
-        }, DELAY_MS);
+        clock.hidden = false;
+        clock.setAttribute('aria-hidden', 'false');
       }
       function disarm() {
-        clearTimeout(timer);
-        timer = null;
         clock.hidden = true;
         clock.setAttribute('aria-hidden', 'true');
       }
@@ -53,30 +48,36 @@
           && url.pathname === location.pathname
           && url.search === location.search;
       }
+      function isRealInternalNavAnchor(a) {
+        if (!a || a.target && a.target !== '' && a.target !== '_self') return false;
+        if (a.hasAttribute('download') || a.getAttribute('aria-disabled') === 'true') return false;
+        const raw = a.getAttribute('href');
+        if (!raw || raw.charAt(0) === '#' || raw.indexOf('javascript:') === 0) return false;
+        let url;
+        try { url = new URL(raw, location.href); } catch (_) { return false; }
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+        if (url.origin !== location.origin) return false;
+        if (sameDocumentNav(url) && url.hash) return false;
+        return true;
+      }
       document.addEventListener('click', function (e) {
         if (e.defaultPrevented || e.button !== 0) return;
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-        if (!a) return;
-        if (a.target && a.target !== '' && a.target !== '_self') return;
-        if (a.hasAttribute('download')) return;
-        const raw = a.getAttribute('href');
-        if (!raw || raw.charAt(0) === '#' || raw.indexOf('javascript:') === 0) return;
-        let url;
-        try { url = new URL(raw, location.href); } catch (_) { return; }
-        if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
-        if (url.origin !== location.origin) return;
-        if (sameDocumentNav(url) && url.hash) return;
+        if (!isRealInternalNavAnchor(a)) return;
         arm();
       }, true);
       document.addEventListener('submit', function (e) {
         if (e.defaultPrevented) return;
         const form = e.target;
-        if (!form || (form.target && form.target !== '' && form.target !== '_self')) return;
+        if (!form || form.tagName !== 'FORM') return;
+        if (form.target && form.target !== '' && form.target !== '_self') return;
+        if (form.hasAttribute('data-no-nav-clock')) return;
         arm();
       }, true);
       window.addEventListener('pageshow', disarm);
       window.addEventListener('pagehide', disarm);
+      window.addEventListener('popstate', disarm);
     })();
 
     /* Permanent no-zoom: keep focused text controls at ≥16px even if CSS regresses */

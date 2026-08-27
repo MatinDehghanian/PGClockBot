@@ -4145,31 +4145,46 @@ form.settings-form > .actions.sticky-actions,
   .side {
     position: fixed;
     top: calc(var(--topbar-h) + var(--safe-top));
-    right: 0;
-    left: auto;
     bottom: 0;
     width: min(300px, 86vw);
     height: auto;
     max-height: none;
     z-index: 50;
-    transform: translateX(105%);
-    transition: transform .2s ease;
+    /* iOS Safari: transform on position:fixed drawers leaves a visible gap under
+       the panel when the URL bar is shown (PWA has no URL bar → looked fine).
+       Slide with `right` instead of transform so the fixed box stays pinned to
+       the visible bottom. */
+    left: auto;
+    right: calc(-1 * min(300px, 86vw) - 24px);
+    transform: none;
+    transition: right .2s ease;
     border-left: 1px solid var(--border);
     border-top: 1px solid var(--border);
     grid-area: unset;
     display: flex !important;
     padding-top: var(--space-2);
-    /* Drawer box paints to bottom:0 — safe-area is inner (.side-foot), not box shorten */
+    /* Drawer paints to bottom:0 — bottom inset is inner (.side-foot) only */
     padding-bottom: 0;
     overscroll-behavior-y: contain;
     box-sizing: border-box;
   }
-  .side.open { transform: translateX(0); }
+  .side.open {
+    right: 0;
+  }
   .side:not(.open) {
     pointer-events: none;
   }
+  /* Match main footer inset: FOOTER → foot-gap → safe-bottom → viewport */
   .side .side-foot {
-    padding-bottom: var(--safe-bottom);
+    padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));
+  }
+
+  /* Backdrop shares identical vertical anchors with .side (no transform) */
+  .side-backdrop,
+  .side-backdrop.show {
+    top: calc(var(--topbar-h) + var(--safe-top));
+    bottom: 0;
+    transform: none;
   }
 
   .main {
@@ -8472,12 +8487,23 @@ html[data-theme="light"] .home-panel-neutral .home-panel-h {
   background: transparent;
   opacity: 0;
   visibility: hidden;
-  transition: opacity var(--motion-fast) var(--ease-standard),
-    visibility var(--motion-fast) var(--ease-standard);
 }
+/* Reveal with CSS delay — setTimeout often never paints during full navigation
+   because the document is torn down before the timer fires. Arming removes
+   [hidden] immediately; opacity stays 0 for 140ms (anti-flicker on fast nav). */
 .panel-nav-clock:not([hidden]) {
-  opacity: 1;
-  visibility: visible;
+  animation: panel-nav-clock-show 0s linear 140ms forwards;
+}
+@keyframes panel-nav-clock-show {
+  to {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel-nav-clock:not([hidden]) {
+    animation-delay: 0s;
+  }
 }
 .panel-nav-clock .panel-load-clock {
   width: 3rem;

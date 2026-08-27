@@ -25,7 +25,10 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertIn("height: auto;", shell)
         self.assertIn("flex: 1 0 auto;", shell)
         self.assertIn("padding-bottom: 0;", side)
-        self.assertIn("padding-bottom: var(--safe-bottom);", mobile.split(".side .side-foot", 1)[1][:80])
+        self.assertNotIn("transform: translateX", side)
+        self.assertIn("right: calc(-1 * min(300px, 86vw) - 24px);", side)
+        foot = mobile.split(".side .side-foot", 1)[1][:120]
+        self.assertIn("padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));", foot)
         self.assertNotIn("var(--foot-gap) + var(--safe-bottom)", side)
         closed = mobile.split(".side:not(.open)", 1)[1][:160]
         self.assertNotIn("height: 0;", closed)
@@ -63,8 +66,12 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertNotIn(".page-load-veil", css)
         self.assertIn('id="panel-nav-clock"', base)
         self.assertIn(".panel-nav-clock", css)
-        self.assertIn("pointer-events: none", css.split(".panel-nav-clock", 1)[1][:400])
-        self.assertIn("panel-nav-clock", js)
+        clock_css = css.split(".panel-nav-clock", 1)[1][:900]
+        self.assertIn("pointer-events: none", clock_css)
+        self.assertIn("140ms", clock_css)
+        self.assertIn("@keyframes panel-nav-clock-show", css)
+        self.assertIn("clock.hidden = false", js)
+        self.assertNotIn("setTimeout(function () {\n          clock.hidden = false", js)
 
     def test_hamburger_pageshow_reset(self):
         js = JS.read_text(encoding="utf-8")
@@ -78,7 +85,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_service_worker_cache(self):
         pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v20", pwa)
+        self.assertIn("pgclock-shell-v21", pwa)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.31": [
+        "موبایل — Footer واحد: short/long و side-foot همگی FOOTER→foot-gap→safe-bottom؛ side-foot با calc(foot-gap+safe-bottom)",
+        "iOS Safari Sidebar: حذف transform از drawer fixed (علت gap زیر منو وقتی URL bar باز است؛ PWA بدون URL bar درست بود) — اسلاید با right",
+        "Loading clock: arm فوری با حذف [hidden]؛ delay ضد flicker با CSS animation 140ms (setTimeout هنگام navigation اجرا نمی‌شد)",
+        "حفظ document-scroll؛ بدون --vvh/dvh/nested scroll",
+        "Service Worker cache v21؛ ریستور: v8.5.30",
+    ],
     "8.5.30": [
         "موبایل — short page: footer پایین viewport با flex fill (% min-height + margin-top:auto) — بدون vh/dvh؛ long page همچنان document scroll",
         "موبایل — sidebar: safe-bottom فقط روی .side-foot (نه کوتاه‌کردن drawer)؛ قفل scroll روی html به‌جای body.overflow:hidden (رفع gap زیر fixed در iOS)",
