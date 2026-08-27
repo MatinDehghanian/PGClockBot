@@ -1,7 +1,7 @@
 {# Progressive widget fill — shell already passed server authz.
    Body URL re-runs the same Depends authz; shell permission does not grant body.
    redirect:manual avoids injecting login HTML into #home-dash / #pg-dash.
-   No loading veil — swap widgets silently when /body returns. #}
+   Uses #panel-nav-clock (not the deleted page-load veil) while /body loads. #}
 {% set body_url = widgets_body_url or '/home/body' %}
 <noscript>
   <div class="flash warn home-update-banner">
@@ -24,10 +24,25 @@
     }
   };
 
+  function armClock() {
+    document.dispatchEvent(new CustomEvent('panel-widgets-loading'));
+    var clock = document.getElementById('panel-nav-clock');
+    if (!clock) return;
+    clock.hidden = false;
+    clock.setAttribute('aria-hidden', 'false');
+  }
+  function disarmClock() {
+    document.dispatchEvent(new CustomEvent('panel-widgets-ready', { detail: { id: '' } }));
+    var clock = document.getElementById('panel-nav-clock');
+    if (!clock) return;
+    clock.hidden = true;
+    clock.setAttribute('aria-hidden', 'true');
+  }
+
   function swap(htmlText) {
-    if (!htmlText) return;
+    if (!htmlText) { disarmClock(); return; }
     var root = document.getElementById('home-dash') || document.getElementById('pg-dash');
-    if (!root) return;
+    if (!root) { disarmClock(); return; }
     var tmp = document.createElement('div');
     tmp.innerHTML = String(htmlText).trim();
     var next = tmp.firstElementChild;
@@ -36,9 +51,17 @@
       document.dispatchEvent(new CustomEvent('panel-widgets-ready', {
         detail: { id: next.id || '' }
       }));
+      var clock = document.getElementById('panel-nav-clock');
+      if (clock) {
+        clock.hidden = true;
+        clock.setAttribute('aria-hidden', 'true');
+      }
+    } else {
+      disarmClock();
     }
   }
 
+  armClock();
   fetch(url, fetchOpts).then(function (r) {
     if (r.type === 'opaqueredirect' || r.status === 301 || r.status === 302 || r.status === 303) {
       window.location.href = '/login';
@@ -51,12 +74,12 @@
     if (!r.ok) throw new Error('widgets body ' + r.status);
     return r.text();
   }).then(function (htmlText) {
-    if (!htmlText) return;
+    if (!htmlText) { disarmClock(); return; }
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', function () { swap(htmlText); }, { once: true });
       return;
     }
     swap(htmlText);
-  }).catch(function () {});
+  }).catch(function () { disarmClock(); });
 })();
 </script>

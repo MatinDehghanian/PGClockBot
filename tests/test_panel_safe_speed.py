@@ -155,14 +155,17 @@ class PanelShellFirstContractTests(unittest.TestCase):
         self.assertIn("panel-widgets-ready", live)
         self.assertIn("function els()", live)
 
-    def test_deferred_widgets_load_silently(self):
-        """Deferred /body fetch swaps widgets with no global loading veil."""
+    def test_deferred_widgets_use_nav_clock_not_veil(self):
+        """Deferred /body shows #panel-nav-clock — never the deleted page-load veil."""
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
         self.assertNotIn('id="page-load-veil"', base)
         self.assertNotIn('id="page-skeleton"', base)
+        self.assertIn('id="panel-nav-clock"', base)
         defer = (ROOT / "app/web/templates/_panel_widgets_defer.html").read_text(encoding="utf-8")
         self.assertNotIn("armVeil", defer)
         self.assertNotIn("page-loading", defer)
+        self.assertIn("panel-nav-clock", defer)
+        self.assertIn("panel-widgets-loading", defer)
         for rel in (
             "app/web/templates/home.html",
             "app/web/templates/reseller_home.html",

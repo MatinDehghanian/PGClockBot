@@ -31,6 +31,41 @@
   </script>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/pwa/icon/180" />
+  {# Critical boot: if panel.css is delayed/aborted (SW race, flaky network),
+     color-scheme:dark alone paints a black void with both brands visible —
+     the intermittent "refresh to fix" load. These rules are overridden by
+     panel.css; they only exist so the shell never FOUCs into that state. #}
+  <style id="panel-critical-boot">
+    html, body { margin: 0; background: #09090b; color: #fafafa; }
+    html[data-theme="light"], html[data-theme="light"] body { background: #fafafa; color: #09090b; }
+    @media (max-width: 900px) {
+      .desk-only { display: none !important; }
+      .topbar.mobile-only {
+        display: flex; align-items: center; justify-content: space-between;
+        position: fixed; top: 0; left: 0; right: 0; z-index: 55;
+        min-height: 52px; padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px;
+        box-sizing: border-box; background: #18181b; color: inherit;
+      }
+      .shell {
+        display: flex; flex-direction: column; min-height: 100svh;
+        padding-top: calc(52px + env(safe-area-inset-top, 0px)); box-sizing: border-box;
+      }
+      .side {
+        position: fixed; top: calc(52px + env(safe-area-inset-top, 0px)); bottom: 0;
+        right: 0; width: min(300px, 78vw); z-index: 50; box-sizing: border-box;
+        background: #18181b; overflow: auto;
+        /* Closed until panel.css / .open — avoids a flash of the full drawer. */
+        visibility: hidden; pointer-events: none;
+      }
+      .side.open { visibility: visible; pointer-events: auto; }
+      .side-backdrop { display: none !important; }
+      .main { flex: 1 1 auto; padding: 12px; box-sizing: border-box; }
+    }
+    @media (min-width: 901px) {
+      .topbar.mobile-only { display: none !important; }
+    }
+  </style>
+  <link rel="preload" href="/static/panel.css?v={{ app_version }}" as="style" />
   <link rel="stylesheet" href="/static/fonts.css?v={{ app_version }}" />
   <link rel="stylesheet" href="/static/panel.css?v={{ app_version }}" />
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
@@ -366,7 +401,7 @@
       </form>
     </div>
   </div>
-  <script src="/static/panel.js?v={{ app_version }}" defer></script>
+  <script src="/static/panel.js?v={{ app_version }}"></script>
   {% block page_scripts %}{% endblock %}
   {% else %}
     {% block auth %}{% endblock %}

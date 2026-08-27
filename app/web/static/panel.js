@@ -45,9 +45,12 @@
        if the click→nav path is busy). Fast-nav flicker is preferable to never
        painting. Matte is CSS on .panel-nav-clock.
 
-       Close the sidebar in the SAME capture turn BEFORE arming the clock so PWA
-       and Safari both paint closed+loading together (bubble-only close raced
-       unload in standalone). */
+       For real internal navigations we preventDefault, close the drawer, arm the
+       clock, then location.assign on the next frame. Closing the drawer in the
+       same turn as a default click (off-screen slide + pointer-events:none on
+       .side) cancelled or skipped the paint on WebKit — Plans and other heavy
+       MPA targets often never showed the clock. Explicit assign after one rAF
+       keeps closed+loading together for PWA/Safari and guarantees a paint. */
     (function () {
       const clock = document.getElementById('panel-nav-clock');
       if (!clock) return;
@@ -83,9 +86,17 @@
         const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
         if (!a) return;
         const inSide = side && side.contains(a);
+        if (!isRealInternalNavAnchor(a)) {
+          if (inSide) setOpen(false, true);
+          return;
+        }
+        e.preventDefault();
         if (inSide) setOpen(false, true);
-        if (!isRealInternalNavAnchor(a)) return;
         arm();
+        var href = a.href;
+        requestAnimationFrame(function () {
+          window.location.assign(href);
+        });
       }, true);
       document.addEventListener('submit', function (e) {
         if (e.defaultPrevented) return;
@@ -99,6 +110,9 @@
       window.addEventListener('pageshow', disarm);
       window.addEventListener('pagehide', disarm);
       window.addEventListener('popstate', disarm);
+      /* Shell-first home/PG: keep the clock up until /body swaps widgets in. */
+      document.addEventListener('panel-widgets-loading', arm);
+      document.addEventListener('panel-widgets-ready', disarm);
     })();
 
     /* Permanent no-zoom: keep focused text controls at ≥16px even if CSS regresses */
