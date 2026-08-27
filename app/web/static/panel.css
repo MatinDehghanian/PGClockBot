@@ -4244,6 +4244,9 @@ form.settings-form > .actions.sticky-actions,
   }
   .side:not(.open) {
     pointer-events: none;
+    /* Critical-boot CSS hides the closed drawer with visibility; restore here
+       so the off-screen slide (right) remains the only closed-state mechanism. */
+    visibility: visible;
   }
   /* SAME inset path as .site-footer — separators share one Y + one box height */
   .side .side-foot {

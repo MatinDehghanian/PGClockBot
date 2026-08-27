@@ -277,7 +277,7 @@ def build_manifest(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def service_worker_js() -> str:
     return """/* PGClockBot panel service worker — static shell only */
-const CACHE = 'pgclock-shell-v32';
+const CACHE = 'pgclock-shell-v33';
 const PRECACHE = [
   '/static/logo.png',
   '/static/logo-64.png',
@@ -334,13 +334,17 @@ self.addEventListener('fetch', (event) => {
   if (!url.pathname.startsWith('/static/') && !url.pathname.startsWith('/pwa/')) return;
 
   if (isVersionedPanelAsset(url)) {
+    /* Network-first, but NEVER hand the page a failed/empty CSS/JS response
+       when an older same-pathname cache exists — that was the intermittent
+       black void with duplicate brands (color-scheme dark, no layout CSS). */
     event.respondWith(
       fetch(req).then((res) => {
         if (res && res.ok) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
+          return res;
         }
-        return res;
+        return matchIgnoreSearch(req).then((hit) => hit || res);
       }).catch(() => matchIgnoreSearch(req))
     );
     return;
