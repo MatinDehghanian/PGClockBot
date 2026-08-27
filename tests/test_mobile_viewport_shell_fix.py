@@ -39,9 +39,14 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_document_is_scroll_owner(self):
         mobile = self._mobile()
-        doc = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
+        html = mobile.split("html:has(.shell) {\n", 1)[1].split("}", 1)[0]
+        body = mobile.split("html:has(.shell) body {\n", 1)[1].split("}", 1)[0]
         main = mobile.split("  .main {", 1)[1].split("  .main-body", 1)[0]
-        self.assertIn("overflow-y: auto;", doc)
+        self.assertIn("overflow-x: visible;", html)
+        self.assertIn("overflow-y: visible;", html)
+        self.assertNotIn("overflow-x: hidden;", html)
+        self.assertIn("overflow-y: auto;", body)
+        self.assertIn("overflow-x: hidden;", body)
         self.assertIn("overflow: visible;", main)
         self.assertNotIn("overflow-y: auto;", main)
 
@@ -85,7 +90,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_service_worker_cache(self):
         pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v21", pwa)
+        self.assertIn("pgclock-shell-v22", pwa)
 
 
 if __name__ == "__main__":

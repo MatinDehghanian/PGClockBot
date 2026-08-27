@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.32": [
+        "موبایل — ریشه مشترک gap فوتر/سایدبار در short page: overflow-x:hidden روی html باعث می‌شد overflow-y به auto تبدیل شود و در WebKit html containing-block برای fixed شود",
+        "fix: html در موبایل overflow visible در هر دو محور؛ فقط body اسکرول عمودی + clip افقی — بدون --vvh/dvh/nested scroll",
+        "حذف overflow:hidden روی html هنگام باز شدن منو (دوباره CB می‌ساخت)؛ حفظ document-scroll از v8.5.28",
+        "Service Worker cache v22؛ ریستور: v8.5.31",
+    ],
     "8.5.31": [
         "موبایل — Footer واحد: short/long و side-foot همگی FOOTER→foot-gap→safe-bottom؛ side-foot با calc(foot-gap+safe-bottom)",
         "iOS Safari Sidebar: حذف transform از drawer fixed (علت gap زیر منو وقتی URL bar باز است؛ PWA بدون URL bar درست بود) — اسلاید با right",

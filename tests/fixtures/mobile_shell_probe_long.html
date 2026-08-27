@@ -62,6 +62,7 @@
       var back = document.getElementById('side-backdrop');
       back.hidden = !open;
       back.classList.toggle('show', open);
+      document.body.classList.toggle('nav-open', open);
     });
   </script>
 </body>
