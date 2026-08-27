@@ -29,8 +29,9 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertIn("padding-bottom: 0;", side)
         self.assertNotIn("transform: translateX", side)
         self.assertIn("right: calc(-1 * min(300px, 86vw) - 24px);", side)
-        foot = mobile.split(".side .side-foot", 1)[1][:240]
+        foot = mobile.split(".side .side-foot", 1)[1][:320]
         self.assertIn("padding-bottom: var(--bottom-inset);", foot)
+        self.assertIn("max-height: calc(var(--footer-bar-h) + var(--bottom-inset));", foot)
         self.assertNotIn("var(--foot-gap) + var(--safe-bottom)", side)
         closed = mobile.split(".side:not(.open)", 1)[1][:160]
         self.assertNotIn("height: 0;", closed)
@@ -60,6 +61,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertIn("overflow-y: visible;", main)
         self.assertNotIn("overflow-y: auto;", main)
         self.assertIn("padding: var(--page-title-gap) var(--space-2) 0;", main)
+        self.assertIn("background: var(--background);", main)
 
     def test_sidebar_fixed_with_pointer_events_guard(self):
         mobile = self._mobile()
@@ -74,55 +76,56 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertIn("--footer-bar-h:", css[:5000])
         mobile = self._mobile()
         site = mobile.split("  .site-footer {", 1)[1].split("  .footer-meta", 1)[0]
-        side_foot = mobile.split(".side .side-foot", 1)[1][:280]
+        side_foot = mobile.split(".side .side-foot", 1)[1][:360]
         self.assertIn("padding-bottom: var(--bottom-inset);", site)
         self.assertIn("padding-bottom: var(--bottom-inset);", side_foot)
-        self.assertIn("min-height: calc(var(--footer-bar-h) + var(--bottom-inset));", site)
-        self.assertIn("min-height: calc(var(--footer-bar-h) + var(--bottom-inset));", side_foot)
+        shared = "min-height: calc(var(--footer-bar-h) + var(--bottom-inset));"
+        self.assertIn(shared, site)
+        self.assertIn(shared, side_foot)
+        shared_max = "max-height: calc(var(--footer-bar-h) + var(--bottom-inset));"
+        self.assertIn(shared_max, site)
+        self.assertIn(shared_max, side_foot)
 
-    def test_no_vvh_or_visual_viewport_js(self):
+    def test_dark_color_scheme_and_no_vvh(self):
         base = BASE.read_text(encoding="utf-8")
         js = JS.read_text(encoding="utf-8")
         css = self._css()
+        self.assertIn("color-scheme: dark;", css[:200])
+        self.assertIn('html[data-theme="dark"]', css)
+        self.assertIn("color-scheme: dark;", css.split('html[data-theme="dark"]', 1)[1][:80])
+        self.assertIn('html[data-theme="light"]', css)
+        self.assertIn("color-scheme: light;", css.split('html[data-theme="light"]', 1)[1][:80])
+        self.assertIn("meta-color-scheme", base)
+        self.assertIn('scheme.setAttribute("content"', base)
+        self.assertIn("metaScheme", js)
+        self.assertNotIn("leave theme-color transparent", js)
         self.assertNotIn("--vvh", base)
         self.assertNotIn("--vvh", css)
         self.assertNotIn("visualViewport", base)
         self.assertNotIn("visualViewport", js)
         self.assertNotIn("__pgPinSafariOverlay", js)
+        self.assertNotIn("iOS drawer glass", css)
+        self.assertNotIn("html.ios .side.open", css)
 
     def test_sw_fallback_ignores_query_for_panel_assets(self):
         sw = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v29", sw)
+        self.assertIn("pgclock-shell-v30", sw)
         self.assertIn("matchIgnoreSearch", sw)
         self.assertIn("isVersionedPanelAsset", sw)
 
-    def test_glass_experiments_reverted_keep_instant_close(self):
-        """v8.5.38: no transparent drawer/main; keep opaque side + instant close."""
-        css = self._css()
+    def test_instant_close_kept_no_glass(self):
         mobile = self._mobile()
-        self.assertNotIn("html.ios .side.open", css)
-        self.assertNotIn("html.ios .side.open::before", css)
-        self.assertNotIn("html.ios-safari .shell", mobile)
-        self.assertNotIn("iOS drawer glass", css)
-        self.assertNotIn("html.ios .main {", css)
-        self.assertNotIn("right: min(300px, 86vw);", mobile.split(".side-backdrop", 1)[1][:400])
-        back = mobile.split(".side-backdrop,", 1)[1][:280]
-        self.assertIn("left: 0;", back)
-        self.assertIn("right: 0;", back)
+        css = self._css()
         self.assertIn("side-nav-closing", mobile)
-        self.assertNotIn("min-height: 100lvh;", mobile)
-        self.assertNotIn("bottom: calc(100svh - 100lvh);", mobile)
-        self.assertNotIn("backdrop-filter: blur(16px)", mobile)
-        base = BASE.read_text(encoding="utf-8")
-        self.assertNotIn('meta.setAttribute("content", "transparent")', base)
-        self.assertIn("ios-safari", base)
+        self.assertNotIn("html.ios-safari .shell", mobile)
+        self.assertNotIn("html.ios .side.open", css)
         js = JS.read_text(encoding="utf-8")
         self.assertIn("side-nav-closing", js)
         self.assertIn("setOpen(false, true)", js)
-        # Light theme still paints opaque side (must not be overridden to transparent)
-        self.assertIn('html[data-theme="light"] .side', css)
-        light = css.split('html[data-theme="light"] .side', 1)[1][:120]
-        self.assertIn("background: #ffffff;", light)
+        back = mobile.split(".side-backdrop,", 1)[1][:300]
+        self.assertIn("left: 0;", back)
+        self.assertIn("right: 0;", back)
+        self.assertIn("bottom: 0;", back)
 
 
 if __name__ == "__main__":

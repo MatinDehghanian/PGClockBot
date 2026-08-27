@@ -1,5 +1,6 @@
 ﻿/* کلاک بات — shadcn dark minimal (no gradient / no glow) */
 :root {
+  color-scheme: dark;
   --background: #09090b;
   --foreground: #fafafa;
   --card: #09090b;
@@ -108,6 +109,9 @@ html, body {
   margin: 0;
   min-height: 100%;
   width: 100%;
+  /* background-color + background: WebKit overscroll/canvas samples these.
+     Missing color-scheme:dark left a WHITE strip under short dark pages. */
+  background-color: var(--background);
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font);
@@ -117,6 +121,9 @@ html, body {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   overflow-x: hidden;
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
 }
 a { color: var(--foreground); text-decoration: none; }
 a:hover { opacity: 0.8; }
@@ -4123,6 +4130,8 @@ form.settings-form > .actions.sticky-actions,
     min-height: 100svh;
     overflow-x: visible;
     overflow-y: visible;
+    background-color: var(--background);
+    background: var(--background);
   }
   html:has(.shell) body {
     min-height: 100%;
@@ -4132,6 +4141,8 @@ form.settings-form > .actions.sticky-actions,
     flex-direction: column;
     overflow-x: visible;
     overflow-y: visible;
+    background-color: var(--background);
+    background: var(--background);
   }
   body.nav-open {
     overscroll-behavior: none;
@@ -4157,6 +4168,7 @@ form.settings-form > .actions.sticky-actions,
     /* No padding-bottom safe-area here — that empty strip WAS the visible bottom gap.
        Safe-area lives inside --bottom-inset on the footers only. */
     padding-bottom: 0;
+    background-color: var(--background);
     background: var(--background);
   }
 
@@ -4190,6 +4202,7 @@ form.settings-form > .actions.sticky-actions,
     overflow-y: auto;
     overscroll-behavior-y: contain;
     box-sizing: border-box;
+    background-color: var(--bg-card);
     background: var(--bg-card);
   }
   .side.open {
@@ -4198,11 +4211,23 @@ form.settings-form > .actions.sticky-actions,
   .side:not(.open) {
     pointer-events: none;
   }
-  /* SAME inset path as .site-footer — separators share one baseline */
+  /* SAME inset path as .site-footer — separators share one Y + one box height */
   .side .side-foot {
+    flex-shrink: 0;
     padding-bottom: var(--bottom-inset);
     min-height: calc(var(--footer-bar-h) + var(--bottom-inset));
+    max-height: calc(var(--footer-bar-h) + var(--bottom-inset));
+    overflow: hidden;
   }
+  .side .side-foot-user { flex-wrap: nowrap; }
+  .side .side-foot-name,
+  .side .side-foot-identity {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+  .side .identity-chips { display: none; }
 
   .side-backdrop,
   .side-backdrop.show {
@@ -4211,6 +4236,7 @@ form.settings-form > .actions.sticky-actions,
     left: 0;
     right: 0;
     transform: none;
+    background: rgba(0, 0, 0, 0.55);
   }
 
   /* Instant close on navigation — disable slide so PWA paints closed before unload */
@@ -4231,11 +4257,14 @@ form.settings-form > .actions.sticky-actions,
     overflow-y: visible;
     display: flex;
     flex-direction: column;
+    background-color: var(--background);
+    background: var(--background);
   }
   .main-body { flex: 0 0 auto; padding-bottom: var(--page-title-gap); }
   .site-footer {
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
     align-items: center;
     justify-content: center;
     text-align: center;
@@ -4244,6 +4273,8 @@ form.settings-form > .actions.sticky-actions,
     padding-bottom: var(--bottom-inset);
     gap: var(--space-1);
     min-height: calc(var(--footer-bar-h) + var(--bottom-inset));
+    max-height: calc(var(--footer-bar-h) + var(--bottom-inset));
+    overflow: hidden;
   }
   .footer-meta { justify-content: center; }
   .footer-actions { justify-content: center; }
