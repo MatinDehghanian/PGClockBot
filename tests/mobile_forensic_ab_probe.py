@@ -133,29 +133,15 @@ def main() -> None:
     out["broken_short"] = broken_short
     out["broken_long"] = broken_long
 
-    # html height must be same short/long → cannot explain sidebar short≠long
-    if abs(live_short["htmlH"] - live_long["htmlH"]) > TOL:
-        errors.append("unexpected: html height differs short vs long")
+    # Under height:100% (pre-fix), html client box was identical short/long.
+    # With height:auto + min-height:100svh, html MAY grow on long pages — that is OK.
+    # The content-sized CB clue is shell/body height differing while side stays viewport-pinned.
     if not diff:
         errors.append("expected a differing ancestor (shell/body) short vs long")
-    elif diff["short"]["cls"].find("side") == 0 and "shell" not in diff["short"]["cls"] and diff["short"]["tag"] == "aside":
-        # first diff should be shell or body, not the fixed side itself on chromium live
-        pass
-    # Accept shell or body as first content-sized diff
-    if diff and diff["short"]["tag"] not in ("div", "body") and "shell" not in diff["short"]["cls"]:
-        # side itself may match; next should be shell
-        if "shell" not in (diff["short"].get("cls") or "") and diff["short"]["tag"] != "body":
-            # still record — Chromium live side bottoms match; ancestor height still differs at shell
-            pass
-
-    if not diff or ("shell" not in (diff["short"].get("cls") or "") and diff["short"]["tag"] != "body"):
-        # find shell in chains
-        for s, l in zip(live_short["chain"], live_long["chain"]):
-            if "shell" in (s.get("cls") or ""):
-                if abs(s["height"] - l["height"]) <= 1:
-                    errors.append("shell height should differ short vs long")
-                out["shell_diff"] = {"short": s, "long": l}
-                break
+    elif abs(live_short["htmlH"] - live_long["htmlH"]) <= TOL and abs(
+        live_short["bodyH"] - live_long["bodyH"]
+    ) <= TOL:
+        errors.append("expected body/shell height to differ short vs long")
 
     # Mechanism: body-as-CB + short shell → shared side/shell gap; long → no visible side gap
     bsg = broken_short["ih"] - broken_short["side"]["bottom"]

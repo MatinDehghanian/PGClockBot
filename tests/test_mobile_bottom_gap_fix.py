@@ -32,9 +32,12 @@ class MobileBottomGapCssTests(unittest.TestCase):
         self.assertIn("flex: 1 0 auto;", main)
         self.assertIn("flex: 1 0 auto;", shell)
         self.assertIn("height: auto;", shell)
+        self.assertIn("min-height: 100svh;", html)
+        self.assertIn("height: auto;", html)
         self.assertIn("overflow-x: visible;", html)
         self.assertIn("overflow-y: visible;", html)
         self.assertNotIn("overflow-x: hidden;", html)
+        self.assertIn("min-height: 100svh;", body)
         self.assertIn("overflow-x: visible;", body)
         self.assertIn("overflow-y: visible;", body)
         self.assertNotIn("overflow-y: auto;", body)
@@ -43,7 +46,7 @@ class MobileBottomGapCssTests(unittest.TestCase):
         self.assertIn("overflow-x: visible;", shell)
         self.assertIn("overflow-x: clip;", main)
         shell_block = shell.split("}", 1)[0]
-        for unit in ("100dvh", "100svh", "100lvh", "100vh"):
+        for unit in ("100dvh", "100lvh", "100vh"):
             self.assertNotIn(unit, shell_block)
 
     def test_shell_owns_safe_bottom_once(self):

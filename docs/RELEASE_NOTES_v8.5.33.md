@@ -1,29 +1,24 @@
-# v8.5.33 — Real root cause: body as content-sized fixed CB
+# v8.5.33 — Body fixed-CB + first-paint svh fill + WebKit-safe nav clock
 
-Rolls back the failed v8.5.32 html-overflow hypothesis. Keeps document scroll (no nested `.main`).
+Rolls back failed v8.5.32. Keeps document/viewport scroll (no nested `.main`).
 
-## ROOT CAUSE
+## A) Sidebar short≠long (primary clue)
 
-**Exact element/property:** `body` with `overflow-y: auto` (explicit or via `overflow-x:hidden` axis-coupling) / `-webkit-overflow-scrolling`, while `.side` / `.side-backdrop` are descendants of `body` / `.shell`.
+**Cause:** `body { overflow-y:auto }` → content-sized fixed CB; `.side` under body/shell.  
+**Fix:** html+body+shell overflow visible; viewport scrolls; `.main { overflow-x: clip }` only.
 
-On WebKit this makes **body a content-sized fixed containing block**.
+## B) First-paint gap (tablet/Safari) — clears after scroll
 
-| | Why |
-|--|--|
-| Long / PWA normal | body/shell taller than viewport → `bottom:0` past the fold → no visible gap |
-| Short / PWA short | body/shell ≈ fill height → drawer tracks that box → **page gap + sidebar gap together** |
-| Why v8.5.32 failed | `html` height is **identical** short vs long (`height:100%`); first differing ancestors are `.shell`/`body`. v8.5.32 kept `body { overflow-y:auto }` |
+**Cause:** `html { height:100% }` + `body { min-height:100% }` fill the **layout** ICB (`innerHeight`). With chrome, `visualViewport < innerHeight` → footer below visible fold (content looks pushed up). First scroll hides chrome → vv grows → gap gone **without CSS box change**.  
+**Fix:** `min-height: 100svh` (small viewport) for html/body fill — one stable unit, not `100dvh` shell + nested scroll.
 
-## MINIMAL FIX
+## C) Nav clock missing on slow pages
 
-- `html` + `body`: `overflow-x/y: visible` (override global `overflow-x:hidden`)
-- Viewport is the only vertical scroll owner
-Horizontal clip: `.main { overflow-x: clip }` only (`.side` is a sibling — never put `overflow-x:hidden` on `.shell` or axis-coupling recreates a content-sized CB on `.shell`).
-- No `overflow:hidden` nav-open lock
-- Keep flex short-page fill + unified foot-gap/safe-bottom + `right`-based drawer
+**Cause:** CSS `animation-delay` reveal. WebKit **freezes CSS animations** when MPA navigation starts; clock stays `opacity:0` until unload. `setTimeout` **does** fire (proven).  
+**Fix:** `setTimeout(140)` anti-flicker, then show with immediate opacity; light matte background (not the deleted veil system).
 
 ## After update
 
-Hard refresh + Clear Website Data. SW: `pgclock-shell-v23`. Restore: `v8.5.31`.
+Hard refresh + Clear Website Data. SW: `pgclock-shell-v24`. Restore: `v8.5.31`.
 
-**Real iPhone still required for final confirmation** — CI uses Chromium + forced body-CB stand-in that reproduces short≠long; live CSS asserts body is not a scrollport.
+Confirm on device: short page first paint (no bottom gap), sidebar open short+long, slow nav shows clock+matte.

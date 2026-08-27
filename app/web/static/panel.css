@@ -4112,14 +4112,23 @@ form.settings-form > .actions.sticky-actions,
      Do NOT put overflow-x:hidden on .shell — axis coupling would compute
      overflow-y:auto and make the content-sized .shell a fixed CB (same bug).
      Horizontal clip lives on .main only (.side is a sibling, not a child).
-     Short pages still fill via min-height:100% + flex (no vh/--vvh). */
+     Short-page fill: min-height:100% uses the layout ICB (innerHeight). When the
+     browser chrome makes visualViewport < innerHeight (Safari/tablet first paint),
+     flex + margin-top:auto parks the footer BELOW the visible fold → gap under
+     the page / content looks pushed up. First scroll hides chrome → visualViewport
+     grows → gap “disappears” with NO CSS box change (measured). Fix: fill with
+     100svh (small viewport = chrome-visible size), not layout 100%. One stable
+     unit for min-height only — not shell height:100dvh + nested .main scroll. */
   html:has(.shell) {
-    height: 100%;
+    height: auto;
+    min-height: 100%;
+    min-height: 100svh;
     overflow-x: visible;
     overflow-y: visible;
   }
   html:has(.shell) body {
     min-height: 100%;
+    min-height: 100svh;
     display: flex;
     flex-direction: column;
     overflow-x: visible;
@@ -8486,7 +8495,7 @@ html[data-theme="light"] .home-panel-neutral .home-panel-h {
   }
 }
 
-/* —— Navigation clock (fixed; no opaque overlay / no geometry change) —— */
+/* —— Navigation clock (fixed; light matte; no geometry change) —— */
 .panel-nav-clock {
   position: fixed;
   inset: 0;
@@ -8498,26 +8507,16 @@ html[data-theme="light"] .home-panel-neutral .home-panel-h {
   padding: 0;
   border: 0;
   pointer-events: none;
-  background: transparent;
+  /* Light matte — not the deleted full-page veil/skeleton system */
+  background: color-mix(in srgb, var(--background, #09090b) 72%, transparent);
   opacity: 0;
   visibility: hidden;
 }
-/* Reveal with CSS delay — setTimeout often never paints during full navigation
-   because the document is torn down before the timer fires. Arming removes
-   [hidden] immediately; opacity stays 0 for 140ms (anti-flicker on fast nav). */
+/* Revealed by JS (setTimeout anti-flicker). Do NOT use CSS animation-delay:
+   WebKit freezes animation timelines when MPA navigation starts. */
 .panel-nav-clock:not([hidden]) {
-  animation: panel-nav-clock-show 0s linear 140ms forwards;
-}
-@keyframes panel-nav-clock-show {
-  to {
-    opacity: 1;
-    visibility: visible;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .panel-nav-clock:not([hidden]) {
-    animation-delay: 0s;
-  }
+  opacity: 1;
+  visibility: visible;
 }
 .panel-nav-clock .panel-load-clock {
   width: 3rem;
