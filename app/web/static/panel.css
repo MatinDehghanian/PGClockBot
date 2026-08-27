@@ -4087,27 +4087,34 @@ form.settings-form > .actions.sticky-actions,
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
-  /* Mobile: document is the sole vertical scroller — NOT .main.
-     Root cause (iOS nested scroll, pre-v8.5.27): height:100dvh on .shell +
-     overflow-y:auto on .main → dvh jump after first scroll.
+  /* Mobile: document scrolls in the VIEWPORT — NOT .main, and NOT body/html
+     as overflow scrollports.
 
-     Shared root cause (short-page footer gap + sidebar gap on iOS PWA/Safari):
-     Global `html { overflow-x:hidden }` + CSS overflow-axis coupling makes
-     computed `overflow-y` on html become `auto` (visible+hidden → auto).
-     WebKit then treats html as the fixed containing block. Short pages use
-     html { height:100% } + body flex fill, so BOTH .shell and position:fixed
-     .side/.backdrop pin to that html box — if it ≠ visible viewport, PAGE gap
-     and SIDEBAR gap appear together. Long pages mask it via scroll/overflow.
+     Pre-v8.5.27: height:100dvh on .shell + overflow-y:auto on .main → dvh jump.
 
-     Model: html overflow must be visible on BOTH axes (never the scrollport).
-     body alone is the vertical scrollport and owns overflow-x clipping.
-     Fixed overlays pin to the viewport. Short pages fill via body
-     min-height:100% + flex (no vh units). */
+     Real iOS short-vs-long sidebar clue (primary): sidebar gap CHANGES with page
+     content length ⇒ fixed drawer is pinned to a CONTENT-SIZED containing block,
+     not the viewport. Ancestor walk: html height is identical on short and long
+     (height:100%); FIRST differing ancestors are .shell and body (short≈100%,
+     long=content). Therefore html-overflow theories cannot explain short≠long
+     (v8.5.32 kept body overflow-y:auto and failed on device).
+
+     On WebKit, body with overflow-y:auto (explicit, or computed via
+     overflow-x:hidden axis-coupling) and/or -webkit-overflow-scrolling:touch
+     becomes that content-sized fixed CB. .side lives under body/.shell ⇒
+     bottom:0 tracks body/shell bottom:
+       long page  → CB taller than viewport → drawer extends past fold → looks OK
+       short page → CB ≈ fill height → if that box ≠ visible bottom → PAGE gap
+                    and SIDEBAR gap appear together (shared ancestor geometry).
+
+     Model: html+body overflow visible on BOTH axes (override global
+     overflow-x:hidden). Viewport is the only vertical scroll owner.
+     Do NOT put overflow-x:hidden on .shell — axis coupling would compute
+     overflow-y:auto and make the content-sized .shell a fixed CB (same bug).
+     Horizontal clip lives on .main only (.side is a sibling, not a child).
+     Short pages still fill via min-height:100% + flex (no vh/--vvh). */
   html:has(.shell) {
     height: 100%;
-    /* Override global html overflow-x:hidden on BOTH axes. Setting only
-       overflow-y:visible while overflow-x stays hidden still computes to
-       overflow-y:auto — which recreates the WebKit fixed CB. */
     overflow-x: visible;
     overflow-y: visible;
   }
@@ -4115,13 +4122,10 @@ form.settings-form > .actions.sticky-actions,
     min-height: 100%;
     display: flex;
     flex-direction: column;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow-x: visible;
+    overflow-y: visible;
   }
-  /* Drawer open: do NOT set overflow:hidden on html/body — that recreates the
-     iOS fixed containing-block gap. Block background interaction only. */
+  /* Do NOT lock via overflow:hidden on html/body — recreates a fixed CB. */
   body.nav-open {
     overscroll-behavior: none;
     touch-action: none;
@@ -4136,7 +4140,8 @@ form.settings-form > .actions.sticky-actions,
     min-height: 0;
     height: auto;
     max-height: none;
-    overflow: visible;
+    overflow-x: visible;
+    overflow-y: visible;
     padding-top: calc(var(--topbar-h) + var(--safe-top));
     padding-bottom: var(--safe-bottom);
     background: var(--background);
@@ -4157,7 +4162,10 @@ form.settings-form > .actions.sticky-actions,
     height: auto;
     max-height: none;
     z-index: 50;
-    /* No transform — WebKit fixed+transform leaves URL-bar gap in Safari. */
+    /* iOS Safari: transform on position:fixed drawers leaves a visible gap under
+       the panel when the URL bar is shown (PWA has no URL bar → looked fine).
+       Slide with `right` instead of transform so the fixed box stays pinned to
+       the visible bottom. */
     left: auto;
     right: calc(-1 * min(300px, 86vw) - 24px);
     transform: none;
@@ -4167,10 +4175,8 @@ form.settings-form > .actions.sticky-actions,
     grid-area: unset;
     display: flex !important;
     padding-top: var(--space-2);
+    /* Drawer paints to bottom:0 — bottom inset is inner (.side-foot) only */
     padding-bottom: 0;
-    /* Override desktop overflow-y:auto bleed explicitly */
-    overflow-x: hidden;
-    overflow-y: auto;
     overscroll-behavior-y: contain;
     box-sizing: border-box;
   }
@@ -4185,7 +4191,7 @@ form.settings-form > .actions.sticky-actions,
     padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));
   }
 
-  /* Backdrop shares identical vertical anchors with .side */
+  /* Backdrop shares identical vertical anchors with .side (no transform) */
   .side-backdrop,
   .side-backdrop.show {
     top: calc(var(--topbar-h) + var(--safe-top));
@@ -4201,7 +4207,9 @@ form.settings-form > .actions.sticky-actions,
     min-width: 0;
     width: 100%;
     padding: var(--page-title-gap) var(--space-2) var(--foot-gap);
-    overflow: visible;
+    /* clip-x does not couple overflow-y to auto (hidden would). .side is a sibling. */
+    overflow-x: clip;
+    overflow-y: visible;
     display: flex;
     flex-direction: column;
   }

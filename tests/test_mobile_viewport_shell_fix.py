@@ -45,9 +45,11 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertIn("overflow-x: visible;", html)
         self.assertIn("overflow-y: visible;", html)
         self.assertNotIn("overflow-x: hidden;", html)
-        self.assertIn("overflow-y: auto;", body)
-        self.assertIn("overflow-x: hidden;", body)
-        self.assertIn("overflow: visible;", main)
+        self.assertIn("overflow-x: visible;", body)
+        self.assertIn("overflow-y: visible;", body)
+        self.assertNotIn("overflow-y: auto;", body)
+        self.assertIn("overflow-x: clip;", main)
+        self.assertIn("overflow-y: visible;", main)
         self.assertNotIn("overflow-y: auto;", main)
 
     def test_sidebar_fixed_with_pointer_events_guard(self):
@@ -90,7 +92,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_service_worker_cache(self):
         pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v22", pwa)
+        self.assertIn("pgclock-shell-v23", pwa)
 
 
 if __name__ == "__main__":
