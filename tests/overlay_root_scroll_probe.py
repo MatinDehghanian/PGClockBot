@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real-browser proof for the mobile bottom-bar bug (v8.5.40).
+"""Real-browser proof for the mobile bottom-bar bug (v8.5.40, v8.5.42).
 
 Renders the REAL base.html with the REAL panel.css / panel.js in WebKit and
 Chromium and checks two things:
@@ -10,6 +10,11 @@ geometry
     end exactly on the viewport bottom, and closing the drawer restores the
     original geometry (the user's screenshot 3).
 
+    In every state it also replays Safari 26's toolbar-tint sampling: no
+    position:fixed box with its own background may touch the bottom viewport
+    edge, so Safari always falls back to the root background and can never
+    freeze the bottom bar on an overlay colour after that overlay closes.
+
 behaviour
     While the drawer or a modal is open, the ROOT SCROLLER (html/body) is never
     locked — no overflow:hidden, no touch-action:none, no overscroll-behavior:
@@ -18,8 +23,8 @@ behaviour
     state and stop repainting the strip it had covered, which is the solid bar
     that survived the drawer close.
 
-Needs playwright (not a runtime dependency):
-    pip install playwright && playwright install webkit chromium
+Needs playwright and pillow (not runtime dependencies):
+    pip install playwright pillow && playwright install webkit chromium
     python tests/overlay_root_scroll_probe.py [--json]
 """
 
@@ -27,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import http.server
+import io
 import json
 import socketserver
 import sys
@@ -34,6 +40,7 @@ import threading
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from PIL import Image, ImageChops
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -78,19 +85,19 @@ class _FakeRequest:
     class _URL:
         path = "/home"
 
-    def __init__(self, query: dict[str, str] | None = None):
+    def __init__(self):
         self.url = self._URL()
-        self.query_params = query or {}
+        self.query_params: dict[str, str] = {}
 
 
-def _render(body: str, query: dict[str, str] | None = None) -> str:
+def _render(body: str) -> str:
     env = Environment(
         loader=FileSystemLoader(str(TEMPLATES)), autoescape=select_autoescape(["html"])
     )
     staff = {"username": "admin", "role": "admin", "permissions": [], "pg_permissions": PG_PERMS}
     staff["get"] = staff.copy().get  # base.html calls staff.get(...)
     return env.from_string(_CHILD.replace("__BODY__", body)).render(
-        request=_FakeRequest(query),
+        request=_FakeRequest(),
         staff=staff,
         identity={
             "kind": "owner",
@@ -113,7 +120,7 @@ def _render(body: str, query: dict[str, str] | None = None) -> str:
     )
 
 
-_PAGES: dict[tuple[str, bool], bytes] = {}
+_PAGES: dict[str, bytes] = {}
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -133,11 +140,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if name not in BODIES:
             self.send_error(404)
             return
-        query = {} if "vp=" not in self.path else {"vp": "1"}
-        key = (name, bool(query))
-        if key not in _PAGES:
-            _PAGES[key] = _render(BODIES[name], query).encode("utf-8")
-        self._send(_PAGES[key], "text/html; charset=utf-8")
+        if name not in _PAGES:
+            _PAGES[name] = _render(BODIES[name]).encode("utf-8")
+        self._send(_PAGES[name], "text/html; charset=utf-8")
 
     def _send(self, data: bytes, ctype: str) -> None:
         self.send_response(200)
@@ -152,7 +157,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
 def _serve() -> None:
     for name, body in BODIES.items():
-        _PAGES[(name, False)] = _render(body).encode("utf-8")
+        _PAGES[name] = _render(body).encode("utf-8")
     socketserver.TCPServer.allow_reuse_address = True
     httpd = socketserver.TCPServer(("127.0.0.1", PORT), _Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -194,9 +199,42 @@ _MEASURE = r"""
     const b = el.getBoundingClientRect();
     return { top: +b.top.toFixed(1), bottom: +b.bottom.toFixed(1), height: +b.height.toFixed(1) };
   };
+  /* Safari 26+ picks the colour of its own toolbars from position:fixed /
+     position:sticky boxes that touch a viewport edge, and it does not
+     re-sample when such a box disappears. Reproduce its published rules
+     (within 4px of the top or 3px of the bottom, >=80% of the viewport width,
+     >=3px tall, own background-color or backdrop-filter) so a background that
+     would freeze the bottom bar on an overlay colour fails here. */
+  const tintSources = (edge) => {
+    const vw = document.documentElement.clientWidth;
+    const vh = window.innerHeight;
+    const out = [];
+    for (const el of document.querySelectorAll('*')) {
+      const cs = getComputedStyle(el);
+      if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
+      const bg = cs.backgroundColor;
+      const blur = cs.backdropFilter || cs.webkitBackdropFilter || 'none';
+      const paints = (bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') || blur !== 'none';
+      if (!paints) continue;
+      const b = el.getBoundingClientRect();
+      /* Width that actually overlaps the viewport: the closed drawer is parked
+         off-screen, so it covers no edge pixel and cannot be sampled. */
+      const covered = Math.min(b.right, vw) - Math.max(b.left, 0);
+      if (covered < vw * 0.8 || b.height < 3) continue;
+      const near = edge === 'bottom' ? Math.abs(b.bottom - vh) <= 3 : Math.abs(b.top) <= 4;
+      if (!near) continue;
+      const cls = String(el.className || '').trim().split(/\s+/).filter(Boolean);
+      out.push({ el: el.tagName.toLowerCase() + cls.map((c) => '.' + c).join(''), bg: bg, blur: blur });
+    }
+    return out;
+  };
   const de = document.documentElement;
   const side = document.querySelector('.side');
   return {
+    tintTop: tintSources('top'),
+    tintBottom: tintSources('bottom'),
+    rootBg: getComputedStyle(de).backgroundColor,
+    dim: getComputedStyle(document.querySelector('.side-backdrop'), '::before').backgroundColor,
     innerH: window.innerHeight,
     scrollY: +window.scrollY.toFixed(1),
     docScrollW: de.scrollWidth,
@@ -224,6 +262,19 @@ def _check_geometry(
     if m["docScrollW"] > m["docClientW"] + TOL:
         bad.append(f"h_overflow={m['docScrollW'] - m['docClientW']}")
 
+    # Nothing may hand Safari a bottom-bar colour: with no candidate it keeps
+    # falling back to the (opaque) root background, so the bar reads as page in
+    # every drawer state and has no overlay colour left to get stuck on.
+    if m["tintBottom"]:
+        bad.append(f"bottom_bar_tint_source={m['tintBottom']}")
+    if m["rootBg"] in ("transparent", "rgba(0, 0, 0, 0)"):
+        bad.append("root_background_transparent")
+    # Only the opaque topbar tints the status bar, and only on mobile where it
+    # is the fixed top chrome.
+    tops = [t["el"] for t in m["tintTop"]]
+    if tops != (["header.topbar.mobile-only"] if mobile else []):
+        bad.append(f"status_bar_tint_sources={tops}")
+
     if state in ("closed", "reclosed"):
         # "reclosed" is the user's screenshot 3: after the drawer closes the
         # shell must fill the viewport again, with no leftover strip.
@@ -244,6 +295,8 @@ def _check_geometry(
             bad.append(f"footer_gap_at_bottom={round(vh - m['footer']['bottom'], 1)}")
 
     if state == "open" and mobile:
+        if m["dim"] in ("transparent", "rgba(0, 0, 0, 0)"):
+            bad.append("drawer_dim_missing")
         side, back = m["side"], m["backdrop"]
         if side["bottom"] < vh - TOL:
             bad.append(f"side_short_by={round(vh - side['bottom'], 1)}")
@@ -354,6 +407,22 @@ def _touch_pan(page, x: int, y: int, dy: int, steps: int = 10) -> None:
     cdp.detach()
 
 
+def _worst_pixel_delta(a: bytes, b: bytes) -> int:
+    """Largest per-channel difference between two screenshots.
+
+    Text re-rasterisation moves single channels by 1 between identical layouts,
+    so exact byte equality is too strict; anything a viewer could notice (a
+    leftover dim, a moved edge) is far above that noise floor.
+    """
+    if a == b:
+        return 0
+    ia = Image.open(io.BytesIO(a)).convert("RGB")
+    ib = Image.open(io.BytesIO(b)).convert("RGB")
+    if ia.size != ib.size:
+        return 255
+    return max(hi for _lo, hi in ImageChops.difference(ia, ib).getextrema())
+
+
 def _settle_at_top(page) -> None:
     """Let any fling from a previous pan die out, then pin the page at the top."""
     page.wait_for_timeout(900)
@@ -376,6 +445,19 @@ def run_behaviour(browser, engine: str) -> list[str]:
     page.goto(f"http://127.0.0.1:{PORT}/long", wait_until="load")
     page.wait_for_timeout(150)
     check("document is the scroller", page.evaluate(_LOCK_STATE)["rootScrollable"])
+
+    # The user's report: after the drawer closes the page must look exactly like
+    # it did before it opened — no dim, no leftover strip. Wait out the page
+    # title's entry animation first, or the baseline shot is a mid-animation
+    # frame.
+    page.wait_for_timeout(700)
+    before = page.screenshot()
+    page.click("#menu-toggle")
+    page.wait_for_timeout(340)
+    page.click("#menu-toggle")
+    page.wait_for_timeout(340)
+    worst = _worst_pixel_delta(before, page.screenshot())
+    check("close restores the pre-open pixels", worst <= 2, f"delta={worst}")
 
     page.click("#menu-toggle")
     page.wait_for_timeout(340)

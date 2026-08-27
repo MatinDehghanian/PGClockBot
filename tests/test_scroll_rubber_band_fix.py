@@ -54,10 +54,9 @@ class PageScrollContainerTests(unittest.TestCase):
         """The root scroller must stay scrollable while any overlay is open.
 
         Blocking it (overflow:hidden / touch-action:none / overscroll:none on
-        html or body) makes iOS Safari snap its bottom toolbar to the expanded
-        state and stop painting the strip the toolbar covered — the solid bar
-        that survived the overlay close, because Safari only retracts again on a
-        real page scroll. Background touches are contained by the overlays.
+        html or body) keeps iOS Safari's bottom toolbar expanded and stops it
+        compositing page pixels behind the toolbar, so the strip it covers reads
+        as a solid bar. Background touches are contained by the overlays.
         """
         css = self.css
         self.assertNotIn("html:has(body.nav-open)", css)

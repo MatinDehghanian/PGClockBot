@@ -30,7 +30,8 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertIn("flex: 1 0 auto;", shell)
         self.assertIn("padding-bottom: 0;", side)
         self.assertNotIn("transform: translateX", side)
-        self.assertIn("right: calc(-1 * min(300px, 86vw) - 24px);", side)
+        self.assertIn("right: calc(-1 * var(--drawer-w) - 24px);", side)
+        self.assertIn("width: var(--drawer-w);", side)
         foot = mobile.split(".side .side-foot", 1)[1][:320]
         self.assertIn("padding-bottom: var(--bottom-inset);", foot)
         self.assertIn("max-height: calc(var(--footer-bar-h) + var(--bottom-inset));", foot)
@@ -111,7 +112,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_sw_fallback_ignores_query_for_panel_assets(self):
         sw = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v31", sw)
+        self.assertIn("pgclock-shell-v32", sw)
         self.assertIn("matchIgnoreSearch", sw)
         self.assertIn("isVersionedPanelAsset", sw)
 
