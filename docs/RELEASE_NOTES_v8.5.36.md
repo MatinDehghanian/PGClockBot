@@ -1,20 +1,30 @@
-# v8.5.36 — Instant sidebar close + backdrop parity (no vh ping-pong)
+# v8.5.36 — Liquid Glass paint band + instant sidebar close
 
 ## Keep (v8.5.34)
 
-Footer inset unity, immediate nav clock, document scroll, no `--vvh`, no `fill-available` after `100svh`.
+Footer inset unity, immediate nav clock, document scroll.
+`min-height` chain ends with `100svh`. No `--vvh` / `visualViewport` sizing.
+No `100svh` / `100dvh` / `100lvh` ping-pong.
 
-## Explicitly NOT in this release
+## New approach (not the old cycles)
 
-Another `100svh` / `100dvh` / `100lvh` geometry swap for the short-page gap.
-That cycle moved the bug for dozens of releases and is rejected here.
+The leftover “footer too high / solid band under sidebar” on iOS Safari was
+**not** fixed by another viewport-height guess. Those cycles failed for many
+releases (`vh` swaps, measured `--vvh`, 3px fade + heavy blur).
 
-## Fixes
+**Root cause:** Safari 26 samples opaque paint near the bottom of the layout
+viewport and tints browser chrome solid. Geometry stayed correct; the band was
+sampled chrome.
 
-1. **Browser backdrop too matte vs PWA** — removed ios-safari-only blur; same dim as PWA.
-2. **PWA: sidebar stayed open during loading** — close in capture **before** nav clock, with transition disabled for that close.
-3. **ios-safari glass sampling** — transparent shell + closed drawer `height: 0` (no opaque fixed paint at the bottom edge when closed).
+**Fix (`html.ios-safari` only):** keep `bottom:0` / `100svh` geometry. Stop
+opaque fill on `.main` and open `.side` above `--safe-bottom` (full home-
+indicator band). Collapse closed drawer to `height:0`. Backdrop uses the same
+dim as PWA, no `backdrop-filter`, and clears paint through `--safe-bottom`
+while the box stays `bottom:0`.
 
-Short-page / open-drawer gap remaining on device → next step is a minimal fixed-drawer repro on the same iPhone, not another viewport unit.
+## Also in this release
+
+1. Instant sidebar close before nav clock (Safari and PWA)
+2. PWA-matching backdrop dim (no extra browser blur)
 
 SW: `pgclock-shell-v27`. Restore: `v8.5.34`.
