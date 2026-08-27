@@ -4088,34 +4088,41 @@ form.settings-form > .actions.sticky-actions,
   .topbar.mobile-only { display: flex !important; }
 
   /* Mobile: document is the sole vertical scroller — NOT .main.
-     Root cause (iOS): height:100dvh on .shell + overflow-y:auto on .main nested
-     scroll. dvh matches layout viewport on first paint (taller than visual viewport
-     with URL bar); first scroll recalculates dvh → shell shrinks → bottom gap jumps.
-     Fix: normal document flow — shell height:auto (no vh/dvh/svh); .main overflow:visible;
-     short pages fill via % min-height + flex (footer margin-top:auto); safe-bottom on
-     .shell only; foot-gap on .main only. */
+     Root cause (iOS nested scroll, pre-v8.5.27): height:100dvh on .shell +
+     overflow-y:auto on .main → dvh jump after first scroll.
+
+     Shared root cause (short-page footer gap + sidebar gap on iOS PWA/Safari):
+     Global `html { overflow-x:hidden }` + CSS overflow-axis coupling makes
+     computed `overflow-y` on html become `auto` (visible+hidden → auto).
+     WebKit then treats html as the fixed containing block. Short pages use
+     html { height:100% } + body flex fill, so BOTH .shell and position:fixed
+     .side/.backdrop pin to that html box — if it ≠ visible viewport, PAGE gap
+     and SIDEBAR gap appear together. Long pages mask it via scroll/overflow.
+
+     Model: html overflow must be visible on BOTH axes (never the scrollport).
+     body alone is the vertical scrollport and owns overflow-x clipping.
+     Fixed overlays pin to the viewport. Short pages fill via body
+     min-height:100% + flex (no vh units). */
   html:has(.shell) {
     height: 100%;
-  }
-  html:has(.shell),
-  html:has(.shell) body {
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior-y: auto;
-    -webkit-overflow-scrolling: touch;
+    /* Override global html overflow-x:hidden on BOTH axes. Setting only
+       overflow-y:visible while overflow-x stays hidden still computes to
+       overflow-y:auto — which recreates the WebKit fixed CB. */
+    overflow-x: visible;
+    overflow-y: visible;
   }
   html:has(.shell) body {
     min-height: 100%;
     display: flex;
     flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
-  /* iOS: overflow:hidden on body shrinks the fixed containing block and leaves a
-     gap under position:fixed drawer/backdrop. Lock scroll on html instead. */
-  html:has(body.nav-open) {
-    overflow: hidden;
-  }
+  /* Drawer open: do NOT set overflow:hidden on html/body — that recreates the
+     iOS fixed containing-block gap. Block background interaction only. */
   body.nav-open {
-    overflow: visible;
     overscroll-behavior: none;
     touch-action: none;
   }
@@ -4150,10 +4157,7 @@ form.settings-form > .actions.sticky-actions,
     height: auto;
     max-height: none;
     z-index: 50;
-    /* iOS Safari: transform on position:fixed drawers leaves a visible gap under
-       the panel when the URL bar is shown (PWA has no URL bar → looked fine).
-       Slide with `right` instead of transform so the fixed box stays pinned to
-       the visible bottom. */
+    /* No transform — WebKit fixed+transform leaves URL-bar gap in Safari. */
     left: auto;
     right: calc(-1 * min(300px, 86vw) - 24px);
     transform: none;
@@ -4163,8 +4167,10 @@ form.settings-form > .actions.sticky-actions,
     grid-area: unset;
     display: flex !important;
     padding-top: var(--space-2);
-    /* Drawer paints to bottom:0 — bottom inset is inner (.side-foot) only */
     padding-bottom: 0;
+    /* Override desktop overflow-y:auto bleed explicitly */
+    overflow-x: hidden;
+    overflow-y: auto;
     overscroll-behavior-y: contain;
     box-sizing: border-box;
   }
@@ -4179,7 +4185,7 @@ form.settings-form > .actions.sticky-actions,
     padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));
   }
 
-  /* Backdrop shares identical vertical anchors with .side (no transform) */
+  /* Backdrop shares identical vertical anchors with .side */
   .side-backdrop,
   .side-backdrop.show {
     top: calc(var(--topbar-h) + var(--safe-top));

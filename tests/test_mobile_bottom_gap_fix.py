@@ -24,12 +24,18 @@ class MobileBottomGapCssTests(unittest.TestCase):
         main = mobile.split("  .main {", 1)[1].split("  .main-body", 1)[0]
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
         footer = mobile.split("  .site-footer {", 1)[1].split("  .footer-meta", 1)[0]
-        body = mobile.split("html:has(.shell) body {\n    min-height: 100%;", 1)[1].split("}", 1)[0]
+        body = mobile.split("html:has(.shell) body {\n", 1)[1].split("}", 1)[0]
+        html = mobile.split("html:has(.shell) {\n", 1)[1].split("}", 1)[0]
         self.assertIn("overflow: visible;", main)
         self.assertNotIn("overflow-y: auto;", main)
         self.assertIn("flex: 1 0 auto;", main)
         self.assertIn("flex: 1 0 auto;", shell)
         self.assertIn("height: auto;", shell)
+        self.assertIn("overflow-x: visible;", html)
+        self.assertIn("overflow-y: visible;", html)
+        self.assertNotIn("overflow-x: hidden;", html)
+        self.assertIn("overflow-y: auto;", body)
+        self.assertIn("overflow-x: hidden;", body)
         self.assertIn("display: flex;", body)
         self.assertIn("margin-top: auto;", footer)
         shell_block = shell.split("}", 1)[0]

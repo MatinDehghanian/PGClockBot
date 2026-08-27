@@ -24,8 +24,13 @@ class PageScrollContainerTests(unittest.TestCase):
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         shell = mobile.split(".shell {\n", 1)[1].split("}", 1)[0]
         main = mobile.split("  .main {\n", 1)[1].split("}", 1)[0]
-        doc = mobile.split("html:has(.shell)", 1)[1].split(".shell {", 1)[0]
-        self.assertIn("overflow-y: auto;", doc)
+        html = mobile.split("html:has(.shell) {\n", 1)[1].split("}", 1)[0]
+        body = mobile.split("html:has(.shell) body {\n", 1)[1].split("}", 1)[0]
+        self.assertIn("overflow-x: visible;", html)
+        self.assertIn("overflow-y: visible;", html)
+        self.assertNotIn("overflow-x: hidden;", html)
+        self.assertIn("overflow-y: auto;", body)
+        self.assertIn("overflow-x: hidden;", body)
         self.assertIn("overflow: visible;", shell)
         self.assertNotIn("overflow: hidden;", shell)
         self.assertIn("height: auto;", shell)
@@ -37,14 +42,13 @@ class PageScrollContainerTests(unittest.TestCase):
         self.assertIn("overflow: visible;", main)
         self.assertNotIn("overflow-y: auto;", main)
 
-    def test_nav_open_locks_document_scroll(self):
+    def test_nav_open_does_not_lock_html_overflow(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
-        self.assertIn("html:has(body.nav-open)", mobile)
-        self.assertIn("overflow: hidden;", mobile.split("html:has(body.nav-open)", 1)[1][:80])
-        # Must NOT lock overflow on body — iOS fixed containing-block gap
+        self.assertNotIn("html:has(body.nav-open)", mobile)
         body_nav = mobile.split("body.nav-open {", 1)[1].split("}", 1)[0]
         self.assertNotIn("overflow: hidden;", body_nav)
+        self.assertIn("touch-action: none;", body_nav)
         self.assertNotIn("body.nav-open .main", mobile)
 
 
