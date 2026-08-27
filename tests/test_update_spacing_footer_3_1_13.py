@@ -68,7 +68,7 @@ class TitleGapParityTests(unittest.TestCase):
     def test_bot_title_above_and_below_use_same_token(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-4) calc(var(--foot-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-4) var(--bottom-inset);",
             css,
         )
         head = css.split(".page-head {\n", 1)[1].split("}", 1)[0]
@@ -85,7 +85,7 @@ class FooterBaselineTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         site = css.split(".site-footer {\n", 1)[1].split("}", 1)[0]
         side = css.split(".side-foot {\n", 1)[1].split("}", 1)[0]
-        shared = "min-height: calc(var(--page-title-gap) + 28px + var(--space-1));"
+        shared = "min-height: var(--footer-bar-h);"
         self.assertIn(shared, site)
         self.assertIn(shared, side)
         self.assertIn("padding-top: var(--page-title-gap);", site)
@@ -98,13 +98,17 @@ class FooterBaselineTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) var(--foot-gap);",
+            "padding: var(--page-title-gap) var(--space-2) 0;",
             mobile,
         )
-        self.assertIn("padding-bottom: var(--safe-bottom);", mobile.split(".shell {", 1)[1])
+        self.assertIn("padding-bottom: 0;", mobile.split(".shell {", 1)[1].split(".topbar",1)[0])
         self.assertIn(
-            "padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));",
-            mobile.split(".side {", 1)[1],
+            "padding-bottom: var(--bottom-inset);",
+            mobile.split(".side .side-foot", 1)[1][:200],
+        )
+        self.assertIn(
+            "padding-bottom: var(--bottom-inset);",
+            mobile.split("  .site-footer {", 1)[1][:240],
         )
 
     def test_main_body_footer_gap_matches_page_title_gap(self):

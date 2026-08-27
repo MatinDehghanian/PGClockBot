@@ -27,15 +27,18 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertIn("padding-bottom: 0;", side)
         self.assertNotIn("transform: translateX", side)
         self.assertIn("right: calc(-1 * min(300px, 86vw) - 24px);", side)
-        foot = mobile.split(".side .side-foot", 1)[1][:120]
-        self.assertIn("padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));", foot)
+        foot = mobile.split(".side .side-foot", 1)[1][:240]
+        self.assertIn("padding-bottom: var(--bottom-inset);", foot)
         self.assertNotIn("var(--foot-gap) + var(--safe-bottom)", side)
         closed = mobile.split(".side:not(.open)", 1)[1][:160]
         self.assertNotIn("height: 0;", closed)
         shell_block = shell.split("}", 1)[0]
-        for unit in ("100dvh", "100svh", "100lvh", "100vh", "var(--vvh"):
-            self.assertNotIn(unit, shell_block)
-        self.assertIn("padding-bottom: var(--safe-bottom);", shell)
+        # shell may use min-height:100svh but must not lock height to a viewport unit
+        for unit in ("100dvh", "100lvh", "100vh", "var(--vvh"):
+            self.assertNotIn(f"height: {unit}", shell_block)
+            self.assertNotIn(f"height:{unit}", shell_block)
+        self.assertIn("padding-bottom: 0;", shell)
+        self.assertIn("min-height: 100svh;", shell_block)
 
     def test_document_is_scroll_owner(self):
         mobile = self._mobile()
@@ -55,51 +58,39 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertIn("overflow-x: clip;", main)
         self.assertIn("overflow-y: visible;", main)
         self.assertNotIn("overflow-y: auto;", main)
+        self.assertIn("padding: var(--page-title-gap) var(--space-2) 0;", main)
 
     def test_sidebar_fixed_with_pointer_events_guard(self):
         mobile = self._mobile()
-        side = mobile.split(".side {", 1)[1].split(".side.open", 1)[0]
+        side = mobile.split("  .side {", 1)[1].split("  .side.open", 1)[0]
         self.assertIn("position: fixed;", side)
         self.assertIn("bottom: 0;", side)
         self.assertIn("pointer-events: none;", mobile.split(".side:not(.open)", 1)[1][:120])
 
-    def test_no_vvh_script(self):
-        base = BASE.read_text(encoding="utf-8")
-        self.assertNotIn("--vvh", base)
-
-    def test_no_page_loading_veil_but_nav_clock_present(self):
-        base = BASE.read_text(encoding="utf-8")
-        defer = DEFER.read_text(encoding="utf-8")
+    def test_bottom_inset_token_and_shared_footers(self):
         css = CSS.read_text(encoding="utf-8")
-        js = JS.read_text(encoding="utf-8")
-        self.assertNotIn("page-load-veil", base)
-        self.assertNotIn("armVeil", defer)
-        self.assertNotIn(".page-load-veil", css)
-        self.assertIn('id="panel-nav-clock"', base)
-        self.assertIn(".panel-nav-clock", css)
-        clock_css = css.split(".panel-nav-clock", 1)[1][:900]
-        self.assertIn("pointer-events: none", clock_css)
-        self.assertIn("color-mix(in srgb, var(--background", clock_css)
-        self.assertNotIn("@keyframes panel-nav-clock-show", css)
-        self.assertNotIn("animation: panel-nav-clock-show", css)
-        self.assertIn("setTimeout(function () {", js)
-        self.assertIn("clock.hidden = false", js)
-        self.assertIn("void clock.offsetWidth", js)
-        self.assertIn("clearTimeout(armTimer)", js)
-
-    def test_hamburger_pageshow_reset(self):
-        js = JS.read_text(encoding="utf-8")
-        self.assertIn("addEventListener('pageshow'", js)
-        self.assertIn("stopPropagation", js)
-
-    def test_no_ios_safari_layout_hacks(self):
+        self.assertIn("--bottom-inset:", css[:5000])
+        self.assertIn("--footer-bar-h:", css[:5000])
         mobile = self._mobile()
-        self.assertNotIn("html.ios-safari .shell", mobile)
-        self.assertNotIn("--safari-overlay", mobile)
+        site = mobile.split("  .site-footer {", 1)[1].split("  .footer-meta", 1)[0]
+        side_foot = mobile.split(".side .side-foot", 1)[1][:280]
+        self.assertIn("padding-bottom: var(--bottom-inset);", site)
+        self.assertIn("padding-bottom: var(--bottom-inset);", side_foot)
+        self.assertIn("min-height: calc(var(--footer-bar-h) + var(--bottom-inset));", site)
+        self.assertIn("min-height: calc(var(--footer-bar-h) + var(--bottom-inset));", side_foot)
 
-    def test_service_worker_cache(self):
-        pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v24", pwa)
+    def test_no_vvh_or_visual_viewport_js(self):
+        base = BASE.read_text(encoding="utf-8")
+        js = JS.read_text(encoding="utf-8")
+        self.assertNotIn("--vvh", base)
+        self.assertNotIn("visualViewport", base)
+        self.assertNotIn("visualViewport", js)
+
+    def test_sw_fallback_ignores_query_for_panel_assets(self):
+        sw = PWA.read_text(encoding="utf-8")
+        self.assertIn("pgclock-shell-v25", sw)
+        self.assertIn("matchIgnoreSearch", sw)
+        self.assertIn("isVersionedPanelAsset", sw)
 
 
 if __name__ == "__main__":

@@ -30,24 +30,25 @@ class FooterRestore303Tests(unittest.TestCase):
         self.assertNotIn("padding-bottom: var(--chrome-pad-bottom)", css)
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertNotIn("--chrome-pad", mobile)
-        # Desktop .main: foot-gap + safe-bottom; mobile splits safe-bottom to .shell
+        # Desktop .main keeps --bottom-inset; mobile moves it onto both footers
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-4) calc(var(--foot-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-4) var(--bottom-inset);",
             css,
         )
         mobile = css.split("@media (max-width: 900px)", 1)[1]
-        self.assertIn("padding-bottom: var(--safe-bottom);", mobile.split(".shell {", 1)[1])
+        self.assertIn("padding-bottom: 0;", mobile.split(".shell {", 1)[1].split(".topbar",1)[0])
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) var(--foot-gap);",
+            "padding: var(--page-title-gap) var(--space-2) 0;",
             mobile,
         )
+        self.assertIn("padding-bottom: var(--bottom-inset);", mobile.split("  .site-footer {", 1)[1][:240])
 
     def test_side_scrolls_as_a_column(self):
         css = CSS.read_text(encoding="utf-8")
         side = css.split(".side {\n", 1)[1].split(".main {", 1)[0]
         self.assertIn("overflow-y: auto;", side)
         self.assertIn(
-            "padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));",
+            "padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) var(--bottom-inset);",
             side,
         )
         self.assertNotIn("padding-bottom: var(--chrome-pad-bottom)", css)

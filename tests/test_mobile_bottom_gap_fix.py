@@ -33,11 +33,13 @@ class MobileBottomGapCssTests(unittest.TestCase):
         self.assertIn("flex: 1 0 auto;", shell)
         self.assertIn("height: auto;", shell)
         self.assertIn("min-height: 100svh;", html)
+        self.assertIn("min-height: -webkit-fill-available;", html)
         self.assertIn("height: auto;", html)
         self.assertIn("overflow-x: visible;", html)
         self.assertIn("overflow-y: visible;", html)
         self.assertNotIn("overflow-x: hidden;", html)
         self.assertIn("min-height: 100svh;", body)
+        self.assertIn("min-height: -webkit-fill-available;", body)
         self.assertIn("overflow-x: visible;", body)
         self.assertIn("overflow-y: visible;", body)
         self.assertNotIn("overflow-y: auto;", body)
@@ -54,10 +56,14 @@ class MobileBottomGapCssTests(unittest.TestCase):
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
         main = mobile.split("  .main {", 1)[1].split("  .main-body", 1)[0]
         side = mobile.split("  .side {", 1)[1].split("  .side.open", 1)[0]
-        self.assertIn("padding-bottom: var(--safe-bottom);", shell)
-        self.assertIn("padding: var(--page-title-gap) var(--space-2) var(--foot-gap);", main)
-        self.assertNotIn("calc(var(--foot-gap) + var(--safe-bottom))", main)
+        foot = mobile.split("  .site-footer {", 1)[1].split("  .footer-meta", 1)[0]
+        self.assertIn("padding-bottom: 0;", shell)
+        # Bottom inset is owned by both footers — NOT by .main (that split separators).
+        self.assertIn("padding: var(--page-title-gap) var(--space-2) 0;", main)
+        self.assertIn("padding-bottom: var(--bottom-inset);", foot)
+        self.assertIn("padding-bottom: var(--bottom-inset);", mobile.split(".side .side-foot", 1)[1][:200])
         self.assertIn("padding-bottom: 0;", side)
+        self.assertIn("min-height: -webkit-fill-available;", shell)
 
     def test_no_viewport_js_hacks(self):
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")

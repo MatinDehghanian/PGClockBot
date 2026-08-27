@@ -26,7 +26,7 @@ class MobileSideFullHeightTests(unittest.TestCase):
         self.assertIn("bottom: 0;", side)
         self.assertNotIn("transform: translateX", side)
         foot = mobile.split(".side .side-foot", 1)[1][:160]
-        self.assertIn("padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));", foot)
+        self.assertIn("padding-bottom: var(--bottom-inset);", foot)
 
 
 if __name__ == "__main__":

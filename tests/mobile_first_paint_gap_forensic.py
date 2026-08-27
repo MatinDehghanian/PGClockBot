@@ -101,6 +101,7 @@ def main() -> None:
           @media (max-width: 900px) {{
             html:has(.shell) {{ height: auto !important; min-height: {VISUAL}px !important; }}
             html:has(.shell) body {{ min-height: {VISUAL}px !important; }}
+            .shell {{ min-height: {VISUAL}px !important; height: auto !important; }}
           }}
         """
         )

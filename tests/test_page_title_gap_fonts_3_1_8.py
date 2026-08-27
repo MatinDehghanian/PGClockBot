@@ -23,7 +23,7 @@ class PageTitleGapParityTests(unittest.TestCase):
     def test_main_top_matches_page_head_bottom(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-4) calc(var(--foot-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-4) var(--bottom-inset);",
             css,
         )
         self.assertIn(".page-head {\n  display: flex;", css)
@@ -44,10 +44,10 @@ class PageTitleGapParityTests(unittest.TestCase):
         self.assertIn("margin-bottom: var(--page-title-gap);", head)
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) var(--foot-gap);",
+            "padding: var(--page-title-gap) var(--space-2) 0;",
             mobile,
         )
-        self.assertIn("padding-bottom: var(--safe-bottom);", mobile.split(".shell {", 1)[1])
+        self.assertIn("padding-bottom: 0;", mobile.split(".shell {", 1)[1].split(".topbar",1)[0])
         self.assertIn(".page-head { margin-bottom: var(--page-title-gap);", mobile)
 
     def test_pg_pages_use_plain_page_head_like_bot(self):
