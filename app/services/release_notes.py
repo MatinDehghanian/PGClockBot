@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.35": [
+        "حفظ v8.5.34: هم‌ترازی فوتر، ساعت nav فوری، اسکرول document (جمع شدن نوار مرورگر)",
+        "iOS Safari Liquid Glass: تشخیص ios-safari؛ shell شفاف؛ کشوی بسته height:0؛ backdrop شیشه‌ای؛ لبه بدون نمونه‌برداری مات Safari 26",
+        "بدون تغییر مسیر --bottom-inset و بدون --vvh و بدون fill-available بعد از 100svh",
+        "SW v26؛ ریستور: v8.5.34",
+    ],
     "8.5.34": [
         "ریشه از اسکرین واقعی: گپ سیاه زیر صفحه+سایدبار و ناهم‌ترازی خط فوترها — دو مسیر inset و fill کوتاه‌تر از viewport",
         "یک مسیر inset: --bottom-inset و --footer-bar-h روی .site-footer و .side-foot؛ .main بدون padding پایین؛ .shell بدون safe خالی",
