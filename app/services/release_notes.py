@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.37": [
+        "ریشه واقعی نوار سالید: قانون تم روشن background:#fff روی .side بعد از فیکس Liquid Glass می‌آمد و آن را می‌کشت — الان فیکس بعد از تم روشن است و برای Safari+PWA",
+        "کشوی باز: رنگ کارت فقط تا بالای --bottom-inset (via ::before)؛ باند پایین واقعاً شفاف",
+        "backdrop یکسان Safari=PWA (rgba 0.55، بدون blur/gradient مخصوص)؛ دیگر زیر ستون سایدبار dim نمی‌شود (نوار خاکستری undershoot)",
+        "حفظ هندسه v8.5.34 و بستن فوری سایدبار؛ SW v28؛ ریستور: v8.5.34",
+    ],
     "8.5.36": [
         "حفظ هندسه v8.5.34 — بدون svh/dvh/lvh ping-pong و بدون --vvh/visualViewport",
         "ریشه نوار سالید Safari 26: نمونه‌برداری از رنگ opaque لبه‌ی پایین — قطع رنگ تا --safe-bottom روی .main و کشوی باز (بدون blur و بدون عوض کردن ارتفاع)",

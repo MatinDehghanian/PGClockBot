@@ -4208,28 +4208,19 @@ form.settings-form > .actions.sticky-actions,
   .side-backdrop.show {
     top: calc(var(--topbar-h) + var(--safe-top));
     bottom: 0;
+    /* Dim ONLY the main column — never the drawer gutter.
+       An undershooting drawer used to reveal this dim as a solid grey bar
+       under the sidebar; leaving the gutter undimmed shows glass/page instead. */
+    left: 0;
+    right: min(300px, 86vw);
     transform: none;
   }
 
   /*
-    Safari in-browser (html.ios-safari) — v8.5.36
-    KEEP v8.5.34 geometry: document scroll, --bottom-inset footer unity, nav clock,
-    100svh last, no measured viewport-height JS vars, no svh/dvh/lvh ping-pong.
-    Do NOT raise .side / .site-footer bottoms (that re-splits separators).
-
-    Root cause of the “dead/solid band” (not another viewport-height bug):
-    Safari 26 Liquid Glass samples opaque paint near the bottom edge of the
-    layout viewport and tints the browser chrome solid. Prior attempts failed by
-    (a) swapping vh units, (b) measuring visual viewport into a CSS var, or
-    (c) a 3px fade + heavy blur.
-
-    New paint model (geometry unchanged):
-      • html/body/shell stay transparent so chrome can be glass.
-      • Opaque fill on .main / open .side stops ABOVE --safe-bottom (full home-
-        indicator band — not a 3px trickle). Box size and bottom:0 stay put.
-      • Closed .side collapses to height:0 (off-screen fixed paint was sampled).
-      • Open backdrop keeps the same dim as PWA — no backdrop-filter — and ends
-        above --safe-bottom so it does not re-introduce an opaque slab.
+    Safari in-browser chrome sampling (html.ios-safari) — keep shell transparent
+    and collapse the closed drawer so off-screen fixed paint is not sampled.
+    Open-drawer opaque slab + backdrop parity are handled AFTER the light-theme
+    .side { background } rule (search “iOS drawer glass”) — cascade order matters.
   */
   html.ios-safari,
   html.ios-safari body {
@@ -4237,14 +4228,6 @@ form.settings-form > .actions.sticky-actions,
   }
   html.ios-safari .shell {
     background: transparent;
-  }
-  /* Opaque page fill without painting into the safe-bottom sampling band */
-  html.ios-safari .main {
-    background-color: transparent;
-    background-image: linear-gradient(var(--background), var(--background));
-    background-repeat: no-repeat;
-    background-position: top left;
-    background-size: 100% calc(100% - var(--safe-bottom));
   }
   html.ios-safari .side:not(.open) {
     top: auto;
@@ -4255,36 +4238,6 @@ form.settings-form > .actions.sticky-actions,
     border: 0 !important;
     overflow: hidden;
     visibility: hidden;
-  }
-  html.ios-safari .side.open {
-    background-color: transparent;
-    background-image: linear-gradient(var(--bg-card), var(--bg-card));
-    background-repeat: no-repeat;
-    background-position: top left;
-    background-size: 100% calc(100% - var(--safe-bottom));
-  }
-  html.ios-safari .side-backdrop,
-  html.ios-safari .side-backdrop.show {
-    /* Keep bottom:0 (same box as .side) — clear paint in the safe band only. */
-    bottom: 0;
-    background-color: transparent;
-    background-image: linear-gradient(
-      to bottom,
-      rgba(0, 0, 0, 0.55),
-      rgba(0, 0, 0, 0.55) calc(100% - var(--safe-bottom)),
-      transparent calc(100% - var(--safe-bottom))
-    );
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-  html.ios-safari[data-theme="light"] .side-backdrop,
-  html.ios-safari[data-theme="light"] .side-backdrop.show {
-    background-image: linear-gradient(
-      to bottom,
-      rgba(0, 0, 0, 0.55),
-      rgba(0, 0, 0, 0.55) calc(100% - var(--safe-bottom)),
-      transparent calc(100% - var(--safe-bottom))
-    );
   }
   /* Instant close on navigation — disable slide so PWA paints closed before unload */
   html.ios .side.side-nav-closing {
@@ -6363,6 +6316,59 @@ html[data-theme="light"] .side,
 html[data-theme="light"] .topbar {
   background: #ffffff;
 }
+
+/*
+  iOS drawer glass (Safari + PWA) — MUST sit AFTER the light-theme .side
+  background rule. Equal-specificity earlier rules (v8.5.36) lost the cascade
+  so light theme kept a solid white slab through --bottom-inset forever.
+*/
+@media (max-width: 900px) {
+  /*
+    Opaque card fill via ::before that STOPS above --bottom-inset.
+    The inset padding band stays truly transparent (glass / page shows through).
+    Applies to html.ios — both ios-safari and ios-standalone (PWA).
+  */
+  html.ios .side.open {
+    background: transparent !important;
+    isolation: isolate;
+  }
+  html.ios .side.open::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    bottom: var(--bottom-inset);
+    background: var(--bg-card);
+    z-index: -1;
+    pointer-events: none;
+  }
+  html.ios[data-theme="light"] .side.open::before {
+    background: #ffffff;
+  }
+
+  /* Same dim everywhere — no ios-safari-only gradient/blur overrides */
+  html.ios .side-backdrop,
+  html.ios .side-backdrop.show {
+    background: rgba(0, 0, 0, 0.55) !important;
+    background-image: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  /* Short-page main fill: no opaque paint in the bottom inset band (PWA+Safari) */
+  html.ios .main {
+    background-color: transparent !important;
+    background-image: linear-gradient(var(--background), var(--background));
+    background-repeat: no-repeat;
+    background-position: top left;
+    background-size: 100% calc(100% - var(--bottom-inset));
+  }
+  html.ios[data-theme="light"] .main {
+    background-image: linear-gradient(#fafafa, #fafafa);
+  }
+}
+
 html[data-theme="light"] .stat,
 html[data-theme="light"] .card,
 html[data-theme="light"] .ui-switch-row,
