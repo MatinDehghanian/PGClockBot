@@ -13,12 +13,28 @@
   <script>
   (function () {
     try {
+      var d = document.documentElement;
+      /* iOS Safari (in-browser) vs PWA — needed for Liquid Glass sampling rules.
+         Keeps v8.5.34 document-scroll model (no dynamic viewport height vars). */
+      var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      var isStandalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+        !!window.navigator.standalone;
+      if (isIOS) {
+        d.classList.add("ios");
+        d.classList.add(isStandalone ? "ios-standalone" : "ios-safari");
+      }
       var pref = localStorage.getItem("panel-theme") || "system";
       var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
       var theme = pref === "light" ? "light" : pref === "dark" ? "dark" : dark ? "dark" : "light";
-      document.documentElement.setAttribute("data-theme", theme);
+      d.setAttribute("data-theme", theme);
       var meta = document.getElementById("meta-theme-color");
-      if (meta) meta.setAttribute("content", theme === "light" ? "#fafafa" : "#09090b");
+      if (meta) {
+        /* Safari 26 samples opaque fixed paint for toolbar tint — theme-color is
+           ignored there. Keep transparent in ios-safari so chrome stays glass. */
+        if (d.classList.contains("ios-safari")) meta.setAttribute("content", "transparent");
+        else meta.setAttribute("content", theme === "light" ? "#fafafa" : "#09090b");
+      }
     } catch (e) {}
   })();
   </script>

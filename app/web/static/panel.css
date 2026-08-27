@@ -4211,6 +4211,55 @@ form.settings-form > .actions.sticky-actions,
     transform: none;
   }
 
+  /*
+    Safari 26 Liquid Glass (in-browser only — html.ios-safari).
+    KEEP v8.5.34: document scroll, footer --bottom-inset unity, nav clock, no --vvh.
+    Do NOT raise .side/.site-footer bottoms — that re-splits separators.
+    Do NOT put -webkit-fill-available after 100svh (Chromium → stretch collapse).
+
+    Safari samples opaque position:fixed paint within ~3px of the viewport bottom
+    and tints the URL/tab bar solid. Open drawer + opaque backdrop forced that slab.
+    Closed off-screen .side still spanned top→bottom with opaque bg.
+  */
+  html.ios-safari,
+  html.ios-safari body {
+    background: transparent;
+  }
+  html.ios-safari .shell {
+    background: transparent;
+  }
+  html.ios-safari .main {
+    background: var(--background);
+  }
+  html.ios-safari .side:not(.open) {
+    top: auto;
+    bottom: auto;
+    height: 0 !important;
+    max-height: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    overflow: hidden;
+    visibility: hidden;
+  }
+  /* Keep bottom:0 geometry (footer align). Fade/mask the last pixels so Safari
+     does not sample an opaque edge for the toolbar tint. */
+  html.ios-safari .side.open {
+    background-color: transparent;
+    background-image: linear-gradient(var(--bg-card), var(--bg-card));
+    background-repeat: no-repeat;
+    background-size: 100% calc(100% - 3px);
+  }
+  html.ios-safari .side-backdrop.show {
+    background: rgba(0, 0, 0, 0.28);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 4px), transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 4px), transparent 100%);
+  }
+  html.ios-safari[data-theme="light"] .side-backdrop.show {
+    background: rgba(0, 0, 0, 0.18);
+  }
+
   .main {
     height: auto;
     max-height: none;
