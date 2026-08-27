@@ -30,10 +30,16 @@ window.__mobileScrollMeasure = function (step) {
   var htmlOverflowY = cs(docEl, 'overflow-y');
   var shellHeight = cs(shell, 'height');
   var shellMinHeight = cs(shell, 'min-height');
-  var footerGap = footerR && mainR ? mainR.bottom - footerR.bottom : null;
+  var footPad = parseFloat(cs(footer, 'padding-bottom') || '0');
+  var footerContentBottom = footerR ? footerR.bottom - footPad : null;
+  /* Content-bottom → main bottom == --bottom-inset (padding lives ON the footer). */
+  var footerGap = footerContentBottom != null && mainR ? mainR.bottom - footerContentBottom : null;
+  var footerBoxGap = footerR && mainR ? mainR.bottom - footerR.bottom : null;
   var footerToShell = footerR && shellR ? shellR.bottom - footerR.bottom : null;
   var shellToVisual = shellR ? visualBottom - shellR.bottom : null;
-  var blankBelowFooter = footerR && shellR ? shellR.bottom - footerR.bottom - parseFloat(cs(shell, 'padding-bottom') || '0') : null;
+  var blankBelowFooter = footerContentBottom != null && shellR
+    ? shellR.bottom - footerContentBottom - parseFloat(cs(shell, 'padding-bottom') || '0')
+    : null;
   var mainIsScroller = ['auto', 'scroll'].includes(mainOverflowY);
   /* Viewport document scroll: body/html overflow may be visible (not auto). */
   var documentScrolls = !mainIsScroller && (
@@ -73,10 +79,16 @@ window.__mobileScrollMeasure = function (step) {
       paddingBottom: cs(main, 'padding-bottom'),
     },
     mainBody: { rect: rect(mainBody) },
-    footer: { rect: footerR, paddingTop: cs(footer, 'padding-top') },
+    footer: {
+      rect: footerR,
+      paddingTop: cs(footer, 'padding-top'),
+      paddingBottom: cs(footer, 'padding-bottom'),
+      contentBottom: footerContentBottom,
+    },
     lastContent: { rect: lastR },
     gaps: {
       footer_to_mainBottom: footerGap,
+      footer_box_to_mainBottom: footerBoxGap,
       mainBottom_to_shellBottom: mainR && shellR ? shellR.bottom - mainR.bottom : null,
       footer_to_shellBottom: footerToShell,
       shellBottom_to_visualViewportBottom: shellToVisual,

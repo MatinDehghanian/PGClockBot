@@ -58,9 +58,12 @@ def measure(page) -> dict:
         sideBottom: r(side).bottom,
         backBottom: r(back).bottom,
         sideFootContentBottom: sfR ? sfR.bottom - sfPad : null,
+        footerPad: parseFloat(cs(footer,'padding-bottom')||0),
+        footerContentBottom: r(footer).bottom - parseFloat(cs(footer,'padding-bottom')||0),
         gaps: {
           shell_to_ih: ih - r(shell).bottom,
-          footer_to_ih: ih - r(footer).bottom,
+          footer_content_to_ih: ih - (r(footer).bottom - parseFloat(cs(footer,'padding-bottom')||0)),
+          footer_box_to_ih: ih - r(footer).bottom,
           side_to_ih: ih - r(side).bottom,
           back_to_ih: ih - r(back).bottom,
           side_vs_back: Math.abs(r(side).bottom - r(back).bottom),
@@ -146,12 +149,14 @@ def main() -> None:
 
     if abs(short_closed["gaps"]["shell_to_ih"]) > TOL:
         errors.append(f"short: shell_to_ih={short_closed['gaps']['shell_to_ih']}")
-    if abs(short_closed["gaps"]["footer_to_ih"] - EXPECTED) > TOL:
-        errors.append(f"short footer inset {short_closed['gaps']['footer_to_ih']} != {EXPECTED}")
-    if abs(long_bottom["gaps"]["footer_to_ih"] - EXPECTED) > TOL:
-        errors.append(f"long footer inset {long_bottom['gaps']['footer_to_ih']} != {EXPECTED}")
-    if abs(short_closed["gaps"]["footer_to_ih"] - long_bottom["gaps"]["footer_to_ih"]) > TOL:
+    if abs(short_closed["gaps"]["footer_content_to_ih"] - EXPECTED) > TOL:
+        errors.append(f"short footer inset {short_closed['gaps']['footer_content_to_ih']} != {EXPECTED}")
+    if abs(long_bottom["gaps"]["footer_content_to_ih"] - EXPECTED) > TOL:
+        errors.append(f"long footer inset {long_bottom['gaps']['footer_content_to_ih']} != {EXPECTED}")
+    if abs(short_closed["gaps"]["footer_content_to_ih"] - long_bottom["gaps"]["footer_content_to_ih"]) > TOL:
         errors.append("short/long footer inset mismatch")
+    if abs(short_closed["gaps"]["footer_box_to_ih"]) > TOL:
+        errors.append(f"short: footer box must reach layout bottom ({short_closed['gaps']['footer_box_to_ih']})")
 
     for label, snap in (("short_open", short_open), ("long_open", long_open), ("short_stressed", short_stressed)):
         if not snap["navOpen"]:

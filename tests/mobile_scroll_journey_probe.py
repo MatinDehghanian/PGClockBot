@@ -22,6 +22,13 @@ SAFE_BOTTOM = 34.0
 TOL = 2.0
 
 
+def parse_px(val: str) -> float:
+    try:
+        return float(str(val).replace("px", "").strip() or 0)
+    except ValueError:
+        return -1.0
+
+
 def stub_visual_viewport(page, visual_h: int) -> None:
     page.evaluate(
         """(visualH) => {
@@ -116,18 +123,28 @@ def assert_journey(name: str, steps: dict[str, dict], is_long: bool) -> list[str
 
     gap_before = first["gaps"]["footer_to_mainBottom"]
     gap_after = after_scroll["gaps"]["footer_to_mainBottom"]
-    if gap_before is not None and abs(gap_before - FOOT_GAP) > TOL:
-        errors.append(f"{name}: footer→main gap on load {gap_before} != {FOOT_GAP}")
-    if gap_after is not None and abs(gap_after - FOOT_GAP) > TOL:
-        errors.append(f"{name}: footer→main gap after scroll {gap_after} != {FOOT_GAP}")
+    bottom_inset = FOOT_GAP + SAFE_BOTTOM
+    if gap_before is not None and abs(gap_before - bottom_inset) > TOL:
+        errors.append(f"{name}: footer→main gap on load {gap_before} != {bottom_inset}")
+    if gap_after is not None and abs(gap_after - bottom_inset) > TOL:
+        errors.append(f"{name}: footer→main gap after scroll {gap_after} != {bottom_inset}")
 
     blank = first["gaps"]["blankBelowFooterInsideShell"]
-    if blank is not None and blank > FOOT_GAP + TOL:
-        errors.append(f"{name}: artificial blank below footer on load: {blank}px")
+    if blank is not None and abs(blank - bottom_inset) > TOL:
+        errors.append(f"{name}: blank below footer content on load {blank} != {bottom_inset}")
+
+    box_gap = first["gaps"].get("footer_box_to_mainBottom")
+    if box_gap is not None and abs(box_gap) > TOL:
+        errors.append(f"{name}: footer box must meet main bottom (gap={box_gap})")
+
+    main_pb = parse_px(first["main"].get("paddingBottom") or "0")
+    if abs(main_pb) > TOL:
+        errors.append(f"{name}: .main must not own bottom inset (padBottom={main_pb})")
 
     main_shell = first["gaps"]["mainBottom_to_shellBottom"]
-    if main_shell is not None and abs(main_shell - SAFE_BOTTOM) > TOL:
-        errors.append(f"{name}: main→shell gap {main_shell} != safe-bottom {SAFE_BOTTOM}")
+    # shell no longer has safe-bottom padding — main meets shell bottom
+    if main_shell is not None and abs(main_shell) > TOL:
+        errors.append(f"{name}: main→shell gap {main_shell} != 0 (safe moved into --bottom-inset)")
 
     if is_long:
         if at_bottom["docScrollTop"] <= 0:

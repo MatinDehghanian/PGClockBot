@@ -277,7 +277,7 @@ def build_manifest(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def service_worker_js() -> str:
     return """/* PGClockBot panel service worker — static shell only */
-const CACHE = 'pgclock-shell-v24';
+const CACHE = 'pgclock-shell-v25';
 const PRECACHE = [
   '/static/logo.png',
   '/static/logo-64.png',
@@ -291,8 +291,8 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  /* Skip taking over open pages — mid-load takeover aborts in-flight
-     CSS/font requests on iOS Safari (blank/unstyled panel). */
+  /* Do NOT clients.claim() here — mid-load takeover aborts in-flight CSS/font
+     requests on iOS Safari (blank/unstyled panel). */
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
@@ -307,6 +307,25 @@ function isVersionedPanelAsset(url) {
     || url.pathname.indexOf('/static/fonts/') === 0;
 }
 
+/* When network fails for ?v=8.5.xx URLs, fall back to any cached same-pathname
+   asset so the panel is never left unstyled/unscripted. */
+function matchIgnoreSearch(req) {
+  return caches.open(CACHE).then((cache) =>
+    cache.match(req).then((hit) => {
+      if (hit) return hit;
+      return cache.keys().then((keys) => {
+        const want = new URL(req.url).pathname;
+        for (const k of keys) {
+          try {
+            if (new URL(k.url).pathname === want) return cache.match(k);
+          } catch (e) {}
+        }
+        return undefined;
+      });
+    })
+  );
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
@@ -314,8 +333,6 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   if (!url.pathname.startsWith('/static/') && !url.pathname.startsWith('/pwa/')) return;
 
-  /* Network-first for versioned panel + fonts — cache-first kept stale
-     broken CSS/JS and could cache a failed font response. Only store ok. */
   if (isVersionedPanelAsset(url)) {
     event.respondWith(
       fetch(req).then((res) => {
@@ -324,7 +341,7 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE).then((c) => c.put(req, copy));
         }
         return res;
-      }).catch(() => caches.match(req))
+      }).catch(() => matchIgnoreSearch(req))
     );
     return;
   }

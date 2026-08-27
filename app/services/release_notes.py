@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.34": [
+        "ریشه از اسکرین واقعی: گپ سیاه زیر صفحه+سایدبار و ناهم‌ترازی خط فوترها — دو مسیر inset و fill کوتاه‌تر از viewport",
+        "یک مسیر inset: --bottom-inset و --footer-bar-h روی .site-footer و .side-foot؛ .main بدون padding پایین؛ .shell بدون safe خالی",
+        "fill: min-height 100% → -webkit-fill-available → 100svh (آخر)؛ بدون fixed/sticky footer و بدون --vvh",
+        "ساعت navigation: نمایش فوری روی arm؛ SW v25: fallback CSS/font با نادیده‌گرفتن ?v= تا صفحه unstyled نماند",
+        "ریستور: v8.5.33",
+    ],
     "8.5.33": [
         "موبایل — ریشه واقعی gap سایدبار short≠long: body با overflow-y:auto containing-block وابسته به ارتفاع محتوا؛ .side داخل body/.shell",
         "رد v8.5.32: ارتفاع html در short/long یکسان؛ body همچنان overflow-y:auto بود",

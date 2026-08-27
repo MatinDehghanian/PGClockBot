@@ -29,30 +29,19 @@
     });
 
     /* Lightweight nav clock — fixed, pointer-events:none, no layout reflow.
-       WebKit freezes CSS animation timelines when an MPA navigation starts, so a
-       CSS animation-delay reveal never becomes visible on slow navigations
-       (proven: tests/nav_clock_webkit_mpa_proof.py). setTimeout DOES fire during
-       the outgoing-page wait — use it for the 140ms anti-flicker, then show with
-       immediate opacity (no CSS delay). */
+       Show IMMEDIATELY on arm (no CSS animation-delay — WebKit freezes it during
+       MPA nav; no setTimeout delay — slow navigations often unload before 140ms
+       if the click→nav path is busy). Fast-nav flicker is preferable to never
+       painting. Matte is CSS on .panel-nav-clock. */
     (function () {
       const clock = document.getElementById('panel-nav-clock');
       if (!clock) return;
-      let armTimer = null;
       function arm() {
-        if (armTimer != null) clearTimeout(armTimer);
-        armTimer = setTimeout(function () {
-          armTimer = null;
-          clock.hidden = false;
-          clock.setAttribute('aria-hidden', 'false');
-          /* Force a layout pass so WebKit commits the visible state. */
-          void clock.offsetWidth;
-        }, 140);
+        clock.hidden = false;
+        clock.setAttribute('aria-hidden', 'false');
+        void clock.offsetWidth;
       }
       function disarm() {
-        if (armTimer != null) {
-          clearTimeout(armTimer);
-          armTimer = null;
-        }
         clock.hidden = true;
         clock.setAttribute('aria-hidden', 'true');
       }

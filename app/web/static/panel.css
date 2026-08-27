@@ -79,6 +79,11 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
+  /* ONE bottom inset for main footer + sidebar footer (never double-stack) */
+  --bottom-inset: calc(var(--foot-gap) + var(--safe-bottom));
+  /* Content band above --bottom-inset (padding-top + 28px control row + gap).
+     Both .site-footer and .side-foot use this so separator lines share one Y. */
+  --footer-bar-h: calc(var(--page-title-gap) + 28px + var(--space-1));
   /* Single UI typeface — no secondary families in the web panel */
   --font: "Vazirmatn", sans-serif;
 
@@ -198,7 +203,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   -webkit-overflow-scrolling: touch;
   background: var(--bg-card);
   border-left: 1px solid var(--border);
-  padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) calc(var(--foot-gap) + var(--safe-bottom));
+  padding: calc(var(--space-2) + var(--safe-top)) var(--space-2) var(--bottom-inset);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -211,7 +216,7 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   height: 100%;
   max-height: 100dvh;
   /* Top chrome: --page-title-gap. Bottom chrome: --foot-gap (same as .side). */
-  padding: var(--page-title-gap) var(--space-4) calc(var(--foot-gap) + var(--safe-bottom));
+  padding: var(--page-title-gap) var(--space-4) var(--bottom-inset);
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
@@ -567,8 +572,8 @@ a.cell-user-link:hover {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-1);
-  /* Shared with .site-footer so both tops sit on one baseline */
-  min-height: calc(var(--page-title-gap) + 28px + var(--space-1));
+  /* Shared with .site-footer so both separator tops sit on one baseline */
+  min-height: var(--footer-bar-h);
   box-sizing: border-box;
 }
 .side-foot-user {
@@ -2760,8 +2765,8 @@ code.env-fname {
   font-size: 12px;
   line-height: 1.25;
   flex: 0 0 auto;
-  /* Match .side-foot baseline height so both footer tops sit on one line */
-  min-height: calc(var(--page-title-gap) + 28px + var(--space-1));
+  /* Match .side-foot baseline height so both separator tops sit on one line */
+  min-height: var(--footer-bar-h);
   box-sizing: border-box;
 }
 .site-footer a { color: var(--muted-fg); text-decoration: none; }
@@ -4087,54 +4092,47 @@ form.settings-form > .actions.sticky-actions,
   .desk-only { display: none !important; }
   .topbar.mobile-only { display: flex !important; }
 
-  /* Mobile: document scrolls in the VIEWPORT — NOT .main, and NOT body/html
-     as overflow scrollports.
+  /*
+    FINAL mobile geometry (v8.5.34) — one model, no parallel hacks.
 
-     Pre-v8.5.27: height:100dvh on .shell + overflow-y:auto on .main → dvh jump.
+    Screenshot proof on v8.5.33: shell AND fixed sidebar ended ABOVE the visible
+    bottom, and main footer separator sat HIGHER than side-foot separator.
+    Root causes:
+      1) Fill height < visible viewport (min-height:0 on .shell; empty safe pad on
+         .shell looked like a black gap; fill-available AFTER 100svh collapses to
+         stretch in Chromium).
+      2) Two inset paths: .main {padding-bottom:inset} vs .side-foot {padding-bottom:inset}
+         with unequal content-box heights → separators at different Y.
 
-     Real iOS short-vs-long sidebar clue (primary): sidebar gap CHANGES with page
-     content length ⇒ fixed drawer is pinned to a CONTENT-SIZED containing block,
-     not the viewport. Ancestor walk: html height is identical on short and long
-     (height:100%); FIRST differing ancestors are .shell and body (short≈100%,
-     long=content). Therefore html-overflow theories cannot explain short≠long
-     (v8.5.32 kept body overflow-y:auto and failed on device).
-
-     On WebKit, body with overflow-y:auto (explicit, or computed via
-     overflow-x:hidden axis-coupling) and/or -webkit-overflow-scrolling:touch
-     becomes that content-sized fixed CB. .side lives under body/.shell ⇒
-     bottom:0 tracks body/shell bottom:
-       long page  → CB taller than viewport → drawer extends past fold → looks OK
-       short page → CB ≈ fill height → if that box ≠ visible bottom → PAGE gap
-                    and SIDEBAR gap appear together (shared ancestor geometry).
-
-     Model: html+body overflow visible on BOTH axes (override global
-     overflow-x:hidden). Viewport is the only vertical scroll owner.
-     Do NOT put overflow-x:hidden on .shell — axis coupling would compute
-     overflow-y:auto and make the content-sized .shell a fixed CB (same bug).
-     Horizontal clip lives on .main only (.side is a sibling, not a child).
-     Short-page fill: min-height:100% uses the layout ICB (innerHeight). When the
-     browser chrome makes visualViewport < innerHeight (Safari/tablet first paint),
-     flex + margin-top:auto parks the footer BELOW the visible fold → gap under
-     the page / content looks pushed up. First scroll hides chrome → visualViewport
-     grows → gap “disappears” with NO CSS box change (measured). Fix: fill with
-     100svh (small viewport = chrome-visible size), not layout 100%. One stable
-     unit for min-height only — not shell height:100dvh + nested .main scroll. */
+    Invariants:
+      A) html/body/shell min-height fills the visible viewport (100svh last).
+      B) ONE inset owner: both footers use padding-bottom:var(--bottom-inset) and
+         min-height: calc(var(--footer-bar-h) + var(--bottom-inset)). .main has NO
+         bottom inset. Separators share one Y; content-bottom → viewport-bottom
+         == --bottom-inset on every page and in the open sidebar.
+      C) Document/viewport scrolls; .main is NOT a vertical scroller.
+      D) Fixed .side pins to the viewport (html/body/shell never create a scrollport CB).
+  */
   html:has(.shell) {
     height: auto;
+    /* Order matters: -webkit-fill-available computes to stretch and MUST NOT
+       override 100svh on engines that support both (Chromium → content-sized shell).
+       Old iOS without svh keeps fill-available; modern iOS/Safari uses 100svh. */
     min-height: 100%;
+    min-height: -webkit-fill-available;
     min-height: 100svh;
     overflow-x: visible;
     overflow-y: visible;
   }
   html:has(.shell) body {
     min-height: 100%;
+    min-height: -webkit-fill-available;
     min-height: 100svh;
     display: flex;
     flex-direction: column;
     overflow-x: visible;
     overflow-y: visible;
   }
-  /* Do NOT lock via overflow:hidden on html/body — recreates a fixed CB. */
   body.nav-open {
     overscroll-behavior: none;
     touch-action: none;
@@ -4146,13 +4144,19 @@ form.settings-form > .actions.sticky-actions,
     grid-template-columns: none;
     grid-template-areas: none;
     flex: 1 0 auto;
-    min-height: 0;
+    /* Must fill the visible viewport on short pages — min-height:0 prevented that.
+       100svh MUST be last (see html/body comment). */
+    min-height: 100%;
+    min-height: -webkit-fill-available;
+    min-height: 100svh;
     height: auto;
     max-height: none;
     overflow-x: visible;
     overflow-y: visible;
     padding-top: calc(var(--topbar-h) + var(--safe-top));
-    padding-bottom: var(--safe-bottom);
+    /* No padding-bottom safe-area here — that empty strip WAS the visible bottom gap.
+       Safe-area lives inside --bottom-inset on the footers only. */
+    padding-bottom: 0;
     background: var(--background);
   }
 
@@ -4171,10 +4175,6 @@ form.settings-form > .actions.sticky-actions,
     height: auto;
     max-height: none;
     z-index: 50;
-    /* iOS Safari: transform on position:fixed drawers leaves a visible gap under
-       the panel when the URL bar is shown (PWA has no URL bar → looked fine).
-       Slide with `right` instead of transform so the fixed box stays pinned to
-       the visible bottom. */
     left: auto;
     right: calc(-1 * min(300px, 86vw) - 24px);
     transform: none;
@@ -4183,11 +4183,14 @@ form.settings-form > .actions.sticky-actions,
     border-top: 1px solid var(--border);
     grid-area: unset;
     display: flex !important;
+    flex-direction: column;
     padding-top: var(--space-2);
-    /* Drawer paints to bottom:0 — bottom inset is inner (.side-foot) only */
     padding-bottom: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
     overscroll-behavior-y: contain;
     box-sizing: border-box;
+    background: var(--bg-card);
   }
   .side.open {
     right: 0;
@@ -4195,12 +4198,12 @@ form.settings-form > .actions.sticky-actions,
   .side:not(.open) {
     pointer-events: none;
   }
-  /* Match main footer inset: FOOTER → foot-gap → safe-bottom → viewport */
+  /* SAME inset path as .site-footer — separators share one baseline */
   .side .side-foot {
-    padding-bottom: calc(var(--foot-gap) + var(--safe-bottom));
+    padding-bottom: var(--bottom-inset);
+    min-height: calc(var(--footer-bar-h) + var(--bottom-inset));
   }
 
-  /* Backdrop shares identical vertical anchors with .side (no transform) */
   .side-backdrop,
   .side-backdrop.show {
     top: calc(var(--topbar-h) + var(--safe-top));
@@ -4215,8 +4218,8 @@ form.settings-form > .actions.sticky-actions,
     min-height: 0;
     min-width: 0;
     width: 100%;
-    padding: var(--page-title-gap) var(--space-2) var(--foot-gap);
-    /* clip-x does not couple overflow-y to auto (hidden would). .side is a sibling. */
+    /* Bottom inset lives on .site-footer only — never here (that split separators). */
+    padding: var(--page-title-gap) var(--space-2) 0;
     overflow-x: clip;
     overflow-y: visible;
     display: flex;
@@ -4224,7 +4227,6 @@ form.settings-form > .actions.sticky-actions,
   }
   .main-body { flex: 0 0 auto; padding-bottom: var(--page-title-gap); }
   .site-footer {
-    /* Keep one row like .side-foot so both footer tops sit on the same line */
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
@@ -4232,8 +4234,9 @@ form.settings-form > .actions.sticky-actions,
     text-align: center;
     margin-top: auto;
     padding-top: var(--page-title-gap);
+    padding-bottom: var(--bottom-inset);
     gap: var(--space-1);
-    min-height: calc(var(--page-title-gap) + 28px + var(--space-1));
+    min-height: calc(var(--footer-bar-h) + var(--bottom-inset));
   }
   .footer-meta { justify-content: center; }
   .footer-actions { justify-content: center; }
@@ -8512,8 +8515,9 @@ html[data-theme="light"] .home-panel-neutral .home-panel-h {
   opacity: 0;
   visibility: hidden;
 }
-/* Revealed by JS (setTimeout anti-flicker). Do NOT use CSS animation-delay:
-   WebKit freezes animation timelines when MPA navigation starts. */
+/* Revealed immediately by JS removing [hidden]. Do NOT use CSS animation-delay:
+   WebKit freezes animation timelines when MPA navigation starts. Do NOT delay
+   with setTimeout — slow navigations unload before the timer fires. */
 .panel-nav-clock:not([hidden]) {
   opacity: 1;
   visibility: visible;

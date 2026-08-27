@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Footer inset unity + sidebar anchors + nav-clock state transitions."""
+"""Footer inset unity + sidebar anchors + nav-clock state transitions.
+
+Geometry contract (v8.5.34):
+  - One inset path: both .site-footer and .side-foot use padding-bottom =
+    --bottom-inset (foot-gap + safe-bottom) and shared --footer-bar-h.
+  - Separator tops (border-top / rect.top) align when sidebar is open.
+  - Content-bottom → layout bottom == --bottom-inset for both footers.
+  - Shell fills the viewport on short pages; .main is not a vertical scroller.
+  - Nav clock arms immediately (no CSS delay / no setTimeout race).
+"""
 from __future__ import annotations
 
 import json
@@ -41,6 +50,8 @@ def measure(page) -> dict:
       const shellR = r(shell); const footR = r(footer); const mainR = r(main);
       const sideR = r(side); const backR = r(back); const sfR = sideFoot ? r(sideFoot) : null;
       const layoutBottom = window.innerHeight;
+      const footPad = parseFloat(cs(footer,'padding-bottom')||0);
+      const sfPad = sideFoot ? parseFloat(cs(sideFoot,'padding-bottom')||0) : 0;
       return {{
         innerHeight: layoutBottom,
         maxScroll: Math.max(0, document.documentElement.scrollHeight - document.documentElement.clientHeight),
@@ -48,7 +59,12 @@ def measure(page) -> dict:
         mainOverflow: cs(main,'overflow-y'),
         shell: {{rect: shellR, padBottom: cs(shell,'padding-bottom')}},
         main: {{rect: mainR, padBottom: cs(main,'padding-bottom'), transform: cs(main,'transform')}},
-        footer: {{rect: footR, marginTop: cs(footer,'margin-top')}},
+        footer: {{
+          rect: footR,
+          marginTop: cs(footer,'margin-top'),
+          padBottom: cs(footer,'padding-bottom'),
+          contentBottom: footR.bottom - footPad,
+        }},
         last: {{rect: last ? r(last) : null}},
         side: {{
           rect: sideR,
@@ -68,17 +84,17 @@ def measure(page) -> dict:
         sideFoot: sfR ? {{
           rect: sfR,
           padBottom: cs(sideFoot,'padding-bottom'),
+          contentBottom: sfR.bottom - sfPad,
         }} : null,
         gaps: {{
-          footer_to_layout: layoutBottom - footR.bottom,
+          footer_content_to_layout: layoutBottom - (footR.bottom - footPad),
+          footer_box_to_layout: layoutBottom - footR.bottom,
           footer_to_shell: shellR.bottom - footR.bottom,
-          below_footer_inside_shell: shellR.bottom - footR.bottom - parseFloat(cs(shell,'padding-bottom')||0),
           shell_to_layout: layoutBottom - shellR.bottom,
           side_to_layout: layoutBottom - sideR.bottom,
           backdrop_to_layout: layoutBottom - backR.bottom,
           side_vs_backdrop: Math.abs(sideR.bottom - backR.bottom),
-          sideFoot_to_sideBottom: sfR ? (sideR.bottom - sfR.bottom) : null,
-          sideFoot_to_layout: sfR ? (layoutBottom - sfR.bottom) : null,
+          sideFoot_content_to_layout: sfR ? (layoutBottom - (sfR.bottom - sfPad)) : null,
           expected_footer_inset: FOOT_GAP + SAFE_BOTTOM,
         }},
       }};
@@ -120,7 +136,6 @@ def main() -> None:
         long_open = measure(page)
         page.close()
 
-        # Nav clock state machine on a fixture page with injected clock + panel.js logic proxy
         page = browser.new_page(viewport=VIEWPORT, device_scale_factor=3)
         page.goto(SHORT.resolve().as_uri(), wait_until="networkidle")
         page.add_style_tag(path=str(ROOT / "app/web/static/panel.css"))
@@ -136,19 +151,12 @@ def main() -> None:
             el.innerHTML = '<span class="panel-load-clock"><span class="panel-load-clock-face"><span class="panel-load-clock-hand panel-load-clock-hour"></span><span class="panel-load-clock-hand panel-load-clock-minute"></span><span class="panel-load-clock-hub"></span></span></span>';
             document.body.appendChild(el);
           }
-          // Mirror production arm: setTimeout 140ms then show with immediate opacity
-          let armTimer = null;
           window.__armNavClock = () => {
-            if (armTimer != null) clearTimeout(armTimer);
-            armTimer = setTimeout(() => {
-              armTimer = null;
-              el.hidden = false;
-              el.setAttribute('aria-hidden','false');
-              void el.offsetWidth;
-            }, 140);
+            el.hidden = false;
+            el.setAttribute('aria-hidden','false');
+            void el.offsetWidth;
           };
           window.__disarmNavClock = () => {
-            if (armTimer != null) { clearTimeout(armTimer); armTimer = null; }
             el.hidden = true;
             el.setAttribute('aria-hidden','true');
           };
@@ -171,8 +179,6 @@ def main() -> None:
         s0 = page.evaluate("() => window.__clockState()")
         page.evaluate("() => window.__armNavClock()")
         s_armed = page.evaluate("() => window.__clockState()")
-        page.wait_for_timeout(160)
-        s_visible = page.evaluate("() => window.__clockState()")
         page.evaluate("() => window.__disarmNavClock()")
         s_disarmed = page.evaluate("() => window.__clockState()")
         page.close()
@@ -185,30 +191,41 @@ def main() -> None:
     out["long_open"] = long_open
     out["nav_clock"] = {
         "initial": s0,
-        "armed_pending": s_armed,
-        "after_delay": s_visible,
+        "armed": s_armed,
         "disarmed": s_disarmed,
     }
 
     expected = FOOT_GAP + SAFE_BOTTOM
 
-    # A) Footer: short closed + long at bottom share same layout inset
-    short_inset = short_closed["gaps"]["footer_to_layout"]
-    long_inset = long_bottom["gaps"]["footer_to_layout"]
+    # A) Content-bottom inset is constant (short closed + long at bottom)
+    short_inset = short_closed["gaps"]["footer_content_to_layout"]
+    long_inset = long_bottom["gaps"]["footer_content_to_layout"]
     if abs(short_inset - expected) > TOL:
-        errors.append(f"short footer inset {short_inset} != {expected}")
+        errors.append(f"short footer content inset {short_inset} != {expected}")
     if abs(long_inset - expected) > TOL:
-        errors.append(f"long footer inset {long_inset} != {expected}")
+        errors.append(f"long footer content inset {long_inset} != {expected}")
     if abs(short_inset - long_inset) > TOL:
         errors.append(f"short/long footer inset mismatch {short_inset} vs {long_inset}")
-    if abs(short_closed["gaps"]["below_footer_inside_shell"] - FOOT_GAP) > TOL:
-        errors.append("short: blank below footer inside shell != foot-gap")
+
+    main_pb = parse_px(short_closed["main"]["padBottom"])
+    if abs(main_pb) > TOL:
+        errors.append(f"short: .main must not own bottom inset (padBottom={main_pb})")
+    foot_pb = parse_px(short_closed["footer"]["padBottom"])
+    if abs(foot_pb - expected) > TOL:
+        errors.append(f"short: site-footer padBottom {foot_pb} != {expected}")
+    if abs(short_closed["gaps"]["footer_box_to_layout"]) > TOL:
+        errors.append(
+            f"short: site-footer box must reach layout bottom "
+            f"(gap={short_closed['gaps']['footer_box_to_layout']})"
+        )
     if short_closed["mainIsScroller"] or long_bottom["mainIsScroller"]:
         errors.append(".main must not be vertical scroller")
     if abs(short_closed["gaps"]["shell_to_layout"]) > TOL:
         errors.append("short: shell must fill viewport (no blank under footer)")
+    if parse_px(short_closed["shell"]["padBottom"]) > TOL:
+        errors.append("short: shell padding-bottom must be 0 (no empty safe strip)")
 
-    # Sidebar open: drawer+backdrop to layout bottom; foot inset matches main footer
+    # Sidebar open: drawer+backdrop to layout bottom; separators + content inset match
     for label, snap in (("short_open", short_open), ("long_open", long_open)):
         if snap["gaps"]["side_to_layout"] > TOL:
             errors.append(f"{label}: side gap to layout={snap['gaps']['side_to_layout']}")
@@ -223,34 +240,33 @@ def main() -> None:
         sf_pad = parse_px((snap.get("sideFoot") or {}).get("padBottom") or "0")
         if abs(sf_pad - expected) > TOL:
             errors.append(f"{label}: side-foot padBottom {sf_pad} != {expected}")
-        # side-foot border-box reaches drawer bottom (pad is inner); content edge must
-        # match main footer bottom within tolerance
-        sf_content_bottom = snap["sideFoot"]["rect"]["bottom"] - sf_pad
-        main_foot_bottom = snap["footer"]["rect"]["bottom"]
-        if abs(sf_content_bottom - main_foot_bottom) > TOL:
+        sf_content_bottom = snap["sideFoot"]["contentBottom"]
+        main_content_bottom = snap["footer"]["contentBottom"]
+        if abs(sf_content_bottom - main_content_bottom) > TOL:
             errors.append(
-                f"{label}: side-foot content bottom {sf_content_bottom} vs main footer {main_foot_bottom}"
+                f"{label}: content bottoms misaligned side={sf_content_bottom} main={main_content_bottom}"
             )
-        sf_content_inset = snap["innerHeight"] - sf_content_bottom
+        sf_top = snap["sideFoot"]["rect"]["top"]
+        ft_top = snap["footer"]["rect"]["top"]
+        if abs(sf_top - ft_top) > TOL:
+            errors.append(f"{label}: footer separators misaligned side={sf_top} main={ft_top}")
+        sf_content_inset = snap["gaps"]["sideFoot_content_to_layout"]
         if abs(sf_content_inset - expected) > TOL:
             errors.append(f"{label}: side-foot content inset {sf_content_inset} != {expected}")
 
-    # C) Nav clock: setTimeout anti-flicker then immediate opacity (WebKit-safe)
+    # C) Nav clock: immediate visible arm
     if not s0["hidden"] or float(s0["opacity"]) > 0.01:
         errors.append("nav-clock: must start hidden")
-    if not s_armed["hidden"]:
-        errors.append("nav-clock: must stay [hidden] during 140ms anti-flicker window")
-    if float(s_visible["opacity"]) < 0.95 or s_visible["visibility"] != "visible" or s_visible["hidden"]:
-        errors.append("nav-clock: must become visible after setTimeout delay")
+    if s_armed["hidden"] or float(s_armed["opacity"]) < 0.95 or s_armed["visibility"] != "visible":
+        errors.append("nav-clock: arm must show immediately")
     if not s_disarmed["hidden"]:
         errors.append("nav-clock: disarm must set hidden")
-    if s_visible["pointerEvents"] != "none" or s_visible["position"] != "fixed":
+    if s_armed["pointerEvents"] != "none" or s_armed["position"] != "fixed":
         errors.append("nav-clock: must stay fixed + pointer-events:none")
-    # Light matte (not fully transparent)
-    bg = (s_visible.get("backgroundColor") or "").lower()
+    bg = (s_armed.get("backgroundColor") or "").lower()
     if bg in ("rgba(0, 0, 0, 0)", "transparent", "rgba(0,0,0,0)"):
         errors.append("nav-clock: must use light matte background, not fully transparent")
-    if abs(s0["shellH"] - s_visible["shellH"]) > TOL or abs(s0["docSH"] - s_visible["docSH"]) > TOL:
+    if abs(s0["shellH"] - s_armed["shellH"]) > TOL or abs(s0["docSH"] - s_armed["docSH"]) > TOL:
         errors.append("nav-clock: must not change document/shell geometry")
 
     out["passed"] = not errors

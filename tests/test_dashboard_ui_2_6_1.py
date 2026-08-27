@@ -40,7 +40,7 @@ class FooterAndMobileTests(unittest.TestCase):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".site-footer {\n  margin-top: auto;\n  padding-top: var(--page-title-gap);", css)
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-4) calc(var(--foot-gap) + var(--safe-bottom));",
+            "padding: var(--page-title-gap) var(--space-4) var(--bottom-inset);",
             css,
         )
 
@@ -48,10 +48,10 @@ class FooterAndMobileTests(unittest.TestCase):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-2) var(--foot-gap);",
+            "padding: var(--page-title-gap) var(--space-2) 0;",
             mobile,
         )
-        self.assertIn("padding-bottom: var(--safe-bottom);", mobile.split(".shell {", 1)[1])
+        self.assertIn("padding-bottom: 0;", mobile.split(".shell {", 1)[1].split(".topbar",1)[0])
 
 
 class SidebarHoverTests(unittest.TestCase):

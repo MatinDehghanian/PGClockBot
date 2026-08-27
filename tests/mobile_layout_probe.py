@@ -60,8 +60,15 @@ def measure(page) -> dict:
         },
         footer: {
           bottom: footerR ? footerR.bottom : null,
+          paddingBottom: cs(footer, 'padding-bottom'),
+          contentBottom: footerR
+            ? footerR.bottom - parseFloat(cs(footer, 'padding-bottom') || '0')
+            : null,
         },
-        gap_footer_to_main_bottom: mainR && footerR ? mainR.bottom - footerR.bottom : null,
+        gap_footer_content_to_main_bottom: mainR && footerR
+          ? mainR.bottom - (footerR.bottom - parseFloat(cs(footer, 'padding-bottom') || '0'))
+          : null,
+        gap_footer_box_to_main_bottom: mainR && footerR ? mainR.bottom - footerR.bottom : null,
         gap_shell_to_viewport: shellR ? vh - shellR.bottom : null,
         gap_main_to_shell_bottom: shellR && mainR ? shellR.bottom - mainR.bottom : null,
       };
@@ -102,7 +109,8 @@ def main() -> None:
         browser.close()
 
     vh = VIEWPORT["height"]
-    foot_to_main = short.get("gap_footer_to_main_bottom")
+    foot_to_main = short.get("gap_footer_content_to_main_bottom")
+    foot_box = short.get("gap_footer_box_to_main_bottom")
     shell_gap = short.get("gap_shell_to_viewport")
     main_shell_gap = short.get("gap_main_to_shell_bottom")
     tol = 2.0
@@ -110,29 +118,33 @@ def main() -> None:
 
     checks = {
         "title_below_topbar": title["top"] >= topbar_bottom - tol,
-        "main_fills_shell_content_box": main_shell_gap is not None and abs(main_shell_gap - SAFE_BOTTOM) <= tol,
+        # shell no longer owns safe-bottom padding — main bottom meets shell bottom
+        "main_fills_shell_content_box": main_shell_gap is not None and abs(main_shell_gap) <= tol,
         "main_not_scroller": short.get("mainOverflowY") == "visible",
         "main_max_height_unbounded": short["main"]["maxHeight"] in ("none", ""),
         "side_open_reaches_bottom": abs(side_open["bottom"] - vh) <= 4,
+        "main_has_no_bottom_inset": abs(float(str(short["main"]["paddingBottom"]).replace("px", "") or 0)) <= tol,
     }
+    bottom_inset = FOOT_GAP + SAFE_BOTTOM
     if not is_long:
         checks["no_shell_viewport_gap"] = shell_gap is not None and abs(shell_gap) <= tol
         checks["footer_gap_is_foot_gap_only"] = (
-            foot_to_main is not None and abs(foot_to_main - FOOT_GAP) <= tol
+            foot_to_main is not None and abs(foot_to_main - bottom_inset) <= tol
         )
+        checks["footer_box_meets_main"] = foot_box is not None and abs(foot_box) <= tol
 
     if is_long:
         if long_bottom is not None:
-            foot_to_main = long_bottom.get("gap_footer_to_main_bottom")
+            foot_to_main = long_bottom.get("gap_footer_content_to_main_bottom")
             checks["long_document_scrolled"] = (long_bottom.get("docScrollTop") or 0) > 0
             checks["main_stays_non_scroller"] = long_bottom.get("main", {}).get("scrollTop", 0) == 0
             checks["footer_gap_is_foot_gap_only"] = (
-                foot_to_main is not None and abs(foot_to_main - FOOT_GAP) <= tol
+                foot_to_main is not None and abs(foot_to_main - bottom_inset) <= tol
             )
             checks["no_extra_scroll_blank"] = checks["footer_gap_is_foot_gap_only"]
     else:
         checks["footer_gap_is_foot_gap_only"] = (
-            foot_to_main is not None and abs(foot_to_main - FOOT_GAP) <= tol
+            foot_to_main is not None and abs(foot_to_main - bottom_inset) <= tol
         )
 
     out["title"] = title
