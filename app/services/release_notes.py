@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.41": [
+        "ابزار تشخیص viewport با ?vp=1 — اعداد واقعی دستگاه را نشان می‌دهد: innerHeight، documentElement.clientHeight، visualViewport، مقدار حل‌شدهٔ vh/svh/lvh/dvh، safe-area، و لبهٔ پایین topbar/shell/main/footer/side/backdrop",
+        "چرا: دو مورد باقی‌ماندهٔ نوار پایین فقط روی iOS رخ می‌دهند و در WebKit و Chromium روی CI بازتولید نمی‌شوند — بدون عدد واقعی دستگاه، هر تغییری حدس است",
+        "از اندازه‌گیری پیکسلی اسکرین‌شات‌های v8.5.40: در PWA لبهٔ پایین .side و .side-backdrop دقیقاً ۶۲ پیکسل بالاتر از پایین صفحه است، و ۶۲ همان env(safe-area-inset-top) این دستگاه است — یعنی viewport چیدمان به اندازهٔ inset بالا کوتاه است",
+        "ابزار روی هندسه اثر ندارد (تست‌شده: scrollHeight و clientHeight با و بدون آن یکسان) و دکمهٔ منو را نمی‌گیرد",
+        "بدون تغییر در چیدمان پنل نسبت به v8.5.40",
+    ],
     "8.5.40": [
         "ریشهٔ واقعی نوار سالید پایین صفحه (بعد از ۴۰ آپدیت): قفل کردن اسکرولر ریشه هنگام باز شدن سایدبار/مودال — body.nav-open با touch-action:none و html/body.modal-open با overflow:hidden",
         "این قفل باعث می‌شد Safari نوار پایین خودش را باز کند و دیگر جمع نکند (Safari فقط با اسکرول واقعی صفحه جمع می‌شود)؛ ارتفاع دیده‌شده کوتاه می‌شد و باند پوشیده‌شده رنگ نمی‌گرفت — همان نواری که بعد از بستن سایدبار هم می‌ماند",

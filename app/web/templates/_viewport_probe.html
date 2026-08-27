@@ -1,0 +1,186 @@
+{#
+  Viewport diagnostic — rendered ONLY for ?vp=1, so it costs nothing otherwise.
+
+  It exists because the remaining bottom-strip reports are iOS-only and cannot be
+  reproduced in WebKit/Chromium on CI. These are the numbers that say WHY the
+  visible bottom of the screen and the page's idea of it disagree. Open the panel
+  with ?vp=1 on the device and screenshot it with the drawer closed and again
+  with it open, once in Safari and once in the installed PWA.
+
+  The overlay is pointer-events:none except for its two buttons, so it can never
+  block the menu button or the drawer underneath it.
+#}
+<div id="vp-probe" dir="ltr">
+  <div class="vp-head">
+    <span>
+      <button type="button" id="vp-copy">copy</button>
+      <button type="button" id="vp-close">hide</button>
+    </span>
+    <strong>viewport probe</strong>
+  </div>
+  <pre id="vp-out">…</pre>
+</div>
+<div id="vp-units" aria-hidden="true">
+  <i data-unit="vh"></i><i data-unit="svh"></i><i data-unit="lvh"></i><i data-unit="dvh"></i>
+</div>
+<div id="vp-safe" aria-hidden="true"></div>
+<style>
+  #vp-probe {
+    position: fixed;
+    top: 28%;
+    left: 0;
+    right: 0;
+    z-index: 2147483647;
+    background: rgba(0, 0, 0, 0.9);
+    color: #fafafa;
+    font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    padding: 6px 8px;
+    border-top: 1px solid #f97316;
+    border-bottom: 1px solid #f97316;
+    /* Must never swallow a tap meant for the panel underneath. */
+    pointer-events: none;
+  }
+  #vp-probe .vp-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    color: #f97316;
+  }
+  #vp-probe button {
+    background: #27272a;
+    color: #fafafa;
+    border: 1px solid #52525b;
+    border-radius: 4px;
+    font: inherit;
+    padding: 2px 8px;
+    margin-right: 4px;
+    pointer-events: auto;
+  }
+  #vp-probe pre {
+    margin: 0;
+    white-space: pre;
+  }
+  /* Unit probes: never painted, only measured. MUST be fixed, not absolute —
+     four 100vh boxes in the flow would add ~4 viewports of scroll height and
+     falsify the scrollH/maxScroll numbers this probe exists to report (and would
+     hand Safari a scrollable page it otherwise would not have). */
+  #vp-units {
+    position: fixed;
+    top: 0;
+    left: -9999px;
+    width: 1px;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  #vp-units i { display: block; width: 1px; }
+  #vp-units i[data-unit="vh"] { height: 100vh; }
+  #vp-units i[data-unit="svh"] { height: 100svh; }
+  #vp-units i[data-unit="lvh"] { height: 100lvh; }
+  #vp-units i[data-unit="dvh"] { height: 100dvh; }
+  /* env() is not readable from JS, so read it back as resolved padding. */
+  #vp-safe {
+    position: fixed;
+    top: 0;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    visibility: hidden;
+    pointer-events: none;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+             env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  }
+</style>
+<script>
+(function () {
+  var out = document.getElementById('vp-out');
+  var units = document.getElementById('vp-units');
+  var safe = document.getElementById('vp-safe');
+  if (!out) return;
+
+  function n(v) { return Math.round(parseFloat(v) * 10) / 10; }
+
+  function unit(name) {
+    var el = units.querySelector('[data-unit="' + name + '"]');
+    return el ? n(el.getBoundingClientRect().height) : 0;
+  }
+
+  function pad(s, w) {
+    s = String(s);
+    while (s.length < w) s += ' ';
+    return s;
+  }
+
+  function edge(label, sel) {
+    var el = document.querySelector(sel);
+    if (!el) return pad(label, 9) + '-';
+    if (getComputedStyle(el).display === 'none') return pad(label, 9) + 'hidden';
+    var b = el.getBoundingClientRect();
+    return pad(label, 9) + pad(n(b.top) + '>' + n(b.bottom), 14)
+      + 'gap ' + n(window.innerHeight - b.bottom);
+  }
+
+  function render() {
+    var de = document.documentElement;
+    var vv = window.visualViewport;
+    var cs = getComputedStyle(safe);
+    var ih = window.innerHeight;
+    var lines = [
+      pad('mode', 9) + (window.matchMedia('(display-mode: standalone)').matches
+        ? 'standalone (PWA)' : 'browser')
+        + (window.navigator.standalone ? ' +apple' : ''),
+      pad('screen', 9) + window.screen.width + 'x' + window.screen.height
+        + '  dpr ' + window.devicePixelRatio,
+      pad('inner', 9) + window.innerWidth + 'x' + ih + '  outerH ' + window.outerHeight,
+      pad('de', 9) + 'clientH ' + de.clientHeight + '  scrollH ' + de.scrollHeight,
+      pad('scroll', 9) + n(window.scrollY) + ' / ' + (de.scrollHeight - de.clientHeight),
+      pad('visualVP', 9) + (vv ? n(vv.height) + '  offTop ' + n(vv.offsetTop)
+        + '  scale ' + vv.scale : '-'),
+      '',
+      pad('vh/svh', 9) + unit('vh') + ' / ' + unit('svh'),
+      pad('lvh/dvh', 9) + unit('lvh') + ' / ' + unit('dvh'),
+      pad('safe', 9) + 't' + n(cs.paddingTop) + ' r' + n(cs.paddingRight)
+        + ' b' + n(cs.paddingBottom) + ' l' + n(cs.paddingLeft),
+      '',
+      pad('D inner-de', 13) + n(ih - de.clientHeight),
+      pad('D inner-svh', 13) + n(ih - unit('svh')),
+      pad('D vv-de', 13) + (vv ? n(vv.height - de.clientHeight) : '-'),
+      '',
+      'nav-open ' + document.body.classList.contains('nav-open'),
+      edge('topbar', '.topbar'),
+      edge('shell', '.shell'),
+      edge('main', '.main'),
+      edge('footer', '.site-footer'),
+      edge('side', '.side'),
+      edge('backdrop', '.side-backdrop')
+    ];
+    out.textContent = lines.join('\n');
+  }
+
+  render();
+  ['resize', 'orientationchange', 'scroll', 'pageshow'].forEach(function (ev) {
+    window.addEventListener(ev, render, { passive: true });
+  });
+  if (window.visualViewport) {
+    ['resize', 'scroll'].forEach(function (ev) {
+      window.visualViewport.addEventListener(ev, render, { passive: true });
+    });
+  }
+  /* The drawer changes exactly the numbers we care about. */
+  try {
+    new MutationObserver(render).observe(document.body, {
+      attributes: true, attributeFilter: ['class']
+    });
+  } catch (e) {}
+
+  document.getElementById('vp-close').addEventListener('click', function () {
+    document.getElementById('vp-probe').remove();
+  });
+  document.getElementById('vp-copy').addEventListener('click', function () {
+    var text = out.textContent;
+    if (navigator.clipboard) navigator.clipboard.writeText(text).catch(function () {});
+    else window.prompt('copy:', text);
+  });
+})();
+</script>

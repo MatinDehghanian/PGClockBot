@@ -78,23 +78,19 @@ class _FakeRequest:
     class _URL:
         path = "/home"
 
-    class _QP:
-        @staticmethod
-        def get(_key, default=None):
-            return default
-
-    url = _URL()
-    query_params = _QP()
+    def __init__(self, query: dict[str, str] | None = None):
+        self.url = self._URL()
+        self.query_params = query or {}
 
 
-def _render(body: str) -> str:
+def _render(body: str, query: dict[str, str] | None = None) -> str:
     env = Environment(
         loader=FileSystemLoader(str(TEMPLATES)), autoescape=select_autoescape(["html"])
     )
     staff = {"username": "admin", "role": "admin", "permissions": [], "pg_permissions": PG_PERMS}
     staff["get"] = staff.copy().get  # base.html calls staff.get(...)
     return env.from_string(_CHILD.replace("__BODY__", body)).render(
-        request=_FakeRequest(),
+        request=_FakeRequest(query),
         staff=staff,
         identity={
             "kind": "owner",
@@ -117,7 +113,7 @@ def _render(body: str) -> str:
     )
 
 
-_PAGES: dict[str, bytes] = {}
+_PAGES: dict[tuple[str, bool], bytes] = {}
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -133,11 +129,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
             self._send(asset.read_bytes(), ctype)
             return
-        page = _PAGES.get(path.strip("/"))
-        if page is None:
+        name = path.strip("/")
+        if name not in BODIES:
             self.send_error(404)
             return
-        self._send(page, "text/html; charset=utf-8")
+        query = {} if "vp=" not in self.path else {"vp": "1"}
+        key = (name, bool(query))
+        if key not in _PAGES:
+            _PAGES[key] = _render(BODIES[name], query).encode("utf-8")
+        self._send(_PAGES[key], "text/html; charset=utf-8")
 
     def _send(self, data: bytes, ctype: str) -> None:
         self.send_response(200)
@@ -152,7 +152,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
 def _serve() -> None:
     for name, body in BODIES.items():
-        _PAGES[name] = _render(body).encode("utf-8")
+        _PAGES[(name, False)] = _render(body).encode("utf-8")
     socketserver.TCPServer.allow_reuse_address = True
     httpd = socketserver.TCPServer(("127.0.0.1", PORT), _Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
