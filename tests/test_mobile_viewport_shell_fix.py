@@ -82,30 +82,43 @@ class MobileViewportShellFixTests(unittest.TestCase):
     def test_no_vvh_or_visual_viewport_js(self):
         base = BASE.read_text(encoding="utf-8")
         js = JS.read_text(encoding="utf-8")
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertNotIn("--vvh", base)
+        self.assertNotIn("--vvh", css)
         self.assertNotIn("visualViewport", base)
         self.assertNotIn("visualViewport", js)
+        self.assertNotIn("__pgPinSafariOverlay", js)
+        ios = css.split("@media (max-width: 900px)", 1)[1].split("html.ios-safari", 1)[-1][:1200]
+        self.assertNotIn("100lvh", ios)
 
     def test_sw_fallback_ignores_query_for_panel_assets(self):
         sw = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v26", sw)
+        self.assertIn("pgclock-shell-v27", sw)
         self.assertIn("matchIgnoreSearch", sw)
         self.assertIn("isVersionedPanelAsset", sw)
-
 
     def test_ios_safari_liquid_glass_rules(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         self.assertIn("html.ios-safari .side:not(.open)", mobile)
         self.assertIn("height: 0 !important;", mobile)
+        self.assertIn("background-size: 100% calc(100% - var(--safe-bottom));", mobile)
         self.assertIn("html.ios-safari .side.open", mobile)
-        self.assertIn("background-size: 100% calc(100% - 3px);", mobile)
-        self.assertIn("backdrop-filter: blur(16px)", mobile)
+        self.assertIn("html.ios-safari .side-backdrop", mobile)
+        back = mobile.split("html.ios-safari .side-backdrop", 1)[1][:500]
+        self.assertIn("calc(100% - var(--safe-bottom))", back)
+        self.assertIn("backdrop-filter: none;", back)
+        self.assertNotIn("min-height: 100lvh;", mobile)
+        self.assertNotIn("bottom: calc(100svh - 100lvh);", mobile)
+        self.assertNotIn("backdrop-filter: blur(16px)", mobile)
+        self.assertIn("side-nav-closing", mobile)
         base = BASE.read_text(encoding="utf-8")
-        self.assertIn('ios-safari', base)
-        self.assertIn('ios-standalone', base)
+        self.assertIn("ios-safari", base)
+        self.assertIn("ios-standalone", base)
         js = JS.read_text(encoding="utf-8")
-        self.assertIn("ios-safari", js)
+        self.assertIn("side-nav-closing", js)
+        self.assertIn("setOpen(false, true)", js)
+        self.assertNotIn("visualViewport", js)
 
 
 if __name__ == "__main__":

@@ -72,6 +72,8 @@ class MobileBottomGapCssTests(unittest.TestCase):
         self.assertNotIn("--vvh", base)
         self.assertNotIn("visualViewport", base)
         self.assertNotIn("visualViewport", js)
+        self.assertNotIn("--vvh", js)
+        self.assertNotIn("__pgPinSafariOverlay", js)
         self.assertNotIn("--safari-overlay", mobile)
 
 

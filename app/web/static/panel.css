@@ -4212,14 +4212,24 @@ form.settings-form > .actions.sticky-actions,
   }
 
   /*
-    Safari 26 Liquid Glass (in-browser only — html.ios-safari).
-    KEEP v8.5.34: document scroll, footer --bottom-inset unity, nav clock, no --vvh.
-    Do NOT raise .side/.site-footer bottoms — that re-splits separators.
-    Do NOT put -webkit-fill-available after 100svh (Chromium → stretch collapse).
+    Safari in-browser (html.ios-safari) — v8.5.36
+    KEEP v8.5.34 geometry: document scroll, --bottom-inset footer unity, nav clock,
+    100svh last, no measured viewport-height JS vars, no svh/dvh/lvh ping-pong.
+    Do NOT raise .side / .site-footer bottoms (that re-splits separators).
 
-    Safari samples opaque position:fixed paint within ~3px of the viewport bottom
-    and tints the URL/tab bar solid. Open drawer + opaque backdrop forced that slab.
-    Closed off-screen .side still spanned top→bottom with opaque bg.
+    Root cause of the “dead/solid band” (not another viewport-height bug):
+    Safari 26 Liquid Glass samples opaque paint near the bottom edge of the
+    layout viewport and tints the browser chrome solid. Prior attempts failed by
+    (a) swapping vh units, (b) measuring visual viewport into a CSS var, or
+    (c) a 3px fade + heavy blur.
+
+    New paint model (geometry unchanged):
+      • html/body/shell stay transparent so chrome can be glass.
+      • Opaque fill on .main / open .side stops ABOVE --safe-bottom (full home-
+        indicator band — not a 3px trickle). Box size and bottom:0 stay put.
+      • Closed .side collapses to height:0 (off-screen fixed paint was sampled).
+      • Open backdrop keeps the same dim as PWA — no backdrop-filter — and ends
+        above --safe-bottom so it does not re-introduce an opaque slab.
   */
   html.ios-safari,
   html.ios-safari body {
@@ -4228,8 +4238,13 @@ form.settings-form > .actions.sticky-actions,
   html.ios-safari .shell {
     background: transparent;
   }
+  /* Opaque page fill without painting into the safe-bottom sampling band */
   html.ios-safari .main {
-    background: var(--background);
+    background-color: transparent;
+    background-image: linear-gradient(var(--background), var(--background));
+    background-repeat: no-repeat;
+    background-position: top left;
+    background-size: 100% calc(100% - var(--safe-bottom));
   }
   html.ios-safari .side:not(.open) {
     top: auto;
@@ -4241,23 +4256,39 @@ form.settings-form > .actions.sticky-actions,
     overflow: hidden;
     visibility: hidden;
   }
-  /* Keep bottom:0 geometry (footer align). Fade/mask the last pixels so Safari
-     does not sample an opaque edge for the toolbar tint. */
   html.ios-safari .side.open {
     background-color: transparent;
     background-image: linear-gradient(var(--bg-card), var(--bg-card));
     background-repeat: no-repeat;
-    background-size: 100% calc(100% - 3px);
+    background-position: top left;
+    background-size: 100% calc(100% - var(--safe-bottom));
   }
+  html.ios-safari .side-backdrop,
   html.ios-safari .side-backdrop.show {
-    background: rgba(0, 0, 0, 0.28);
-    -webkit-backdrop-filter: blur(16px) saturate(1.2);
-    backdrop-filter: blur(16px) saturate(1.2);
-    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 4px), transparent 100%);
-    mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 4px), transparent 100%);
+    /* Keep bottom:0 (same box as .side) — clear paint in the safe band only. */
+    bottom: 0;
+    background-color: transparent;
+    background-image: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.55),
+      rgba(0, 0, 0, 0.55) calc(100% - var(--safe-bottom)),
+      transparent calc(100% - var(--safe-bottom))
+    );
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
+  html.ios-safari[data-theme="light"] .side-backdrop,
   html.ios-safari[data-theme="light"] .side-backdrop.show {
-    background: rgba(0, 0, 0, 0.18);
+    background-image: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.55),
+      rgba(0, 0, 0, 0.55) calc(100% - var(--safe-bottom)),
+      transparent calc(100% - var(--safe-bottom))
+    );
+  }
+  /* Instant close on navigation — disable slide so PWA paints closed before unload */
+  html.ios .side.side-nav-closing {
+    transition: none !important;
   }
 
   .main {

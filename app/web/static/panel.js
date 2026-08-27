@@ -2,9 +2,13 @@
     const side = document.getElementById('sidebar');
     const btn = document.getElementById('menu-toggle');
     const back = document.getElementById('side-backdrop');
-    function setOpen(v){
+    function setOpen(v, instant){
       if (!side) return;
       var open = !!v;
+      if (instant) {
+        side.classList.add('side-nav-closing');
+        void side.offsetWidth;
+      }
       side.classList.toggle('open', open);
       if (back) {
         back.hidden = !open;
@@ -13,6 +17,14 @@
       }
       document.body.classList.toggle('nav-open', open);
       if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (instant) {
+        /* Re-enable transition after paint so the next manual open still animates */
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            side.classList.remove('side-nav-closing');
+          });
+        });
+      }
     }
     setOpen(false);
     if (btn) {
@@ -22,17 +34,20 @@
         setOpen(!side.classList.contains('open'));
       });
     }
-    if (back) back.addEventListener('click', () => setOpen(false));
-    side && side.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setOpen(false)));
-    window.addEventListener('pageshow', function (e) {
-      setOpen(false);
+    if (back) back.addEventListener('click', function () { setOpen(false); });
+    window.addEventListener('pageshow', function () {
+      setOpen(false, true);
     });
 
     /* Lightweight nav clock — fixed, pointer-events:none, no layout reflow.
        Show IMMEDIATELY on arm (no CSS animation-delay — WebKit freezes it during
        MPA nav; no setTimeout delay — slow navigations often unload before 140ms
        if the click→nav path is busy). Fast-nav flicker is preferable to never
-       painting. Matte is CSS on .panel-nav-clock. */
+       painting. Matte is CSS on .panel-nav-clock.
+
+       Close the sidebar in the SAME capture turn BEFORE arming the clock so PWA
+       and Safari both paint closed+loading together (bubble-only close raced
+       unload in standalone). */
     (function () {
       const clock = document.getElementById('panel-nav-clock');
       if (!clock) return;
@@ -66,6 +81,9 @@
         if (e.defaultPrevented || e.button !== 0) return;
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+        if (!a) return;
+        const inSide = side && side.contains(a);
+        if (inSide) setOpen(false, true);
         if (!isRealInternalNavAnchor(a)) return;
         arm();
       }, true);
@@ -75,6 +93,7 @@
         if (!form || form.tagName !== 'FORM') return;
         if (form.target && form.target !== '' && form.target !== '_self') return;
         if (form.hasAttribute('data-no-nav-clock')) return;
+        if (side && side.contains(form)) setOpen(false, true);
         arm();
       }, true);
       window.addEventListener('pageshow', disarm);
