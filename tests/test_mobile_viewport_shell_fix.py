@@ -11,7 +11,6 @@ CSS = ROOT / "app/web/static/panel.css"
 BASE = ROOT / "app/web/templates/base.html"
 JS = ROOT / "app/web/static/panel.js"
 PWA = ROOT / "app/services/pwa.py"
-DEFER = ROOT / "app/web/templates/_panel_widgets_defer.html"
 
 
 class MobileViewportShellFixTests(unittest.TestCase):
@@ -93,38 +92,37 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_sw_fallback_ignores_query_for_panel_assets(self):
         sw = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v28", sw)
+        self.assertIn("pgclock-shell-v29", sw)
         self.assertIn("matchIgnoreSearch", sw)
         self.assertIn("isVersionedPanelAsset", sw)
 
-    def test_ios_drawer_glass_beats_light_theme_cascade(self):
-        """Light-theme .side { background:#fff } must not win over iOS glass."""
+    def test_glass_experiments_reverted_keep_instant_close(self):
+        """v8.5.38: no transparent drawer/main; keep opaque side + instant close."""
         css = self._css()
-        light_at = css.find('html[data-theme="light"] .side')
-        glass_at = css.find("html.ios .side.open")
-        self.assertGreater(light_at, 0)
-        self.assertGreater(glass_at, light_at)
-        glass = css[glass_at : glass_at + 900]
-        self.assertIn("background: transparent !important;", glass)
-        self.assertIn("bottom: var(--bottom-inset);", glass)
-        self.assertIn("html.ios .side.open::before", css)
-        self.assertIn("html.ios .side-backdrop", css)
-        self.assertIn("background: rgba(0, 0, 0, 0.55) !important;", css)
         mobile = self._mobile()
-        back = mobile.split(".side-backdrop,", 1)[1][:350]
-        self.assertIn("right: min(300px, 86vw);", back)
-        self.assertIn("html.ios-safari .side:not(.open)", mobile)
-        self.assertIn("height: 0 !important;", mobile)
+        self.assertNotIn("html.ios .side.open", css)
+        self.assertNotIn("html.ios .side.open::before", css)
+        self.assertNotIn("html.ios-safari .shell", mobile)
+        self.assertNotIn("iOS drawer glass", css)
+        self.assertNotIn("html.ios .main {", css)
+        self.assertNotIn("right: min(300px, 86vw);", mobile.split(".side-backdrop", 1)[1][:400])
+        back = mobile.split(".side-backdrop,", 1)[1][:280]
+        self.assertIn("left: 0;", back)
+        self.assertIn("right: 0;", back)
+        self.assertIn("side-nav-closing", mobile)
         self.assertNotIn("min-height: 100lvh;", mobile)
         self.assertNotIn("bottom: calc(100svh - 100lvh);", mobile)
         self.assertNotIn("backdrop-filter: blur(16px)", mobile)
-        self.assertIn("side-nav-closing", mobile)
         base = BASE.read_text(encoding="utf-8")
+        self.assertNotIn('meta.setAttribute("content", "transparent")', base)
         self.assertIn("ios-safari", base)
-        self.assertIn("ios-standalone", base)
         js = JS.read_text(encoding="utf-8")
         self.assertIn("side-nav-closing", js)
         self.assertIn("setOpen(false, true)", js)
+        # Light theme still paints opaque side (must not be overridden to transparent)
+        self.assertIn('html[data-theme="light"] .side', css)
+        light = css.split('html[data-theme="light"] .side', 1)[1][:120]
+        self.assertIn("background: #ffffff;", light)
 
 
 if __name__ == "__main__":
