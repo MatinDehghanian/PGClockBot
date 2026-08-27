@@ -18,11 +18,14 @@ class MobileSideFullHeightTests(unittest.TestCase):
         self.assertNotIn("100dvh - var(--topbar-h)", side)
         self.assertNotIn("--safari-overlay", side)
 
-    def test_closed_side_no_height_collapse(self):
+    def test_side_safe_area_is_inner_not_box_shorten(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
         side = mobile.split("  .side {", 1)[1].split("  .side.open", 1)[0]
-        self.assertNotIn("height: 0", side)
+        self.assertIn("padding-bottom: 0;", side)
+        self.assertIn("bottom: 0;", side)
+        foot = mobile.split(".side .side-foot", 1)[1][:120]
+        self.assertIn("padding-bottom: var(--safe-bottom);", foot)
 
 
 if __name__ == "__main__":

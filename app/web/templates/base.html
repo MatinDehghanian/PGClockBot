@@ -331,6 +331,16 @@
       </footer>
     </main>
   </div>
+  {# Navigation clock — fixed, no layout reflow; independent of deleted veil system #}
+  <div id="panel-nav-clock" class="panel-nav-clock" hidden aria-hidden="true" role="status">
+    <span class="panel-load-clock" aria-hidden="true">
+      <span class="panel-load-clock-face">
+        <span class="panel-load-clock-hand panel-load-clock-hour"></span>
+        <span class="panel-load-clock-hand panel-load-clock-minute"></span>
+        <span class="panel-load-clock-hub"></span>
+      </span>
+    </span>
+  </div>
   <div class="ui-modal" id="modal-confirm" hidden>
     <div class="ui-modal-backdrop" data-modal-close></div>
     <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="confirm-title">

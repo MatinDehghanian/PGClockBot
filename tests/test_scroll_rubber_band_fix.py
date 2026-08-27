@@ -29,7 +29,8 @@ class PageScrollContainerTests(unittest.TestCase):
         self.assertIn("overflow: visible;", shell)
         self.assertNotIn("overflow: hidden;", shell)
         self.assertIn("height: auto;", shell)
-        self.assertIn("flex: 0 0 auto;", main)
+        self.assertIn("flex: 1 0 auto;", main)
+        self.assertIn("flex: 1 0 auto;", shell)
         shell_block = shell.split("}", 1)[0]
         for unit in ("100dvh", "100svh", "100lvh", "100vh"):
             self.assertNotIn(unit, shell_block)
@@ -39,7 +40,11 @@ class PageScrollContainerTests(unittest.TestCase):
     def test_nav_open_locks_document_scroll(self):
         css = CSS.read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 900px)", 1)[1]
-        self.assertIn("body.nav-open { overflow: hidden; }", mobile)
+        self.assertIn("html:has(body.nav-open)", mobile)
+        self.assertIn("overflow: hidden;", mobile.split("html:has(body.nav-open)", 1)[1][:80])
+        # Must NOT lock overflow on body — iOS fixed containing-block gap
+        body_nav = mobile.split("body.nav-open {", 1)[1].split("}", 1)[0]
+        self.assertNotIn("overflow: hidden;", body_nav)
         self.assertNotIn("body.nav-open .main", mobile)
 
 

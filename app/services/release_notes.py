@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.30": [
+        "موبایل — short page: footer پایین viewport با flex fill (% min-height + margin-top:auto) — بدون vh/dvh؛ long page همچنان document scroll",
+        "موبایل — sidebar: safe-bottom فقط روی .side-foot (نه کوتاه‌کردن drawer)؛ قفل scroll روی html به‌جای body.overflow:hidden (رفع gap زیر fixed در iOS)",
+        "ساعت navigation سبک (#panel-nav-clock) — fixed، pointer-events:none، بدون veil/skeleton/reflow؛ delay کوتاه ضد flicker",
+        "حفظ کامل مدل document-scroll از v8.5.28؛ بدون --vvh/visualViewport",
+        "Service Worker cache v20؛ ریستور: v8.5.29",
+    ],
     "8.5.29": [
         "موبایل — micro-fix: gap زیر sidebar Safari — حذف stack دوباره foot-gap+safe-bottom روی .side (فقط safe-bottom)؛ collapse کشوی بسته (height:0) تا scroll height inflate نشود",
         "موبایل — micro-fix: gap زیر footer در صفحات کوتاه — حذف body flex stretch + margin-top:auto footer؛ shell content-driven",

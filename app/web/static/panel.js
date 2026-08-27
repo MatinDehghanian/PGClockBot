@@ -28,6 +28,57 @@
       setOpen(false);
     });
 
+    /* Lightweight nav clock — fixed, pointer-events:none, no layout reflow.
+       Short delay avoids flash on fast navigations. Not the old page-load-veil. */
+    (function () {
+      const clock = document.getElementById('panel-nav-clock');
+      if (!clock) return;
+      let timer = null;
+      const DELAY_MS = 140;
+      function arm() {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          clock.hidden = false;
+          clock.setAttribute('aria-hidden', 'false');
+        }, DELAY_MS);
+      }
+      function disarm() {
+        clearTimeout(timer);
+        timer = null;
+        clock.hidden = true;
+        clock.setAttribute('aria-hidden', 'true');
+      }
+      function sameDocumentNav(url) {
+        return url.origin === location.origin
+          && url.pathname === location.pathname
+          && url.search === location.search;
+      }
+      document.addEventListener('click', function (e) {
+        if (e.defaultPrevented || e.button !== 0) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+        if (!a) return;
+        if (a.target && a.target !== '' && a.target !== '_self') return;
+        if (a.hasAttribute('download')) return;
+        const raw = a.getAttribute('href');
+        if (!raw || raw.charAt(0) === '#' || raw.indexOf('javascript:') === 0) return;
+        let url;
+        try { url = new URL(raw, location.href); } catch (_) { return; }
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+        if (url.origin !== location.origin) return;
+        if (sameDocumentNav(url) && url.hash) return;
+        arm();
+      }, true);
+      document.addEventListener('submit', function (e) {
+        if (e.defaultPrevented) return;
+        const form = e.target;
+        if (!form || (form.target && form.target !== '' && form.target !== '_self')) return;
+        arm();
+      }, true);
+      window.addEventListener('pageshow', disarm);
+      window.addEventListener('pagehide', disarm);
+    })();
+
     /* Permanent no-zoom: keep focused text controls at ≥16px even if CSS regresses */
     (function () {
       const MIN = 16;

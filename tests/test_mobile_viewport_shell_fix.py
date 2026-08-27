@@ -18,16 +18,17 @@ class MobileViewportShellFixTests(unittest.TestCase):
     def _mobile(self) -> str:
         return CSS.read_text(encoding="utf-8").split("@media (max-width: 900px)", 1)[1]
 
-    def test_mobile_shell_content_flow_not_viewport_stretch(self):
+    def test_mobile_shell_flex_fill_not_viewport_units(self):
         mobile = self._mobile()
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
         side = mobile.split("  .side {", 1)[1].split("  .side.open", 1)[0]
-        closed = mobile.split(".side:not(.open)", 1)[1][:200]
         self.assertIn("height: auto;", shell)
-        self.assertNotIn("flex: 1 0 auto;", shell)
-        self.assertIn("padding-bottom: var(--safe-bottom);", side)
+        self.assertIn("flex: 1 0 auto;", shell)
+        self.assertIn("padding-bottom: 0;", side)
+        self.assertIn("padding-bottom: var(--safe-bottom);", mobile.split(".side .side-foot", 1)[1][:80])
         self.assertNotIn("var(--foot-gap) + var(--safe-bottom)", side)
-        self.assertIn("height: 0;", closed)
+        closed = mobile.split(".side:not(.open)", 1)[1][:160]
+        self.assertNotIn("height: 0;", closed)
         shell_block = shell.split("}", 1)[0]
         for unit in ("100dvh", "100svh", "100lvh", "100vh", "var(--vvh"):
             self.assertNotIn(unit, shell_block)
@@ -52,13 +53,18 @@ class MobileViewportShellFixTests(unittest.TestCase):
         base = BASE.read_text(encoding="utf-8")
         self.assertNotIn("--vvh", base)
 
-    def test_no_page_loading_system(self):
+    def test_no_page_loading_veil_but_nav_clock_present(self):
         base = BASE.read_text(encoding="utf-8")
         defer = DEFER.read_text(encoding="utf-8")
         css = CSS.read_text(encoding="utf-8")
+        js = JS.read_text(encoding="utf-8")
         self.assertNotIn("page-load-veil", base)
         self.assertNotIn("armVeil", defer)
         self.assertNotIn(".page-load-veil", css)
+        self.assertIn('id="panel-nav-clock"', base)
+        self.assertIn(".panel-nav-clock", css)
+        self.assertIn("pointer-events: none", css.split(".panel-nav-clock", 1)[1][:400])
+        self.assertIn("panel-nav-clock", js)
 
     def test_hamburger_pageshow_reset(self):
         js = JS.read_text(encoding="utf-8")
@@ -72,7 +78,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_service_worker_cache(self):
         pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v19", pwa)
+        self.assertIn("pgclock-shell-v20", pwa)
 
 
 if __name__ == "__main__":

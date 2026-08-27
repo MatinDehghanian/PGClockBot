@@ -116,7 +116,7 @@ def main() -> None:
         "side_open_reaches_bottom": abs(side_open["bottom"] - vh) <= 4,
     }
     if not is_long:
-        checks["short_page_content_sized"] = shell_gap is not None and shell_gap > 100
+        checks["no_shell_viewport_gap"] = shell_gap is not None and abs(shell_gap) <= tol
         checks["footer_gap_is_foot_gap_only"] = (
             foot_to_main is not None and abs(foot_to_main - FOOT_GAP) <= tol
         )
