@@ -27,12 +27,20 @@ window.__mobileScrollMeasure = function (step) {
   var docClientHeight = docEl.clientHeight;
   var mainOverflowY = cs(main, 'overflow-y');
   var docOverflowY = cs(document.body, 'overflow-y');
+  var htmlOverflowY = cs(docEl, 'overflow-y');
   var shellHeight = cs(shell, 'height');
   var shellMinHeight = cs(shell, 'min-height');
   var footerGap = footerR && mainR ? mainR.bottom - footerR.bottom : null;
   var footerToShell = footerR && shellR ? shellR.bottom - footerR.bottom : null;
   var shellToVisual = shellR ? visualBottom - shellR.bottom : null;
   var blankBelowFooter = footerR && shellR ? shellR.bottom - footerR.bottom - parseFloat(cs(shell, 'padding-bottom') || '0') : null;
+  var mainIsScroller = ['auto', 'scroll'].includes(mainOverflowY);
+  /* Viewport document scroll: body/html overflow may be visible (not auto). */
+  var documentScrolls = !mainIsScroller && (
+    docOverflowY === 'auto' || docOverflowY === 'scroll' || docOverflowY === 'visible'
+  ) && (
+    htmlOverflowY === 'auto' || htmlOverflowY === 'scroll' || htmlOverflowY === 'visible'
+  );
   return {
     step: step,
     innerHeight: window.innerHeight,
@@ -43,9 +51,11 @@ window.__mobileScrollMeasure = function (step) {
     visualViewportOffsetTop: vTop,
     visualViewportBottom: visualBottom,
     scrollOwners: {
-      documentScrolls: docOverflowY === 'auto' || docOverflowY === 'scroll',
-      mainIsScroller: ['auto', 'scroll'].includes(mainOverflowY),
+      documentScrolls: documentScrolls,
+      mainIsScroller: mainIsScroller,
       mainScrollTop: main ? main.scrollTop : null,
+      bodyOverflowY: docOverflowY,
+      htmlOverflowY: htmlOverflowY,
     },
     shell: {
       rect: shellR,

@@ -42,12 +42,18 @@ class MobileViewportShellFixTests(unittest.TestCase):
         html = mobile.split("html:has(.shell) {\n", 1)[1].split("}", 1)[0]
         body = mobile.split("html:has(.shell) body {\n", 1)[1].split("}", 1)[0]
         main = mobile.split("  .main {", 1)[1].split("  .main-body", 1)[0]
+        self.assertIn("min-height: 100svh;", html)
+        self.assertIn("height: auto;", html)
+        self.assertNotRegex(html, r"(?m)^\s*height:\s*100%;")
         self.assertIn("overflow-x: visible;", html)
         self.assertIn("overflow-y: visible;", html)
         self.assertNotIn("overflow-x: hidden;", html)
-        self.assertIn("overflow-y: auto;", body)
-        self.assertIn("overflow-x: hidden;", body)
-        self.assertIn("overflow: visible;", main)
+        self.assertIn("min-height: 100svh;", body)
+        self.assertIn("overflow-x: visible;", body)
+        self.assertIn("overflow-y: visible;", body)
+        self.assertNotIn("overflow-y: auto;", body)
+        self.assertIn("overflow-x: clip;", main)
+        self.assertIn("overflow-y: visible;", main)
         self.assertNotIn("overflow-y: auto;", main)
 
     def test_sidebar_fixed_with_pointer_events_guard(self):
@@ -73,10 +79,13 @@ class MobileViewportShellFixTests(unittest.TestCase):
         self.assertIn(".panel-nav-clock", css)
         clock_css = css.split(".panel-nav-clock", 1)[1][:900]
         self.assertIn("pointer-events: none", clock_css)
-        self.assertIn("140ms", clock_css)
-        self.assertIn("@keyframes panel-nav-clock-show", css)
+        self.assertIn("color-mix(in srgb, var(--background", clock_css)
+        self.assertNotIn("@keyframes panel-nav-clock-show", css)
+        self.assertNotIn("animation: panel-nav-clock-show", css)
+        self.assertIn("setTimeout(function () {", js)
         self.assertIn("clock.hidden = false", js)
-        self.assertNotIn("setTimeout(function () {\n          clock.hidden = false", js)
+        self.assertIn("void clock.offsetWidth", js)
+        self.assertIn("clearTimeout(armTimer)", js)
 
     def test_hamburger_pageshow_reset(self):
         js = JS.read_text(encoding="utf-8")
@@ -90,7 +99,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_service_worker_cache(self):
         pwa = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v22", pwa)
+        self.assertIn("pgclock-shell-v24", pwa)
 
 
 if __name__ == "__main__":

@@ -136,9 +136,22 @@ def main() -> None:
             el.innerHTML = '<span class="panel-load-clock"><span class="panel-load-clock-face"><span class="panel-load-clock-hand panel-load-clock-hour"></span><span class="panel-load-clock-hand panel-load-clock-minute"></span><span class="panel-load-clock-hub"></span></span></span>';
             document.body.appendChild(el);
           }
-          // Mirror production arm: remove hidden immediately (CSS delay handles reveal)
-          window.__armNavClock = () => { el.hidden = false; el.setAttribute('aria-hidden','false'); };
-          window.__disarmNavClock = () => { el.hidden = true; el.setAttribute('aria-hidden','true'); };
+          // Mirror production arm: setTimeout 140ms then show with immediate opacity
+          let armTimer = null;
+          window.__armNavClock = () => {
+            if (armTimer != null) clearTimeout(armTimer);
+            armTimer = setTimeout(() => {
+              armTimer = null;
+              el.hidden = false;
+              el.setAttribute('aria-hidden','false');
+              void el.offsetWidth;
+            }, 140);
+          };
+          window.__disarmNavClock = () => {
+            if (armTimer != null) { clearTimeout(armTimer); armTimer = null; }
+            el.hidden = true;
+            el.setAttribute('aria-hidden','true');
+          };
           window.__clockState = () => {
             const cs = getComputedStyle(el);
             return {
@@ -147,6 +160,8 @@ def main() -> None:
               visibility: cs.visibility,
               pointerEvents: cs.pointerEvents,
               position: cs.position,
+              backgroundImage: cs.backgroundImage,
+              backgroundColor: cs.backgroundColor,
               shellH: document.querySelector('.shell').getBoundingClientRect().height,
               docSH: document.documentElement.scrollHeight,
             };
@@ -170,7 +185,7 @@ def main() -> None:
     out["long_open"] = long_open
     out["nav_clock"] = {
         "initial": s0,
-        "armed_immediate": s_armed,
+        "armed_pending": s_armed,
         "after_delay": s_visible,
         "disarmed": s_disarmed,
     }
@@ -220,19 +235,21 @@ def main() -> None:
         if abs(sf_content_inset - expected) > TOL:
             errors.append(f"{label}: side-foot content inset {sf_content_inset} != {expected}")
 
-    # C) Nav clock transitions
+    # C) Nav clock: setTimeout anti-flicker then immediate opacity (WebKit-safe)
     if not s0["hidden"] or float(s0["opacity"]) > 0.01:
         errors.append("nav-clock: must start hidden")
-    if s_armed["hidden"]:
-        errors.append("nav-clock: arm must clear [hidden] immediately")
-    if float(s_armed["opacity"]) > 0.05:
-        errors.append("nav-clock: must stay invisible during 140ms anti-flicker window")
-    if float(s_visible["opacity"]) < 0.95 or s_visible["visibility"] != "visible":
-        errors.append("nav-clock: must become visible after delay")
+    if not s_armed["hidden"]:
+        errors.append("nav-clock: must stay [hidden] during 140ms anti-flicker window")
+    if float(s_visible["opacity"]) < 0.95 or s_visible["visibility"] != "visible" or s_visible["hidden"]:
+        errors.append("nav-clock: must become visible after setTimeout delay")
     if not s_disarmed["hidden"]:
         errors.append("nav-clock: disarm must set hidden")
-    if s_armed["pointerEvents"] != "none" or s_armed["position"] != "fixed":
+    if s_visible["pointerEvents"] != "none" or s_visible["position"] != "fixed":
         errors.append("nav-clock: must stay fixed + pointer-events:none")
+    # Light matte (not fully transparent)
+    bg = (s_visible.get("backgroundColor") or "").lower()
+    if bg in ("rgba(0, 0, 0, 0)", "transparent", "rgba(0,0,0,0)"):
+        errors.append("nav-clock: must use light matte background, not fully transparent")
     if abs(s0["shellH"] - s_visible["shellH"]) > TOL or abs(s0["docSH"] - s_visible["docSH"]) > TOL:
         errors.append("nav-clock: must not change document/shell geometry")
 

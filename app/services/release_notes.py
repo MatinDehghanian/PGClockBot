@@ -16,6 +16,14 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.33": [
+        "موبایل — ریشه واقعی gap سایدبار short≠long: body با overflow-y:auto containing-block وابسته به ارتفاع محتوا؛ .side داخل body/.shell",
+        "رد v8.5.32: ارتفاع html در short/long یکسان؛ body همچنان overflow-y:auto بود",
+        "fix هندسه: html+body+.shell overflow visible؛ اسکرول viewport؛ overflow-x:clip فقط روی .main",
+        "گپ first-paint تبلت/Safari: fill با min-height:100svh به‌جای height:100% (layout ICB)؛ اسکرول فقط vv را بزرگ می‌کرد",
+        "ساعت navigation: CSS animation-delay در WebKit هنگام MPA nav یخ می‌زند — setTimeout + opacity فوری؛ matte سبک",
+        "SW v24؛ ریستور: v8.5.31",
+    ],
     "8.5.32": [
         "موبایل — ریشه مشترک gap فوتر/سایدبار در short page: overflow-x:hidden روی html باعث می‌شد overflow-y به auto تبدیل شود و در WebKit html containing-block برای fixed شود",
         "fix: html در موبایل overflow visible در هر دو محور؛ فقط body اسکرول عمودی + clip افقی — بدون --vvh/dvh/nested scroll",
