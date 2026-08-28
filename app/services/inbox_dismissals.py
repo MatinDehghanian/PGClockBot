@@ -129,33 +129,71 @@ async def load_dismissals(
     )
 
 
+def _action_center_active_keys(ac: dict[str, Any]) -> dict[str, bool]:
+    """Map action-center alert keys from counts (not only rendered entries)."""
+    out: dict[str, bool] = {}
+    if int(ac.get("pending") or 0) > 0:
+        out["ac:pending"] = True
+    if int(ac.get("failures") or 0) > 0:
+        out["ac:delivery"] = True
+    if int(ac.get("tickets") or 0) > 0:
+        out["ac:tickets"] = True
+    if int(ac.get("expiring") or 0) > 0:
+        out["ac:expiring"] = True
+    if int(ac.get("low_volume") or 0) > 0:
+        out["ac:low_volume"] = True
+    for entry in ac.get("entries") or []:
+        ek = str(entry.get("key") or "")
+        if ek:
+            out[alert_key_for_action_center(ek)] = True
+    return out
+
+
+def _alert_active_map(ctx: dict[str, Any]) -> dict[str, bool]:
+    """Which alert keys are currently active in a built inbox context."""
+    pr = ctx.get("payg_risk") or {}
+    active: dict[str, bool] = {
+        "update": bool((ctx.get("update") or {}).get("update_available")),
+        "shop_maintenance": bool(ctx.get("shop_maintenance")),
+        "capacity_warn": bool(ctx.get("capacity_warn")),
+        "payg_suspended": bool(pr.get("suspended")),
+        "payg_low": bool(pr.get("low")),
+    }
+    ta = ctx.get("ticket_alert")
+    if ta:
+        active["ticket_alert"] = True
+    if ctx.get("action_center_ok", True):
+        active.update(_action_center_active_keys(ctx.get("action_center") or {}))
+    return active
+
+
 async def cleanup_resolved_dismissals(
     session: AsyncSession,
     staff: dict,
     ctx: dict[str, Any],
 ) -> None:
     """Drop forever-dismiss rows once their alert is no longer active."""
+    if not ctx.get("action_center_ok", True):
+        return
     rows = await load_dismissals(session, staff)
     if not rows:
         return
 
-    active: dict[str, bool] = {
-        "update": bool((ctx.get("update") or {}).get("update_available")),
-        "ticket_alert": bool(ctx.get("ticket_alert")),
-        "shop_maintenance": bool(ctx.get("shop_maintenance")),
-        "capacity_warn": bool(ctx.get("capacity_warn")),
-        "payg_suspended": bool((ctx.get("payg_risk") or {}).get("suspended")),
-        "payg_low": bool((ctx.get("payg_risk") or {}).get("low")),
-    }
-    ac = ctx.get("action_center") or {}
-    for entry in ac.get("entries") or []:
-        ek = str(entry.get("key") or "")
-        if ek:
-            active[alert_key_for_action_center(ek)] = True
+    active = _alert_active_map(ctx)
 
     stale_ids: list[int] = []
     for row in rows:
         if row.mode != MODE_FOREVER:
+            continue
+        if row.alert_key == "ticket_alert":
+            ta = ctx.get("ticket_alert")
+            if not ta:
+                stale_ids.append(int(row.id))
+                continue
+            if row.entity_id:
+                eid = str(ta.get("ticket_id") or ta.get("id") or "")
+                if eid != row.entity_id:
+                    stale_ids.append(int(row.id))
             continue
         if not active.get(row.alert_key, False):
             stale_ids.append(int(row.id))
@@ -164,6 +202,16 @@ async def cleanup_resolved_dismissals(
             delete(PanelInboxDismissal).where(PanelInboxDismissal.id.in_(stale_ids))
         )
         await session.commit()
+
+
+async def clear_staff_dismissals(session: AsyncSession, staff: dict) -> int:
+    """Remove all persisted hide/snooze rows for this staff member."""
+    key = staff_dismiss_key(staff)
+    result = await session.execute(
+        delete(PanelInboxDismissal).where(PanelInboxDismissal.staff_key == key)
+    )
+    await session.commit()
+    return int(result.rowcount or 0)
 
 
 def _row_matches(row: PanelInboxDismissal, alert_key: str, entity_id: str = "") -> bool:

@@ -2204,7 +2204,7 @@
                 '<label>صاحب کارت<input type="text" class="pay-dest-card-holder" value="' + String(item.holder || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
-              '<button type="button" class="btn btn-ghost btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+              '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
             '</div>'
           );
         }
@@ -2216,7 +2216,7 @@
                 '<label>لینک<input type="text" class="pay-dest-gw-link" dir="ltr" value="' + String(item.link || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
-              '<button type="button" class="btn btn-ghost btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+              '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
             '</div>'
           );
         }
@@ -2228,7 +2228,7 @@
               '<label>آدرس<input type="text" class="pay-dest-cr-address" dir="ltr" value="' + String(item.address || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
               styleHtml +
             '</div>' +
-            '<button type="button" class="btn btn-ghost btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
+            '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
           '</div>'
         );
       }
@@ -2312,7 +2312,7 @@
       });
     })();
 
-    /* Colors tab — sub-tabs + tone chips */
+    /* Colors tab — section sub-tabs */
     (function () {
       const root = document.querySelector('[data-colors-subtabs]');
       if (!root) return;
@@ -2333,36 +2333,6 @@
             else panel.setAttribute('hidden', 'hidden');
           });
           document.dispatchEvent(new CustomEvent('colors-tab-change'));
-        });
-      });
-      function syncChips(card) {
-        const select = card.querySelector('.btn-color-select');
-        const chips = card.querySelectorAll('.btn-color-chip');
-        if (!select || !chips.length) return;
-        chips.forEach((chip) => {
-          chip.classList.toggle('is-active', chip.getAttribute('data-value') === select.value);
-        });
-      }
-      document.querySelectorAll('.btn-color-card').forEach((card) => {
-        syncChips(card);
-        const select = card.querySelector('.btn-color-select');
-        if (select) {
-          select.addEventListener('change', () => syncChips(card));
-        }
-        card.querySelectorAll('.btn-color-chip').forEach((chip) => {
-          chip.addEventListener('click', (e) => {
-            e.preventDefault();
-            const selectEl = card.querySelector('.btn-color-select');
-            if (!selectEl) return;
-            selectEl.value = chip.getAttribute('data-value') || '';
-            const tone = chip.getAttribute('data-tone') || '';
-            if (tone) selectEl.dataset.tone = tone;
-            else delete selectEl.dataset.tone;
-            selectEl.dispatchEvent(new Event('change', { bubbles: true }));
-            selectEl.dispatchEvent(new Event('input', { bubbles: true }));
-            syncChips(card);
-            document.dispatchEvent(new CustomEvent('colors-tab-change'));
-          });
         });
       });
     })();

@@ -1,4 +1,4 @@
-{# Telegram button colors — sub-tabs, dynamic-item summary, tone chips + selects. #}
+{# Telegram button colors — section tabs + tone-aware selects. #}
 <form method="post" action="{{ settings_action|default('/settings?tab=colors') }}" class="settings-form" id="settings-form">
   <div class="card settings-card">
     <h2>رنگبندی دکمه‌ها</h2>
@@ -31,38 +31,23 @@
     role="tabpanel"
     {% if not loop.first %}hidden{% endif %}
   >
-    <div class="btn-color-section-head colors-tab-intro" data-section="{{ tab_id }}">
-      <h2>{{ tab_label }}</h2>
-      {% if tab_caption %}
-      <p class="muted update-card-caption">{{ tab_caption }}</p>
-      {% endif %}
-    </div>
+    {% if tab_caption %}
+    <p class="muted colors-tab-caption">{{ tab_caption }}</p>
+    {% endif %}
 
-    {% for group_name, items in tab_groups %}
-    <details class="colors-group-details card settings-card"{% if loop.first %} open{% endif %}>
-      <summary class="colors-group-summary">
-        <h2>{{ group_name }}</h2>
-        <span class="colors-group-chevron" aria-hidden="true"></span>
-      </summary>
-      <div class="btn-color-grid">
-        {% for item in items %}
-        {% set cur = values.get(item.key, item.default) %}
-        {% set cur_tone = 'default' if not cur else cur %}
-        <div class="btn-color-card">
-          <span class="btn-color-label">{{ item.label }}</span>
-          <div class="btn-color-picker">
-            <div class="btn-color-chips" data-color-chips aria-hidden="true">
-              {% for opt_val, opt_label, opt_tone in style_options %}
-              <button
-                type="button"
-                class="btn-color-chip{% if cur == opt_val %} is-active{% endif %}"
-                data-tone="{{ opt_tone }}"
-                data-value="{{ opt_val }}"
-                title="{{ opt_label }}"
-                aria-label="{{ opt_label }}"
-              ></button>
-              {% endfor %}
-            </div>
+    <div class="colors-groups-stack">
+      {% for group_name, items in tab_groups %}
+      <details class="colors-group-details card settings-card"{% if loop.first %} open{% endif %}>
+        <summary class="colors-group-summary">
+          <h2>{{ group_name }}</h2>
+          <span class="colors-group-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="btn-color-grid colors-group-grid">
+          {% for item in items %}
+          {% set cur = values.get(item.key, item.default) %}
+          {% set cur_tone = 'default' if not cur else cur %}
+          <div class="btn-color-card">
+            <span class="btn-color-label">{{ item.label }}</span>
             <select
               name="s_{{ item.key }}"
               class="btn-color-select"
@@ -78,11 +63,11 @@
               {% endfor %}
             </select>
           </div>
+          {% endfor %}
         </div>
-        {% endfor %}
-      </div>
-    </details>
-    {% endfor %}
+      </details>
+      {% endfor %}
+    </div>
 
     {% if dynamic_color_rows %}
     {% set tab_dynamic = dynamic_color_rows | selectattr('tab', 'equalto', tab_id) | list %}

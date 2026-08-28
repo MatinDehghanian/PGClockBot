@@ -333,6 +333,29 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             status_code=303,
         )
 
+    @app.post("/inbox/dismiss/reset")
+    async def inbox_dismiss_reset(
+        request: Request,
+        staff: dict = Depends(require_staff),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from urllib.parse import quote
+
+        from app.services.inbox_dismissals import clear_staff_dismissals
+        from app.services.panel_inbox import invalidate_inbox_sidebar_cache
+
+        form = await request.form()
+        return_to = str(form.get("return_to") or "/inbox").strip()
+        if not return_to.startswith("/") or return_to.startswith("//"):
+            return_to = "/inbox"
+        removed = await clear_staff_dismissals(session, staff)
+        invalidate_inbox_sidebar_cache(staff)
+        msg = "اعلان‌های مخفی‌شده بازنشانی شدند" if removed else "اعلان مخفی‌شده‌ای نبود"
+        return RedirectResponse(
+            f"{return_to}?ok={quote(msg)}",
+            status_code=303,
+        )
+
     async def _render_home_result(request: Request, result, *, as_body_fragment: bool):
         if isinstance(result, RedirectResponse):
             return result
