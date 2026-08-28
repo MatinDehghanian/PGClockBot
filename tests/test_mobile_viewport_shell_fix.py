@@ -112,7 +112,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_sw_fallback_ignores_query_for_panel_assets(self):
         sw = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v36", sw)
+        self.assertIn("pgclock-shell-v37", sw)
         self.assertIn("matchIgnoreSearch", sw)
         self.assertIn("isVersionedPanelAsset", sw)
         # Non-OK network responses must fall back to cache (not pass through).
