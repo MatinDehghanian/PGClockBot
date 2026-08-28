@@ -56,10 +56,13 @@ class DashboardAndBulkTests(unittest.TestCase):
         panel_css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn("table_bulk_bar", macros)
         self.assertIn("table-bulk-check", macros)
+        self.assertIn("table-bulk-op-count", macros)
         self.assertIn("data-bulk-select", Path("app/web/templates/users.html").read_text(encoding="utf-8"))
         self.assertIn("data-table-bulk-bar", panel_js)
         self.assertIn("openModal('modal-inbox-dismiss')", panel_js)
         self.assertIn("is-bulk-selected", panel_js)
+        self.assertIn("panelConfirm", panel_js.split("Table bulk row selection")[1])
+        self.assertIn("eligibleIds", panel_js)
         self.assertIn("rgba(249, 115, 22, 0.08)", panel_css)
         self.assertIn("width: 20px !important", panel_css)
         self.assertIn("height: 20px !important", panel_css)
@@ -67,6 +70,7 @@ class DashboardAndBulkTests(unittest.TestCase):
         self.assertIn("margin: 0 !important", panel_css.split("Table bulk selection")[1].split("tbody tr.is-bulk-selected")[0])
         self.assertIn("align-items: center", panel_css.split("Table bulk selection")[1].split("tbody tr.is-bulk-selected")[0])
         self.assertNotIn("border-radius: 4px", panel_css.split("Table bulk selection")[1].split("tbody tr.is-bulk-selected")[0])
+        self.assertIn(".table-bulk-op-count", panel_css)
 
     def test_pay_dest_delete_button(self):
         js = Path("app/web/static/panel.js").read_text(encoding="utf-8")

@@ -79,17 +79,29 @@
     </label>
     <button class="btn btn-ghost" type="submit">جستجو</button>
   </form>
-  {% if manage %}
+  {% if manage and ops %}
   {{ table_bulk_bar('/users/bulk-action', [
-    {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': 'کاربران انتخاب‌شده مسدود شوند؟', 'confirm_title': 'مسدودسازی گروهی', 'warn': true},
-    {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت کاربران انتخاب‌شده برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی'},
+    {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true},
+    {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی'},
+    {'key': 'renew', 'label': 'تمدید', 'confirm': 'سرویس بحرانی {n} کاربر با پلن فعلی تمدید شود؟ مصرف ریست می‌شود.', 'confirm_title': 'تمدید گروهی', 'confirm_label': 'تمدید'},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر و داده‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است.', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true, 'reason': true, 'reason_label': 'علت حذف'},
+  ]) }}
+  {% elif manage %}
+  {{ table_bulk_bar('/users/bulk-action', [
+    {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true},
+    {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی'},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر و داده‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است.', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true, 'reason': true, 'reason_label': 'علت حذف'},
+  ]) }}
+  {% elif ops %}
+  {{ table_bulk_bar('/users/bulk-action', [
+    {'key': 'renew', 'label': 'تمدید', 'confirm': 'سرویس بحرانی {n} کاربر با پلن فعلی تمدید شود؟ مصرف ریست می‌شود.', 'confirm_title': 'تمدید گروهی', 'confirm_label': 'تمدید'},
   ]) }}
   {% endif %}
   <div class="table-wrap">
-  <table class="table-compact users-ops-table" data-sortable{% if manage %} data-bulk-select{% endif %}>
+  <table class="table-compact users-ops-table" data-sortable{% if manage or ops %} data-bulk-select{% endif %}>
     <thead>
       <tr>
-        {% if manage %}{{ table_select_head() }}{% endif %}
+        {% if manage or ops %}{{ table_select_head() }}{% endif %}
         <th class="col-id col-hide-sm" data-sort-type="num">#</th>
         <th class="col-tg col-hide-sm" data-sort-type="num">تلگرام</th>
         <th class="col-name" data-sort-type="text">نام</th>
@@ -106,8 +118,9 @@
       {% set u = row.user %}
       <tr class="users-row{% if focus_uid and u.id == focus_uid %} is-focus{% endif %}{% if row.has_alert %} has-alert{% endif %}"
           data-uid="{{ u.id }}"
-          id="user-{{ u.id }}">
-        {% if manage %}{{ table_select_cell(u.id) }}{% endif %}
+          id="user-{{ u.id }}"
+          data-bulk-ops="{% if manage and not u.is_blocked %}block,{% endif %}{% if manage and u.is_blocked %}unblock,{% endif %}{% if ops and row.service_count > 0 %}renew,{% endif %}{% if manage and u.role != 'admin' %}delete{% endif %}">
+        {% if manage or ops %}{{ table_select_cell(u.id) }}{% endif %}
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.id }}">{{ u.id }}</td>
         <td class="mono col-tg col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
         <td class="col-name" data-sort-value="{{ u.full_name or u.username or '' }}">
@@ -210,7 +223,7 @@
         {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="{% if manage %}10{% elif ops %}9{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
+      <tr><td colspan="{% if manage or ops %}10{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>

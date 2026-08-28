@@ -9430,3 +9430,44 @@ tbody tr.is-bulk-selected:hover {
   gap: var(--space-1);
   flex-wrap: wrap;
 }
+.table-bulk-op {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+}
+.table-bulk-op[hidden] {
+  display: none !important;
+}
+.table-bulk-op-label {
+  line-height: 1.2;
+}
+.table-bulk-op-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--muted-fg);
+  box-sizing: border-box;
+}
+.table-bulk-op.btn-ok .table-bulk-op-count,
+.table-bulk-op.btn-warn .table-bulk-op-count,
+.table-bulk-op.btn-danger .table-bulk-op-count {
+  background: rgba(0, 0, 0, 0.18);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: inherit;
+}
+html[data-theme="light"] .table-bulk-op-count {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: var(--foreground);
+}

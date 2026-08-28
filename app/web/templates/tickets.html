@@ -78,7 +78,7 @@
   <p class="muted page-sub">پشتیبانی کاربران تلگرام — پاسخ از همین‌جا مثل تلگرام برای کاربر ارسال می‌شود</p>
   <div class="card card-flush">
     {{ table_bulk_bar('/tickets/bot/bulk-action', [
-      {'key': 'close', 'label': 'بستن', 'confirm': 'تیکت‌های انتخاب‌شده بسته شوند؟', 'confirm_title': 'بستن گروهی', 'warn': true},
+      {'key': 'close', 'label': 'بستن', 'confirm': '{n} تیکت بسته شوند؟', 'confirm_title': 'بستن گروهی', 'confirm_label': 'بستن', 'warn': true},
     ]) }}
     <div class="table-wrap">
     <table data-bulk-select>
@@ -88,7 +88,7 @@
       <tbody>
       {% for row in tg_rows %}
         {% set t = row.ticket %}
-        <tr>
+        <tr data-bulk-ops="{% if t.status != 'closed' %}close{% endif %}">
           {{ table_select_cell(t.id) }}
           <td class="mono">{{ t.id }}</td>
           <td>

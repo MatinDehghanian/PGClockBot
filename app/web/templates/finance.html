@@ -54,9 +54,9 @@
     <button class="btn btn-ghost" type="submit">جستجو</button>
   </form>
   {{ table_bulk_bar('/finance/orders/bulk-action', [
-    {'key': 'approve', 'label': 'تأیید', 'class': 'btn-ok', 'confirm': 'سفارش‌های انتخاب‌شده تأیید شوند؟', 'confirm_title': 'تأیید گروهی'},
-    {'key': 'reject', 'label': 'رد', 'class': 'btn-danger', 'confirm': 'سفارش‌های انتخاب‌شده رد شوند؟', 'confirm_title': 'رد گروهی', 'danger': true},
-    {'key': 'cancel', 'label': 'لغو', 'confirm': 'سفارش‌های انتخاب‌شده لغو شوند؟', 'confirm_title': 'لغو گروهی', 'warn': true},
+    {'key': 'approve', 'label': 'تأیید', 'class': 'btn-ok', 'confirm': '{n} سفارش تأیید شوند؟', 'confirm_title': 'تأیید گروهی', 'confirm_label': 'تأیید'},
+    {'key': 'reject', 'label': 'رد', 'class': 'btn-danger', 'confirm': '{n} سفارش رد شوند؟', 'confirm_title': 'رد گروهی', 'confirm_label': 'رد', 'danger': true},
+    {'key': 'cancel', 'label': 'لغو', 'confirm': '{n} سفارش لغو شوند؟', 'confirm_title': 'لغو گروهی', 'confirm_label': 'لغو', 'warn': true},
   ]) }}
   <div class="table-wrap">
   <table class="table-compact" data-sortable data-bulk-select>
@@ -78,7 +78,19 @@
       {% set pay = payments_by_order.get(o.id) %}
       {% set uname = (o.user.full_name or o.user.username or o.user_id) if o.user else o.user_id %}
       {% set pname = o.plan.name if o.plan else (o.plan_id or "—") %}
-      <tr>
+      {% set ns = namespace(ops='') %}
+      {% if pay and pay.status == 'pending' %}
+        {% set ns.ops = 'approve,reject,cancel' %}
+      {% elif o.status == 'paid' %}
+        {% set ns.ops = 'approve' %}
+      {% elif o.status == 'awaiting_approval' %}
+        {% set ns.ops = 'approve,reject,cancel' %}
+      {% elif o.status in ['pending', 'awaiting_receipt'] %}
+        {% set ns.ops = 'approve,reject,cancel' %}
+      {% elif o.status == 'rejected' %}
+        {% set ns.ops = 'cancel' %}
+      {% endif %}
+      <tr data-bulk-ops="{{ ns.ops }}">
         {{ table_select_cell(o.id) }}
         <td class="mono" data-sort-value="{{ o.id }}">{{ o.id }}</td>
         <td data-sort-value="{{ uname }}">
@@ -166,8 +178,8 @@
     <button class="btn btn-ghost" type="submit">جستجو</button>
   </form>
   {{ table_bulk_bar('/finance/payments/bulk-action', [
-    {'key': 'approve', 'label': 'تأیید', 'class': 'btn-ok', 'confirm': 'پرداخت‌های انتخاب‌شده تأیید شوند؟', 'confirm_title': 'تأیید گروهی'},
-    {'key': 'reject', 'label': 'رد', 'class': 'btn-danger', 'confirm': 'پرداخت‌های انتخاب‌شده رد شوند؟', 'confirm_title': 'رد گروهی', 'danger': true},
+    {'key': 'approve', 'label': 'تأیید', 'class': 'btn-ok', 'confirm': '{n} پرداخت تأیید شوند؟', 'confirm_title': 'تأیید گروهی', 'confirm_label': 'تأیید'},
+    {'key': 'reject', 'label': 'رد', 'class': 'btn-danger', 'confirm': '{n} پرداخت رد شوند؟', 'confirm_title': 'رد گروهی', 'confirm_label': 'رد', 'danger': true},
   ]) }}
   <div class="table-wrap">
   <table class="table-compact" data-sortable data-bulk-select>
@@ -185,7 +197,7 @@
     {% for p in payments %}
       {% set payer = (payers or {}).get(p.user_id) %}
       {% set uname = (payer.full_name or payer.username or p.user_id) if payer else p.user_id %}
-      <tr>
+      <tr data-bulk-ops="{% if p.status == 'pending' %}approve,reject{% endif %}">
         {{ table_select_cell(p.id) }}
         <td class="mono" data-sort-value="{{ p.id }}">{{ p.id }}</td>
         <td data-sort-value="{{ uname }}">
@@ -232,10 +244,14 @@
 
 {% elif finance_tab == 'delivery' and can_orders %}
 <div class="card card-flush">
+  {{ table_bulk_bar('/finance/delivery/bulk-action', [
+    {'key': 'retry', 'label': 'تلاش مجدد', 'class': 'btn-ok', 'confirm': 'تحویل {n} سفارش دوباره تلاش شود؟', 'confirm_title': 'تلاش مجدد گروهی', 'confirm_label': 'تلاش مجدد'},
+  ]) }}
   <div class="table-wrap">
-  <table class="table-compact" data-sortable>
+  <table class="table-compact" data-sortable data-bulk-select>
     <thead>
       <tr>
+        {{ table_select_head() }}
         <th data-sort-type="num">سفارش</th>
         <th data-sort-type="text">کاربر</th>
         <th class="col-hide-sm" data-sort-type="text">خطا</th>
@@ -247,7 +263,8 @@
     {% for f in delivery_failures %}
       {% set o = (orders_by_id or {}).get(f.order_id) %}
       {% set uname = (o.user.full_name or o.user.username or o.user_id) if o and o.user else (o.user_id if o else '—') %}
-      <tr>
+      <tr data-bulk-ops="retry">
+        {{ table_select_cell(f.order_id) }}
         <td class="mono" data-sort-value="{{ f.order_id }}">#{{ f.order_id }}</td>
         <td data-sort-value="{{ uname }}">{{ uname }}</td>
         <td class="col-hide-sm muted" data-sort-value="{{ f.error or '' }}">{{ (f.error or '—')[:120] }}</td>
@@ -264,7 +281,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="muted">صف تحویل ناموفق خالی است.</td></tr>
+      <tr><td colspan="6" class="muted">صف تحویل ناموفق خالی است.</td></tr>
     {% endfor %}
     </tbody>
   </table>
