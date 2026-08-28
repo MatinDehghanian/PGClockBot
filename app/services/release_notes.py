@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.7.3": [
+        "اعلان‌ها: کلید dismiss پایدار + بازیابی legacy؛ کارت بازنشانی همیشه در /inbox",
+        "تب رنگبندی: حذف پیش‌نمایش تلگرام؛ آکاردئون با chevron و فاصله section-gap",
+        "چک‌باکس multi-select 20×20px (هم‌ارتفاع badge)",
+        "بدون مایگریشن DB — SW v39؛ ریستور: restore/pre-v8.7.3-v8.7.2",
+    ],
     "8.7.2": [
         "اعلان‌ها: رفع باگ ناپدید شدن بعد از آپدیت — cleanup از شمارنده‌های واقعی صف کار استفاده می‌کند، نه فقط entries",
         "دکمه «بازنشانی اعلان‌های مخفی» در /inbox برای بازیابی dismissهای ذخیره‌شده",
