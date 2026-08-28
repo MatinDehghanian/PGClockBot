@@ -16,6 +16,14 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.7.2": [
+        "اعلان‌ها: رفع باگ ناپدید شدن بعد از آپدیت — cleanup از شمارنده‌های واقعی صف کار استفاده می‌کند، نه فقط entries",
+        "دکمه «بازنشانی اعلان‌های مخفی» در /inbox برای بازیابی dismissهای ذخیره‌شده",
+        "تب رنگبندی: حذف چیپ‌های دایره‌ای، فقط select؛ آکاردئون فشرده‌تر با فلش به بالا",
+        "حذف مقصد پرداخت: btn-danger مثل سایر دکمه‌های حذف",
+        "چک‌باکس multi-select کوچک‌تر؛ همه سوییچ‌ها یک اندازه (44×26)",
+        "بدون مایگریشن DB — SW v38؛ ریستور: restore/pre-v8.7.2-v8.7.1",
+    ],
     "8.7.1": [
         "اعلان‌ها: رفع باگ حذف اعلان — مودال dismiss در /inbox و صف کار داشبورد درست باز می‌شود",
         "صف کار داشبورد هم dismiss ذخیره‌شده را اعمال می‌کند (مثل /inbox)",
