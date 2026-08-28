@@ -7653,14 +7653,58 @@ html[data-theme="light"] .home-period {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
+  gap: var(--space-1);
   padding: var(--space-2);
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.03);
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+.home-action-item-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-width: 0;
   color: inherit;
   text-decoration: none;
-  transition: background var(--motion-fast) var(--ease-standard);
+}
+.home-action-item-link:hover {
+  color: inherit;
+}
+.inbox-dismiss-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.inbox-alert-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.inbox-alert-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+}
+.inbox-dismiss-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.inbox-dismiss-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: start;
+  width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 .home-action-leading {
   display: flex;
@@ -7689,10 +7733,11 @@ html[data-theme="light"] .home-period {
 }
 .home-action-item.tone-warn .home-action-ico { color: var(--warn-fg); }
 .home-action-item.tone-err .home-action-ico { color: var(--destructive-fg); }
-.home-action-item:hover {
+.home-action-item:hover,
+.home-action-item-link:hover {
   background: rgba(255, 255, 255, 0.07);
 }
-.home-action-item:focus-visible {
+.home-action-item-link:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 55%, transparent);
 }
@@ -8982,4 +9027,120 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   .msg-vars-token-cell .btn {
     flex: 0 0 auto;
   }
+}
+
+/* —— Payment destination lists (multi card/gateway/crypto) —— */
+.pay-dest-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  grid-column: 1 / -1;
+}
+.pay-dest-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pay-dest-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.pay-dest-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.pay-dest-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-1);
+  align-items: start;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+.pay-dest-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-1);
+}
+.pay-dest-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.pay-dest-fields input {
+  width: 100%;
+}
+.pay-dest-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
+}
+.pay-dest-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: 18px;
+  line-height: 1;
+}
+.pay-dest-add-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted-fg);
+  cursor: pointer;
+  width: 100%;
+}
+.pay-dest-add-row:hover {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  color: var(--foreground);
+}
+
+/* —— Table bulk selection —— */
+.col-select {
+  width: 44px;
+  min-width: 44px;
+  text-align: center;
+  vertical-align: middle;
+}
+.table-select-all,
+.table-select-row {
+  justify-content: center;
+  margin: 0;
+}
+.table-select-all .ui-switch,
+.table-select-row .ui-switch {
+  margin: 0 auto;
+}
+.table-bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-1_5) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+.table-bulk-bar[hidden] {
+  display: none !important;
+}
+.table-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
 }

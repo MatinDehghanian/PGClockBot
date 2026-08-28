@@ -996,6 +996,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_perm=require_perm,
         get_db=get_db,
     )
+    from app.api.bulk_pages import register_bulk_pages
+
+    register_bulk_pages(
+        app,
+        require_admin=require_admin,
+        require_perm=require_perm,
+        get_db=get_db,
+    )
     from app.api.finance_pages import register_finance_pages
     register_finance_pages(
         app,

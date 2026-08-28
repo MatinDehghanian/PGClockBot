@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import tkt_status, page_title, panel_tkt_status, panel_tkt_priority %}
+{% from "macros.html" import tkt_status, page_title, panel_tkt_status, panel_tkt_priority, table_select_head, table_select_cell, table_bulk_bar %}
 {% block title %}پشتیبانی{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -77,13 +77,19 @@
   <h2 class="section-title">تیکت‌های کاربران ربات</h2>
   <p class="muted page-sub">پشتیبانی کاربران تلگرام — پاسخ از همین‌جا مثل تلگرام برای کاربر ارسال می‌شود</p>
   <div class="card card-flush">
+    {{ table_bulk_bar('/tickets/bot/bulk-action', [
+      {'key': 'close', 'label': 'بستن', 'confirm': 'تیکت‌های انتخاب‌شده بسته شوند؟', 'confirm_title': 'بستن گروهی', 'warn': true},
+    ]) }}
     <div class="table-wrap">
-    <table>
-      <thead><tr><th class="col-id">#</th><th class="col-user">کاربر</th><th class="col-subject">موضوع</th><th class="col-status">وضعیت</th><th class="col-time">زمان</th><th class="col-actions"></th></tr></thead>
+    <table data-bulk-select>
+      <thead><tr>
+        {{ table_select_head() }}
+        <th class="col-id">#</th><th class="col-user">کاربر</th><th class="col-subject">موضوع</th><th class="col-status">وضعیت</th><th class="col-time">زمان</th><th class="col-actions"></th></tr></thead>
       <tbody>
       {% for row in tg_rows %}
         {% set t = row.ticket %}
         <tr>
+          {{ table_select_cell(t.id) }}
           <td class="mono">{{ t.id }}</td>
           <td>
             {% if row.user_id %}
@@ -104,7 +110,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="6" class="muted">تیکت کاربری نیست</td></tr>
+        <tr><td colspan="7" class="muted">تیکت کاربری نیست</td></tr>
       {% endfor %}
       </tbody>
     </table>

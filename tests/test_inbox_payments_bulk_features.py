@@ -1,0 +1,63 @@
+"""Tests for inbox dismissals, payment destinations, dashboard order."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import unittest
+
+
+class InboxDismissalsTests(unittest.TestCase):
+    def test_dismiss_service_file(self):
+        src = Path("app/services/inbox_dismissals.py").read_text(encoding="utf-8")
+        self.assertIn("MODE_24H", src)
+        self.assertIn("MODE_FOREVER", src)
+        self.assertIn("filter_inbox_context", src)
+        self.assertIn("SNOOZE_HOURS = 24", src)
+
+    def test_dismiss_model(self):
+        src = Path("app/db/models.py").read_text(encoding="utf-8")
+        self.assertIn("class PanelInboxDismissal", src)
+
+
+class PaymentDestinationsTests(unittest.TestCase):
+    def test_legacy_migration_logic(self):
+        src = Path("app/services/payment_destinations.py").read_text(encoding="utf-8")
+        self.assertIn("def migrate_legacy_payment_settings", src)
+        self.assertIn("def enrich_payment_settings", src)
+        self.assertIn("KEY_CARDS", src)
+
+    def test_settings_form_fields(self):
+        src = Path("app/services/users.py").read_text(encoding="utf-8")
+        self.assertIn('"payment_cards"', src)
+        self.assertIn('"payment_gateways"', src)
+        self.assertIn('"payment_crypto_wallets"', src)
+        field = Path("app/web/templates/_settings_field.html").read_text(encoding="utf-8")
+        self.assertIn("data-pay-dest", field)
+
+
+class DashboardAndBulkTests(unittest.TestCase):
+    def test_home_ops_queue_before_sales(self):
+        ops = Path("app/web/templates/_home_ops.html").read_text(encoding="utf-8")
+        q = ops.find("home-action-card")
+        s = ops.find("home-periods-card")
+        self.assertGreater(q, 0)
+        self.assertGreater(s, 0)
+        self.assertLess(q, s)
+
+    def test_bulk_select_markup(self):
+        macros = Path("app/web/templates/macros.html").read_text(encoding="utf-8")
+        panel_js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
+        self.assertIn("table_bulk_bar", macros)
+        self.assertIn("data-bulk-select", Path("app/web/templates/users.html").read_text(encoding="utf-8"))
+        self.assertIn("data-table-bulk-bar", panel_js)
+
+    def test_inbox_dismiss_modal(self):
+        base = Path("app/web/templates/base.html").read_text(encoding="utf-8")
+        self.assertIn("modal-inbox-dismiss", base)
+        self.assertIn("/inbox/dismiss", base)
+
+
+if __name__ == "__main__":
+    unittest.main()

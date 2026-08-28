@@ -1,8 +1,8 @@
-{# Shared home ops block: portals → period sales → work queue
+{# Shared home ops block: portals → work queue → period sales
    Expects: periods, action_center (optional), portal_bot_href, portal_pg_href,
             portal_bot_show (bool, default true), portal_pg_show (bool, default true)
 #}
-{% from "macros.html" import action_center_icon %}
+{% from "macros.html" import action_center_icon, inbox_dismiss_btn %}
 {% set ac = action_center or {} %}
 {% set periods = periods or {} %}
 {% set day = periods.day or {} %}
@@ -46,6 +46,31 @@
 </div>
 {% endif %}
 
+<section class="card home-action-card" aria-label="صف کار">
+  <h2>صف کار</h2>
+  {% if ac.has_items %}
+  <div class="home-action-list">
+    {% for item in ac.entries %}
+    <div class="home-action-item tone-{{ item.tone or 'neutral' }}">
+      <a class="home-action-item-link" href="{{ item.href }}">
+        <span class="home-action-leading">
+          {{ action_center_icon(item.key) }}
+          <span class="home-action-copy">
+            <strong>{{ item.title }}</strong>
+            <span class="muted">{{ item.detail }}</span>
+          </span>
+        </span>
+        <span class="btn btn-sm btn-ghost">برو</span>
+      </a>
+      {{ inbox_dismiss_btn('ac:' ~ item.key) }}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted home-action-empty">الان کاری در صف نیست.</p>
+  {% endif %}
+</section>
+
 <section class="card home-periods-card" aria-label="فروش دوره‌ای">
   <header class="home-periods-head">
     <h2>فروش</h2>
@@ -80,26 +105,4 @@
       </dl>
     </article>
   </div>
-</section>
-
-<section class="card home-action-card" aria-label="صف کار">
-  <h2>صف کار</h2>
-  {% if ac.has_items %}
-  <div class="home-action-list">
-    {% for item in ac.entries %}
-    <a class="home-action-item tone-{{ item.tone or 'neutral' }}" href="{{ item.href }}">
-      <span class="home-action-leading">
-        {{ action_center_icon(item.key) }}
-        <span class="home-action-copy">
-          <strong>{{ item.title }}</strong>
-          <span class="muted">{{ item.detail }}</span>
-        </span>
-      </span>
-      <span class="btn btn-sm btn-ghost">برو</span>
-    </a>
-    {% endfor %}
-  </div>
-  {% else %}
-  <p class="muted home-action-empty">الان کاری در صف نیست.</p>
-  {% endif %}
 </section>

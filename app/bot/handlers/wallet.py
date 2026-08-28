@@ -278,31 +278,45 @@ async def _topup_instructions(
     payment: Payment,
     method: str,
     ui: dict | None = None,
+    *,
+    card: dict | None = None,
+    gateway: dict | None = None,
+    wallet: dict | None = None,
 ) -> tuple[str, InlineKeyboardMarkup]:
+    from app.services.payment_destinations import (
+        enabled_cards,
+        enabled_crypto_wallets,
+        enabled_gateways,
+    )
+
     if ui is None:
         ui = await get_all_settings(session)
     amount = format_toman(payment.amount, get_settings().currency)
     rows: list[list[InlineKeyboardButton]] = []
     if method == PaymentMethod.CARD.value:
+        card = card or (enabled_cards(ui)[0] if enabled_cards(ui) else None)
+        card_num = (card or {}).get("number") or ui.get("card_number") or "—"
+        holder = (card or {}).get("holder") or ui.get("card_holder") or "—"
         try:
             body = render_message_template(
                 ui["card_pay_text"],
                 domain=DOMAIN_PAYMENT,
                 amount=amount,
-                card=ui.get("card_number") or "—",
-                holder=ui.get("card_holder") or "—",
+                card=card_num,
+                holder=holder,
                 shop_title=ui.get("shop_title") or "",
                 payment_id=payment.id,
             )
         except Exception:
             body = (
                 f"مبلغ {amount} را کارت به کارت کنید:\n"
-                f"<code>{ui.get('card_number') or '—'}</code>\n{ui.get('card_holder') or ''}"
+                f"<code>{card_num}</code>\n{holder}"
             )
         title = "💳 کارت به کارت"
     elif method == PaymentMethod.GATEWAY.value:
-        name = ui.get("gateway_name") or "درگاه"
-        link = (ui.get("gateway_link") or "").strip()
+        gateway = gateway or (enabled_gateways(ui)[0] if enabled_gateways(ui) else None)
+        name = (gateway or {}).get("name") or ui.get("gateway_name") or "درگاه"
+        link = ((gateway or {}).get("link") or ui.get("gateway_link") or "").strip()
         if link:
             try:
                 link = render_message_template(
@@ -331,32 +345,47 @@ async def _topup_instructions(
             rows.append([InlineKeyboardButton(text=f"ورود به {name}", url=link)])
         title = f"🌐 {name}"
     else:
-        address = (ui.get("crypto_address") or "").strip() or "—"
+        wallet = wallet or (enabled_crypto_wallets(ui)[0] if enabled_crypto_wallets(ui) else None)
+        address = ((wallet or {}).get("address") or ui.get("crypto_address") or "").strip() or "—"
+        asset = (wallet or {}).get("asset") or ui.get("crypto_asset") or "USDT"
+        network = (wallet or {}).get("network") or ui.get("crypto_network") or "—"
         try:
             body = render_message_template(
                 ui.get("crypto_pay_text") or "",
                 domain=DOMAIN_PAYMENT,
                 amount=amount,
-                asset=ui.get("crypto_asset") or "USDT",
-                network=ui.get("crypto_network") or "—",
+                asset=asset,
+                network=network,
                 address=address,
                 shop_title=ui.get("shop_title") or "",
                 payment_id=payment.id,
             )
         except Exception:
-            body = f"{ui.get('crypto_asset') or 'USDT'}: <code>{address}</code>\nمبلغ تقریبی {amount}"
+            body = f"{asset}: <code>{address}</code>\nمبلغ تقریبی {amount}"
         title = "💎 رمزارز"
     body += f"\n\nسپس عکس رسید را بفرستید.\n(پرداخت #{payment.id})"
     rows.append([InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="wallet:home")])
     return format_message(title, body), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-@router.callback_query(F.data.in_({"wtop:card", "wtop:gateway", "wtop:crypto"}), WalletStates.choose_method)
+@router.callback_query(F.data.regexp(r"^wtop:(card|gateway|crypto)(?::\w+)?$"), WalletStates.choose_method)
 async def wtop_choose_method(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser
 ):
+    from app.services.payment_destinations import (
+        card_by_id,
+        crypto_by_id,
+        enabled_cards,
+        enabled_crypto_wallets,
+        enabled_gateways,
+        gateway_by_id,
+        inline_picker_markup,
+    )
+
     ui = await get_all_settings(session)
-    key = (callback.data or "").split(":")[-1]
+    parts = (callback.data or "").split(":")
+    key = parts[1]
+    dest_id = parts[2] if len(parts) > 2 else None
     flag, method = _TOPUP_METHODS[key]
     if not on(ui.get(flag)):
         await callback.answer("غیرفعال است", show_alert=True)
@@ -366,9 +395,62 @@ async def wtop_choose_method(
     if amount < 1000:
         await callback.answer("ابتدا مبلغ شارژ را وارد کنید", show_alert=True)
         return
+
+    card = gateway = wallet = None
+    if key == "card":
+        items = enabled_cards(ui)
+        if not items:
+            await callback.answer("کارت تنظیم نشده", show_alert=True)
+            return
+        if len(items) > 1 and not dest_id:
+            await callback.answer()
+            markup = inline_picker_markup("card", items, order_id=0, prefix="wtop")
+            if callback.message and markup:
+                await safe_edit_text(
+                    callback.message,
+                    format_message("💳 کارت", "یکی از کارت‌ها را انتخاب کنید:"),
+                    reply_markup=markup,
+                )
+            return
+        card = card_by_id(ui, dest_id) if dest_id else items[0]
+    elif key == "gateway":
+        items = enabled_gateways(ui)
+        if not items:
+            await callback.answer("درگاه تنظیم نشده", show_alert=True)
+            return
+        if len(items) > 1 and not dest_id:
+            await callback.answer()
+            markup = inline_picker_markup("gateway", items, order_id=0, prefix="wtop")
+            if callback.message and markup:
+                await safe_edit_text(
+                    callback.message,
+                    format_message("🌐 درگاه", "یکی از درگاه‌ها را انتخاب کنید:"),
+                    reply_markup=markup,
+                )
+            return
+        gateway = gateway_by_id(ui, dest_id) if dest_id else items[0]
+    else:
+        items = enabled_crypto_wallets(ui)
+        if not items:
+            await callback.answer("ولت تنظیم نشده", show_alert=True)
+            return
+        if len(items) > 1 and not dest_id:
+            await callback.answer()
+            markup = inline_picker_markup("crypto", items, order_id=0, prefix="wtop")
+            if callback.message and markup:
+                await safe_edit_text(
+                    callback.message,
+                    format_message("💎 رمزارز", "یکی از آدرس‌ها را انتخاب کنید:"),
+                    reply_markup=markup,
+                )
+            return
+        wallet = crypto_by_id(ui, dest_id) if dest_id else items[0]
+
     payment = await create_wallet_topup(session, db_user.id, amount, method=method)
     await callback.answer()
-    text, markup = await _topup_instructions(session, payment, method, ui=ui)
+    text, markup = await _topup_instructions(
+        session, payment, method, ui=ui, card=card, gateway=gateway, wallet=wallet
+    )
     await state.set_state(WalletStates.waiting_receipt)
     await state.update_data(payment_id=payment.id, topup_amount=None)
     if callback.message:

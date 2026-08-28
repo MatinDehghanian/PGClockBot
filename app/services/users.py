@@ -558,6 +558,27 @@ async def set_settings_bulk(
     """Upsert many settings with a single commit (avoids lock storms on menu save)."""
     if not values:
         return
+    from app.services.payment_destinations import (
+        KEY_CARDS,
+        KEY_CRYPTO,
+        KEY_GATEWAYS,
+        enrich_payment_settings,
+    )
+
+    merged = dict(values)
+    if KEY_CARDS in merged or KEY_GATEWAYS in merged or KEY_CRYPTO in merged:
+        merged = enrich_payment_settings({**DEFAULT_SETTINGS, **merged})
+        for legacy in (
+            "card_number",
+            "card_holder",
+            "gateway_name",
+            "gateway_link",
+            "crypto_asset",
+            "crypto_network",
+            "crypto_address",
+        ):
+            if legacy in merged:
+                values[legacy] = merged[legacy]
     rid = _effective_reseller_id(reseller_id)
     keys = list(values.keys())
     if rid:
@@ -600,6 +621,9 @@ DEFAULT_SETTINGS = {
         "به فروشگاه کلاک خوش آمدید.\n"
         "از منوی زیر می‌توانید سرویس بخرید، وضعیت را ببینید و پشتیبانی بگیرید."
     ),
+    "payment_cards": "[]",
+    "payment_gateways": "[]",
+    "payment_crypto_wallets": "[]",
     "card_number": "",
     "card_holder": "",
     "support_text": "پیام خود را بنویسید؛ تیم پشتیبانی پاسخ می‌دهد.",
@@ -1074,21 +1098,32 @@ SETTING_GROUPS = {
         ),
     ],
     "کارت به کارت": [
-        ("card_number", "شماره کارت", "text", "۱۶ رقم"),
-        ("card_holder", "نام صاحب کارت", "text", ""),
+        (
+            "payment_cards",
+            "کارت‌ها",
+            "payment_cards",
+            "چند کارت — دکمه + برای افزودن. متغیرهای متن: {amount} {card} {holder}",
+        ),
         ("card_pay_text", "راهنمای کارت‌به‌کارت", "textarea", "متغیرها: {amount} {card} {holder}"),
         ("btn_pay_card", "متن دکمه کارت به کارت", "text", ""),
     ],
     "درگاه پرداخت": [
-        ("gateway_name", "نام درگاه", "text", "مثلاً زرین‌پال"),
-        ("gateway_link", "لینک درگاه / صفحه پرداخت", "text", "می‌تواند شامل {amount} یا {order_id} یا {payment_id} باشد"),
+        (
+            "payment_gateways",
+            "درگاه‌ها",
+            "payment_gateways",
+            "چند درگاه — لینک می‌تواند شامل {amount} یا {order_id} باشد",
+        ),
         ("gateway_pay_text", "راهنمای درگاه", "textarea", "متغیرها: {amount} {order_id} {gateway_name} (قدیمی: {name})"),
         ("btn_pay_gateway", "متن دکمه درگاه", "text", ""),
     ],
     "رمزارز": [
-        ("crypto_asset", "رمزارز", "text", "مثلاً USDT"),
-        ("crypto_network", "شبکه", "text", "مثلاً TRC20"),
-        ("crypto_address", "آدرس ولت", "text", ""),
+        (
+            "payment_crypto_wallets",
+            "آدرس‌های ولت",
+            "payment_crypto_wallets",
+            "چند آدرس — هر ردیف: رمزارز، شبکه، آدرس",
+        ),
         ("crypto_pay_text", "راهنمای رمزارز", "textarea", "متغیرها: {amount} {asset} {network} {address}"),
         ("btn_pay_crypto", "متن دکمه رمزارز", "text", ""),
     ],
@@ -1251,11 +1286,17 @@ async def get_all_settings(
         if "shop" not in order:
             order.insert(0, "shop")
         data["menu_order"] = ",".join(order)
+        from app.services.payment_destinations import enrich_payment_settings
+
+        data = enrich_payment_settings(data)
         _SETTINGS_CACHE[cache_key] = (now, dict(data))
         return data
     result = await session.execute(select(Setting))
     rows = result.scalars().all()
     data.update({r.key: r.value for r in rows})
+    from app.services.payment_destinations import enrich_payment_settings
+
+    data = enrich_payment_settings(data)
     _SETTINGS_CACHE[cache_key] = (now, dict(data))
     return data
 

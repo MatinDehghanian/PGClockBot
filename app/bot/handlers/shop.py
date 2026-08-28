@@ -1401,21 +1401,47 @@ async def _await_order_receipt(
             pass
 
 
-@router.callback_query(F.data.startswith("pay:card:"))
+@router.callback_query(F.data.regexp(r"^pay:card:\d+(?::\w+)?$"))
 async def pay_card_cb(
     callback: CallbackQuery,
     session: AsyncSession,
     db_user: BotUser,
     state: FSMContext | None = None,
 ):
+    from app.services.payment_destinations import (
+        card_by_id,
+        enabled_cards,
+        inline_picker_markup,
+    )
+
     ui = await get_all_settings(session)
     if not on(ui.get("pay_card_enabled")):
         await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
         return
-    order_id = int(callback.data.split(":")[-1])
+    parts = (callback.data or "").split(":")
+    order_id = int(parts[2])
+    dest_id = parts[3] if len(parts) > 3 else None
     order = await session.get(Order, order_id)
     if not order or order.user_id != db_user.id:
         await callback.answer("سفارش نامعتبر", show_alert=True)
+        return
+    cards = enabled_cards(ui)
+    if not cards:
+        await callback.answer("کارت بانکی تنظیم نشده — به ادمین اطلاع دهید", show_alert=True)
+        return
+    if len(cards) > 1 and not dest_id:
+        await callback.answer()
+        markup = inline_picker_markup("card", cards, order_id=order_id, prefix="pay")
+        if callback.message and markup:
+            await safe_edit_text(
+                callback.message,
+                format_message("💳 کارت به کارت", "یکی از کارت‌ها را انتخاب کنید:"),
+                reply_markup=markup,
+            )
+        return
+    card = card_by_id(ui, dest_id) if dest_id else cards[0]
+    if not card:
+        await callback.answer("کارت نامعتبر", show_alert=True)
         return
     try:
         payment = await start_card_payment(session, order, db_user.id)
@@ -1429,8 +1455,8 @@ async def pay_card_cb(
             ui["card_pay_text"],
             domain=DOMAIN_PAYMENT,
             amount=amount,
-            card=ui.get("card_number") or "—",
-            holder=ui.get("card_holder") or "—",
+            card=card.get("number") or "—",
+            holder=card.get("holder") or "—",
             shop_title=ui.get("shop_title") or "",
             payment_id=payment.id,
         )
@@ -1442,7 +1468,7 @@ async def pay_card_cb(
     )
 
 
-@router.callback_query(F.data.startswith("pay:gateway:"))
+@router.callback_query(F.data.regexp(r"^pay:gateway:\d+(?::\w+)?$"))
 async def pay_gateway_cb(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -1451,14 +1477,40 @@ async def pay_gateway_cb(
 ):
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+    from app.services.payment_destinations import (
+        enabled_gateways,
+        gateway_by_id,
+        inline_picker_markup,
+    )
+
     ui = await get_all_settings(session)
     if not on(ui.get("pay_gateway_enabled")):
         await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
         return
-    order_id = int(callback.data.split(":")[-1])
+    parts = (callback.data or "").split(":")
+    order_id = int(parts[2])
+    dest_id = parts[3] if len(parts) > 3 else None
     order = await session.get(Order, order_id)
     if not order or order.user_id != db_user.id:
         await callback.answer("سفارش نامعتبر", show_alert=True)
+        return
+    gateways = enabled_gateways(ui)
+    if not gateways:
+        await callback.answer("درگاه پرداخت تنظیم نشده — به ادمین اطلاع دهید", show_alert=True)
+        return
+    if len(gateways) > 1 and not dest_id:
+        await callback.answer()
+        markup = inline_picker_markup("gateway", gateways, order_id=order_id, prefix="pay")
+        if callback.message and markup:
+            await safe_edit_text(
+                callback.message,
+                format_message("🌐 درگاه پرداخت", "یکی از درگاه‌ها را انتخاب کنید:"),
+                reply_markup=markup,
+            )
+        return
+    gw = gateway_by_id(ui, dest_id) if dest_id else gateways[0]
+    if not gw:
+        await callback.answer("درگاه نامعتبر", show_alert=True)
         return
     try:
         payment = await start_method_payment(
@@ -1469,8 +1521,8 @@ async def pay_gateway_cb(
         return
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
-    name = ui.get("gateway_name") or "درگاه پرداخت"
-    link = (ui.get("gateway_link") or "").strip()
+    name = gw.get("name") or "درگاه پرداخت"
+    link = (gw.get("link") or "").strip()
     if link:
         try:
             link = render_message_template(
@@ -1510,26 +1562,49 @@ async def pay_gateway_cb(
     )
 
 
-@router.callback_query(F.data.startswith("pay:crypto:"))
+@router.callback_query(F.data.regexp(r"^pay:crypto:\d+(?::\w+)?$"))
 async def pay_crypto_cb(
     callback: CallbackQuery,
     session: AsyncSession,
     db_user: BotUser,
     state: FSMContext | None = None,
 ):
+    from app.services.payment_destinations import (
+        crypto_by_id,
+        enabled_crypto_wallets,
+        inline_picker_markup,
+    )
+
     ui = await get_all_settings(session)
     if not on(ui.get("pay_crypto_enabled")):
         await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
         return
-    order_id = int(callback.data.split(":")[-1])
+    parts = (callback.data or "").split(":")
+    order_id = int(parts[2])
+    dest_id = parts[3] if len(parts) > 3 else None
     order = await session.get(Order, order_id)
     if not order or order.user_id != db_user.id:
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
-    address = (ui.get("crypto_address") or "").strip()
-    if not address:
+    wallets = enabled_crypto_wallets(ui)
+    if not wallets:
         await callback.answer("آدرس ولت تنظیم نشده — به ادمین اطلاع دهید", show_alert=True)
         return
+    if len(wallets) > 1 and not dest_id:
+        await callback.answer()
+        markup = inline_picker_markup("crypto", wallets, order_id=order_id, prefix="pay")
+        if callback.message and markup:
+            await safe_edit_text(
+                callback.message,
+                format_message("💎 رمزارز", "یکی از آدرس‌های ولت را انتخاب کنید:"),
+                reply_markup=markup,
+            )
+        return
+    wallet = crypto_by_id(ui, dest_id) if dest_id else wallets[0]
+    if not wallet:
+        await callback.answer("آدرس نامعتبر", show_alert=True)
+        return
+    address = (wallet.get("address") or "").strip()
     try:
         payment = await start_method_payment(
             session, order, db_user.id, PaymentMethod.CRYPTO.value
@@ -1539,13 +1614,15 @@ async def pay_crypto_cb(
         return
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
+    asset = wallet.get("asset") or "USDT"
+    network = wallet.get("network") or "—"
     try:
         body = render_message_template(
             ui.get("crypto_pay_text") or "",
             domain=DOMAIN_PAYMENT,
             amount=amount,
-            asset=ui.get("crypto_asset") or "USDT",
-            network=ui.get("crypto_network") or "—",
+            asset=asset,
+            network=network,
             address=address,
             shop_title=ui.get("shop_title") or "",
             payment_id=payment.id,
@@ -1553,7 +1630,7 @@ async def pay_crypto_cb(
     except Exception:
         body = (
             f"مبلغ {amount}\n"
-            f"{ui.get('crypto_asset') or 'USDT'} ({ui.get('crypto_network') or '—'})\n"
+            f"{asset} ({network})\n"
             f"<code>{address}</code>\n\nرسید را بفرستید."
         )
     body += f"\n\n(پرداخت #{payment.id})"

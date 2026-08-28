@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import ord_status, pay_status, row_actions, page_title %}
+{% from "macros.html" import ord_status, pay_status, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar %}
 {% block title %}
 {%- if finance_tab == 'reports' -%}گزارشات
 {%- elif finance_tab == 'behavior' -%}رفتار کاربر
@@ -53,10 +53,16 @@
     </label>
     <button class="btn btn-ghost" type="submit">جستجو</button>
   </form>
+  {{ table_bulk_bar('/finance/orders/bulk-action', [
+    {'key': 'approve', 'label': 'تأیید', 'class': 'btn-ok', 'confirm': 'سفارش‌های انتخاب‌شده تأیید شوند؟', 'confirm_title': 'تأیید گروهی'},
+    {'key': 'reject', 'label': 'رد', 'class': 'btn-danger', 'confirm': 'سفارش‌های انتخاب‌شده رد شوند؟', 'confirm_title': 'رد گروهی', 'danger': true},
+    {'key': 'cancel', 'label': 'لغو', 'confirm': 'سفارش‌های انتخاب‌شده لغو شوند؟', 'confirm_title': 'لغو گروهی', 'warn': true},
+  ]) }}
   <div class="table-wrap">
-  <table class="table-compact" data-sortable>
+  <table class="table-compact" data-sortable data-bulk-select>
     <thead>
       <tr>
+        {{ table_select_head() }}
         <th class="col-id" data-sort-type="num">#</th>
         <th data-sort-type="text">کاربر</th>
         <th class="col-hide-sm" data-sort-type="text">پلن</th>
@@ -73,6 +79,7 @@
       {% set uname = (o.user.full_name or o.user.username or o.user_id) if o.user else o.user_id %}
       {% set pname = o.plan.name if o.plan else (o.plan_id or "—") %}
       <tr>
+        {{ table_select_cell(o.id) }}
         <td class="mono" data-sort-value="{{ o.id }}">{{ o.id }}</td>
         <td data-sort-value="{{ uname }}">
           {% if o.user and o.user.id %}
@@ -142,7 +149,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="muted">سفارشی نیست</td></tr>
+      <tr><td colspan="9" class="muted">سفارشی نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -158,9 +165,14 @@
     </label>
     <button class="btn btn-ghost" type="submit">جستجو</button>
   </form>
+  {{ table_bulk_bar('/finance/payments/bulk-action', [
+    {'key': 'approve', 'label': 'تأیید', 'class': 'btn-ok', 'confirm': 'پرداخت‌های انتخاب‌شده تأیید شوند؟', 'confirm_title': 'تأیید گروهی'},
+    {'key': 'reject', 'label': 'رد', 'class': 'btn-danger', 'confirm': 'پرداخت‌های انتخاب‌شده رد شوند؟', 'confirm_title': 'رد گروهی', 'danger': true},
+  ]) }}
   <div class="table-wrap">
-  <table class="table-compact" data-sortable>
+  <table class="table-compact" data-sortable data-bulk-select>
     <thead><tr>
+      {{ table_select_head() }}
       <th class="col-id" data-sort-type="num">#</th>
       <th data-sort-type="text">کاربر</th>
       <th data-sort-type="num">مبلغ</th>
@@ -174,6 +186,7 @@
       {% set payer = (payers or {}).get(p.user_id) %}
       {% set uname = (payer.full_name or payer.username or p.user_id) if payer else p.user_id %}
       <tr>
+        {{ table_select_cell(p.id) }}
         <td class="mono" data-sort-value="{{ p.id }}">{{ p.id }}</td>
         <td data-sort-value="{{ uname }}">
           {% if payer and payer.id %}
@@ -210,7 +223,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">پرداختی نیست</td></tr>
+      <tr><td colspan="8" class="muted">پرداختی نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>

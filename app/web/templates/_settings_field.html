@@ -4,7 +4,7 @@
 {% set help = field[3] if field|length > 3 else '' %}
 {% set options = field[4] if field|length > 4 else [] %}
 {% set val = values.get(key, '') %}
-<div class="setting-item {% if kind in ['textarea', 'image', 'toggle', 'force_channels'] %}full{% endif %}">
+<div class="setting-item {% if kind in ['textarea', 'image', 'toggle', 'force_channels', 'payment_cards', 'payment_gateways', 'payment_crypto_wallets'] %}full{% endif %}">
   {% if kind == 'toggle' %}
   <label class="toggle-row ui-switch-row">
     <span class="ui-switch-copy">
@@ -33,6 +33,33 @@
     </div>
     <input type="hidden" name="s_{{ key }}" value="{{ val }}" data-force-channels-json />
     <div class="force-channels-list" data-force-channels-list></div>
+  </div>
+  {% elif kind == 'payment_cards' %}
+  <div class="pay-dest-list" data-pay-dest="cards">
+    <div class="pay-dest-head">
+      <strong class="pay-dest-title">{{ label }}</strong>
+      {% if help %}<p class="muted pay-dest-help">{{ help }}</p>{% endif %}
+    </div>
+    <input type="hidden" name="s_payment_cards" value="{{ values.get('payment_cards', '[]') }}" data-pay-dest-json />
+    <div class="pay-dest-rows" data-pay-dest-list></div>
+  </div>
+  {% elif kind == 'payment_gateways' %}
+  <div class="pay-dest-list" data-pay-dest="gateways">
+    <div class="pay-dest-head">
+      <strong class="pay-dest-title">{{ label }}</strong>
+      {% if help %}<p class="muted pay-dest-help">{{ help }}</p>{% endif %}
+    </div>
+    <input type="hidden" name="s_payment_gateways" value="{{ values.get('payment_gateways', '[]') }}" data-pay-dest-json />
+    <div class="pay-dest-rows" data-pay-dest-list></div>
+  </div>
+  {% elif kind == 'payment_crypto_wallets' %}
+  <div class="pay-dest-list" data-pay-dest="crypto">
+    <div class="pay-dest-head">
+      <strong class="pay-dest-title">{{ label }}</strong>
+      {% if help %}<p class="muted pay-dest-help">{{ help }}</p>{% endif %}
+    </div>
+    <input type="hidden" name="s_payment_crypto_wallets" value="{{ values.get('payment_crypto_wallets', '[]') }}" data-pay-dest-json />
+    <div class="pay-dest-rows" data-pay-dest-list></div>
   </div>
   {% elif kind == 'textarea' %}
   <label>{{ label }}

@@ -361,6 +361,34 @@
       </span>
     </span>
   </div>
+  <div class="ui-modal" id="modal-inbox-dismiss" hidden>
+    <div class="ui-modal-backdrop" data-modal-close></div>
+    <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="inbox-dismiss-title">
+      <div class="ui-modal-head">
+        <h2 id="inbox-dismiss-title">حذف اعلان</h2>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <form method="post" action="/inbox/dismiss" class="form-stack" id="form-inbox-dismiss">
+        <input type="hidden" name="alert_key" id="inbox-dismiss-key" value="" />
+        <input type="hidden" name="entity_id" id="inbox-dismiss-entity" value="" />
+        <input type="hidden" name="return_to" id="inbox-dismiss-return" value="" />
+        <p class="muted">این اعلان چگونه مخفی شود؟</p>
+        <div class="inbox-dismiss-options">
+          <button type="submit" name="mode" value="24h" class="btn btn-ghost inbox-dismiss-option">
+            <strong>۲۴ ساعت</strong>
+            <small class="muted">بعد از ۲۴ ساعت اگر هنوز برقرار باشد دوباره نمایش داده می‌شود</small>
+          </button>
+          <button type="submit" name="mode" value="forever" class="btn btn-ghost inbox-dismiss-option">
+            <strong>برای همیشه</strong>
+            <small class="muted">تا وقتی مشکل برطرف شود نمایش داده نمی‌شود</small>
+          </button>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+        </div>
+      </form>
+    </div>
+  </div>
   <div class="ui-modal" id="modal-confirm" hidden>
     <div class="ui-modal-backdrop" data-modal-close></div>
     <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="confirm-title">

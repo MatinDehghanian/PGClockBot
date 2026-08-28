@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title %}
+{% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar %}
 {#- Declared at template top level (outside any block) so both {% block content %}
    and {% block page_scripts %} share the same values — {% set %} inside a block
    is local to that block only and would silently leave `manage` etc. undefined
@@ -79,10 +79,17 @@
     </label>
     <button class="btn btn-ghost" type="submit">جستجو</button>
   </form>
+  {% if manage %}
+  {{ table_bulk_bar('/users/bulk-action', [
+    {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': 'کاربران انتخاب‌شده مسدود شوند؟', 'confirm_title': 'مسدودسازی گروهی', 'warn': true},
+    {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت کاربران انتخاب‌شده برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی'},
+  ]) }}
+  {% endif %}
   <div class="table-wrap">
-  <table class="table-compact users-ops-table" data-sortable>
+  <table class="table-compact users-ops-table" data-sortable{% if manage %} data-bulk-select{% endif %}>
     <thead>
       <tr>
+        {% if manage %}{{ table_select_head() }}{% endif %}
         <th class="col-id col-hide-sm" data-sort-type="num">#</th>
         <th class="col-tg col-hide-sm" data-sort-type="num">تلگرام</th>
         <th class="col-name" data-sort-type="text">نام</th>
@@ -100,6 +107,7 @@
       <tr class="users-row{% if focus_uid and u.id == focus_uid %} is-focus{% endif %}{% if row.has_alert %} has-alert{% endif %}"
           data-uid="{{ u.id }}"
           id="user-{{ u.id }}">
+        {% if manage %}{{ table_select_cell(u.id) }}{% endif %}
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.id }}">{{ u.id }}</td>
         <td class="mono col-tg col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
         <td class="col-name" data-sort-value="{{ u.full_name or u.username or '' }}">

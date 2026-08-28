@@ -261,6 +261,22 @@ async def build_inbox_context(
     }
     ctx["inbox_count"] = inbox_alert_count(ctx)
     ctx["inbox_has"] = ctx["inbox_count"] > 0
+
+    try:
+        from app.services.inbox_dismissals import (
+            cleanup_resolved_dismissals,
+            filter_inbox_context,
+            load_dismissals,
+        )
+
+        await cleanup_resolved_dismissals(session, staff, ctx)
+        dismissals = await load_dismissals(session, staff)
+        if dismissals:
+            ctx = filter_inbox_context(ctx, dismissals)
+    except Exception:
+        logger.exception("inbox dismissals filter failed")
+        await rollback_quiet(session)
+
     # Refresh sidebar cache from authoritative page build.
     _SIDEBAR_CACHE[_cache_key(staff)] = (time.monotonic(), bool(ctx["inbox_has"]))
     return ctx

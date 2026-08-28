@@ -91,6 +91,54 @@
 </div>
 {%- endmacro %}
 
+{% macro inbox_dismiss_btn(alert_key, entity_id='') -%}
+<button type="button"
+        class="btn btn-sm btn-ghost inbox-dismiss-btn"
+        data-inbox-dismiss="{{ alert_key }}"
+        {% if entity_id %}data-inbox-entity="{{ entity_id }}"{% endif %}
+        aria-label="حذف اعلان">حذف</button>
+{%- endmacro %}
+
+{% macro table_select_head() -%}
+<th class="col-select" scope="col">
+  <label class="table-select-all ui-switch-row" title="انتخاب همه">
+    <span class="ui-switch">
+      <input type="checkbox" class="table-select-all-input" aria-label="انتخاب همه" />
+      <span class="ui-switch-track" aria-hidden="true"></span>
+    </span>
+  </label>
+</th>
+{%- endmacro %}
+
+{% macro table_select_cell(row_id) -%}
+<td class="col-select">
+  <label class="table-select-row ui-switch-row">
+    <span class="ui-switch">
+      <input type="checkbox" class="table-select-input" value="{{ row_id }}" aria-label="انتخاب ردیف" />
+      <span class="ui-switch-track" aria-hidden="true"></span>
+    </span>
+  </label>
+</td>
+{%- endmacro %}
+
+{% macro table_bulk_bar(form_action, actions) -%}
+<div class="table-bulk-bar" hidden data-table-bulk-bar data-bulk-action="{{ form_action }}">
+  <span class="table-bulk-count muted" data-bulk-count-label>۰ مورد</span>
+  <div class="table-bulk-actions">
+    {% for action in actions %}
+    <button type="button"
+            class="btn btn-sm {{ action.class or 'btn-ghost' }}"
+            data-bulk-op="{{ action.key }}"
+            {% if action.confirm %}data-bulk-confirm="{{ action.confirm }}"{% endif %}
+            {% if action.confirm_title %}data-bulk-confirm-title="{{ action.confirm_title }}"{% endif %}
+            {% if action.danger %}data-bulk-confirm-danger="1"{% endif %}
+            {% if action.warn %}data-bulk-confirm-warn="1"{% endif %}
+            {% if action.reason %}data-bulk-confirm-reason="1"{% endif %}>{{ action.label }}</button>
+    {% endfor %}
+  </div>
+</div>
+{%- endmacro %}
+
 {# Page title icon — stroke SVGs matching sidebar language; tone: brand | pg | neutral #}
 {% macro page_ico(name, tone='brand') -%}
 <span class="page-title-ico{% if tone == 'pg' %} page-title-ico--pg{% elif tone == 'neutral' %} page-title-ico--neutral{% endif %}" aria-hidden="true">

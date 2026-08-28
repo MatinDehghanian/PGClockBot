@@ -2119,4 +2119,265 @@
       }
       document.querySelectorAll('table[data-sortable]').forEach(bind);
     })();
+
+    /* Inbox alert dismiss modal */
+    (function () {
+      const modal = document.getElementById('modal-inbox-dismiss');
+      const keyInput = document.getElementById('inbox-dismiss-key');
+      const entityInput = document.getElementById('inbox-dismiss-entity');
+      const returnInput = document.getElementById('inbox-dismiss-return');
+      if (!modal || !keyInput) return;
+      function openDismiss(alertKey, entityId) {
+        keyInput.value = alertKey || '';
+        if (entityInput) entityInput.value = entityId || '';
+        if (returnInput) returnInput.value = window.location.pathname + window.location.search;
+        if (typeof openModal === 'function') openModal(modal);
+        else {
+          modal.hidden = false;
+          modal.classList.add('open');
+        }
+      }
+      document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-inbox-dismiss]');
+        if (!btn) return;
+        e.preventDefault();
+        openDismiss(btn.getAttribute('data-inbox-dismiss'), btn.getAttribute('data-inbox-entity') || '');
+      });
+    })();
+
+    /* Payment destination lists (+ / -) */
+    (function () {
+      function uid() {
+        return 'pd' + Math.random().toString(36).slice(2, 10);
+      }
+      function parseJson(raw) {
+        try {
+          const data = JSON.parse(raw || '[]');
+          return Array.isArray(data) ? data : [];
+        } catch (_) {
+          return [];
+        }
+      }
+      function rowHtml(kind, item) {
+        const id = (item && item.id) || uid();
+        if (kind === 'cards') {
+          return (
+            '<div class="pay-dest-row" data-pay-dest-row>' +
+              '<div class="pay-dest-fields">' +
+                '<label>شماره کارت<input type="text" class="pay-dest-card-number" dir="ltr" value="' + String(item.number || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
+                '<label>صاحب کارت<input type="text" class="pay-dest-card-holder" value="' + String(item.holder || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
+              '</div>' +
+              '<div class="pay-dest-actions">' +
+                '<button type="button" class="btn btn-ghost btn-sm pay-dest-btn pay-dest-remove" aria-label="حذف">−</button>' +
+              '</div>' +
+            '</div>'
+          );
+        }
+        if (kind === 'gateways') {
+          return (
+            '<div class="pay-dest-row" data-pay-dest-row>' +
+              '<div class="pay-dest-fields">' +
+                '<label>نام درگاه<input type="text" class="pay-dest-gw-name" value="' + String(item.name || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
+                '<label>لینک<input type="text" class="pay-dest-gw-link" dir="ltr" value="' + String(item.link || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
+              '</div>' +
+              '<div class="pay-dest-actions">' +
+                '<button type="button" class="btn btn-ghost btn-sm pay-dest-btn pay-dest-remove" aria-label="حذف">−</button>' +
+              '</div>' +
+            '</div>'
+          );
+        }
+        return (
+          '<div class="pay-dest-row" data-pay-dest-row>' +
+            '<div class="pay-dest-fields">' +
+              '<label>رمزارز<input type="text" class="pay-dest-cr-asset" value="' + String(item.asset || 'USDT').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
+              '<label>شبکه<input type="text" class="pay-dest-cr-network" value="' + String(item.network || 'TRC20').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
+              '<label>آدرس<input type="text" class="pay-dest-cr-address" dir="ltr" value="' + String(item.address || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
+            '</div>' +
+            '<div class="pay-dest-actions">' +
+              '<button type="button" class="btn btn-ghost btn-sm pay-dest-btn pay-dest-remove" aria-label="حذف">−</button>' +
+            '</div>' +
+          '</div>'
+        );
+      }
+      function addBtnHtml() {
+        return '<button type="button" class="pay-dest-add-row" data-pay-dest-add><span aria-hidden="true">+</span><span>افزودن</span></button>';
+      }
+      function sync(root) {
+        const hidden = root.querySelector('[data-pay-dest-json]');
+        const list = root.querySelector('[data-pay-dest-list]');
+        if (!hidden || !list) return;
+        const kind = root.getAttribute('data-pay-dest');
+        const entries = [];
+        list.querySelectorAll('[data-pay-dest-row]').forEach((row, idx) => {
+          if (kind === 'cards') {
+            const number = String((row.querySelector('.pay-dest-card-number') || {}).value || '').replace(/\D/g, '');
+            const holder = String((row.querySelector('.pay-dest-card-holder') || {}).value || '').trim();
+            if (!number) return;
+            entries.push({ id: uid(), number: number, holder: holder, enabled: true, sort: idx });
+          } else if (kind === 'gateways') {
+            const name = String((row.querySelector('.pay-dest-gw-name') || {}).value || '').trim();
+            const link = String((row.querySelector('.pay-dest-gw-link') || {}).value || '').trim();
+            if (!name && !link) return;
+            entries.push({ id: uid(), name: name || 'درگاه پرداخت', link: link, enabled: true, sort: idx });
+          } else {
+            const asset = String((row.querySelector('.pay-dest-cr-asset') || {}).value || 'USDT').trim();
+            const network = String((row.querySelector('.pay-dest-cr-network') || {}).value || 'TRC20').trim();
+            const address = String((row.querySelector('.pay-dest-cr-address') || {}).value || '').trim();
+            if (!address) return;
+            entries.push({ id: uid(), asset: asset, network: network, address: address, enabled: true, sort: idx });
+          }
+        });
+        hidden.value = JSON.stringify(entries);
+      }
+      function render(root, items) {
+        const list = root.querySelector('[data-pay-dest-list]');
+        const kind = root.getAttribute('data-pay-dest');
+        if (!list) return;
+        const rows = (items && items.length ? items : [{}]).map((item) => rowHtml(kind, item)).join('');
+        list.innerHTML = rows + addBtnHtml();
+        sync(root);
+      }
+      document.querySelectorAll('[data-pay-dest]').forEach((root) => {
+        const hidden = root.querySelector('[data-pay-dest-json]');
+        render(root, parseJson(hidden ? hidden.value : '[]'));
+        root.addEventListener('click', (e) => {
+          if (e.target.closest('[data-pay-dest-add]')) {
+            e.preventDefault();
+            const list = root.querySelector('[data-pay-dest-list]');
+            const add = list && list.querySelector('[data-pay-dest-add]');
+            const kind = root.getAttribute('data-pay-dest');
+            const html = rowHtml(kind, {});
+            if (add) add.insertAdjacentHTML('beforebegin', html);
+            else if (list) list.insertAdjacentHTML('afterbegin', html);
+            sync(root);
+            return;
+          }
+          if (e.target.closest('.pay-dest-remove')) {
+            e.preventDefault();
+            const row = e.target.closest('[data-pay-dest-row]');
+            const list = root.querySelector('[data-pay-dest-list]');
+            if (row && list) {
+              row.remove();
+              if (!list.querySelector('[data-pay-dest-row]')) {
+                const kind = root.getAttribute('data-pay-dest');
+                const add = list.querySelector('[data-pay-dest-add]');
+                if (add) add.insertAdjacentHTML('beforebegin', rowHtml(kind, {}));
+              }
+              sync(root);
+            }
+          }
+        });
+        root.addEventListener('input', () => sync(root));
+      });
+    })();
+
+    /* Table bulk row selection */
+    (function () {
+      function faNum(n) {
+        try {
+          return Number(n).toLocaleString('fa-IR');
+        } catch (_) {
+          return String(n);
+        }
+      }
+      function updateBar(table) {
+        const wrap = table.closest('.card');
+        const bar = wrap && wrap.querySelector('[data-table-bulk-bar]');
+        if (!bar) return;
+        const checked = table.querySelectorAll('.table-select-input:checked');
+        const count = checked.length;
+        const label = bar.querySelector('[data-bulk-count-label]');
+        if (label) label.textContent = faNum(count) + ' مورد';
+        bar.hidden = count === 0;
+        const all = table.querySelector('.table-select-all-input');
+        const rows = table.querySelectorAll('.table-select-input');
+        if (all && rows.length) {
+          all.indeterminate = count > 0 && count < rows.length;
+          all.checked = count === rows.length;
+        }
+      }
+      function submitBulk(table, actionKey, btn) {
+        const bar = table.closest('.card').querySelector('[data-table-bulk-bar]');
+        const actionUrl = bar && bar.getAttribute('data-bulk-action');
+        if (!actionUrl) return;
+        const ids = Array.from(table.querySelectorAll('.table-select-input:checked')).map((i) => i.value);
+        if (!ids.length) return;
+        const confirmMsg = btn.getAttribute('data-bulk-confirm') || 'ادامه می‌دهید؟';
+        const needsReason = btn.hasAttribute('data-bulk-confirm-reason');
+        if (needsReason && typeof showConfirmModal === 'function') {
+          showConfirmModal({
+            title: btn.getAttribute('data-bulk-confirm-title') || 'تأیید',
+            message: confirmMsg,
+            requireReason: true,
+            onConfirm: (reason) => postBulk(actionUrl, actionKey, ids, reason),
+          });
+          return;
+        }
+        if (typeof showConfirmModal === 'function') {
+          showConfirmModal({
+            title: btn.getAttribute('data-bulk-confirm-title') || 'تأیید',
+            message: confirmMsg,
+            danger: btn.hasAttribute('data-bulk-confirm-danger'),
+            warn: btn.hasAttribute('data-bulk-confirm-warn'),
+            onConfirm: () => postBulk(actionUrl, actionKey, ids, ''),
+          });
+          return;
+        }
+        if (window.confirm(confirmMsg)) postBulk(actionUrl, actionKey, ids, '');
+      }
+      function postBulk(url, actionKey, ids, reason) {
+        const form = document.createElement('form');
+        form.method = 'post';
+        form.action = url;
+        const action = document.createElement('input');
+        action.type = 'hidden';
+        action.name = 'action';
+        action.value = actionKey;
+        form.appendChild(action);
+        const ret = document.createElement('input');
+        ret.type = 'hidden';
+        ret.name = 'return_to';
+        ret.value = window.location.pathname + window.location.search;
+        form.appendChild(ret);
+        if (reason) {
+          const r = document.createElement('input');
+          r.type = 'hidden';
+          r.name = 'reason';
+          r.value = reason;
+          form.appendChild(r);
+        }
+        ids.forEach((id) => {
+          const inp = document.createElement('input');
+          inp.type = 'hidden';
+          inp.name = 'ids';
+          inp.value = id;
+          form.appendChild(inp);
+        });
+        document.body.appendChild(form);
+        form.submit();
+      }
+      document.querySelectorAll('table[data-bulk-select]').forEach((table) => {
+        table.addEventListener('change', (e) => {
+          if (e.target.matches('.table-select-input, .table-select-all-input')) updateBar(table);
+        });
+        table.addEventListener('click', (e) => {
+          const all = e.target.closest('.table-select-all-input');
+          if (all) {
+            const on = all.checked;
+            table.querySelectorAll('.table-select-input').forEach((cb) => { cb.checked = on; });
+            updateBar(table);
+          }
+        });
+        const bar = table.closest('.card') && table.closest('.card').querySelector('[data-table-bulk-bar]');
+        if (bar) {
+          bar.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-bulk-op]');
+            if (!btn) return;
+            e.preventDefault();
+            submitBulk(table, btn.getAttribute('data-bulk-op'), btn);
+          });
+        }
+        updateBar(table);
+      });
+    })();
   })();

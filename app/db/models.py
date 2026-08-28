@@ -914,6 +914,29 @@ class ChargeCode(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class PanelInboxDismissal(Base):
+    """Per-staff snooze/hide for computed inbox alerts (not a notification store)."""
+
+    __tablename__ = "panel_inbox_dismissals"
+    __table_args__ = (
+        UniqueConstraint(
+            "staff_key",
+            "alert_key",
+            "entity_id",
+            name="uq_panel_inbox_dismiss_staff_alert",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    staff_key: Mapped[str] = mapped_column(String(128), index=True)
+    alert_key: Mapped[str] = mapped_column(String(64))
+    entity_id: Mapped[str] = mapped_column(String(64), default="")
+    mode: Mapped[str] = mapped_column(String(16))  # 24h | forever
+    dismissed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class FunnelEvent(Base):
     """Lightweight purchase-funnel analytics."""
 

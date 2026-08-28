@@ -296,6 +296,43 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         mark(request, "page_data")
         return render(request, "inbox.html", ctx)
 
+    @app.post("/inbox/dismiss")
+    async def inbox_dismiss(
+        request: Request,
+        staff: dict = Depends(require_staff),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from urllib.parse import quote
+
+        from app.services.inbox_dismissals import upsert_dismissal
+        from app.services.panel_inbox import invalidate_inbox_sidebar_cache
+
+        form = await request.form()
+        alert_key = str(form.get("alert_key") or "").strip()
+        entity_id = str(form.get("entity_id") or "").strip()
+        mode = str(form.get("mode") or "").strip()
+        return_to = str(form.get("return_to") or "/inbox").strip()
+        if not return_to.startswith("/") or return_to.startswith("//"):
+            return_to = "/inbox"
+        try:
+            await upsert_dismissal(
+                session,
+                staff=staff,
+                alert_key=alert_key,
+                mode=mode,
+                entity_id=entity_id,
+            )
+        except ValueError as e:
+            return RedirectResponse(
+                f"{return_to}?err={quote(str(e))}",
+                status_code=303,
+            )
+        invalidate_inbox_sidebar_cache(staff)
+        return RedirectResponse(
+            f"{return_to}?ok={quote('اعلان مخفی شد')}",
+            status_code=303,
+        )
+
     async def _render_home_result(request: Request, result, *, as_body_fragment: bool):
         if isinstance(result, RedirectResponse):
             return result
