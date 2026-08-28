@@ -14,12 +14,15 @@
   const titleEl = document.getElementById('pv-title');
   const textEl = document.getElementById('pv-text');
   const keysEl = document.getElementById('pv-keys');
+  const inlineEl = document.getElementById('pv-inline');
+  const sceneEl = document.getElementById('pv-scene');
   const qrCard = document.getElementById('pv-qr');
   const qrCap = document.getElementById('pv-qr-cap');
   const qrBox = document.getElementById('pv-qr-box');
   const qrBg = document.getElementById('pv-qr-bg');
   const qrFake = document.getElementById('pv-qr-fake');
   let focusKey = null;
+  let focusStyleId = null;
   let qrObjectUrl = null;
   let active = false;
   let renderTimer = 0;
@@ -79,9 +82,247 @@
     if (t === 'primary' || t === 'success' || t === 'danger') return t;
     return 'default';
   }
-  function btn(label, tone){
+  function btn(label, tone, opts){
+    opts = opts || {};
     const t = tone || 'default';
-    return '<button type="button" class="tg-key" data-tone="'+esc(t)+'">'+esc(label)+'</button>';
+    const sid = opts.styleId ? ' data-style-id="'+esc(opts.styleId)+'"' : '';
+    const focus = opts.focus ? ' is-focus' : '';
+    return '<button type="button" class="tg-key'+focus+'" data-tone="'+esc(t)+'"'+sid+'>'+esc(label)+'</button>';
+  }
+  function inlineBtn(label, tone, opts){
+    opts = opts || {};
+    const t = tone || 'default';
+    const sid = opts.styleId ? ' data-style-id="'+esc(opts.styleId)+'"' : '';
+    const focus = opts.focus ? ' is-focus' : '';
+    return '<button type="button" class="tg-inline-key'+focus+'" data-tone="'+esc(t)+'"'+sid+'>'+esc(label)+'</button>';
+  }
+  function parseJsonList(raw){
+    try {
+      const data = JSON.parse(raw || '[]');
+      return Array.isArray(data) ? data : [];
+    } catch (_) {
+      return [];
+    }
+  }
+  function onFlag(name){
+    const v = val(name, values[name] || '0');
+    return v === '1' || v === 'true' || v === 'on' || v === 'yes';
+  }
+  function getActiveColorsTab(){
+    const active = document.querySelector('.colors-subtab.is-active');
+    return (active && active.getAttribute('data-colors-tab')) || 'user';
+  }
+  function resolveItemTone(item, inheritId, fallback){
+    if (item && Object.prototype.hasOwnProperty.call(item, 'button_style')) {
+      if (item.button_style === '') return 'default';
+      const t = String(item.button_style || '').trim().toLowerCase();
+      if (t === 'primary' || t === 'success' || t === 'danger') return t;
+      if (t) return 'default';
+    }
+    return styleTone(inheritId, fallback || '');
+  }
+  function renderInlineKeys(rows){
+    if (!inlineEl) return;
+    if (!rows || !rows.length) {
+      inlineEl.hidden = true;
+      inlineEl.innerHTML = '';
+      return;
+    }
+    inlineEl.hidden = false;
+    inlineEl.innerHTML = rows.map(function(row){
+      return '<div class="tg-inline-row">'+row.map(function(cell){
+        return inlineBtn(cell.label, cell.tone, {styleId: cell.styleId, focus: cell.styleId && cell.styleId === focusStyleId});
+      }).join('')+'</div>';
+    }).join('');
+  }
+  function renderColorsPreview(){
+    const scene = getActiveColorsTab();
+    const sceneLabels = {
+      user: 'منوی کاربر',
+      payment: 'پرداخت',
+      admin: 'منوی ادمین',
+      reseller: 'منوی نماینده',
+      shop: 'فروشگاه',
+    };
+    if (sceneEl) {
+      sceneEl.hidden = false;
+      sceneEl.textContent = 'نمای «' + (sceneLabels[scene] || scene) + '»';
+    }
+    const hint = document.getElementById('pv-hint');
+    if (hint) {
+      hint.textContent = 'پیش‌نمایش زنده — با تغییر رنگ‌ها (select یا چیپ) بلافاصله به‌روز می‌شود.';
+    }
+
+    if (scene === 'payment') {
+      if (textEl) {
+        textEl.innerHTML = esc('💳 روش پرداخت را انتخاب کنید:').replace(/\n/g,'<br>');
+      }
+      if (keysEl) keysEl.innerHTML = '';
+      const payRows = [];
+      if (onFlag('pay_wallet_enabled')) {
+        payRows.push([{
+          label: val('btn_pay_wallet', values.btn_pay_wallet || '💚 کیف پول'),
+          tone: styleTone('pay_wallet', 'success'),
+          styleId: 'pay_wallet',
+        }]);
+      }
+      if (onFlag('pay_card_enabled')) {
+        payRows.push([{
+          label: val('btn_pay_card', values.btn_pay_card || '💳 کارت به کارت'),
+          tone: styleTone('pay_card', 'primary'),
+          styleId: 'pay_card',
+        }]);
+      }
+      if (onFlag('pay_gateway_enabled')) {
+        payRows.push([{
+          label: val('btn_pay_gateway', values.btn_pay_gateway || '🌐 درگاه'),
+          tone: styleTone('pay_gateway', 'primary'),
+          styleId: 'pay_gateway',
+        }]);
+      }
+      if (onFlag('pay_crypto_enabled')) {
+        payRows.push([{
+          label: val('btn_pay_crypto', values.btn_pay_crypto || '💎 رمزارز'),
+          tone: styleTone('pay_crypto', 'primary'),
+          styleId: 'pay_crypto',
+        }]);
+      }
+      if (onFlag('pay_stars_enabled')) {
+        payRows.push([{
+          label: val('btn_pay_stars', values.btn_pay_stars || '⭐ استارز'),
+          tone: styleTone('pay_stars', 'primary'),
+          styleId: 'pay_stars',
+        }]);
+      }
+      if (onFlag('pay_discount_enabled')) {
+        payRows.push([{
+          label: val('btn_pay_discount', values.btn_pay_discount || '🏷️ تخفیف'),
+          tone: styleTone('pay_discount', ''),
+          styleId: 'pay_discount',
+        }]);
+      }
+      payRows.push([{
+        label: val('btn_cancel', values.btn_cancel || '❌ انصراف'),
+        tone: styleTone('cancel', 'danger'),
+        styleId: 'cancel',
+      }]);
+
+      const cards = parseJsonList(values.payment_cards);
+      const gateways = parseJsonList(values.payment_gateways);
+      const wallets = parseJsonList(values.payment_crypto_wallets);
+      if (cards.length > 1) {
+        cards.slice(0, 3).forEach(function(c, idx){
+          const tail = String(c.number || '').slice(-4);
+          payRows.push([{
+            label: '💳 …' + (tail || (idx + 1)),
+            tone: resolveItemTone(c, 'pay_card', 'primary'),
+            styleId: 'pay_dest_card_' + (c.id || idx),
+          }]);
+        });
+      }
+      if (gateways.length > 1) {
+        gateways.slice(0, 2).forEach(function(g, idx){
+          payRows.push([{
+            label: '🌐 ' + String(g.name || 'درگاه').slice(0, 18),
+            tone: resolveItemTone(g, 'pay_gateway', 'primary'),
+            styleId: 'pay_dest_gw_' + (g.id || idx),
+          }]);
+        });
+      }
+      if (wallets.length > 1) {
+        wallets.slice(0, 2).forEach(function(w, idx){
+          payRows.push([{
+            label: '💎 ' + String(w.asset || 'USDT') + ' …' + String(w.address || '').slice(-4),
+            tone: resolveItemTone(w, 'pay_crypto', 'primary'),
+            styleId: 'pay_dest_cr_' + (w.id || idx),
+          }]);
+        });
+      }
+      renderInlineKeys(payRows);
+      return {showKeys: false, showInline: true, text: ''};
+    }
+
+    if (scene === 'admin') {
+      if (textEl) textEl.innerHTML = esc('⚙️ پنل ادمین — نمونه دکمه‌ها').replace(/\n/g,'<br>');
+      renderInlineKeys([]);
+      const adminItems = [
+        {id: 'adm_hub_ops', label: '⚡ عملیات روزانه', fb: 'success'},
+        {id: 'adm_orders', label: '📦 سفارش‌ها', fb: 'success'},
+        {id: 'adm_payments', label: '💳 رسیدها', fb: 'success'},
+        {id: 'adm_users', label: '👥 کاربران', fb: 'success'},
+        {id: 'adm_settings', label: '⚙️ تنظیمات', fb: ''},
+        {id: 'cancel', label: val('btn_back', values.btn_back || '⬅️ بازگشت'), fb: ''},
+      ];
+      renderReplyKeys(adminItems.map(function(it){
+        return {
+          label: it.label,
+          tone: styleTone(it.id, it.fb),
+          styleId: it.id,
+        };
+      }), {submenu: true});
+      return {showKeys: true, showInline: false, text: ''};
+    }
+
+    if (scene === 'reseller') {
+      if (textEl) textEl.innerHTML = esc('🏪 هاب نماینده — نمونه دکمه‌ها').replace(/\n/g,'<br>');
+      renderInlineKeys([]);
+      const resItems = [
+        {id: 'res_dash', label: '📊 خانه نماینده', fb: 'success'},
+        {id: 'res_orders', label: '📦 سفارش‌ها', fb: 'success'},
+        {id: 'res_plans', label: '📋 پلن‌ها', fb: 'primary'},
+        {id: 'res_settings', label: '⚙️ تنظیمات', fb: ''},
+      ];
+      renderReplyKeys(resItems.map(function(it){
+        return {label: it.label, tone: styleTone(it.id, it.fb), styleId: it.id};
+      }), {submenu: true});
+      return {showKeys: true, showInline: false, text: ''};
+    }
+
+    // user / shop — main menu + optional multi-support inline list
+    if (textEl) {
+      textEl.innerHTML = esc('👋 '+fillVars(values.welcome_text || val('welcome_text','سلام {name} 👋'))).replace(/\n/g,'<br>');
+    }
+    const order = menuOrder();
+    const map = {
+      shop: values.btn_shop || '🟢🛒 خرید سرویس',
+      services: values.btn_services || '🔵📦 سرویس‌های من',
+      wallet: values.btn_wallet || '🟡👛 کیف پول',
+      support: values.btn_support || '🟣🎧 پشتیبانی',
+      loyalty: values.btn_loyalty || '⭐ باشگاه مشتریان',
+      referral: values.btn_loyalty || values.btn_referral || '⭐ باشگاه مشتریان',
+      reseller_apply: values.btn_reseller_apply || '🤝 درخواست نمایندگی',
+    };
+    const styleMap = {
+      shop: 'shop', services: 'services', wallet: 'wallet', support: 'support',
+      loyalty: 'loyalty', referral: 'loyalty', reseller_apply: 'reseller_apply',
+    };
+    const defaults = {
+      shop: 'primary', services: 'primary', wallet: 'primary',
+      support: 'primary', loyalty: 'success', reseller_apply: '',
+    };
+    const labels = order.filter(function(k){ return k !== 'miniapp'; }).map(function(k){
+      const label = map[k];
+      if (!label) return null;
+      const sid = styleMap[k] || k;
+      return {label: label, tone: styleTone(sid, defaults[sid] || ''), styleId: sid};
+    }).filter(Boolean);
+    renderReplyKeys(labels);
+
+    const contacts = parseJsonList(values.support_contacts).filter(function(c){
+      return c.enabled !== false;
+    });
+    if (contacts.length > 1) {
+      renderInlineKeys(contacts.slice(0, 4).map(function(c, idx){
+        return [{
+          label: '💬 ' + String(c.title || 'پشتیبان').slice(0, 24),
+          tone: resolveItemTone(c, 'support', 'primary'),
+          styleId: 'support_' + (c.id || idx),
+        }];
+      }));
+    } else {
+      renderInlineKeys([]);
+    }
+    return {showKeys: true, showInline: contacts.length > 1, text: ''};
   }
   function menuOrder(){
     const mo = document.getElementById('menu_order');
@@ -160,7 +401,11 @@
     opts = opts || {};
     const norm = (items || []).map(function(it){
       if (typeof it === 'string') return {label: it, tone: 'default'};
-      return {label: it.label, tone: it.tone || 'default'};
+      return {
+        label: it.label,
+        tone: it.tone || 'default',
+        styleId: it.styleId || '',
+      };
     }).filter(function(it){ return it.label; });
     const home = val('btn_menu_home', values.btn_menu_home || '🏠 منوی اصلی');
     const back = val('btn_back', values.btn_back || '⬅️ بازگشت');
@@ -170,15 +415,23 @@
     let html = '';
     if (compact) {
       for (let i=0;i<norm.length;i+=2){
-        html += '<div class="tg-key-row">'+btn(norm[i].label, norm[i].tone)+(norm[i+1]?btn(norm[i+1].label, norm[i+1].tone):'')+'</div>';
+        html += '<div class="tg-key-row">'
+          + btn(norm[i].label, norm[i].tone, {styleId: norm[i].styleId, focus: norm[i].styleId === focusStyleId})
+          + (norm[i+1] ? btn(norm[i+1].label, norm[i+1].tone, {styleId: norm[i+1].styleId, focus: norm[i+1].styleId === focusStyleId}) : '')
+          + '</div>';
       }
     } else {
-      html = norm.map(function(it){ return '<div class="tg-key-row">'+btn(it.label, it.tone)+'</div>'; }).join('');
+      html = norm.map(function(it){
+        return '<div class="tg-key-row">'+btn(it.label, it.tone, {styleId: it.styleId, focus: it.styleId === focusStyleId})+'</div>';
+      }).join('');
     }
     if (opts.submenu) {
-      html += '<div class="tg-key-row tg-key-nav">'+btn(back, backTone)+btn(home, homeTone)+'</div>';
+      html += '<div class="tg-key-row tg-key-nav">'
+        + btn(back, backTone, {styleId: 'back', focus: focusStyleId === 'back'})
+        + btn(home, homeTone, {styleId: 'home', focus: focusStyleId === 'home'})
+        + '</div>';
     } else if (home) {
-      html += '<div class="tg-key-row tg-key-home">'+btn(home, homeTone)+'</div>';
+      html += '<div class="tg-key-row tg-key-home">'+btn(home, homeTone, {styleId: 'home', focus: focusStyleId === 'home'})+'</div>';
     }
     keysEl.innerHTML = html;
   }
@@ -222,10 +475,9 @@
       if (qrCap) qrCap.textContent = cap;
       applyQrBackground();
     } else if (tab === 'colors') {
-      text = 'پیش‌نمایش رنگ دکمه‌های منوی اصلی و سراسری.\nبا تغییر منوی هر دکمه، رنگ کیبورد همین‌جا عوض می‌شود.';
-      showKeys = true;
-      const hint = document.getElementById('pv-hint');
-      if (hint) hint.textContent = 'پیش‌نمایش زنده رنگ دکمه‌ها — سفید / آبی / سبز / قرمز مطابق تلگرام.';
+      renderColorsPreview();
+      if (qrCard) qrCard.hidden = true;
+      return;
     } else if (tab === 'daily_report') {
       var defTpl = '📊 گزارش روزانه\n\n👤 ادمین: {admin_name}\n📅 دوره: {period_label}\n📆 روز: {day}\n🗓️ ماه: {month_name}\n📅 سال: {year}\n📅 از: {date_from}\n📅 تا: {date_to}\n\n📊 فعالیت:\n• کاربران جدید: {users_new}\n• سفارش‌ها: {orders_new}\n• تحویل‌شده: {orders_delivered}\n• درآمد امروز: {revenue_today}';
       text = fillDailyReport(val('admin_daily_report_template', values.admin_daily_report_template || defTpl));
@@ -254,8 +506,6 @@
         map.reseller_apply = val('btn_reseller_apply', map.reseller_apply);
         map.miniapp = val('btn_miniapp', map.miniapp);
       }
-      // miniapp is WebApp (inline only) — skip on reply keyboard preview
-      // Static menus/submenus → reply keyboard; dynamic entity lists stay inline under messages.
       const styleMap = {
         shop: 'shop',
         services: 'services',
@@ -269,7 +519,7 @@
         shop: 'primary', services: 'primary', wallet: 'primary',
         support: 'primary', loyalty: 'success', reseller_apply: '',
       };
-      const labels = order.filter(k => k !== 'miniapp').map(function(k){
+      const labels = order.filter(function(k){ return k !== 'miniapp'; }).map(function(k){
         const label = map[k];
         if (!label) return null;
         const sid = styleMap[k] || k;
@@ -279,6 +529,11 @@
     } else if (keysEl) {
       keysEl.innerHTML = '';
     }
+    if (inlineEl && tab !== 'colors') {
+      inlineEl.hidden = true;
+      inlineEl.innerHTML = '';
+    }
+    if (sceneEl && tab !== 'colors') sceneEl.hidden = true;
     if (textEl) textEl.innerHTML = esc(text).replace(/\n/g,'<br>');
     if (qrCard) qrCard.hidden = !showQr;
   }
@@ -295,6 +550,10 @@
     const t = e.target;
     if (t && t.name) {
       focusKey = t.name;
+      if (tab === 'colors' && t.classList && t.classList.contains('btn-color-select')) {
+        const m = String(t.name || '').match(/^s_btn_style_(.+)$/);
+        focusStyleId = m ? m[1] : null;
+      }
       scheduleRender();
     }
   }
@@ -321,6 +580,14 @@
       menuObserver = new MutationObserver(scheduleRender);
       menuObserver.observe(activeList, {childList:true, subtree:true});
     }
+    document.addEventListener('colors-tab-change', scheduleRender);
+    document.addEventListener('click', onColorsChipClick, true);
+  }
+  function onColorsChipClick(e){
+    if (!active || tab !== 'colors') return;
+    if (e.target && e.target.classList && e.target.classList.contains('btn-color-chip')) {
+      scheduleRender();
+    }
   }
   function unbindLive(){
     if (form) {
@@ -340,6 +607,8 @@
       menuObserver.disconnect();
       menuObserver = null;
     }
+    document.removeEventListener('colors-tab-change', scheduleRender);
+    document.removeEventListener('click', onColorsChipClick, true);
     if (renderTimer) {
       clearTimeout(renderTimer);
       renderTimer = 0;

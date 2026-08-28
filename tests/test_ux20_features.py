@@ -443,9 +443,9 @@ class ButtonStyleTests(unittest.TestCase):
         for opt_line in re.findall(r"<option\b[^>]*>[^<]*", settings_html):
             self.assertNotIn("پیش‌فرض", opt_line)
         self.assertIn("style_options", settings_html)
-        self.assertIn("button_style_sections", settings_html)
+        self.assertIn("colors_page_sections", settings_html)
         labels = "".join(item["label"] for item in BUTTON_STYLE_CATALOG)
-        self.assertIn("نوع پلن نمایندگی: PAYG", labels)
+        self.assertIn("پلن PAYG نماینده", labels)
         self.assertNotIn("Pay As You Go", labels)
         # Expanded catalog covers user/admin/reseller reply hubs.
         ids = {item["id"] for item in BUTTON_STYLE_CATALOG}

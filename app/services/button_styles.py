@@ -91,25 +91,25 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     # Shop flow (inline) — submenu plan rows inherit the matching kind color
     {
         "id": "shop_kind_fixed",
-        "label": "نوع پلن کاربر: ثابت (زیرمنو هم همین رنگ)",
+        "label": "پلن ثابت — رنگ پیش‌فرض",
         "group": "فروشگاه",
         "default": "primary",
     },
     {
         "id": "shop_kind_custom",
-        "label": "نوع پلن کاربر: دلخواه (زیرمنو هم همین رنگ)",
+        "label": "پلن دلخواه — رنگ پیش‌فرض",
         "group": "فروشگاه",
         "default": "primary",
     },
     {
         "id": "shop_kind_wholesale",
-        "label": "نوع پلن کاربر: عمده (زیرمنو هم همین رنگ)",
+        "label": "پلن عمده — رنگ پیش‌فرض",
         "group": "فروشگاه",
         "default": "primary",
     },
     {
         "id": "shop_kind_trial",
-        "label": "نوع پلن کاربر: تست (زیرمنو هم همین رنگ)",
+        "label": "پلن تست — رنگ پیش‌فرض",
         "group": "فروشگاه",
         "default": "primary",
     },
@@ -119,13 +119,13 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     # Reseller audience plans (admin configures kinds; submenu rows inherit these colors)
     {
         "id": "plan_res_fixed",
-        "label": "نوع پلن نمایندگی: ثابت (زیرمنو هم همین رنگ)",
+        "label": "پلن نماینده ثابت — پیش‌فرض",
         "group": "پلن نمایندگی",
         "default": "primary",
     },
     {
         "id": "plan_res_payg",
-        "label": "نوع پلن نمایندگی: PAYG (زیرمنو هم همین رنگ)",
+        "label": "پلن PAYG نماینده — پیش‌فرض",
         "group": "پلن نمایندگی",
         "default": "primary",
     },
@@ -145,10 +145,10 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "loy_rewards", "label": "جوایز باشگاه", "group": "باشگاه مشتریان", "default": ""},
     {"id": "loy_history", "label": "تاریخچه باشگاه", "group": "باشگاه مشتریان", "default": ""},
     # ── Admin hub (platform bot only) ──────────────────────────────────────────
-    {"id": "adm_hub_ops", "label": "عملیات روزانه (هاب ادمین)", "group": "منوی ادمین", "default": "success"},
-    {"id": "adm_hub_people", "label": "افراد (هاب ادمین)", "group": "منوی ادمین", "default": "success"},
-    {"id": "adm_hub_product", "label": "محصول و PG (هاب ادمین)", "group": "منوی ادمین", "default": "success"},
-    {"id": "adm_hub_system", "label": "سیستم (هاب ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_hub_ops", "label": "عملیات روزانه", "group": "منوی ادمین", "default": "success"},
+    {"id": "adm_hub_people", "label": "افراد", "group": "منوی ادمین", "default": "success"},
+    {"id": "adm_hub_product", "label": "محصول و پاسارگارد", "group": "منوی ادمین", "default": "success"},
+    {"id": "adm_hub_system", "label": "سیستم", "group": "منوی ادمین", "default": ""},
     {"id": "adm_dash", "label": "داشبورد ادمین", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_orders", "label": "سفارش‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_payments", "label": "رسیدها (ادمین)", "group": "منوی ادمین", "default": "success"},
@@ -258,6 +258,20 @@ PLAN_BUTTON_STYLE_OPTIONS: list[tuple[str, str, str]] = [
     *STYLE_OPTIONS,
 ]
 
+# JSON list items (payment destinations, support contacts): inherit → parent style.
+ITEM_BUTTON_STYLE_OPTIONS: list[tuple[str, str, str]] = [
+    ("inherit", "ارث از پیش‌فرض", "default"),
+    *STYLE_OPTIONS,
+]
+
+PAY_METHOD_STYLE_IDS: dict[str, str] = {
+    "card": "pay_card",
+    "gateway": "pay_gateway",
+    "crypto": "pay_crypto",
+}
+
+SUPPORT_CONTACT_STYLE_ID = "support"
+
 
 def parse_plan_button_style_form(form, field: str = "button_style") -> str | None:
     """Parse plan color from HTML form. Returns None = inherit kind color."""
@@ -292,6 +306,85 @@ def parse_plan_button_style_callback(raw: str) -> str | None:
     if v in {"inherit", "default", "__inherit__"}:
         return None
     return normalize_style(v)
+
+
+def item_button_style_options(
+    *,
+    inherit_label: str = "ارث از پیش‌فرض",
+) -> list[tuple[str, str, str]]:
+    return [("inherit", inherit_label, "default"), *STYLE_OPTIONS]
+
+
+def parse_item_button_style_raw(raw: object) -> str | None:
+    """Parse stored JSON item style. None = inherit parent default."""
+    if raw is None:
+        return None
+    if raw == "":
+        return ""
+    text = str(raw).strip().lower()
+    if text in {"inherit", "__inherit__", "none"}:
+        return None
+    return normalize_style(text)
+
+
+def parse_item_button_style_form(form, field: str = "button_style") -> str | None:
+    if field not in form:
+        return None
+    return parse_item_button_style_raw(form.get(field))
+
+
+def item_button_style_form_value(stored: object) -> str:
+    parsed = parse_item_button_style_raw(stored)
+    if parsed is None and stored is not None and str(stored).strip() == "":
+        return ""
+    if parsed is None:
+        return "inherit"
+    return parsed
+
+
+def serialize_item_button_style(raw: object) -> dict[str, str]:
+    """JSON storage: omit inherit, keep explicit white as \"\"."""
+    parsed = parse_item_button_style_raw(raw)
+    if parsed is None and raw is not None and str(raw).strip() == "":
+        return {"button_style": ""}
+    if parsed is not None:
+        return {"button_style": parsed}
+    return {}
+
+
+def parse_item_button_style_callback(raw: str) -> str | None:
+    return parse_item_button_style_raw(raw)
+
+
+def resolve_payment_destination_style(
+    ui: dict | None,
+    item: dict | None,
+    method: str,
+) -> str | None:
+    """Telegram inline style for one card/gateway/wallet row."""
+    if item and "button_style" in item:
+        raw = item.get("button_style")
+        if raw == "":
+            return None
+        parsed = parse_item_button_style_raw(raw)
+        if parsed is not None:
+            return parsed or None
+    style_id = PAY_METHOD_STYLE_IDS.get(method, "pay_card")
+    return style_or_none(ui, style_id, fallback="primary")
+
+
+def resolve_support_contact_style(
+    ui: dict | None,
+    contact: dict | None,
+) -> str | None:
+    if contact and "button_style" in contact:
+        raw = contact.get("button_style")
+        if raw == "":
+            return None
+        parsed = parse_item_button_style_raw(raw)
+        if parsed is not None:
+            return parsed or None
+    return style_or_none(ui, SUPPORT_CONTACT_STYLE_ID, fallback="primary")
 
 
 def get_button_style(
@@ -583,3 +676,162 @@ def sectioned_catalog(
             _pick(reseller_names),
         ),
     ]
+
+
+COLORS_PAGE_TABS: list[tuple[str, str, list[str]]] = [
+    ("user", "کاربر", ["دکمه‌های سراسری", "منوی اصلی", "زیرمنوها", "فروشگاه", "باشگاه مشتریان"]),
+    ("payment", "پرداخت", ["پرداخت"]),
+    ("admin", "ادمین", [
+        "پلن نمایندگی",
+        "منوی ادمین",
+        "باشگاه ادمین",
+        "پاسارگارد",
+        "تنظیمات ادمین",
+        "بکاپ",
+        "پیام همگانی",
+    ]),
+    ("reseller", "نماینده", ["منوی نماینده", "تنظیمات نماینده"]),
+]
+
+
+def colors_page_tabs(*, for_reseller: bool = False) -> list[tuple[str, str, list[str]]]:
+    if for_reseller:
+        return [("shop", "فروشگاه", [])]
+    return list(COLORS_PAGE_TABS)
+
+
+def colors_page_grouped_sections(
+    *, for_reseller: bool = False
+) -> list[tuple[str, str, str, list[tuple[str, list[dict[str, str]]]]]]:
+    """Map catalog groups onto colors-page sub-tabs."""
+    flat = grouped_catalog(for_reseller=for_reseller)
+    if for_reseller:
+        return [("shop", "فروشگاه شما", "رنگ دکمه‌های ربات فروشگاه.", flat)]
+
+    by_name = {name: items for name, items in flat}
+
+    def _pick(names: list[str]) -> list[tuple[str, list[dict[str, str]]]]:
+        out: list[tuple[str, list[dict[str, str]]]] = []
+        for name in names:
+            if name in by_name:
+                out.append((name, by_name[name]))
+        return out
+
+    sections: list[tuple[str, str, str, list[tuple[str, list[dict[str, str]]]]]] = []
+    for tab_id, tab_label, group_names in COLORS_PAGE_TABS:
+        groups = _pick(group_names)
+        if not groups:
+            continue
+        if tab_id == "user":
+            caption = "منوی اصلی، خرید و باشگاه مشتریان."
+        elif tab_id == "payment":
+            caption = "روش‌های پرداخت و شارژ کیف پول."
+        elif tab_id == "admin":
+            caption = "دکمه‌های پنل ادمین ربات اصلی."
+        else:
+            caption = "منوی هاب نماینده و تنظیمات فروشگاه."
+        sections.append((tab_id, tab_label, caption, groups))
+    return sections
+
+
+def _style_label(value: str | None) -> str:
+    for opt_val, opt_label, _tone in STYLE_OPTIONS:
+        if opt_val == (value or ""):
+            return opt_label
+    return "ارث"
+
+
+def build_dynamic_color_summary(
+    ui: dict | None,
+    *,
+    support_contacts: list[dict] | None = None,
+    payment_cards: list[dict] | None = None,
+    payment_gateways: list[dict] | None = None,
+    payment_crypto_wallets: list[dict] | None = None,
+) -> list[dict[str, str]]:
+    """Read-only rows for colors tab — edited in their own settings screens."""
+    rows: list[dict[str, str]] = []
+    ui = ui or {}
+
+    for contact in support_contacts or []:
+        title = str(contact.get("title") or "پشتیبان").strip()
+        stored = contact.get("button_style")
+        if parse_item_button_style_raw(stored) is None and stored not in ("",):
+            label = "ارث از پشتیبانی"
+        elif stored == "":
+            label = "سفید"
+        else:
+            label = _style_label(parse_item_button_style_raw(stored))
+        rows.append(
+            {
+                "kind": "support",
+                "title": title,
+                "color_label": label,
+                "edit_url": "/tickets?supports=1",
+                "edit_hint": "پشتیبان‌ها",
+            }
+        )
+
+    for card in payment_cards or []:
+        num = str(card.get("number") or "")
+        tail = num[-4:] if len(num) >= 4 else num
+        title = f"کارت …{tail}" if tail else "کارت"
+        stored = card.get("button_style")
+        if parse_item_button_style_raw(stored) is None and stored not in ("",):
+            label = "ارث از کارت به کارت"
+        elif stored == "":
+            label = "سفید"
+        else:
+            label = _style_label(parse_item_button_style_raw(stored))
+        rows.append(
+            {
+                "kind": "pay_card",
+                "title": title,
+                "color_label": label,
+                "edit_url": "/settings?tab=payment",
+                "edit_hint": "پرداخت",
+            }
+        )
+
+    for gw in payment_gateways or []:
+        title = str(gw.get("name") or "درگاه").strip()
+        stored = gw.get("button_style")
+        if parse_item_button_style_raw(stored) is None and stored not in ("",):
+            label = "ارث از درگاه"
+        elif stored == "":
+            label = "سفید"
+        else:
+            label = _style_label(parse_item_button_style_raw(stored))
+        rows.append(
+            {
+                "kind": "pay_gateway",
+                "title": title,
+                "color_label": label,
+                "edit_url": "/settings?tab=payment",
+                "edit_hint": "پرداخت",
+            }
+        )
+
+    for wallet in payment_crypto_wallets or []:
+        asset = str(wallet.get("asset") or "USDT").strip()
+        addr = str(wallet.get("address") or "")
+        tail = addr[-6:] if len(addr) >= 6 else addr
+        title = f"{asset} …{tail}" if tail else asset
+        stored = wallet.get("button_style")
+        if parse_item_button_style_raw(stored) is None and stored not in ("",):
+            label = "ارث از رمزارز"
+        elif stored == "":
+            label = "سفید"
+        else:
+            label = _style_label(parse_item_button_style_raw(stored))
+        rows.append(
+            {
+                "kind": "pay_crypto",
+                "title": title,
+                "color_label": label,
+                "edit_url": "/settings?tab=payment",
+                "edit_hint": "پرداخت",
+            }
+        )
+
+    return rows

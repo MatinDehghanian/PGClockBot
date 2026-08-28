@@ -172,6 +172,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
 
         values = await get_all_settings(session, reseller_id=rid)
         values["show_reseller_apply"] = "0"
+        if tab == "colors":
+            from app.services.payment_destinations import enrich_payment_settings
+
+            values = enrich_payment_settings(values)
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
         # Hide platform-only fields from reseller menu tab
         groups = {name: SETTING_GROUPS[name] for name in tab_groups if name in SETTING_GROUPS}
@@ -217,9 +221,9 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if tab == "menu":
             ctx.update(_menu_tab_context(values))
         elif tab == "colors":
-            from app.services.button_styles import STYLE_OPTIONS, sectioned_catalog
+            from app.services.button_styles import STYLE_OPTIONS, colors_page_grouped_sections
 
-            ctx["button_style_sections"] = sectioned_catalog(for_reseller=True)
+            ctx["colors_page_sections"] = colors_page_grouped_sections(for_reseller=True)
             ctx["style_options"] = STYLE_OPTIONS
         elif tab == "bot":
             token = (profile.bot_token if profile else "") or ""
@@ -577,6 +581,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
     ):
         if _is_owner_settings_actor(staff):
             return RedirectResponse("/tickets?supports=1", status_code=303)
+        from app.services.button_styles import parse_item_button_style_form
         from app.services.support_contacts import upsert_support_contact
 
         rid = _rid(staff)
@@ -593,6 +598,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         enabled = str(form.get("enabled") or "") in {"1", "on", "true", "yes"}
         if contact_id and "enabled" not in form:
             enabled = False
+        button_style = parse_item_button_style_form(form)
         _, err = await upsert_support_contact(
             session,
             contact_id=contact_id,
@@ -600,6 +606,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             telegram=telegram,
             sort=sort,
             enabled=enabled,
+            button_style=button_style,
             reseller_id=rid,
         )
         if err:

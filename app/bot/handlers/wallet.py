@@ -404,7 +404,7 @@ async def wtop_choose_method(
             return
         if len(items) > 1 and not dest_id:
             await callback.answer()
-            markup = inline_picker_markup("card", items, order_id=0, prefix="wtop")
+            markup = inline_picker_markup("card", items, order_id=0, prefix="wtop", ui=ui)
             if callback.message and markup:
                 await safe_edit_text(
                     callback.message,
@@ -420,7 +420,7 @@ async def wtop_choose_method(
             return
         if len(items) > 1 and not dest_id:
             await callback.answer()
-            markup = inline_picker_markup("gateway", items, order_id=0, prefix="wtop")
+            markup = inline_picker_markup("gateway", items, order_id=0, prefix="wtop", ui=ui)
             if callback.message and markup:
                 await safe_edit_text(
                     callback.message,
@@ -436,7 +436,7 @@ async def wtop_choose_method(
             return
         if len(items) > 1 and not dest_id:
             await callback.answer()
-            markup = inline_picker_markup("crypto", items, order_id=0, prefix="wtop")
+            markup = inline_picker_markup("crypto", items, order_id=0, prefix="wtop", ui=ui)
             if callback.message and markup:
                 await safe_edit_text(
                     callback.message,

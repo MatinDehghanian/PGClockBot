@@ -1431,7 +1431,7 @@ async def pay_card_cb(
         return
     if len(cards) > 1 and not dest_id:
         await callback.answer()
-        markup = inline_picker_markup("card", cards, order_id=order_id, prefix="pay")
+        markup = inline_picker_markup("card", cards, order_id=order_id, prefix="pay", ui=ui)
         if callback.message and markup:
             await safe_edit_text(
                 callback.message,
@@ -1500,7 +1500,7 @@ async def pay_gateway_cb(
         return
     if len(gateways) > 1 and not dest_id:
         await callback.answer()
-        markup = inline_picker_markup("gateway", gateways, order_id=order_id, prefix="pay")
+        markup = inline_picker_markup("gateway", gateways, order_id=order_id, prefix="pay", ui=ui)
         if callback.message and markup:
             await safe_edit_text(
                 callback.message,
@@ -1592,7 +1592,7 @@ async def pay_crypto_cb(
         return
     if len(wallets) > 1 and not dest_id:
         await callback.answer()
-        markup = inline_picker_markup("crypto", wallets, order_id=order_id, prefix="pay")
+        markup = inline_picker_markup("crypto", wallets, order_id=order_id, prefix="pay", ui=ui)
         if callback.message and markup:
             await safe_edit_text(
                 callback.message,

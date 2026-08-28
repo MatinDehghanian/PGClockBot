@@ -261,8 +261,13 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
         }
 
         if can_manage_supports:
+            from app.services.button_styles import item_button_style_options
             from app.services.support_contacts import get_support_contacts
             from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
+
+            ctx["item_style_options"] = item_button_style_options(
+                inherit_label="ارث از پشتیبانی"
+            )
 
             # Owner settings only for real Owner. Missing shop scope → empty, never Owner fallback.
             if is_platform_admin(staff):

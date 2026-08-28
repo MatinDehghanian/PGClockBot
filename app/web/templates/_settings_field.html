@@ -35,7 +35,7 @@
     <div class="force-channels-list" data-force-channels-list></div>
   </div>
   {% elif kind == 'payment_cards' %}
-  <div class="pay-dest-list" data-pay-dest="cards">
+  <div class="pay-dest-list" data-pay-dest="cards" data-style-inherit-label="ارث از کارت به کارت">
     <div class="pay-dest-head">
       <strong class="pay-dest-title">{{ label }}</strong>
       {% if help %}<p class="muted pay-dest-help">{{ help }}</p>{% endif %}
@@ -44,7 +44,7 @@
     <div class="pay-dest-rows" data-pay-dest-list></div>
   </div>
   {% elif kind == 'payment_gateways' %}
-  <div class="pay-dest-list" data-pay-dest="gateways">
+  <div class="pay-dest-list" data-pay-dest="gateways" data-style-inherit-label="ارث از درگاه پرداخت">
     <div class="pay-dest-head">
       <strong class="pay-dest-title">{{ label }}</strong>
       {% if help %}<p class="muted pay-dest-help">{{ help }}</p>{% endif %}
@@ -53,7 +53,7 @@
     <div class="pay-dest-rows" data-pay-dest-list></div>
   </div>
   {% elif kind == 'payment_crypto_wallets' %}
-  <div class="pay-dest-list" data-pay-dest="crypto">
+  <div class="pay-dest-list" data-pay-dest="crypto" data-style-inherit-label="ارث از رمزارز">
     <div class="pay-dest-head">
       <strong class="pay-dest-title">{{ label }}</strong>
       {% if help %}<p class="muted pay-dest-help">{{ help }}</p>{% endif %}
