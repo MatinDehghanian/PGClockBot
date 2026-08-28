@@ -2158,14 +2158,51 @@
           return [];
         }
       }
-      function rowHtml(kind, item) {
+      function storedStyleValue(item) {
+        if (!item || item.button_style === undefined || item.button_style === null) return 'inherit';
+        if (item.button_style === '') return '';
+        return String(item.button_style);
+      }
+      function styleSelectHtml(cur, inheritLabel) {
+        const val = cur == null ? 'inherit' : cur;
+        const tone = (!val || val === 'inherit') ? 'default' : val;
+        const opts = [
+          ['inherit', inheritLabel || 'ارث از پیش‌فرض', 'default'],
+          ['', 'سفید', 'default'],
+          ['primary', 'آبی', 'primary'],
+          ['success', 'سبز', 'success'],
+          ['danger', 'قرمز', 'danger'],
+        ];
+        let html =
+          '<div class="plan-color-field item-color-field pay-dest-color">' +
+            '<div class="btn-color-card plan-color-card">' +
+              '<span class="btn-color-label">رنگ دکمه در ربات</span>' +
+              '<select class="btn-color-select pay-dest-style" data-tone="' + tone + '" aria-label="رنگ دکمه در ربات">';
+        opts.forEach(function (o) {
+          html +=
+            '<option value="' + o[0] + '" data-tone="' + o[2] + '"' +
+            (val === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        });
+        html += '</select></div></div>';
+        return html;
+      }
+      function rowStylePatch(row) {
+        const styleSel = row.querySelector('.pay-dest-style');
+        const styleVal = styleSel ? styleSel.value : 'inherit';
+        if (styleVal === 'inherit') return {};
+        if (styleVal === '') return { button_style: '' };
+        return { button_style: styleVal };
+      }
+      function rowHtml(kind, item, inheritLabel) {
         const id = (item && item.id) || uid();
+        const styleHtml = styleSelectHtml(storedStyleValue(item), inheritLabel);
         if (kind === 'cards') {
           return (
-            '<div class="pay-dest-row" data-pay-dest-row>' +
+            '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + String(id).replace(/"/g, '&quot;') + '">' +
               '<div class="pay-dest-fields">' +
                 '<label>شماره کارت<input type="text" class="pay-dest-card-number" dir="ltr" value="' + String(item.number || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
                 '<label>صاحب کارت<input type="text" class="pay-dest-card-holder" value="' + String(item.holder || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
+                styleHtml +
               '</div>' +
               '<div class="pay-dest-actions">' +
                 '<button type="button" class="btn btn-ghost btn-sm pay-dest-btn pay-dest-remove" aria-label="حذف">−</button>' +
@@ -2175,10 +2212,11 @@
         }
         if (kind === 'gateways') {
           return (
-            '<div class="pay-dest-row" data-pay-dest-row>' +
+            '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + String(id).replace(/"/g, '&quot;') + '">' +
               '<div class="pay-dest-fields">' +
                 '<label>نام درگاه<input type="text" class="pay-dest-gw-name" value="' + String(item.name || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
                 '<label>لینک<input type="text" class="pay-dest-gw-link" dir="ltr" value="' + String(item.link || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
+                styleHtml +
               '</div>' +
               '<div class="pay-dest-actions">' +
                 '<button type="button" class="btn btn-ghost btn-sm pay-dest-btn pay-dest-remove" aria-label="حذف">−</button>' +
@@ -2187,11 +2225,12 @@
           );
         }
         return (
-          '<div class="pay-dest-row" data-pay-dest-row>' +
+          '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + String(id).replace(/"/g, '&quot;') + '">' +
             '<div class="pay-dest-fields">' +
               '<label>رمزارز<input type="text" class="pay-dest-cr-asset" value="' + String(item.asset || 'USDT').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
               '<label>شبکه<input type="text" class="pay-dest-cr-network" value="' + String(item.network || 'TRC20').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
               '<label>آدرس<input type="text" class="pay-dest-cr-address" dir="ltr" value="' + String(item.address || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
+              styleHtml +
             '</div>' +
             '<div class="pay-dest-actions">' +
               '<button type="button" class="btn btn-ghost btn-sm pay-dest-btn pay-dest-remove" aria-label="حذف">−</button>' +
@@ -2209,22 +2248,25 @@
         const kind = root.getAttribute('data-pay-dest');
         const entries = [];
         list.querySelectorAll('[data-pay-dest-row]').forEach((row, idx) => {
+          const rowId = row.getAttribute('data-pay-dest-id') || uid();
+          row.setAttribute('data-pay-dest-id', rowId);
+          const stylePatch = rowStylePatch(row);
           if (kind === 'cards') {
             const number = String((row.querySelector('.pay-dest-card-number') || {}).value || '').replace(/\D/g, '');
             const holder = String((row.querySelector('.pay-dest-card-holder') || {}).value || '').trim();
             if (!number) return;
-            entries.push({ id: uid(), number: number, holder: holder, enabled: true, sort: idx });
+            entries.push(Object.assign({ id: rowId, number: number, holder: holder, enabled: true, sort: idx }, stylePatch));
           } else if (kind === 'gateways') {
             const name = String((row.querySelector('.pay-dest-gw-name') || {}).value || '').trim();
             const link = String((row.querySelector('.pay-dest-gw-link') || {}).value || '').trim();
             if (!name && !link) return;
-            entries.push({ id: uid(), name: name || 'درگاه پرداخت', link: link, enabled: true, sort: idx });
+            entries.push(Object.assign({ id: rowId, name: name || 'درگاه پرداخت', link: link, enabled: true, sort: idx }, stylePatch));
           } else {
             const asset = String((row.querySelector('.pay-dest-cr-asset') || {}).value || 'USDT').trim();
             const network = String((row.querySelector('.pay-dest-cr-network') || {}).value || 'TRC20').trim();
             const address = String((row.querySelector('.pay-dest-cr-address') || {}).value || '').trim();
             if (!address) return;
-            entries.push({ id: uid(), asset: asset, network: network, address: address, enabled: true, sort: idx });
+            entries.push(Object.assign({ id: rowId, asset: asset, network: network, address: address, enabled: true, sort: idx }, stylePatch));
           }
         });
         hidden.value = JSON.stringify(entries);
@@ -2232,13 +2274,15 @@
       function render(root, items) {
         const list = root.querySelector('[data-pay-dest-list]');
         const kind = root.getAttribute('data-pay-dest');
+        const inheritLabel = root.getAttribute('data-style-inherit-label') || 'ارث از پیش‌فرض';
         if (!list) return;
-        const rows = (items && items.length ? items : [{}]).map((item) => rowHtml(kind, item)).join('');
+        const rows = (items && items.length ? items : [{}]).map((item) => rowHtml(kind, item, inheritLabel)).join('');
         list.innerHTML = rows + addBtnHtml();
         sync(root);
       }
       document.querySelectorAll('[data-pay-dest]').forEach((root) => {
         const hidden = root.querySelector('[data-pay-dest-json]');
+        const inheritLabel = root.getAttribute('data-style-inherit-label') || 'ارث از پیش‌فرض';
         render(root, parseJson(hidden ? hidden.value : '[]'));
         root.addEventListener('click', (e) => {
           if (e.target.closest('[data-pay-dest-add]')) {
@@ -2246,7 +2290,7 @@
             const list = root.querySelector('[data-pay-dest-list]');
             const add = list && list.querySelector('[data-pay-dest-add]');
             const kind = root.getAttribute('data-pay-dest');
-            const html = rowHtml(kind, {});
+            const html = rowHtml(kind, {}, inheritLabel);
             if (add) add.insertAdjacentHTML('beforebegin', html);
             else if (list) list.insertAdjacentHTML('afterbegin', html);
             sync(root);
@@ -2261,13 +2305,69 @@
               if (!list.querySelector('[data-pay-dest-row]')) {
                 const kind = root.getAttribute('data-pay-dest');
                 const add = list.querySelector('[data-pay-dest-add]');
-                if (add) add.insertAdjacentHTML('beforebegin', rowHtml(kind, {}));
+                if (add) add.insertAdjacentHTML('beforebegin', rowHtml(kind, {}, inheritLabel));
               }
               sync(root);
             }
           }
         });
         root.addEventListener('input', () => sync(root));
+        root.addEventListener('change', (e) => {
+          if (e.target && e.target.classList && e.target.classList.contains('pay-dest-style')) sync(root);
+        });
+      });
+    })();
+
+    /* Colors tab — sub-tabs + tone chips */
+    (function () {
+      const root = document.querySelector('[data-colors-subtabs]');
+      if (!root) return;
+      const tabs = root.querySelectorAll('.colors-subtab');
+      const panels = document.querySelectorAll('[data-colors-panel]');
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const id = tab.getAttribute('data-colors-tab');
+          tabs.forEach((t) => {
+            const active = t === tab;
+            t.classList.toggle('is-active', active);
+            t.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          panels.forEach((panel) => {
+            const show = panel.getAttribute('data-colors-panel') === id;
+            panel.classList.toggle('is-active', show);
+            if (show) panel.removeAttribute('hidden');
+            else panel.setAttribute('hidden', 'hidden');
+          });
+        });
+      });
+      function syncChips(card) {
+        const select = card.querySelector('.btn-color-select');
+        const chips = card.querySelectorAll('.btn-color-chip');
+        if (!select || !chips.length) return;
+        chips.forEach((chip) => {
+          chip.classList.toggle('is-active', chip.getAttribute('data-value') === select.value);
+        });
+      }
+      document.querySelectorAll('.btn-color-card').forEach((card) => {
+        syncChips(card);
+        const select = card.querySelector('.btn-color-select');
+        if (select) {
+          select.addEventListener('change', () => syncChips(card));
+        }
+        card.querySelectorAll('.btn-color-chip').forEach((chip) => {
+          chip.addEventListener('click', (e) => {
+            e.preventDefault();
+            const selectEl = card.querySelector('.btn-color-select');
+            if (!selectEl) return;
+            selectEl.value = chip.getAttribute('data-value') || '';
+            const tone = chip.getAttribute('data-tone') || '';
+            if (tone) selectEl.dataset.tone = tone;
+            else delete selectEl.dataset.tone;
+            selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+            selectEl.dispatchEvent(new Event('input', { bubbles: true }));
+            syncChips(card);
+          });
+        });
       });
     })();
 

@@ -9109,6 +9109,148 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   color: var(--foreground);
 }
 
+.pay-dest-color {
+  grid-column: 1 / -1;
+}
+.pay-dest-color .plan-color-card {
+  max-width: 320px;
+}
+
+.support-fields .item-color-field {
+  grid-column: 1 / -1;
+}
+.support-fields .item-color-field .plan-color-card {
+  max-width: 320px;
+}
+
+/* —— Colors tab (sub-tabs, chips, dynamic summary) —— */
+.colors-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+.colors-subtab {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.colors-subtab:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+}
+.colors-subtab.is-active {
+  background: color-mix(in srgb, var(--primary) 14%, var(--muted));
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+.colors-tab-panel[hidden] {
+  display: none !important;
+}
+.colors-tab-intro {
+  margin-bottom: var(--space-1);
+}
+.colors-group-details {
+  padding: 0;
+}
+.colors-group-details > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: var(--card-pad);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.colors-group-details > summary::-webkit-details-marker {
+  display: none;
+}
+.colors-group-summary h2 {
+  margin: 0;
+  font-size: var(--title-size);
+}
+.colors-group-details > summary::before {
+  content: "▸";
+  color: var(--muted-fg);
+  transition: transform 0.15s;
+}
+.colors-group-details[open] > summary::before {
+  transform: rotate(90deg);
+}
+.colors-group-details > .btn-color-grid {
+  padding: 0 var(--card-pad) var(--card-pad);
+}
+.colors-dynamic-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.colors-dynamic-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
+  padding: var(--space-1_5) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+.colors-dynamic-title {
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.colors-dynamic-link {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.btn-color-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.btn-color-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.btn-color-chip {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  background: #e4e4e7;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.btn-color-chip[data-tone="primary"] {
+  background: #3390ec;
+}
+.btn-color-chip[data-tone="success"] {
+  background: #34c759;
+}
+.btn-color-chip[data-tone="danger"] {
+  background: #ff3b30;
+}
+.btn-color-chip.is-active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+html[data-theme="light"] .btn-color-chip[data-tone="default"] {
+  background: #f4f4f5;
+}
+
 /* —— Table bulk selection —— */
 .col-select {
   width: 44px;

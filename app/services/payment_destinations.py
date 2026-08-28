@@ -7,7 +7,10 @@ import re
 import uuid
 from typing import Any
 
-from app.services.users import get_setting, set_setting
+from app.services.button_styles import (
+    resolve_payment_destination_style,
+    serialize_item_button_style,
+)
 
 KEY_CARDS = "payment_cards"
 KEY_GATEWAYS = "payment_gateways"
@@ -66,13 +69,15 @@ def _normalize_card(entry: dict[str, Any]) -> dict[str, Any] | None:
     if not number:
         return None
     holder = str(entry.get("holder") or entry.get("card_holder") or "").strip()[:128]
-    return {
+    row = {
         "id": str(entry.get("id") or _new_id())[:32],
         "number": number,
         "holder": holder,
         "enabled": bool(entry.get("enabled", True)),
         "sort": int(entry.get("sort") or 0),
+        **serialize_item_button_style(entry.get("button_style")),
     }
+    return row
 
 
 def _normalize_gateway(entry: dict[str, Any]) -> dict[str, Any] | None:
@@ -82,27 +87,31 @@ def _normalize_gateway(entry: dict[str, Any]) -> dict[str, Any] | None:
         return None
     if not name:
         name = "درگاه پرداخت"
-    return {
+    row = {
         "id": str(entry.get("id") or _new_id())[:32],
         "name": name,
         "link": link,
         "enabled": bool(entry.get("enabled", True)),
         "sort": int(entry.get("sort") or 0),
+        **serialize_item_button_style(entry.get("button_style")),
     }
+    return row
 
 
 def _normalize_crypto(entry: dict[str, Any]) -> dict[str, Any] | None:
     address = str(entry.get("address") or entry.get("crypto_address") or "").strip()[:256]
     if not address:
         return None
-    return {
+    row = {
         "id": str(entry.get("id") or _new_id())[:32],
         "asset": str(entry.get("asset") or entry.get("crypto_asset") or "USDT").strip()[:32],
         "network": str(entry.get("network") or entry.get("crypto_network") or "TRC20").strip()[:32],
         "address": address,
         "enabled": bool(entry.get("enabled", True)),
         "sort": int(entry.get("sort") or 0),
+        **serialize_item_button_style(entry.get("button_style")),
     }
+    return row
 
 
 def _dedupe_sort(items: list[dict[str, Any]], key_fn) -> list[dict[str, Any]]:
@@ -354,14 +363,22 @@ def inline_picker_markup(
     *,
     order_id: int,
     prefix: str,
+    ui: dict | None = None,
 ) -> Any:
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
     rows: list[list[InlineKeyboardButton]] = []
     for group in destination_picker_rows(method, items, order_id=order_id, prefix=prefix):
-        rows.append(
-            [InlineKeyboardButton(text=label, callback_data=cb) for label, cb in group]
-        )
+        row_btns: list[InlineKeyboardButton] = []
+        for label, cb in group:
+            item_id = cb.rsplit(":", 1)[-1]
+            item = next((x for x in items if str(x.get("id")) == item_id), None)
+            style = resolve_payment_destination_style(ui, item, method)
+            kwargs: dict[str, Any] = {"text": label, "callback_data": cb}
+            if style:
+                kwargs["style"] = style
+            row_btns.append(InlineKeyboardButton(**kwargs))
+        rows.append(row_btns)
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 

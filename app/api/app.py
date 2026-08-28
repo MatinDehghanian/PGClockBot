@@ -3559,6 +3559,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         from urllib.parse import quote
 
+        from app.services.button_styles import parse_item_button_style_form
         from app.services.support_contacts import upsert_support_contact
 
         form = await request.form()
@@ -3573,6 +3574,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         # unchecked checkbox means disabled when editing existing
         if contact_id and "enabled" not in form:
             enabled = False
+        button_style = parse_item_button_style_form(form)
         _, err = await upsert_support_contact(
             session,
             contact_id=contact_id,
@@ -3580,6 +3582,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             telegram=telegram,
             sort=sort,
             enabled=enabled,
+            button_style=button_style,
         )
         if err:
             return RedirectResponse(
@@ -3729,10 +3732,31 @@ def create_api_app(lifespan=None) -> FastAPI:
         if tab == "menu":
             ctx.update(_menu_tab_context(values))
         elif tab == "colors":
-            from app.services.button_styles import STYLE_OPTIONS, sectioned_catalog
+            from app.services.button_styles import (
+                STYLE_OPTIONS,
+                build_dynamic_color_summary,
+                colors_page_grouped_sections,
+            )
+            from app.services.payment_destinations import (
+                enrich_payment_settings,
+                parse_payment_cards,
+                parse_payment_crypto_wallets,
+                parse_payment_gateways,
+            )
+            from app.services.support_contacts import parse_support_contacts
 
-            ctx["button_style_sections"] = sectioned_catalog()
+            pay_ui = enrich_payment_settings(values)
+            ctx["colors_page_sections"] = colors_page_grouped_sections()
             ctx["style_options"] = STYLE_OPTIONS
+            ctx["dynamic_color_rows"] = build_dynamic_color_summary(
+                values,
+                support_contacts=parse_support_contacts(values.get("support_contacts")),
+                payment_cards=parse_payment_cards(pay_ui.get("payment_cards")),
+                payment_gateways=parse_payment_gateways(pay_ui.get("payment_gateways")),
+                payment_crypto_wallets=parse_payment_crypto_wallets(
+                    pay_ui.get("payment_crypto_wallets")
+                ),
+            )
         elif tab == "notifications":
             prefs = await get_notify_prefs(session)
             ctx["notify_prefs"] = prefs

@@ -9,9 +9,12 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.button_styles import parse_item_button_style_raw, serialize_item_button_style
 from app.services.users import get_setting, set_setting
 
 SETTING_KEY = "support_contacts"
+
+_STYLE_UNSET = object()
 
 _USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$")
 
@@ -103,6 +106,7 @@ def parse_support_contacts(raw: str | None) -> list[dict[str, Any]]:
                 "telegram": telegram,
                 "sort": sort,
                 "enabled": bool(enabled),
+                **serialize_item_button_style(item.get("button_style")),
             }
         )
     out.sort(key=lambda x: (x["sort"], x["title"]))
@@ -127,6 +131,7 @@ def dump_support_contacts(contacts: list[dict[str, Any]]) -> str:
                 "telegram": telegram,
                 "sort": sort_val,
                 "enabled": bool(c.get("enabled", True)),
+                **serialize_item_button_style(c.get("button_style")),
             }
         )
     clean.sort(key=lambda x: (x["sort"], x["title"]))
@@ -163,6 +168,7 @@ async def upsert_support_contact(
     telegram: str,
     sort: int = 0,
     enabled: bool = True,
+    button_style: object = _STYLE_UNSET,
     reseller_id: int | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     err = validate_telegram(telegram)
@@ -171,6 +177,9 @@ async def upsert_support_contact(
         return None, "عنوان الزامی است"
     if err:
         return None, err
+    style_patch: dict[str, str] = {}
+    if button_style is not _STYLE_UNSET:
+        style_patch = serialize_item_button_style(button_style)
     contacts = await get_support_contacts(session, reseller_id=reseller_id)
     if contact_id:
         found = None
@@ -184,6 +193,9 @@ async def upsert_support_contact(
         found["telegram"] = normalize_telegram_handle(telegram)
         found["sort"] = sort
         found["enabled"] = enabled
+        if button_style is not _STYLE_UNSET:
+            found.pop("button_style", None)
+            found.update(style_patch)
         await save_support_contacts(session, contacts, reseller_id=reseller_id)
         return found, None
     item = {
@@ -192,6 +204,7 @@ async def upsert_support_contact(
         "telegram": normalize_telegram_handle(telegram),
         "sort": sort if sort else (max((c["sort"] for c in contacts), default=-1) + 1),
         "enabled": enabled,
+        **style_patch,
     }
     contacts.append(item)
     await save_support_contacts(session, contacts, reseller_id=reseller_id)

@@ -1,19 +1,117 @@
-{# Telegram button colors — sectioned catalog (admin vs reseller) + tone-aware selects.
-   style_options comes from button_styles.STYLE_OPTIONS (value, label, tone).
-   button_style_sections: list of (section_id, title, caption, groups)
-   OR legacy button_style_groups: list of (group_name, items) #}
+{# Telegram button colors — sub-tabs, dynamic-item summary, tone chips + selects. #}
 <form method="post" action="{{ settings_action|default('/settings?tab=colors') }}" class="settings-form" id="settings-form">
   <div class="card settings-card">
     <h2>رنگبندی دکمه‌ها</h2>
     <p class="muted update-card-caption">
-      رنگ هر دکمه را از منوی بازشو انتخاب کنید؛ خود منو به همان رنگ درمی‌آید تا در یک نگاه مشخص باشد.
       تلگرام فقط سفید، آبی، سبز و قرمز را پشتیبانی می‌کند.
-      باکس <strong>دکمه‌های سراسری</strong> رنگ منوی اصلی، بازگشت، انصراف، تأیید و رد را همه‌جا یکدست می‌کند.
-      رنگ <strong>نوع پلن</strong> پیش‌فرض زیرمنوی همان نوع است؛ در «پلن‌ها → ویرایش» می‌توانید برای هر پلن رنگ جدا بگذارید.
+      رنگ دکمه‌های ثابت را اینجا تنظیم کنید؛
+      رنگ <strong>پلن‌ها</strong>، <strong>پشتیبان‌ها</strong> و <strong>مقاصد پرداخت</strong>
+      در همان بخش مربوطه (ساخت/ویرایش) تعیین می‌شود.
     </p>
   </div>
 
-  {% if button_style_sections %}
+  {% if dynamic_color_rows %}
+  <div class="card settings-card colors-dynamic-card">
+    <h2>رنگ‌های تعریف‌شده در بخش‌های دیگر</h2>
+    <p class="muted update-card-caption">
+      این موارد در فرم خودشان ویرایش می‌شوند — اینجا فقط خلاصه نمایش داده می‌شود.
+    </p>
+    <ul class="colors-dynamic-list">
+      {% for row in dynamic_color_rows %}
+      <li class="colors-dynamic-row">
+        <span class="colors-dynamic-title">{{ row.title }}</span>
+        <span class="colors-dynamic-color muted">{{ row.color_label }}</span>
+        <a class="colors-dynamic-link" href="{{ row.edit_url }}">ویرایش در {{ row.edit_hint }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if colors_page_sections %}
+  <div class="colors-subtabs" data-colors-subtabs role="tablist" aria-label="بخش‌های رنگبندی">
+    {% for tab_id, tab_label, _tab_caption, _tab_groups in colors_page_sections %}
+    <button
+      type="button"
+      class="colors-subtab{% if loop.first %} is-active{% endif %}"
+      role="tab"
+      aria-selected="{{ 'true' if loop.first else 'false' }}"
+      data-colors-tab="{{ tab_id }}"
+    >{{ tab_label }}</button>
+    {% endfor %}
+  </div>
+
+  {% for tab_id, tab_label, tab_caption, tab_groups in colors_page_sections %}
+  <div
+    class="colors-tab-panel{% if loop.first %} is-active{% endif %}"
+    data-colors-panel="{{ tab_id }}"
+    role="tabpanel"
+    {% if not loop.first %}hidden{% endif %}
+  >
+    <div class="btn-color-section-head colors-tab-intro" data-section="{{ tab_id }}">
+      <h2>{{ tab_label }}</h2>
+      {% if tab_caption %}
+      <p class="muted update-card-caption">{{ tab_caption }}</p>
+      {% endif %}
+    </div>
+
+    {% for group_name, items in tab_groups %}
+    {% set collapse = tab_id in ['admin', 'reseller'] %}
+    {% if collapse %}
+    <details class="colors-group-details card settings-card">
+      <summary class="colors-group-summary"><h2>{{ group_name }}</h2></summary>
+      <div class="btn-color-grid">
+    {% else %}
+    <div class="card settings-card">
+      <h2>{{ group_name }}</h2>
+      <div class="btn-color-grid">
+    {% endif %}
+        {% for item in items %}
+        {% set cur = values.get(item.key, item.default) %}
+        {% set cur_tone = 'default' if not cur else cur %}
+        <div class="btn-color-card">
+          <span class="btn-color-label">{{ item.label }}</span>
+          <div class="btn-color-picker">
+            <div class="btn-color-chips" data-color-chips aria-hidden="true">
+              {% for opt_val, opt_label, opt_tone in style_options %}
+              <button
+                type="button"
+                class="btn-color-chip{% if cur == opt_val %} is-active{% endif %}"
+                data-tone="{{ opt_tone }}"
+                data-value="{{ opt_val }}"
+                title="{{ opt_label }}"
+                aria-label="{{ opt_label }}"
+              ></button>
+              {% endfor %}
+            </div>
+            <select
+              name="s_{{ item.key }}"
+              class="btn-color-select"
+              data-tone="{{ cur_tone }}"
+              aria-label="{{ item.label }}"
+            >
+              {% for opt_val, opt_label, opt_tone in style_options %}
+              <option
+                value="{{ opt_val }}"
+                data-tone="{{ opt_tone }}"
+                {% if cur == opt_val %}selected{% endif %}
+              >{{ opt_label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% if collapse %}
+    </details>
+    {% else %}
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endfor %}
+  {% elif button_style_sections %}
+    {# Legacy fallback #}
     {% for section_id, section_title, section_caption, section_groups in button_style_sections %}
     <div class="btn-color-section-head" data-section="{{ section_id }}">
       <h2>{{ section_title }}</h2>
@@ -49,35 +147,6 @@
       </div>
     </div>
     {% endfor %}
-    {% endfor %}
-  {% else %}
-    {% for group_name, items in button_style_groups %}
-    <div class="card settings-card">
-      <h2>{{ group_name }}</h2>
-      <div class="btn-color-grid">
-        {% for item in items %}
-        {% set cur = values.get(item.key, item.default) %}
-        {% set cur_tone = 'default' if not cur else cur %}
-        <div class="btn-color-card">
-          <span class="btn-color-label">{{ item.label }}</span>
-          <select
-            name="s_{{ item.key }}"
-            class="btn-color-select"
-            data-tone="{{ cur_tone }}"
-            aria-label="{{ item.label }}"
-          >
-            {% for opt_val, opt_label, opt_tone in style_options %}
-            <option
-              value="{{ opt_val }}"
-              data-tone="{{ opt_tone }}"
-              {% if cur == opt_val %}selected{% endif %}
-            >{{ opt_label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
     {% endfor %}
   {% endif %}
 

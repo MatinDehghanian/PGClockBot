@@ -440,6 +440,41 @@ def plan_button_style_picker_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def item_button_style_picker_keyboard(
+    *,
+    callback_prefix: str,
+    back_callback: str,
+    inherit_label: str = "ارث از پیش‌فرض",
+    ui: dict | None = None,
+) -> InlineKeyboardMarkup:
+    """Per-item color picker for JSON list entries (support, payment destinations)."""
+    from app.services.button_styles import item_button_style_options
+
+    rows: list[list[InlineKeyboardButton]] = []
+    for val, label, _tone in item_button_style_options(inherit_label=inherit_label):
+        cb_val = "inherit" if val == "inherit" else (val or "default")
+        opt_style = None if val in {"inherit", ""} else val
+        rows.append(
+            [
+                _ikb(
+                    label,
+                    callback_data=f"{callback_prefix}:{cb_val}",
+                    style=opt_style,
+                )
+            ]
+        )
+    rows.append(
+        [
+            _ikb(
+                _t(ui, "btn_back") or "⬅️ بازگشت",
+                callback_data=back_callback,
+                style=_style(ui, "back"),
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def _reply_markup(
     rows: list[list[KeyboardButton]],
     *,
@@ -2096,13 +2131,18 @@ def support_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
 
 def support_contacts_keyboard(contacts: list[dict], ui: dict | None = None) -> InlineKeyboardMarkup:
     """URL contact rows only — ticket/back live on support_reply_keyboard."""
-    _ = ui
+    from app.services.button_styles import resolve_support_contact_style
+
     rows: list[list[InlineKeyboardButton]] = []
     for c in contacts:
         url = support_chat_url(c.get("telegram") or "")
         title = str(c.get("title") or "پشتیبان")[:64]
         if url:
-            rows.append([InlineKeyboardButton(text=f"💬 {title}", url=url)])
+            style = resolve_support_contact_style(ui, c)
+            kwargs: dict = {"text": f"💬 {title}", "url": url}
+            if style:
+                kwargs["style"] = style
+            rows.append([InlineKeyboardButton(**kwargs)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

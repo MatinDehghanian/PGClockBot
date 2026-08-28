@@ -982,6 +982,7 @@ async def support_view(
                 text="خاموش" if c.get("enabled", True) else "روشن",
                 callback_data=f"adm:st:sup:tog:{cid}",
             ),
+            InlineKeyboardButton(text="🎨 رنگ", callback_data=f"adm:st:sup:color:{cid}"),
             InlineKeyboardButton(text="ویرایش", callback_data=f"adm:st:sup:edit:{cid}"),
             InlineKeyboardButton(text="حذف", callback_data=f"adm:st:sup:del:{cid}"),
         ],
@@ -1030,6 +1031,96 @@ async def support_toggle(
                 text="خاموش" if c2.get("enabled", True) else "روشن",
                 callback_data=f"adm:st:sup:tog:{cid}",
             ),
+            InlineKeyboardButton(text="🎨 رنگ", callback_data=f"adm:st:sup:color:{cid}"),
+            InlineKeyboardButton(text="ویرایش", callback_data=f"adm:st:sup:edit:{cid}"),
+            InlineKeyboardButton(text="حذف", callback_data=f"adm:st:sup:del:{cid}"),
+        ],
+        _back_row(("⬅️ لیست", "adm:st:sec:support")),
+    ]
+    await callback.message.edit_text(text, reply_markup=_kb(rows))
+
+
+@settings_actor_required
+@router.callback_query(F.data.regexp(r"^adm:st:sup:color:[^:]+$"))
+async def support_color_picker(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    cid = callback.data.split(":")[-1]
+    c = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
+    if not c:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await callback.answer()
+    ui = await get_all_settings(session)
+    markup = kb.item_button_style_picker_keyboard(
+        callback_prefix=f"adm:st:sup:color:set:{cid}",
+        back_callback=f"adm:st:sup:v:{cid}",
+        inherit_label="ارث از پشتیبانی",
+        ui=ui,
+    )
+    if callback.message:
+        await callback.message.edit_text(
+            f"🎨 رنگ دکمه «{c['title']}» را انتخاب کنید:",
+            reply_markup=markup,
+        )
+
+
+@settings_actor_required
+@router.callback_query(F.data.startswith("adm:st:sup:color:set:"))
+async def support_color_set(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    from app.services.button_styles import parse_item_button_style_callback
+
+    parts = callback.data.split(":")
+    if len(parts) < 7:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    cid = parts[5]
+    style = parse_item_button_style_callback(parts[6])
+    c = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
+    if not c:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await upsert_support_contact(
+        session,
+        contact_id=cid,
+        title=c["title"],
+        telegram=c["telegram"],
+        sort=int(c.get("sort") or 0),
+        enabled=bool(c.get("enabled", True)),
+        button_style=style,
+    )
+    await callback.answer("ذخیره شد")
+    c2 = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
+    if not c2 or not callback.message:
+        return
+    url = support_chat_url(c2["telegram"]) or "—"
+    text = (
+        f"🎧 <b>{c2['title']}</b>\n"
+        f"<code>{c2['telegram']}</code>\n"
+        f"{url}\n"
+        f"{'فعال' if c2.get('enabled', True) else 'خاموش'}"
+    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="خاموش" if c2.get("enabled", True) else "روشن",
+                callback_data=f"adm:st:sup:tog:{cid}",
+            ),
+            InlineKeyboardButton(text="🎨 رنگ", callback_data=f"adm:st:sup:color:{cid}"),
             InlineKeyboardButton(text="ویرایش", callback_data=f"adm:st:sup:edit:{cid}"),
             InlineKeyboardButton(text="حذف", callback_data=f"adm:st:sup:del:{cid}"),
         ],
