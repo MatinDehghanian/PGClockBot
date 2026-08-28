@@ -210,7 +210,7 @@
         {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="{% if ops or manage %}9{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
+      <tr><td colspan="{% if manage %}10{% elif ops %}9{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>
