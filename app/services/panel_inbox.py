@@ -311,16 +311,6 @@ async def sidebar_inbox_has_alerts(
             return hit[1]
 
     try:
-        from app.services.updates import peek_update_cache
-
-        upd = peek_update_cache()
-        if is_platform_admin(staff) and upd and upd.get("update_available"):
-            _SIDEBAR_CACHE[key] = (now, True)
-            return True
-    except Exception:
-        pass
-
-    try:
         ctx = await build_inbox_context(session, request, staff)
         has = bool(ctx.get("inbox_has"))
     except Exception:

@@ -9170,7 +9170,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .colors-tab-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--section-gap);
+  gap: var(--space-2);
 }
 .colors-tab-panel[hidden] {
   display: none !important;
@@ -9182,7 +9182,10 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .colors-groups-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--section-gap);
+  gap: var(--space-2);
+}
+.colors-groups-stack > .colors-group-details {
+  margin: 0 !important;
 }
 .colors-group-details {
   padding: 0;
@@ -9193,26 +9196,33 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   cursor: pointer;
   padding: 0;
 }
+.colors-group-details > summary::-webkit-details-marker,
+.colors-group-details > summary::marker {
+  display: none;
+  content: "";
+}
+/* RTL grid: col1 (title) sits on the right, col2 (chevron) on the left */
 .colors-group-details > summary.colors-group-summary {
-  display: flex;
-  direction: rtl;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  min-height: 52px;
+  column-gap: var(--space-2);
+  min-height: 44px;
   padding: 0 var(--card-pad);
   box-sizing: border-box;
 }
-.colors-group-details > summary::-webkit-details-marker {
-  display: none;
-}
 .colors-group-summary h2 {
   margin: 0;
+  padding: 0;
   font-size: var(--title-size);
+  font-weight: 600;
   line-height: 1.25;
-  flex: 1;
   min-width: 0;
-  text-align: right;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  align-self: center;
 }
 .colors-group-chevron {
   flex: 0 0 auto;
@@ -9225,6 +9235,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   align-items: center;
   justify-content: center;
   color: var(--muted-fg);
+  align-self: center;
   transition: border-color 0.15s ease, color 0.15s ease;
 }
 .colors-chevron-ico {
@@ -9246,7 +9257,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 }
 .colors-group-grid {
   padding: 0 var(--card-pad) var(--card-pad);
-  gap: var(--section-gap);
+  gap: var(--space-2);
 }
 .colors-dynamic-list {
   list-style: none;
@@ -9316,13 +9327,15 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   }
 }
 
-/* —— Table bulk selection —— */
+/* —— Table bulk selection ——
+   Circle on the RIGHT (first col in RTL tables). Diameter = .badge min-height. */
 .col-select {
   width: 28px;
   min-width: 28px;
+  max-width: 36px;
   text-align: center;
   vertical-align: middle;
-  padding-inline: var(--space-1) !important;
+  padding-inline: 6px !important;
 }
 .table-select-all,
 .table-select-row {
@@ -9330,22 +9343,31 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   align-items: center;
   justify-content: center;
   margin: 0;
+  padding: 0;
   cursor: pointer;
-  width: 16px;
-  height: 16px;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  font-weight: 400;
 }
 .table-bulk-check {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  border-radius: 4px;
-  border: 1.5px solid color-mix(in srgb, var(--foreground) 28%, var(--border));
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  min-height: 20px !important;
+  max-width: 20px !important;
+  max-height: 20px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  border: 1.5px solid color-mix(in srgb, var(--foreground) 32%, var(--border));
   background: transparent;
   cursor: pointer;
   flex: 0 0 auto;
   box-sizing: border-box;
+  vertical-align: middle;
   transition:
     border-color var(--motion-fast) var(--ease-standard),
     background var(--motion-fast) var(--ease-standard),
