@@ -9170,7 +9170,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .colors-tab-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--section-gap);
 }
 .colors-tab-panel[hidden] {
   display: none !important;
@@ -9182,33 +9182,41 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .colors-groups-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--section-gap);
 }
 .colors-group-details {
   padding: 0;
+  overflow: hidden;
 }
 .colors-group-details > summary {
   list-style: none;
   cursor: pointer;
-  min-height: 48px;
-  padding: 0 var(--card-pad);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  padding: 0;
+  display: block;
 }
 .colors-group-details > summary::-webkit-details-marker {
   display: none;
 }
+.colors-group-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 52px;
+  padding: 0 var(--card-pad);
+  box-sizing: border-box;
+}
 .colors-group-summary h2 {
   margin: 0;
   font-size: var(--title-size);
-  line-height: 1.3;
+  line-height: 1.25;
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
 }
 .colors-group-chevron {
   flex: 0 0 auto;
-  margin-inline-start: auto;
   width: 28px;
   height: 28px;
   border-radius: 999px;
@@ -9218,29 +9226,28 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   align-items: center;
   justify-content: center;
   color: var(--muted-fg);
-  transition: border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
-.colors-group-chevron::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-inline-end: 2px solid currentColor;
-  border-block-end: 2px solid currentColor;
-  transform: rotate(45deg);
-  margin-top: -3px;
+.colors-chevron-ico {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   transition: transform 0.15s ease;
 }
 .colors-group-details[open] > summary .colors-group-chevron {
   border-color: rgba(249, 115, 22, 0.42);
   color: var(--brand-fg);
 }
-.colors-group-details[open] > summary .colors-group-chevron::before {
-  transform: rotate(-135deg);
-  margin-top: 2px;
+.colors-group-details[open] > summary .colors-chevron-ico {
+  transform: rotate(180deg);
 }
 .colors-group-grid {
-  padding: var(--space-2) var(--card-pad) var(--card-pad);
-  gap: var(--space-2);
+  padding: 0 var(--card-pad) var(--card-pad);
+  gap: var(--section-gap);
 }
 .colors-dynamic-list {
   list-style: none;
@@ -9276,11 +9283,44 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   margin: 0;
   flex: 0 0 auto;
 }
+.inbox-tools-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.inbox-tools-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.inbox-tools-copy strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.inbox-tools-copy .muted {
+  font-size: 12px;
+}
+.inbox-reset-form .btn {
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .inbox-tools-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .inbox-reset-form .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
 
 /* —— Table bulk selection —— */
 .col-select {
-  width: 36px;
-  min-width: 36px;
+  width: 32px;
+  min-width: 32px;
   text-align: center;
   vertical-align: middle;
 }
@@ -9291,17 +9331,19 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   justify-content: center;
   margin: 0;
   cursor: pointer;
+  min-height: 20px;
 }
 .table-bulk-check {
   appearance: none;
-  width: 15px;
-  height: 15px;
+  width: 20px;
+  height: 20px;
   margin: 0;
   border-radius: 999px;
   border: 1.5px solid color-mix(in srgb, var(--foreground) 28%, var(--border));
   background: transparent;
   cursor: pointer;
   flex: 0 0 auto;
+  box-sizing: border-box;
   transition:
     border-color var(--motion-fast) var(--ease-standard),
     background var(--motion-fast) var(--ease-standard),

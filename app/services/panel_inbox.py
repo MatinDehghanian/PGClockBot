@@ -268,10 +268,11 @@ async def build_inbox_context(
         "inbox_count": 0,
         "inbox_has": False,
         "action_center_ok": action_center_ok,
-        "inbox_dismissals_count": 0,
+        "inbox_hidden_by_dismiss": 0,
     }
     ctx["inbox_count"] = inbox_alert_count(ctx)
     ctx["inbox_has"] = ctx["inbox_count"] > 0
+    raw_count = ctx["inbox_count"]
 
     try:
         from app.services.inbox_dismissals import (
@@ -282,10 +283,9 @@ async def build_inbox_context(
 
         await cleanup_resolved_dismissals(session, staff, ctx)
         dismissals = await load_dismissals(session, staff)
-        ctx["inbox_dismissals_count"] = len(dismissals)
         if dismissals:
             ctx = filter_inbox_context(ctx, dismissals)
-            ctx["inbox_dismissals_count"] = len(dismissals)
+            ctx["inbox_hidden_by_dismiss"] = max(0, raw_count - int(ctx.get("inbox_count") or 0))
     except Exception:
         logger.exception("inbox dismissals filter failed")
         await rollback_quiet(session)

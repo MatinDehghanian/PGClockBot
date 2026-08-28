@@ -85,18 +85,16 @@ class ItemButtonStyleTests(unittest.TestCase):
         from pathlib import Path
 
         html = Path("app/web/templates/_settings_colors.html").read_text(encoding="utf-8")
-        preview = Path("app/web/templates/_tg_preview_chat_js.html").read_text(encoding="utf-8")
-        chat = Path("app/web/templates/_tg_preview_chat.html").read_text(encoding="utf-8")
         self.assertIn("data-colors-subtabs", html)
         self.assertIn("section-tabs", html)
         self.assertIn("colors_page_sections", html)
         self.assertNotIn("btn-color-chip", html)
         self.assertIn("colors-groups-stack", html)
+        self.assertIn("colors-chevron-ico", html)
         self.assertIn("colors-dynamic-list", html)
-        self.assertIn("renderColorsPreview", preview)
-        self.assertIn("pv-inline", chat)
-        self.assertIn("colors-tab-change", preview)
-        self.assertIn("getActiveColorsTab", preview)
+        settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
+        self.assertNotIn("'colors','daily_report'", settings)
+        self.assertNotIn("colors','daily_report'", settings)
 
     def test_dynamic_color_rows_tab_mapping(self):
         from app.services.button_styles import build_dynamic_color_summary

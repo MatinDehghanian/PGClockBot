@@ -2332,7 +2332,6 @@
             if (show) panel.removeAttribute('hidden');
             else panel.setAttribute('hidden', 'hidden');
           });
-          document.dispatchEvent(new CustomEvent('colors-tab-change'));
         });
       });
     })();
