@@ -9192,13 +9192,10 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   list-style: none;
   cursor: pointer;
   padding: 0;
-  display: block;
 }
-.colors-group-details > summary::-webkit-details-marker {
-  display: none;
-}
-.colors-group-summary {
+.colors-group-details > summary.colors-group-summary {
   display: flex;
+  direction: rtl;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
@@ -9206,14 +9203,16 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   padding: 0 var(--card-pad);
   box-sizing: border-box;
 }
+.colors-group-details > summary::-webkit-details-marker {
+  display: none;
+}
 .colors-group-summary h2 {
   margin: 0;
   font-size: var(--title-size);
   line-height: 1.25;
   flex: 1;
   min-width: 0;
-  display: flex;
-  align-items: center;
+  text-align: right;
 }
 .colors-group-chevron {
   flex: 0 0 auto;
@@ -9319,10 +9318,11 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 
 /* —— Table bulk selection —— */
 .col-select {
-  width: 32px;
-  min-width: 32px;
+  width: 28px;
+  min-width: 28px;
   text-align: center;
   vertical-align: middle;
+  padding-inline: var(--space-1) !important;
 }
 .table-select-all,
 .table-select-row {
@@ -9331,14 +9331,16 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   justify-content: center;
   margin: 0;
   cursor: pointer;
-  min-height: 20px;
+  width: 16px;
+  height: 16px;
 }
 .table-bulk-check {
+  -webkit-appearance: none;
   appearance: none;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   margin: 0;
-  border-radius: 999px;
+  border-radius: 4px;
   border: 1.5px solid color-mix(in srgb, var(--foreground) 28%, var(--border));
   background: transparent;
   cursor: pointer;

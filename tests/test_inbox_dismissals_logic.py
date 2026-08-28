@@ -92,11 +92,13 @@ class InboxDismissalsLogicTests(unittest.TestCase):
     def test_staff_dismiss_key_candidates(self):
         from app.services.inbox_dismissals import staff_dismiss_key, staff_dismiss_key_candidates
 
-        staff = {"role": "admin", "bot_user_id": 42, "org_principal_id": 7}
+        staff = {"role": "admin", "bot_user_id": 42, "org_principal_id": 7, "username": "owner"}
         keys = staff_dismiss_key_candidates(staff)
-        self.assertIn(staff_dismiss_key(staff), keys)
+        self.assertEqual(staff_dismiss_key(staff), "op:7")
+        self.assertIn("op:7", keys)
         self.assertIn("admin:42", keys)
-        self.assertIn("admin:7", keys)
+        self.assertIn("admin:owner", keys)
+        self.assertIn("admin:p7", keys)
 
 
 if __name__ == "__main__":

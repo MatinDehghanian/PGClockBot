@@ -36,10 +36,14 @@ ALLOWED_ALERT_KEYS = frozenset(
 
 def staff_dismiss_key(staff: dict) -> str:
     """Stable per-staff key for persisted inbox dismissals."""
+    try:
+        pid = int(staff.get("org_principal_id") or 0)
+    except (TypeError, ValueError):
+        pid = 0
+    if pid > 0:
+        return f"op:{pid}"[:128]
     role = str(staff.get("role") or "")
-    if staff.get("org_principal_id"):
-        uid = f"p{staff.get('org_principal_id')}"
-    elif staff.get("pg_staff_id"):
+    if staff.get("pg_staff_id"):
         uid = f"pgs{staff.get('pg_staff_id')}"
     elif staff.get("bot_user_id"):
         uid = f"b{staff.get('bot_user_id')}"
@@ -61,9 +65,16 @@ def staff_dismiss_key_candidates(staff: dict) -> list[str]:
 
     add(staff_dismiss_key(staff))
     role = str(staff.get("role") or "")
+    try:
+        pid = int(staff.get("org_principal_id") or 0)
+    except (TypeError, ValueError):
+        pid = 0
+    if pid > 0:
+        add(f"op:{pid}")
+        add(f"{role}:p{pid}")
+        add(f"{role}:{pid}")
     for uid in (
         staff.get("bot_user_id"),
-        staff.get("org_principal_id"),
         staff.get("pg_staff_id"),
         staff.get("id"),
         staff.get("username"),
@@ -71,6 +82,10 @@ def staff_dismiss_key_candidates(staff: dict) -> list[str]:
         if uid is None or uid == "":
             continue
         add(f"{role}:{uid}")
+        if staff.get("pg_staff_id") and uid == staff.get("pg_staff_id"):
+            add(f"{role}:pgs{uid}")
+        if staff.get("bot_user_id") and uid == staff.get("bot_user_id"):
+            add(f"{role}:b{uid}")
     return keys
 
 
@@ -120,11 +135,12 @@ async def upsert_dismissal(
     if mode not in (MODE_24H, MODE_FOREVER):
         raise ValueError("حالت حذف نامعتبر")
     entity_id = (entity_id or "").strip()[:64]
+    keys = staff_dismiss_key_candidates(staff)
 
     existing = (
         await session.execute(
             select(PanelInboxDismissal).where(
-                PanelInboxDismissal.staff_key == key,
+                PanelInboxDismissal.staff_key.in_(keys),
                 PanelInboxDismissal.alert_key == alert_key,
                 PanelInboxDismissal.entity_id == entity_id,
             )
@@ -134,6 +150,7 @@ async def upsert_dismissal(
     if existing:
         existing.mode = mode
         existing.dismissed_at = _utcnow()
+        existing.staff_key = key
     else:
         session.add(
             PanelInboxDismissal(
@@ -142,6 +159,16 @@ async def upsert_dismissal(
                 entity_id=entity_id,
                 mode=mode,
                 dismissed_at=_utcnow(),
+            )
+        )
+    # Drop duplicate legacy keys for the same alert so reset/load stay consistent.
+    legacy_keys = [k for k in staff_dismiss_key_candidates(staff) if k != key]
+    if legacy_keys:
+        await session.execute(
+            delete(PanelInboxDismissal).where(
+                PanelInboxDismissal.staff_key.in_(legacy_keys),
+                PanelInboxDismissal.alert_key == alert_key,
+                PanelInboxDismissal.entity_id == entity_id,
             )
         )
     await session.commit()
@@ -257,11 +284,13 @@ async def clear_staff_dismissals(session: AsyncSession, staff: dict) -> int:
 def _row_matches(row: PanelInboxDismissal, alert_key: str, entity_id: str = "") -> bool:
     if row.alert_key != alert_key:
         return False
-    if row.entity_id and entity_id and row.entity_id != entity_id:
+    row_eid = (row.entity_id or "").strip()
+    check_eid = (entity_id or "").strip()
+    if not row_eid:
+        return True
+    if not check_eid:
         return False
-    if row.entity_id and not entity_id:
-        return False
-    return True
+    return row_eid == check_eid
 
 
 async def filter_action_center_for_staff(

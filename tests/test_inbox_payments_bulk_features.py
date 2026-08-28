@@ -61,8 +61,9 @@ class DashboardAndBulkTests(unittest.TestCase):
         self.assertIn("openModal('modal-inbox-dismiss')", panel_js)
         self.assertIn("is-bulk-selected", panel_js)
         self.assertIn("rgba(249, 115, 22, 0.08)", panel_css)
-        self.assertIn("width: 20px", panel_css)
-        self.assertIn("height: 20px", panel_css)
+        self.assertIn("width: 16px", panel_css)
+        self.assertIn("height: 16px", panel_css)
+        self.assertIn("border-radius: 4px", panel_css)
 
     def test_pay_dest_delete_button(self):
         js = Path("app/web/static/panel.js").read_text(encoding="utf-8")

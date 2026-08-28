@@ -89,7 +89,6 @@
   <table class="table-compact users-ops-table" data-sortable{% if manage %} data-bulk-select{% endif %}>
     <thead>
       <tr>
-        {% if manage %}{{ table_select_head() }}{% endif %}
         <th class="col-id col-hide-sm" data-sort-type="num">#</th>
         <th class="col-tg col-hide-sm" data-sort-type="num">تلگرام</th>
         <th class="col-name" data-sort-type="text">نام</th>
@@ -98,6 +97,7 @@
         <th class="col-exp" data-sort-type="num">انقضا</th>
         <th class="col-wallet col-hide-sm" data-sort-type="num">کیف پول</th>
         <th class="col-status" data-sort-type="text">وضعیت</th>
+        {% if manage %}{{ table_select_head() }}{% endif %}
         {% if ops or manage %}<th class="col-actions"></th>{% endif %}
       </tr>
     </thead>
@@ -107,7 +107,6 @@
       <tr class="users-row{% if focus_uid and u.id == focus_uid %} is-focus{% endif %}{% if row.has_alert %} has-alert{% endif %}"
           data-uid="{{ u.id }}"
           id="user-{{ u.id }}">
-        {% if manage %}{{ table_select_cell(u.id) }}{% endif %}
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.id }}">{{ u.id }}</td>
         <td class="mono col-tg col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
         <td class="col-name" data-sort-value="{{ u.full_name or u.username or '' }}">
@@ -155,6 +154,7 @@
           <span class="badge active">فعال</span>
           {% endif %}
         </td>
+        {% if manage %}{{ table_select_cell(u.id) }}{% endif %}
         {% if ops or manage %}
         <td class="col-actions">
           {% call row_actions() %}

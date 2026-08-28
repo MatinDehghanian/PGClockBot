@@ -83,13 +83,13 @@
     <div class="table-wrap">
     <table data-bulk-select>
       <thead><tr>
+        <th class="col-id">#</th><th class="col-user">کاربر</th><th class="col-subject">موضوع</th><th class="col-status">وضعیت</th><th class="col-time">زمان</th>
         {{ table_select_head() }}
-        <th class="col-id">#</th><th class="col-user">کاربر</th><th class="col-subject">موضوع</th><th class="col-status">وضعیت</th><th class="col-time">زمان</th><th class="col-actions"></th></tr></thead>
+        <th class="col-actions"></th></tr></thead>
       <tbody>
       {% for row in tg_rows %}
         {% set t = row.ticket %}
         <tr>
-          {{ table_select_cell(t.id) }}
           <td class="mono">{{ t.id }}</td>
           <td>
             {% if row.user_id %}
@@ -105,6 +105,7 @@
             </span>
           </td>
           <td class="muted mono" dir="ltr">{{ t.updated_at or t.created_at }}</td>
+          {{ table_select_cell(t.id) }}
           <td>
             <a class="btn btn-sm btn-ghost" href="/tickets?tg={{ t.id }}">مشاهده</a>
           </td>

@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.7.4": [
+        "اعلان‌ها: کلید op:{principal} + ادغام legacy؛ بازنشانی واقعاً همه dismissها را پاک می‌کند",
+        "sidebar dot هماهنگ با فیلتر dismiss (نه unread خام)",
+        "تب رنگبندی: آکاردئون RTL — متن راست، chevron چپ",
+        "چک‌باکس bulk جدول: 16px مربع، ستون چپ",
+        "بدون مایگریشن DB — SW v40؛ ریستور: restore/pre-v8.7.4-v8.7.3",
+    ],
     "8.7.3": [
         "اعلان‌ها: کلید dismiss پایدار + بازیابی legacy؛ کارت بازنشانی همیشه در /inbox",
         "تب رنگبندی: حذف پیش‌نمایش تلگرام؛ آکاردئون با chevron و فاصله section-gap",
