@@ -92,11 +92,11 @@ class ItemButtonStyleTests(unittest.TestCase):
         self.assertIn("colors_page_sections", html)
         self.assertNotIn("btn-color-chip", html)
         self.assertIn("colors-groups-stack", html)
+        self.assertIn("colors-chevron-ico", html)
         self.assertIn("colors-dynamic-list", html)
-        self.assertIn("renderColorsPreview", preview)
-        self.assertIn("pv-inline", chat)
-        self.assertIn("colors-tab-change", preview)
-        self.assertIn("getActiveColorsTab", preview)
+        settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
+        self.assertNotIn("'colors','daily_report'", settings)
+        self.assertNotIn("colors','daily_report'", settings)
 
     def test_dynamic_color_rows_tab_mapping(self):
         from app.services.button_styles import build_dynamic_color_summary

@@ -35,9 +35,43 @@ ALLOWED_ALERT_KEYS = frozenset(
 
 
 def staff_dismiss_key(staff: dict) -> str:
+    """Stable per-staff key for persisted inbox dismissals."""
     role = str(staff.get("role") or "")
-    uid = staff.get("bot_user_id") or staff.get("id") or staff.get("username") or ""
+    if staff.get("org_principal_id"):
+        uid = f"p{staff.get('org_principal_id')}"
+    elif staff.get("pg_staff_id"):
+        uid = f"pgs{staff.get('pg_staff_id')}"
+    elif staff.get("bot_user_id"):
+        uid = f"b{staff.get('bot_user_id')}"
+    elif staff.get("username"):
+        uid = str(staff.get("username"))
+    else:
+        uid = str(staff.get("id") or "")
     return f"{role}:{uid}"[:128]
+
+
+def staff_dismiss_key_candidates(staff: dict) -> list[str]:
+    """Current + legacy keys (covers staff-id churn across releases)."""
+    keys: list[str] = []
+
+    def add(key: str) -> None:
+        key = (key or "")[:128]
+        if key and key not in keys:
+            keys.append(key)
+
+    add(staff_dismiss_key(staff))
+    role = str(staff.get("role") or "")
+    for uid in (
+        staff.get("bot_user_id"),
+        staff.get("org_principal_id"),
+        staff.get("pg_staff_id"),
+        staff.get("id"),
+        staff.get("username"),
+    ):
+        if uid is None or uid == "":
+            continue
+        add(f"{role}:{uid}")
+    return keys
 
 
 def _utcnow() -> datetime:
@@ -117,11 +151,15 @@ async def load_dismissals(
     session: AsyncSession,
     staff: dict,
 ) -> list[PanelInboxDismissal]:
-    key = staff_dismiss_key(staff)
+    keys = staff_dismiss_key_candidates(staff)
+    if not keys:
+        return []
     return list(
         (
             await session.execute(
-                select(PanelInboxDismissal).where(PanelInboxDismissal.staff_key == key)
+                select(PanelInboxDismissal).where(
+                    PanelInboxDismissal.staff_key.in_(keys)
+                )
             )
         )
         .scalars()
@@ -206,9 +244,11 @@ async def cleanup_resolved_dismissals(
 
 async def clear_staff_dismissals(session: AsyncSession, staff: dict) -> int:
     """Remove all persisted hide/snooze rows for this staff member."""
-    key = staff_dismiss_key(staff)
+    keys = staff_dismiss_key_candidates(staff)
+    if not keys:
+        return 0
     result = await session.execute(
-        delete(PanelInboxDismissal).where(PanelInboxDismissal.staff_key == key)
+        delete(PanelInboxDismissal).where(PanelInboxDismissal.staff_key.in_(keys))
     )
     await session.commit()
     return int(result.rowcount or 0)

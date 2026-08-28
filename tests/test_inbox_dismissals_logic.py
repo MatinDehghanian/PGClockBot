@@ -86,7 +86,17 @@ class InboxDismissalsLogicTests(unittest.TestCase):
         inbox = Path("app/web/templates/inbox.html").read_text(encoding="utf-8")
         self.assertIn("/inbox/dismiss/reset", src)
         self.assertIn("clear_staff_dismissals", src)
+        self.assertIn("inbox-tools-card", inbox)
         self.assertIn("بازنشانی اعلان‌های مخفی", inbox)
+
+    def test_staff_dismiss_key_candidates(self):
+        from app.services.inbox_dismissals import staff_dismiss_key, staff_dismiss_key_candidates
+
+        staff = {"role": "admin", "bot_user_id": 42, "org_principal_id": 7}
+        keys = staff_dismiss_key_candidates(staff)
+        self.assertIn(staff_dismiss_key(staff), keys)
+        self.assertIn("admin:42", keys)
+        self.assertIn("admin:7", keys)
 
 
 if __name__ == "__main__":

@@ -10,23 +10,30 @@
     {{ page_title('inbox', 'اعلان‌ها و مرکز اقدام', 'neutral') }}
     <p class="muted page-sub">اعلان‌های فوری و میانبرهای عملیاتی امروز</p>
   </div>
-  {% if inbox_dismissals_count %}
+</div>
+
+<div class="card inbox-tools-card">
+  <div class="inbox-tools-copy">
+    {% if inbox_hidden_by_dismiss %}
+    <strong>{{ inbox_hidden_by_dismiss | num }} اعلان مخفی شده</strong>
+    <span class="muted">با بازنشانی، همه اعلان‌های مخفی‌شده دوباره نمایش داده می‌شوند.</span>
+    {% elif not inbox_has %}
+    <strong>اعلانی برای نمایش نیست</strong>
+    <span class="muted">اگر قبلاً اعلان‌ها را مخفی کرده‌اید، با بازنشانی می‌توانید آن‌ها را ببینید.</span>
+    {% else %}
+    <strong>مدیریت اعلان‌های مخفی</strong>
+    <span class="muted">اگر اعلانی را اشتباه مخفی کرده‌اید، از این دکمه استفاده کنید.</span>
+    {% endif %}
+  </div>
   <form method="post" action="/inbox/dismiss/reset" class="inbox-reset-form">
     <input type="hidden" name="return_to" value="{{ request.url.path }}" />
-    <button type="submit" class="btn btn-sm btn-ghost">بازنشانی اعلان‌های مخفی</button>
+    <button type="submit" class="btn btn-sm">بازنشانی اعلان‌های مخفی</button>
   </form>
-  {% endif %}
 </div>
 
 {% if not inbox_has %}
 <div class="card">
-  <p class="muted" style="margin:0">
-    {% if inbox_dismissals_count %}
-    فعلاً اعلان قابل‌نمایشی ندارید — ممکن است قبلاً مخفی کرده باشید.
-    {% else %}
-    فعلاً اعلان یا اقدام فوری ندارید.
-    {% endif %}
-  </p>
+  <p class="muted" style="margin:0">فعلاً اعلان قابل‌نمایشی ندارید.</p>
 </div>
 {% else %}
 

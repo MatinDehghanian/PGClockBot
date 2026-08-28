@@ -20,7 +20,7 @@
 {{ settings_tabs(tab, tabs) }}
 {% endif %}
 
-<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','colors','daily_report'] %}can-preview{% endif %}" id="settings-layout">
+<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','daily_report'] %}can-preview{% endif %}" id="settings-layout">
   <div class="settings-main">
 
   {% if tab == 'update' %}
@@ -107,7 +107,7 @@
 
   {% if tab == 'appearance' %}
   {% include "_tg_preview_appearance.html" %}
-  {% elif tab in ['menu','welcome','messages','buttons','qr','colors','daily_report'] %}
+  {% elif tab in ['menu','welcome','messages','buttons','qr','daily_report'] %}
   {% include "_tg_preview_chat.html" %}
   {% endif %}
 </div>
@@ -115,7 +115,7 @@
 {% if tab == 'appearance' %}
 {% include "_tg_preview_appearance_js.html" %}
 {% endif %}
-{% if tab in ['menu','welcome','messages','buttons','qr','colors','daily_report'] %}
+{% if tab in ['menu','welcome','messages','buttons','qr','daily_report'] %}
 {% include "_tg_preview_chat_js.html" %}
 {% endif %}
 {% if tab == 'naming' %}
