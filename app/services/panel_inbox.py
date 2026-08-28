@@ -320,11 +320,6 @@ async def sidebar_inbox_has_alerts(
     except Exception:
         pass
 
-    unread = int(getattr(request.state, "panel_tickets_unread", 0) or 0)
-    if unread > 0:
-        _SIDEBAR_CACHE[key] = (now, True)
-        return True
-
     try:
         ctx = await build_inbox_context(session, request, staff)
         has = bool(ctx.get("inbox_has"))

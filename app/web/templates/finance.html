@@ -62,7 +62,6 @@
   <table class="table-compact" data-sortable data-bulk-select>
     <thead>
       <tr>
-        {{ table_select_head() }}
         <th class="col-id" data-sort-type="num">#</th>
         <th data-sort-type="text">کاربر</th>
         <th class="col-hide-sm" data-sort-type="text">پلن</th>
@@ -70,6 +69,7 @@
         <th data-sort-type="text">وضعیت</th>
         <th class="col-hide-sm" data-sort-type="text">روش</th>
         <th class="col-hide-sm" data-sort-type="text">زمان</th>
+        {{ table_select_head() }}
         <th class="col-actions"></th>
       </tr>
     </thead>
@@ -79,7 +79,6 @@
       {% set uname = (o.user.full_name or o.user.username or o.user_id) if o.user else o.user_id %}
       {% set pname = o.plan.name if o.plan else (o.plan_id or "—") %}
       <tr>
-        {{ table_select_cell(o.id) }}
         <td class="mono" data-sort-value="{{ o.id }}">{{ o.id }}</td>
         <td data-sort-value="{{ uname }}">
           {% if o.user and o.user.id %}
@@ -97,6 +96,7 @@
         </td>
         <td class="col-hide-sm" data-sort-value="{{ o.payment_method or '' }}">{% if o.payment_method=='card' %}کارت{% elif o.payment_method=='wallet' %}کیف پول{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
         <td class="muted col-hide-sm" data-sort-value="{{ o.created_at }}">{{ o.created_at }}</td>
+        {{ table_select_cell(o.id) }}
         <td class="col-actions">
           {% set has_receipt = pay and pay.receipt_file_id and not (pay.receipt_file_id|string).startswith('stars:') %}
           {% set can_act = (pay and pay.status == 'pending') or o.status in ['paid','awaiting_approval','pending','awaiting_receipt','rejected'] %}
@@ -172,13 +172,13 @@
   <div class="table-wrap">
   <table class="table-compact" data-sortable data-bulk-select>
     <thead><tr>
-      {{ table_select_head() }}
       <th class="col-id" data-sort-type="num">#</th>
       <th data-sort-type="text">کاربر</th>
       <th data-sort-type="num">مبلغ</th>
       <th class="col-hide-sm" data-sort-type="text">نوع</th>
       <th data-sort-type="text">وضعیت</th>
       <th class="col-hide-sm" data-sort-type="num">سفارش</th>
+      {{ table_select_head() }}
       <th class="col-actions"></th>
     </tr></thead>
     <tbody>
@@ -186,7 +186,6 @@
       {% set payer = (payers or {}).get(p.user_id) %}
       {% set uname = (payer.full_name or payer.username or p.user_id) if payer else p.user_id %}
       <tr>
-        {{ table_select_cell(p.id) }}
         <td class="mono" data-sort-value="{{ p.id }}">{{ p.id }}</td>
         <td data-sort-value="{{ uname }}">
           {% if payer and payer.id %}
@@ -203,6 +202,7 @@
           </span>
         </td>
         <td class="col-hide-sm" data-sort-value="{{ p.order_id or 0 }}">{{ p.order_id or "—" }}</td>
+        {{ table_select_cell(p.id) }}
         <td class="col-actions">
           {% if p.status == 'pending' or (p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:')) %}
           {% call row_actions() %}

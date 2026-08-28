@@ -85,11 +85,13 @@ class ItemButtonStyleTests(unittest.TestCase):
         from pathlib import Path
 
         html = Path("app/web/templates/_settings_colors.html").read_text(encoding="utf-8")
+        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn("data-colors-subtabs", html)
         self.assertIn("section-tabs", html)
         self.assertIn("colors_page_sections", html)
         self.assertNotIn("btn-color-chip", html)
         self.assertIn("colors-groups-stack", html)
+        self.assertIn("direction: rtl", css)
         self.assertIn("colors-chevron-ico", html)
         self.assertIn("colors-dynamic-list", html)
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
