@@ -1,5 +1,5 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch_chip, row_actions, page_title %}
+{% from "macros.html" import switch_chip, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar %}
 {% block title %}تمپلیت‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -15,10 +15,16 @@
   {% if not templates %}
   <p class="muted">تمپلیتی نیست.</p>
   {% else %}
+  {% if can_delete %}
+  {{ table_bulk_bar('/pg/templates/bulk-action', [
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} تمپلیت حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
+  ]) }}
+  {% endif %}
   <div class="table-wrap">
-  <table class="table-compact">
+  <table class="table-compact"{% if can_delete %} data-bulk-select{% endif %}>
     <thead>
       <tr>
+        {% if can_delete %}{{ table_select_head() }}{% endif %}
         <th class="col-id col-hide-sm">شناسه</th>
         <th class="col-name">نام</th>
         <th>حجم</th>
@@ -32,7 +38,8 @@
       {% set gids = t.get('group_ids') or [] %}
       {% set days = (t.get('expire_duration') / 86400) | round(0) if t.get('expire_duration') else '' %}
       {% set gb = (t.get('data_limit') / (1024**3)) if t.get('data_limit') else '' %}
-      <tr>
+      <tr data-bulk-ops="{% if can_delete and t.get('id') %}delete{% endif %}">
+        {% if can_delete %}{% if t.get('id') %}{{ table_select_cell(t.get('id')) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
         <td class="mono col-hide-sm">{{ t.get('id') }}</td>
         <td>{{ t.get('name') or '—' }}</td>
         <td class="mono reseller-quota-cell">

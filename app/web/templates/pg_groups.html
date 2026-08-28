@@ -1,5 +1,5 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch, switch_chip, row_actions, page_title %}
+{% from "macros.html" import switch, switch_chip, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar %}
 {% block title %}گروه‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -16,12 +16,18 @@
   {% if not groups %}
   <p class="muted">گروهی نیست.</p>
   {% else %}
+  {% if can_delete %}
+  {{ table_bulk_bar('/pg/groups/bulk-action', [
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} گروه حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
+  ]) }}
+  {% endif %}
   <div class="table-wrap">
-  <table class="table-compact">
-    <thead><tr><th class="col-id">شناسه</th><th class="col-name">نام</th><th class="col-hide-sm col-text">اینباندها</th><th class="col-hide-sm col-amount">کاربران</th><th class="col-status">وضعیت</th><th class="col-actions"></th></tr></thead>
+  <table class="table-compact"{% if can_delete %} data-bulk-select{% endif %}>
+    <thead><tr>{% if can_delete %}{{ table_select_head() }}{% endif %}<th class="col-id">شناسه</th><th class="col-name">نام</th><th class="col-hide-sm col-text">اینباندها</th><th class="col-hide-sm col-amount">کاربران</th><th class="col-status">وضعیت</th><th class="col-actions"></th></tr></thead>
     <tbody>
     {% for g in groups %}
-      <tr>
+      <tr data-bulk-ops="{% if can_delete and g.get('id') %}delete{% endif %}">
+        {% if can_delete %}{% if g.get('id') %}{{ table_select_cell(g.get('id')) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
         <td class="mono">{{ g.get('id') }}</td>
         <td>{{ g.get('name') }}</td>
         <td class="mono muted col-hide-sm">{{ g.get('inbound_tags') or '—' }}</td>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, row_actions, page_title %}
+{% from "macros.html" import switch, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar %}
 {% block title %}پلن‌های نمایندگی{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -17,12 +17,17 @@
 
 <div class="card card-flush">
   <h2>پلن‌های موجود</h2>
+  {{ table_bulk_bar('/resellers/plans/bulk-action', [
+    {'key': 'toggle', 'label': 'روشن/خاموش', 'confirm': 'وضعیت {n} پلن نمایندگی تغییر کند؟', 'confirm_title': 'تغییر وضعیت گروهی', 'confirm_label': 'اعمال'},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} پلن نمایندگی حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
+  ]) }}
   <div class="table-wrap">
-  <table class="table-compact">
-    <thead><tr><th>نام</th><th>قیمت</th><th class="col-hide-sm">کمیسیون</th><th>وضعیت</th><th class="col-actions"></th></tr></thead>
+  <table class="table-compact" data-bulk-select>
+    <thead><tr>{{ table_select_head() }}<th>نام</th><th>قیمت</th><th class="col-hide-sm">کمیسیون</th><th>وضعیت</th><th class="col-actions"></th></tr></thead>
     <tbody>
     {% for p in plans %}
-      <tr>
+      <tr data-bulk-ops="toggle,delete">
+        {{ table_select_cell(p.id) }}
         <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
         <td class="mono">{{ p.price | num }}</td>
         <td class="mono col-hide-sm">{{ p.commission_percent }}%</td>
@@ -40,7 +45,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="muted">پلنی نیست — تا پلن نسازید دکمه درخواست در بات برای کاربر بی‌فایده است</td></tr>
+      <tr><td colspan="6" class="muted">پلنی نیست — تا پلن نسازید دکمه درخواست در بات برای کاربر بی‌فایده است</td></tr>
     {% endfor %}
     </tbody>
   </table>

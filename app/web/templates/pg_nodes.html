@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title %}
+{% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar %}
 {% block title %}نودهای پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -21,9 +21,19 @@
   {% if not nodes %}
   <p class="muted">نودی یافت نشد.</p>
   {% else %}
+  {% if can_reconnect or can_update or can_delete %}
+  {{ table_bulk_bar('/pg/nodes/bulk-action', [
+    {'key': 'reconnect', 'label': 'اتصال مجدد', 'confirm': 'اتصال مجدد {n} نود؟', 'confirm_title': 'اتصال مجدد گروهی', 'confirm_label': 'اتصال'},
+    {'key': 'sync', 'label': 'همگام‌سازی', 'confirm': 'همگام‌سازی {n} نود؟', 'confirm_title': 'همگام‌سازی گروهی', 'confirm_label': 'همگام‌سازی'},
+    {'key': 'reset', 'label': 'ریست مصرف', 'confirm': 'مصرف {n} نود ریست شود؟', 'confirm_title': 'ریست گروهی', 'confirm_label': 'ریست', 'warn': true},
+    {'key': 'toggle', 'label': 'تغییر وضعیت', 'confirm': 'وضعیت {n} نود تغییر کند؟', 'confirm_title': 'تغییر وضعیت گروهی', 'confirm_label': 'اعمال'},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} نود حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
+  ]) }}
+  {% endif %}
   <div class="table-wrap">
-  <table class="table-compact" data-sortable>
+  <table class="table-compact" data-sortable{% if can_reconnect or can_update or can_delete %} data-bulk-select{% endif %}>
     <thead><tr>
+      {% if can_reconnect or can_update or can_delete %}{{ table_select_head() }}{% endif %}
       <th class="col-id" data-sort-type="num">شناسه</th>
       <th class="col-name" data-sort-type="text">نام</th>
       <th class="col-address" data-sort-type="text">آدرس</th>
@@ -35,7 +45,14 @@
     </tr></thead>
     <tbody>
     {% for n in nodes %}
-      <tr>
+      {% set ns = namespace(ops='') %}
+      {% if n.get('id') %}
+        {% if can_reconnect %}{% set ns.ops = ns.ops + 'reconnect,' %}{% endif %}
+        {% if can_update %}{% set ns.ops = ns.ops + 'sync,reset,toggle,' %}{% endif %}
+        {% if can_delete %}{% set ns.ops = ns.ops + 'delete,' %}{% endif %}
+      {% endif %}
+      <tr data-bulk-ops="{{ ns.ops.rstrip(',') }}">
+        {% if can_reconnect or can_update or can_delete %}{% if n.get('id') %}{{ table_select_cell(n.get('id')) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
         <td class="mono" dir="ltr" data-sort-value="{{ n.get('id') or 0 }}">{{ n.get('id') }}</td>
         <td data-sort-value="{{ n.get('name') or '' }}">{{ n.get('name') or '—' }}</td>
         <td class="mono" dir="ltr" data-sort-value="{{ n.get('address') or n.get('host') or '' }}">{{ n.get('address') or n.get('host') or '—' }}{% if n.get('port') %}:{{ n.get('port') }}{% endif %}</td>

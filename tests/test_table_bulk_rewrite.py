@@ -98,6 +98,30 @@ class BulkUiContractTests(unittest.TestCase):
         self.assertIn("/finance/delivery/bulk-action", finance)
         self.assertIn('data-bulk-ops="retry"', finance)
 
+    def test_extended_tables_have_bulk(self):
+        files = {
+            "reseller_applications.html": "/resellers/applications/bulk-action",
+            "resellers.html": "/resellers/bulk-action",
+            "plans.html": "/plans/bulk-action",
+            "broadcast.html": "/broadcast/history/bulk-action",
+            "pg_users.html": "/pg/users/bulk-action",
+            "pg_hosts.html": "/pg/hosts/bulk-action",
+            "pg_templates.html": "/pg/templates/bulk-action",
+            "pg_groups.html": "/pg/groups/bulk-action",
+            "pg_nodes.html": "/pg/nodes/bulk-action",
+        }
+        for name, endpoint in files.items():
+            src = (ROOT / "app/web/templates" / name).read_text(encoding="utf-8")
+            self.assertIn("data-bulk-select", src, msg=name)
+            self.assertIn("table_bulk_bar", src, msg=name)
+            self.assertIn(endpoint, src, msg=name)
+            self.assertIn("data-bulk-ops", src, msg=name)
+        tickets = (ROOT / "app/web/templates/tickets.html").read_text(encoding="utf-8")
+        self.assertIn("/tickets/panel/bulk-action", tickets)
+        plans = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        self.assertIn("/resellers/plans/bulk-action", plans)
+        self.assertIn("/plans/gift-codes/bulk-action", plans)
+
     def test_backend_exports(self):
         src = (ROOT / "app/services/table_bulk.py").read_text(encoding="utf-8")
         self.assertIn("def sanitize_return_to", src)
@@ -106,9 +130,18 @@ class BulkUiContractTests(unittest.TestCase):
         self.assertIn("async def bulk_delete_users", src)
         self.assertIn("async def bulk_renew_users", src)
         self.assertIn("async def bulk_retry_delivery", src)
+        ext = (ROOT / "app/services/table_bulk_ext.py").read_text(encoding="utf-8")
+        self.assertIn("async def bulk_reseller_app_action", ext)
+        self.assertIn("async def bulk_pg_user_action", ext)
+        self.assertIn("async def bulk_shop_plan_action", ext)
         pages = (ROOT / "app/api/bulk_pages.py").read_text(encoding="utf-8")
         self.assertIn("/finance/delivery/bulk-action", pages)
+        self.assertIn("/pg/users/bulk-action", pages)
+        self.assertIn("/resellers/applications/bulk-action", pages)
         self.assertIn("sanitize_return_to", pages)
+        self.assertIn("require_pg_perm", pages)
+        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
+        self.assertIn("findBulkBar", js)
 
 
 if __name__ == "__main__":

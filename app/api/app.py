@@ -1002,6 +1002,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         app,
         require_admin=require_admin,
         require_perm=require_perm,
+        require_pg_perm=require_pg_perm,
+        require_staff=require_staff,
         get_db=get_db,
     )
     from app.api.finance_pages import register_finance_pages

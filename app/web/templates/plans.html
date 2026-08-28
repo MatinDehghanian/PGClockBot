@@ -1,6 +1,6 @@
 ﻿{% extends "base.html" %}
 {% from "macros.html" import switch, switch_chip, page_title %}
-{% from "macros.html" import row_actions %}
+{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar %}
 {% block title %}پلن‌ها{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -24,14 +24,19 @@
 
 <div class="card card-flush">
   <h2>پلن‌های کاربران</h2>
+  {{ table_bulk_bar('/plans/bulk-action', [
+    {'key': 'toggle', 'label': 'روشن/خاموش', 'confirm': 'وضعیت {n} پلن تغییر کند؟', 'confirm_title': 'تغییر وضعیت گروهی', 'confirm_label': 'اعمال'},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} پلن حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
+  ]) }}
   <div class="table-wrap">
-  <table class="table-compact">
+  <table class="table-compact" data-bulk-select>
     <thead>
-      <tr><th>نام</th><th>قیمت</th><th class="col-hide-sm">مدت</th><th>حجم</th><th class="col-hide-sm">منبع پاسارگارد</th><th>وضعیت</th><th class="col-actions"></th></tr>
+      <tr>{{ table_select_head() }}<th>نام</th><th>قیمت</th><th class="col-hide-sm">مدت</th><th>حجم</th><th class="col-hide-sm">منبع پاسارگارد</th><th>وضعیت</th><th class="col-actions"></th></tr>
     </thead>
     <tbody>
     {% for p in plans %}
-      <tr>
+      <tr data-bulk-ops="toggle,delete">
+        {{ table_select_cell(p.id) }}
         <td>{{ p.name }}</td>
         <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
         <td class="col-hide-sm">{{ p.duration_days }} روز</td>
@@ -72,9 +77,10 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">پلن ثابتی نیست — از «افزودن پلن» بسازید.</td></tr>
+      <tr><td colspan="8" class="muted">پلن ثابتی نیست — از «افزودن پلن» بسازید.</td></tr>
     {% endfor %}
       <tr>
+        <td class="col-select"></td>
         <td>پلن تست{% if trial %} — {{ trial.name }}{% endif %}</td>
         <td class="mono">رایگان</td>
         <td class="col-hide-sm">{% if trial %}{{ trial.duration_days }} روز{% else %}—{% endif %}</td>
@@ -100,6 +106,7 @@
         </td>
       </tr>
       <tr>
+        <td class="col-select"></td>
         <td>پلن دلخواه</td>
         <td class="mono">هر گیگ / روز</td>
         <td class="col-hide-sm">{{ values.get('custom_plan_min_days','1') }}–{{ values.get('custom_plan_max_days','365') }} روز</td>
@@ -125,6 +132,7 @@
         </td>
       </tr>
       <tr>
+        <td class="col-select"></td>
         <td>فروش عمده</td>
         <td class="mono">تخفیف پلکانی</td>
         <td class="col-hide-sm">—</td>
@@ -158,10 +166,15 @@
   {% endif %}
 
   <h3 id="reseller-plans-fixed" class="card-subhead">📦 اشتراک ثابت (کمیسیون)</h3>
+    {{ table_bulk_bar('/resellers/plans/bulk-action', [
+    {'key': 'toggle', 'label': 'روشن/خاموش', 'confirm': 'وضعیت {n} پلن نمایندگی تغییر کند؟', 'confirm_title': 'تغییر وضعیت گروهی', 'confirm_label': 'اعمال'},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} پلن نمایندگی حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
+  ]) }}
   <div class="table-wrap">
-  <table class="table-compact">
+  <table class="table-compact" data-bulk-select>
     <thead>
       <tr>
+        {{ table_select_head() }}
         <th>نام</th>
         <th>قیمت ورود</th>
         <th class="col-hide-sm">کمیسیون</th>
@@ -171,7 +184,8 @@
     </thead>
     <tbody>
     {% for p in fixed_reseller_plans %}
-      <tr>
+      <tr data-bulk-ops="toggle,delete">
+        {{ table_select_cell(p.id) }}
         <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
         <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
         <td class="mono col-hide-sm">{{ p.commission_percent }}٪</td>
@@ -193,17 +207,22 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="muted">پلن اشتراک ثابت نیست — از «افزودن پلن» با مخاطب نمایندگان بسازید.</td></tr>
+      <tr><td colspan="6" class="muted">پلن اشتراک ثابت نیست — از «افزودن پلن» با مخاطب نمایندگان بسازید.</td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
 
   <h3 id="reseller-plans-payg" class="card-subhead">⚡ اشتراک PAYG</h3>
+    {{ table_bulk_bar('/resellers/plans/bulk-action', [
+    {'key': 'toggle', 'label': 'روشن/خاموش', 'confirm': 'وضعیت {n} پلن نمایندگی تغییر کند؟', 'confirm_title': 'تغییر وضعیت گروهی', 'confirm_label': 'اعمال'},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} پلن نمایندگی حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
+  ]) }}
   <div class="table-wrap">
-  <table class="table-compact">
+  <table class="table-compact" data-bulk-select>
     <thead>
       <tr>
+        {{ table_select_head() }}
         <th>نام</th>
         <th>قیمت ورود</th>
         <th class="col-hide-sm">نرخ / گیگ</th>
@@ -214,7 +233,8 @@
     </thead>
     <tbody>
     {% for p in payg_reseller_plans %}
-      <tr>
+      <tr data-bulk-ops="toggle,delete">
+        {{ table_select_cell(p.id) }}
         <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
         <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
         <td class="mono col-hide-sm">{% if p.price_per_gb %}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }}{% else %}—{% endif %}</td>
@@ -237,7 +257,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="muted">پلن PAYG نیست — از «افزودن پلن» با نوع PAYG بسازید.</td></tr>
+      <tr><td colspan="7" class="muted">پلن PAYG نیست — از «افزودن پلن» با نوع PAYG بسازید.</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -245,10 +265,15 @@
 
   <h3 id="reseller-plans-addons" class="card-subhead">📦 بسته‌های حجم / کاربر</h3>
   <p class="muted update-card-caption">فقط در منوی نمایندگانی که قبلاً اشتراک خریده‌اند دیده می‌شود — بدون گروه، نقش یا دسترسی اضافه.</p>
+    {{ table_bulk_bar('/resellers/plans/bulk-action', [
+    {'key': 'toggle', 'label': 'روشن/خاموش', 'confirm': 'وضعیت {n} پلن نمایندگی تغییر کند؟', 'confirm_title': 'تغییر وضعیت گروهی', 'confirm_label': 'اعمال'},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} پلن نمایندگی حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
+  ]) }}
   <div class="table-wrap">
-  <table class="table-compact">
+  <table class="table-compact" data-bulk-select>
     <thead>
       <tr>
+        {{ table_select_head() }}
         <th>نام</th>
         <th>نوع</th>
         <th>مقدار</th>
@@ -259,7 +284,8 @@
     </thead>
     <tbody>
     {% for p in addon_reseller_plans %}
-      <tr>
+      <tr data-bulk-ops="toggle,delete">
+        {{ table_select_cell(p.id) }}
         <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
         <td>{% if p.plan_kind == 'addon_users' %}کاربر{% else %}حجم{% endif %}</td>
         <td class="mono">{% if p.plan_kind == 'addon_users' %}+{{ p.addon_users or 0 }} کاربر{% else %}+{{ p.addon_gb or 0 }} گیگ{% endif %}</td>
@@ -282,7 +308,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="muted">بسته اضافه نیست — مخاطب پلن: نمایندگان → نوع: بسته حجم/کاربر.</td></tr>
+      <tr><td colspan="7" class="muted">بسته اضافه نیست — مخاطب پلن: نمایندگان → نوع: بسته حجم/کاربر.</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -753,10 +779,14 @@
       </div>
     </form>
     <h3 class="gift-codes-recent-title">کدهای اخیر</h3>
+    {{ table_bulk_bar('/plans/gift-codes/bulk-action', [
+      {'key': 'toggle', 'label': 'روشن/خاموش', 'confirm': 'وضعیت {n} کد هدیه تغییر کند؟', 'confirm_title': 'تغییر وضعیت گروهی', 'confirm_label': 'اعمال'},
+    ]) }}
     <div class="table-wrap">
-      <table class="table-compact">
+      <table class="table-compact" data-bulk-select>
         <thead>
           <tr>
+            {{ table_select_head() }}
             <th>کد</th>
             <th>مبلغ</th>
             <th class="col-hide-sm">مصرف</th>
@@ -766,7 +796,8 @@
         </thead>
         <tbody>
         {% for c in gift_codes or [] %}
-          <tr>
+          <tr data-bulk-ops="toggle">
+            {{ table_select_cell(c.id) }}
             <td class="mono" dir="ltr">{{ c.code }}</td>
             <td class="mono">{{ c.amount | num }}</td>
             <td class="col-hide-sm">{{ c.used_count }}{% if c.max_uses is not none %}/{{ c.max_uses }}{% endif %}</td>
@@ -778,7 +809,7 @@
             </td>
           </tr>
         {% else %}
-          <tr><td colspan="5" class="muted">هنوز کدی ساخته نشده.</td></tr>
+          <tr><td colspan="6" class="muted">هنوز کدی ساخته نشده.</td></tr>
         {% endfor %}
         </tbody>
       </table>

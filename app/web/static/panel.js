@@ -2363,9 +2363,24 @@
           })
           .filter(Boolean);
       }
+      function findBulkBar(table) {
+        const tw = table.closest('.table-wrap');
+        let el = tw && tw.previousElementSibling;
+        while (el) {
+          if (el.hasAttribute && el.hasAttribute('data-table-bulk-bar')) return el;
+          if (el.classList && el.classList.contains('table-wrap')) break;
+          el = el.previousElementSibling;
+        }
+        const wrap = table.closest('.card, .ui-modal-panel');
+        if (wrap) {
+          /* Prefer bar immediately before this table's wrap when multiple tables share a card */
+          const bars = wrap.querySelectorAll('[data-table-bulk-bar]');
+          if (bars.length === 1) return bars[0];
+        }
+        return null;
+      }
       function updateBar(table) {
-        const wrap = table.closest('.card');
-        const bar = wrap && wrap.querySelector('[data-table-bulk-bar]');
+        const bar = findBulkBar(table);
         if (!bar) return;
         const rows = selectedRows(table);
         const count = rows.length;
@@ -2411,7 +2426,7 @@
         }
       }
       function submitBulk(table, actionKey, btn) {
-        const bar = table.closest('.card') && table.closest('.card').querySelector('[data-table-bulk-bar]');
+        const bar = findBulkBar(table);
         const actionUrl = bar && bar.getAttribute('data-bulk-action');
         if (!actionUrl) return;
         const ids = eligibleIds(table, actionKey);
@@ -2482,7 +2497,7 @@
             updateBar(table);
           }
         });
-        const bar = table.closest('.card') && table.closest('.card').querySelector('[data-table-bulk-bar]');
+        const bar = findBulkBar(table);
         if (bar) {
           bar.addEventListener('click', (e) => {
             const btn = e.target.closest('[data-bulk-op]');

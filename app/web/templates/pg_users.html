@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, switch_chip, page_title %}
+{% from "macros.html" import row_actions, switch_chip, page_title, table_select_head, table_select_cell, table_bulk_bar %}
 {% block title %}کاربران پنل{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -21,10 +21,20 @@
   {% if not users %}
   <p class="muted">کاربری یافت نشد.</p>
   {% else %}
+  {% if can_disable or can_enable or can_reset or can_revoke or can_delete %}
+  {{ table_bulk_bar('/pg/users/bulk-action', [
+    {'key': 'disable', 'label': 'غیرفعال', 'class': 'btn-warn', 'confirm': '{n} کاربر غیرفعال شوند؟', 'confirm_title': 'غیرفعال‌سازی گروهی', 'confirm_label': 'غیرفعال', 'warn': true},
+    {'key': 'enable', 'label': 'فعال', 'confirm': '{n} کاربر فعال شوند؟', 'confirm_title': 'فعال‌سازی گروهی', 'confirm_label': 'فعال'},
+    {'key': 'reset', 'label': 'ریست', 'confirm': 'مصرف {n} کاربر ریست شود؟', 'confirm_title': 'ریست گروهی', 'confirm_label': 'ریست', 'warn': true},
+    {'key': 'revoke', 'label': 'ابطال ساب', 'confirm': 'سابسکرایب {n} کاربر ابطال شود؟', 'confirm_title': 'ابطال گروهی', 'confirm_label': 'ابطال', 'warn': true},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر پاسارگارد حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
+  ]) }}
+  {% endif %}
   <div class="table-wrap">
-  <table class="table-compact" data-sortable>
+  <table class="table-compact" data-sortable{% if can_disable or can_enable or can_reset or can_revoke or can_delete %} data-bulk-select{% endif %}>
     <thead>
       <tr>
+        {% if can_disable or can_enable or can_reset or can_revoke or can_delete %}{{ table_select_head() }}{% endif %}
         <th data-sort-type="text">نام کاربری</th>
         <th data-sort-type="text">وضعیت</th>
         <th data-sort-type="num">حجم</th>
@@ -41,7 +51,16 @@
       {% set days_left = u.get('_days_left') %}
       {% set gb_left = u.get('_data_gb') %}
       {% set gids = u.get('_group_ids') or [] %}
-      <tr>
+      {% set ns = namespace(ops='') %}
+      {% if uid %}
+        {% if can_disable and not disabled %}{% set ns.ops = ns.ops + 'disable,' %}{% endif %}
+        {% if can_enable and disabled %}{% set ns.ops = ns.ops + 'enable,' %}{% endif %}
+        {% if can_reset %}{% set ns.ops = ns.ops + 'reset,' %}{% endif %}
+        {% if can_revoke %}{% set ns.ops = ns.ops + 'revoke,' %}{% endif %}
+        {% if can_delete %}{% set ns.ops = ns.ops + 'delete,' %}{% endif %}
+      {% endif %}
+      <tr data-bulk-ops="{{ ns.ops.rstrip(',') }}">
+        {% if can_disable or can_enable or can_reset or can_revoke or can_delete %}{% if uid %}{{ table_select_cell(uid) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
         <td class="mono" dir="ltr" data-sort-value="{{ u.get('username') or '' }}">{{ u.get('username') or '—' }}</td>
         <td data-sort-value="{{ '0' if disabled else '1' }}">
           {% if disabled %}

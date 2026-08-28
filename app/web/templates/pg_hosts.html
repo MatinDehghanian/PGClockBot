@@ -1,5 +1,5 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title %}
+{% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar %}
 {% block title %}هاست‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -15,14 +15,26 @@
   {% if not hosts %}
   <p class="muted">هاستی نیست.</p>
   {% else %}
+  {% if can_update or can_delete %}
+  {{ table_bulk_bar('/pg/hosts/bulk-action', [
+    {'key': 'toggle', 'label': 'روشن/خاموش', 'confirm': 'وضعیت {n} هاست تغییر کند؟', 'confirm_title': 'تغییر وضعیت گروهی', 'confirm_label': 'اعمال'},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} هاست حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
+  ]) }}
+  {% endif %}
   <div class="table-wrap">
-  <table class="table-compact">
-    <thead><tr><th class="col-id">شناسه</th><th class="col-name">عنوان</th><th class="col-hide-sm col-address">آدرس</th><th class="col-hide-sm col-id">پورت</th><th class="col-hide-sm col-text">اینباند</th><th class="col-status">وضعیت</th><th class="col-actions"></th></tr></thead>
+  <table class="table-compact"{% if can_update or can_delete %} data-bulk-select{% endif %}>
+    <thead><tr>{% if can_update or can_delete %}{{ table_select_head() }}{% endif %}<th class="col-id">شناسه</th><th class="col-name">عنوان</th><th class="col-hide-sm col-address">آدرس</th><th class="col-hide-sm col-id">پورت</th><th class="col-hide-sm col-text">اینباند</th><th class="col-status">وضعیت</th><th class="col-actions"></th></tr></thead>
     <tbody>
     {% for h in hosts %}
       {% set addr = h.get('address') %}
       {% set addr_text = addr if addr is string else (addr | join(', ') if addr is iterable and addr is not string else '') %}
-      <tr>
+      {% set ns = namespace(ops='') %}
+      {% if h.get('id') %}
+        {% if can_update %}{% set ns.ops = ns.ops + 'toggle,' %}{% endif %}
+        {% if can_delete %}{% set ns.ops = ns.ops + 'delete,' %}{% endif %}
+      {% endif %}
+      <tr data-bulk-ops="{{ ns.ops.rstrip(',') }}">
+        {% if can_update or can_delete %}{% if h.get('id') %}{{ table_select_cell(h.get('id')) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
         <td class="mono" dir="ltr">{{ h.get('id') or '—' }}</td>
         <td>{{ h.get('remark') or h.get('name') or '—' }}</td>
         <td class="mono col-hide-sm" dir="ltr">{{ addr_text or '—' }}</td>

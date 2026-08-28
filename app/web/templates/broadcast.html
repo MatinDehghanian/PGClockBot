@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_title, table_select_head, table_select_cell, table_bulk_bar %}
 {% block title %}پیام گروهی{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -43,14 +43,18 @@
     </form>
     {% endif %}
   </div>
+  {{ table_bulk_bar('/broadcast/history/bulk-action', [
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} رکورد تاریخچه حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
+  ]) }}
   <div class="table-wrap">
-  <table class="table-compact">
+  <table class="table-compact" data-bulk-select>
     <thead>
-      <tr><th class="col-id">#</th><th class="col-time">زمان</th><th class="col-hide-sm col-user">مخاطب</th><th class="col-text">متن</th><th class="col-status">نتیجه</th><th class="col-hide-sm col-user">توسط</th><th class="col-actions"></th></tr>
+      <tr>{{ table_select_head() }}<th class="col-id">#</th><th class="col-time">زمان</th><th class="col-hide-sm col-user">مخاطب</th><th class="col-text">متن</th><th class="col-status">نتیجه</th><th class="col-hide-sm col-user">توسط</th><th class="col-actions"></th></tr>
     </thead>
     <tbody>
     {% for row in history %}
-      <tr>
+      <tr data-bulk-ops="delete">
+        {{ table_select_cell(row.id) }}
         <td class="mono cell-tight">{{ row.id }}</td>
         <td class="mono muted cell-tight">{{ row.created_at }}</td>
         <td class="col-hide-sm">{{ audience_labels.get(row.audience, row.audience) }}</td>
@@ -68,7 +72,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">هنوز پیامی ارسال نشده</td></tr>
+      <tr><td colspan="8" class="muted">هنوز پیامی ارسال نشده</td></tr>
     {% endfor %}
     </tbody>
   </table>
