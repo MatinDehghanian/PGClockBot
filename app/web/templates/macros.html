@@ -101,22 +101,16 @@
 
 {% macro table_select_head() -%}
 <th class="col-select" scope="col">
-  <label class="table-select-all ui-switch-row" title="انتخاب همه">
-    <span class="ui-switch">
-      <input type="checkbox" class="table-select-all-input" aria-label="انتخاب همه" />
-      <span class="ui-switch-track" aria-hidden="true"></span>
-    </span>
+  <label class="table-select-all" title="انتخاب همه">
+    <input type="checkbox" class="table-bulk-check table-select-all-input" aria-label="انتخاب همه" />
   </label>
 </th>
 {%- endmacro %}
 
 {% macro table_select_cell(row_id) -%}
 <td class="col-select">
-  <label class="table-select-row ui-switch-row">
-    <span class="ui-switch">
-      <input type="checkbox" class="table-select-input" value="{{ row_id }}" aria-label="انتخاب ردیف" />
-      <span class="ui-switch-track" aria-hidden="true"></span>
-    </span>
+  <label class="table-select-row">
+    <input type="checkbox" class="table-bulk-check table-select-input" value="{{ row_id }}" aria-label="انتخاب ردیف" />
   </label>
 </td>
 {%- endmacro %}

@@ -176,6 +176,19 @@ def _row_matches(row: PanelInboxDismissal, alert_key: str, entity_id: str = "") 
     return True
 
 
+async def filter_action_center_for_staff(
+    session: AsyncSession,
+    staff: dict,
+    action_center: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply persisted dismissals to a dashboard work-queue payload."""
+    dismissals = await load_dismissals(session, staff)
+    if not dismissals:
+        return action_center
+    filtered = filter_inbox_context({"action_center": action_center}, dismissals)
+    return filtered.get("action_center") or action_center
+
+
 def filter_inbox_context(
     ctx: dict[str, Any],
     dismissals: list[PanelInboxDismissal],

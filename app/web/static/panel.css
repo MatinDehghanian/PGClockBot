@@ -9102,10 +9102,9 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   gap: var(--space-1);
 }
 .pay-dest-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--space-1);
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
   padding: var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -9115,6 +9114,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--space-1);
+  width: 100%;
 }
 .pay-dest-fields label {
   display: flex;
@@ -9125,22 +9125,9 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .pay-dest-fields input {
   width: 100%;
 }
-.pay-dest-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: stretch;
-}
-.pay-dest-btn {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
+.pay-dest-remove-btn {
+  width: 100%;
   justify-content: center;
-  border-radius: var(--radius-sm);
-  font-size: 18px;
-  line-height: 1;
 }
 .pay-dest-add-row {
   display: flex;
@@ -9174,37 +9161,20 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   max-width: 320px;
 }
 
-/* —— Colors tab (sub-tabs, chips, dynamic summary) —— */
-.colors-subtabs {
+/* —— Colors tab (section-tabs, chips, dynamic summary, accordions) —— */
+.colors-page-tabs {
+  margin-bottom: 0;
+}
+.colors-tab-panel {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  margin-bottom: var(--space-2);
-}
-.colors-subtab {
-  appearance: none;
-  border: 1px solid var(--border);
-  background: var(--muted);
-  color: var(--text);
-  border-radius: 999px;
-  padding: 6px 14px;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
-}
-.colors-subtab:hover {
-  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
-}
-.colors-subtab.is-active {
-  background: color-mix(in srgb, var(--primary) 14%, var(--muted));
-  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  flex-direction: column;
+  gap: var(--section-gap);
 }
 .colors-tab-panel[hidden] {
   display: none !important;
 }
 .colors-tab-intro {
-  margin-bottom: var(--space-1);
+  margin: 0;
 }
 .colors-group-details {
   padding: 0;
@@ -9215,7 +9185,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   padding: var(--card-pad);
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 .colors-group-details > summary::-webkit-details-marker {
   display: none;
@@ -9223,14 +9193,39 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .colors-group-summary h2 {
   margin: 0;
   font-size: var(--title-size);
+  flex: 1;
+  min-width: 0;
 }
-.colors-group-details > summary::before {
-  content: "▸";
+.colors-group-chevron {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--muted-fg);
-  transition: transform 0.15s;
+  transition: transform 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.colors-group-details[open] > summary::before {
-  transform: rotate(90deg);
+.colors-group-chevron::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-inline-end: 2px solid currentColor;
+  border-block-end: 2px solid currentColor;
+  transform: rotate(-45deg);
+  margin-top: -2px;
+  transition: transform 0.15s ease;
+}
+.colors-group-details[open] > summary .colors-group-chevron {
+  border-color: rgba(249, 115, 22, 0.42);
+  color: var(--brand-fg);
+}
+.colors-group-details[open] > summary .colors-group-chevron::before {
+  transform: rotate(45deg);
 }
 .colors-group-details > .btn-color-grid {
   padding: 0 var(--card-pad) var(--card-pad);
@@ -9295,8 +9290,8 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   background: #ff3b30;
 }
 .btn-color-chip.is-active {
-  border-color: var(--text);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent);
+  border-color: var(--brand-fg);
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.35);
 }
 html[data-theme="light"] .btn-color-chip[data-tone="default"] {
   background: #f4f4f5;
@@ -9311,12 +9306,48 @@ html[data-theme="light"] .btn-color-chip[data-tone="default"] {
 }
 .table-select-all,
 .table-select-row {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
   margin: 0;
+  cursor: pointer;
 }
-.table-select-all .ui-switch,
-.table-select-row .ui-switch {
-  margin: 0 auto;
+.table-bulk-check {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--foreground) 28%, var(--border));
+  background: transparent;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
+}
+.table-bulk-check:hover {
+  border-color: rgba(249, 115, 22, 0.55);
+}
+.table-bulk-check:focus-visible {
+  outline: 2px solid rgba(249, 115, 22, 0.45);
+  outline-offset: 2px;
+}
+.table-bulk-check:checked {
+  border-color: var(--brand);
+  background: var(--brand);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--background) 82%, transparent);
+}
+.table-bulk-check:indeterminate {
+  border-color: var(--brand);
+  background: rgba(249, 115, 22, 0.35);
+}
+tbody tr.is-bulk-selected {
+  background: rgba(249, 115, 22, 0.08);
+}
+tbody tr.is-bulk-selected:hover {
+  background: rgba(249, 115, 22, 0.12);
 }
 .table-bulk-bar {
   display: flex;
@@ -9326,7 +9357,7 @@ html[data-theme="light"] .btn-color-chip[data-tone="default"] {
   flex-wrap: wrap;
   padding: var(--space-1_5) var(--space-2);
   border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  background: rgba(249, 115, 22, 0.08);
 }
 .table-bulk-bar[hidden] {
   display: none !important;
