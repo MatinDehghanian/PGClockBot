@@ -85,8 +85,6 @@ class ItemButtonStyleTests(unittest.TestCase):
         from pathlib import Path
 
         html = Path("app/web/templates/_settings_colors.html").read_text(encoding="utf-8")
-        preview = Path("app/web/templates/_tg_preview_chat_js.html").read_text(encoding="utf-8")
-        chat = Path("app/web/templates/_tg_preview_chat.html").read_text(encoding="utf-8")
         self.assertIn("data-colors-subtabs", html)
         self.assertIn("section-tabs", html)
         self.assertIn("colors_page_sections", html)
