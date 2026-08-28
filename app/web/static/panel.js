@@ -28,10 +28,28 @@
     }
     setOpen(false);
     if (btn) {
-      btn.addEventListener('click', function (e) {
+      /* click alone waits for iOS momentum scroll to settle on a fixed topbar.
+         pointerup opens immediately; click still covers mouse / keyboard. */
+      var ignoreClick = false;
+      function toggleMenu(e) {
         e.preventDefault();
         e.stopPropagation();
         setOpen(!side.classList.contains('open'));
+      }
+      btn.addEventListener('pointerup', function (e) {
+        if (e.pointerType === 'mouse') return;
+        if (e.button != null && e.button !== 0) return;
+        ignoreClick = true;
+        toggleMenu(e);
+        setTimeout(function () { ignoreClick = false; }, 400);
+      });
+      btn.addEventListener('click', function (e) {
+        if (ignoreClick) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        toggleMenu(e);
       });
     }
     if (back) back.addEventListener('click', function () { setOpen(false); });
