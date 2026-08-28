@@ -1,6 +1,6 @@
 """App version — bump when releasing so the panel can detect updates."""
 
-__version__ = "8.5.43"
+__version__ = "8.5.44"
 
 # GitHub repo used for update checks
 GITHUB_REPO = "Mrclocks/PGClockBot"

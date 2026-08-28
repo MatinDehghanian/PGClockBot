@@ -16,6 +16,18 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.5.44": [
+        "ریشهٔ واقعی نوار سالید بعد از بستن سایدبار: v8.5.40 قفل overflow را از html/body برداشت، ولی همان قفل را با touch-action:none روی .side-backdrop تمام‌صفحه (و topbar) گذاشت — برای سافاری یعنی صفحه دیگر با ژست اسکرول نمی‌شود، نوار پایین باز می‌ماند و بعد از بستن (معمولاً scrollY=۰) جمع نمی‌شود",
+        "فیکس: حذف touch-action:none از backdrop و topbar؛ backdrop فقط dim + تب برای بستن است؛ اسکرول زیر dim مجاز است تا نوار سافاری صادق بماند",
+        "دکمهٔ همبرگر: علاوه بر click، با pointerup باز می‌شود و touch-action:manipulation دارد — دیگر تا توقف کامل اسکرول منتظر نمی‌ماند",
+        "حذف مدل موازی critical-boot برای کشو (visibility/shell مینی) که با panel.css می‌جنگید؛ فقط رنگ canvas و مخفی‌کردن .desk-only ماند",
+        "SW v34؛ ریستور: v8.5.34",
+    ],
+    "8.5.43": [
+        "ساعت ناوبری: preventDefault + یک فریم paint قبل از location.assign تا روی پلن‌ها و صفحات سنگین دیده شود؛ panel.js بدون defer",
+        "لود خراب گاه‌به‌گاه: critical-boot برای مخفی‌کردن برند دسکتاپ + preload CSS؛ SW fallback برای پاسخ non-OK",
+        "SW v33",
+    ],
     "8.5.42": [
         "ریشهٔ نوار مشکی که بعد از بستن سایدبار شفاف نمی‌شد: از iOS 26 (Liquid Glass) سافاری رنگ نوار پایین خودش را از background عناصر position:fixed که به لبهٔ پایین viewport می‌چسبند برمی‌دارد — و وقتی آن عنصر حذف می‌شود، دیگر نمونه‌برداری را تکرار نمی‌کند",
         "پس دیمِ سایدبار (rgba(0,0,0,0.55)) که روی خود .side-backdrop بود، همان لحظهٔ باز شدن نوار پایین را سالید می‌کرد و بعد از بستن سایدبار هم روی همان رنگ قفل می‌ماند — دقیقاً همان نواری که محتوا را کوتاه نشان می‌داد",

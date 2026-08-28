@@ -469,9 +469,16 @@ def run_behaviour(browser, engine: str) -> list[str]:
           topbar: getComputedStyle(document.querySelector('.topbar')).touchAction,
         })"""
     )
+    # Drawer must NOT install a full-viewport touch-action:none lock — that is
+    # what kept Safari's bottom toolbar expanded after close.
     check(
-        "overlays own touch containment",
-        contain["backdrop"] == "none" and contain["topbar"] == "none",
+        "drawer backdrop is not a touch-action scroll lock",
+        contain["backdrop"] != "none",
+        contain,
+    )
+    check(
+        "topbar is not a touch-action scroll lock while drawer open",
+        contain["topbar"] != "none",
         contain,
     )
 
@@ -481,7 +488,11 @@ def run_behaviour(browser, engine: str) -> list[str]:
         _touch_pan(page, 60, 500, 300)
         page.wait_for_timeout(250)
         y = page.evaluate("() => window.scrollY")
-        check("pan on backdrop does not scroll the page", y < 2, f"scrollY={y}")
+        check(
+            "pan on backdrop can still scroll the page (keeps Safari toolbar honest)",
+            y > 20,
+            f"scrollY={y}",
+        )
 
         before = page.evaluate("() => document.getElementById('sidebar').scrollTop")
         _touch_pan(page, 200, 500, 200)

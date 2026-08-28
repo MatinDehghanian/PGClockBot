@@ -51,12 +51,11 @@ class PageScrollContainerTests(unittest.TestCase):
         self.assertNotIn("overflow-y: auto;", main)
 
     def test_open_overlays_never_lock_the_root_scroller(self):
-        """The root scroller must stay scrollable while any overlay is open.
+        """The root scroller must stay gesture-scrollable while overlays are open.
 
-        Blocking it (overflow:hidden / touch-action:none / overscroll:none on
-        html or body) keeps iOS Safari's bottom toolbar expanded and stops it
-        compositing page pixels behind the toolbar, so the strip it covers reads
-        as a solid bar. Background touches are contained by the overlays.
+        Blocking it via html/body overflow OR via a full-viewport
+        touch-action:none overlay expands iOS Safari's bottom toolbar and leaves
+        a solid short strip after close. Drawer backdrop is dim + tap only.
         """
         css = self.css
         self.assertNotIn("html:has(body.nav-open)", css)
@@ -70,18 +69,14 @@ class PageScrollContainerTests(unittest.TestCase):
         ):
             self.assertNotIn(selector, css, selector)
 
-        # The drawer backdrop owns containment and is full-bleed, so no
-        # background pixel is left pannable.
         back = rule(css, ".side-backdrop")
         self.assertIn("position: fixed;", back)
         self.assertIn("inset: 0;", back)
-        self.assertIn("touch-action: none;", back)
+        self.assertNotIn("touch-action: none;", back)
         self.assertIn("overscroll-behavior: contain;", back)
-        # The topbar paints above the backdrop, so it contains touches itself.
-        self.assertIn(
-            "touch-action: none;", rule(self.mobile, "body.nav-open .topbar")
-        )
-        # Modal backdrop does the same job for modals.
+        # No parallel lock on the topbar while the drawer is open.
+        self.assertNotIn("body.nav-open .topbar", self.mobile)
+        # Modal backdrop still owns its own touches (modals are a separate path).
         self.assertIn("touch-action: none;", rule(css, ".ui-modal-backdrop"))
 
         # Freezing .main / .side is only correct on desktop, where they are the

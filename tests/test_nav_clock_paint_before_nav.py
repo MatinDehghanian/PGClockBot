@@ -40,6 +40,10 @@ class NavClockPaintBeforeNavTests(unittest.TestCase):
         base = BASE.read_text(encoding="utf-8")
         self.assertIn('id="panel-critical-boot"', base)
         self.assertIn(".desk-only { display: none !important; }", base)
+        # No second drawer model — visibility/right:0 fought panel.css.
+        boot = base.split('id="panel-critical-boot"', 1)[1].split("</style>", 1)[0]
+        self.assertNotIn("visibility:", boot)
+        self.assertNotIn(".side {", boot)
         self.assertIn('rel="preload"', base)
         self.assertIn("/static/panel.css?v={{ app_version }}", base)
 

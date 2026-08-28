@@ -4079,10 +4079,12 @@ form.settings-form > .actions.sticky-actions,
 .side-backdrop {
   display: none !important;
   position: fixed;
-  /* Full-bleed: the backdrop is the element that swallows background touches
-     while the drawer is open, so it must cover every pixel the page can paint.
-     The opaque .topbar (z-index 55) still draws above it, so the top chrome
-     never looks dimmed. */
+  /* Full-bleed dim + tap-to-close. Must NOT use touch-action:none: that is a
+     functional scroll lock covering the viewport, and iOS Safari then expands
+     its bottom toolbar and will not retract it after the drawer closes
+     (usually scrollY===0, so nothing scrolls to collapse chrome). Tap still
+     fires with the default touch-action; page may scroll under the dim — that
+     is what keeps the toolbar honest. */
   inset: 0;
   /* NO background/backdrop-filter on this fixed box — see ::before below. */
   background: transparent;
@@ -4090,21 +4092,11 @@ form.settings-form > .actions.sticky-actions,
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--motion-med) var(--ease-standard);
-  /* Background containment lives HERE, never on html/body: an unscrollable root
-     scroller (overflow:hidden / touch-action:none) stops iOS Safari from
-     retracting its bottom toolbar and from compositing page pixels behind it.
-     touch-action:none still lets the tap-to-close click through. */
-  touch-action: none;
   overscroll-behavior: contain;
 }
-/* The dim paints on a pseudo-element, never on the fixed box above.
-   Safari 26+ tints its own toolbars from the `background-color` /
-   `backdrop-filter` of position:fixed boxes that touch a viewport edge, and it
-   does NOT re-sample when that box goes away. A dim on .side-backdrop itself
-   therefore turned the bottom bar solid the moment the drawer opened and left
-   it solid after the drawer closed. Absolutely-positioned boxes and
-   pseudo-elements are invisible to that sampler, so the bar keeps reflecting
-   the html/body background — identical in every drawer state. */
+/* Dim on a pseudo-element so the fixed box itself stays transparent to Safari
+   26's edge sampler (it freezes the last sampled colour when a candidate goes
+   away). Secondary to the scroll-lock rule above. */
 .side-backdrop::before {
   content: "";
   position: absolute;
@@ -4123,40 +4115,24 @@ form.settings-form > .actions.sticky-actions,
   .topbar.mobile-only { display: flex !important; }
 
   /*
-    Mobile geometry — ONE model, no parallel paths.
+    Mobile geometry — ONE model.
 
-    Invariants (each has exactly one owner; never re-state them elsewhere):
+      A) The document stays the vertical scroller AND stays gesture-scrollable
+         while overlays are open. Never lock scrolling via html/body overflow,
+         and never via a full-viewport touch-action:none overlay either — both
+         expand iOS Safari's bottom toolbar and leave a solid short strip after
+         close. Backdrop is dim + tap-to-close only.
 
-      A) The root (viewport) is the only vertical scroller, and it must STAY
-         scrollable at all times. Never set overflow/touch-action/overscroll on
-         html or body to block scrolling: iOS Safari then keeps its bottom
-         toolbar expanded and stops compositing page pixels behind it, so the
-         strip it covers reads as a solid bar. Overlays contain background
-         touches themselves (.side-backdrop, .ui-modal-backdrop).
+      B) Fill height is 100svh (never dvh/lvh — they reflow while chrome moves).
 
-      B) Fill height is 100svh — the SMALLEST height the visible viewport can
-         take. The footer is then reachable no matter how much retractable
-         browser chrome is on screen, and the extra strip that appears once the
-         chrome retracts is painted by the html canvas in --background, so it
-         reads as page, not as a gap. Never dvh/lvh here: they change while the
-         chrome animates and would reflow the document on every frame.
-
-      C) ONE bottom-inset owner: both footers use padding-bottom:var(--bottom-inset)
+      C) ONE bottom-inset owner: footers use padding-bottom:var(--bottom-inset)
          plus min/max-height: calc(var(--footer-bar-h) + var(--bottom-inset)).
-         .main carries NO bottom inset, so both separators share one Y.
 
-      D) .side / .side-backdrop are fixed to the viewport. html, body and .shell
-         must never become scroll containers, or they would capture the fixed
-         containing block and the drawer would follow page length.
+      D) .side / .side-backdrop are position:fixed to the viewport. html/body/
+         .shell must not become scroll containers (that would steal the fixed CB).
 
-      E) Browser chrome tint: Safari 26+ colours its own top/bottom bars from
-         the background of position:fixed boxes touching a viewport edge, and
-         it does not re-sample when such a box disappears. Only .topbar may own
-         a background there (its --bg-card is the intended top-bar tint).
-         Overlays keep their fixed box transparent and paint on an absolute
-         child (.side-backdrop::before, .ui-modal-backdrop), so the bottom bar
-         always reflects the html/body background instead of freezing on an
-         overlay colour after the overlay closes.
+      E) Fixed overlays that touch a viewport edge keep their own background
+         transparent and paint on an absolute child (tint freeze on Safari 26).
   */
   html:has(.shell) {
     height: auto;
@@ -4176,12 +4152,6 @@ form.settings-form > .actions.sticky-actions,
     overflow-y: visible;
     background-color: var(--background);
     background: var(--background);
-  }
-  /* The fixed .topbar is the only chrome the backdrop cannot cover (it paints
-     above it), so it swallows drag-to-scroll while the drawer is open. Nothing
-     here touches the root scroller. */
-  body.nav-open .topbar {
-    touch-action: none;
   }
 
   .shell {
@@ -4210,6 +4180,9 @@ form.settings-form > .actions.sticky-actions,
   .menu-toggle {
     position: relative;
     z-index: 60;
+    /* Cancels the 300ms tap delay; pairs with pointerup in panel.js so a tap
+       during momentum scroll still opens the drawer (click alone waits for settle). */
+    touch-action: manipulation;
   }
 
   .side {
@@ -4244,9 +4217,6 @@ form.settings-form > .actions.sticky-actions,
   }
   .side:not(.open) {
     pointer-events: none;
-    /* Critical-boot CSS hides the closed drawer with visibility; restore here
-       so the off-screen slide (right) remains the only closed-state mechanism. */
-    visibility: visible;
   }
   /* SAME inset path as .site-footer — separators share one Y + one box height */
   .side .side-foot {
