@@ -765,6 +765,7 @@ def build_dynamic_color_summary(
         rows.append(
             {
                 "kind": "support",
+                "tab": "user",
                 "title": title,
                 "color_label": label,
                 "edit_url": "/tickets?supports=1",
@@ -786,6 +787,7 @@ def build_dynamic_color_summary(
         rows.append(
             {
                 "kind": "pay_card",
+                "tab": "payment",
                 "title": title,
                 "color_label": label,
                 "edit_url": "/settings?tab=payment",
@@ -805,6 +807,7 @@ def build_dynamic_color_summary(
         rows.append(
             {
                 "kind": "pay_gateway",
+                "tab": "payment",
                 "title": title,
                 "color_label": label,
                 "edit_url": "/settings?tab=payment",
@@ -827,6 +830,7 @@ def build_dynamic_color_summary(
         rows.append(
             {
                 "kind": "pay_crypto",
+                "tab": "payment",
                 "title": title,
                 "color_label": label,
                 "edit_url": "/settings?tab=payment",

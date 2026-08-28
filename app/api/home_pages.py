@@ -599,6 +599,14 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 funnel_enabled=funnel_enabled,
                 expire_days=expire_days,
             )
+            try:
+                from app.services.inbox_dismissals import filter_action_center_for_staff
+
+                action_center = await filter_action_center_for_staff(
+                    session, staff, action_center
+                )
+            except Exception:
+                logger.exception("home action_center dismiss filter failed")
             pg_limits = None
             wallet_card = None
             if staff.get("pg_is_owner") is False:
@@ -772,6 +780,14 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             funnel_enabled=funnel_enabled,
             expire_days=expire_days,
         )
+        try:
+            from app.services.inbox_dismissals import filter_action_center_for_staff
+
+            action_center = await filter_action_center_for_staff(
+                session, staff, action_center
+            )
+        except Exception:
+            logger.exception("reseller home action_center dismiss filter failed")
         return (
             "reseller_home.html",
             {

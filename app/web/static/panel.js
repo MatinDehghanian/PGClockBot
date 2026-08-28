@@ -2131,7 +2131,7 @@
         keyInput.value = alertKey || '';
         if (entityInput) entityInput.value = entityId || '';
         if (returnInput) returnInput.value = window.location.pathname + window.location.search;
-        if (typeof openModal === 'function') openModal(modal);
+        if (typeof openModal === 'function') openModal('modal-inbox-dismiss');
         else {
           modal.hidden = false;
           modal.classList.add('open');
@@ -2204,9 +2204,7 @@
                 '<label>صاحب کارت<input type="text" class="pay-dest-card-holder" value="' + String(item.holder || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
-              '<div class="pay-dest-actions">' +
-                '<button type="button" class="btn btn-ghost btn-sm pay-dest-btn pay-dest-remove" aria-label="حذف">−</button>' +
-              '</div>' +
+              '<button type="button" class="btn btn-ghost btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
             '</div>'
           );
         }
@@ -2218,9 +2216,7 @@
                 '<label>لینک<input type="text" class="pay-dest-gw-link" dir="ltr" value="' + String(item.link || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
-              '<div class="pay-dest-actions">' +
-                '<button type="button" class="btn btn-ghost btn-sm pay-dest-btn pay-dest-remove" aria-label="حذف">−</button>' +
-              '</div>' +
+              '<button type="button" class="btn btn-ghost btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
             '</div>'
           );
         }
@@ -2232,9 +2228,7 @@
               '<label>آدرس<input type="text" class="pay-dest-cr-address" dir="ltr" value="' + String(item.address || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
               styleHtml +
             '</div>' +
-            '<div class="pay-dest-actions">' +
-              '<button type="button" class="btn btn-ghost btn-sm pay-dest-btn pay-dest-remove" aria-label="حذف">−</button>' +
-            '</div>' +
+            '<button type="button" class="btn btn-ghost btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
           '</div>'
         );
       }
@@ -2322,14 +2316,14 @@
     (function () {
       const root = document.querySelector('[data-colors-subtabs]');
       if (!root) return;
-      const tabs = root.querySelectorAll('.colors-subtab');
+      const tabs = root.querySelectorAll('.tab-btn');
       const panels = document.querySelectorAll('[data-colors-panel]');
       tabs.forEach((tab) => {
         tab.addEventListener('click', () => {
           const id = tab.getAttribute('data-colors-tab');
           tabs.forEach((t) => {
             const active = t === tab;
-            t.classList.toggle('is-active', active);
+            t.classList.toggle('active', active);
             t.setAttribute('aria-selected', active ? 'true' : 'false');
           });
           panels.forEach((panel) => {
@@ -2397,6 +2391,10 @@
           all.indeterminate = count > 0 && count < rows.length;
           all.checked = count === rows.length;
         }
+        table.querySelectorAll('tbody tr').forEach((tr) => {
+          const cb = tr.querySelector('.table-select-input');
+          tr.classList.toggle('is-bulk-selected', !!(cb && cb.checked));
+        });
       }
       function submitBulk(table, actionKey, btn) {
         const bar = table.closest('.card').querySelector('[data-table-bulk-bar]');

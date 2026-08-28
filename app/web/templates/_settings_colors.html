@@ -11,36 +11,18 @@
     </p>
   </div>
 
-  {% if dynamic_color_rows %}
-  <div class="card settings-card colors-dynamic-card">
-    <h2>رنگ‌های تعریف‌شده در بخش‌های دیگر</h2>
-    <p class="muted update-card-caption">
-      این موارد در فرم خودشان ویرایش می‌شوند — اینجا فقط خلاصه نمایش داده می‌شود.
-    </p>
-    <ul class="colors-dynamic-list">
-      {% for row in dynamic_color_rows %}
-      <li class="colors-dynamic-row">
-        <span class="colors-dynamic-title">{{ row.title }}</span>
-        <span class="colors-dynamic-color muted">{{ row.color_label }}</span>
-        <a class="colors-dynamic-link" href="{{ row.edit_url }}">ویرایش در {{ row.edit_hint }}</a>
-      </li>
-      {% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-
   {% if colors_page_sections %}
-  <div class="colors-subtabs" data-colors-subtabs role="tablist" aria-label="بخش‌های رنگبندی">
+  <nav class="section-tabs settings-tabs colors-page-tabs" data-colors-subtabs role="tablist" aria-label="بخش‌های رنگبندی">
     {% for tab_id, tab_label, _tab_caption, _tab_groups in colors_page_sections %}
     <button
       type="button"
-      class="colors-subtab{% if loop.first %} is-active{% endif %}"
+      class="tab-btn{% if loop.first %} active{% endif %}"
       role="tab"
       aria-selected="{{ 'true' if loop.first else 'false' }}"
       data-colors-tab="{{ tab_id }}"
     >{{ tab_label }}</button>
     {% endfor %}
-  </div>
+  </nav>
 
   {% for tab_id, tab_label, tab_caption, tab_groups in colors_page_sections %}
   <div
@@ -57,16 +39,12 @@
     </div>
 
     {% for group_name, items in tab_groups %}
-    {% set collapse = tab_id in ['admin', 'reseller'] %}
-    {% if collapse %}
-    <details class="colors-group-details card settings-card">
-      <summary class="colors-group-summary"><h2>{{ group_name }}</h2></summary>
+    <details class="colors-group-details card settings-card"{% if loop.first %} open{% endif %}>
+      <summary class="colors-group-summary">
+        <h2>{{ group_name }}</h2>
+        <span class="colors-group-chevron" aria-hidden="true"></span>
+      </summary>
       <div class="btn-color-grid">
-    {% else %}
-    <div class="card settings-card">
-      <h2>{{ group_name }}</h2>
-      <div class="btn-color-grid">
-    {% endif %}
         {% for item in items %}
         {% set cur = values.get(item.key, item.default) %}
         {% set cur_tone = 'default' if not cur else cur %}
@@ -103,12 +81,29 @@
         </div>
         {% endfor %}
       </div>
-    {% if collapse %}
     </details>
-    {% else %}
+    {% endfor %}
+
+    {% if dynamic_color_rows %}
+    {% set tab_dynamic = dynamic_color_rows | selectattr('tab', 'equalto', tab_id) | list %}
+    {% if tab_dynamic %}
+    <div class="card settings-card colors-dynamic-card">
+      <h2>رنگ‌های تعریف‌شده در بخش‌های دیگر</h2>
+      <p class="muted update-card-caption">
+        این موارد در فرم خودشان ویرایش می‌شوند — اینجا فقط خلاصه نمایش داده می‌شود.
+      </p>
+      <ul class="colors-dynamic-list">
+        {% for row in tab_dynamic %}
+        <li class="colors-dynamic-row">
+          <span class="colors-dynamic-title">{{ row.title }}</span>
+          <span class="colors-dynamic-color muted">{{ row.color_label }}</span>
+          <a class="colors-dynamic-link" href="{{ row.edit_url }}">ویرایش در {{ row.edit_hint }}</a>
+        </li>
+        {% endfor %}
+      </ul>
     </div>
     {% endif %}
-    {% endfor %}
+    {% endif %}
   </div>
   {% endfor %}
   {% elif button_style_sections %}
