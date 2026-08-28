@@ -38,9 +38,11 @@
       {% for group_name, items in tab_groups %}
       <details class="colors-group-details card settings-card"{% if loop.first %} open{% endif %}>
         <summary class="colors-group-summary">
-          <h2>{{ group_name }}</h2>
-          <span class="colors-group-chevron" aria-hidden="true">
-            <svg class="ico colors-chevron-ico" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+          <span class="colors-group-summary-inner">
+            <h2>{{ group_name }}</h2>
+            <span class="colors-group-chevron" aria-hidden="true">
+              <svg class="ico colors-chevron-ico" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </span>
           </span>
         </summary>
         <div class="btn-color-grid colors-group-grid">
