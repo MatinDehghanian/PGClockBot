@@ -467,7 +467,7 @@ class ButtonStyleTests(unittest.TestCase):
         self.assertIn("has-preview", Path("app/web/static/panel.css").read_text(encoding="utf-8"))
         self.assertIn("data-tg-preview-open", Path("app/web/templates/_tg_preview_chat.html").read_text(encoding="utf-8"))
         preview_js = Path("app/web/templates/_tg_preview_chat_js.html").read_text(encoding="utf-8")
-        self.assertIn("tab === 'colors'", preview_js)
+        self.assertNotIn("tab === 'colors'", preview_js)
         self.assertIn("styleTone", preview_js)
         self.assertIn("hasOwnProperty.call(values", preview_js)
         self.assertIn('data-tone', preview_js)
