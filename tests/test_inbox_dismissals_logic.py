@@ -100,6 +100,13 @@ class InboxDismissalsLogicTests(unittest.TestCase):
         self.assertIn("admin:owner", keys)
         self.assertIn("admin:p7", keys)
 
+    def test_staff_dismissal_clause_covers_username(self):
+        from app.services.inbox_dismissals import _staff_dismissal_clause
+
+        staff = {"role": "admin", "username": "owner", "org_principal_id": 7}
+        clause = _staff_dismissal_clause(staff)
+        self.assertIsNotNone(clause)
+
 
 if __name__ == "__main__":
     unittest.main()

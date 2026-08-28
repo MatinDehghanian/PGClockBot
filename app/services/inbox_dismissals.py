@@ -69,24 +69,56 @@ def staff_dismiss_key_candidates(staff: dict) -> list[str]:
         pid = int(staff.get("org_principal_id") or 0)
     except (TypeError, ValueError):
         pid = 0
+    username = str(staff.get("username") or "").strip()
     if pid > 0:
         add(f"op:{pid}")
         add(f"{role}:p{pid}")
         add(f"{role}:{pid}")
+        # Pre-prefix mistakes
+        add(f"p{pid}")
+        add(str(pid))
+    if username:
+        add(f"{role}:{username}")
+        add(username)
     for uid in (
         staff.get("bot_user_id"),
         staff.get("pg_staff_id"),
         staff.get("id"),
-        staff.get("username"),
     ):
         if uid is None or uid == "":
             continue
         add(f"{role}:{uid}")
+        add(str(uid))
         if staff.get("pg_staff_id") and uid == staff.get("pg_staff_id"):
             add(f"{role}:pgs{uid}")
+            add(f"pgs{uid}")
         if staff.get("bot_user_id") and uid == staff.get("bot_user_id"):
             add(f"{role}:b{uid}")
+            add(f"b{uid}")
     return keys
+
+
+def _staff_dismissal_clause(staff: dict):
+    """SQL filter matching canonical + every known legacy staff_key shape."""
+    from sqlalchemy import or_
+
+    keys = staff_dismiss_key_candidates(staff)
+    clauses = []
+    if keys:
+        clauses.append(PanelInboxDismissal.staff_key.in_(keys))
+    username = str(staff.get("username") or "").strip()
+    if username:
+        clauses.append(PanelInboxDismissal.staff_key.endswith(f":{username}"))
+    try:
+        pid = int(staff.get("org_principal_id") or 0)
+    except (TypeError, ValueError):
+        pid = 0
+    if pid > 0:
+        clauses.append(PanelInboxDismissal.staff_key.endswith(f":p{pid}"))
+        clauses.append(PanelInboxDismissal.staff_key == f"op:{pid}")
+    if not clauses:
+        return None
+    return or_(*clauses)
 
 
 def _utcnow() -> datetime:
@@ -135,17 +167,27 @@ async def upsert_dismissal(
     if mode not in (MODE_24H, MODE_FOREVER):
         raise ValueError("حالت حذف نامعتبر")
     entity_id = (entity_id or "").strip()[:64]
-    keys = staff_dismiss_key_candidates(staff)
-
-    existing = (
-        await session.execute(
-            select(PanelInboxDismissal).where(
-                PanelInboxDismissal.staff_key.in_(keys),
-                PanelInboxDismissal.alert_key == alert_key,
-                PanelInboxDismissal.entity_id == entity_id,
+    clause = _staff_dismissal_clause(staff)
+    existing = None
+    if clause is not None:
+        rows = list(
+            (
+                await session.execute(
+                    select(PanelInboxDismissal).where(
+                        clause,
+                        PanelInboxDismissal.alert_key == alert_key,
+                        PanelInboxDismissal.entity_id == entity_id,
+                    )
+                )
             )
+            .scalars()
+            .all()
         )
-    ).scalar_one_or_none()
+        if rows:
+            existing = rows[0]
+            # Collapse duplicates onto the canonical key
+            for dup in rows[1:]:
+                await session.delete(dup)
 
     if existing:
         existing.mode = mode
@@ -161,16 +203,6 @@ async def upsert_dismissal(
                 dismissed_at=_utcnow(),
             )
         )
-    # Drop duplicate legacy keys for the same alert so reset/load stay consistent.
-    legacy_keys = [k for k in staff_dismiss_key_candidates(staff) if k != key]
-    if legacy_keys:
-        await session.execute(
-            delete(PanelInboxDismissal).where(
-                PanelInboxDismissal.staff_key.in_(legacy_keys),
-                PanelInboxDismissal.alert_key == alert_key,
-                PanelInboxDismissal.entity_id == entity_id,
-            )
-        )
     await session.commit()
 
 
@@ -178,17 +210,11 @@ async def load_dismissals(
     session: AsyncSession,
     staff: dict,
 ) -> list[PanelInboxDismissal]:
-    keys = staff_dismiss_key_candidates(staff)
-    if not keys:
+    clause = _staff_dismissal_clause(staff)
+    if clause is None:
         return []
     return list(
-        (
-            await session.execute(
-                select(PanelInboxDismissal).where(
-                    PanelInboxDismissal.staff_key.in_(keys)
-                )
-            )
-        )
+        (await session.execute(select(PanelInboxDismissal).where(clause)))
         .scalars()
         .all()
     )
@@ -271,14 +297,19 @@ async def cleanup_resolved_dismissals(
 
 async def clear_staff_dismissals(session: AsyncSession, staff: dict) -> int:
     """Remove all persisted hide/snooze rows for this staff member."""
-    keys = staff_dismiss_key_candidates(staff)
-    if not keys:
+    clause = _staff_dismissal_clause(staff)
+    if clause is None:
         return 0
-    result = await session.execute(
-        delete(PanelInboxDismissal).where(PanelInboxDismissal.staff_key.in_(keys))
-    )
+    result = await session.execute(delete(PanelInboxDismissal).where(clause))
     await session.commit()
-    return int(result.rowcount or 0)
+    removed = int(result.rowcount or 0)
+    logger.info(
+        "inbox dismiss reset staff=%s removed=%s keys=%s",
+        staff_dismiss_key(staff),
+        removed,
+        staff_dismiss_key_candidates(staff)[:12],
+    )
+    return removed
 
 
 def _row_matches(row: PanelInboxDismissal, alert_key: str, entity_id: str = "") -> bool:
