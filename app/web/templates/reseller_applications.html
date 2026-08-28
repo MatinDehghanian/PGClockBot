@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title %}
+{% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar %}
 {% block title %}درخواست‌های نمایندگی{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -15,14 +15,19 @@
 </div>
 
 <div class="card card-flush">
+  {{ table_bulk_bar('/resellers/applications/bulk-action', [
+    {'key': 'approve', 'label': 'تأیید', 'class': 'btn-ok', 'confirm': '{n} درخواست تأیید شوند؟', 'confirm_title': 'تأیید گروهی', 'confirm_label': 'تأیید'},
+    {'key': 'reject', 'label': 'رد', 'class': 'btn-danger', 'confirm': '{n} درخواست رد شوند؟', 'confirm_title': 'رد گروهی', 'confirm_label': 'رد', 'danger': true},
+  ]) }}
   <div class="table-wrap">
-  <table class="table-compact">
+  <table class="table-compact" data-bulk-select>
     <thead>
-      <tr><th class="col-id">#</th><th class="col-user">کاربر</th><th class="col-hide-sm col-name">پلن</th><th class="col-amount">مبلغ</th><th class="col-status">وضعیت</th><th class="col-actions"></th></tr>
+      <tr>{{ table_select_head() }}<th class="col-id">#</th><th class="col-user">کاربر</th><th class="col-hide-sm col-name">پلن</th><th class="col-amount">مبلغ</th><th class="col-status">وضعیت</th><th class="col-actions"></th></tr>
     </thead>
     <tbody>
     {% for a in apps %}
-      <tr>
+      <tr data-bulk-ops="{% if a.status == 'awaiting_approval' %}approve,reject{% endif %}">
+        {{ table_select_cell(a.id) }}
         <td class="mono">{{ a.id }}</td>
         <td>
           {{ a.user.full_name or a.user.username or '—' if a.user else '—' }}
@@ -49,7 +54,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="muted">درخواستی نیست</td></tr>
+      <tr><td colspan="7" class="muted">درخواستی نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>

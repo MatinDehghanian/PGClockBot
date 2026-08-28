@@ -115,19 +115,27 @@
 </td>
 {%- endmacro %}
 
+{# actions: list of {key, label, class?, confirm, confirm_title?, danger?, warn?, reason?} #}
 {% macro table_bulk_bar(form_action, actions) -%}
 <div class="table-bulk-bar" hidden data-table-bulk-bar data-bulk-action="{{ form_action }}">
   <span class="table-bulk-count muted" data-bulk-count-label>۰ مورد</span>
   <div class="table-bulk-actions">
     {% for action in actions %}
     <button type="button"
-            class="btn btn-sm {{ action.class or 'btn-ghost' }}"
+            class="btn btn-sm table-bulk-op {{ action.class or 'btn-ghost' }}"
             data-bulk-op="{{ action.key }}"
+            hidden
+            disabled
             {% if action.confirm %}data-bulk-confirm="{{ action.confirm }}"{% endif %}
             {% if action.confirm_title %}data-bulk-confirm-title="{{ action.confirm_title }}"{% endif %}
+            {% if action.confirm_label %}data-bulk-confirm-label="{{ action.confirm_label }}"{% endif %}
             {% if action.danger %}data-bulk-confirm-danger="1"{% endif %}
             {% if action.warn %}data-bulk-confirm-warn="1"{% endif %}
-            {% if action.reason %}data-bulk-confirm-reason="1"{% endif %}>{{ action.label }}</button>
+            {% if action.reason %}data-bulk-confirm-reason="1"{% endif %}
+            {% if action.reason_label %}data-bulk-confirm-reason-label="{{ action.reason_label }}"{% endif %}>
+      <span class="table-bulk-op-label">{{ action.label }}</span>
+      <span class="table-bulk-op-count" data-bulk-op-count aria-hidden="true">۰</span>
+    </button>
     {% endfor %}
   </div>
 </div>

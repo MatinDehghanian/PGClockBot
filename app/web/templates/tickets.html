@@ -18,10 +18,14 @@
 </div>
 
 <div class="card card-flush">
+  {{ table_bulk_bar('/tickets/panel/bulk-action', [
+    {'key': 'close', 'label': 'بستن', 'confirm': '{n} تیکت پنلی بسته شوند؟', 'confirm_title': 'بستن گروهی', 'confirm_label': 'بستن', 'warn': true},
+  ]) }}
   <div class="table-wrap">
-  <table>
+  <table data-bulk-select>
     <thead>
       <tr>
+        {{ table_select_head() }}
         <th class="col-id">#</th>
         {% if is_owner %}<th>از</th>{% endif %}
         <th>موضوع</th>
@@ -33,7 +37,9 @@
     </thead>
     <tbody>
     {% for t in panel_tickets %}
-      <tr class="{% if (t.answered_unread and not is_owner) or (t.owner_unread and is_owner) %}is-unread{% endif %}">
+      <tr class="{% if (t.answered_unread and not is_owner) or (t.owner_unread and is_owner) %}is-unread{% endif %}"
+          data-bulk-ops="{% if t.status != 'closed' %}close{% endif %}">
+        {{ table_select_cell(t.id) }}
         <td class="mono">{{ t.id }}</td>
         {% if is_owner %}
         <td>
@@ -65,7 +71,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="{% if is_owner %}7{% else %}6{% endif %}" class="muted">هنوز تیکت پنلی ثبت نشده</td></tr>
+      <tr><td colspan="{% if is_owner %}8{% else %}7{% endif %}" class="muted">هنوز تیکت پنلی ثبت نشده</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -78,7 +84,7 @@
   <p class="muted page-sub">پشتیبانی کاربران تلگرام — پاسخ از همین‌جا مثل تلگرام برای کاربر ارسال می‌شود</p>
   <div class="card card-flush">
     {{ table_bulk_bar('/tickets/bot/bulk-action', [
-      {'key': 'close', 'label': 'بستن', 'confirm': 'تیکت‌های انتخاب‌شده بسته شوند؟', 'confirm_title': 'بستن گروهی', 'warn': true},
+      {'key': 'close', 'label': 'بستن', 'confirm': '{n} تیکت بسته شوند؟', 'confirm_title': 'بستن گروهی', 'confirm_label': 'بستن', 'warn': true},
     ]) }}
     <div class="table-wrap">
     <table data-bulk-select>
@@ -88,7 +94,7 @@
       <tbody>
       {% for row in tg_rows %}
         {% set t = row.ticket %}
-        <tr>
+        <tr data-bulk-ops="{% if t.status != 'closed' %}close{% endif %}">
           {{ table_select_cell(t.id) }}
           <td class="mono">{{ t.id }}</td>
           <td>

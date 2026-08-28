@@ -2336,7 +2336,7 @@
       });
     })();
 
-    /* Table bulk row selection */
+    /* Table bulk row selection — parallel to per-row actions, eligible-only */
     (function () {
       function faNum(n) {
         try {
@@ -2345,54 +2345,114 @@
           return String(n);
         }
       }
+      function rowOps(tr) {
+        const raw = (tr && tr.getAttribute('data-bulk-ops')) || '';
+        return raw.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+      function selectedRows(table) {
+        return Array.from(table.querySelectorAll('.table-select-input:checked'))
+          .map((inp) => inp.closest('tr'))
+          .filter(Boolean);
+      }
+      function eligibleIds(table, op) {
+        return selectedRows(table)
+          .filter((tr) => rowOps(tr).includes(op))
+          .map((tr) => {
+            const inp = tr.querySelector('.table-select-input');
+            return inp ? inp.value : '';
+          })
+          .filter(Boolean);
+      }
+      function findBulkBar(table) {
+        const tw = table.closest('.table-wrap');
+        let el = tw && tw.previousElementSibling;
+        while (el) {
+          if (el.hasAttribute && el.hasAttribute('data-table-bulk-bar')) return el;
+          if (el.classList && el.classList.contains('table-wrap')) break;
+          el = el.previousElementSibling;
+        }
+        const wrap = table.closest('.card, .ui-modal-panel');
+        if (wrap) {
+          /* Prefer bar immediately before this table's wrap when multiple tables share a card */
+          const bars = wrap.querySelectorAll('[data-table-bulk-bar]');
+          if (bars.length === 1) return bars[0];
+        }
+        return null;
+      }
       function updateBar(table) {
-        const wrap = table.closest('.card');
-        const bar = wrap && wrap.querySelector('[data-table-bulk-bar]');
+        const bar = findBulkBar(table);
         if (!bar) return;
-        const checked = table.querySelectorAll('.table-select-input:checked');
-        const count = checked.length;
+        const rows = selectedRows(table);
+        const count = rows.length;
         const label = bar.querySelector('[data-bulk-count-label]');
         if (label) label.textContent = faNum(count) + ' مورد';
-        bar.hidden = count === 0;
+
         const all = table.querySelector('.table-select-all-input');
-        const rows = table.querySelectorAll('.table-select-input');
-        if (all && rows.length) {
-          all.indeterminate = count > 0 && count < rows.length;
-          all.checked = count === rows.length;
+        const inputs = table.querySelectorAll('.table-select-input');
+        if (all && inputs.length) {
+          all.indeterminate = count > 0 && count < inputs.length;
+          all.checked = count === inputs.length && count > 0;
         }
         table.querySelectorAll('tbody tr').forEach((tr) => {
           const cb = tr.querySelector('.table-select-input');
           tr.classList.toggle('is-bulk-selected', !!(cb && cb.checked));
         });
+
+        let anyEligible = false;
+        bar.querySelectorAll('[data-bulk-op]').forEach((btn) => {
+          const op = btn.getAttribute('data-bulk-op');
+          const n = eligibleIds(table, op).length;
+          const badge = btn.querySelector('[data-bulk-op-count]');
+          if (badge) badge.textContent = faNum(n);
+          const show = count > 0 && n > 0;
+          if (show) anyEligible = true;
+          btn.hidden = !show;
+          btn.disabled = !show;
+          btn.classList.toggle('is-empty', n === 0);
+          btn.setAttribute('aria-label', (btn.querySelector('.table-bulk-op-label') || btn).textContent.trim() + ' (' + faNum(n) + ')');
+        });
+        /* No eligible bulk op for current selection → nothing to do */
+        bar.hidden = count === 0 || !anyEligible;
+      }
+      function cleanReturnTo() {
+        try {
+          const u = new URL(window.location.href);
+          u.searchParams.delete('ok');
+          u.searchParams.delete('err');
+          u.searchParams.delete('_');
+          return u.pathname + (u.search || '');
+        } catch (_) {
+          return window.location.pathname + window.location.search;
+        }
       }
       function submitBulk(table, actionKey, btn) {
-        const bar = table.closest('.card').querySelector('[data-table-bulk-bar]');
+        const bar = findBulkBar(table);
         const actionUrl = bar && bar.getAttribute('data-bulk-action');
         if (!actionUrl) return;
-        const ids = Array.from(table.querySelectorAll('.table-select-input:checked')).map((i) => i.value);
+        const ids = eligibleIds(table, actionKey);
         if (!ids.length) return;
-        const confirmMsg = btn.getAttribute('data-bulk-confirm') || 'ادامه می‌دهید؟';
+        const n = ids.length;
+        const baseMsg = btn.getAttribute('data-bulk-confirm') || 'ادامه می‌دهید؟';
+        const confirmMsg = baseMsg.replace(/\{n\}/g, faNum(n));
         const needsReason = btn.hasAttribute('data-bulk-confirm-reason');
-        if (needsReason && typeof showConfirmModal === 'function') {
-          showConfirmModal({
-            title: btn.getAttribute('data-bulk-confirm-title') || 'تأیید',
-            message: confirmMsg,
-            requireReason: true,
-            onConfirm: (reason) => postBulk(actionUrl, actionKey, ids, reason),
+        const opts = {
+          title: btn.getAttribute('data-bulk-confirm-title') || 'تأیید',
+          message: confirmMsg,
+          confirmLabel: btn.getAttribute('data-bulk-confirm-label') || 'تأیید',
+          danger: btn.hasAttribute('data-bulk-confirm-danger'),
+          warn: btn.hasAttribute('data-bulk-confirm-warn'),
+          requireReason: needsReason,
+          reasonLabel: btn.getAttribute('data-bulk-confirm-reason-label') || 'علت',
+        };
+        const run = (reason) => postBulk(actionUrl, actionKey, ids, reason || '');
+        if (typeof window.panelConfirm === 'function') {
+          window.panelConfirm(opts).then((result) => {
+            if (!result || !result.ok) return;
+            run(result.reason || '');
           });
           return;
         }
-        if (typeof showConfirmModal === 'function') {
-          showConfirmModal({
-            title: btn.getAttribute('data-bulk-confirm-title') || 'تأیید',
-            message: confirmMsg,
-            danger: btn.hasAttribute('data-bulk-confirm-danger'),
-            warn: btn.hasAttribute('data-bulk-confirm-warn'),
-            onConfirm: () => postBulk(actionUrl, actionKey, ids, ''),
-          });
-          return;
-        }
-        if (window.confirm(confirmMsg)) postBulk(actionUrl, actionKey, ids, '');
+        run('');
       }
       function postBulk(url, actionKey, ids, reason) {
         const form = document.createElement('form');
@@ -2406,7 +2466,7 @@
         const ret = document.createElement('input');
         ret.type = 'hidden';
         ret.name = 'return_to';
-        ret.value = window.location.pathname + window.location.search;
+        ret.value = cleanReturnTo();
         form.appendChild(ret);
         if (reason) {
           const r = document.createElement('input');
@@ -2437,11 +2497,11 @@
             updateBar(table);
           }
         });
-        const bar = table.closest('.card') && table.closest('.card').querySelector('[data-table-bulk-bar]');
+        const bar = findBulkBar(table);
         if (bar) {
           bar.addEventListener('click', (e) => {
             const btn = e.target.closest('[data-bulk-op]');
-            if (!btn) return;
+            if (!btn || btn.disabled || btn.hidden) return;
             e.preventDefault();
             submitBulk(table, btn.getAttribute('data-bulk-op'), btn);
           });
