@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.7.6": [
+        "وسط‌چین عمودی دقیق: چک‌باکس جدول (رفع margin سراسری label) و آکاردئون رنگبندی (wrapper داخلی + حذف padding/flex کارت)",
+        "فاصله آکاردئون‌ها کمتر (--space-1)",
+        "بدون مایگریشن DB — SW v42؛ ریستور: restore/pre-v8.7.6-v8.7.5",
+    ],
     "8.7.5": [
         "اعلان‌ها: reset/load روی همه شکل‌های legacy staff_key؛ upsert بدون MultipleResultsFound",
         "چک‌باکس bulk: دایره ۲۰px (هم‌ارتفاع badge) سمت راست جدول — برگشت از مربع/چپ اشتباه",

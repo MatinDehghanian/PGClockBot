@@ -9170,7 +9170,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .colors-tab-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
 .colors-tab-panel[hidden] {
   display: none !important;
@@ -9182,41 +9182,48 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .colors-groups-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
-.colors-groups-stack > .colors-group-details {
+/* Kill .card flex/gap/padding — those push summary content off true center */
+.colors-groups-stack > .colors-group-details.card,
+details.colors-group-details.card {
+  display: block !important;
+  padding: 0 !important;
+  gap: 0 !important;
   margin: 0 !important;
-}
-.colors-group-details {
-  padding: 0;
   overflow: hidden;
 }
-.colors-group-details > summary {
+.colors-group-details > summary.colors-group-summary {
+  display: block;
   list-style: none;
   cursor: pointer;
   padding: 0;
+  margin: 0;
 }
-.colors-group-details > summary::-webkit-details-marker,
-.colors-group-details > summary::marker {
+.colors-group-details > summary.colors-group-summary::-webkit-details-marker,
+.colors-group-details > summary.colors-group-summary::marker {
   display: none;
   content: "";
 }
-/* RTL grid: col1 (title) sits on the right, col2 (chevron) on the left */
-.colors-group-details > summary.colors-group-summary {
-  display: grid !important;
+/* Inner wrapper: Safari/WebKit ignores flex/grid on <summary> itself */
+.colors-group-summary-inner {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  justify-items: stretch;
   column-gap: var(--space-2);
   min-height: 44px;
+  height: 44px;
   padding: 0 var(--card-pad);
   box-sizing: border-box;
+  width: 100%;
 }
-.colors-group-summary h2 {
+.colors-group-summary-inner h2 {
   margin: 0;
   padding: 0;
   font-size: var(--title-size);
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -9225,7 +9232,6 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   align-self: center;
 }
 .colors-group-chevron {
-  flex: 0 0 auto;
   width: 28px;
   height: 28px;
   border-radius: 999px;
@@ -9236,6 +9242,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   justify-content: center;
   color: var(--muted-fg);
   align-self: center;
+  box-sizing: border-box;
   transition: border-color 0.15s ease, color 0.15s ease;
 }
 .colors-chevron-ico {
@@ -9258,6 +9265,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .colors-group-grid {
   padding: 0 var(--card-pad) var(--card-pad);
   gap: var(--space-2);
+  margin: 0;
 }
 .colors-dynamic-list {
   list-style: none;
@@ -9328,27 +9336,35 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 }
 
 /* —— Table bulk selection ——
-   Circle on the RIGHT (first col in RTL tables). Diameter = .badge min-height. */
-.col-select {
-  width: 28px;
-  min-width: 28px;
-  max-width: 36px;
+   Circle on the RIGHT (first col in RTL). Diameter = .badge min-height (20px).
+   Root cause of off-center: global `label { margin-bottom }` on .table-select-*. */
+th.col-select,
+td.col-select {
+  width: 36px;
+  min-width: 36px;
+  max-width: 40px;
+  padding: 0 !important;
   text-align: center;
-  vertical-align: middle;
-  padding-inline: 6px !important;
+  vertical-align: middle !important;
 }
 .table-select-all,
 .table-select-row {
-  display: inline-flex;
+  display: flex !important;
   align-items: center;
   justify-content: center;
-  margin: 0;
-  padding: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100%;
+  height: 100%;
+  min-height: 48px;
+  box-sizing: border-box;
   cursor: pointer;
-  width: auto;
-  height: auto;
-  min-height: 0;
   font-weight: 400;
+  line-height: 0;
+}
+thead th.col-select .table-select-all {
+  min-height: 40px;
+  height: 100%;
 }
 .table-bulk-check {
   -webkit-appearance: none !important;
@@ -9367,7 +9383,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   cursor: pointer;
   flex: 0 0 auto;
   box-sizing: border-box;
-  vertical-align: middle;
+  display: block;
   transition:
     border-color var(--motion-fast) var(--ease-standard),
     background var(--motion-fast) var(--ease-standard),

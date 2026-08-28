@@ -64,6 +64,8 @@ class DashboardAndBulkTests(unittest.TestCase):
         self.assertIn("width: 20px !important", panel_css)
         self.assertIn("height: 20px !important", panel_css)
         self.assertIn("border-radius: 50%", panel_css)
+        self.assertIn("margin: 0 !important", panel_css.split("Table bulk selection")[1].split("tbody tr.is-bulk-selected")[0])
+        self.assertIn("align-items: center", panel_css.split("Table bulk selection")[1].split("tbody tr.is-bulk-selected")[0])
         self.assertNotIn("border-radius: 4px", panel_css.split("Table bulk selection")[1].split("tbody tr.is-bulk-selected")[0])
 
     def test_pay_dest_delete_button(self):
