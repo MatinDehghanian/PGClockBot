@@ -85,10 +85,16 @@ class ItemButtonStyleTests(unittest.TestCase):
         from pathlib import Path
 
         html = Path("app/web/templates/_settings_colors.html").read_text(encoding="utf-8")
+        preview = Path("app/web/templates/_tg_preview_chat_js.html").read_text(encoding="utf-8")
+        chat = Path("app/web/templates/_tg_preview_chat.html").read_text(encoding="utf-8")
         self.assertIn("colors-subtabs", html)
         self.assertIn("colors_page_sections", html)
         self.assertIn("btn-color-chip", html)
         self.assertIn("colors-dynamic-list", html)
+        self.assertIn("renderColorsPreview", preview)
+        self.assertIn("pv-inline", chat)
+        self.assertIn("colors-tab-change", preview)
+        self.assertIn("getActiveColorsTab", preview)
 
     def test_simplified_catalog_labels(self):
         from app.services.button_styles import CATALOG_BY_ID

@@ -3706,6 +3706,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
         groups = {name: SETTING_GROUPS[name] for name in tab_groups if name in SETTING_GROUPS}
 
+        if tab == "colors":
+            from app.services.payment_destinations import enrich_payment_settings
+
+            values = enrich_payment_settings(values)
+
         # Bot settings tabs only in horizontal nav; panel tabs use sidebar.
         page_tabs = SETTINGS_TABS if tab not in PANEL_SETTINGS_KEYS else []
 

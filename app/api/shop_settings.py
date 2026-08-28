@@ -172,6 +172,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
 
         values = await get_all_settings(session, reseller_id=rid)
         values["show_reseller_apply"] = "0"
+        if tab == "colors":
+            from app.services.payment_destinations import enrich_payment_settings
+
+            values = enrich_payment_settings(values)
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
         # Hide platform-only fields from reseller menu tab
         groups = {name: SETTING_GROUPS[name] for name in tab_groups if name in SETTING_GROUPS}

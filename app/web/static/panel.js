@@ -2338,6 +2338,7 @@
             if (show) panel.removeAttribute('hidden');
             else panel.setAttribute('hidden', 'hidden');
           });
+          document.dispatchEvent(new CustomEvent('colors-tab-change'));
         });
       });
       function syncChips(card) {
@@ -2366,6 +2367,7 @@
             selectEl.dispatchEvent(new Event('change', { bubbles: true }));
             selectEl.dispatchEvent(new Event('input', { bubbles: true }));
             syncChips(card);
+            document.dispatchEvent(new CustomEvent('colors-tab-change'));
           });
         });
       });
