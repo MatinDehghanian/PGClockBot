@@ -10,11 +10,23 @@
     {{ page_title('inbox', 'اعلان‌ها و مرکز اقدام', 'neutral') }}
     <p class="muted page-sub">اعلان‌های فوری و میانبرهای عملیاتی امروز</p>
   </div>
+  {% if inbox_dismissals_count %}
+  <form method="post" action="/inbox/dismiss/reset" class="inbox-reset-form">
+    <input type="hidden" name="return_to" value="{{ request.url.path }}" />
+    <button type="submit" class="btn btn-sm btn-ghost">بازنشانی اعلان‌های مخفی</button>
+  </form>
+  {% endif %}
 </div>
 
 {% if not inbox_has %}
 <div class="card">
-  <p class="muted" style="margin:0">فعلاً اعلان یا اقدام فوری ندارید.</p>
+  <p class="muted" style="margin:0">
+    {% if inbox_dismissals_count %}
+    فعلاً اعلان قابل‌نمایشی ندارید — ممکن است قبلاً مخفی کرده باشید.
+    {% else %}
+    فعلاً اعلان یا اقدام فوری ندارید.
+    {% endif %}
+  </p>
 </div>
 {% else %}
 

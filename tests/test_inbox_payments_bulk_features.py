@@ -15,6 +15,8 @@ class InboxDismissalsTests(unittest.TestCase):
         self.assertIn("MODE_FOREVER", src)
         self.assertIn("filter_inbox_context", src)
         self.assertIn("filter_action_center_for_staff", src)
+        self.assertIn("clear_staff_dismissals", src)
+        self.assertIn("_action_center_active_keys", src)
         self.assertIn("SNOOZE_HOURS = 24", src)
 
     def test_dismiss_model(self):
@@ -58,12 +60,13 @@ class DashboardAndBulkTests(unittest.TestCase):
         self.assertIn("openModal('modal-inbox-dismiss')", panel_js)
         self.assertIn("is-bulk-selected", panel_js)
         self.assertIn("rgba(249, 115, 22, 0.08)", panel_css)
+        self.assertIn("width: 15px", panel_css)
 
     def test_pay_dest_delete_button(self):
         js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn("pay-dest-remove-btn", js)
-        self.assertIn("حذف</button>", js)
+        self.assertIn("btn-danger btn-sm pay-dest-remove", js)
         self.assertNotIn("pay-dest-actions", js)
         self.assertIn(".pay-dest-remove-btn", css)
 

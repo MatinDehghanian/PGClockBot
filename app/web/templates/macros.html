@@ -68,7 +68,7 @@
 {% macro switch_chip(name, label, checked=false, value='1') -%}
 <label class="ui-switch-chip">
   <span class="ui-switch-copy"><strong>{{ label }}</strong></span>
-  <span class="ui-switch ui-switch-sm">
+  <span class="ui-switch">
     <input type="checkbox" name="{{ name }}" value="{{ value }}"{% if checked %} checked{% endif %} />
     <span class="ui-switch-track" aria-hidden="true"></span>
   </span>

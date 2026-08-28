@@ -674,7 +674,8 @@ tr.principal-row-l2 td:first-child {
    PasarGuard look much looser than bot list pages. */
 .page-head:has(> .actions),
 .page-head:has(> .page-head-actions),
-.page-head:has(> .btn) {
+.page-head:has(> .btn),
+.page-head:has(> .inbox-reset-form) {
   flex-wrap: nowrap;
 }
 /* Legacy .pg-head wrapper — PG pages now use plain .page-head like bot
@@ -1567,15 +1568,15 @@ textarea[aria-invalid="true"] {
   position: relative;
   display: inline-flex;
   align-items: center;
-  width: 46px;
-  height: 28px;
+  width: 44px;
+  height: 26px;
   flex: 0 0 auto;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 .ui-switch-sm {
-  width: 40px;
-  height: 24px;
+  width: 44px;
+  height: 26px;
 }
 .ui-switch input {
   position: absolute;
@@ -1608,8 +1609,8 @@ textarea[aria-invalid="true"] {
   position: absolute;
   top: 50%;
   inset-inline-start: 3px;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
   background: #fafafa;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 1px rgba(0, 0, 0, 0.2);
@@ -1617,19 +1618,19 @@ textarea[aria-invalid="true"] {
   transition: inset-inline-start 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.22s ease;
 }
 .ui-switch-sm .ui-switch-track::after {
-  width: 18px;
-  height: 18px;
-  inset-inline-start: 2px;
+  width: 20px;
+  height: 20px;
+  inset-inline-start: 3px;
 }
 .ui-switch input:checked + .ui-switch-track {
   background: #16a34a;
   border-color: transparent;
 }
 .ui-switch input:checked + .ui-switch-track::after {
-  inset-inline-start: calc(100% - 25px);
+  inset-inline-start: calc(100% - 23px);
 }
 .ui-switch-sm input:checked + .ui-switch-track::after {
-  inset-inline-start: calc(100% - 20px);
+  inset-inline-start: calc(100% - 23px);
 }
 .ui-switch input:active + .ui-switch-track::after {
   transform: translateY(-50%) scaleX(1.08);
@@ -1945,7 +1946,8 @@ a.btn.btn-ghost:hover {
 .page-head > .actions,
 .page-head > .page-head-actions,
 .page-head > .btn,
-.page-head > a.btn {
+.page-head > a.btn,
+.page-head > .inbox-reset-form {
   margin-top: 0;
   flex: 0 0 auto;
   align-self: center;
@@ -9161,20 +9163,26 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   max-width: 320px;
 }
 
-/* —— Colors tab (section-tabs, chips, dynamic summary, accordions) —— */
+/* —— Colors tab (section-tabs, accordions, dynamic summary) —— */
 .colors-page-tabs {
   margin-bottom: 0;
 }
 .colors-tab-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--section-gap);
+  gap: var(--space-2);
 }
 .colors-tab-panel[hidden] {
   display: none !important;
 }
-.colors-tab-intro {
+.colors-tab-caption {
   margin: 0;
+  font-size: 13px;
+}
+.colors-groups-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 .colors-group-details {
   padding: 0;
@@ -9182,7 +9190,8 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .colors-group-details > summary {
   list-style: none;
   cursor: pointer;
-  padding: var(--card-pad);
+  min-height: 48px;
+  padding: 0 var(--card-pad);
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -9193,6 +9202,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .colors-group-summary h2 {
   margin: 0;
   font-size: var(--title-size);
+  line-height: 1.3;
   flex: 1;
   min-width: 0;
 }
@@ -9208,16 +9218,16 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   align-items: center;
   justify-content: center;
   color: var(--muted-fg);
-  transition: transform 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 .colors-group-chevron::before {
   content: "";
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-inline-end: 2px solid currentColor;
   border-block-end: 2px solid currentColor;
-  transform: rotate(-45deg);
-  margin-top: -2px;
+  transform: rotate(45deg);
+  margin-top: -3px;
   transition: transform 0.15s ease;
 }
 .colors-group-details[open] > summary .colors-group-chevron {
@@ -9225,10 +9235,12 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   color: var(--brand-fg);
 }
 .colors-group-details[open] > summary .colors-group-chevron::before {
-  transform: rotate(45deg);
+  transform: rotate(-135deg);
+  margin-top: 2px;
 }
-.colors-group-details > .btn-color-grid {
-  padding: 0 var(--card-pad) var(--card-pad);
+.colors-group-grid {
+  padding: var(--space-2) var(--card-pad) var(--card-pad);
+  gap: var(--space-2);
 }
 .colors-dynamic-list {
   list-style: none;
@@ -9259,48 +9271,16 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   font-size: 12px;
   white-space: nowrap;
 }
-.btn-color-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-}
-.btn-color-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.btn-color-chip {
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  border: 2px solid transparent;
-  padding: 0;
-  cursor: pointer;
-  background: #e4e4e7;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
-}
-.btn-color-chip[data-tone="primary"] {
-  background: #3390ec;
-}
-.btn-color-chip[data-tone="success"] {
-  background: #34c759;
-}
-.btn-color-chip[data-tone="danger"] {
-  background: #ff3b30;
-}
-.btn-color-chip.is-active {
-  border-color: var(--brand-fg);
-  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.35);
-}
-html[data-theme="light"] .btn-color-chip[data-tone="default"] {
-  background: #f4f4f5;
+
+.inbox-reset-form {
+  margin: 0;
+  flex: 0 0 auto;
 }
 
 /* —— Table bulk selection —— */
 .col-select {
-  width: 44px;
-  min-width: 44px;
+  width: 36px;
+  min-width: 36px;
   text-align: center;
   vertical-align: middle;
 }
@@ -9314,11 +9294,11 @@ html[data-theme="light"] .btn-color-chip[data-tone="default"] {
 }
 .table-bulk-check {
   appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   margin: 0;
   border-radius: 999px;
-  border: 2px solid color-mix(in srgb, var(--foreground) 28%, var(--border));
+  border: 1.5px solid color-mix(in srgb, var(--foreground) 28%, var(--border));
   background: transparent;
   cursor: pointer;
   flex: 0 0 auto;
@@ -9337,7 +9317,7 @@ html[data-theme="light"] .btn-color-chip[data-tone="default"] {
 .table-bulk-check:checked {
   border-color: var(--brand);
   background: var(--brand);
-  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--background) 82%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--background) 82%, transparent);
 }
 .table-bulk-check:indeterminate {
   border-color: var(--brand);

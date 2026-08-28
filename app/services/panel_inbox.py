@@ -211,12 +211,21 @@ async def build_inbox_context(
         expire_days = 3
 
     action_center = dict(_EMPTY_ACTION)
+    action_center_ok = True
     if has_scope:
-        action_center = await _safe_action_center(
-            session,
-            reseller_id=int(rid) if rid else None,
-            expire_days=expire_days,
-        )
+        try:
+            from app.services.ux20 import build_action_center
+
+            action_center = await build_action_center(
+                session,
+                reseller_id=int(rid) if rid else None,
+                expire_days=expire_days,
+            )
+        except Exception:
+            logger.exception("inbox action_center failed reseller_id=%s", rid)
+            await rollback_quiet(session)
+            action_center = dict(_EMPTY_ACTION)
+            action_center_ok = False
 
     shop_maintenance = on(ui.get("shop_maintenance_enabled"))
     capacity_warn = False
@@ -258,6 +267,8 @@ async def build_inbox_context(
         "payg_risk": payg_risk,
         "inbox_count": 0,
         "inbox_has": False,
+        "action_center_ok": action_center_ok,
+        "inbox_dismissals_count": 0,
     }
     ctx["inbox_count"] = inbox_alert_count(ctx)
     ctx["inbox_has"] = ctx["inbox_count"] > 0
@@ -271,8 +282,10 @@ async def build_inbox_context(
 
         await cleanup_resolved_dismissals(session, staff, ctx)
         dismissals = await load_dismissals(session, staff)
+        ctx["inbox_dismissals_count"] = len(dismissals)
         if dismissals:
             ctx = filter_inbox_context(ctx, dismissals)
+            ctx["inbox_dismissals_count"] = len(dismissals)
     except Exception:
         logger.exception("inbox dismissals filter failed")
         await rollback_quiet(session)
