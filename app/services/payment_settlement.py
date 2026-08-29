@@ -10,6 +10,7 @@ Success always ends in ``approve_payment`` — settlement becomes SETTLED only a
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import json
 import logging
@@ -145,6 +146,74 @@ def _embed_mock_token(checkout_url: str, token: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), parts.fragment))
 
 
+async def _await_open_settlement(
+    session: AsyncSession,
+    *,
+    idem: str,
+    payment_id: int,
+    channel: str,
+    require_checkout_url: bool = False,
+    attempts: int = 50,
+    delay_s: float = 0.05,
+) -> PaymentSettlement | None:
+    """Poll for the winner row after a lost insert race (same DB, other session)."""
+    for _ in range(max(1, attempts)):
+        raced = await _get_by_idem(session, idem) or await _get_open_for_payment_channel(
+            session, payment_id=payment_id, channel=channel
+        )
+        if raced is None:
+            await asyncio.sleep(delay_s)
+            continue
+        if raced.status == SettlementStatus.FAILED.value:
+            return raced
+        if raced.status == SettlementStatus.SETTLED.value:
+            return raced
+        if require_checkout_url:
+            if raced.status == SettlementStatus.AWAITING.value and (raced.checkout_url or "").strip():
+                return raced
+        elif raced.status in _OPEN_STATUSES or raced.status == SettlementStatus.AWAITING.value:
+            return raced
+        await asyncio.sleep(delay_s)
+    return await _get_by_idem(session, idem) or await _get_open_for_payment_channel(
+        session, payment_id=payment_id, channel=channel
+    )
+
+
+async def _insert_settlement_race_safe(
+    session: AsyncSession, settlement: PaymentSettlement
+) -> PaymentSettlement:
+    """INSERT with SAVEPOINT — on conflict return the winning row (no full rollback)."""
+    try:
+        async with session.begin_nested():
+            session.add(settlement)
+            await session.flush()
+        return settlement
+    except IntegrityError:
+        # SAVEPOINT rollback may already detach the failed instance.
+        if settlement in session:
+            session.expunge(settlement)
+        idem = settlement.idempotency_key
+        payment_id = int(settlement.payment_id)
+        channel = str(settlement.channel)
+        raced = await _get_by_idem(session, idem)
+        if raced is None:
+            raced = await _get_open_for_payment_channel(
+                session, payment_id=payment_id, channel=channel
+            )
+        if raced is None:
+            # Peer may still hold an uncommitted insert — poll briefly.
+            raced = await _await_open_settlement(
+                session,
+                idem=idem,
+                payment_id=payment_id,
+                channel=channel,
+                require_checkout_url=False,
+            )
+        if raced is None:
+            raise ValueError("ساخت تسویه همزمان ناموفق بود — دوباره تلاش کنید")
+        return raced
+
+
 async def create_psp_checkout(
     session: AsyncSession,
     payment: Payment,
@@ -206,7 +275,7 @@ async def create_psp_checkout(
         settlement.settled_at = None
         settlement.checkout_token = secrets.token_urlsafe(24)
     else:
-        settlement = PaymentSettlement(
+        candidate = PaymentSettlement(
             payment_id=int(payment.id),
             shop_owner_id=shop_owner_id,
             tenant_key=tenant_key_for(shop_owner_id),
@@ -218,20 +287,29 @@ async def create_psp_checkout(
             idempotency_key=idem,
             checkout_token=secrets.token_urlsafe(24),
         )
-        session.add(settlement)
-        try:
-            await session.flush()
-        except IntegrityError:
-            await session.rollback()
-            # Concurrent insert won — return that checkout.
-            raced = await _get_by_idem(session, idem) or await _get_open_for_payment_channel(
-                session, payment_id=int(payment.id), channel=CHANNEL_PSP
+        inserted = await _insert_settlement_race_safe(session, candidate)
+        if inserted is not candidate:
+            # Lost insert race — never roll back caller; wait for winner checkout.
+            if inserted.status == SettlementStatus.AWAITING.value and (
+                inserted.checkout_url or ""
+            ).strip():
+                return inserted
+            if inserted.status in {
+                SettlementStatus.SETTLING.value,
+                SettlementStatus.SETTLED.value,
+            }:
+                return inserted
+            raced = await _await_open_settlement(
+                session,
+                idem=idem,
+                payment_id=int(payment.id),
+                channel=CHANNEL_PSP,
+                require_checkout_url=True,
             )
-            if raced and (raced.checkout_url or "").strip():
-                return raced
             if raced:
                 return raced
             raise ValueError("ساخت تسویه همزمان ناموفق بود — دوباره تلاش کنید")
+        settlement = inserted
 
     adapter = get_psp_adapter(provider, ui=ui, public_base_url=base)
     token = settlement.checkout_token or secrets.token_urlsafe(24)
@@ -331,21 +409,15 @@ async def create_card_auto_awaiting(
         idempotency_key=idem,
         external_ref=None,
     )
-    session.add(settlement)
     if not payment.receipt_file_id:
         payment.receipt_file_id = f"card_auto:awaiting:{payment.id}"[:255]
-    try:
+    inserted = await _insert_settlement_race_safe(session, settlement)
+    if inserted is not settlement:
         await session.commit()
-    except IntegrityError:
-        await session.rollback()
-        raced = await _get_by_idem(session, idem) or await _get_open_for_payment_channel(
-            session, payment_id=int(payment.id), channel=CHANNEL_CARD_AUTO
-        )
-        if raced:
-            return raced
-        raise
-    await session.refresh(settlement)
-    return settlement
+        return inserted
+    await session.commit()
+    await session.refresh(inserted)
+    return inserted
 
 
 async def _claim_for_settle(
@@ -353,8 +425,12 @@ async def _claim_for_settle(
     settlement: PaymentSettlement,
     *,
     external_ref: str | None,
-) -> PaymentSettlement:
-    """Move created/awaiting → settling (consumes mock token). Race-safe."""
+) -> tuple[PaymentSettlement, bool]:
+    """Move created/awaiting → settling. Returns (row, won_claim).
+
+    Only the caller with ``won_claim=True`` may call ``approve_payment``.
+    Uses SAVEPOINT on IntegrityError (duplicate external_ref) — no full rollback.
+    """
     sid = int(settlement.id)
     values: dict[str, Any] = {
         "status": SettlementStatus.SETTLING.value,
@@ -364,24 +440,24 @@ async def _claim_for_settle(
     if external_ref:
         values["external_ref"] = external_ref[:128]
     try:
-        with session.no_autoflush:
-            claim = await session.execute(
-                update(PaymentSettlement)
-                .where(
-                    PaymentSettlement.id == sid,
-                    PaymentSettlement.status.in_(
-                        (
-                            SettlementStatus.CREATED.value,
-                            SettlementStatus.AWAITING.value,
-                        )
-                    ),
+        async with session.begin_nested():
+            with session.no_autoflush:
+                claim = await session.execute(
+                    update(PaymentSettlement)
+                    .where(
+                        PaymentSettlement.id == sid,
+                        PaymentSettlement.status.in_(
+                            (
+                                SettlementStatus.CREATED.value,
+                                SettlementStatus.AWAITING.value,
+                            )
+                        ),
+                    )
+                    .values(**values)
+                    .execution_options(synchronize_session=False)
                 )
-                .values(**values)
-                .execution_options(synchronize_session=False)
-            )
-            await session.flush()
+                await session.flush()
     except IntegrityError as exc:
-        await session.rollback()
         # Duplicate provider event under unique tenant_ext_ref — return winner.
         if external_ref:
             winner = (
@@ -401,18 +477,47 @@ async def _claim_for_settle(
                 )
             ).scalar_one_or_none()
             if winner:
-                return winner
+                return winner, False
         raise ValueError("رویداد تکراری یا ناسازگار") from exc
 
     await session.refresh(settlement)
     if claim.rowcount == 1:
-        return settlement
+        return settlement, True
     if settlement.status in {
         SettlementStatus.SETTLING.value,
         SettlementStatus.SETTLED.value,
     }:
-        return settlement
+        return settlement, False
     raise ValueError("این تسویه قابل تأیید نیست")
+
+
+async def _wait_for_peer_settle(
+    session: AsyncSession,
+    settlement: PaymentSettlement,
+    payment: Payment,
+) -> Payment:
+    """Loser of claim: do not approve; wait for winner to finish."""
+    for _ in range(60):
+        await session.refresh(settlement)
+        await session.refresh(payment)
+        if settlement.status == SettlementStatus.SETTLED.value:
+            return payment
+        if payment.status == PaymentStatus.APPROVED.value:
+            # Winner approved; help finalize if needed (conditional UPDATE).
+            await _finalize_settled(session, settlement)
+            await session.commit()
+            await session.refresh(settlement)
+            return payment
+        await asyncio.sleep(0.05)
+    await session.refresh(settlement)
+    await session.refresh(payment)
+    if settlement.status == SettlementStatus.SETTLED.value:
+        return payment
+    if payment.status == PaymentStatus.APPROVED.value:
+        await _finalize_settled(session, settlement)
+        await session.commit()
+        return payment
+    raise ValueError("تسویه توسط درخواست دیگر در حال انجام است")
 
 
 async def _finalize_settled(
@@ -512,7 +617,9 @@ async def settle_and_approve(
             return payment
         raise ValueError("وضعیت پرداخت برای تسویه مناسب نیست")
 
-    await _claim_for_settle(session, settlement, external_ref=external_ref)
+    settlement, won = await _claim_for_settle(session, settlement, external_ref=external_ref)
+    if not won:
+        return await _wait_for_peer_settle(session, settlement, payment)
 
     if payment.status == PaymentStatus.APPROVED.value:
         await _finalize_settled(session, settlement)
@@ -733,7 +840,7 @@ async def handle_card_auto_webhook(
         )
 
     if settlement is None:
-        settlement = PaymentSettlement(
+        candidate = PaymentSettlement(
             payment_id=int(payment.id),
             shop_owner_id=shop_owner_id,
             tenant_key=tkey,
@@ -744,14 +851,8 @@ async def handle_card_auto_webhook(
             currency="IRT",
             idempotency_key=idem_key_card_auto(int(payment.id)),
         )
-        session.add(settlement)
-        try:
-            await session.flush()
-        except IntegrityError:
-            await session.rollback()
-            settlement = await _get_by_idem(session, idem_key_card_auto(int(payment.id)))
-            if not settlement:
-                raise ValueError("ثبت تسویه همزمان ناموفق بود")
+        inserted = await _insert_settlement_race_safe(session, candidate)
+        settlement = inserted
     elif not _shop_ids_equal(settlement.shop_owner_id, shop_owner_id):
         raise ValueError("محدوده فروشگاه ناسازگار است")
     else:

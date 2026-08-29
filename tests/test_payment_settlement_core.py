@@ -692,6 +692,242 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
                     session, body=body, signature=sig, shop_owner_id=r2.id
                 )
 
+    async def test_integrity_error_savepoint_preserves_prior_session_work(self):
+        """IntegrityError on settlement insert must not wipe unrelated dirty state."""
+        from app.db.models import (
+            Order,
+            OrderStatus,
+            Payment,
+            PaymentMethod,
+            PaymentSettlement,
+            PaymentStatus,
+            SettlementStatus,
+        )
+        from app.services import payment_settlement as ps
+
+        async with self.Session() as session:
+            u = await self._user(session, 91020, "SP91020")
+            order = Order(
+                user_id=u.id,
+                amount=5000,
+                status=OrderStatus.AWAITING_RECEIPT.value,
+                payment_method=PaymentMethod.PSP.value,
+            )
+            session.add(order)
+            await session.flush()
+            payment = Payment(
+                order_id=order.id,
+                user_id=u.id,
+                amount=5000,
+                method=PaymentMethod.PSP.value,
+                status=PaymentStatus.PENDING.value,
+            )
+            session.add(payment)
+            await session.commit()
+            await session.refresh(payment)
+
+            winner = PaymentSettlement(
+                payment_id=payment.id,
+                shop_owner_id=None,
+                tenant_key=0,
+                channel="psp",
+                provider="mock",
+                status=SettlementStatus.AWAITING.value,
+                amount=5000,
+                currency="IRT",
+                idempotency_key=f"psp:{payment.id}",
+                checkout_url="https://example.test/pay",
+            )
+            session.add(winner)
+            await session.commit()
+
+            # Uncommitted prior work in this session (must survive insert conflict).
+            payment.receipt_file_id = "keep-me-after-integrity-error"
+            dup = PaymentSettlement(
+                payment_id=payment.id,
+                shop_owner_id=None,
+                tenant_key=0,
+                channel="psp",
+                provider="mock",
+                status=SettlementStatus.CREATED.value,
+                amount=5000,
+                currency="IRT",
+                idempotency_key=f"psp:{payment.id}",
+            )
+            got = await ps._insert_settlement_race_safe(session, dup)
+            self.assertEqual(got.id, winner.id)
+            self.assertEqual(payment.receipt_file_id, "keep-me-after-integrity-error")
+            await session.commit()
+            await session.refresh(payment)
+            self.assertEqual(payment.receipt_file_id, "keep-me-after-integrity-error")
+
+    async def test_concurrent_settle_two_sessions_single_approve(self):
+        """Two AsyncSessions racing settle_and_approve → one claim, one approve, one SETTLED."""
+        import asyncio
+
+        from app.db.models import (
+            Order,
+            OrderStatus,
+            Payment,
+            PaymentMethod,
+            PaymentSettlement,
+            PaymentStatus,
+            SettlementStatus,
+        )
+        from app.services import payment_settlement as ps
+
+        async with self.Session() as setup:
+            u = await self._user(setup, 91021, "RC91021")
+            order = Order(
+                user_id=u.id,
+                amount=15000,
+                status=OrderStatus.AWAITING_RECEIPT.value,
+                payment_method=PaymentMethod.CARD.value,
+            )
+            setup.add(order)
+            await setup.flush()
+            payment = Payment(
+                order_id=order.id,
+                user_id=u.id,
+                amount=15000,
+                method=PaymentMethod.CARD.value,
+                status=PaymentStatus.PENDING.value,
+                receipt_file_id="card_auto:awaiting:x",
+            )
+            setup.add(payment)
+            await setup.flush()
+            settlement = PaymentSettlement(
+                payment_id=payment.id,
+                shop_owner_id=None,
+                tenant_key=0,
+                channel="card_auto",
+                provider="generic",
+                status=SettlementStatus.AWAITING.value,
+                amount=15000,
+                currency="IRT",
+                idempotency_key=f"card_auto:{payment.id}",
+            )
+            setup.add(settlement)
+            await setup.commit()
+            payment_id = payment.id
+            settlement_id = settlement.id
+
+        approve_calls = {"n": 0}
+        gate = asyncio.Event()
+
+        async def _counting_approve(session, payment, reviewer_tg=0):
+            approve_calls["n"] += 1
+            # Hold claim so the peer session can attempt settle concurrently.
+            await gate.wait()
+            await asyncio.sleep(0.05)
+            if payment.status != PaymentStatus.APPROVED.value:
+                payment.status = PaymentStatus.APPROVED.value
+            await session.commit()
+            return None
+
+        orig = ps.approve_payment
+        ps.approve_payment = _counting_approve
+        try:
+
+            async def _race():
+                async with self.Session() as session:
+                    s = await session.get(PaymentSettlement, settlement_id)
+                    return await ps.settle_and_approve(
+                        session,
+                        s,
+                        expected_amount=15000,
+                        external_ref="evt-race-1",
+                    )
+
+            t1 = asyncio.create_task(_race())
+            t2 = asyncio.create_task(_race())
+            # Let both enter claim; winner blocks inside approve until gate opens.
+            await asyncio.sleep(0.15)
+            gate.set()
+            results = await asyncio.gather(t1, t2)
+        finally:
+            ps.approve_payment = orig
+
+        self.assertEqual(approve_calls["n"], 1)
+        self.assertEqual(len(results), 2)
+        for pay in results:
+            self.assertEqual(pay.status, PaymentStatus.APPROVED.value)
+            self.assertEqual(pay.id, payment_id)
+
+        async with self.Session() as session:
+            payment = await session.get(Payment, payment_id)
+            settlement = await session.get(PaymentSettlement, settlement_id)
+            self.assertEqual(payment.status, PaymentStatus.APPROVED.value)
+            self.assertEqual(settlement.status, SettlementStatus.SETTLED.value)
+            self.assertEqual(settlement.external_ref, "evt-race-1")
+
+    async def test_concurrent_psp_checkout_two_sessions_single_row(self):
+        """Two AsyncSessions creating PSP checkout → one settlement row, same id returned."""
+        import asyncio
+
+        from sqlalchemy import func, select
+
+        from app.db.models import (
+            Order,
+            OrderStatus,
+            Payment,
+            PaymentMethod,
+            PaymentSettlement,
+            PaymentStatus,
+        )
+        from app.services.payment_settlement import create_psp_checkout
+        from app.services.users import set_setting
+
+        async with self.Session() as setup:
+            await set_setting(setup, "pay_psp_enabled", "1")
+            await set_setting(setup, "psp_provider", "mock")
+            u = await self._user(setup, 91022, "PC91022")
+            order = Order(
+                user_id=u.id,
+                amount=22000,
+                status=OrderStatus.AWAITING_RECEIPT.value,
+                payment_method=PaymentMethod.PSP.value,
+            )
+            setup.add(order)
+            await setup.flush()
+            payment = Payment(
+                order_id=order.id,
+                user_id=u.id,
+                amount=22000,
+                method=PaymentMethod.PSP.value,
+                status=PaymentStatus.PENDING.value,
+            )
+            setup.add(payment)
+            await setup.commit()
+            payment_id = payment.id
+
+        with patch(
+            "app.services.payment_settlement.settlement_mock_allowed",
+            return_value=True,
+        ):
+
+            async def _checkout():
+                async with self.Session() as session:
+                    payment = await session.get(Payment, payment_id)
+                    return await create_psp_checkout(session, payment)
+
+            s1, s2 = await asyncio.gather(_checkout(), _checkout())
+
+        self.assertEqual(s1.id, s2.id)
+        self.assertTrue((s1.checkout_url or "").strip())
+        self.assertTrue((s2.checkout_url or "").strip())
+        self.assertEqual(s1.checkout_url, s2.checkout_url)
+
+        async with self.Session() as session:
+            n = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(PaymentSettlement)
+                    .where(PaymentSettlement.payment_id == payment_id)
+                )
+            ).scalar_one()
+            self.assertEqual(int(n), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
