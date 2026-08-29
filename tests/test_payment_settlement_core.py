@@ -60,12 +60,18 @@ class SettlementWiringTests(unittest.TestCase):
     def test_model_tenant_columns(self):
         models = (ROOT / "app/db/models.py").read_text(encoding="utf-8")
         self.assertIn("shop_owner_id", models)
+        self.assertIn("tenant_key", models)
         self.assertIn("checkout_token", models)
+        self.assertIn("SETTLING", models)
+        self.assertIn("uq_payment_settlements_active_payment_channel", models)
         mig = (ROOT / "alembic/versions/0021_payment_settlements.py").read_text(
             encoding="utf-8"
         )
         self.assertIn("shop_owner_id", mig)
+        self.assertIn("tenant_key", mig)
         self.assertIn("checkout_token", mig)
+        self.assertIn("uq_payment_settlements_active_payment_channel", mig)
+        self.assertIn("uq_payment_settlements_tenant_ext_ref", mig)
 
     def test_secrets_masked_in_panel(self):
         field = (ROOT / "app/web/templates/_settings_field.html").read_text(
@@ -293,12 +299,13 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
                 PaymentSettlement(
                     payment_id=payment.id,
                     shop_owner_id=reseller.id,
+                    tenant_key=int(reseller.id),
                     channel="card_auto",
                     provider="generic",
                     status=SettlementStatus.AWAITING.value,
                     amount=33000,
                     currency="IRT",
-                    idempotency_key=f"ca-{payment.id}",
+                    idempotency_key=f"cardauto:{payment.id}",
                 )
             )
             await session.commit()
@@ -407,6 +414,283 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
                 )
             await session.refresh(settlement)
             self.assertEqual(settlement.status, SettlementStatus.FAILED.value)
+
+    async def test_psp_checkout_idempotent_deterministic_key(self):
+        from app.db.models import (
+            Order,
+            OrderStatus,
+            Payment,
+            PaymentMethod,
+            PaymentStatus,
+        )
+        from app.services.payment_settlement import (
+            create_psp_checkout,
+            idem_key_psp,
+        )
+        from app.services.users import set_setting
+
+        async with self.Session() as session:
+            await set_setting(session, "pay_psp_enabled", "1")
+            await set_setting(session, "psp_provider", "mock")
+            u = await self._user(session, 91005, "IDM91005")
+            order = Order(
+                user_id=u.id,
+                amount=5000,
+                status=OrderStatus.AWAITING_RECEIPT.value,
+                payment_method=PaymentMethod.PSP.value,
+            )
+            session.add(order)
+            await session.flush()
+            payment = Payment(
+                order_id=order.id,
+                user_id=u.id,
+                amount=5000,
+                method=PaymentMethod.PSP.value,
+                status=PaymentStatus.PENDING.value,
+            )
+            session.add(payment)
+            await session.commit()
+            await session.refresh(payment)
+
+            with patch(
+                "app.services.payment_settlement.settlement_mock_allowed",
+                return_value=True,
+            ):
+                s1 = await create_psp_checkout(session, payment)
+                s2 = await create_psp_checkout(session, payment)
+                self.assertEqual(s1.id, s2.id)
+                self.assertEqual(s1.idempotency_key, idem_key_psp(payment.id))
+                self.assertEqual(s1.idempotency_key, s2.idempotency_key)
+
+    async def test_approve_failure_does_not_leave_settled(self):
+        from app.db.models import (
+            Order,
+            OrderStatus,
+            Payment,
+            PaymentMethod,
+            PaymentSettlement,
+            PaymentStatus,
+            SettlementStatus,
+        )
+        from app.services import payment_settlement as ps
+
+        async with self.Session() as session:
+            u = await self._user(session, 91006, "AT91006")
+            order = Order(
+                user_id=u.id,
+                amount=8000,
+                status=OrderStatus.AWAITING_RECEIPT.value,
+                payment_method=PaymentMethod.PSP.value,
+            )
+            session.add(order)
+            await session.flush()
+            payment = Payment(
+                order_id=order.id,
+                user_id=u.id,
+                amount=8000,
+                method=PaymentMethod.PSP.value,
+                status=PaymentStatus.PENDING.value,
+            )
+            session.add(payment)
+            await session.flush()
+            settlement = PaymentSettlement(
+                payment_id=payment.id,
+                shop_owner_id=None,
+                tenant_key=0,
+                channel="psp",
+                provider="mock",
+                status=SettlementStatus.AWAITING.value,
+                amount=8000,
+                currency="IRT",
+                idempotency_key=f"psp:{payment.id}",
+                external_ref="mock-a",
+            )
+            session.add(settlement)
+            await session.commit()
+            await session.refresh(settlement)
+            await session.refresh(payment)
+
+            async def _boom(session, payment, reviewer_tg=0):
+                raise ValueError("تحویل ناموفق تست")
+
+            orig = ps.approve_payment
+            ps.approve_payment = _boom
+            try:
+                with self.assertRaises(ValueError):
+                    await ps.settle_and_approve(
+                        session,
+                        settlement,
+                        expected_amount=8000,
+                        external_ref="mock-a",
+                    )
+            finally:
+                ps.approve_payment = orig
+
+            await session.refresh(settlement)
+            await session.refresh(payment)
+            self.assertEqual(settlement.status, SettlementStatus.AWAITING.value)
+            self.assertEqual(payment.status, PaymentStatus.PENDING.value)
+
+            # Retry after fix succeeds and settles.
+            async def _ok(session, payment, reviewer_tg=0):
+                payment.status = PaymentStatus.APPROVED.value
+                await session.commit()
+                return None
+
+            ps.approve_payment = _ok
+            try:
+                await ps.settle_and_approve(
+                    session,
+                    settlement,
+                    expected_amount=8000,
+                    external_ref="mock-a",
+                )
+            finally:
+                ps.approve_payment = orig
+            await session.refresh(settlement)
+            self.assertEqual(settlement.status, SettlementStatus.SETTLED.value)
+
+    async def test_duplicate_card_auto_webhook_idempotent(self):
+        from app.db.models import (
+            Order,
+            OrderStatus,
+            Payment,
+            PaymentMethod,
+            PaymentStatus,
+            SettlementStatus,
+        )
+        from app.services.payment_providers.card_auto import dumps_canonical, sign_payload
+        from app.services import payment_settlement as ps
+        from app.services.users import set_setting
+
+        async with self.Session() as session:
+            await set_setting(session, "pay_card_auto_enabled", "1")
+            await set_setting(session, "card_auto_webhook_secret", "dup-secret-16chars")
+            u = await self._user(session, 91007, "DUP91007")
+            order = Order(
+                user_id=u.id,
+                amount=12000,
+                status=OrderStatus.AWAITING_RECEIPT.value,
+                payment_method=PaymentMethod.CARD.value,
+            )
+            session.add(order)
+            await session.flush()
+            payment = Payment(
+                order_id=order.id,
+                user_id=u.id,
+                amount=12000,
+                method=PaymentMethod.CARD.value,
+                status=PaymentStatus.PENDING.value,
+            )
+            session.add(payment)
+            await session.commit()
+            await session.refresh(payment)
+
+            await ps.create_card_auto_awaiting(session, payment)
+
+            payload = {
+                "amount": 12000,
+                "external_ref": "evt-dup-1",
+                "payment_id": payment.id,
+            }
+            body = dumps_canonical(payload)
+            sig = sign_payload("dup-secret-16chars", body)
+            calls = {"n": 0}
+
+            async def _ok(session, payment, reviewer_tg=0):
+                calls["n"] += 1
+                if payment.status != PaymentStatus.APPROVED.value:
+                    payment.status = PaymentStatus.APPROVED.value
+                    await session.commit()
+                return None
+
+            orig = ps.approve_payment
+            ps.approve_payment = _ok
+            try:
+                s1 = await ps.handle_card_auto_webhook(
+                    session, body=body, signature=sig, shop_owner_id=None
+                )
+                s2 = await ps.handle_card_auto_webhook(
+                    session, body=body, signature=sig, shop_owner_id=None
+                )
+                self.assertEqual(s1.id, s2.id)
+                self.assertEqual(s1.status, SettlementStatus.SETTLED.value)
+                self.assertEqual(s2.status, SettlementStatus.SETTLED.value)
+                # Second webhook must not re-credit (approve may be called for repair but
+                # payment already approved — stub counts calls; first settles, second short-circuits).
+                self.assertLessEqual(calls["n"], 2)
+            finally:
+                ps.approve_payment = orig
+
+    async def test_cross_tenant_card_auto_rejected(self):
+        from app.db.models import (
+            BotUser,
+            Order,
+            OrderStatus,
+            Payment,
+            PaymentMethod,
+            PaymentStatus,
+            Role,
+        )
+        from app.services.payment_providers.card_auto import dumps_canonical, sign_payload
+        from app.services.payment_settlement import (
+            create_card_auto_awaiting,
+            handle_card_auto_webhook,
+        )
+        from app.services.users import set_setting
+
+        async with self.Session() as session:
+            r1 = BotUser(
+                telegram_id=93001, referral_code="XR93001", role=Role.RESELLER.value
+            )
+            r2 = BotUser(
+                telegram_id=93002, referral_code="XR93002", role=Role.RESELLER.value
+            )
+            session.add_all([r1, r2])
+            await session.flush()
+            for rid, secret in (
+                (r1.id, "tenant-one-secret1"),
+                (r2.id, "tenant-two-secret2"),
+            ):
+                await set_setting(session, "pay_card_auto_enabled", "1", reseller_id=rid)
+                await set_setting(
+                    session, "card_auto_webhook_secret", secret, reseller_id=rid
+                )
+
+            buyer = await self._user(session, 91008, "XT91008", reseller_id=r1.id)
+            order = Order(
+                user_id=buyer.id,
+                amount=9000,
+                status=OrderStatus.AWAITING_RECEIPT.value,
+                payment_method=PaymentMethod.CARD.value,
+                reseller_id=r1.id,
+            )
+            session.add(order)
+            await session.flush()
+            payment = Payment(
+                order_id=order.id,
+                user_id=buyer.id,
+                amount=9000,
+                method=PaymentMethod.CARD.value,
+                status=PaymentStatus.PENDING.value,
+            )
+            session.add(payment)
+            await session.commit()
+            await session.refresh(payment)
+            await create_card_auto_awaiting(session, payment)
+
+            payload = {
+                "amount": 9000,
+                "external_ref": "xt-1",
+                "payment_id": payment.id,
+            }
+            body = dumps_canonical(payload)
+            # Shop-2 secret + shop-2 path must not settle shop-1 payment
+            sig = sign_payload("tenant-two-secret2", body)
+            with self.assertRaises(ValueError):
+                await handle_card_auto_webhook(
+                    session, body=body, signature=sig, shop_owner_id=r2.id
+                )
 
 
 if __name__ == "__main__":

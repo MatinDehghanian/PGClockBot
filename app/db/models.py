@@ -195,6 +195,7 @@ class SettlementStatus(str, Enum):
 
     CREATED = "created"
     AWAITING = "awaiting"
+    SETTLING = "settling"  # claimed for approve; not terminal
     SETTLED = "settled"
     FAILED = "failed"
     EXPIRED = "expired"
@@ -211,6 +212,26 @@ class PaymentSettlement(Base):
     __table_args__ = (
         UniqueConstraint("idempotency_key", name="uq_payment_settlements_idempotency"),
         Index("ix_payment_settlements_external_ref", "provider", "external_ref"),
+        # One open attempt per payment+channel (race-safe create).
+        Index(
+            "uq_payment_settlements_active_payment_channel",
+            "payment_id",
+            "channel",
+            unique=True,
+            sqlite_where=text("status IN ('created','awaiting','settling')"),
+            postgresql_where=text("status IN ('created','awaiting','settling')"),
+        ),
+        # Duplicate provider events within a tenant.
+        Index(
+            "uq_payment_settlements_tenant_ext_ref",
+            "channel",
+            "provider",
+            "tenant_key",
+            "external_ref",
+            unique=True,
+            sqlite_where=text("external_ref IS NOT NULL AND status IN ('settling','settled')"),
+            postgresql_where=text("external_ref IS NOT NULL AND status IN ('settling','settled')"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -219,6 +240,8 @@ class PaymentSettlement(Base):
     shop_owner_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bot_users.id"), nullable=True, index=True
     )
+    # 0 = platform; else reseller user id — for UNIQUE indexes (NULL-safe).
+    tenant_key: Mapped[int] = mapped_column(Integer, default=0, index=True)
     channel: Mapped[str] = mapped_column(String(32), index=True)  # psp | card_auto
     provider: Mapped[str] = mapped_column(String(32), index=True)  # mock | zarinpal | generic
     status: Mapped[str] = mapped_column(
