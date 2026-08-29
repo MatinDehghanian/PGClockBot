@@ -125,7 +125,10 @@
         <td class="mono col-tg col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
         <td class="col-name" data-sort-value="{{ u.full_name or u.username or '' }}">
           <div class="cell-name">
-            <span class="cell-name-text">{{ u.full_name or u.username or "—" }}</span>
+            <span class="cell-name-primary">
+              <span class="cell-name-text">{{ u.full_name or u.username or "—" }}</span>
+              {% if row.has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
+            </span>
             <span class="cell-name-tags">
               <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
                 {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
@@ -143,6 +146,11 @@
             {% if row.services[0].has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
           </span>
           {% else %}
+          {% set sel = namespace(id=none) %}
+          {% for s in row.services %}
+            {% if sel.id is none and s.has_alert %}{% set sel.id = s.id %}{% endif %}
+          {% endfor %}
+          {% if sel.id is none %}{% set sel.id = row.services[0].id %}{% endif %}
           <label class="users-svc-select-wrap">
             <span class="sr-only">سرویس‌های کاربر</span>
             <select class="select-sm users-svc-select" data-uid="{{ u.id }}" aria-label="سرویس‌های کاربر">
@@ -152,7 +160,7 @@
                       data-expire="{{ s.expire_text }}"
                       data-days="{{ s.days_left if s.days_left is not none else 9999 }}"
                       data-alert="{{ '1' if s.has_alert else '0' }}"
-                      {% if loop.first %}selected{% endif %}>{{ s.label }}</option>
+                      {% if s.id == sel.id %}selected{% endif %}>{{ s.label }}</option>
               {% endfor %}
             </select>
           </label>

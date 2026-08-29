@@ -84,6 +84,23 @@ class DashboardAndBulkTests(unittest.TestCase):
         base = Path("app/web/templates/base.html").read_text(encoding="utf-8")
         self.assertIn("modal-inbox-dismiss", base)
         self.assertIn("/inbox/dismiss", base)
+        self.assertIn('name="mode" value="24h"', base)
+        self.assertIn('type="radio"', base)
+        self.assertIn("inbox-dismiss-submit", base)
+        self.assertIn("انصراف", base)
+        # Select then confirm — options must not be type=submit
+        dismiss = base.split('id="form-inbox-dismiss"')[1].split("modal-confirm")[0]
+        self.assertNotIn('type="submit" name="mode"', dismiss)
+        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn(".inbox-dismiss-option.is-selected", css)
+        self.assertIn(".inbox-dismiss-radio", css)
+        # No orange edge line on alert rows — circle beside name instead
+        self.assertNotIn(".users-row.has-alert > td:first-child", css)
+        users = Path("app/web/templates/users.html").read_text(encoding="utf-8")
+        self.assertIn("cell-name-primary", users)
+        self.assertIn("sel.id", users)
+        self.assertIn("nth-last-child(1 of :not(script)", css)
+        self.assertIn("place-items: center", css.split(".table-bulk-op-count")[1][:400])
 
 
 if __name__ == "__main__":

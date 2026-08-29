@@ -228,7 +228,8 @@ def build_user_ops_row(
     expire_days = max(1, min(30, int(expire_days or DEFAULT_EXPIRE_DAYS)))
     now = now or _utcnow()
     snaps = [_summarize_service(s, expire_days=expire_days, now=now) for s in services]
-    snaps.sort(key=lambda s: (s.sort_expire, s.sort_volume, s.id))
+    # Alerted services first (then soonest expiry) so UI default selection matches
+    snaps.sort(key=lambda s: (0 if s.has_alert else 1, s.sort_expire, s.sort_volume, s.id))
 
     row = UserOpsRow(user=user, services=snaps, service_count=len(snaps))
     row.no_service = len(snaps) == 0

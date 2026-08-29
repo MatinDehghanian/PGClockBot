@@ -252,12 +252,21 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   /* Equal to .main padding-top — space before footer border matches top air */
   padding-bottom: var(--page-title-gap);
 }
-/* Avoid stacking last-card margin with main-body padding-bottom */
+/* Content→footer air = only .main-body padding-bottom (--page-title-gap).
+   Zero trailing margin on the last *content* node (skip script/style/template
+   so pages with inline scripts match dashboard spacing). */
 .main-body > :last-child {
   margin-bottom: 0;
 }
+.main-body > :nth-last-child(1 of :not(script):not(style):not(template)) {
+  margin-bottom: 0;
+}
+.main-body > :nth-last-child(1 of :not(script):not(style):not(template)) .card:last-child,
+.main-body > :nth-last-child(1 of :not(script):not(style):not(template)) .card-flush:last-child {
+  margin-bottom: 0;
+}
 /* Dashboard wraps panels in .home-dash — zero the inner last block so
-   content→footer equals one --section-gap (same as other pages), not 2× */
+   content→footer equals one --page-title-gap, not 2× */
 .home-dash > :last-child {
   margin-bottom: 0;
 }
@@ -401,6 +410,13 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   max-width: 100%;
   min-width: 0;
 }
+.cell-name-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  min-width: 0;
+}
 .cell-name-text {
   min-width: 0;
   max-width: 100%;
@@ -417,6 +433,9 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   max-width: 100%;
 }
 .cell-name-tags > .badge {
+  flex: 0 0 auto;
+}
+.cell-name-primary > .alert-dot {
   flex: 0 0 auto;
 }
 .badge.badge-risk {
@@ -555,12 +574,6 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
 }
 .users-row.is-focus > td {
   background: color-mix(in srgb, var(--accent, #38bdf8) 12%, transparent);
-}
-.users-row.has-alert > td:first-child {
-  box-shadow: inset -2px 0 0 #f97316;
-}
-html[dir="rtl"] .users-row.has-alert > td:first-child {
-  box-shadow: inset 2px 0 0 #f97316;
 }
 a.cell-user-link {
   color: inherit;
@@ -7699,14 +7712,80 @@ html[data-theme="light"] .home-period {
 }
 .inbox-dismiss-option {
   display: flex;
-  flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
-  text-align: start;
+  gap: var(--space-1_5);
   width: 100%;
+  margin: 0;
   padding: var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  background: color-mix(in srgb, var(--muted, #18181b) 55%, transparent);
+  cursor: pointer;
+  text-align: start;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.inbox-dismiss-option:hover {
+  border-color: color-mix(in srgb, var(--foreground) 22%, var(--border));
+}
+.inbox-dismiss-option:has(input:checked),
+.inbox-dismiss-option.is-selected {
+  border-color: color-mix(in srgb, #f97316 55%, var(--border));
+  background: color-mix(in srgb, #f97316 10%, transparent);
+}
+.inbox-dismiss-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+.inbox-dismiss-radio {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--muted-fg) 45%, var(--border));
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+}
+.inbox-dismiss-option:has(input:checked) .inbox-dismiss-radio,
+.inbox-dismiss-option.is-selected .inbox-dismiss-radio {
+  border-color: #f97316;
+  box-shadow: inset 0 0 0 4px #f97316;
+}
+.inbox-dismiss-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.inbox-dismiss-copy strong {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--foreground);
+}
+.inbox-dismiss-copy small {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted-fg);
+}
+#form-inbox-dismiss .actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+#form-inbox-dismiss .actions .btn {
+  width: 100%;
+  justify-content: center;
 }
 .home-action-leading {
   display: flex;
@@ -9443,10 +9522,10 @@ tbody tr.is-bulk-selected:hover {
   line-height: 1.2;
 }
 .table-bulk-op-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-grid;
+  place-items: center;
   min-width: 20px;
+  width: auto;
   height: 20px;
   padding: 0 6px;
   border-radius: 999px;
@@ -9454,6 +9533,8 @@ tbody tr.is-bulk-selected:hover {
   font-weight: 600;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  /* Vazirmatn Persian digits sit optically low in small circles */
+  transform: translateY(-0.5px);
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: var(--muted-fg);

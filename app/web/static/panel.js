@@ -2123,20 +2123,45 @@
     /* Inbox alert dismiss modal */
     (function () {
       const modal = document.getElementById('modal-inbox-dismiss');
+      const form = document.getElementById('form-inbox-dismiss');
       const keyInput = document.getElementById('inbox-dismiss-key');
       const entityInput = document.getElementById('inbox-dismiss-entity');
       const returnInput = document.getElementById('inbox-dismiss-return');
-      if (!modal || !keyInput) return;
+      if (!modal || !keyInput || !form) return;
+
+      function syncSelected() {
+        form.querySelectorAll('.inbox-dismiss-option').forEach((opt) => {
+          const input = opt.querySelector('input[type="radio"]');
+          opt.classList.toggle('is-selected', !!(input && input.checked));
+        });
+      }
+
       function openDismiss(alertKey, entityId) {
         keyInput.value = alertKey || '';
         if (entityInput) entityInput.value = entityId || '';
         if (returnInput) returnInput.value = window.location.pathname + window.location.search;
+        const first = form.querySelector('input[name="mode"][value="24h"]');
+        if (first) first.checked = true;
+        syncSelected();
         if (typeof openModal === 'function') openModal('modal-inbox-dismiss');
         else {
           modal.hidden = false;
           modal.classList.add('open');
         }
       }
+
+      form.addEventListener('change', (e) => {
+        if (e.target && e.target.matches('input[name="mode"]')) syncSelected();
+      });
+      form.querySelectorAll('.inbox-dismiss-option').forEach((opt) => {
+        opt.addEventListener('click', () => {
+          const input = opt.querySelector('input[type="radio"]');
+          if (!input) return;
+          input.checked = true;
+          syncSelected();
+        });
+      });
+
       document.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-inbox-dismiss]');
         if (!btn) return;
