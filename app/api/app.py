@@ -1013,6 +1013,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
+    from app.api.settlement_pages import register_settlement_pages
+
+    register_settlement_pages(app, get_db=get_db)
     from app.api.ux20_pages import register_ux20_pages
     register_ux20_pages(
         app,

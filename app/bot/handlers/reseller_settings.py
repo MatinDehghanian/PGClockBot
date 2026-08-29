@@ -70,7 +70,9 @@ SECTIONS: dict[str, dict] = {
             ("methods", "روش‌های فعال", [
                 ("pay_wallet_enabled", "کیف پول", "toggle"),
                 ("pay_card_enabled", "کارت به کارت", "toggle"),
-                ("pay_gateway_enabled", "درگاه", "toggle"),
+                ("pay_gateway_enabled", "درگاه لینک", "toggle"),
+                ("pay_psp_enabled", "درگاه API", "toggle"),
+                ("pay_card_auto_enabled", "تأیید خودکار کارت", "toggle"),
                 ("pay_crypto_enabled", "رمزارز", "toggle"),
                 ("pay_stars_enabled", "استارز", "toggle"),
                 ("pay_discount_enabled", "کد تخفیف", "toggle"),

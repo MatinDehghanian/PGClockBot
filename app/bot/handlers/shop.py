@@ -1463,6 +1463,16 @@ async def pay_card_cb(
     except Exception:
         body = f"مبلغ {amount} را کارت به کارت کنید و رسید بفرستید."
     body += f"\n\n(پرداخت #{payment.id})"
+    if on(ui.get("pay_card_auto_enabled")):
+        try:
+            from app.services.payment_settlement import create_card_auto_awaiting
+
+            await create_card_auto_awaiting(session, payment)
+            hint = (ui.get("card_auto_hint_text") or "").strip()
+            if hint:
+                body += f"\n\n{hint}"
+        except Exception:
+            pass
     await _await_order_receipt(
         callback, session, db_user, title="💳 کارت به کارت", body=body, state=state
     )
@@ -1706,3 +1716,77 @@ async def pay_stars_cb(
     except Exception as e:
         if callback.message:
             await callback.message.answer(f"خطا در ساخت فاکتور استارز: {e}")
+
+
+@router.callback_query(F.data.startswith("pay:psp:"))
+async def pay_psp_cb(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
+    """Additive API PSP checkout (mock / zarinpal) — no receipt photo required."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    from app.services.payment_settlement import create_psp_checkout
+
+    ui = await get_all_settings(session)
+    if not on(ui.get("pay_psp_enabled")):
+        await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
+        return
+    order_id = int((callback.data or "").split(":")[-1])
+    order = await session.get(Order, order_id)
+    if not order or order.user_id != db_user.id:
+        await callback.answer("سفارش نامعتبر", show_alert=True)
+        return
+    try:
+        payment = await start_method_payment(
+            session, order, db_user.id, PaymentMethod.PSP.value
+        )
+        settlement = await create_psp_checkout(
+            session,
+            payment,
+            description=f"سفارش #{order.id}",
+        )
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
+    await callback.answer()
+    amount = format_toman(order.amount, get_settings().currency)
+    try:
+        body = render_message_template(
+            ui.get("psp_pay_text") or "",
+            domain=DOMAIN_PAYMENT,
+            amount=amount,
+            order_id=order.id,
+            payment_id=payment.id,
+            shop_title=ui.get("shop_title") or "",
+        )
+    except Exception:
+        body = (
+            f"مبلغ {amount} را از طریق درگاه آنلاین پرداخت کنید.\n"
+            "پس از تأیید درگاه، سرویس خودکار تحویل می‌شود."
+        )
+    body += f"\n\n(پرداخت #{payment.id})"
+    rows: list[list[InlineKeyboardButton]] = []
+    link = (settlement.checkout_url or "").strip()
+    if link.startswith("http://") or link.startswith("https://"):
+        rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
+    markup = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message("🏦 درگاه آنلاین", body),
+            reply_markup=markup,
+        )
+        await callback.message.answer(
+            "پس از پرداخت موفق در درگاه، به ربات برگردید.",
+            reply_markup=kb.cancel_reply(ui),
+        )
+    if state is not None:
+        from app.bot import menu_nav as nav
+
+        try:
+            await state.update_data(**{nav.NAV_LEVEL: nav.NAV_MAIN})
+        except Exception:
+            pass

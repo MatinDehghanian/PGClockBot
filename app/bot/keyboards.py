@@ -301,6 +301,7 @@ REPLY_ACTION_PAY_CARD = "pay_card"
 REPLY_ACTION_PAY_GATEWAY = "pay_gateway"
 REPLY_ACTION_PAY_CRYPTO = "pay_crypto"
 REPLY_ACTION_PAY_STARS = "pay_stars"
+REPLY_ACTION_PAY_PSP = "pay_psp"
 REPLY_ACTION_PAY_DISCOUNT = "pay_discount"
 REPLY_ACTION_TOPUP_CARD = "topup_card"
 REPLY_ACTION_TOPUP_GATEWAY = "topup_gateway"
@@ -899,6 +900,8 @@ def _pay_method_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         entries.append((REPLY_ACTION_PAY_CARD, _t(ui, "btn_pay_card")))
     if on(_t(ui, "pay_gateway_enabled")):
         entries.append((REPLY_ACTION_PAY_GATEWAY, _t(ui, "btn_pay_gateway")))
+    if on(_t(ui, "pay_psp_enabled")):
+        entries.append((REPLY_ACTION_PAY_PSP, _t(ui, "btn_pay_psp")))
     if on(_t(ui, "pay_crypto_enabled")):
         entries.append((REPLY_ACTION_PAY_CRYPTO, _t(ui, "btn_pay_crypto")))
     if on(_t(ui, "pay_stars_enabled")):
@@ -1945,6 +1948,7 @@ def any_checkout_method_enabled(ui: dict | None = None) -> bool:
             "pay_wallet_enabled",
             "pay_card_enabled",
             "pay_gateway_enabled",
+            "pay_psp_enabled",
             "pay_crypto_enabled",
             "pay_stars_enabled",
         )
@@ -1980,6 +1984,16 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                     _t(ui, "btn_pay_gateway"),
                     callback_data=f"pay:gateway:{order_id}",
                     style=_style(ui, "pay_gateway", fallback="primary"),
+                )
+            ]
+        )
+    if on(_t(ui, "pay_psp_enabled")):
+        rows.append(
+            [
+                _ikb(
+                    _t(ui, "btn_pay_psp"),
+                    callback_data=f"pay:psp:{order_id}",
+                    style=_style(ui, "pay_psp", fallback="primary"),
                 )
             ]
         )

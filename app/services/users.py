@@ -776,7 +776,23 @@ DEFAULT_SETTINGS = {
     "pay_gateway_enabled": "0",
     "pay_crypto_enabled": "0",
     "pay_stars_enabled": "0",
+    "pay_psp_enabled": "0",
+    "pay_card_auto_enabled": "0",
     "pay_discount_enabled": "1",
+    "psp_provider": "mock",
+    "psp_merchant_id": "",
+    "psp_sandbox": "1",
+    "psp_pay_text": (
+        "مبلغ قابل پرداخت: <b>{amount}</b>\n"
+        "از دکمه زیر وارد درگاه شوید و پرداخت را تکمیل کنید.\n"
+        "پس از تأیید درگاه، سرویس به‌صورت خودکار تحویل می‌شود."
+    ),
+    "btn_pay_psp": "🔵🏦 درگاه آنلاین",
+    "card_auto_provider": "generic",
+    "card_auto_webhook_secret": "",
+    "card_auto_hint_text": (
+        "اگر تأیید خودکار کارت روشن باشد، پس از واریز دقیق مبلغ، پرداخت بدون رسید عکس تأیید می‌شود."
+    ),
     "gateway_name": "درگاه پرداخت",
     "gateway_link": "",
     "gateway_pay_text": (
@@ -1088,7 +1104,9 @@ SETTING_GROUPS = {
     "روش‌های پرداخت": [
         ("pay_wallet_enabled", "کیف پول داخلی", "toggle", "پرداخت از موجودی کیف پول کاربر"),
         ("pay_card_enabled", "کارت به کارت", "toggle", ""),
-        ("pay_gateway_enabled", "درگاه پرداخت", "toggle", "لینک درگاه خارجی + ارسال رسید"),
+        ("pay_gateway_enabled", "درگاه پرداخت (لینک + رسید)", "toggle", "لینک درگاه خارجی + ارسال رسید — روش قبلی حفظ می‌شود"),
+        ("pay_psp_enabled", "درگاه آنلاین API", "toggle", "درگاه واقعی request→verify (Mock بدون مرچنت / زرین‌پال با مرچنت)"),
+        ("pay_card_auto_enabled", "تأیید خودکار کارت", "toggle", "وب‌هوک امضادار از سرویس تأیید کارت — کنار رسید دستی"),
         ("pay_crypto_enabled", "رمزارز", "toggle", ""),
         ("pay_stars_enabled", "استارز تلگرام", "toggle", "پرداخت درون‌برنامه‌ای با ⭐"),
         ("pay_discount_enabled", "کد تخفیف", "toggle", "نمایش دکمه کد تخفیف هنگام پرداخت"),
@@ -1157,6 +1175,53 @@ SETTING_GROUPS = {
         ("stars_description", "توضیح فاکتور", "text", ""),
         ("btn_pay_stars", "متن دکمه استارز", "text", ""),
     ],
+    "درگاه آنلاین API": [
+        (
+            "psp_provider",
+            "ارائه‌دهنده",
+            "text",
+            "mock (تست بدون مرچنت) یا zarinpal",
+        ),
+        (
+            "psp_merchant_id",
+            "مرچنت آیدی",
+            "text",
+            "برای mock خالی بگذارید؛ برای زرین‌پال مرچنت واقعی",
+        ),
+        (
+            "psp_sandbox",
+            "حالت سندباکس",
+            "toggle",
+            "روشن = محیط آزمایشی زرین‌پال",
+        ),
+        (
+            "psp_pay_text",
+            "راهنمای درگاه API",
+            "textarea",
+            "متغیرها: {amount} {order_id} {payment_id}",
+        ),
+        ("btn_pay_psp", "متن دکمه درگاه آنلاین", "text", ""),
+    ],
+    "تأیید خودکار کارت": [
+        (
+            "card_auto_provider",
+            "نام ارائه‌دهنده",
+            "text",
+            "شناسه منطقی (مثلاً generic) — قرارداد JSON یکسان است",
+        ),
+        (
+            "card_auto_webhook_secret",
+            "رمز امضای وب‌هوک",
+            "text",
+            "HMAC-SHA256 روی بدنه خام؛ هدر X-Signature",
+        ),
+        (
+            "card_auto_hint_text",
+            "متن راهنما کنار کارت‌به‌کارت",
+            "textarea",
+            "وقتی تأیید خودکار روشن است به پیام کارت اضافه می‌شود",
+        ),
+    ],
     "متن دکمه‌های پرداخت": [
         ("btn_pay_wallet", "پرداخت با کیف پول", "text", ""),
         ("btn_pay_discount", "کد تخفیف", "text", ""),
@@ -1202,6 +1267,8 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
         "روش‌های پرداخت",
         "کارت به کارت",
         "درگاه پرداخت",
+        "درگاه آنلاین API",
+        "تأیید خودکار کارت",
         "رمزارز",
         "استارز تلگرام",
         "متن دکمه‌های پرداخت",
