@@ -83,10 +83,22 @@ SECTIONS: dict[str, dict] = {
                 ("card_holder", "صاحب کارت", "text"),
                 ("card_pay_text", "راهنمای پرداخت", "textarea"),
             ]),
-            ("gateway", "درگاه", [
+            ("gateway", "درگاه لینک", [
                 ("gateway_name", "نام درگاه", "text"),
                 ("gateway_link", "لینک", "text"),
                 ("gateway_pay_text", "راهنما", "textarea"),
+            ]),
+            ("psp", "درگاه API", [
+                ("psp_provider", "ارائه‌دهنده (zarinpal/mock)", "text"),
+                ("psp_merchant_id", "مرچنت", "text"),
+                ("psp_sandbox", "سندباکس", "toggle"),
+                ("psp_pay_text", "راهنما", "textarea"),
+                ("btn_pay_psp", "متن دکمه", "text"),
+            ]),
+            ("card_auto", "تأیید خودکار کارت", [
+                ("card_auto_provider", "ارائه‌دهنده", "text"),
+                ("card_auto_webhook_secret", "رمز وب‌هوک", "text"),
+                ("card_auto_hint_text", "راهنما", "textarea"),
             ]),
             ("crypto", "رمزارز", [
                 ("crypto_asset", "رمزارز", "text"),

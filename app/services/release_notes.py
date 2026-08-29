@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
     "8.8.0": [
-        "هسته تسویه پرداخت (Settlement): درگاه API و تأیید خودکار کارت — افزایشی، بدون حذف روش‌های قبلی",
-        "موتور واحد + آداپتر (Mock / زرین‌پال)؛ fail-closed، وب‌هوک امضادار، تطبیق مبلغ، ایدمپوتنت",
-        "صفحه checkout آزمایشی Mock بدون مرچنت؛ تنظیمات پنل هم‌سبک تب پرداخت",
-        "مایگریشن payment_settlements؛ تست‌ها با Mock — بدون نیاز به مرچنت زنده",
+        "هسته تسویه پرداخت (Settlement): درگاه API و تأیید خودکار کارت — افزایشی، امن، ایزولهٔ نقش",
+        "Mock فقط با ALLOW_SETTLEMENT_MOCK=1 + توکن یک‌بارمصرف؛ وب‌هوک جدا برای platform/shop",
+        "payment_id الزامی؛ shop_owner_id؛ رمز/مرچنت password-masked؛ پیش‌فرض zarinpal",
+        "هم‌ترازی پنل و ربات (تنظیمات + شارژ کیف با PSP)؛ مایگریشن payment_settlements",
         "ریستور: restore/pre-v8.8.0-v8.7.9",
     ],
     "8.7.9": [

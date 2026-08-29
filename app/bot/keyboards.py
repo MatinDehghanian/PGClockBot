@@ -305,6 +305,7 @@ REPLY_ACTION_PAY_PSP = "pay_psp"
 REPLY_ACTION_PAY_DISCOUNT = "pay_discount"
 REPLY_ACTION_TOPUP_CARD = "topup_card"
 REPLY_ACTION_TOPUP_GATEWAY = "topup_gateway"
+REPLY_ACTION_TOPUP_PSP = "topup_psp"
 REPLY_ACTION_TOPUP_CRYPTO = "topup_crypto"
 REPLY_ACTION_PG_STATS = "pg_stats"
 REPLY_ACTION_PG_USERS = "pg_users"
@@ -917,6 +918,8 @@ def _topup_method_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         entries.append((REPLY_ACTION_TOPUP_CARD, _t(ui, "btn_pay_card")))
     if on(_t(ui, "pay_gateway_enabled")):
         entries.append((REPLY_ACTION_TOPUP_GATEWAY, _t(ui, "btn_pay_gateway")))
+    if on(_t(ui, "pay_psp_enabled")):
+        entries.append((REPLY_ACTION_TOPUP_PSP, _t(ui, "btn_pay_psp")))
     if on(_t(ui, "pay_crypto_enabled")):
         entries.append((REPLY_ACTION_TOPUP_CRYPTO, _t(ui, "btn_pay_crypto")))
     return entries
@@ -2059,6 +2062,16 @@ def topup_pay_methods(ui: dict | None = None) -> InlineKeyboardMarkup:
                     _t(ui, "btn_pay_gateway"),
                     callback_data="wtop:gateway",
                     style=_style(ui, "topup_gateway", fallback="primary"),
+                )
+            ]
+        )
+    if on(_t(ui, "pay_psp_enabled")):
+        rows.append(
+            [
+                _ikb(
+                    _t(ui, "btn_pay_psp"),
+                    callback_data="wtop:psp",
+                    style=_style(ui, "pay_psp", fallback="primary"),
                 )
             ]
         )

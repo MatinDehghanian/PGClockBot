@@ -1,6 +1,9 @@
-"""Public settlement endpoints — PSP return, mock checkout, card-auto webhook.
+"""Settlement HTTP endpoints — fail-closed, tenant-scoped, mock gated.
 
-No panel session required. Fail-closed; additive to receipt-based methods.
+Public surface:
+  - Real PSP return (provider != mock) — verifies via provider API
+  - Card-auto webhooks — per-tenant path + HMAC secret from that tenant only
+  - Mock checkout/pay — ONLY when ALLOW_SETTLEMENT_MOCK=1 + one-time token
 """
 
 from __future__ import annotations
@@ -9,7 +12,7 @@ import logging
 from html import escape
 
 from fastapi import Depends, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Order, Payment, SettlementStatus
@@ -17,7 +20,7 @@ from app.db.models import Order, Payment, SettlementStatus
 logger = logging.getLogger(__name__)
 
 
-def _html_page(title: str, body: str, *, ok: bool = True) -> HTMLResponse:
+def _html_page(title: str, body: str, *, ok: bool = True, status_code: int = 200) -> HTMLResponse:
     color = "#16a34a" if ok else "#dc2626"
     doc = f"""<!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -37,7 +40,19 @@ text-decoration:none;border:0;border-radius:8px;font:inherit;cursor:pointer}}
 </style>
 </head>
 <body><div class="card">{body}</div></body></html>"""
-    return HTMLResponse(doc)
+    return HTMLResponse(doc, status_code=status_code)
+
+
+def _sig_from_headers(request: Request) -> str:
+    signature = (
+        request.headers.get("x-signature")
+        or request.headers.get("x-card-auto-signature")
+        or request.headers.get("x-hub-signature-256")
+        or ""
+    )
+    if signature.lower().startswith("sha256="):
+        signature = signature.split("=", 1)[1]
+    return signature.strip()
 
 
 def register_settlement_pages(app, *, get_db):
@@ -47,36 +62,47 @@ def register_settlement_pages(app, *, get_db):
         session: AsyncSession = Depends(get_db),
     ):
         from app.db.models import PaymentSettlement
-        from app.services.payment_settlement import CHANNEL_PSP
+        from app.services.payment_settlement import CHANNEL_PSP, settlement_mock_allowed
+
+        if not settlement_mock_allowed():
+            return Response(status_code=404, content="Not Found")
 
         sid = request.query_params.get("settlement_id") or ""
+        token = (request.query_params.get("token") or "").strip()
         try:
             settlement_id = int(sid)
         except (TypeError, ValueError):
-            return _html_page("خطا", "<h1>شناسه نامعتبر</h1>", ok=False)
+            return _html_page("خطا", "<h1>درخواست نامعتبر</h1>", ok=False, status_code=400)
         settlement = await session.get(PaymentSettlement, settlement_id)
         if (
             not settlement
             or settlement.channel != CHANNEL_PSP
             or settlement.provider != "mock"
         ):
-            return _html_page("خطا", "<h1>تسویه mock یافت نشد</h1>", ok=False)
+            return _html_page("خطا", "<h1>درخواست نامعتبر</h1>", ok=False, status_code=404)
+        # Constant-time-ish token check without leaking existence details on mismatch.
+        from app.services.payment_settlement import _require_mock_token
+
+        try:
+            _require_mock_token(settlement, token)
+        except ValueError:
+            return _html_page("خطا", "<h1>درخواست نامعتبر</h1>", ok=False, status_code=403)
+
         if settlement.status == SettlementStatus.SETTLED.value:
-            return _html_page(
-                "پرداخت شده",
-                f"<h1>قبلاً تسویه شده</h1><p class='muted'>#{settlement.id}</p>",
-            )
+            return _html_page("پرداخت شده", "<h1>قبلاً تسویه شده</h1>")
+
         amount = int(settlement.amount)
+        # Do not echo payment_id / internal ids beyond what the payer already has in the URL.
         body = f"""
 <h1>درگاه آزمایشی (Mock)</h1>
 <p>مبلغ: <b>{amount:,}</b> تومان</p>
-<p class="muted">پرداخت #{settlement.payment_id} · تسویه #{settlement.id}</p>
 <form method="post" action="/payments/settlement/mock/pay">
   <input type="hidden" name="settlement_id" value="{settlement.id}"/>
   <input type="hidden" name="amount" value="{amount}"/>
+  <input type="hidden" name="token" value="{escape(token)}"/>
   <button class="btn" type="submit">پرداخت آزمایشی موفق</button>
 </form>
-<p class="muted">بدون مرچنت واقعی — فقط برای تست محلی</p>
+<p class="muted">فقط با ALLOW_SETTLEMENT_MOCK=1</p>
 """
         return _html_page("Mock PSP", body)
 
@@ -84,16 +110,31 @@ def register_settlement_pages(app, *, get_db):
     async def mock_pay(
         settlement_id: int = Form(...),
         amount: int = Form(...),
+        token: str = Form(...),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.payment_settlement import mock_psp_pay, notify_after_settlement
+        from app.services.payment_settlement import (
+            mock_psp_pay,
+            notify_after_settlement,
+            settlement_mock_allowed,
+        )
 
+        if not settlement_mock_allowed():
+            return Response(status_code=404, content="Not Found")
         try:
             settlement = await mock_psp_pay(
-                session, settlement_id=settlement_id, amount=amount
+                session,
+                settlement_id=settlement_id,
+                amount=amount,
+                token=token,
             )
-        except ValueError as exc:
-            return _html_page("ناموفق", f"<h1>خطا</h1><p>{escape(str(exc))}</p>", ok=False)
+        except ValueError:
+            return _html_page(
+                "ناموفق",
+                "<h1>تسویه ناموفق</h1><p class='muted'>درخواست رد شد.</p>",
+                ok=False,
+                status_code=400,
+            )
         payment = await session.get(Payment, int(settlement.payment_id))
         order = None
         if payment and payment.order_id:
@@ -106,7 +147,7 @@ def register_settlement_pages(app, *, get_db):
         return _html_page(
             "موفق",
             "<h1>پرداخت آزمایشی تأیید شد</h1>"
-            "<p>به ربات برگردید — سرویس در صورت موفقیت تحویل می‌شود.</p>",
+            "<p>به ربات برگردید.</p>",
         )
 
     @app.get("/payments/settlement/psp/{provider}/return/{settlement_id}")
@@ -116,35 +157,43 @@ def register_settlement_pages(app, *, get_db):
         request: Request,
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.payment_settlement import complete_psp_return, notify_after_settlement
+        from app.db.models import PaymentSettlement
+        from app.services.payment_settlement import (
+            complete_psp_return,
+            notify_after_settlement,
+            settlement_mock_allowed,
+        )
+
+        provider_l = (provider or "").strip().lower()
+        if provider_l == "mock" and not settlement_mock_allowed():
+            return Response(status_code=404, content="Not Found")
 
         params = dict(request.query_params)
-        # Resolve shop settings from payment/order when possible.
-        reseller_id = None
-        from app.db.models import PaymentSettlement
-
         pre = await session.get(PaymentSettlement, settlement_id)
-        if pre:
-            pay = await session.get(Payment, int(pre.payment_id))
-            if pay and pay.order_id:
-                ord_row = await session.get(Order, pay.order_id)
-                if ord_row and ord_row.reseller_id:
-                    reseller_id = int(ord_row.reseller_id)
+        if not pre:
+            return _html_page(
+                "ناموفق",
+                "<h1>تسویه یافت نشد</h1>",
+                ok=False,
+                status_code=404,
+            )
+        reseller_id = pre.shop_owner_id
 
         try:
             settlement = await complete_psp_return(
                 session,
-                provider=provider,
+                provider=provider_l,
                 settlement_id=settlement_id,
                 callback_params=params,
                 reseller_id=reseller_id,
             )
-        except ValueError as exc:
+        except ValueError:
             return _html_page(
                 "ناموفق",
-                f"<h1>تأیید پرداخت ناموفق</h1><p>{escape(str(exc))}</p>"
+                "<h1>تأیید پرداخت ناموفق</h1>"
                 "<p class='muted'>اگر مبلغ کم شده با پشتیبانی تماس بگیرید.</p>",
                 ok=False,
+                status_code=400,
             )
         payment = await session.get(Payment, int(settlement.payment_id))
         order = None
@@ -157,14 +206,14 @@ def register_settlement_pages(app, *, get_db):
                 logger.exception("psp return notify failed payment=%s", payment.id)
         return _html_page(
             "موفق",
-            "<h1>پرداخت تأیید شد</h1>"
-            "<p>می‌توانید به تلگرام برگردید.</p>",
+            "<h1>پرداخت تأیید شد</h1><p>می‌توانید به تلگرام برگردید.</p>",
         )
 
-    @app.post("/payments/settlement/card-auto/webhook")
-    async def card_auto_webhook(
+    async def _card_auto_webhook_for_shop(
         request: Request,
-        session: AsyncSession = Depends(get_db),
+        session: AsyncSession,
+        *,
+        shop_owner_id: int | None,
     ):
         from app.services.payment_settlement import (
             handle_card_auto_webhook,
@@ -172,24 +221,20 @@ def register_settlement_pages(app, *, get_db):
         )
 
         body = await request.body()
-        signature = (
-            request.headers.get("x-signature")
-            or request.headers.get("x-card-auto-signature")
-            or request.headers.get("x-hub-signature-256")
-            or ""
-        )
-        if signature.lower().startswith("sha256="):
-            signature = signature.split("=", 1)[1]
+        # Cap body size — fail closed on huge payloads
+        if len(body) > 64 * 1024:
+            return JSONResponse({"ok": False}, status_code=413)
         try:
             settlement = await handle_card_auto_webhook(
                 session,
                 body=body,
-                signature=signature,
-                reseller_id=None,
+                signature=_sig_from_headers(request),
+                shop_owner_id=shop_owner_id,
             )
         except ValueError as exc:
-            logger.info("card-auto webhook rejected: %s", exc)
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+            logger.info("card-auto webhook rejected shop=%s: %s", shop_owner_id, exc)
+            # Generic client error — do not echo internal reason to callers.
+            return JSONResponse({"ok": False}, status_code=400)
         payment = await session.get(Payment, int(settlement.payment_id))
         order = None
         if payment and payment.order_id:
@@ -205,16 +250,43 @@ def register_settlement_pages(app, *, get_db):
             {
                 "ok": True,
                 "settlement_id": int(settlement.id),
-                "payment_id": int(settlement.payment_id),
                 "status": settlement.status,
             }
         )
 
-    @app.get("/payments/settlement/card-auto/webhook")
-    async def card_auto_webhook_hint():
+    @app.post("/payments/settlement/card-auto/platform/webhook")
+    async def card_auto_webhook_platform(
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+    ):
+        return await _card_auto_webhook_for_shop(
+            request, session, shop_owner_id=None
+        )
+
+    @app.post("/payments/settlement/card-auto/shop/{reseller_id}/webhook")
+    async def card_auto_webhook_shop(
+        reseller_id: int,
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.db.models import BotUser, Role
+
+        if reseller_id <= 0:
+            return JSONResponse({"ok": False}, status_code=404)
+        owner = await session.get(BotUser, int(reseller_id))
+        if not owner or owner.role != Role.RESELLER.value:
+            return JSONResponse({"ok": False}, status_code=404)
+        return await _card_auto_webhook_for_shop(
+            request, session, shop_owner_id=int(reseller_id)
+        )
+
+    # Legacy path removed — do not accept unsigned/tenant-ambiguous webhooks.
+    @app.api_route(
+        "/payments/settlement/card-auto/webhook",
+        methods=["GET", "POST"],
+    )
+    async def card_auto_webhook_legacy_removed():
         return JSONResponse(
-            {
-                "ok": True,
-                "hint": "POST signed JSON {external_ref, amount, payment_id?} with X-Signature HMAC-SHA256",
-            }
+            {"ok": False, "error": "use /card-auto/platform/webhook or /card-auto/shop/{id}/webhook"},
+            status_code=410,
         )

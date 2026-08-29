@@ -1443,6 +1443,14 @@ async def pay_card_cb(
     if not card:
         await callback.answer("کارت نامعتبر", show_alert=True)
         return
+    if on(ui.get("pay_card_auto_enabled")):
+        secret = str(ui.get("card_auto_webhook_secret") or "").strip()
+        if not secret or len(secret) < 16:
+            await callback.answer(
+                "تأیید خودکار کارت روشن است ولی رمز وب‌هوک تنظیم نشده",
+                show_alert=True,
+            )
+            return
     try:
         payment = await start_card_payment(session, order, db_user.id)
     except ValueError as e:
@@ -1464,15 +1472,12 @@ async def pay_card_cb(
         body = f"مبلغ {amount} را کارت به کارت کنید و رسید بفرستید."
     body += f"\n\n(پرداخت #{payment.id})"
     if on(ui.get("pay_card_auto_enabled")):
-        try:
-            from app.services.payment_settlement import create_card_auto_awaiting
+        from app.services.payment_settlement import create_card_auto_awaiting
 
-            await create_card_auto_awaiting(session, payment)
-            hint = (ui.get("card_auto_hint_text") or "").strip()
-            if hint:
-                body += f"\n\n{hint}"
-        except Exception:
-            pass
+        await create_card_auto_awaiting(session, payment)
+        hint = (ui.get("card_auto_hint_text") or "").strip()
+        if hint:
+            body += f"\n\n{hint}"
     await _await_order_receipt(
         callback, session, db_user, title="💳 کارت به کارت", body=body, state=state
     )

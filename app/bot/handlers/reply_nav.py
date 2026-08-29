@@ -1663,6 +1663,7 @@ async def _handle_topup_action(
     key = {
         kb.REPLY_ACTION_TOPUP_CARD: "wtop:card",
         kb.REPLY_ACTION_TOPUP_GATEWAY: "wtop:gateway",
+        kb.REPLY_ACTION_TOPUP_PSP: "wtop:psp",
         kb.REPLY_ACTION_TOPUP_CRYPTO: "wtop:crypto",
     }.get(action)
     if not key:
@@ -1869,6 +1870,7 @@ async def reply_main_nav(
         kb.REPLY_ACTION_PAY_DISCOUNT,
         kb.REPLY_ACTION_TOPUP_CARD,
         kb.REPLY_ACTION_TOPUP_GATEWAY,
+        kb.REPLY_ACTION_TOPUP_PSP,
         kb.REPLY_ACTION_TOPUP_CRYPTO,
         kb.REPLY_ACTION_WALLET_TOPUP,
         kb.REPLY_ACTION_SUPPORT_NEW,

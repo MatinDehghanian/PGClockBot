@@ -27,6 +27,7 @@ def upgrade() -> None:
         "payment_settlements",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column("payment_id", sa.Integer(), sa.ForeignKey("payments.id"), nullable=False),
+        sa.Column("shop_owner_id", sa.Integer(), sa.ForeignKey("bot_users.id"), nullable=True),
         sa.Column("channel", sa.String(32), nullable=False),
         sa.Column("provider", sa.String(32), nullable=False),
         sa.Column("status", sa.String(32), nullable=False, server_default="created"),
@@ -34,6 +35,7 @@ def upgrade() -> None:
         sa.Column("currency", sa.String(8), nullable=False, server_default="IRT"),
         sa.Column("idempotency_key", sa.String(64), nullable=False),
         sa.Column("external_ref", sa.String(128), nullable=True),
+        sa.Column("checkout_token", sa.String(64), nullable=True),
         sa.Column("checkout_url", sa.Text(), nullable=True),
         sa.Column("provider_payload", sa.Text(), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
@@ -53,6 +55,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("idempotency_key", name="uq_payment_settlements_idempotency"),
     )
     op.create_index("ix_payment_settlements_payment_id", "payment_settlements", ["payment_id"])
+    op.create_index("ix_payment_settlements_shop_owner_id", "payment_settlements", ["shop_owner_id"])
     op.create_index("ix_payment_settlements_channel", "payment_settlements", ["channel"])
     op.create_index("ix_payment_settlements_provider", "payment_settlements", ["provider"])
     op.create_index("ix_payment_settlements_status", "payment_settlements", ["status"])
@@ -73,6 +76,7 @@ def downgrade() -> None:
         "ix_payment_settlements_status",
         "ix_payment_settlements_provider",
         "ix_payment_settlements_channel",
+        "ix_payment_settlements_shop_owner_id",
         "ix_payment_settlements_payment_id",
     ):
         try:

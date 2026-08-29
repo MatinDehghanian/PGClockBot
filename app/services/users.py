@@ -779,7 +779,7 @@ DEFAULT_SETTINGS = {
     "pay_psp_enabled": "0",
     "pay_card_auto_enabled": "0",
     "pay_discount_enabled": "1",
-    "psp_provider": "mock",
+    "psp_provider": "zarinpal",
     "psp_merchant_id": "",
     "psp_sandbox": "1",
     "psp_pay_text": (
@@ -1179,14 +1179,15 @@ SETTING_GROUPS = {
         (
             "psp_provider",
             "ارائه‌دهنده",
-            "text",
-            "mock (تست بدون مرچنت) یا zarinpal",
+            "select",
+            "zarinpal = درگاه واقعی؛ mock فقط با ALLOW_SETTLEMENT_MOCK=1 روی سرور",
+            [("zarinpal", "زرین‌پال"), ("mock", "Mock (فقط تست محلی)")],
         ),
         (
             "psp_merchant_id",
             "مرچنت آیدی",
-            "text",
-            "برای mock خالی بگذارید؛ برای زرین‌پال مرچنت واقعی",
+            "password",
+            "خالی بماند = بدون تغییر. برای mock لازم نیست",
         ),
         (
             "psp_sandbox",
@@ -1207,19 +1208,19 @@ SETTING_GROUPS = {
             "card_auto_provider",
             "نام ارائه‌دهنده",
             "text",
-            "شناسه منطقی (مثلاً generic) — قرارداد JSON یکسان است",
+            "شناسه منطقی (مثلاً generic)",
         ),
         (
             "card_auto_webhook_secret",
             "رمز امضای وب‌هوک",
-            "text",
-            "HMAC-SHA256 روی بدنه خام؛ هدر X-Signature",
+            "password",
+            "حداقل ۱۶ کاراکتر — HMAC-SHA256 روی بدنه؛ هدر X-Signature. خالی = بدون تغییر",
         ),
         (
             "card_auto_hint_text",
             "متن راهنما کنار کارت‌به‌کارت",
             "textarea",
-            "وقتی تأیید خودکار روشن است به پیام کارت اضافه می‌شود",
+            "پلتفرم: /payments/settlement/card-auto/platform/webhook — فروشگاه: .../shop/{reseller_id}/webhook",
         ),
     ],
     "متن دکمه‌های پرداخت": [
@@ -1306,6 +1307,20 @@ IMAGE_KEYS = {
     for item in fields
     if len(item) >= 3 and item[2] == "image"
 }
+
+SECRET_KEYS = {
+    item[0]
+    for fields in SETTING_GROUPS.values()
+    for item in fields
+    if len(item) >= 3 and item[2] == "password"
+}
+
+# Sentinels: empty / keep-marker means "do not overwrite existing secret".
+SECRET_KEEP_VALUES = {"", "••••", "****", "__keep__", "__unchanged__"}
+
+
+def should_keep_secret_value(raw: str | None) -> bool:
+    return str(raw if raw is not None else "").strip() in SECRET_KEEP_VALUES
 
 
 def keys_for_tab(tab: str) -> set[str]:

@@ -215,6 +215,10 @@ class PaymentSettlement(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     payment_id: Mapped[int] = mapped_column(ForeignKey("payments.id"), index=True)
+    # NULL = platform shop; set for reseller tenant isolation on webhooks/matching.
+    shop_owner_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
     channel: Mapped[str] = mapped_column(String(32), index=True)  # psp | card_auto
     provider: Mapped[str] = mapped_column(String(32), index=True)  # mock | zarinpal | generic
     status: Mapped[str] = mapped_column(
@@ -224,6 +228,8 @@ class PaymentSettlement(Base):
     currency: Mapped[str] = mapped_column(String(8), default="IRT")
     idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
     external_ref: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # One-time token for mock checkout settle (never a substitute for real PSP verify).
+    checkout_token: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     checkout_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     provider_payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
