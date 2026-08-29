@@ -1,16 +1,19 @@
 """Mobile sidebar — bottom:0 stretch, no calc-dvh height."""
 from __future__ import annotations
+
 import unittest
 from pathlib import Path
+
+from css_blocks import at_rule, rule
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class MobileSideFullHeightTests(unittest.TestCase):
     def test_side_uses_bottom_zero_not_calc_dvh(self):
-        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 900px)", 1)[1]
-        side = mobile.split(".side {", 1)[1].split(".side.open", 1)[0]
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8-sig")
+        mobile = at_rule(css, "@media (max-width: 900px)")
+        side = rule(mobile, ".side")
         self.assertIn("position: fixed;", side)
         self.assertIn("bottom: 0;", side)
         self.assertIn("height: auto;", side)
@@ -19,12 +22,13 @@ class MobileSideFullHeightTests(unittest.TestCase):
         self.assertNotIn("--safari-overlay", side)
 
     def test_side_safe_area_is_inner_not_box_shorten(self):
-        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 900px)", 1)[1]
-        side = mobile.split("  .side {", 1)[1].split("  .side.open", 1)[0]
-        self.assertIn("padding-bottom: 0;", side)
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8-sig")
+        mobile = at_rule(css, "@media (max-width: 900px)")
+        side = rule(mobile, ".side")
+        self.assertIn("padding: 0;", side)
         self.assertIn("bottom: 0;", side)
         self.assertNotIn("transform: translateX", side)
+        self.assertNotIn("transform: translate3d", side)
         foot = mobile.split(".side .side-foot", 1)[1][:160]
         self.assertIn("padding-bottom: var(--bottom-inset);", foot)
 

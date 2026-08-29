@@ -223,8 +223,18 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   padding: var(--space-2) var(--space-2) var(--bottom-inset);
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 0;
   z-index: 30;
+}
+/* Inner slide shell — desktop is a plain flex column; mobile animates transform. */
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
 }
 .main {
   grid-area: main;
@@ -793,7 +803,9 @@ tr.principal-row-l2 td:first-child {
   .btn, a.btn, .btn-sm, a.btn-sm,
   .nav-item, .icon-btn,
   .section-tabs a, .section-tabs .tab-btn,
-  .side-backdrop {
+  .side-backdrop,
+  .side-panel,
+  .ui-switch-track::after {
     transition: none !important;
   }
   .btn:active:not(:disabled), a.btn:active,
@@ -1621,32 +1633,56 @@ textarea[aria-invalid="true"] {
   content: "";
   position: absolute;
   top: 50%;
-  inset-inline-start: 3px;
+  /* Physical left + translateX keeps the thumb on the compositor (no inset thrash). */
+  left: 3px;
   width: 20px;
   height: 20px;
   border-radius: 999px;
   background: #fafafa;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 1px rgba(0, 0, 0, 0.2);
   transform: translateY(-50%);
-  transition: inset-inline-start 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.22s ease;
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .ui-switch-sm .ui-switch-track::after {
   width: 20px;
   height: 20px;
-  inset-inline-start: 3px;
 }
 .ui-switch input:checked + .ui-switch-track {
   background: #16a34a;
   border-color: transparent;
 }
 .ui-switch input:checked + .ui-switch-track::after {
-  inset-inline-start: calc(100% - 23px);
+  transform: translateY(-50%) translateX(21px);
 }
 .ui-switch-sm input:checked + .ui-switch-track::after {
-  inset-inline-start: calc(100% - 23px);
+  transform: translateY(-50%) translateX(21px);
 }
 .ui-switch input:active + .ui-switch-track::after {
   transform: translateY(-50%) scaleX(1.08);
+}
+.ui-switch input:checked:active + .ui-switch-track::after {
+  transform: translateY(-50%) translateX(21px) scaleX(1.08);
+}
+/* RTL: thumb starts on the inline-start (right) edge */
+[dir="rtl"] .ui-switch-track::after,
+html[dir="rtl"] .ui-switch-track::after {
+  left: auto;
+  right: 3px;
+  transform: translateY(-50%);
+}
+[dir="rtl"] .ui-switch input:checked + .ui-switch-track::after,
+html[dir="rtl"] .ui-switch input:checked + .ui-switch-track::after,
+[dir="rtl"] .ui-switch-sm input:checked + .ui-switch-track::after,
+html[dir="rtl"] .ui-switch-sm input:checked + .ui-switch-track::after {
+  transform: translateY(-50%) translateX(-21px);
+}
+[dir="rtl"] .ui-switch input:active + .ui-switch-track::after,
+html[dir="rtl"] .ui-switch input:active + .ui-switch-track::after {
+  transform: translateY(-50%) scaleX(1.08);
+}
+[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after,
+html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
+  transform: translateY(-50%) translateX(-21px) scaleX(1.08);
 }
 .ui-switch input:focus-visible + .ui-switch-track {
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.28);
@@ -4092,7 +4128,10 @@ form.settings-form > .actions.sticky-actions,
   background: currentColor;
 }
 .side-backdrop {
-  display: none !important;
+  /* Always in the tree — toggling display killed the opacity fade and forced
+     a style recalc. Visibility + opacity stay compositor-friendly. */
+  display: block;
+  visibility: hidden;
   position: fixed;
   /* Full-bleed dim + tap-to-close. Must NOT use touch-action:none: that is a
      functional scroll lock covering the viewport, and iOS Safari then expands
@@ -4106,7 +4145,8 @@ form.settings-form > .actions.sticky-actions,
   z-index: 45;
   pointer-events: none;
   opacity: 0;
-  transition: opacity var(--motion-med) var(--ease-standard);
+  transition: opacity var(--motion-med) var(--ease-standard),
+    visibility 0s linear var(--motion-med);
   overscroll-behavior: contain;
 }
 /* Dim on a pseudo-element so the fixed box itself stays transparent to Safari
@@ -4119,9 +4159,11 @@ form.settings-form > .actions.sticky-actions,
   background: var(--side-dim);
 }
 .side-backdrop.show {
-  display: block !important;
+  visibility: visible;
   opacity: 1;
   pointer-events: auto;
+  transition: opacity var(--motion-med) var(--ease-standard),
+    visibility 0s linear 0s;
 }
 
 /* —— Mobile layout: toolbar + hamburger drawer —— */
@@ -4209,26 +4251,46 @@ form.settings-form > .actions.sticky-actions,
     max-height: none;
     z-index: 50;
     left: auto;
-    /* Slid with `right`, never `transform`: a transformed fixed box gets its own
-       containing block on WebKit and stops tracking the viewport bottom. */
-    right: calc(-1 * var(--drawer-w) - 24px);
-    transition: right .2s ease;
-    border-left: 1px solid var(--border);
-    border-top: 1px solid var(--border);
+    /* Shell stays docked at `right: 0` (tracks viewport bottom on WebKit).
+       Slide is on `.side-panel` via transform — avoids layout thrash from
+       animating `right` while keeping the fixed box untransformed. */
+    right: 0;
+    transition: none;
+    border-left: none;
+    border-top: none;
     grid-area: unset;
     display: flex !important;
     flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+    overscroll-behavior-y: contain;
+    box-sizing: border-box;
+    /* Transparent shell — paint lives on `.side-panel` (Safari edge sampler). */
+    background-color: transparent;
+    background: transparent;
+  }
+  .side-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    box-sizing: border-box;
     padding-top: var(--space-2);
+    padding-inline: var(--space-2);
     padding-bottom: 0;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: contain;
-    box-sizing: border-box;
+    -webkit-overflow-scrolling: touch;
+    border-left: 1px solid var(--border);
+    border-top: 1px solid var(--border);
     background-color: var(--bg-card);
     background: var(--bg-card);
+    transform: translate3d(calc(100% + 24px), 0, 0);
+    transition: transform 0.22s var(--ease-standard);
+    will-change: transform;
   }
-  .side.open {
-    right: 0;
+  .side.open .side-panel {
+    transform: translate3d(0, 0, 0);
   }
   .side:not(.open) {
     pointer-events: none;
@@ -4252,7 +4314,7 @@ form.settings-form > .actions.sticky-actions,
   .side .identity-chips { display: none; }
 
   /* Instant close on navigation — disable slide so PWA paints closed before unload */
-  html.ios .side.side-nav-closing {
+  html.ios .side.side-nav-closing .side-panel {
     transition: none !important;
   }
 
@@ -4619,17 +4681,24 @@ form.settings-form > .actions.sticky-actions,
 .settings-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--section-gap);
+  /* stack-gap matches card→card rhythm; section-gap was stacking with card margin */
+  gap: var(--stack-gap);
   align-items: start;
 }
 /* Two-column only while preview is open (lazy mount) */
 .settings-layout.has-preview {
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: var(--section-gap);
 }
 .settings-main { min-width: 0; }
 .settings-tabs { margin-bottom: var(--page-title-gap); }
 
 .tg-preview-slot { min-width: 0; }
+.settings-layout > .tg-preview-slot > .card,
+.settings-layout > .tg-preview-slot > .settings-card,
+.settings-layout > .tg-preview-slot > .tg-preview-card {
+  margin-bottom: 0;
+}
 .tg-preview-gate {
   margin-bottom: 0;
 }
@@ -5110,9 +5179,8 @@ form.settings-form > .actions.sticky-actions,
 .ui-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.42);
-  -webkit-backdrop-filter: blur(2px);
-  backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.52);
+  /* No backdrop-filter — blur during open/close was a major compositor hitch. */
   touch-action: none;
   opacity: 0;
   animation: ui-modal-backdrop-in var(--motion-med) var(--ease-out) forwards;
@@ -9233,6 +9301,28 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 }
 .pay-dest-color .plan-color-card {
   max-width: 320px;
+}
+
+.supports-fields-grid .supports-enabled-field {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) !important;
+  padding: var(--space-1) var(--space-2) !important;
+  margin: 0;
+  min-height: 48px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--foreground) !important;
+}
+.supports-fields-grid .supports-enabled-field > span:not(.ui-switch) {
+  font-size: 13px;
+  font-weight: 550;
+}
+.supports-editor-list {
+  margin-top: var(--space-1);
 }
 
 .support-fields .item-color-field {

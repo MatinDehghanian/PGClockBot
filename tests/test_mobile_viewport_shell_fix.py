@@ -25,18 +25,25 @@ class MobileViewportShellFixTests(unittest.TestCase):
     def test_mobile_shell_flex_fill_not_viewport_units(self):
         mobile = self._mobile()
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
-        side = mobile.split("  .side {", 1)[1].split("  .side.open", 1)[0]
+        side = rule(mobile, ".side")
         self.assertIn("height: auto;", shell)
         self.assertIn("flex: 1 0 auto;", shell)
-        self.assertIn("padding-bottom: 0;", side)
+        self.assertIn("padding: 0;", side)
+        # Fixed shell stays docked; slide is on .side-panel (compositor transform).
+        self.assertIn("right: 0;", side)
+        self.assertNotIn("right: calc(-1 * var(--drawer-w)", side)
         self.assertNotIn("transform: translateX", side)
-        self.assertIn("right: calc(-1 * var(--drawer-w) - 24px);", side)
+        self.assertNotIn("transform: translate3d", side)
         self.assertIn("width: var(--drawer-w);", side)
+        self.assertIn("background: transparent;", side)
+        panel = rule(mobile, ".side-panel")
+        self.assertIn("transform: translate3d(calc(100% + 24px), 0, 0);", panel)
+        self.assertIn("transition: transform 0.22s var(--ease-standard);", panel)
         foot = mobile.split(".side .side-foot", 1)[1][:320]
         self.assertIn("padding-bottom: var(--bottom-inset);", foot)
         self.assertIn("max-height: calc(var(--footer-bar-h) + var(--bottom-inset));", foot)
         self.assertNotIn("var(--foot-gap) + var(--safe-bottom)", side)
-        closed = mobile.split(".side:not(.open)", 1)[1][:160]
+        closed = rule(mobile, ".side:not(.open)")
         self.assertNotIn("height: 0;", closed)
         shell_block = shell.split("}", 1)[0]
         for unit in ("100dvh", "100lvh", "100vh", "var(--vvh"):
@@ -112,7 +119,7 @@ class MobileViewportShellFixTests(unittest.TestCase):
 
     def test_sw_fallback_ignores_query_for_panel_assets(self):
         sw = PWA.read_text(encoding="utf-8")
-        self.assertIn("pgclock-shell-v45", sw)
+        self.assertIn("pgclock-shell-v46", sw)
         self.assertIn("matchIgnoreSearch", sw)
         self.assertIn("isVersionedPanelAsset", sw)
         # Non-OK network responses must fall back to cache (not pass through).
@@ -122,11 +129,13 @@ class MobileViewportShellFixTests(unittest.TestCase):
         mobile = self._mobile()
         css = self._css()
         self.assertIn("side-nav-closing", mobile)
+        self.assertIn("side-nav-closing .side-panel", mobile)
         self.assertNotIn("html.ios-safari .shell", mobile)
         self.assertNotIn("html.ios .side.open", css)
         js = JS.read_text(encoding="utf-8")
         self.assertIn("side-nav-closing", js)
         self.assertIn("setOpen(false, true)", js)
+        self.assertNotIn("back.hidden", js)
         # One backdrop geometry rule, full-bleed, defined once outside the
         # media query — the drawer and the dim must share one bottom edge.
         self.assertFalse(has_rule(mobile, ".side-backdrop"))
@@ -134,6 +143,8 @@ class MobileViewportShellFixTests(unittest.TestCase):
         back = rule(css, ".side-backdrop")
         self.assertIn("inset: 0;", back)
         self.assertIn("position: fixed;", back)
+        self.assertIn("visibility: hidden;", back)
+        self.assertNotIn("display: none", back)
 
 
 if __name__ == "__main__":

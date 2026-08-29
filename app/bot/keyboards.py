@@ -768,15 +768,15 @@ def _reseller_settings_submenu_entries(ui: dict | None = None) -> list[tuple[str
 
 def _wallet_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return [
-        (REPLY_ACTION_WALLET_TOPUP, "🟢➕ شارژ کیف پول"),
-        (REPLY_ACTION_WALLET_TX, "🟡📜 تراکنش‌ها"),
+        (REPLY_ACTION_WALLET_TOPUP, _t(ui, "btn_wallet_topup") or "🟢➕ شارژ کیف پول"),
+        (REPLY_ACTION_WALLET_TX, _t(ui, "btn_wallet_tx") or "🟡📜 تراکنش‌ها"),
     ]
 
 
 def _support_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return [
-        (REPLY_ACTION_SUPPORT_NEW, "🟣✉️ تیکت جدید"),
-        (REPLY_ACTION_SUPPORT_LIST, "📋 تیکت‌های من"),
+        (REPLY_ACTION_SUPPORT_NEW, _t(ui, "btn_support_new") or "🟣✉️ تیکت جدید"),
+        (REPLY_ACTION_SUPPORT_LIST, _t(ui, "btn_support_list") or "📋 تیکت‌های من"),
     ]
 
 
@@ -787,9 +787,9 @@ def _loyalty_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     """
     return [
         (REPLY_ACTION_LOY_REFERRAL, _t(ui, "btn_referral") or "👥 دعوت دوستان"),
-        (REPLY_ACTION_LOY_POINTS, "⭐ امتیاز من"),
-        (REPLY_ACTION_LOY_REWARDS, "🎁 جوایز"),
-        (REPLY_ACTION_LOY_HISTORY, "📜 تاریخچه"),
+        (REPLY_ACTION_LOY_POINTS, _t(ui, "btn_loy_points") or "⭐ امتیاز من"),
+        (REPLY_ACTION_LOY_REWARDS, _t(ui, "btn_loy_rewards") or "🎁 جوایز"),
+        (REPLY_ACTION_LOY_HISTORY, _t(ui, "btn_loy_history") or "📜 تاریخچه"),
     ]
 
 

@@ -11,7 +11,7 @@
       }
       side.classList.toggle('open', open);
       if (back) {
-        back.hidden = !open;
+        /* Class-only (no hidden/display flip) so opacity can fade on the compositor. */
         back.classList.toggle('show', open);
         back.setAttribute('aria-hidden', open ? 'false' : 'true');
       }
@@ -2334,6 +2334,152 @@
         root.addEventListener('change', (e) => {
           if (e.target && e.target.classList && e.target.classList.contains('pay-dest-style')) sync(root);
         });
+      });
+    })();
+
+    /* Support contacts editor — same multi-row + final-save pattern as pay-dest */
+    (function () {
+      function uid() {
+        return 's' + Math.random().toString(36).slice(2, 10);
+      }
+      function parseJson(raw) {
+        try {
+          const data = JSON.parse(raw || '[]');
+          return Array.isArray(data) ? data : [];
+        } catch (_) {
+          return [];
+        }
+      }
+      function storedStyleValue(item) {
+        if (!item || item.button_style === undefined || item.button_style === null) return 'inherit';
+        if (item.button_style === '') return '';
+        return String(item.button_style);
+      }
+      function styleSelectHtml(cur) {
+        const val = cur == null ? 'inherit' : cur;
+        const tone = (!val || val === 'inherit') ? 'default' : val;
+        const opts = [
+          ['inherit', 'ارث از پشتیبانی', 'default'],
+          ['', 'سفید', 'default'],
+          ['primary', 'آبی', 'primary'],
+          ['success', 'سبز', 'success'],
+          ['danger', 'قرمز', 'danger'],
+        ];
+        let html =
+          '<div class="plan-color-field item-color-field pay-dest-color">' +
+            '<div class="btn-color-card plan-color-card">' +
+              '<span class="btn-color-label">رنگ دکمه در ربات</span>' +
+              '<select class="btn-color-select supports-style" data-tone="' + tone + '" aria-label="رنگ دکمه در ربات">';
+        opts.forEach(function (o) {
+          html +=
+            '<option value="' + o[0] + '" data-tone="' + o[2] + '"' +
+            (val === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        });
+        html += '</select></div></div>';
+        return html;
+      }
+      function rowStylePatch(row) {
+        const styleSel = row.querySelector('.supports-style');
+        const styleVal = styleSel ? styleSel.value : 'inherit';
+        if (styleVal === 'inherit') return {};
+        if (styleVal === '') return { button_style: '' };
+        return { button_style: styleVal };
+      }
+      function esc(v) {
+        return String(v == null ? '' : v).replace(/"/g, '&quot;');
+      }
+      function rowHtml(item) {
+        const id = (item && item.id) || uid();
+        const enabled = !item || item.enabled === undefined || item.enabled === null
+          ? true
+          : !!item.enabled;
+        return (
+          '<div class="pay-dest-row" data-supports-row data-supports-id="' + esc(id) + '">' +
+            '<div class="pay-dest-fields supports-fields-grid">' +
+              '<label>عنوان<input type="text" class="supports-title" maxlength="80" value="' + esc(item && item.title) + '" placeholder="مثلاً پشتیبان ربات" autocomplete="off" /></label>' +
+              '<label>آیدی / یوزرنیم تلگرام<input type="text" class="supports-telegram" dir="ltr" value="' + esc(item && item.telegram) + '" placeholder="@username یا 123456789" autocomplete="off" /></label>' +
+              '<label>ترتیب<input type="number" class="supports-sort" dir="ltr" value="' + esc(item && item.sort != null ? item.sort : 0) + '" /></label>' +
+              '<label class="support-enabled supports-enabled-field">' +
+                '<span>فعال</span>' +
+                '<span class="ui-switch">' +
+                  '<input type="checkbox" class="supports-enabled" value="1"' + (enabled ? ' checked' : '') + ' />' +
+                  '<span class="ui-switch-track" aria-hidden="true"></span>' +
+                '</span>' +
+              '</label>' +
+              styleSelectHtml(storedStyleValue(item)) +
+            '</div>' +
+            '<button type="button" class="btn btn-danger btn-sm supports-remove pay-dest-remove-btn">حذف</button>' +
+          '</div>'
+        );
+      }
+      function addBtnHtml() {
+        return '<button type="button" class="pay-dest-add-row" data-supports-add><span aria-hidden="true">+</span><span>افزودن</span></button>';
+      }
+      function sync(root) {
+        const hidden = root.querySelector('[data-supports-json]');
+        const list = root.querySelector('[data-supports-list]');
+        if (!hidden || !list) return;
+        const entries = [];
+        list.querySelectorAll('[data-supports-row]').forEach((row, idx) => {
+          const rowId = row.getAttribute('data-supports-id') || uid();
+          row.setAttribute('data-supports-id', rowId);
+          const title = String((row.querySelector('.supports-title') || {}).value || '').trim();
+          const telegram = String((row.querySelector('.supports-telegram') || {}).value || '').trim();
+          if (!title && !telegram) return;
+          let sort = idx;
+          try {
+            sort = parseInt(String((row.querySelector('.supports-sort') || {}).value || idx), 10);
+            if (Number.isNaN(sort)) sort = idx;
+          } catch (_) { sort = idx; }
+          const en = row.querySelector('.supports-enabled');
+          const enabled = !!(en && en.checked);
+          entries.push(Object.assign({
+            id: rowId,
+            title: title,
+            telegram: telegram,
+            sort: sort,
+            enabled: enabled,
+          }, rowStylePatch(row)));
+        });
+        hidden.value = JSON.stringify(entries);
+      }
+      function render(root, items) {
+        const list = root.querySelector('[data-supports-list]');
+        if (!list) return;
+        const rows = (items && items.length ? items : [{}]).map((item) => rowHtml(item)).join('');
+        list.innerHTML = rows + addBtnHtml();
+        sync(root);
+      }
+      document.querySelectorAll('[data-supports-editor]').forEach((root) => {
+        const hidden = root.querySelector('[data-supports-json]');
+        render(root, parseJson(hidden ? hidden.value : '[]'));
+        root.addEventListener('click', (e) => {
+          if (e.target.closest('[data-supports-add]')) {
+            e.preventDefault();
+            const list = root.querySelector('[data-supports-list]');
+            const add = list && list.querySelector('[data-supports-add]');
+            const html = rowHtml({});
+            if (add) add.insertAdjacentHTML('beforebegin', html);
+            else if (list) list.insertAdjacentHTML('afterbegin', html);
+            sync(root);
+            return;
+          }
+          if (e.target.closest('.supports-remove')) {
+            e.preventDefault();
+            const row = e.target.closest('[data-supports-row]');
+            const list = root.querySelector('[data-supports-list]');
+            if (row && list) {
+              row.remove();
+              if (!list.querySelector('[data-supports-row]')) {
+                const add = list.querySelector('[data-supports-add]');
+                if (add) add.insertAdjacentHTML('beforebegin', rowHtml({}));
+              }
+              sync(root);
+            }
+          }
+        });
+        root.addEventListener('input', () => sync(root));
+        root.addEventListener('change', () => sync(root));
       });
     })();
 

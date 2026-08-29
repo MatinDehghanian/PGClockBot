@@ -160,6 +160,51 @@ async def save_support_contacts(
     await set_setting(session, SETTING_KEY, dump_support_contacts(contacts), reseller_id=reseller_id)
 
 
+def contacts_from_form_json(raw: str | None) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """Parse bulk editor JSON. Empty rows skipped; partial rows return an error."""
+    text = (raw or "").strip()
+    if not text:
+        return [], None
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None, "داده پشتیبان‌ها نامعتبر است"
+    if not isinstance(data, list):
+        return None, "داده پشتیبان‌ها نامعتبر است"
+    out: list[dict[str, Any]] = []
+    for i, item in enumerate(data):
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        telegram_raw = str(item.get("telegram") or "").strip()
+        if not title and not telegram_raw:
+            continue
+        if not title:
+            return None, "عنوان پشتیبان الزامی است"
+        err = validate_telegram(telegram_raw)
+        if err:
+            return None, err
+        try:
+            sort = int(item.get("sort", i))
+        except (TypeError, ValueError):
+            sort = i
+        enabled = item.get("enabled", True)
+        if isinstance(enabled, str):
+            enabled = enabled.strip().lower() in {"1", "true", "yes", "on"}
+        out.append(
+            {
+                "id": str(item.get("id") or _new_id()),
+                "title": title[:80],
+                "telegram": normalize_telegram_handle(telegram_raw),
+                "sort": sort,
+                "enabled": bool(enabled),
+                **serialize_item_button_style(item.get("button_style")),
+            }
+        )
+    out.sort(key=lambda x: (x["sort"], x["title"]))
+    return out, None
+
+
 async def upsert_support_contact(
     session: AsyncSession,
     *,
