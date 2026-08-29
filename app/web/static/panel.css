@@ -1342,7 +1342,7 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
   font: inherit;
   font-size: var(--control-fs) !important;
   font-weight: 400;
-  line-height: 1.25;
+  line-height: 1;
   text-align: right;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -1381,12 +1381,18 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  line-height: 1.25;
 }
 .ui-select-caret {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
   margin-inline-start: auto;
+  align-self: center;
+  display: block;
   stroke: var(--muted-fg);
   fill: none;
   stroke-width: 1.6;
@@ -1441,7 +1447,7 @@ body > .ui-select-menu.is-ported[data-drop-up="1"] {
   align-items: center;
   justify-content: flex-start;
   width: 100%;
-  min-height: 34px;
+  min-height: 36px;
   padding: 0 var(--space-1);
   border: 0;
   border-radius: var(--menu-item-radius);
@@ -1450,6 +1456,7 @@ body > .ui-select-menu.is-ported[data-drop-up="1"] {
   font: inherit;
   font-size: 13px;
   font-weight: 500;
+  line-height: 1.25;
   text-align: right;
   cursor: pointer;
 }
@@ -1598,6 +1605,10 @@ textarea[aria-invalid="true"] {
   flex: 0 0 auto;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  /* Travel = inner track width − thumb − 2×pad (border eats 2px of 44). */
+  --sw-thumb: 20px;
+  --sw-pad: 3px;
+  --sw-travel: 16px;
 }
 .ui-switch-sm {
   width: 44px;
@@ -1628,15 +1639,16 @@ textarea[aria-invalid="true"] {
   border: 1px solid rgba(255, 255, 255, 0.06);
   transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   pointer-events: none;
+  overflow: hidden;
 }
 .ui-switch-track::after {
   content: "";
   position: absolute;
   top: 50%;
   /* Physical left + translateX keeps the thumb on the compositor (no inset thrash). */
-  left: 3px;
-  width: 20px;
-  height: 20px;
+  left: var(--sw-pad);
+  width: var(--sw-thumb);
+  height: var(--sw-thumb);
   border-radius: 999px;
   background: #fafafa;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 1px rgba(0, 0, 0, 0.2);
@@ -1644,45 +1656,45 @@ textarea[aria-invalid="true"] {
   transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .ui-switch-sm .ui-switch-track::after {
-  width: 20px;
-  height: 20px;
+  width: var(--sw-thumb);
+  height: var(--sw-thumb);
 }
 .ui-switch input:checked + .ui-switch-track {
   background: #16a34a;
   border-color: transparent;
 }
 .ui-switch input:checked + .ui-switch-track::after {
-  transform: translateY(-50%) translateX(21px);
+  transform: translateY(-50%) translateX(var(--sw-travel));
 }
 .ui-switch-sm input:checked + .ui-switch-track::after {
-  transform: translateY(-50%) translateX(21px);
+  transform: translateY(-50%) translateX(var(--sw-travel));
 }
 .ui-switch input:active + .ui-switch-track::after {
-  transform: translateY(-50%) scaleX(1.08);
+  transform: translateY(-50%) scaleX(1.06);
 }
 .ui-switch input:checked:active + .ui-switch-track::after {
-  transform: translateY(-50%) translateX(21px) scaleX(1.08);
+  transform: translateY(-50%) translateX(var(--sw-travel)) scaleX(1.06);
 }
 /* RTL: thumb starts on the inline-start (right) edge */
 [dir="rtl"] .ui-switch-track::after,
 html[dir="rtl"] .ui-switch-track::after {
   left: auto;
-  right: 3px;
+  right: var(--sw-pad);
   transform: translateY(-50%);
 }
 [dir="rtl"] .ui-switch input:checked + .ui-switch-track::after,
 html[dir="rtl"] .ui-switch input:checked + .ui-switch-track::after,
 [dir="rtl"] .ui-switch-sm input:checked + .ui-switch-track::after,
 html[dir="rtl"] .ui-switch-sm input:checked + .ui-switch-track::after {
-  transform: translateY(-50%) translateX(-21px);
+  transform: translateY(-50%) translateX(calc(-1 * var(--sw-travel)));
 }
 [dir="rtl"] .ui-switch input:active + .ui-switch-track::after,
 html[dir="rtl"] .ui-switch input:active + .ui-switch-track::after {
-  transform: translateY(-50%) scaleX(1.08);
+  transform: translateY(-50%) scaleX(1.06);
 }
 [dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after,
 html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
-  transform: translateY(-50%) translateX(-21px) scaleX(1.08);
+  transform: translateY(-50%) translateX(calc(-1 * var(--sw-travel))) scaleX(1.06);
 }
 .ui-switch input:focus-visible + .ui-switch-track {
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.28);
@@ -3396,7 +3408,7 @@ form.settings-form > .actions.sticky-actions,
 .dnd-cols {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--section-gap);
+  gap: var(--space-2);
   width: 100%;
 }
 .dnd-list {
@@ -4527,7 +4539,9 @@ form.settings-form > .actions.sticky-actions,
   .edit-section > .actions,
   .ui-modal-panel > .actions,
   .ui-modal-panel .form-stack > .actions,
-  .update-actions {
+  .update-actions,
+  .tg-preview-gate > .actions,
+  .tg-preview-toolbar {
     width: 100%;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4556,7 +4570,10 @@ form.settings-form > .actions.sticky-actions,
   .ui-modal-panel .form-stack > .actions > a.btn,
   .update-actions > .btn,
   .update-actions > a.btn,
-  .update-actions > button {
+  .update-actions > button,
+  .tg-preview-gate > .actions > .btn,
+  .tg-preview-toolbar > .btn,
+  .tg-preview-toolbar > .tg-preview-close-btn {
     width: 100%;
     max-width: 100%;
     min-width: 0;
@@ -4571,7 +4588,9 @@ form.settings-form > .actions.sticky-actions,
   .edit-section > .actions > :last-child:nth-child(odd),
   .ui-modal-panel > .actions > :last-child:nth-child(odd),
   .ui-modal-panel .form-stack > .actions > :last-child:nth-child(odd),
-  .update-actions > :last-child:nth-child(odd) {
+  .update-actions > :last-child:nth-child(odd),
+  .tg-preview-gate > .actions > :last-child:nth-child(odd),
+  .tg-preview-toolbar > :last-child:nth-child(odd) {
     grid-column: 1 / -1;
   }
   .sticky-actions > form,
@@ -4703,13 +4722,19 @@ form.settings-form > .actions.sticky-actions,
   margin-bottom: 0;
 }
 .tg-preview-gate .actions {
-  margin-top: var(--space-2);
+  margin-top: var(--space-1);
   justify-content: flex-start;
 }
 .tg-preview-toolbar {
   display: flex;
   justify-content: flex-start;
   margin-top: var(--space-1);
+  width: 100%;
+}
+.tg-preview-toolbar .btn,
+.tg-preview-toolbar .tg-preview-close-btn {
+  width: 100%;
+  justify-content: center;
 }
 /* Sticky phone mock only when the live panel is open */
 .settings-layout.has-preview .tg-preview-wrap {
@@ -4740,7 +4765,7 @@ form.settings-form > .actions.sticky-actions,
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
   color: var(--tg-text);
   font-family: var(--font);
-  min-height: 520px;
+  min-height: 400px;
   display: flex;
   flex-direction: column;
 }
@@ -4776,7 +4801,7 @@ form.settings-form > .actions.sticky-actions,
     radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
   background-size: 18px 18px;
   overflow: auto;
-  min-height: 360px;
+  min-height: 260px;
 }
 .tg-bubble {
   max-width: 92%;
@@ -5065,11 +5090,22 @@ form.settings-form > .actions.sticky-actions,
   .tg-preview-slot {
     order: -1;
   }
-  .tg-preview { min-height: 420px; }
+  .tg-preview { min-height: 360px; }
 }
 
 @media (max-width: 900px) {
-  .tg-preview { min-height: 380px; border-radius: 18px; }
+  .tg-preview { min-height: 320px; border-radius: 18px; }
+  .tg-preview-gate .actions,
+  .tg-preview-toolbar {
+    display: flex;
+    width: 100%;
+  }
+  .tg-preview-gate .actions .btn,
+  .tg-preview-toolbar .btn,
+  .tg-preview-close-btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 /* ── Panel split: Bot vs PasarGuard ── */
