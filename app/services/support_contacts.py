@@ -23,6 +23,16 @@ def _new_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
+def _sanitize_contact_title(raw: str) -> str:
+    """Strip HTML/attribute breakout characters from staff-facing titles."""
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    # Defense in depth for panel DOM editors (innerHTML / attributes).
+    s = re.sub(r'[<>"\'`]', "", s)
+    return s.strip()[:80]
+
+
 def normalize_telegram_handle(raw: str) -> str:
     """Normalize to @username, numeric id, or keep absolute URL."""
     s = (raw or "").strip()
@@ -87,7 +97,7 @@ def parse_support_contacts(raw: str | None) -> list[dict[str, Any]]:
     for i, item in enumerate(data):
         if not isinstance(item, dict):
             continue
-        title = str(item.get("title") or "").strip()
+        title = _sanitize_contact_title(str(item.get("title") or ""))
         telegram = normalize_telegram_handle(str(item.get("telegram") or ""))
         if not title or not telegram:
             continue
@@ -102,7 +112,7 @@ def parse_support_contacts(raw: str | None) -> list[dict[str, Any]]:
         out.append(
             {
                 "id": cid,
-                "title": title[:80],
+                "title": title,
                 "telegram": telegram,
                 "sort": sort,
                 "enabled": bool(enabled),
@@ -116,7 +126,7 @@ def parse_support_contacts(raw: str | None) -> list[dict[str, Any]]:
 def dump_support_contacts(contacts: list[dict[str, Any]]) -> str:
     clean = []
     for i, c in enumerate(contacts):
-        title = str(c.get("title") or "").strip()[:80]
+        title = _sanitize_contact_title(str(c.get("title") or ""))
         telegram = normalize_telegram_handle(str(c.get("telegram") or ""))
         if not title or not telegram:
             continue
@@ -175,7 +185,7 @@ def contacts_from_form_json(raw: str | None) -> tuple[list[dict[str, Any]] | Non
     for i, item in enumerate(data):
         if not isinstance(item, dict):
             continue
-        title = str(item.get("title") or "").strip()
+        title = _sanitize_contact_title(str(item.get("title") or ""))
         telegram_raw = str(item.get("telegram") or "").strip()
         if not title and not telegram_raw:
             continue
@@ -194,7 +204,7 @@ def contacts_from_form_json(raw: str | None) -> tuple[list[dict[str, Any]] | Non
         out.append(
             {
                 "id": str(item.get("id") or _new_id()),
-                "title": title[:80],
+                "title": title,
                 "telegram": normalize_telegram_handle(telegram_raw),
                 "sort": sort,
                 "enabled": bool(enabled),
@@ -217,7 +227,7 @@ async def upsert_support_contact(
     reseller_id: int | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     err = validate_telegram(telegram)
-    title = (title or "").strip()
+    title = _sanitize_contact_title(title or "")
     if not title:
         return None, "عنوان الزامی است"
     if err:
@@ -234,7 +244,7 @@ async def upsert_support_contact(
                 break
         if not found:
             return None, "پشتیبان یافت نشد"
-        found["title"] = title[:80]
+        found["title"] = title
         found["telegram"] = normalize_telegram_handle(telegram)
         found["sort"] = sort
         found["enabled"] = enabled
@@ -245,7 +255,7 @@ async def upsert_support_contact(
         return found, None
     item = {
         "id": _new_id(),
-        "title": title[:80],
+        "title": title,
         "telegram": normalize_telegram_handle(telegram),
         "sort": sort if sort else (max((c["sort"] for c in contacts), default=-1) + 1),
         "enabled": enabled,

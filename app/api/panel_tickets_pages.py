@@ -249,6 +249,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             "open_supports_modal": open_supports and can_manage_supports,
             "supports_modal_tab": supports_modal_tab,
             "support_contacts": [],
+            "support_contacts_json": "[]",
             "values": {},
             "support_text_tab_groups": [],
             "support_text_groups": {},
@@ -262,7 +263,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
 
         if can_manage_supports:
             from app.services.button_styles import item_button_style_options
-            from app.services.support_contacts import get_support_contacts
+            from app.services.support_contacts import dump_support_contacts, get_support_contacts
             from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
 
             ctx["item_style_options"] = item_button_style_options(
@@ -272,6 +273,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             # Owner settings only for real Owner. Missing shop scope → empty, never Owner fallback.
             if is_platform_admin(staff):
                 ctx["support_contacts"] = await get_support_contacts(session, reseller_id=None)
+                ctx["support_contacts_json"] = dump_support_contacts(ctx["support_contacts"])
                 values = await get_all_settings(session)
                 ctx["values"] = values
                 names = TAB_SETTING_GROUPS.get("supports") or []
@@ -285,6 +287,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                     ctx["support_contacts"] = await get_support_contacts(
                         session, reseller_id=rid
                     )
+                    ctx["support_contacts_json"] = dump_support_contacts(ctx["support_contacts"])
                     values = await get_all_settings(session, reseller_id=rid)
                     ctx["values"] = values
                     names = TAB_SETTING_GROUPS.get("supports") or []

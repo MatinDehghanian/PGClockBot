@@ -1,5 +1,6 @@
 {% set supports_save = supports_save or '/supports/save' %}
-{% set _supports_json = support_contacts|default([])|tojson %}
+{# Plain JSON string (not |tojson Markup) so Jinja HTML-escapes attribute quotes. #}
+{% set _supports_json = support_contacts_json if support_contacts_json is defined else '[]' %}
 <form method="post" action="{{ supports_save }}" class="settings-form" data-supports-editor>
   <div class="card settings-card">
     <h2>پشتیبان‌های تلگرام</h2>
@@ -10,7 +11,7 @@
       چند پشتیبان را اضافه یا حذف کنید و در پایان یک‌بار ذخیره کنید.
     </p>
     <div class="pay-dest-list supports-editor-list">
-      <input type="hidden" name="support_contacts" value='{{ _supports_json }}' data-supports-json />
+      <input type="hidden" name="support_contacts" value="{{ _supports_json }}" data-supports-json />
       <div class="pay-dest-rows" data-supports-list></div>
     </div>
   </div>

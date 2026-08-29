@@ -1444,21 +1444,29 @@
         const link = entry && entry.link ? String(entry.link) : '';
         const title = entry && entry.title ? String(entry.title) : '';
         const req = !entry || entry.required !== false;
+        function attrEsc(v) {
+          return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        }
         return (
           '<div class="force-channel-row">' +
             '<label class="form-field force-channel-title-wrap">عنوان دکمه اینلاین' +
               '<input type="text" class="force-channel-title" placeholder="مثلاً کانال اخبار" value="' +
-                title.replace(/"/g, '&quot;') + '" autocomplete="off" />' +
+                attrEsc(title) + '" autocomplete="off" />' +
               '<small class="muted">متنی که روی دکمه عضویت در ربات دیده می‌شود</small>' +
             '</label>' +
             '<label class="form-field force-channel-id-wrap">شناسه کانال' +
               '<input type="text" class="force-channel-id" dir="ltr" placeholder="@channel یا -100… یا t.me/c/…" value="' +
-                id.replace(/"/g, '&quot;') + '" autocomplete="off" />' +
+                attrEsc(id) + '" autocomplete="off" />' +
               '<small class="muted">برای تأیید عضویت: @username یا −100… — ربات باید ادمین کانال باشد</small>' +
             '</label>' +
             '<label class="form-field force-channel-link-wrap">لینک دکمه / دعوت' +
               '<input type="text" class="force-channel-link" dir="ltr" placeholder="https://t.me/+… یا t.me/channel" value="' +
-                link.replace(/"/g, '&quot;') + '" autocomplete="off" />' +
+                attrEsc(link) + '" autocomplete="off" />' +
               '<small class="muted">لینک روی دکمه اینلاین؛ کانال خصوصی حتماً لینک دعوت (+…) بگذارید</small>' +
             '</label>' +
             '<div class="force-channel-foot">' +
@@ -2175,6 +2183,14 @@
       function uid() {
         return 'pd' + Math.random().toString(36).slice(2, 10);
       }
+      function attrEsc(v) {
+        return String(v == null ? '' : v)
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
       function parseJson(raw) {
         try {
           const data = JSON.parse(raw || '[]');
@@ -2223,10 +2239,10 @@
         const styleHtml = styleSelectHtml(storedStyleValue(item), inheritLabel);
         if (kind === 'cards') {
           return (
-            '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + String(id).replace(/"/g, '&quot;') + '">' +
+            '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + attrEsc(id) + '">' +
               '<div class="pay-dest-fields">' +
-                '<label>شماره کارت<input type="text" class="pay-dest-card-number" dir="ltr" value="' + String(item.number || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
-                '<label>صاحب کارت<input type="text" class="pay-dest-card-holder" value="' + String(item.holder || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
+                '<label>شماره کارت<input type="text" class="pay-dest-card-number" dir="ltr" value="' + attrEsc(item.number) + '" autocomplete="off" /></label>' +
+                '<label>صاحب کارت<input type="text" class="pay-dest-card-holder" value="' + attrEsc(item.holder) + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
               '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
@@ -2235,10 +2251,10 @@
         }
         if (kind === 'gateways') {
           return (
-            '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + String(id).replace(/"/g, '&quot;') + '">' +
+            '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + attrEsc(id) + '">' +
               '<div class="pay-dest-fields">' +
-                '<label>نام درگاه<input type="text" class="pay-dest-gw-name" value="' + String(item.name || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
-                '<label>لینک<input type="text" class="pay-dest-gw-link" dir="ltr" value="' + String(item.link || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
+                '<label>نام درگاه<input type="text" class="pay-dest-gw-name" value="' + attrEsc(item.name) + '" autocomplete="off" /></label>' +
+                '<label>لینک<input type="text" class="pay-dest-gw-link" dir="ltr" value="' + attrEsc(item.link) + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
               '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
@@ -2246,11 +2262,11 @@
           );
         }
         return (
-          '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + String(id).replace(/"/g, '&quot;') + '">' +
+          '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + attrEsc(id) + '">' +
             '<div class="pay-dest-fields">' +
-              '<label>رمزارز<input type="text" class="pay-dest-cr-asset" value="' + String(item.asset || 'USDT').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
-              '<label>شبکه<input type="text" class="pay-dest-cr-network" value="' + String(item.network || 'TRC20').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
-              '<label>آدرس<input type="text" class="pay-dest-cr-address" dir="ltr" value="' + String(item.address || '').replace(/"/g, '&quot;') + '" autocomplete="off" /></label>' +
+              '<label>رمزارز<input type="text" class="pay-dest-cr-asset" value="' + attrEsc(item.asset || 'USDT') + '" autocomplete="off" /></label>' +
+              '<label>شبکه<input type="text" class="pay-dest-cr-network" value="' + attrEsc(item.network || 'TRC20') + '" autocomplete="off" /></label>' +
+              '<label>آدرس<input type="text" class="pay-dest-cr-address" dir="ltr" value="' + attrEsc(item.address) + '" autocomplete="off" /></label>' +
               styleHtml +
             '</div>' +
             '<button type="button" class="btn btn-danger btn-sm pay-dest-remove pay-dest-remove-btn">حذف</button>' +
@@ -2386,7 +2402,12 @@
         return { button_style: styleVal };
       }
       function esc(v) {
-        return String(v == null ? '' : v).replace(/"/g, '&quot;');
+        return String(v == null ? '' : v)
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
       }
       function rowHtml(item) {
         const id = (item && item.id) || uid();

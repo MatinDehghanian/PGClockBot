@@ -20,6 +20,9 @@ class SupportsBulkEditorTests(unittest.TestCase):
         self.assertIn("data-supports-json", tpl)
         self.assertIn("data-supports-list", tpl)
         self.assertIn('name="support_contacts"', tpl)
+        self.assertIn('value="{{ _supports_json }}"', tpl)
+        self.assertIn("support_contacts_json", tpl)
+        self.assertNotIn("|tojson }}", tpl)
         self.assertIn("ذخیره پشتیبان‌ها", tpl)
         self.assertNotIn("supports/delete", tpl)
         self.assertNotIn("افزودن پشتیبان", tpl)
@@ -29,6 +32,9 @@ class SupportsBulkEditorTests(unittest.TestCase):
         self.assertIn("data-supports-editor", js)
         self.assertIn("data-supports-add", js)
         self.assertIn("supports-remove", js)
+        # Attribute escape must cover more than quotes (stored XSS hardening).
+        self.assertIn(".replace(/&/g, '&amp;')", js)
+        self.assertIn(".replace(/</g, '&lt;')", js)
 
     def test_contacts_from_form_json(self):
         from app.services.support_contacts import contacts_from_form_json
@@ -43,6 +49,24 @@ class SupportsBulkEditorTests(unittest.TestCase):
         bad, err2 = contacts_from_form_json('[{"title":"S","telegram":"x"}]')
         self.assertIsNone(bad)
         self.assertTrue(err2)
+
+    def test_title_html_stripped(self):
+        import json
+
+        from app.services.support_contacts import contacts_from_form_json, dump_support_contacts
+
+        ok, err = contacts_from_form_json(
+            '[{"title":"A<script>x</script>","telegram":"@support_ok"}]'
+        )
+        self.assertIsNone(err)
+        self.assertEqual(ok[0]["title"], "Ascriptx/script")
+        dumped = dump_support_contacts(
+            [{"title": 'x" autofocus="y', "telegram": "@support_ok"}]
+        )
+        parsed = json.loads(dumped)
+        self.assertEqual(parsed[0]["title"], "x autofocus=y")
+        self.assertNotIn("<", parsed[0]["title"])
+        self.assertNotIn('"', parsed[0]["title"])
 
 
 class SettingsTextsCompletenessTests(unittest.TestCase):
