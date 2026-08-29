@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.8.1": [
+        "Placeholderها در همه ورودی‌ها راست‌چین و کمرنگ (تم روشن/تیره)",
+        "سوییچ فعال: دایره داخل ترک می‌ماند؛ متن ui-select وسط عمودی",
+        "پیشنمایش تلگرام: بدون کپشن، ارتفاع کمتر؛ دکمه‌ها در موبایل تمام‌عرض",
+        "فاصله کمتر بین مخزن و منوی فعال کیبورد",
+        "ریستور: restore/pre-v8.8.1-v8.8.0",
+    ],
     "8.8.0": [
         "هسته تسویه پرداخت (Settlement): درگاه API و تأیید خودکار کارت — افزایشی، امن، ایزولهٔ نقش",
         "Mock فقط با ALLOW_SETTLEMENT_MOCK=1 + توکن یک‌بارمصرف؛ وب‌هوک جدا برای platform/shop",
