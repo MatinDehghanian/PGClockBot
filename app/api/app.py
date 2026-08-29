@@ -3561,10 +3561,24 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         from urllib.parse import quote
 
+        from app.services.support_contacts import contacts_from_form_json, save_support_contacts
+
+        form = await request.form()
+        raw = form.get("support_contacts")
+        if raw is not None:
+            contacts, err = contacts_from_form_json(str(raw))
+            if err:
+                return RedirectResponse(
+                    f"/tickets?supports=1&err={quote(err)}",
+                    status_code=303,
+                )
+            await save_support_contacts(session, contacts or [])
+            return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
+
+        # Legacy single-row upsert (bot / older clients)
         from app.services.button_styles import parse_item_button_style_form
         from app.services.support_contacts import upsert_support_contact
 
-        form = await request.form()
         contact_id = str(form.get("id") or "").strip() or None
         title = str(form.get("title") or "").strip()
         telegram = str(form.get("telegram") or "").strip()
@@ -3573,7 +3587,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         except ValueError:
             sort = 0
         enabled = str(form.get("enabled") or "") in {"1", "on", "true", "yes"}
-        # unchecked checkbox means disabled when editing existing
         if contact_id and "enabled" not in form:
             enabled = False
         button_style = parse_item_button_style_form(form)

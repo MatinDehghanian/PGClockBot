@@ -25,7 +25,6 @@
     <div class="settings-modal-body">
       <div class="modal-tab-panel" data-modal-tab-panel="contacts" {% if supports_modal_tab == 'text' %}hidden{% endif %}>
         {% set supports_save = supports_save_action %}
-        {% set supports_delete = supports_delete_action %}
         {% include "_settings_supports.html" %}
       </div>
       <div class="modal-tab-panel" data-modal-tab-panel="text" {% if supports_modal_tab != 'text' %}hidden{% endif %}>

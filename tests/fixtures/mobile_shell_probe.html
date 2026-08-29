@@ -21,14 +21,16 @@
       </button>
     </header>
     <aside class="side" id="sidebar" aria-label="منوی اصلی">
+      <div class="side-panel">
       <div class="side-theme"><button type="button" class="side-theme-btn"><span class="side-theme-text">تم</span></button></div>
       <nav class="side-nav">
         <div class="nav-section"><a href="#" class="nav-item"><span>باشگاه مشتریان</span></a></div>
         <div class="nav-section"><a href="#" class="nav-item"><span>متغیرهای پیام</span></a></div>
       </nav>
       <div class="side-foot"><div class="side-foot-user"><span class="side-foot-name">admin</span></div></div>
+      </div>
     </aside>
-    <div class="side-backdrop" id="side-backdrop" hidden></div>
+    <div class="side-backdrop" id="side-backdrop" aria-hidden="true"></div>
     <main class="main">
       <div class="main-body page-surface">
         <div class="page-head"><h1>وضعیت اتصال</h1></div>
@@ -41,8 +43,8 @@
     document.getElementById('menu-toggle').addEventListener('click', function () {
       var open = document.getElementById('sidebar').classList.toggle('open');
       var back = document.getElementById('side-backdrop');
-      back.hidden = !open;
       back.classList.toggle('show', open);
+      back.setAttribute('aria-hidden', open ? 'false' : 'true');
       document.body.classList.toggle('nav-open', open);
     });
   </script>

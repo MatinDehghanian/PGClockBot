@@ -17,7 +17,9 @@ LAYOUT_PROBE = ROOT / "tests/mobile_layout_probe.py"
 
 class MobileBottomGapCssTests(unittest.TestCase):
     def _mobile(self) -> str:
-        return CSS.read_text(encoding="utf-8").split("@media (max-width: 900px)", 1)[1]
+        from css_blocks import at_rule
+
+        return at_rule(CSS.read_text(encoding="utf-8-sig"), "@media (max-width: 900px)")
 
     def test_document_scroll_not_nested_main(self):
         mobile = self._mobile()
@@ -55,17 +57,19 @@ class MobileBottomGapCssTests(unittest.TestCase):
             self.assertNotIn(unit, shell_block)
 
     def test_shell_owns_safe_bottom_once(self):
+        from css_blocks import rule
+
         mobile = self._mobile()
         shell = mobile.split(".shell {", 1)[1].split("  .topbar", 1)[0]
         main = mobile.split("  .main {", 1)[1].split("  .main-body", 1)[0]
-        side = mobile.split("  .side {", 1)[1].split("  .side.open", 1)[0]
+        side = rule(mobile, ".side")
         foot = mobile.split("  .site-footer {", 1)[1].split("  .footer-meta", 1)[0]
         self.assertIn("padding-bottom: 0;", shell)
         # Bottom inset is owned by both footers — NOT by .main (that split separators).
         self.assertIn("padding: var(--page-title-gap) var(--space-2) 0;", main)
         self.assertIn("padding-bottom: var(--bottom-inset);", foot)
         self.assertIn("padding-bottom: var(--bottom-inset);", mobile.split(".side .side-foot", 1)[1][:200])
-        self.assertIn("padding-bottom: 0;", side)
+        self.assertIn("padding: 0;", side)
         self.assertIn("min-height: 100svh;", shell)
 
     def test_no_viewport_js_hacks(self):

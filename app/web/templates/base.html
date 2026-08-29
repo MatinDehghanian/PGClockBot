@@ -78,6 +78,7 @@
     </header>
 
     <aside class="side" id="sidebar" aria-label="منوی اصلی">
+      <div class="side-panel">
       <div class="brand desk-only">
         <span class="brand-logo" aria-hidden="true"><img src="/static/logo-64.png" alt="" width="36" height="36" /></span>
         <div>
@@ -323,9 +324,10 @@
           </button>
         </form>
       </div>
+      </div>
     </aside>
 
-    <div class="side-backdrop" id="side-backdrop" hidden aria-hidden="true"></div>
+    <div class="side-backdrop" id="side-backdrop" aria-hidden="true"></div>
 
     <main class="main">
       <div class="main-body">
@@ -372,18 +374,27 @@
         <input type="hidden" name="alert_key" id="inbox-dismiss-key" value="" />
         <input type="hidden" name="entity_id" id="inbox-dismiss-entity" value="" />
         <input type="hidden" name="return_to" id="inbox-dismiss-return" value="" />
-        <p class="muted">این اعلان چگونه مخفی شود؟</p>
-        <div class="inbox-dismiss-options">
-          <button type="submit" name="mode" value="24h" class="btn btn-ghost inbox-dismiss-option">
-            <strong>۲۴ ساعت</strong>
-            <small class="muted">بعد از ۲۴ ساعت اگر هنوز برقرار باشد دوباره نمایش داده می‌شود</small>
-          </button>
-          <button type="submit" name="mode" value="forever" class="btn btn-ghost inbox-dismiss-option">
-            <strong>برای همیشه</strong>
-            <small class="muted">تا وقتی مشکل برطرف شود نمایش داده نمی‌شود</small>
-          </button>
+        <p class="muted" id="inbox-dismiss-hint">مدت مخفی‌سازی را انتخاب کنید، سپس تأیید کنید.</p>
+        <div class="inbox-dismiss-options" role="radiogroup" aria-labelledby="inbox-dismiss-hint">
+          <label class="inbox-dismiss-option is-selected">
+            <input type="radio" name="mode" value="24h" checked />
+            <span class="inbox-dismiss-radio" aria-hidden="true"></span>
+            <span class="inbox-dismiss-copy">
+              <strong>۲۴ ساعت</strong>
+              <small>بعد از ۲۴ ساعت اگر هنوز برقرار باشد دوباره نمایش داده می‌شود</small>
+            </span>
+          </label>
+          <label class="inbox-dismiss-option">
+            <input type="radio" name="mode" value="forever" />
+            <span class="inbox-dismiss-radio" aria-hidden="true"></span>
+            <span class="inbox-dismiss-copy">
+              <strong>برای همیشه</strong>
+              <small>تا وقتی مشکل برطرف شود نمایش داده نمی‌شود</small>
+            </span>
+          </label>
         </div>
         <div class="actions">
+          <button type="submit" class="btn" id="inbox-dismiss-submit">تأیید</button>
           <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
         </div>
       </form>
