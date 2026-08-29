@@ -46,6 +46,7 @@ class PaymentMethod(str, Enum):
     GATEWAY = "gateway"
     CRYPTO = "crypto"
     STARS = "stars"
+    PSP = "psp"  # Iranian/online PSP with request→verify (additive)
 
 
 class PaymentStatus(str, Enum):
@@ -186,6 +187,82 @@ class Payment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     order: Mapped[Optional["Order"]] = relationship(back_populates="payments")
+    settlements: Mapped[list["PaymentSettlement"]] = relationship(back_populates="payment")
+
+
+class SettlementStatus(str, Enum):
+    """Lifecycle of an external settlement attempt (PSP / card-auto)."""
+
+    CREATED = "created"
+    AWAITING = "awaiting"
+    SETTLING = "settling"  # claimed for approve; not terminal
+    SETTLED = "settled"
+    FAILED = "failed"
+    EXPIRED = "expired"
+
+
+class PaymentSettlement(Base):
+    """Additive settlement ledger for PSP and card-auto channels.
+
+    Existing receipt-based methods never touch this table. Settlement success
+    always terminates in ``approve_payment`` (fail-closed, amount-matched).
+    """
+
+    __tablename__ = "payment_settlements"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_payment_settlements_idempotency"),
+        Index("ix_payment_settlements_external_ref", "provider", "external_ref"),
+        # One open attempt per payment+channel (race-safe create).
+        Index(
+            "uq_payment_settlements_active_payment_channel",
+            "payment_id",
+            "channel",
+            unique=True,
+            sqlite_where=text("status IN ('created','awaiting','settling')"),
+            postgresql_where=text("status IN ('created','awaiting','settling')"),
+        ),
+        # Duplicate provider events within a tenant.
+        Index(
+            "uq_payment_settlements_tenant_ext_ref",
+            "channel",
+            "provider",
+            "tenant_key",
+            "external_ref",
+            unique=True,
+            sqlite_where=text("external_ref IS NOT NULL AND status IN ('settling','settled')"),
+            postgresql_where=text("external_ref IS NOT NULL AND status IN ('settling','settled')"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    payment_id: Mapped[int] = mapped_column(ForeignKey("payments.id"), index=True)
+    # NULL = platform shop; set for reseller tenant isolation on webhooks/matching.
+    shop_owner_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    # 0 = platform; else reseller user id — for UNIQUE indexes (NULL-safe).
+    tenant_key: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    channel: Mapped[str] = mapped_column(String(32), index=True)  # psp | card_auto
+    provider: Mapped[str] = mapped_column(String(32), index=True)  # mock | zarinpal | generic
+    status: Mapped[str] = mapped_column(
+        String(32), default=SettlementStatus.CREATED.value, index=True
+    )
+    amount: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(8), default="IRT")
+    idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    external_ref: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # One-time token for mock checkout settle (never a substitute for real PSP verify).
+    checkout_token: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    checkout_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    provider_payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    settled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    payment: Mapped["Payment"] = relationship(back_populates="settlements")
 
 
 class UserService(Base):

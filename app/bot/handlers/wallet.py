@@ -24,6 +24,7 @@ router = Router(name="wallet")
 _TOPUP_METHODS = {
     "card": ("pay_card_enabled", PaymentMethod.CARD.value),
     "gateway": ("pay_gateway_enabled", PaymentMethod.GATEWAY.value),
+    "psp": ("pay_psp_enabled", PaymentMethod.PSP.value),
     "crypto": ("pay_crypto_enabled", PaymentMethod.CRYPTO.value),
 }
 
@@ -213,7 +214,12 @@ async def wallet_topup(callback: CallbackQuery, state: FSMContext, session: Asyn
     ui = await get_all_settings(session)
     can_topup = any(
         on(ui.get(k))
-        for k in ("pay_card_enabled", "pay_gateway_enabled", "pay_crypto_enabled")
+        for k in (
+            "pay_card_enabled",
+            "pay_gateway_enabled",
+            "pay_psp_enabled",
+            "pay_crypto_enabled",
+        )
     )
     if not can_topup:
         await callback.answer("روش شارژ فعالی تنظیم نشده", show_alert=True)
@@ -368,7 +374,10 @@ async def _topup_instructions(
     return format_message(title, body), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-@router.callback_query(F.data.regexp(r"^wtop:(card|gateway|crypto)(?::\w+)?$"), WalletStates.choose_method)
+@router.callback_query(
+    F.data.regexp(r"^wtop:(card|gateway|psp|crypto)(?::\w+)?$"),
+    WalletStates.choose_method,
+)
 async def wtop_choose_method(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser
 ):
@@ -394,6 +403,47 @@ async def wtop_choose_method(
     amount = int(data.get("topup_amount") or 0)
     if amount < 1000:
         await callback.answer("ابتدا مبلغ شارژ را وارد کنید", show_alert=True)
+        return
+
+    if key == "psp":
+        from app.services.payment_settlement import create_psp_checkout
+
+        payment = await create_wallet_topup(session, db_user.id, amount, method=method)
+        try:
+            settlement = await create_psp_checkout(
+                session, payment, description=f"شارژ کیف پول #{payment.id}"
+            )
+        except ValueError as e:
+            await callback.answer(str(e), show_alert=True)
+            return
+        await callback.answer()
+        amount_txt = format_toman(amount, get_settings().currency)
+        try:
+            body = render_message_template(
+                ui.get("psp_pay_text") or "",
+                domain=DOMAIN_PAYMENT,
+                amount=amount_txt,
+                order_id=0,
+                payment_id=payment.id,
+                shop_title=ui.get("shop_title") or "",
+            )
+        except Exception:
+            body = f"مبلغ {amount_txt} را از درگاه آنلاین پرداخت کنید."
+        body += f"\n\n(پرداخت #{payment.id})"
+        rows: list[list[InlineKeyboardButton]] = []
+        link = (settlement.checkout_url or "").strip()
+        if link.startswith("http://") or link.startswith("https://"):
+            rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
+        rows.append(
+            [InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="wallet:home")]
+        )
+        await state.clear()
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                format_message("🏦 درگاه آنلاین", body),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            )
         return
 
     card = gateway = wallet = None
@@ -447,10 +497,22 @@ async def wtop_choose_method(
         wallet = crypto_by_id(ui, dest_id) if dest_id else items[0]
 
     payment = await create_wallet_topup(session, db_user.id, amount, method=method)
+    if key == "card" and on(ui.get("pay_card_auto_enabled")):
+        try:
+            from app.services.payment_settlement import create_card_auto_awaiting
+
+            await create_card_auto_awaiting(session, payment)
+        except ValueError as e:
+            await callback.answer(str(e), show_alert=True)
+            return
     await callback.answer()
     text, markup = await _topup_instructions(
         session, payment, method, ui=ui, card=card, gateway=gateway, wallet=wallet
     )
+    if key == "card" and on(ui.get("pay_card_auto_enabled")):
+        hint = (ui.get("card_auto_hint_text") or "").strip()
+        if hint:
+            text = text + f"\n\n{hint}"
     await state.set_state(WalletStates.waiting_receipt)
     await state.update_data(payment_id=payment.id, topup_amount=None)
     if callback.message:

@@ -1013,6 +1013,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
+    from app.api.settlement_pages import register_settlement_pages
+
+    register_settlement_pages(app, get_db=get_db)
     from app.api.ux20_pages import register_ux20_pages
     register_ux20_pages(
         app,
@@ -2790,44 +2793,10 @@ def create_api_app(lifespan=None) -> FastAPI:
 
 
     async def _notify_order_user(session: AsyncSession, payment: Payment, order: Order | None) -> None:
-        user = await session.get(BotUser, payment.user_id)
-        if not user:
-            return
         try:
-            from app.services.delivery import send_delivery_to_user
-            from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok
-            from app.services.reseller_bots import open_notify_bot_for_user
+            from app.services.payment_settlement import notify_after_settlement
 
-            bot, should_close = await open_notify_bot_for_user(session, user)
-            try:
-                try:
-                    await send_delivery_to_user(
-                        bot, user.telegram_id, session, payment, order
-                    )
-                except Exception as send_exc:
-                    if order is not None:
-                        from app.services.ux20 import note_delivery_send_failure
-
-                        await note_delivery_send_failure(
-                            session, order=order, payment=payment, error=str(send_exc)
-                        )
-                    raise
-                if payment.is_wallet_topup:
-                    await notify_wallet_topup_ok(bot, session, payment, user.telegram_id)
-                elif order:
-                    plan = await session.get(Plan, order.plan_id) if order.plan_id else None
-                    await notify_new_subscription(
-                        bot,
-                        session,
-                        order=order,
-                        user_tg_id=user.telegram_id,
-                        user_name=user.full_name or user.username,
-                        plan_name=plan.name if plan else None,
-                        needs_approval=False,
-                    )
-            finally:
-                if should_close:
-                    await bot.session.close()
+            await notify_after_settlement(session, payment, order)
         except Exception:
             pass
 
@@ -3934,7 +3903,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         from starlette.datastructures import UploadFile
 
-        from app.services.users import IMAGE_KEYS, TOGGLE_KEYS, keys_for_tab
+        from app.services.users import IMAGE_KEYS, SECRET_KEYS, TOGGLE_KEYS, keys_for_tab, should_keep_secret_value
 
         tab = (request.query_params.get("tab") or "welcome").strip()
         form = await request.form()
@@ -4220,6 +4189,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             raw = form.get(f"s_{key}")
             if raw is not None and not isinstance(raw, UploadFile):
                 val = str(raw)
+                if key in SECRET_KEYS and should_keep_secret_value(val):
+                    continue
                 if key.startswith("btn_style_"):
                     from app.services.button_styles import normalize_style
 

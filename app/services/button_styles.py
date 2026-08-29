@@ -133,6 +133,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "pay_wallet", "label": "پرداخت با کیف پول", "group": "پرداخت", "default": "success"},
     {"id": "pay_card", "label": "کارت به کارت", "group": "پرداخت", "default": "primary"},
     {"id": "pay_gateway", "label": "درگاه پرداخت", "group": "پرداخت", "default": "primary"},
+    {"id": "pay_psp", "label": "درگاه آنلاین API", "group": "پرداخت", "default": "primary"},
     {"id": "pay_crypto", "label": "رمزارز", "group": "پرداخت", "default": "primary"},
     {"id": "pay_stars", "label": "استارز تلگرام", "group": "پرداخت", "default": "primary"},
     {"id": "pay_discount", "label": "کد تخفیف", "group": "پرداخت", "default": ""},
@@ -267,6 +268,7 @@ ITEM_BUTTON_STYLE_OPTIONS: list[tuple[str, str, str]] = [
 PAY_METHOD_STYLE_IDS: dict[str, str] = {
     "card": "pay_card",
     "gateway": "pay_gateway",
+    "psp": "pay_psp",
     "crypto": "pay_crypto",
 }
 

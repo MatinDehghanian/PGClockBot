@@ -776,7 +776,23 @@ DEFAULT_SETTINGS = {
     "pay_gateway_enabled": "0",
     "pay_crypto_enabled": "0",
     "pay_stars_enabled": "0",
+    "pay_psp_enabled": "0",
+    "pay_card_auto_enabled": "0",
     "pay_discount_enabled": "1",
+    "psp_provider": "zarinpal",
+    "psp_merchant_id": "",
+    "psp_sandbox": "1",
+    "psp_pay_text": (
+        "مبلغ قابل پرداخت: <b>{amount}</b>\n"
+        "از دکمه زیر وارد درگاه شوید و پرداخت را تکمیل کنید.\n"
+        "پس از تأیید درگاه، سرویس به‌صورت خودکار تحویل می‌شود."
+    ),
+    "btn_pay_psp": "🔵🏦 درگاه آنلاین",
+    "card_auto_provider": "generic",
+    "card_auto_webhook_secret": "",
+    "card_auto_hint_text": (
+        "اگر تأیید خودکار کارت روشن باشد، پس از واریز دقیق مبلغ، پرداخت بدون رسید عکس تأیید می‌شود."
+    ),
     "gateway_name": "درگاه پرداخت",
     "gateway_link": "",
     "gateway_pay_text": (
@@ -1088,7 +1104,9 @@ SETTING_GROUPS = {
     "روش‌های پرداخت": [
         ("pay_wallet_enabled", "کیف پول داخلی", "toggle", "پرداخت از موجودی کیف پول کاربر"),
         ("pay_card_enabled", "کارت به کارت", "toggle", ""),
-        ("pay_gateway_enabled", "درگاه پرداخت", "toggle", "لینک درگاه خارجی + ارسال رسید"),
+        ("pay_gateway_enabled", "درگاه پرداخت (لینک + رسید)", "toggle", "لینک درگاه خارجی + ارسال رسید — روش قبلی حفظ می‌شود"),
+        ("pay_psp_enabled", "درگاه آنلاین API", "toggle", "درگاه واقعی request→verify (Mock بدون مرچنت / زرین‌پال با مرچنت)"),
+        ("pay_card_auto_enabled", "تأیید خودکار کارت", "toggle", "وب‌هوک امضادار از سرویس تأیید کارت — کنار رسید دستی"),
         ("pay_crypto_enabled", "رمزارز", "toggle", ""),
         ("pay_stars_enabled", "استارز تلگرام", "toggle", "پرداخت درون‌برنامه‌ای با ⭐"),
         ("pay_discount_enabled", "کد تخفیف", "toggle", "نمایش دکمه کد تخفیف هنگام پرداخت"),
@@ -1157,6 +1175,54 @@ SETTING_GROUPS = {
         ("stars_description", "توضیح فاکتور", "text", ""),
         ("btn_pay_stars", "متن دکمه استارز", "text", ""),
     ],
+    "درگاه آنلاین API": [
+        (
+            "psp_provider",
+            "ارائه‌دهنده",
+            "select",
+            "zarinpal = درگاه واقعی؛ mock فقط با ALLOW_SETTLEMENT_MOCK=1 روی سرور",
+            [("zarinpal", "زرین‌پال"), ("mock", "Mock (فقط تست محلی)")],
+        ),
+        (
+            "psp_merchant_id",
+            "مرچنت آیدی",
+            "password",
+            "خالی بماند = بدون تغییر. برای mock لازم نیست",
+        ),
+        (
+            "psp_sandbox",
+            "حالت سندباکس",
+            "toggle",
+            "روشن = محیط آزمایشی زرین‌پال",
+        ),
+        (
+            "psp_pay_text",
+            "راهنمای درگاه API",
+            "textarea",
+            "متغیرها: {amount} {order_id} {payment_id}",
+        ),
+        ("btn_pay_psp", "متن دکمه درگاه آنلاین", "text", ""),
+    ],
+    "تأیید خودکار کارت": [
+        (
+            "card_auto_provider",
+            "نام ارائه‌دهنده",
+            "text",
+            "شناسه منطقی (مثلاً generic)",
+        ),
+        (
+            "card_auto_webhook_secret",
+            "رمز امضای وب‌هوک",
+            "password",
+            "حداقل ۱۶ کاراکتر — HMAC-SHA256 روی بدنه؛ هدر X-Signature. خالی = بدون تغییر",
+        ),
+        (
+            "card_auto_hint_text",
+            "متن راهنما کنار کارت‌به‌کارت",
+            "textarea",
+            "پلتفرم: /payments/settlement/card-auto/platform/webhook — فروشگاه: .../shop/{reseller_id}/webhook",
+        ),
+    ],
     "متن دکمه‌های پرداخت": [
         ("btn_pay_wallet", "پرداخت با کیف پول", "text", ""),
         ("btn_pay_discount", "کد تخفیف", "text", ""),
@@ -1202,6 +1268,8 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
         "روش‌های پرداخت",
         "کارت به کارت",
         "درگاه پرداخت",
+        "درگاه آنلاین API",
+        "تأیید خودکار کارت",
         "رمزارز",
         "استارز تلگرام",
         "متن دکمه‌های پرداخت",
@@ -1239,6 +1307,20 @@ IMAGE_KEYS = {
     for item in fields
     if len(item) >= 3 and item[2] == "image"
 }
+
+SECRET_KEYS = {
+    item[0]
+    for fields in SETTING_GROUPS.values()
+    for item in fields
+    if len(item) >= 3 and item[2] == "password"
+}
+
+# Sentinels: empty / keep-marker means "do not overwrite existing secret".
+SECRET_KEEP_VALUES = {"", "••••", "****", "__keep__", "__unchanged__"}
+
+
+def should_keep_secret_value(raw: str | None) -> bool:
+    return str(raw if raw is not None else "").strip() in SECRET_KEEP_VALUES
 
 
 def keys_for_tab(tab: str) -> set[str]:

@@ -1619,6 +1619,7 @@ async def _handle_pay_action(
         kb.REPLY_ACTION_PAY_WALLET: f"pay:wallet:{order.id}",
         kb.REPLY_ACTION_PAY_CARD: f"pay:card:{order.id}",
         kb.REPLY_ACTION_PAY_GATEWAY: f"pay:gateway:{order.id}",
+        kb.REPLY_ACTION_PAY_PSP: f"pay:psp:{order.id}",
         kb.REPLY_ACTION_PAY_CRYPTO: f"pay:crypto:{order.id}",
         kb.REPLY_ACTION_PAY_STARS: f"pay:stars:{order.id}",
         kb.REPLY_ACTION_PAY_DISCOUNT: f"pay:discount:{order.id}",
@@ -1635,6 +1636,8 @@ async def _handle_pay_action(
             await shop_h.pay_card_cb(cb, session, db_user, state=state)
         elif action == kb.REPLY_ACTION_PAY_GATEWAY:
             await shop_h.pay_gateway_cb(cb, session, db_user, state=state)
+        elif action == kb.REPLY_ACTION_PAY_PSP:
+            await shop_h.pay_psp_cb(cb, session, db_user, state=state)
         elif action == kb.REPLY_ACTION_PAY_CRYPTO:
             await shop_h.pay_crypto_cb(cb, session, db_user, state=state)
         elif action == kb.REPLY_ACTION_PAY_STARS:
@@ -1660,6 +1663,7 @@ async def _handle_topup_action(
     key = {
         kb.REPLY_ACTION_TOPUP_CARD: "wtop:card",
         kb.REPLY_ACTION_TOPUP_GATEWAY: "wtop:gateway",
+        kb.REPLY_ACTION_TOPUP_PSP: "wtop:psp",
         kb.REPLY_ACTION_TOPUP_CRYPTO: "wtop:crypto",
     }.get(action)
     if not key:
@@ -1860,11 +1864,13 @@ async def reply_main_nav(
         kb.REPLY_ACTION_PAY_WALLET,
         kb.REPLY_ACTION_PAY_CARD,
         kb.REPLY_ACTION_PAY_GATEWAY,
+        kb.REPLY_ACTION_PAY_PSP,
         kb.REPLY_ACTION_PAY_CRYPTO,
         kb.REPLY_ACTION_PAY_STARS,
         kb.REPLY_ACTION_PAY_DISCOUNT,
         kb.REPLY_ACTION_TOPUP_CARD,
         kb.REPLY_ACTION_TOPUP_GATEWAY,
+        kb.REPLY_ACTION_TOPUP_PSP,
         kb.REPLY_ACTION_TOPUP_CRYPTO,
         kb.REPLY_ACTION_WALLET_TOPUP,
         kb.REPLY_ACTION_SUPPORT_NEW,

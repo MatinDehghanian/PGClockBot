@@ -22,11 +22,13 @@ from app.services.resellers import (
 )
 from app.services.users import (
     IMAGE_KEYS,
+    SECRET_KEYS,
     TAB_SETTING_GROUPS,
     TOGGLE_KEYS,
     SETTING_GROUPS,
     get_all_settings,
     keys_for_tab,
+    should_keep_secret_value,
 )
 
 
@@ -395,6 +397,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             raw = form.get(f"s_{key}")
             if raw is not None and not isinstance(raw, UploadFile):
                 val = str(raw)
+                if key in SECRET_KEYS and should_keep_secret_value(val):
+                    continue
                 if key.startswith("btn_style_"):
                     from app.services.button_styles import normalize_style
 

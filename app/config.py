@@ -131,6 +131,8 @@ class Settings(BaseSettings):
     currency: str = Field(default="تومان", alias="CURRENCY")
     default_locale: str = Field(default="fa", alias="DEFAULT_LOCALE")
 
+    allow_settlement_mock: bool = Field(default=False, alias="ALLOW_SETTLEMENT_MOCK")
+
     @field_validator(
         "bot_token",
         "bot_username",
@@ -155,7 +157,7 @@ class Settings(BaseSettings):
     def strip_wrap_quotes(cls, value: object) -> str:
         return _clean_str(value)
 
-    @field_validator("trust_proxy", mode="before")
+    @field_validator("trust_proxy", "allow_settlement_mock", mode="before")
     @classmethod
     def parse_trust_proxy(cls, value: object) -> bool:
         if isinstance(value, bool):

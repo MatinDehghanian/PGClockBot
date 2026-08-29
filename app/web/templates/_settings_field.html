@@ -101,6 +101,18 @@
     </label>
     {% if help %}<small class="muted">{{ help }}</small>{% endif %}
   </div>
+  {% elif kind == 'password' %}
+  <label>{{ label }}
+    <input
+      name="s_{{ key }}"
+      type="password"
+      value=""
+      autocomplete="new-password"
+      dir="ltr"
+      placeholder="{% if val %}•••••••• (خالی = بدون تغییر){% else %}وارد کنید{% endif %}"
+    />
+    {% if help %}<small class="muted">{{ help }}</small>{% endif %}
+  </label>
   {% else %}
   <label>{{ label }}
     <input name="s_{{ key }}" value="{{ val }}" />
