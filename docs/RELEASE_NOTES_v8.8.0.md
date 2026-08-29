@@ -22,9 +22,10 @@
 - `shop_owner_id` روی settlement؛ مرچنت/رمز به‌صورت `password` (خالی = بدون تغییر)
 - provider پیش‌فرض: `zarinpal` (نه mock)
 - شارژ کیف‌پول با PSP و تنظیمات ربات هم‌تراز پنل
+- Race/idempotency: SAVEPOINT به‌جای `session.rollback`؛ فقط یک webhook مالک SETTLING و یک‌بار `approve_payment`
 
 ### Deploy
 
-مایگریشن: `0021_payment_settlements` (شامل `shop_owner_id` + `checkout_token`).
+مایگریشن: `0021_payment_settlements` (شامل `shop_owner_id` + `checkout_token` + partial unique indexes).
 
 Hard refresh once. SW بدون تغییر اجباری (`pgclock-shell-v47`).
