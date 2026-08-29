@@ -117,7 +117,9 @@ async def _get_by_idem(
 ) -> PaymentSettlement | None:
     return (
         await session.execute(
-            select(PaymentSettlement).where(PaymentSettlement.idempotency_key == key)
+            select(PaymentSettlement)
+            .where(PaymentSettlement.idempotency_key == key)
+            .execution_options(populate_existing=True)
         )
     ).scalar_one_or_none()
 
@@ -135,6 +137,7 @@ async def _get_open_for_payment_channel(
             )
             .order_by(PaymentSettlement.id.desc())
             .limit(1)
+            .execution_options(populate_existing=True)
         )
     ).scalar_one_or_none()
 
@@ -146,6 +149,19 @@ def _embed_mock_token(checkout_url: str, token: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), parts.fragment))
 
 
+async def _break_read_snapshot(session: AsyncSession) -> None:
+    """End the current txn so peer commits become visible (needed on SQLite).
+
+    SQLite DEFERRED transactions keep a read snapshot for the whole txn; without
+    ending it, a loser waiting on a concurrent winner never sees AWAITING+url.
+    ``commit()`` persists any prior caller dirty state (SAVEPOINT already
+    protected the failed insert) rather than wiping it with rollback.
+    """
+    bind = session.get_bind()
+    if bind is not None and getattr(bind.dialect, "name", "") == "sqlite":
+        await session.commit()
+
+
 async def _await_open_settlement(
     session: AsyncSession,
     *,
@@ -153,11 +169,12 @@ async def _await_open_settlement(
     payment_id: int,
     channel: str,
     require_checkout_url: bool = False,
-    attempts: int = 50,
+    attempts: int = 80,
     delay_s: float = 0.05,
 ) -> PaymentSettlement | None:
     """Poll for the winner row after a lost insert race (same DB, other session)."""
     for _ in range(max(1, attempts)):
+        await _break_read_snapshot(session)
         raced = await _get_by_idem(session, idem) or await _get_open_for_payment_channel(
             session, payment_id=payment_id, channel=channel
         )
@@ -168,15 +185,31 @@ async def _await_open_settlement(
             return raced
         if raced.status == SettlementStatus.SETTLED.value:
             return raced
+        if raced.status == SettlementStatus.SETTLING.value:
+            return raced
         if require_checkout_url:
             if raced.status == SettlementStatus.AWAITING.value and (raced.checkout_url or "").strip():
                 return raced
         elif raced.status in _OPEN_STATUSES or raced.status == SettlementStatus.AWAITING.value:
             return raced
         await asyncio.sleep(delay_s)
-    return await _get_by_idem(session, idem) or await _get_open_for_payment_channel(
+    await _break_read_snapshot(session)
+    raced = await _get_by_idem(session, idem) or await _get_open_for_payment_channel(
         session, payment_id=payment_id, channel=channel
     )
+    if raced is None:
+        return None
+    if require_checkout_url:
+        if raced.status == SettlementStatus.AWAITING.value and (raced.checkout_url or "").strip():
+            return raced
+        if raced.status in {
+            SettlementStatus.FAILED.value,
+            SettlementStatus.SETTLING.value,
+            SettlementStatus.SETTLED.value,
+        }:
+            return raced
+        return None
+    return raced
 
 
 async def _insert_settlement_race_safe(
@@ -195,6 +228,7 @@ async def _insert_settlement_race_safe(
         idem = settlement.idempotency_key
         payment_id = int(settlement.payment_id)
         channel = str(settlement.channel)
+        await _break_read_snapshot(session)
         raced = await _get_by_idem(session, idem)
         if raced is None:
             raced = await _get_open_for_payment_channel(
@@ -290,11 +324,15 @@ async def create_psp_checkout(
         inserted = await _insert_settlement_race_safe(session, candidate)
         if inserted is not candidate:
             # Lost insert race — never roll back caller; wait for winner checkout.
-            if inserted.status == SettlementStatus.AWAITING.value and (
+            try:
+                await session.refresh(inserted)
+            except Exception:
+                inserted = await _get_by_idem(session, idem) or inserted
+            if inserted is not None and inserted.status == SettlementStatus.AWAITING.value and (
                 inserted.checkout_url or ""
             ).strip():
                 return inserted
-            if inserted.status in {
+            if inserted is not None and inserted.status in {
                 SettlementStatus.SETTLING.value,
                 SettlementStatus.SETTLED.value,
             }:
@@ -306,7 +344,16 @@ async def create_psp_checkout(
                 channel=CHANNEL_PSP,
                 require_checkout_url=True,
             )
-            if raced:
+            if raced is None:
+                raise ValueError("ساخت تسویه همزمان ناموفق بود — دوباره تلاش کنید")
+            if raced.status == SettlementStatus.FAILED.value:
+                return raced
+            if raced.status in {
+                SettlementStatus.SETTLING.value,
+                SettlementStatus.SETTLED.value,
+            }:
+                return raced
+            if (raced.checkout_url or "").strip():
                 return raced
             raise ValueError("ساخت تسویه همزمان ناموفق بود — دوباره تلاش کنید")
         settlement = inserted
@@ -497,20 +544,45 @@ async def _wait_for_peer_settle(
     payment: Payment,
 ) -> Payment:
     """Loser of claim: do not approve; wait for winner to finish."""
-    for _ in range(60):
-        await session.refresh(settlement)
-        await session.refresh(payment)
+    sid = int(settlement.id)
+    pid = int(payment.id)
+    for _ in range(80):
+        await _break_read_snapshot(session)
+        # expire_on_commit=False keeps stale identity — force DB reload.
+        settlement = (
+            await session.execute(
+                select(PaymentSettlement)
+                .where(PaymentSettlement.id == sid)
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one()
+        payment = (
+            await session.execute(
+                select(Payment)
+                .where(Payment.id == pid)
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one()
         if settlement.status == SettlementStatus.SETTLED.value:
             return payment
         if payment.status == PaymentStatus.APPROVED.value:
-            # Winner approved; help finalize if needed (conditional UPDATE).
             await _finalize_settled(session, settlement)
             await session.commit()
-            await session.refresh(settlement)
             return payment
         await asyncio.sleep(0.05)
-    await session.refresh(settlement)
-    await session.refresh(payment)
+    await _break_read_snapshot(session)
+    settlement = (
+        await session.execute(
+            select(PaymentSettlement)
+            .where(PaymentSettlement.id == sid)
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    payment = (
+        await session.execute(
+            select(Payment).where(Payment.id == pid).execution_options(populate_existing=True)
+        )
+    ).scalar_one()
     if settlement.status == SettlementStatus.SETTLED.value:
         return payment
     if payment.status == PaymentStatus.APPROVED.value:
