@@ -10,13 +10,20 @@ CSS = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
 
 
 class RtlPlaceholderTests(unittest.TestCase):
-    def test_placeholder_inherits_field_direction(self):
-        self.assertIn("text-align: start;", CSS)
-        self.assertIn("direction: inherit;", CSS)
+    def test_placeholder_right_aligned_and_theme_muted(self):
+        """Placeholders (examples) are always RTL + right + theme --placeholder."""
+        self.assertIn("color: var(--placeholder);", CSS)
+        self.assertIn("--placeholder:", CSS)
+        block_start = CSS.find("input::placeholder,\ntextarea::placeholder {")
+        self.assertGreaterEqual(block_start, 0)
+        block = CSS[block_start : block_start + 220]
+        self.assertIn("text-align: right;", block)
+        self.assertIn("direction: rtl;", block)
         self.assertIn('input[dir="ltr"]::placeholder', CSS)
         self.assertIn('input[dir="ltr"],\ntextarea[dir="ltr"]', CSS)
+        # Hardcoded dark-only grey must not return (breaks light theme mute).
         self.assertNotIn(
-            "input::placeholder,\ntextarea::placeholder {\n  color: #52525b;\n  font-size: inherit;\n  font-weight: 400;\n  opacity: 1;\n  text-align: right;\n  direction: rtl;\n}",
+            "input::placeholder,\ntextarea::placeholder {\n  color: #52525b;",
             CSS,
         )
 
