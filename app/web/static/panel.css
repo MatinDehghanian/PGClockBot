@@ -9,6 +9,8 @@
   --control-bg-hover: #27272a;
   --muted: #27272a;
   --muted-fg: #a1a1aa;
+  /* Placeholder / example text inside inputs — muted in both themes */
+  --placeholder: #71717a;
   --border: #27272a;
   --input: #27272a;
   --ring: #d4d4d8;
@@ -1153,26 +1155,29 @@ label:has(> .pw-field) > .pw-field,
 
 input::placeholder,
 textarea::placeholder {
-  color: #52525b;
+  color: var(--placeholder);
+  -webkit-text-fill-color: var(--placeholder);
   font-size: inherit;
   font-weight: 400;
   opacity: 1;
-  text-align: start;
-  direction: inherit;
+  text-align: right;
+  direction: rtl;
 }
-/* LTR fields (usernames, URLs, IPs, tokens) keep LTR placeholders */
+/* LTR fields: type LTR, but keep placeholder example right-aligned + muted */
 input[dir="ltr"]::placeholder,
 textarea[dir="ltr"]::placeholder {
-  direction: ltr;
-  text-align: start;
+  direction: rtl;
+  text-align: right;
+  color: var(--placeholder);
+  -webkit-text-fill-color: var(--placeholder);
 }
 input[dir="ltr"],
 textarea[dir="ltr"] {
   direction: ltr;
-  text-align: start;
+  text-align: right;
   unicode-bidi: isolate;
 }
-/* Login / setup auth boxes: keep LTR typing, show value+placeholder on the right */
+/* Login / setup auth boxes: same contract (value + placeholder on the right) */
 .auth-form input[dir="ltr"],
 .auth-form textarea[dir="ltr"],
 .auth-form .pw-field input {
@@ -1182,6 +1187,31 @@ textarea[dir="ltr"] {
 .auth-form textarea[dir="ltr"]::placeholder,
 .auth-form .pw-field input::placeholder {
   text-align: right;
+  direction: rtl;
+  color: var(--placeholder);
+  -webkit-text-fill-color: var(--placeholder);
+}
+/* Number / search / all text controls: force physical right (browser UA often left-biases) */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),
+textarea {
+  text-align: right;
+}
+input[type="number"] {
+  direction: rtl;
+}
+input[type="number"]::placeholder {
+  direction: rtl;
+  text-align: right;
+  color: var(--placeholder);
+  -webkit-text-fill-color: var(--placeholder);
+}
+/* Firefox */
+input::-moz-placeholder,
+textarea::-moz-placeholder {
+  color: var(--placeholder);
+  opacity: 1;
+  text-align: right;
+  direction: rtl;
 }
 /* CRITICAL: keep ≥16px — iOS/Android Safari zoom on focus if smaller. Never use --title-size here. */
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),
@@ -1381,6 +1411,10 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: right;
+}
+.ui-select-label.is-placeholder {
+  color: var(--placeholder);
 }
 .ui-select-caret {
   width: 14px;
@@ -6360,6 +6394,8 @@ html[data-theme="light"] {
   --control-bg-hover: #f4f4f5;
   --muted: #f4f4f5;
   --muted-fg: #71717a;
+  /* Lighter than body muted so examples stay visibly soft on white controls */
+  --placeholder: #a1a1aa;
   --border: #e4e4e7;
   --input: #e4e4e7;
   --ring: #a1a1aa;

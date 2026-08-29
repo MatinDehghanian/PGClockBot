@@ -620,7 +620,12 @@
       }
       function syncLabel(){
         const opt = sel.options[sel.selectedIndex];
-        label.textContent = opt ? opt.textContent : (sel.getAttribute('placeholder') || '—');
+        const ph = sel.getAttribute('placeholder');
+        const isEmpty = !sel.value;
+        label.textContent = (!isEmpty && opt)
+          ? opt.textContent
+          : (ph || (opt ? opt.textContent : '—') || '—');
+        label.classList.toggle('is-placeholder', isEmpty);
         const tone = (opt && opt.dataset && opt.dataset.tone)
           ? opt.dataset.tone
           : (sel.dataset.tone || '');
