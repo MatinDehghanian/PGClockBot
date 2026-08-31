@@ -6478,12 +6478,14 @@ html[data-theme="light"] *::-webkit-scrollbar-thumb { background: #d4d4d8; }
 html[data-theme="light"] .topbar {
   background: #ffffff;
 }
-/* Desktop sidebar chrome. On mobile the fixed .side shell MUST stay transparent
-   (paint lives on .side-panel) — otherwise a white drawer-width slab covers the
-   page while the menu is closed. */
-html[data-theme="light"] .side {
-  background: #ffffff;
-}
+/* Do NOT set background on .side here. Desktop already paints via
+   `.side { background: var(--bg-card) }` (--bg-card is #fff in light).
+   An unscoped `html[data-theme=light] .side { background:#fff }` has higher
+   specificity than the mobile `.side { background:transparent }` shell and
+   the same specificity as the mobile light override — coming later in the
+   file it wins and leaves a drawer-width white slab over the page while the
+   menu is closed (v8.8.1–v8.8.2). Paint for the open drawer stays on
+   `.side-panel` (var(--bg-card)). */
 
 html[data-theme="light"] .stat,
 html[data-theme="light"] .card,
