@@ -4315,6 +4315,11 @@ form.settings-form > .actions.sticky-actions,
     background-color: transparent;
     background: transparent;
   }
+  /* Light theme must not re-paint the fixed shell white while the drawer is closed. */
+  html[data-theme="light"] .side {
+    background-color: transparent;
+    background: transparent;
+  }
   .side-panel {
     flex: 1 1 auto;
     min-height: 0;
@@ -6470,8 +6475,13 @@ html[data-theme="light"] {
 html[data-theme="light"] * { scrollbar-color: #d4d4d8 transparent; }
 html[data-theme="light"] *::-webkit-scrollbar-thumb { background: #d4d4d8; }
 
-html[data-theme="light"] .side,
 html[data-theme="light"] .topbar {
+  background: #ffffff;
+}
+/* Desktop sidebar chrome. On mobile the fixed .side shell MUST stay transparent
+   (paint lives on .side-panel) — otherwise a white drawer-width slab covers the
+   page while the menu is closed. */
+html[data-theme="light"] .side {
   background: #ffffff;
 }
 
