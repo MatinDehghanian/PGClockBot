@@ -1408,13 +1408,19 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
 .ui-select-label {
   flex: 1 1 auto;
   min-width: 0;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   display: flex;
   align-items: center;
   align-self: stretch;
-  line-height: 1.25;
+  /* Match toggle: avoid tall em-box / inherited title styles pushing glyphs up */
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  line-height: 1;
   text-align: right;
 }
 .ui-select-label.is-placeholder {
@@ -2927,7 +2933,8 @@ a.btn.btn-star:hover {
 .settings-main {
   display: flex;
   flex-direction: column;
-  gap: var(--section-gap);
+  /* Same card→card rhythm as .settings-layout (preview ↔ first card = --stack-gap) */
+  gap: var(--stack-gap);
 }
 /* Parent gap owns vertical rhythm — zero child margins to avoid gap+margin stacking */
 .settings-main > .card,
@@ -2944,7 +2951,7 @@ form.settings-form,
 .menu-layout-form {
   display: flex;
   flex-direction: column;
-  gap: var(--section-gap);
+  gap: var(--stack-gap);
   margin: 0;
 }
 .settings-domain-stack {
@@ -2977,6 +2984,13 @@ form.settings-form > .sticky-actions,
 }
 .menu-layout-intro { margin-bottom: 0; }
 .dnd-card { margin: 0; }
+/* Nested cards: never stack .card { margin-bottom } on top of .dnd-cols gap
+   (mobile re-applies margin-bottom: section-gap on every .card). */
+.dnd-cols > .card,
+.dnd-cols > .dnd-card {
+  margin-top: 0;
+  margin-bottom: 0;
+}
 
 .image-preview {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
@@ -3115,7 +3129,10 @@ form.settings-form > .sticky-actions,
 .menu-layout-mode {
   margin-top: var(--space-1);
 }
-.menu-layout-mode .setting-item span {
+/* Direct title only — never `.setting-item span` (that also hits
+   `.ui-select-label` inside the toggle and breaks vertical centering:
+   display:block + margin-bottom + muted 12px overrode the control). */
+.menu-layout-mode .setting-item > span:not(.ui-select-label) {
   display: block;
   font-size: 12px;
   color: var(--muted-fg);
@@ -3442,7 +3459,8 @@ form.settings-form > .actions.sticky-actions,
 .dnd-cols {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-2);
+  /* Same token as settings-layout / settings-main card stacks */
+  gap: var(--stack-gap);
   width: 100%;
 }
 .dnd-list {
@@ -4498,6 +4516,24 @@ form.settings-form > .actions.sticky-actions,
   .stat strong { font-size: 18px; }
   .dash-cols { grid-template-columns: 1fr; gap: var(--section-gap); }
   .card { padding: var(--card-pad); margin-bottom: var(--section-gap); }
+  /* Gap-owned stacks: parent gap only — kill mobile .card margin so active↔pool
+     and layout↔menu match preview↔layout (--stack-gap), not gap+margin. */
+  .settings-main > .card,
+  .settings-main > .settings-card,
+  .settings-form > .card,
+  .settings-form > .settings-card,
+  form.settings-form > .card,
+  form.settings-form > .settings-card,
+  .menu-layout-form > .card,
+  .menu-layout-form > .dnd-card,
+  .dnd-cols > .card,
+  .dnd-cols > .dnd-card,
+  .dash-cols > .card,
+  .settings-layout > .tg-preview-slot > .card,
+  .settings-layout > .tg-preview-slot > .settings-card,
+  .settings-layout > .tg-preview-slot > .tg-preview-card {
+    margin-bottom: 0;
+  }
   .settings-grid, .dnd-cols { grid-template-columns: 1fr; }
   .quick-links { grid-template-columns: 1fr 1fr; gap: var(--space-2); }
   .quick-links a { height: var(--btn-h); min-height: var(--btn-h); }
@@ -6478,12 +6514,14 @@ html[data-theme="light"] *::-webkit-scrollbar-thumb { background: #d4d4d8; }
 html[data-theme="light"] .topbar {
   background: #ffffff;
 }
-/* Desktop sidebar chrome. On mobile the fixed .side shell MUST stay transparent
-   (paint lives on .side-panel) — otherwise a white drawer-width slab covers the
-   page while the menu is closed. */
-html[data-theme="light"] .side {
-  background: #ffffff;
-}
+/* Do NOT set background on .side here. Desktop already paints via
+   `.side { background: var(--bg-card) }` (--bg-card is #fff in light).
+   An unscoped `html[data-theme=light] .side { background:#fff }` has higher
+   specificity than the mobile `.side { background:transparent }` shell and
+   the same specificity as the mobile light override — coming later in the
+   file it wins and leaves a drawer-width white slab over the page while the
+   menu is closed (v8.8.1–v8.8.2). Paint for the open drawer stays on
+   `.side-panel` (var(--bg-card)). */
 
 html[data-theme="light"] .stat,
 html[data-theme="light"] .card,

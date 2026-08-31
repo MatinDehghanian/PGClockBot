@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.8.3": [
+        "تم روشن موبایل: ریشهٔ نوار سفید دراور بسته (cascade #fff روی .side) رفع شد",
+        "منوی بات: فاصله یکسان باکس‌ها (--stack-gap)؛ متن حالت چیدمان وسط عمودی",
+        "ریستور: restore/pre-v8.8.3-v8.8.2",
+    ],
     "8.8.2": [
         "تم روشن موبایل: نوار سفید سایدبار بسته دیگر صفحه را نمی‌پوشاند",
         "ریستور: restore/pre-v8.8.2-v8.8.1",
