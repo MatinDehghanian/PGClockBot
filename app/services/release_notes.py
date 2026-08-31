@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.8.2": [
+        "تم روشن موبایل: نوار سفید سایدبار بسته دیگر صفحه را نمی‌پوشاند",
+        "ریستور: restore/pre-v8.8.2-v8.8.1",
+    ],
     "8.8.1": [
         "Placeholderها در همه ورودی‌ها راست‌چین و کمرنگ (تم روشن/تیره)",
         "سوییچ فعال: دایره داخل ترک می‌ماند؛ متن ui-select وسط عمودی",
