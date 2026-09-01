@@ -9765,20 +9765,47 @@ tbody tr.is-bulk-selected:hover {
   font-variant-numeric: tabular-nums;
   /* Vazirmatn Persian digits sit optically low in small circles */
   transform: translateY(-0.5px);
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: var(--muted-fg);
   box-sizing: border-box;
+  border: 1px solid var(--border);
 }
-.table-bulk-op.btn-ok .table-bulk-op-count,
-.table-bulk-op.btn-warn .table-bulk-op-count,
+/* Tonal pills — mirror each bulk button variant (not one shared gray disk) */
+.table-bulk-op.btn-ghost .table-bulk-op-count {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--muted-fg);
+}
+.table-bulk-op.btn-ok .table-bulk-op-count {
+  background: rgba(34, 197, 94, 0.22);
+  border-color: rgba(34, 197, 94, 0.42);
+  color: var(--ok-fg);
+}
+.table-bulk-op.btn-warn .table-bulk-op-count {
+  background: rgba(234, 179, 8, 0.22);
+  border-color: rgba(234, 179, 8, 0.42);
+  color: var(--warn-fg);
+}
 .table-bulk-op.btn-danger .table-bulk-op-count {
-  background: rgba(0, 0, 0, 0.18);
-  border-color: rgba(255, 255, 255, 0.16);
-  color: inherit;
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.42);
+  color: var(--destructive-fg);
 }
-html[data-theme="light"] .table-bulk-op-count {
-  background: rgba(0, 0, 0, 0.06);
-  border-color: rgba(0, 0, 0, 0.08);
-  color: var(--foreground);
+html[data-theme="light"] .table-bulk-op.btn-ghost .table-bulk-op-count {
+  background: rgba(24, 24, 27, 0.05);
+  border-color: rgba(24, 24, 27, 0.12);
+  color: var(--muted-fg);
+}
+html[data-theme="light"] .table-bulk-op.btn-ok .table-bulk-op-count {
+  background: rgba(22, 163, 74, 0.14);
+  border-color: rgba(22, 163, 74, 0.35);
+  color: #15803d;
+}
+html[data-theme="light"] .table-bulk-op.btn-warn .table-bulk-op-count {
+  background: rgba(234, 179, 8, 0.18);
+  border-color: rgba(202, 138, 4, 0.4);
+  color: #a16207;
+}
+html[data-theme="light"] .table-bulk-op.btn-danger .table-bulk-op-count {
+  background: rgba(220, 38, 38, 0.12);
+  border-color: rgba(220, 38, 38, 0.35);
+  color: #b91c1c;
 }
