@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "8.8.4": [
+        "فوتر: هم‌ترازی سایدبار و صفحه در مرورگر (موبایل/دسکتاپ) — یک مسیر inset",
+        "عملیات گروهی: دایرهٔ شمارنده با رنگ دکمه (ghost/ok/warn/danger) در هر دو تم",
+        "ریستور: restore/pre-v8.8.4-v8.8.3",
+    ],
     "8.8.3": [
         "تم روشن موبایل: ریشهٔ نوار سفید دراور بسته (cascade #fff روی .side) رفع شد",
         "منوی بات: فاصله یکسان باکس‌ها (--stack-gap)؛ متن حالت چیدمان وسط عمودی",

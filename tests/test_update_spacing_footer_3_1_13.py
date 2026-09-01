@@ -70,8 +70,8 @@ class TitleGapParityTests(unittest.TestCase):
     def test_bot_title_above_and_below_use_same_token(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-4) var(--bottom-inset);",
-            css,
+            "padding: var(--page-title-gap) var(--space-4) 0;",
+            rule(css, ".main"),
         )
         head = css.split(".page-head {\n", 1)[1].split("}", 1)[0]
         self.assertIn("margin-bottom: var(--page-title-gap);", head)
@@ -83,13 +83,18 @@ class TitleGapParityTests(unittest.TestCase):
 
 
 class FooterBaselineTests(unittest.TestCase):
-    def test_site_footer_matches_side_foot_min_height(self):
+    def test_site_footer_matches_side_foot_locked_box(self):
         css = CSS.read_text(encoding="utf-8")
         site = css.split(".site-footer {\n", 1)[1].split("}", 1)[0]
         side = css.split(".side-foot {\n", 1)[1].split("}", 1)[0]
-        shared = "min-height: var(--footer-bar-h);"
+        shared = "min-height: calc(var(--footer-bar-h) + var(--bottom-inset));"
+        shared_max = "max-height: calc(var(--footer-bar-h) + var(--bottom-inset));"
         self.assertIn(shared, site)
         self.assertIn(shared, side)
+        self.assertIn(shared_max, site)
+        self.assertIn(shared_max, side)
+        self.assertIn("padding-bottom: var(--bottom-inset);", site)
+        self.assertIn("padding-bottom: var(--bottom-inset);", side)
         self.assertIn("padding-top: var(--page-title-gap);", site)
         self.assertIn("padding-top: var(--page-title-gap);", side)
         logout = css.split(".logout-link {\n", 1)[1].split("}", 1)[0]
@@ -117,6 +122,17 @@ class FooterBaselineTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         body = css.split(".main-body {\n", 1)[1].split("}", 1)[0]
         self.assertIn("padding-bottom: var(--page-title-gap);", body)
+
+    def test_desktop_parents_do_not_stack_bottom_inset(self):
+        css = CSS.read_text(encoding="utf-8")
+        self.assertIn(
+            "padding: var(--space-2) var(--space-2) 0;",
+            rule(css, ".side"),
+        )
+        self.assertIn(
+            "padding: var(--page-title-gap) var(--space-4) 0;",
+            rule(css, ".main"),
+        )
 
 
 if __name__ == "__main__":

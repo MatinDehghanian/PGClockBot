@@ -75,7 +75,8 @@
   --section-gap: var(--space-3);
   /* Equal space above & below page title+icon (bot and PasarGuard identical) */
   --page-title-gap: var(--space-3);
-  /* Air below site-footer AND side-foot — same token so they share one baseline */
+  /* Air below BOTH footers — owned by the footer boxes (padding-bottom),
+     never by .side / .main (that dual path split separator Y when one foot grew). */
   --foot-gap: var(--space-2);
   --control-gap: var(--space-1);
   --stack-gap: var(--space-2);
@@ -88,10 +89,11 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
-  /* ONE bottom inset for main footer + sidebar footer (never double-stack) */
+  /* ONE bottom inset for .site-footer + .side-foot (never double-stack on parents) */
   --bottom-inset: calc(var(--foot-gap) + var(--safe-bottom));
   /* Content band above --bottom-inset (padding-top + 28px control row + gap).
-     Both .site-footer and .side-foot use this so separator lines share one Y. */
+     Footers lock min=max to footer-bar-h + bottom-inset so separator tops share
+     one Y on desktop browser, mobile browser, and PWA. */
   --footer-bar-h: calc(var(--page-title-gap) + 28px + var(--space-1));
   /* Single UI typeface — no secondary families in the web panel */
   --font: "Vazirmatn", sans-serif;
@@ -221,8 +223,9 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   -webkit-overflow-scrolling: touch;
   background: var(--bg-card);
   border-left: 1px solid var(--border);
-  /* --safe-top is owned by .shell — never re-add it here */
-  padding: var(--space-2) var(--space-2) var(--bottom-inset);
+  /* --safe-top is owned by .shell — never re-add it here.
+     Bottom inset lives on .side-foot only (same path as .site-footer). */
+  padding: var(--space-2) var(--space-2) 0;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -244,8 +247,8 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   min-height: 0;
   height: 100%;
   max-height: 100dvh;
-  /* Top chrome: --page-title-gap. Bottom chrome: --foot-gap (same as .side). */
-  padding: var(--page-title-gap) var(--space-4) var(--bottom-inset);
+  /* Top chrome: --page-title-gap. Bottom inset lives on .site-footer only. */
+  padding: var(--page-title-gap) var(--space-4) 0;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
@@ -600,13 +603,18 @@ a.cell-user-link:hover {
 .side-foot {
   margin-top: auto;
   padding-top: var(--page-title-gap);
+  /* Same inset owner as .site-footer — desktop/mobile/PWA one path */
+  padding-bottom: var(--bottom-inset);
   border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-1);
-  /* Shared with .site-footer so both separator tops sit on one baseline */
-  min-height: var(--footer-bar-h);
+  flex-shrink: 0;
+  /* Lock height so identity wrap cannot push separator off the shared Y */
+  min-height: calc(var(--footer-bar-h) + var(--bottom-inset));
+  max-height: calc(var(--footer-bar-h) + var(--bottom-inset));
+  overflow: hidden;
   box-sizing: border-box;
 }
 .side-foot-user {
@@ -615,7 +623,12 @@ a.cell-user-link:hover {
   gap: var(--space-1);
   min-width: 0;
   flex: 1;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+/* Multi-line identity blows the locked footer height — keep a single row */
+.side-foot .identity-chips,
+.side-foot .identity-pg-role {
+  display: none;
 }
 .side-foot-identity {
   display: flex;
@@ -2866,9 +2879,11 @@ code.env-fname {
 .site-footer {
   margin-top: auto;
   padding-top: var(--page-title-gap);
+  /* Same inset owner as .side-foot — desktop/mobile/PWA one path */
+  padding-bottom: var(--bottom-inset);
   border-top: 1px solid var(--border);
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-1);
@@ -2876,8 +2891,11 @@ code.env-fname {
   font-size: 12px;
   line-height: 1.25;
   flex: 0 0 auto;
-  /* Match .side-foot baseline height so both separator tops sit on one line */
-  min-height: var(--footer-bar-h);
+  flex-shrink: 0;
+  /* Match .side-foot locked box so both separator tops sit on one line */
+  min-height: calc(var(--footer-bar-h) + var(--bottom-inset));
+  max-height: calc(var(--footer-bar-h) + var(--bottom-inset));
+  overflow: hidden;
   box-sizing: border-box;
 }
 .site-footer a { color: var(--muted-fg); text-decoration: none; }
@@ -4246,8 +4264,10 @@ form.settings-form > .actions.sticky-actions,
 
       B) Fill height is 100svh (never dvh/lvh — they reflow while chrome moves).
 
-      C) ONE bottom-inset owner: footers use padding-bottom:var(--bottom-inset)
-         plus min/max-height: calc(var(--footer-bar-h) + var(--bottom-inset)).
+      C) ONE bottom-inset owner (all viewports): both footers use
+         padding-bottom:var(--bottom-inset) plus locked
+         min/max-height: calc(var(--footer-bar-h) + var(--bottom-inset)).
+         .side / .main / .shell never add bottom safe/foot padding.
 
       D) .side / .side-backdrop are position:fixed to the viewport. html/body/
          .shell must not become scroll containers (that would steal the fixed CB).
@@ -4364,7 +4384,7 @@ form.settings-form > .actions.sticky-actions,
   .side:not(.open) {
     pointer-events: none;
   }
-  /* SAME inset path as .site-footer — separators share one Y + one box height */
+  /* Reinforces the global one-path footer lock (base .side-foot / .site-footer). */
   .side .side-foot {
     flex-shrink: 0;
     padding-bottom: var(--bottom-inset);
@@ -4380,7 +4400,7 @@ form.settings-form > .actions.sticky-actions,
     white-space: nowrap;
     max-width: 100%;
   }
-  .side .identity-chips { display: none; }
+  /* chips/pg-role already hidden globally on .side-foot */
 
   /* Instant close on navigation — disable slide so PWA paints closed before unload */
   html.ios .side.side-nav-closing .side-panel {
@@ -9745,20 +9765,47 @@ tbody tr.is-bulk-selected:hover {
   font-variant-numeric: tabular-nums;
   /* Vazirmatn Persian digits sit optically low in small circles */
   transform: translateY(-0.5px);
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: var(--muted-fg);
   box-sizing: border-box;
+  border: 1px solid var(--border);
 }
-.table-bulk-op.btn-ok .table-bulk-op-count,
-.table-bulk-op.btn-warn .table-bulk-op-count,
+/* Tonal pills — mirror each bulk button variant (not one shared gray disk) */
+.table-bulk-op.btn-ghost .table-bulk-op-count {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--muted-fg);
+}
+.table-bulk-op.btn-ok .table-bulk-op-count {
+  background: rgba(34, 197, 94, 0.22);
+  border-color: rgba(34, 197, 94, 0.42);
+  color: var(--ok-fg);
+}
+.table-bulk-op.btn-warn .table-bulk-op-count {
+  background: rgba(234, 179, 8, 0.22);
+  border-color: rgba(234, 179, 8, 0.42);
+  color: var(--warn-fg);
+}
 .table-bulk-op.btn-danger .table-bulk-op-count {
-  background: rgba(0, 0, 0, 0.18);
-  border-color: rgba(255, 255, 255, 0.16);
-  color: inherit;
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.42);
+  color: var(--destructive-fg);
 }
-html[data-theme="light"] .table-bulk-op-count {
-  background: rgba(0, 0, 0, 0.06);
-  border-color: rgba(0, 0, 0, 0.08);
-  color: var(--foreground);
+html[data-theme="light"] .table-bulk-op.btn-ghost .table-bulk-op-count {
+  background: rgba(24, 24, 27, 0.05);
+  border-color: rgba(24, 24, 27, 0.12);
+  color: var(--muted-fg);
+}
+html[data-theme="light"] .table-bulk-op.btn-ok .table-bulk-op-count {
+  background: rgba(22, 163, 74, 0.14);
+  border-color: rgba(22, 163, 74, 0.35);
+  color: #15803d;
+}
+html[data-theme="light"] .table-bulk-op.btn-warn .table-bulk-op-count {
+  background: rgba(234, 179, 8, 0.18);
+  border-color: rgba(202, 138, 4, 0.4);
+  color: #a16207;
+}
+html[data-theme="light"] .table-bulk-op.btn-danger .table-bulk-op-count {
+  background: rgba(220, 38, 38, 0.12);
+  border-color: rgba(220, 38, 38, 0.35);
+  color: #b91c1c;
 }
