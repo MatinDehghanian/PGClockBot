@@ -23,7 +23,7 @@ class PageTitleGapParityTests(unittest.TestCase):
     def test_main_top_matches_page_head_bottom(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-4) var(--bottom-inset);",
+            "padding: var(--page-title-gap) var(--space-4) 0;",
             css,
         )
         self.assertIn(".page-head {\n  display: flex;", css)

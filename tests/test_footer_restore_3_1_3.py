@@ -33,9 +33,9 @@ class FooterRestore303Tests(unittest.TestCase):
         self.assertNotIn("padding-bottom: var(--chrome-pad-bottom)", css)
         mobile = at_rule(css, "@media (max-width: 900px)")
         self.assertNotIn("--chrome-pad", mobile)
-        # Desktop .main keeps --bottom-inset; mobile moves it onto both footers
+        # One path: .main / .side have no bottom inset; both footers own it
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-4) var(--bottom-inset);",
+            "padding: var(--page-title-gap) var(--space-4) 0;",
             rule(css, ".main"),
         )
         self.assertIn("padding-bottom: 0;", rule(mobile, ".shell"))
@@ -52,9 +52,9 @@ class FooterRestore303Tests(unittest.TestCase):
         side = rule(css, ".side")
         self.assertIn("overflow-y: auto;", side)
         # .shell is the single owner of the notch insets on desktop/tablet, so
-        # .side must not add --safe-top a second time.
+        # .side must not add --safe-top a second time. Bottom inset is on .side-foot.
         self.assertIn(
-            "padding: var(--space-2) var(--space-2) var(--bottom-inset);",
+            "padding: var(--space-2) var(--space-2) 0;",
             side,
         )
         self.assertNotIn("--safe-top", declarations(side))

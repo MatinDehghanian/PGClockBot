@@ -178,7 +178,7 @@ class SpacingSemanticParityTests(unittest.TestCase):
     def test_page_title_gaps_use_token(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(
-            "padding: var(--page-title-gap) var(--space-4) var(--bottom-inset);",
+            "padding: var(--page-title-gap) var(--space-4) 0;",
             css,
         )
         mobile = css.split("@media (max-width: 900px)", 1)[1]
