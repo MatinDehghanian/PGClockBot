@@ -122,7 +122,7 @@
   <div class="table-bulk-actions">
     {% for action in actions %}
     <button type="button"
-            class="btn btn-sm table-bulk-op {{ action.class or 'btn-ghost' }}"
+            class="btn btn-sm table-bulk-op {{ action.class if action.class else ('btn-warn' if action.warn else 'btn-ghost') }}"
             data-bulk-op="{{ action.key }}"
             hidden
             disabled
