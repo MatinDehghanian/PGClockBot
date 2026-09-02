@@ -636,10 +636,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         ).scalar_one_or_none()
         if not user or not profile:
             return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
-        try:
-            profile.commission_percent = int(str(form.get("commission_percent") or "10"))
-        except ValueError:
-            pass
         mode = str(form.get("billing_mode") or "").strip().lower()
         if mode in {"fixed", "payg"}:
             profile.billing_mode = mode
@@ -977,7 +973,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 name=name,
                 description=str(form.get("description") or "").strip() or None,
                 price=max(0, price),
-                commission_percent=0,
                 billing_mode="fixed",
                 price_per_gb=0,
                 pg_group_ids=None,
@@ -1017,13 +1012,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         billing_mode = str(form.get("billing_mode") or "fixed").strip().lower()
         if billing_mode not in {"fixed", "payg"}:
             billing_mode = "fixed"
-        try:
-            commission = int(str(form.get("commission_percent") or "0"))
-        except ValueError:
-            commission = 0
-        if billing_mode == "payg":
-            commission = 0
-        commission = max(0, min(100, commission))
         price_per_gb = _parse_price_per_gb(form) if billing_mode == "payg" else 0
         pg_group_ids = _parse_pg_group_ids(form)
         if not pg_group_ids:
@@ -1054,7 +1042,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             name=name,
             description=str(form.get("description") or "").strip() or None,
             price=max(0, price),
-            commission_percent=commission,
             billing_mode=billing_mode,
             price_per_gb=price_per_gb,
             pg_group_ids=pg_group_ids,
@@ -1196,7 +1183,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             # Strip subscription-only knobs — addons never provision admins/groups.
             plan.plan_kind = plan_kind
             plan.billing_mode = "fixed"
-            plan.commission_percent = 0
             plan.price_per_gb = 0
             plan.pg_group_ids = None
             plan.duration_days = 0
@@ -1225,10 +1211,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 status_code=303,
             )
 
-        try:
-            plan.commission_percent = int(str(form.get("commission_percent") or "0"))
-        except ValueError:
-            pass
         billing_mode = str(form.get("billing_mode") or plan.billing_mode or "fixed").strip().lower()
         if billing_mode not in {"fixed", "payg"}:
             billing_mode = "fixed"
@@ -1252,14 +1234,12 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 status_code=303,
             )
         if billing_mode == "payg":
-            plan.commission_percent = 0
             plan.price_per_gb = _parse_price_per_gb(form)
             plan.pg_group_ids = pg_group_ids
             plan.allow_buy_extra = False
             plan.extra_gb_price = 0
             plan.extra_user_price = 0
         else:
-            plan.commission_percent = max(0, min(100, int(plan.commission_percent or 0)))
             plan.price_per_gb = 0
             plan.pg_group_ids = pg_group_ids
             plan.allow_buy_extra = bool(form.get("allow_buy_extra"))

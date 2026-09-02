@@ -46,15 +46,9 @@
       <div id="edit-billing-wrap">
         <label class="form-field">حالت پرداخت
           <select name="billing_mode" id="edit-billing-mode">
-            <option value="fixed" {% if (plan.billing_mode or 'fixed') == 'fixed' %}selected{% endif %}>ثابت (کمیسیون)</option>
+            <option value="fixed" {% if (plan.billing_mode or 'fixed') == 'fixed' %}selected{% endif %}>ثابت</option>
             <option value="payg" {% if plan.billing_mode == 'payg' %}selected{% endif %}>PAYG</option>
           </select>
-        </label>
-      </div>
-      <div id="edit-commission-field">
-        <label class="form-field">کمیسیون ٪
-          <input name="commission_percent" id="edit-commission-input" type="number" min="0" max="100" value="{{ plan.commission_percent if plan.commission_percent is not none else 0 }}" />
-          <small class="muted">اختیاری — پیش‌فرض ۰؛ فقط در حالت ثابت</small>
         </label>
       </div>
       <div id="edit-price-per-gb-field" hidden>
@@ -181,8 +175,6 @@
 <script>
 (function(){
   const mode = document.getElementById('edit-billing-mode');
-  const commissionField = document.getElementById('edit-commission-field');
-  const commissionInput = document.getElementById('edit-commission-input');
   const rateField = document.getElementById('edit-price-per-gb-field');
   const billingWrap = document.getElementById('edit-billing-wrap');
   const extras = document.getElementById('edit-subscription-extras');
@@ -194,8 +186,6 @@
   function syncBilling(){
     if (!mode) return;
     const payg = mode.value === 'payg';
-    if (commissionField) commissionField.style.display = payg ? 'none' : '';
-    if (payg && commissionInput) commissionInput.value = '0';
     if (rateField) rateField.hidden = !payg;
   }
 
@@ -245,7 +235,6 @@
     setHidden(document.getElementById('edit-addon-users-field'), !isUsers);
     setHidden(extras, isAddon);
     setHidden(billingWrap, isAddon);
-    setHidden(commissionField, isAddon || payg);
     setHidden(rateField, isAddon || !payg);
     setHidden(document.getElementById('edit-buy-extra-block'), isAddon || payg);
     if (roleSel) {

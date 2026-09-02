@@ -2803,10 +2803,9 @@ async def adm_resellers_add(callback: CallbackQuery, state: FSMContext, db_user:
         await callback.message.answer(
             "آیدی عددی تلگرام کاربر را برای نماینده‌شدن بفرستید.\n\n"
             "مثال:\n"
-            "<code>123456789 15 1</code>\n\n"
+            "<code>123456789 1</code>\n\n"
             "• عدد اول: آیدی تلگرام\n"
-            "• عدد دوم: درصد کمیسیون (پیش‌فرض ۱۰)\n"
-            "• عدد سوم: ۱ = اجازه تأیید رسید، ۰ یا خالی = بدون تأیید",
+            "• عدد دوم: ۱ = اجازه تأیید رسید، ۰ یا خالی = بدون تأیید",
             reply_markup=kb.cancel_reply(),
         )
 
@@ -2980,11 +2979,10 @@ async def make_res(
     parts = (message.text or "").split()
     try:
         tg_id = int(parts[0])
-        commission = int(parts[1]) if len(parts) > 1 else 10
-        can_approve = len(parts) > 2 and parts[2] in {"1", "approve=1", "yes", "بله"}
+        can_approve = len(parts) > 1 and parts[1] in {"1", "approve=1", "yes", "بله"}
     except ValueError:
         await message.answer(
-            "فرمت نامعتبر است.\nمثال: <code>123456789 15 1</code>"
+            "فرمت نامعتبر است.\nمثال: <code>123456789 1</code>"
         )
         return
     result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))
@@ -3005,7 +3003,6 @@ async def make_res(
         creds = await provision_reseller(
             session,
             user=user,
-            commission_percent=commission,
             can_approve_receipts=can_approve,
             web_permissions=perms,
             bot_permissions=perms,

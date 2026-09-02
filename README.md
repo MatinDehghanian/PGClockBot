@@ -75,7 +75,7 @@ Legacy wrappers still work: `./install.sh` → install, `./update.sh` → update
 
 - Guest purchase (plans, wallet, card-to-card)
 - My services, renew, support, expiry / traffic alerts
-- Reseller role (commission, receipt approve)
+- Reseller role (receipt approve)
 - Admin tools in bot + PasarGuard ops
 - Web admin panel on `:9000`
 - Optional Telegram Mini App (HTTPS URL)

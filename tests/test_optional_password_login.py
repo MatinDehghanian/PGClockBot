@@ -46,7 +46,6 @@ class ProvisionPasswordKeepTests(unittest.IsolatedAsyncioTestCase):
         plan = SimpleNamespace(
             id=1,
             is_active=True,
-            commission_percent=10,
             web_permissions="dashboard,plans",
             bot_permissions="dashboard,plans",
             billing_mode="fixed",
@@ -131,7 +130,6 @@ class ProvisionPasswordKeepTests(unittest.IsolatedAsyncioTestCase):
         plan = SimpleNamespace(
             id=1,
             is_active=True,
-            commission_percent=10,
             web_permissions="dashboard,plans",
             bot_permissions="dashboard,plans",
         )
@@ -171,7 +169,6 @@ class ProvisionPasswordKeepTests(unittest.IsolatedAsyncioTestCase):
         plan = SimpleNamespace(
             id=1,
             is_active=True,
-            commission_percent=0,
             web_permissions="dashboard",
             bot_permissions="dashboard",
         )
@@ -216,7 +213,6 @@ class ProvisionPasswordKeepTests(unittest.IsolatedAsyncioTestCase):
         plan = SimpleNamespace(
             id=1,
             is_active=True,
-            commission_percent=0,
             web_permissions="dashboard",
             bot_permissions="dashboard",
         )

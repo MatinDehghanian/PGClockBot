@@ -27,14 +27,15 @@ class ResellerPlanRequiredFieldsTests(unittest.TestCase):
         self.assertIn('raise ValueError("pg_role_id required")', ADMIN_PLANS)
 
     def test_bot_fixed_plan_also_asks_groups(self):
-        # After commission, fixed plans go to group picker (not immediate save)
+        # After price, fixed plans go to group picker (skip commission)
         block = ADMIN_PLANS[
-            ADMIN_PLANS.find("async def resplan_commission") : ADMIN_PLANS.find(
-                "async def resplan_rate_gb"
+            ADMIN_PLANS.find("async def resplan_price") : ADMIN_PLANS.find(
+                "async def resplan_addon_amount"
             )
         ]
         self.assertIn("AdminPlansStates.res_plan_link", block)
         self.assertIn("_show_resplan_add_groups", block)
+        self.assertNotIn("res_plan_commission", block)
         self.assertNotIn("_save_reseller_plan", block)
 
     def test_bot_edit_role_and_groups(self):

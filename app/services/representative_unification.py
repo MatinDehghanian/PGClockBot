@@ -150,7 +150,6 @@ async def attach_shop_package_to_principal(
     if existing is None:
         profile = ResellerProfile(
             user_id=int(user.id),
-            commission_percent=0,
             can_approve_receipts=False,
             pg_admin_username=pg_username,
             pg_admin_password_enc=None,

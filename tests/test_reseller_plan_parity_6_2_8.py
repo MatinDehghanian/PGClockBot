@@ -164,7 +164,6 @@ class FormatAddonDetailTests(unittest.TestCase):
             price=50_000,
             addon_gb=20,
             addon_users=0,
-            commission_percent=0,
             pg_group_ids="1,2",
             pg_role_id=9,
         )

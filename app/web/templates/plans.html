@@ -165,7 +165,7 @@
   <div class="flash warn">{{ reseller_plans_err }}</div>
   {% endif %}
 
-  <h3 id="reseller-plans-fixed" class="card-subhead">📦 اشتراک ثابت (کمیسیون)</h3>
+  <h3 id="reseller-plans-fixed" class="card-subhead">📦 اشتراک ثابت</h3>
     {{ table_bulk_bar('/resellers/plans/bulk-action', [
     {'key': 'toggle', 'label': 'روشن/خاموش', 'confirm': 'وضعیت {n} پلن نمایندگی تغییر کند؟', 'confirm_title': 'تغییر وضعیت گروهی', 'confirm_label': 'اعمال'},
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} پلن نمایندگی حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
@@ -177,7 +177,6 @@
         {{ table_select_head() }}
         <th>نام</th>
         <th>قیمت ورود</th>
-        <th class="col-hide-sm">کمیسیون</th>
         <th>وضعیت</th>
         <th class="col-actions"></th>
       </tr>
@@ -188,7 +187,6 @@
         {{ table_select_cell(p.id) }}
         <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
         <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
-        <td class="mono col-hide-sm">{{ p.commission_percent }}٪</td>
         <td>{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -207,7 +205,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="muted">پلن اشتراک ثابت نیست — از «افزودن پلن» با مخاطب نمایندگان بسازید.</td></tr>
+      <tr><td colspan="5" class="muted">پلن اشتراک ثابت نیست — از «افزودن پلن» با مخاطب نمایندگان بسازید.</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -630,10 +628,6 @@
             <input name="price" type="number" value="0" id="reseller-plan-price" />
             <small class="muted" id="reseller-price-hint">هزینه خرید پکیج نمایندگی — ۰ = رایگان؛ فقط تأیید ادمین</small>
           </label>
-          <label class="form-field" id="reseller-commission-field">کمیسیون ٪
-            <input name="commission_percent" id="reseller-commission-input" type="number" min="0" max="100" value="0" />
-            <small class="muted">فقط برای پلن ثابت</small>
-          </label>
           <label class="form-field" id="reseller-price-per-gb-field" hidden>
             نرخ هر گیگ (تومان)
             <input name="price_per_gb" id="reseller-price-per-gb-input" type="number" min="0" value="0" />
@@ -906,8 +900,6 @@
     const kind = kindSel ? kindSel.value : 'fixed';
     const billing = document.getElementById('reseller-billing-mode');
     const planKindInput = document.getElementById('reseller-plan-kind');
-    const commissionField = document.getElementById('reseller-commission-field');
-    const commissionInput = document.getElementById('reseller-commission-input');
     const rateField = document.getElementById('reseller-price-per-gb-field');
     const extras = document.getElementById('reseller-subscription-extras');
     const included = document.getElementById('reseller-included-fields');
@@ -932,8 +924,6 @@
     }
     if (billing) billing.value = isPayg ? 'payg' : 'fixed';
 
-    setVisible(commissionField, !isAddon && !isPayg);
-    if ((isPayg || isAddon) && commissionInput) commissionInput.value = '0';
     setVisible(rateField, !isAddon && isPayg);
     setVisible(extras, !isAddon);
     setVisible(document.getElementById('reseller-buy-extra-block'), !isAddon && !isPayg);
@@ -979,7 +969,7 @@
       } else if (isPayg) {
         hint.textContent = 'اشتراک PAYG — نرخ هر گیگ، گروه و نقش پاسارگارد الزامی است؛ خرید حجم/کاربر اضافه لازم نیست.';
       } else {
-        hint.textContent = 'اشتراک ثابت — کمیسیون، گروه و نقش پاسارگارد الزامی است.';
+        hint.textContent = 'اشتراک ثابت — گروه و نقش پاسارگارد الزامی است.';
       }
     }
     if (!isAddon) syncResellerExtras();

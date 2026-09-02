@@ -122,7 +122,6 @@ class PlanKindInheritanceTests(unittest.TestCase):
             is_trial=False,
             pg_template_id=1,
             pg_group_ids="",
-            commission_percent=10,
             price_per_gb=0,
         )
         ui = {

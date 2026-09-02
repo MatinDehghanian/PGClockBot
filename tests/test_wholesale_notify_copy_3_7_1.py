@@ -47,7 +47,6 @@ class CredentialsCopyableTests(unittest.TestCase):
     def test_urls_are_code(self):
         text = format_credentials_message(
             {
-                "commission_percent": 10,
                 "unified_credentials": True,
                 "panel_username": "shop_abc",
                 "panel_password": "Secret1!",

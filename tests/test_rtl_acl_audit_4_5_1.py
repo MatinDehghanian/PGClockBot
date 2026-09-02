@@ -49,10 +49,10 @@ class RtlLtrHotspotsTests(unittest.TestCase):
         self.assertIn('class="mono" dir="ltr"', users)
         self.assertIn('class="mono" dir="ltr"', nodes)
 
-    def test_commission_uses_persian_percent(self):
+    def test_resellers_table_has_no_commission_column(self):
         src = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
-        self.assertIn("commission_percent }}٪", src)
-        self.assertNotIn("commission_percent }}%", src)
+        self.assertNotIn("commission_percent", src)
+        self.assertNotIn("کمیسیون", src)
 
     def test_payg_rate_isolates_amount(self):
         src = (ROOT / "app/web/templates/_reseller_edit_body.html").read_text(encoding="utf-8")

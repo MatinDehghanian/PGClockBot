@@ -1,8 +1,6 @@
 """Unified reseller Billing service.
 
-Pay As You Go is one ``billing_mode``; Fixed commission stays on
-``ResellerProfile.balance`` and is never touched here.
-
+Pay As You Go is one ``billing_mode``; fixed is the other package type.
 All money movement for PAYG must go through this module.
 """
 
@@ -1042,9 +1040,3 @@ async def _notify_low_balance(session: AsyncSession, profile: ResellerProfile) -
     except Exception:
         logger.debug("billing low-balance telegram failed", exc_info=True)
 
-
-def should_credit_fixed_commission(profile: ResellerProfile | None) -> bool:
-    """Fixed-mode only; PAYG must not touch commission balance."""
-    if profile is None:
-        return False
-    return not is_payg(profile)

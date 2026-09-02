@@ -209,7 +209,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "res_dash", "label": "خانه نماینده", "group": "منوی نماینده", "default": "success"},
     {"id": "res_users", "label": "مشتریان نماینده", "group": "منوی نماینده", "default": "success"},
     {"id": "res_billing", "label": "کیف پول PAYG", "group": "منوی نماینده", "default": "success"},
-    {"id": "res_stats", "label": "آمار و کمیسیون", "group": "منوی نماینده", "default": "success"},
+    {"id": "res_stats", "label": "آمار", "group": "منوی نماینده", "default": "success"},
     {"id": "res_orders", "label": "سفارش‌ها (نماینده)", "group": "منوی نماینده", "default": "success"},
     {"id": "res_payments", "label": "رسیدها (نماینده)", "group": "منوی نماینده", "default": "success"},
     {"id": "res_plans", "label": "پلن‌های فروش", "group": "منوی نماینده", "default": "primary"},

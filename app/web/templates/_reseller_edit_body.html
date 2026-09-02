@@ -30,15 +30,9 @@
   <form method="post" action="/resellers/{{ user.id }}/edit" class="form-stack">
     <div class="form-row">
       <div>
-        <label class="form-field">کمیسیون ٪
-          <input name="commission_percent" type="number" value="{{ profile.commission_percent }}" />
-          <small class="muted">فقط در حالت ثابت اعمال می‌شود</small>
-        </label>
-      </div>
-      <div>
         <label class="form-field">حالت پرداخت
           <select name="billing_mode" class="select-block">
-            <option value="fixed" {% if (profile.billing_mode or 'fixed') == 'fixed' %}selected{% endif %}>ثابت (کمیسیون)</option>
+            <option value="fixed" {% if (profile.billing_mode or 'fixed') == 'fixed' %}selected{% endif %}>ثابت</option>
             <option value="payg" {% if profile.billing_mode == 'payg' %}selected{% endif %}>PAYG</option>
           </select>
         </label>

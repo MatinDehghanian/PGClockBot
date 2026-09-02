@@ -101,7 +101,6 @@ class UnifiedCredentialsMessageTests(unittest.TestCase):
     def test_unified_credentials_block(self):
         text = format_credentials_message(
             {
-                "commission_percent": 15,
                 "plan_name": "نقره‌ای",
                 "billing_mode": "fixed",
                 "unified_credentials": True,
@@ -118,6 +117,8 @@ class UnifiedCredentialsMessageTests(unittest.TestCase):
         )
         self.assertIn("ورود یکپارچه", text)
         self.assertIn("نقره‌ای", text)
+        self.assertIn("ثابت", text)
+        self.assertNotIn("کمیسیون", text)
         self.assertIn("shop_abc", text)
         self.assertIn("Secret1!", text)
         self.assertIn("https://panel.example", text)
@@ -130,7 +131,6 @@ class UnifiedCredentialsMessageTests(unittest.TestCase):
     def test_legacy_separate_credentials_still_format(self):
         text = format_credentials_message(
             {
-                "commission_percent": 10,
                 "unified_credentials": False,
                 "web_username": "web_x",
                 "web_password": "WebPass1!",

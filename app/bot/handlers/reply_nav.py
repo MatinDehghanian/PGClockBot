@@ -564,7 +564,7 @@ async def open_reseller_apply(message: Message, session: AsyncSession, db_user: 
     rows = [
         [
             InlineKeyboardButton(
-                text=f"📦 ثابت (کمیسیون) — {fixed_n} پلن",
+                text=f"📦 ثابت — {fixed_n} پلن",
                 callback_data="resapply:mode:fixed",
             )
         ],
@@ -579,7 +579,7 @@ async def open_reseller_apply(message: Message, session: AsyncSession, db_user: 
         format_message(
             "🤝 درخواست نمایندگی",
             "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
-            "• <b>ثابت</b> — کمیسیون روی فروش\n"
+            "• <b>ثابت</b> — اشتراک با قیمت ثابت\n"
             "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک",
         ),
         reply_markup=main_kb,

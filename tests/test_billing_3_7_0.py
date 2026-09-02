@@ -15,7 +15,6 @@ from app.services.billing import (
     bytes_cost_proportional,
     bytes_to_charge_toman,
     is_payg,
-    should_credit_fixed_commission,
 )
 from app.services.provision_gate import ProvisionError, assert_provision_create
 
@@ -69,13 +68,6 @@ class ModeHelpersTests(unittest.TestCase):
         self.assertFalse(is_payg(MagicMock(billing_mode=BILLING_MODE_FIXED)))
         self.assertFalse(is_payg(None))
 
-    def test_fixed_commission_only(self):
-        self.assertTrue(
-            should_credit_fixed_commission(MagicMock(billing_mode=BILLING_MODE_FIXED))
-        )
-        self.assertFalse(
-            should_credit_fixed_commission(MagicMock(billing_mode=BILLING_MODE_PAYG))
-        )
 
 
 class AssertBillingGateTests(unittest.IsolatedAsyncioTestCase):

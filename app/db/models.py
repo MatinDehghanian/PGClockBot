@@ -412,8 +412,6 @@ class ResellerProfile(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), unique=True)
-    commission_percent: Mapped[int] = mapped_column(Integer, default=10)
-    balance: Mapped[int] = mapped_column(Integer, default=0)
     can_approve_receipts: Mapped[bool] = mapped_column(Boolean, default=False)
     pg_admin_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     # Fernet ciphertext of the PasarGuard admin password (shop ops must use this, not owner).
@@ -436,7 +434,7 @@ class ResellerProfile(Base):
     # Extra Telegram IDs that get reseller panel on THIS shop's dedicated bot only
     bot_admin_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    # --- Unified Billing (PAYG is one mode; fixed = legacy commission, untouched) ---
+    # --- Unified Billing (PAYG vs fixed package type) ---
     billing_mode: Mapped[str] = mapped_column(String(16), default="fixed")  # fixed | payg
     billing_balance: Mapped[int] = mapped_column(Integer, default=0)  # mirror of shop wallet (payg)
     billing_watermark_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
@@ -526,7 +524,6 @@ class ResellerPlan(Base):
     name: Mapped[str] = mapped_column(String(128))
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     price: Mapped[int] = mapped_column(Integer, default=0)  # toman; 0 = free apply
-    commission_percent: Mapped[int] = mapped_column(Integer, default=0)
     can_approve_receipts: Mapped[bool] = mapped_column(Boolean, default=False)
     web_permissions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     bot_permissions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -534,7 +531,7 @@ class ResellerPlan(Base):
     create_web_access: Mapped[bool] = mapped_column(Boolean, default=True)
     share_pg_panel_url: Mapped[bool] = mapped_column(Boolean, default=False)
     pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    # Default billing for new resellers on this package: fixed (commission) | payg
+    # Default billing for new resellers on this package: fixed | payg
     billing_mode: Mapped[str] = mapped_column(String(16), default="fixed")
     # PAYG: toman per GB for resellers on this package (overrides global Setting via plan rate)
     price_per_gb: Mapped[int] = mapped_column(Integer, default=0)

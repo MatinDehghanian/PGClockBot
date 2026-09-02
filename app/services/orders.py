@@ -1674,20 +1674,6 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             services.clear()
             raise
 
-        if profile is not None:
-            from app.services.billing import should_credit_fixed_commission
-
-            # PAYG: no commission credit — Fixed mode only (untouched for current resellers)
-            if should_credit_fixed_commission(profile):
-                commission = int(order.amount * profile.commission_percent / 100)
-                if commission > 0:
-                    await session.execute(
-                        update(ResellerProfile)
-                        .where(ResellerProfile.user_id == profile.user_id)
-                        .values(balance=ResellerProfile.balance + commission)
-                        .execution_options(synchronize_session=False)
-                    )
-
         order.service_id = services[0].id if services else None
         order.status = OrderStatus.DELIVERED.value
         await session.commit()

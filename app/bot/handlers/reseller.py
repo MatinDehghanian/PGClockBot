@@ -73,7 +73,7 @@ async def _resapply_mode_keyboard(session: AsyncSession, ui: dict) -> InlineKeyb
     rows = [
         [
             InlineKeyboardButton(
-                text=f"📦 ثابت (کمیسیون) — {fixed_n} پلن",
+                text=f"📦 ثابت — {fixed_n} پلن",
                 callback_data="resapply:mode:fixed",
             )
         ],
@@ -101,7 +101,7 @@ async def _resapply_plan_list_keyboard(
             rate = int(getattr(p, "price_per_gb", 0) or 0)
             extra = f" · {format_toman(rate, get_settings().currency)}/گیگ" if rate else ""
         else:
-            extra = f" · {int(p.commission_percent or 0)}٪"
+            extra = ""
         rows.append(
             [
                 InlineKeyboardButton(
@@ -263,8 +263,7 @@ async def res_dash(
         f"👥 مشتریان: {users_n}\n"
         f"🛒 سفارش‌ها: {orders_n}\n"
         f"🧾 رسید معلق: {pending_pay}\n"
-        f"🎫 تیکت باز: {open_tickets}\n"
-        f"💼 کمیسیون: {profile.commission_percent}٪"
+        f"🎫 تیکت باز: {open_tickets}"
     )
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=None)
@@ -622,9 +621,7 @@ async def res_stats(
         return
     await callback.answer()
     text = (
-        "📊 <b>آمار و کمیسیون</b>\n\n"
-        f"کمیسیون: {profile.commission_percent}%\n"
-        f"موجودی کمیسیون: {format_toman(profile.balance, get_settings().currency)}\n"
+        "📊 <b>آمار</b>\n\n"
         f"تأیید رسید: {'بله' if has_bot_perm(profile, 'payments') else 'خیر'}\n"
         f"وب‌پنل: <code>{profile.web_username or '—'}</code>\n"
         f"ربات: <code>{('@' + profile.bot_username) if profile.bot_username else '—'}</code>\n"
@@ -906,7 +903,7 @@ async def resapply_home(
             format_message(
                 "🤝 درخواست نمایندگی",
                 "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
-                "• <b>ثابت</b> — کمیسیون روی فروش\n"
+                "• <b>ثابت</b> — اشتراک با قیمت ثابت\n"
                 "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک\n\n"
                 "بعد از انتخاب نوع، پلن‌های همان دسته نمایش داده می‌شود.",
             ),

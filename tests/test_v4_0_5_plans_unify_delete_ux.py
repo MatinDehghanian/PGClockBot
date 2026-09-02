@@ -40,7 +40,7 @@ class PlansUnifyTests(unittest.TestCase):
         self.assertIn("پلن‌های کاربران", html)
         self.assertIn("reseller-plans", html)
         self.assertIn('action="/resellers/plans"', html)
-        self.assertIn("commission_percent", html)
+        self.assertNotIn("commission_percent", html)
         self.assertIn("billing_mode", html)
         # Old multi-button create chrome removed
         self.assertNotIn('data-modal-open="modal-plan-create"', html)
@@ -59,7 +59,7 @@ class PlansUnifyTests(unittest.TestCase):
         src = (ROOT / "app/db/models.py").read_text(encoding="utf-8")
         block = src[src.find("class ResellerPlan") : src.find("class ResellerApplicationStatus")]
         self.assertIn("billing_mode", block)
-        self.assertIn("default=0", block)  # commission default 0
+        self.assertNotIn("commission_percent", block)
 
     def test_session_alters_billing_mode(self):
         src = (ROOT / "app/db/session.py").read_text(encoding="utf-8")

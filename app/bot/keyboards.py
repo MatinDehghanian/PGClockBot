@@ -858,7 +858,7 @@ def _reseller_submenu_entries(
     ):
         entries.append(("res_reports", "📈 گزارشات"))
     if shop_feature_allowed(key="stats", profile=profile):
-        entries.append(("res_stats", "📊 آمار و کمیسیون"))
+        entries.append(("res_stats", "📊 آمار"))
     if shop_feature_allowed(key="plans", profile=profile):
         entries.append(("res_plans", "💎 پلن‌های فروش"))
     if shop_feature_allowed(key="orders", profile=profile):
@@ -2284,11 +2284,10 @@ def admin_resellers_plans_overview_keyboard(
     for p in fixed_plans[:10]:
         flag = "✅" if getattr(p, "is_active", True) else "⏸"
         name = (getattr(p, "name", "") or "")[:22]
-        pct = int(getattr(p, "commission_percent", 0) or 0)
         rows.append(
             [
                 _ikb(
-                    f"{flag} 📦 {name} · {pct}٪"[:60],
+                    f"{flag} 📦 {name}"[:60],
                     callback_data=f"adm:resplan:view:{p.id}",
                     style=fixed_style,
                 )
@@ -2487,7 +2486,7 @@ def admin_reseller_plans_list_keyboard(
             qty = int(getattr(p, "addon_users", 0) or 0)
             extra = f" · +{qty} کاربر"
         else:
-            extra = f" · {int(getattr(p, 'commission_percent', 0) or 0)}٪"
+            extra = ""
         rows.append(
             [
                 _ikb(

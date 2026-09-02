@@ -3215,7 +3215,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 creds = await provision_reseller(
                     session,
                     user=user,
-                    commission_percent=10,
                     web_permissions=DEFAULT_FEATURE_PERMS,
                     bot_permissions=DEFAULT_FEATURE_PERMS,
                     create_pg_admin=True,
