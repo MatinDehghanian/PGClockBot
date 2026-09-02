@@ -119,7 +119,6 @@
         <th data-sort-type="text">وضعیت</th>
         <th class="reseller-quota-th" data-sort-type="num">کاربران</th>
         <th class="reseller-quota-th" data-sort-type="num">حجم</th>
-        <th class="col-hide-sm" data-sort-type="num">کمیسیون</th>
         <th class="col-hide-sm" data-sort-type="text">وب</th>
         <th class="col-hide-sm" data-sort-type="text">ربات</th>
         <th class="col-hide-sm" data-sort-type="text">راه‌اندازی</th>
@@ -165,7 +164,6 @@
             {% endif %}
           </div>
         </td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ p.commission_percent or 0 }}">{% if (p.billing_mode or 'fixed') == 'payg' %}—{% else %}{{ p.commission_percent }}٪{% endif %}</td>
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ p.web_username or '' }}">{{ p.web_username or '—' }}</td>
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ p.bot_username or '' }}">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
         <td class="col-hide-sm" data-sort-value="{% if p.setup_completed_at %}2{% elif p.web_username %}1{% else %}0{% endif %}">{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.web_username %}<span class="badge pending">بدون ربات</span>{% else %}—{% endif %}</td>
@@ -219,7 +217,7 @@
       <h2>افزودن نماینده</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <p class="muted">پس از ثبت، اطلاعات ورود در تلگرام ارسال می‌شود. حالت پرداخت و کمیسیون از پلن نمایندگی می‌آید؛ دسترسی‌های پاسارگارد از نقش انتخاب‌شده.</p>
+    <p class="muted">پس از ثبت، اطلاعات ورود در تلگرام ارسال می‌شود. حالت پرداخت از پلن نمایندگی می‌آید؛ دسترسی‌های پاسارگارد از نقش انتخاب‌شده.</p>
     <form method="post" action="/resellers" class="form-stack">
       {% if not reseller_plans %}
       <div class="flash warn">هنوز پلن نمایندگی فعالی ندارید — ابتدا از بخش پلن‌ها یک پلن نماینده بسازید.</div>
@@ -249,10 +247,10 @@
         <select name="plan_id" required {% if not reseller_plans %}disabled{% endif %}>
           <option value="">— انتخاب پلن —</option>
           {% for p in reseller_plans or [] %}
-          <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }} / گیگ{% elif p.commission_percent is not none %} · کمیسیون {{ p.commission_percent }}٪{% endif %}</option>
+          <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ "{:,}".format(p.price_per_gb).replace(",", "٬") }} / گیگ{% endif %}</option>
           {% endfor %}
         </select>
-        <small class="muted">ثابت یا PAYG — کمیسیون / نرخ گیگ و حالت پرداخت از همین پلن تنظیم می‌شود</small>
+        <small class="muted">ثابت یا PAYG — نرخ گیگ و حالت پرداخت از همین پلن تنظیم می‌شود</small>
       </label>
 
       <div class="ui-switch-section">

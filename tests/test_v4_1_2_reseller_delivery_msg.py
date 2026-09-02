@@ -11,12 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class CredentialsMessageV412Tests(unittest.TestCase):
-    def test_plan_above_commission_and_no_login_url(self):
+    def test_plan_above_type_and_no_login_url(self):
         text = format_credentials_message(
             {
                 "plan_name": "طلایی PAYG",
                 "billing_mode": "payg",
-                "commission_percent": 0,
                 "unified_credentials": True,
                 "panel_username": "shop_x",
                 "panel_password": "Aa1!bbbbbbbb",
@@ -36,11 +35,11 @@ class CredentialsMessageV412Tests(unittest.TestCase):
         self.assertNotIn("rsetup", text)
         self.assertNotIn("ربات اختصاصی (اختیاری)", text)
         self.assertIn("داشبورد وب‌پنل", text)
+        self.assertNotIn("کمیسیون", text)
 
     def test_no_setup_url_even_if_passed(self):
         text = format_credentials_message(
             {
-                "commission_percent": 10,
                 "unified_credentials": True,
                 "panel_username": "u",
                 "panel_password": "p",
@@ -50,6 +49,7 @@ class CredentialsMessageV412Tests(unittest.TestCase):
         )
         self.assertNotIn("rsetup", text)
         self.assertNotIn("یک‌بارمصرف", text)
+        self.assertNotIn("کمیسیون", text)
 
 
 class RsetupRemovedV412Tests(unittest.TestCase):

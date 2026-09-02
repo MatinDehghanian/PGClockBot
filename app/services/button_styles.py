@@ -144,6 +144,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "loy_referral", "label": "دعوت دوستان", "group": "باشگاه مشتریان", "default": "primary"},
     {"id": "loy_points", "label": "امتیاز من", "group": "باشگاه مشتریان", "default": ""},
     {"id": "loy_rewards", "label": "جوایز باشگاه", "group": "باشگاه مشتریان", "default": ""},
+    {"id": "loy_wheel", "label": "چرخ شانس", "group": "باشگاه مشتریان", "default": "primary"},
     {"id": "loy_history", "label": "تاریخچه باشگاه", "group": "باشگاه مشتریان", "default": ""},
     # ── Admin hub (platform bot only) ──────────────────────────────────────────
     {"id": "adm_hub_ops", "label": "عملیات روزانه", "group": "منوی ادمین", "default": "success"},
@@ -209,7 +210,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "res_dash", "label": "خانه نماینده", "group": "منوی نماینده", "default": "success"},
     {"id": "res_users", "label": "مشتریان نماینده", "group": "منوی نماینده", "default": "success"},
     {"id": "res_billing", "label": "کیف پول PAYG", "group": "منوی نماینده", "default": "success"},
-    {"id": "res_stats", "label": "آمار و کمیسیون", "group": "منوی نماینده", "default": "success"},
+    {"id": "res_stats", "label": "آمار", "group": "منوی نماینده", "default": "success"},
     {"id": "res_orders", "label": "سفارش‌ها (نماینده)", "group": "منوی نماینده", "default": "success"},
     {"id": "res_payments", "label": "رسیدها (نماینده)", "group": "منوی نماینده", "default": "success"},
     {"id": "res_plans", "label": "پلن‌های فروش", "group": "منوی نماینده", "default": "primary"},

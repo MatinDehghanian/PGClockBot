@@ -45,7 +45,6 @@ class AdminPlansStates(StatesGroup):
     edit_value = State()
     res_plan_name = State()
     res_plan_price = State()
-    res_plan_commission = State()
     res_plan_rate_gb = State()
     res_plan_addon_amount = State()
     res_plan_link = State()
@@ -452,7 +451,7 @@ async def send_reseller_plans_list(
         for p in all_plans
         if reseller_plan_mode_of(p) == kind and is_subscription_plan(p)
     ]
-    label = "PAYG" if kind == "payg" else "ثابت (کمیسیون)"
+    label = "PAYG" if kind == "payg" else "ثابت"
     if not plans:
         body = "هنوز پلنی در این دسته نیست."
     else:
@@ -576,7 +575,7 @@ async def _rerender_plans_screen(
                 for p in all_plans
                 if reseller_plan_mode_of(p) == kind and is_subscription_plan(p)
             ]
-            label = "PAYG" if kind == "payg" else "ثابت (کمیسیون)"
+            label = "PAYG" if kind == "payg" else "ثابت"
             add_cb = f"adm:resplan:add:{kind}"
         body = (
             "هنوز پلنی در این دسته نیست."
@@ -1435,10 +1434,6 @@ def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
         rows.append(
             [InlineKeyboardButton(text="✏️ نرخ / گیگ", callback_data=f"adm:resplan:edit:rate:{pid}")]
         )
-    else:
-        rows.append(
-            [InlineKeyboardButton(text="✏️ کمیسیون", callback_data=f"adm:resplan:edit:comm:{pid}")]
-        )
     rows.append(
         [InlineKeyboardButton(text="📁 گروه PG", callback_data=f"adm:resplan:edit:grp:{pid}")]
     )
@@ -1712,7 +1707,6 @@ async def resplan_edit_ask(
     prompts = {
         "name": "نام جدید:",
         "price": "قیمت بسته (تومان):" if is_addon_plan(plan) else "قیمت ورود (تومان):",
-        "comm": "کمیسیون (۰–۱۰۰٪):",
         "rate": "نرخ هر گیگ (تومان):",
         "desc": "توضیح (خالی = حذف):",
         "addon_gb": "حجم بسته (گیگابایت):",
@@ -1952,8 +1946,6 @@ async def resplan_edit_save(
             plan.name = text[:128]
         elif field == "price":
             plan.price = max(0, parse_bot_int(text))
-        elif field == "comm":
-            plan.commission_percent = max(0, min(100, parse_bot_int(text)))
         elif field == "rate":
             plan.price_per_gb = max(0, parse_bot_int(text))
         elif field == "desc":
@@ -2048,8 +2040,14 @@ async def resplan_price(message: Message, state: FSMContext, session: AsyncSessi
         await state.set_state(AdminPlansStates.res_plan_rate_gb)
         await message.answer("نرخ هر گیگ (تومان):", reply_markup=kb.cancel_reply())
     else:
-        await state.set_state(AdminPlansStates.res_plan_commission)
-        await message.answer("کمیسیون فروش (۰–۱۰۰٪):", reply_markup=kb.cancel_reply())
+        await state.update_data(res_plan_groups=[])
+        await state.set_state(AdminPlansStates.res_plan_link)
+        await message.answer(
+            "📁 گروه پاسارگارد را انتخاب کنید (حداقل یک گروه الزامی):",
+            reply_markup=kb.cancel_reply(),
+        )
+        bubble = await message.answer("⏳")
+        await _show_resplan_add_groups(bubble, state)
 
 
 @router.message(AdminPlansStates.res_plan_addon_amount)
@@ -2090,30 +2088,6 @@ async def resplan_addon_amount(
         callback_prefix="adm:resplan:addcolor",
         back_callback="adm:plans:aud:resellers",
     )
-
-
-@router.message(AdminPlansStates.res_plan_commission)
-@require_bot_owner_handler
-async def resplan_commission(
-    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
-):
-    if not _is_admin(db_user) or kb.is_cancel_text(message.text):
-        await state.set_state(None)
-        await _answer_plans_cancel(message, state, session)
-        return
-    try:
-        comm = max(0, min(100, parse_bot_int(message.text)))
-    except ValueError:
-        await message.answer("عدد معتبر بفرستید.")
-        return
-    await state.update_data(res_plan_commission=comm, res_plan_groups=[])
-    await state.set_state(AdminPlansStates.res_plan_link)
-    await message.answer(
-        "📁 گروه پاسارگارد را انتخاب کنید (حداقل یک گروه الزامی):",
-        reply_markup=kb.cancel_reply(),
-    )
-    bubble = await message.answer("⏳")
-    await _show_resplan_add_groups(bubble, state)
 
 
 @router.message(AdminPlansStates.res_plan_rate_gb)
@@ -2164,7 +2138,7 @@ async def _show_resplan_add_groups(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     selected = [int(x) for x in (data.get("res_plan_groups") or [])]
     mode = data.get("res_plan_mode") or "fixed"
-    label = "PAYG" if mode == "payg" else "ثابت (کمیسیون)"
+    label = "PAYG" if mode == "payg" else "ثابت"
     try:
         groups = await get_pg().get_groups_simple()
     except Exception:
@@ -2359,7 +2333,6 @@ async def resplan_add_color(
                 name=data.get("res_plan_name") or "بسته اضافه",
                 price=int(data.get("res_plan_price") or 0),
                 billing_mode="fixed",
-                commission_percent=0,
                 price_per_gb=0,
                 pg_group_ids=None,
                 plan_kind=plan_kind,
@@ -2393,7 +2366,6 @@ async def resplan_add_color(
             plan = await _save_reseller_plan(
                 session,
                 state,
-                commission_percent=int(data.get("res_plan_commission") or 0) if mode == "fixed" else 0,
                 price_per_gb=int(data.get("res_plan_rate_gb") or 0) if mode == "payg" else 0,
                 pg_group_ids=",".join(str(int(x)) for x in (data.get("res_plan_groups") or [])),
                 pg_role_id=int(data.get("res_plan_role_id") or 0),
@@ -2504,7 +2476,6 @@ async def _save_reseller_plan(
     session: AsyncSession,
     state: FSMContext,
     *,
-    commission_percent: int | None = None,
     price_per_gb: int | None = None,
     pg_group_ids: str | None = None,
     pg_role_id: int | None = None,
@@ -2528,7 +2499,6 @@ async def _save_reseller_plan(
         name=data.get("res_plan_name") or "پلن نماینده",
         price=int(data.get("res_plan_price") or 0),
         billing_mode=mode,
-        commission_percent=int(commission_percent or data.get("res_plan_commission") or 0),
         price_per_gb=int(price_per_gb or data.get("res_plan_rate_gb") or 0) if is_payg else 0,
         pg_group_ids=pg_group_ids,
         pg_role_id=int(role_id),

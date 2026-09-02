@@ -130,6 +130,7 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
         # dashboard is soft-injected with other core shop keys
         self.assertIn("🏠 خانه نماینده", mapping)
         # stats is NOT soft-injected
+        self.assertNotIn("📊 آمار", mapping)
         self.assertNotIn("📊 آمار و کمیسیون", mapping)
 
     def test_legacy_hubs_no_longer_static_chrome(self):

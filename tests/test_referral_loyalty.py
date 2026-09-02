@@ -579,7 +579,7 @@ class LoyaltyStaticContractTests(unittest.TestCase):
         from pathlib import Path
 
         src = Path("app/services/loyalty.py").read_text()
-        block = src.split("async def _apply_service_reward", 1)[1].split(
+        block = src.split("async def apply_service_reward", 1)[1].split(
             "async def overview_metrics", 1
         )[0]
         self.assertIn("get_pg_for_reseller(session, int(user.reseller_id))", block)

@@ -291,6 +291,10 @@ class AdminStates(StatesGroup):
     block_user_reason = State()
     broadcast_text = State()
     broadcast_audience = State()
+    svc_adjust_days_input = State()
+    svc_adjust_gb_input = State()
+    reseller_cap_days_input = State()
+    reseller_cap_gb_input = State()
 
 
 @router.callback_query(F.data == "adm:home")
@@ -2233,57 +2237,220 @@ async def adm_users_service_renew(
         )
 
 
-@router.callback_query(F.data.startswith("adm:users:svcext:"))
+@router.callback_query(F.data.startswith("adm:users:svcadj:"))
 @require_bot_owner_handler
-async def adm_users_service_extend(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+async def adm_users_service_adjust(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
-    parts = callback.data.split(":")
-    # adm:users:svcext:{uid}:{sid}:d30|g10
-    user_id = int(parts[3])
-    service_id = int(parts[4])
+    parts = (callback.data or "").split(":")
+    # adm:users:svcadj:{uid}:{sid}[ :days|gb|confirm : +/-|input ]
+    if len(parts) < 5:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    try:
+        user_id = int(parts[3])
+        service_id = int(parts[4])
+    except ValueError:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
     _user, deny = await _platform_shop_user(session, user_id)
     if deny:
         await callback.answer(deny, show_alert=True)
         return
-    token = parts[5] if len(parts) > 5 else ""
-    extra_days = 0
-    extra_gb = 0.0
-    if token.startswith("d"):
-        extra_days = int(token[1:] or 0)
-    elif token.startswith("g"):
-        extra_gb = float(token[1:] or 0)
-    from app.services.bot_user_admin import (
-        admin_extend_service,
-        get_owned_service,
-        service_snapshot,
-        snapshot_telegram_lines,
-    )
 
-    try:
-        svc = await get_owned_service(
-            session, bot_user_id=user_id, service_id=service_id
+    from app.services.bot_user_admin import MAX_EXTEND_DAYS, MAX_EXTEND_GB
+
+    data = await state.get_data()
+    adj_key = f"svcadj:{user_id}:{service_id}"
+    stored = data.get(adj_key) if isinstance(data.get(adj_key), dict) else {}
+    days = int(stored.get("days") or 0)
+    gb = float(stored.get("gb") or 0)
+
+    action = parts[5] if len(parts) > 5 else ""
+    detail = parts[6] if len(parts) > 6 else ""
+
+    def _clamp_days(v: int) -> int:
+        return max(-MAX_EXTEND_DAYS, min(MAX_EXTEND_DAYS, int(v)))
+
+    def _clamp_gb(v: float) -> float:
+        return max(-float(MAX_EXTEND_GB), min(float(MAX_EXTEND_GB), float(v)))
+
+    if action == "days" and detail in {"+", "-"}:
+        days = _clamp_days(days + (1 if detail == "+" else -1))
+        await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+        await callback.answer()
+    elif action == "gb" and detail in {"+", "-"}:
+        gb = _clamp_gb(gb + (1 if detail == "+" else -1))
+        await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+        await callback.answer()
+    elif action == "days" and detail == "input":
+        await state.update_data(
+            **{
+                adj_key: {"days": days, "gb": gb},
+                "svcadj_uid": user_id,
+                "svcadj_sid": service_id,
+            }
         )
-        await admin_extend_service(
-            session, svc, extra_days=extra_days, extra_gb=extra_gb
+        await state.set_state(AdminStates.svc_adjust_days_input)
+        await callback.answer()
+        if callback.message:
+            await callback.message.answer(
+                f"تعداد روز تغییر را وارد کنید (±{MAX_EXTEND_DAYS}، منفی = کاهش):",
+                reply_markup=kb.cancel_reply(),
+            )
+        return
+    elif action == "gb" and detail == "input":
+        await state.update_data(
+            **{
+                adj_key: {"days": days, "gb": gb},
+                "svcadj_uid": user_id,
+                "svcadj_sid": service_id,
+            }
         )
-        snap = await service_snapshot(session, svc)
-    except ValueError as e:
-        await callback.answer(str(e)[:160], show_alert=True)
+        await state.set_state(AdminStates.svc_adjust_gb_input)
+        await callback.answer()
+        if callback.message:
+            await callback.message.answer(
+                f"مقدار گیگ تغییر را وارد کنید (±{MAX_EXTEND_GB}، منفی = کاهش):",
+                reply_markup=kb.cancel_reply(),
+            )
         return
-    except Exception as e:
-        await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+    elif action == "confirm":
+        from app.services.bot_user_admin import (
+            admin_extend_service,
+            get_owned_service,
+            service_snapshot,
+            snapshot_telegram_lines,
+        )
+
+        try:
+            svc = await get_owned_service(
+                session, bot_user_id=user_id, service_id=service_id
+            )
+            await admin_extend_service(
+                session, svc, extra_days=days, extra_gb=gb
+            )
+            snap = await service_snapshot(session, svc)
+        except ValueError as e:
+            await callback.answer(str(e)[:160], show_alert=True)
+            return
+        except Exception as e:
+            await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+            return
+        await state.update_data(**{adj_key: {"days": 0, "gb": 0.0}})
+        await callback.answer("مانده به‌روز شد")
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                "✅ مانده سرویس به‌روز شد\n\n" + snapshot_telegram_lines(snap),
+                reply_markup=kb.admin_user_service_actions(user_id, service_id),
+            )
         return
-    await callback.answer("افزایش یافت")
+    else:
+        # Open adjust screen
+        await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+        await callback.answer()
+
+    text = (
+        f"⏱ <b>تغییر مانده سرویس #{service_id}</b>\n\n"
+        f"روز: <b>{days}</b> · گیگ: <b>{gb}</b>\n"
+        "مثبت = افزایش، منفی = کاهش. برای ورود دستی روی عدد بزنید."
+    )
     if callback.message:
         await safe_edit_text(
             callback.message,
-            "✅ افزایش اعمال شد\n\n" + snapshot_telegram_lines(snap),
-            reply_markup=kb.admin_user_service_actions(user_id, service_id),
+            text,
+            reply_markup=kb.admin_user_service_adjust_keyboard(
+                user_id, service_id, days=days, gb=gb
+            ),
         )
+
+
+@router.message(AdminStates.svc_adjust_days_input)
+@require_bot_owner_handler
+async def adm_svc_adjust_days_entered(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        return
+    if kb.is_cancel_text(message.text):
+        await state.set_state(None)
+        await message.answer("لغو شد.")
+        return
+    from app.services.bot_user_admin import MAX_EXTEND_DAYS
+
+    try:
+        days = parse_bot_int(message.text)
+    except ValueError:
+        await message.answer("عدد معتبر بفرستید")
+        return
+    if abs(days) > MAX_EXTEND_DAYS:
+        await message.answer(f"روز باید بین ±{MAX_EXTEND_DAYS} باشد")
+        return
+    data = await state.get_data()
+    user_id = int(data.get("svcadj_uid") or 0)
+    service_id = int(data.get("svcadj_sid") or 0)
+    if not user_id or not service_id:
+        await state.set_state(None)
+        await message.answer("نشست منقضی شد — دوباره از منوی سرویس وارد شوید.")
+        return
+    adj_key = f"svcadj:{user_id}:{service_id}"
+    stored = data.get(adj_key) if isinstance(data.get(adj_key), dict) else {}
+    gb = float(stored.get("gb") or 0)
+    await state.set_state(None)
+    await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+    await message.answer(
+        f"⏱ <b>تغییر مانده سرویس #{service_id}</b>\n\n"
+        f"روز: <b>{days}</b> · گیگ: <b>{gb}</b>",
+        reply_markup=kb.admin_user_service_adjust_keyboard(
+            user_id, service_id, days=days, gb=gb
+        ),
+    )
+
+
+@router.message(AdminStates.svc_adjust_gb_input)
+@require_bot_owner_handler
+async def adm_svc_adjust_gb_entered(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        return
+    if kb.is_cancel_text(message.text):
+        await state.set_state(None)
+        await message.answer("لغو شد.")
+        return
+    from app.services.bot_user_admin import MAX_EXTEND_GB
+
+    try:
+        gb = parse_bot_float(message.text)
+    except ValueError:
+        await message.answer("عدد معتبر بفرستید")
+        return
+    if abs(gb) > MAX_EXTEND_GB:
+        await message.answer(f"گیگ باید بین ±{MAX_EXTEND_GB} باشد")
+        return
+    data = await state.get_data()
+    user_id = int(data.get("svcadj_uid") or 0)
+    service_id = int(data.get("svcadj_sid") or 0)
+    if not user_id or not service_id:
+        await state.set_state(None)
+        await message.answer("نشست منقضی شد — دوباره از منوی سرویس وارد شوید.")
+        return
+    adj_key = f"svcadj:{user_id}:{service_id}"
+    stored = data.get(adj_key) if isinstance(data.get(adj_key), dict) else {}
+    days = int(stored.get("days") or 0)
+    await state.set_state(None)
+    await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+    await message.answer(
+        f"⏱ <b>تغییر مانده سرویس #{service_id}</b>\n\n"
+        f"روز: <b>{days}</b> · گیگ: <b>{gb}</b>",
+        reply_markup=kb.admin_user_service_adjust_keyboard(
+            user_id, service_id, days=days, gb=gb
+        ),
+    )
 
 
 @router.callback_query(F.data.startswith("adm:users:block:"))
@@ -2679,6 +2846,212 @@ async def adm_resellers_view(
         await _render_reseller_card(callback.message, session, user, edit=True)
 
 
+@router.callback_query(F.data.startswith("adm:resellers:capadj:"))
+@require_bot_owner_handler
+@require_platform_rep_mgmt
+async def adm_resellers_capacity_adjust(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    # adm:resellers:capadj:{uid}[ :days|gb|confirm : +/-|input ]
+    if len(parts) < 4:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    try:
+        user_id = int(parts[3])
+    except ValueError:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+
+    from app.services.pg_admin_subscription import MAX_ADJUST_DAYS, MAX_ADJUST_GB
+    from app.services.resellers import get_reseller_profile
+
+    profile = await get_reseller_profile(session, user_id)
+    if not profile or not (profile.pg_admin_username or "").strip():
+        await callback.answer("ادمین پاسارگارد تنظیم نشده", show_alert=True)
+        return
+
+    data = await state.get_data()
+    adj_key = f"capadj:{user_id}"
+    stored = data.get(adj_key) if isinstance(data.get(adj_key), dict) else {}
+    days = int(stored.get("days") or 0)
+    gb = int(stored.get("gb") or 0)
+
+    action = parts[4] if len(parts) > 4 else ""
+    detail = parts[5] if len(parts) > 5 else ""
+
+    def _clamp_days(v: int) -> int:
+        return max(-MAX_ADJUST_DAYS, min(MAX_ADJUST_DAYS, int(v)))
+
+    def _clamp_gb(v: int) -> int:
+        return max(-MAX_ADJUST_GB, min(MAX_ADJUST_GB, int(v)))
+
+    if action == "days" and detail in {"+", "-"}:
+        days = _clamp_days(days + (1 if detail == "+" else -1))
+        await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+        await callback.answer()
+    elif action == "gb" and detail in {"+", "-"}:
+        gb = _clamp_gb(gb + (1 if detail == "+" else -1))
+        await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+        await callback.answer()
+    elif action == "days" and detail == "input":
+        await state.update_data(
+            **{adj_key: {"days": days, "gb": gb}, "capadj_uid": user_id}
+        )
+        await state.set_state(AdminStates.reseller_cap_days_input)
+        await callback.answer()
+        if callback.message:
+            await callback.message.answer(
+                f"تعداد روز تغییر را وارد کنید (±{MAX_ADJUST_DAYS}، منفی = کاهش):",
+                reply_markup=kb.cancel_reply(),
+            )
+        return
+    elif action == "gb" and detail == "input":
+        await state.update_data(
+            **{adj_key: {"days": days, "gb": gb}, "capadj_uid": user_id}
+        )
+        await state.set_state(AdminStates.reseller_cap_gb_input)
+        await callback.answer()
+        if callback.message:
+            await callback.message.answer(
+                f"مقدار گیگ تغییر را وارد کنید (±{MAX_ADJUST_GB}، منفی = کاهش):",
+                reply_markup=kb.cancel_reply(),
+            )
+        return
+    elif action == "confirm":
+        from app.services.reseller_capacity import admin_adjust_reseller_subscription
+
+        try:
+            result = await admin_adjust_reseller_subscription(
+                session, profile, extra_days=days, extra_gb=gb
+            )
+        except ValueError as e:
+            await callback.answer(str(e)[:160], show_alert=True)
+            return
+        except Exception as e:
+            await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+            return
+        await state.update_data(**{adj_key: {"days": 0, "gb": 0}})
+        await callback.answer("ظرفیت به‌روز شد")
+        total = result.get("total_gb", 0)
+        exp = result.get("expires_at")
+        exp_txt = str(exp) if exp else "نامحدود"
+        shop_count = await session.scalar(
+            select(func.count()).select_from(UserService).where(UserService.bot_user_id == user_id)
+        ) or 0
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                f"✅ ظرفیت اشتراک به‌روز شد\n\nحجم کل: <b>{total}</b> گیگ\nانقضا: {html.escape(exp_txt)}",
+                reply_markup=kb.admin_reseller_actions(
+                    user_id, has_shop_services=int(shop_count) > 0
+                ),
+            )
+        return
+    else:
+        await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+        await callback.answer()
+
+    text = (
+        f"⏱ <b>تغییر ظرفیت نماینده #{user_id}</b>\n\n"
+        f"روز: <b>{days}</b> · گیگ: <b>{gb}</b>\n"
+        "مثبت = افزایش، منفی = کاهش. برای ورود دستی روی عدد بزنید."
+    )
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=kb.admin_reseller_capacity_adjust_keyboard(
+                user_id, days=days, gb=gb
+            ),
+        )
+
+
+@router.message(AdminStates.reseller_cap_days_input)
+@require_bot_owner_handler
+async def adm_reseller_cap_days_entered(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        return
+    if kb.is_cancel_text(message.text):
+        await state.set_state(None)
+        await message.answer("لغو شد.")
+        return
+    from app.services.pg_admin_subscription import MAX_ADJUST_DAYS
+
+    try:
+        days = parse_bot_int(message.text)
+    except ValueError:
+        await message.answer("عدد معتبر بفرستید")
+        return
+    if abs(days) > MAX_ADJUST_DAYS:
+        await message.answer(f"روز باید بین ±{MAX_ADJUST_DAYS} باشد")
+        return
+    data = await state.get_data()
+    user_id = int(data.get("capadj_uid") or 0)
+    if not user_id:
+        await state.set_state(None)
+        await message.answer("نشست منقضی شد.")
+        return
+    adj_key = f"capadj:{user_id}"
+    stored = data.get(adj_key) if isinstance(data.get(adj_key), dict) else {}
+    gb = int(stored.get("gb") or 0)
+    await state.set_state(None)
+    await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+    await message.answer(
+        f"⏱ <b>تغییر ظرفیت نماینده #{user_id}</b>\n\n"
+        f"روز: <b>{days}</b> · گیگ: <b>{gb}</b>",
+        reply_markup=kb.admin_reseller_capacity_adjust_keyboard(
+            user_id, days=days, gb=gb
+        ),
+    )
+
+
+@router.message(AdminStates.reseller_cap_gb_input)
+@require_bot_owner_handler
+async def adm_reseller_cap_gb_entered(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        return
+    if kb.is_cancel_text(message.text):
+        await state.set_state(None)
+        await message.answer("لغو شد.")
+        return
+    from app.services.pg_admin_subscription import MAX_ADJUST_GB
+
+    try:
+        gb = parse_bot_int(message.text)
+    except ValueError:
+        await message.answer("عدد معتبر بفرستید")
+        return
+    if abs(gb) > MAX_ADJUST_GB:
+        await message.answer(f"گیگ باید بین ±{MAX_ADJUST_GB} باشد")
+        return
+    data = await state.get_data()
+    user_id = int(data.get("capadj_uid") or 0)
+    if not user_id:
+        await state.set_state(None)
+        await message.answer("نشست منقضی شد.")
+        return
+    adj_key = f"capadj:{user_id}"
+    stored = data.get(adj_key) if isinstance(data.get(adj_key), dict) else {}
+    days = int(stored.get("days") or 0)
+    await state.set_state(None)
+    await state.update_data(**{adj_key: {"days": days, "gb": gb}})
+    await message.answer(
+        f"⏱ <b>تغییر ظرفیت نماینده #{user_id}</b>\n\n"
+        f"روز: <b>{days}</b> · گیگ: <b>{gb}</b>",
+        reply_markup=kb.admin_reseller_capacity_adjust_keyboard(
+            user_id, days=days, gb=gb
+        ),
+    )
+
+
 @router.callback_query(F.data.startswith("adm:resellers:svcs:"))
 @require_bot_owner_handler
 @require_platform_rep_mgmt
@@ -2803,10 +3176,9 @@ async def adm_resellers_add(callback: CallbackQuery, state: FSMContext, db_user:
         await callback.message.answer(
             "آیدی عددی تلگرام کاربر را برای نماینده‌شدن بفرستید.\n\n"
             "مثال:\n"
-            "<code>123456789 15 1</code>\n\n"
+            "<code>123456789 1</code>\n\n"
             "• عدد اول: آیدی تلگرام\n"
-            "• عدد دوم: درصد کمیسیون (پیش‌فرض ۱۰)\n"
-            "• عدد سوم: ۱ = اجازه تأیید رسید، ۰ یا خالی = بدون تأیید",
+            "• عدد دوم: ۱ = اجازه تأیید رسید، ۰ یا خالی = بدون تأیید",
             reply_markup=kb.cancel_reply(),
         )
 
@@ -2980,11 +3352,10 @@ async def make_res(
     parts = (message.text or "").split()
     try:
         tg_id = int(parts[0])
-        commission = int(parts[1]) if len(parts) > 1 else 10
-        can_approve = len(parts) > 2 and parts[2] in {"1", "approve=1", "yes", "بله"}
+        can_approve = len(parts) > 1 and parts[1] in {"1", "approve=1", "yes", "بله"}
     except ValueError:
         await message.answer(
-            "فرمت نامعتبر است.\nمثال: <code>123456789 15 1</code>"
+            "فرمت نامعتبر است.\nمثال: <code>123456789 1</code>"
         )
         return
     result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))
@@ -3005,7 +3376,6 @@ async def make_res(
         creds = await provision_reseller(
             session,
             user=user,
-            commission_percent=commission,
             can_approve_receipts=can_approve,
             web_permissions=perms,
             bot_permissions=perms,

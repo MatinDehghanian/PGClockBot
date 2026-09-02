@@ -709,7 +709,7 @@ async def _pending_order_detail_lines(
                         reseller_billing_mode_label(reseller_plan_mode_of(rplan)),
                     )
                 )
-                # PAYG / fixed detail lines (rate, groups, commission)
+                # PAYG / fixed detail lines (rate, groups)
                 detail = format_reseller_plan_apply_detail(
                     rplan, currency=get_settings().currency
                 )

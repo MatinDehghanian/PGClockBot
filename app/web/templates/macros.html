@@ -1,5 +1,25 @@
 {# Shared Persian labels — works even if Python filters are not registered yet #}
 
+{# Capsule numeric stepper: [ − ] [ input ] [ + ] (dir=ltr). Negatives allowed unless min set. #}
+{% macro num_stepper(name, value=0, step=1, min=None, max=None, inputmode='numeric', aria_label='', class_name='') -%}
+<div class="num-stepper {{ class_name }}" data-num-stepper data-step="{{ step }}"{% if min is not none %} data-min="{{ min }}"{% endif %}{% if max is not none %} data-max="{{ max }}"{% endif %} dir="ltr">
+  <button type="button" class="num-stepper-btn" data-num-stepper-dec aria-label="کاهش"{% if aria_label %} title="کاهش {{ aria_label }}"{% endif %}>&minus;</button>
+  <input class="num-stepper-input"
+         type="text"
+         name="{{ name }}"
+         value="{{ value }}"
+         inputmode="{{ inputmode }}"
+         autocomplete="off"
+         dir="ltr"
+         data-was-number="1"
+         data-normalize-digits="1"
+         {% if max is not none %}max="{{ max }}"{% endif %}
+         {% if min is not none %}min="{{ min }}"{% endif %}
+         {% if aria_label %}aria-label="{{ aria_label }}"{% endif %} />
+  <button type="button" class="num-stepper-btn" data-num-stepper-inc aria-label="افزایش"{% if aria_label %} title="افزایش {{ aria_label }}"{% endif %}>+</button>
+</div>
+{%- endmacro %}
+
 {% macro ord_status(s) -%}
 {%- if s == 'pending' -%}در انتظار
 {%- elif s == 'awaiting_receipt' -%}منتظر رسید

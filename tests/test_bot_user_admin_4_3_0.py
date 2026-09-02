@@ -52,7 +52,7 @@ class UserEditUiTests(unittest.TestCase):
         edit = Path("app/web/templates/_user_edit_body.html").read_text(encoding="utf-8")
         self.assertIn("wallet-credit", edit)
         self.assertIn("تمدید با پلن", edit)
-        self.assertIn("افزایش مانده", edit)
+        self.assertIn("تغییر مانده", edit)
         self.assertIn("کپی لینک", edit)
         self.assertIn("svc-list", edit)
         self.assertIn("svc-item", edit)

@@ -263,6 +263,7 @@ REPLY_ACTION_LOYALTY = "loyalty"
 REPLY_ACTION_LOY_REFERRAL = "loy_referral"
 REPLY_ACTION_LOY_POINTS = "loy_points"
 REPLY_ACTION_LOY_REWARDS = "loy_rewards"
+REPLY_ACTION_LOY_WHEEL = "loy_wheel"
 REPLY_ACTION_LOY_HISTORY = "loy_history"
 REPLY_ACTION_ADMIN_LOYALTY = "adm_loyalty"
 REPLY_ACTION_ADM_LOY_OVERVIEW = "adm_loy_overview"
@@ -786,13 +787,19 @@ def _loyalty_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     """Customer club main subsets on reply keyboard (invite is one subset).
 
     Secondary actions (share link, redeem, pagination, my-discounts) stay inline.
+    Order from loyalty_submenu_order CSV; club button position uses main menu_order.
     """
-    return [
-        (REPLY_ACTION_LOY_REFERRAL, _t(ui, "btn_referral") or "👥 دعوت دوستان"),
-        (REPLY_ACTION_LOY_POINTS, _t(ui, "btn_loy_points") or "⭐ امتیاز من"),
-        (REPLY_ACTION_LOY_REWARDS, _t(ui, "btn_loy_rewards") or "🎁 جوایز"),
-        (REPLY_ACTION_LOY_HISTORY, _t(ui, "btn_loy_history") or "📜 تاریخچه"),
-    ]
+    catalog = {
+        REPLY_ACTION_LOY_REFERRAL: _t(ui, "btn_referral") or "👥 دعوت دوستان",
+        REPLY_ACTION_LOY_POINTS: _t(ui, "btn_loy_points") or "⭐ امتیاز من",
+        REPLY_ACTION_LOY_REWARDS: _t(ui, "btn_loy_rewards") or "🎁 جوایز",
+        REPLY_ACTION_LOY_WHEEL: _t(ui, "btn_loy_wheel") or "🎡 چرخ شانس",
+        REPLY_ACTION_LOY_HISTORY: _t(ui, "btn_loy_history") or "📜 تاریخچه",
+    }
+    from app.services.lucky_wheel import parse_submenu_order
+
+    order = parse_submenu_order(_t(ui, "loyalty_submenu_order"))
+    return [(key, catalog[key]) for key in order if key in catalog]
 
 
 def _admin_loyalty_submenu_entries(ui: dict | None = None, *, include_tiers: bool = True) -> list[tuple[str, str]]:
@@ -858,7 +865,7 @@ def _reseller_submenu_entries(
     ):
         entries.append(("res_reports", "📈 گزارشات"))
     if shop_feature_allowed(key="stats", profile=profile):
-        entries.append(("res_stats", "📊 آمار و کمیسیون"))
+        entries.append(("res_stats", "📊 آمار"))
     if shop_feature_allowed(key="plans", profile=profile):
         entries.append(("res_plans", "💎 پلن‌های فروش"))
     if shop_feature_allowed(key="orders", profile=profile):
@@ -2284,11 +2291,10 @@ def admin_resellers_plans_overview_keyboard(
     for p in fixed_plans[:10]:
         flag = "✅" if getattr(p, "is_active", True) else "⏸"
         name = (getattr(p, "name", "") or "")[:22]
-        pct = int(getattr(p, "commission_percent", 0) or 0)
         rows.append(
             [
                 _ikb(
-                    f"{flag} 📦 {name} · {pct}٪"[:60],
+                    f"{flag} 📦 {name}"[:60],
                     callback_data=f"adm:resplan:view:{p.id}",
                     style=fixed_style,
                 )
@@ -2487,7 +2493,7 @@ def admin_reseller_plans_list_keyboard(
             qty = int(getattr(p, "addon_users", 0) or 0)
             extra = f" · +{qty} کاربر"
         else:
-            extra = f" · {int(getattr(p, 'commission_percent', 0) or 0)}٪"
+            extra = ""
         rows.append(
             [
                 _ikb(
@@ -2609,6 +2615,12 @@ def admin_reseller_actions(user_id: int, *, has_shop_services: bool = False) -> 
                 callback_data=f"adm:resellers:svcs:{user_id}",
             )
         ],
+        [
+            InlineKeyboardButton(
+                text="⏱ تغییر ظرفیت",
+                callback_data=f"adm:resellers:capadj:{user_id}",
+            )
+        ],
     ]
     if has_shop_services:
         rows.append(
@@ -2631,6 +2643,58 @@ def admin_reseller_actions(user_id: int, *, has_shop_services: bool = False) -> 
         [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:resellers:list:0")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_reseller_capacity_adjust_keyboard(
+    user_id: int,
+    *,
+    days: int = 0,
+    gb: int = 0,
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="➖",
+                    callback_data=f"adm:resellers:capadj:{user_id}:days:-",
+                ),
+                InlineKeyboardButton(
+                    text=f"{days} روز",
+                    callback_data=f"adm:resellers:capadj:{user_id}:days:input",
+                ),
+                InlineKeyboardButton(
+                    text="➕",
+                    callback_data=f"adm:resellers:capadj:{user_id}:days:+",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="➖",
+                    callback_data=f"adm:resellers:capadj:{user_id}:gb:-",
+                ),
+                InlineKeyboardButton(
+                    text=f"{gb} گیگ",
+                    callback_data=f"adm:resellers:capadj:{user_id}:gb:input",
+                ),
+                InlineKeyboardButton(
+                    text="➕",
+                    callback_data=f"adm:resellers:capadj:{user_id}:gb:+",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ اعمال تغییر",
+                    callback_data=f"adm:resellers:capadj:{user_id}:confirm",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ بازگشت",
+                    callback_data=f"adm:resellers:view:{user_id}",
+                )
+            ],
+        ]
+    )
 
 
 def admin_reseller_services_keyboard(
@@ -2799,18 +2863,69 @@ def admin_user_service_actions(user_id: int, service_id: int) -> InlineKeyboardM
             ],
             [
                 InlineKeyboardButton(
-                    text="➕ ۳۰ روز",
-                    callback_data=f"adm:users:svcext:{user_id}:{service_id}:d30",
-                ),
-                InlineKeyboardButton(
-                    text="➕ ۱۰ گیگ",
-                    callback_data=f"adm:users:svcext:{user_id}:{service_id}:g10",
-                ),
+                    text="⏱ تغییر مانده",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}",
+                )
             ],
             [
                 InlineKeyboardButton(
                     text="⬅️ سرویس‌ها",
                     callback_data=f"adm:users:svcs:{user_id}",
+                )
+            ],
+        ]
+    )
+
+
+def admin_user_service_adjust_keyboard(
+    user_id: int,
+    service_id: int,
+    *,
+    days: int = 0,
+    gb: float = 0,
+) -> InlineKeyboardMarkup:
+    """Interactive signed adjust: − | N | + for days and GB."""
+    gb_disp = int(gb) if float(gb) == int(gb) else gb
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="➖",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}:days:-",
+                ),
+                InlineKeyboardButton(
+                    text=f"{days} روز",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}:days:input",
+                ),
+                InlineKeyboardButton(
+                    text="➕",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}:days:+",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="➖",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}:gb:-",
+                ),
+                InlineKeyboardButton(
+                    text=f"{gb_disp} گیگ",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}:gb:input",
+                ),
+                InlineKeyboardButton(
+                    text="➕",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}:gb:+",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ اعمال تغییر",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}:confirm",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ بازگشت",
+                    callback_data=f"adm:users:svc:{user_id}:{service_id}",
                 )
             ],
         ]

@@ -26,20 +26,19 @@ class ListActiveFilterTests(unittest.TestCase):
         fixed = MagicMock(
             description="پلن ثابت",
             price=10000,
-            commission_percent=15,
             billing_mode="fixed",
             price_per_gb=0,
             pg_group_ids=None,
+            allow_buy_extra=False,
         )
         body = format_reseller_plan_apply_detail(fixed, currency="تومان")
         self.assertIn("ثابت", body)
-        self.assertIn("کمیسیون", body)
+        self.assertNotIn("کمیسیون", body)
         self.assertNotIn("نرخ مصرف", body)
 
         payg = MagicMock(
             description="پلن مصرفی",
             price=0,
-            commission_percent=0,
             billing_mode="payg",
             price_per_gb=2500,
             pg_group_ids="1,2",
@@ -77,15 +76,17 @@ class WebSplitTests(unittest.TestCase):
         html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
         self.assertIn('id="reseller-plans-fixed"', html)
         self.assertIn('id="reseller-plans-payg"', html)
-        self.assertIn("ثابت (کمیسیون)", html)
+        self.assertIn("اشتراک ثابت", html)
+        self.assertNotIn("ثابت (کمیسیون)", html)
         self.assertIn("PAYG", html)
         self.assertIn("payg_reseller_plans", html)
         self.assertIn("fixed_reseller_plans", html)
 
     def test_kind_labels_distinguish_modes(self):
         html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
-        self.assertIn("ثابت (کمیسیون)", html)
-        self.assertIn("reseller-commission-field", html)
+        self.assertIn("اشتراک ثابت", html)
+        self.assertNotIn("reseller-commission-field", html)
+        self.assertNotIn("commission_percent", html)
         self.assertIn("reseller-price-per-gb-field", html)
 
 

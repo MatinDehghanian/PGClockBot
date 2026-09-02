@@ -30,15 +30,9 @@
   <form method="post" action="/resellers/{{ user.id }}/edit" class="form-stack">
     <div class="form-row">
       <div>
-        <label class="form-field">کمیسیون ٪
-          <input name="commission_percent" type="number" value="{{ profile.commission_percent }}" />
-          <small class="muted">فقط در حالت ثابت اعمال می‌شود</small>
-        </label>
-      </div>
-      <div>
         <label class="form-field">حالت پرداخت
           <select name="billing_mode" class="select-block">
-            <option value="fixed" {% if (profile.billing_mode or 'fixed') == 'fixed' %}selected{% endif %}>ثابت (کمیسیون)</option>
+            <option value="fixed" {% if (profile.billing_mode or 'fixed') == 'fixed' %}selected{% endif %}>ثابت</option>
             <option value="payg" {% if profile.billing_mode == 'payg' %}selected{% endif %}>PAYG</option>
           </select>
         </label>
@@ -131,6 +125,46 @@
   {% if pg_limits.lifetime_text %}
   <p class="muted payg-lifetime-note">مصرف lifetime (مبنای صورتحساب PAYG): <b class="num-ratio">{{ pg_limits.lifetime_text }}</b></p>
   {% endif %}
+</section>
+{% endif %}
+
+{% if pg_subscription %}
+{% from "macros.html" import num_stepper %}
+<section class="edit-section">
+  <header class="edit-section-head">
+    <h3>تغییر ظرفیت اشتراک</h3>
+    <p class="muted">تنظیم رایگان روز/حجم اشتراک پاسارگارد (مثبت = افزایش، منفی = کاهش)</p>
+  </header>
+  <ul class="payg-meta">
+    <li>
+      <span class="payg-meta-label">انقضا</span>
+      <span class="payg-meta-value">{% if pg_subscription.expires_at %}{{ pg_subscription.expires_at }}{% else %}نامحدود{% endif %}</span>
+    </li>
+    <li>
+      <span class="payg-meta-label">حجم کل</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.total_gb }} گیگ</span>
+    </li>
+    <li>
+      <span class="payg-meta-label">حجم اضافه</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.extra_gb }} گیگ</span>
+    </li>
+  </ul>
+  <form method="post" action="/resellers/{{ user.id }}/subscription/adjust" class="form-stack"
+        data-confirm="ظرفیت اشتراک نماینده تغییر کند؟ (مثبت = افزایش، منفی = کاهش)"
+        data-confirm-title="تغییر ظرفیت اشتراک"
+        data-confirm-label="اعمال">
+    <div class="user-edit-fields user-edit-fields--2">
+      <label class="form-field">روز
+        {{ num_stepper('extra_days', value=0, step=1, min=-3650, max=3650, inputmode='numeric', aria_label='روز') }}
+      </label>
+      <label class="form-field">گیگ
+        {{ num_stepper('extra_gb', value=0, step=1, min=-10000, max=10000, inputmode='numeric', aria_label='گیگ') }}
+      </label>
+    </div>
+    <div class="actions">
+      <button class="btn btn-sm" type="submit">تغییر ظرفیت</button>
+    </div>
+  </form>
 </section>
 {% endif %}
 

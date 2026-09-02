@@ -31,7 +31,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("orders", "سفارش‌ها"),
     ("payments", "پرداخت‌ها و تأیید رسید"),
     ("tickets", "تیکت‌ها"),
-    ("stats", "آمار و کمیسیون"),
+    ("stats", "آمار"),
     ("shop_settings", "تنظیمات ربات فروشگاه"),
     ("loyalty", "باشگاه مشتریان"),
 ]
@@ -363,7 +363,7 @@ def normalize_reseller_billing_mode(raw: str | None) -> str:
 def reseller_billing_mode_label(mode: str | None) -> str:
     from app.services.billing import BILLING_MODE_PAYG
 
-    return "PAYG" if normalize_reseller_billing_mode(mode) == BILLING_MODE_PAYG else "ثابت (کمیسیون)"
+    return "PAYG" if normalize_reseller_billing_mode(mode) == BILLING_MODE_PAYG else "ثابت"
 
 
 def reseller_plan_mode_of(plan: ResellerPlan | None) -> str:
@@ -416,7 +416,6 @@ def format_reseller_plan_apply_detail(plan: ResellerPlan, *, currency: str) -> s
             f"نرخ مصرف: <b>{format_toman(rate, currency) if rate else '—'} / گیگ</b>"
         )
     else:
-        lines.append(f"کمیسیون: <b>{int(plan.commission_percent or 0)}٪</b>")
         if bool(getattr(plan, "allow_buy_extra", False)):
             eg = int(getattr(plan, "extra_gb_price", 0) or 0)
             eu = int(getattr(plan, "extra_user_price", 0) or 0)
@@ -447,7 +446,6 @@ async def make_reseller(
     session: AsyncSession,
     user: BotUser,
     *,
-    commission_percent: int = 0,
     can_approve_receipts: bool = False,
     pg_admin_username: str | None = None,
     pg_admin_password_enc: str | None = None,
@@ -473,11 +471,8 @@ async def make_reseller(
     mode = (billing_mode or "").strip().lower()
     if mode not in {"fixed", "payg"}:
         mode = None
-    if mode == "payg":
-        commission_percent = 0
 
     if profile:
-        profile.commission_percent = commission_percent
         profile.can_approve_receipts = approve
         if mode:
             profile.billing_mode = mode
@@ -498,7 +493,6 @@ async def make_reseller(
     else:
         profile = ResellerProfile(
             user_id=user.id,
-            commission_percent=commission_percent,
             can_approve_receipts=approve,
             billing_mode=mode or "fixed",
             pg_admin_username=pg_admin_username,
@@ -687,7 +681,6 @@ async def provision_reseller(
     *,
     user: BotUser,
     plan: ResellerPlan | None = None,
-    commission_percent: int | None = None,
     can_approve_receipts: bool | None = None,
     web_permissions: str | None = None,
     bot_permissions: str | None = None,
@@ -701,16 +694,9 @@ async def provision_reseller(
     from app.services.pasarguard import get_pg
     from app.services.web_auth import hash_password
 
-    commission = (
-        commission_percent
-        if commission_percent is not None
-        else (plan.commission_percent if plan else 0)
-    )
     plan_billing = str(getattr(plan, "billing_mode", None) or "fixed").strip().lower()
     if plan_billing not in {"fixed", "payg"}:
         plan_billing = "fixed"
-    if plan_billing == "payg":
-        commission = 0
     perms = normalize_feature_perms(
         web_permissions
         or bot_permissions
@@ -793,7 +779,6 @@ async def provision_reseller(
     profile = await make_reseller(
         session,
         user,
-        commission_percent=commission,
         can_approve_receipts=approve,
         pg_admin_username=pg_username,
         pg_admin_password_enc=pg_password_enc,
@@ -849,7 +834,6 @@ async def provision_reseller(
         "panel_password": shared_password if unified else (web_password or pg_password),
         "unified_credentials": unified,
         "panel_url": base,
-        "commission_percent": commission,
         "permissions": perms,
         "plan_name": (plan.name if plan else None) or None,
         "billing_mode": plan_billing,
@@ -864,7 +848,6 @@ def format_credentials_message(creds: dict) -> str:
 
     plan_name = html.escape(str(creds.get("plan_name") or "").strip())
     billing = str(creds.get("billing_mode") or "").strip().lower()
-    commission = int(creds.get("commission_percent") or 0)
 
     lines: list[str] = [
         "✅ <b>نمایندگی فعال شد</b>",
@@ -876,7 +859,7 @@ def format_credentials_message(creds: dict) -> str:
     if billing == "payg":
         lines.append("💳 <b>نوع</b>\nPAYG")
     else:
-        lines.append(f"💰 <b>کمیسیون</b>\n{commission}٪")
+        lines.append("📦 <b>نوع</b>\nثابت")
     lines.append("")
 
     panel = (creds.get("panel_url") or "").strip().rstrip("/")
@@ -1365,7 +1348,6 @@ async def provision_existing_pg_admin(
     profile = await make_reseller(
         session,
         user,
-        commission_percent=int(plan.commission_percent or 0),
         can_approve_receipts="payments" in parse_perms(perms),
         pg_admin_username=pg_u,
         pg_role_id=role_id,

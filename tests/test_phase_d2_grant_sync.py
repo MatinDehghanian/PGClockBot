@@ -45,7 +45,7 @@ class ProvisionNoConversionTests(unittest.IsolatedAsyncioTestCase):
         from app.services.resellers import provision_existing_pg_admin
 
         staff = SimpleNamespace(id=1, pg_username="pgx", web_username="pgx")
-        plan = SimpleNamespace(id=1, is_active=True, web_permissions="dashboard", bot_permissions="dashboard", commission_percent=0)
+        plan = SimpleNamespace(id=1, is_active=True, web_permissions="dashboard", bot_permissions="dashboard")
         session = AsyncMock()
         session.get = AsyncMock(return_value=plan)
 

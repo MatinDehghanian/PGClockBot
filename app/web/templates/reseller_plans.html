@@ -23,14 +23,13 @@
   ]) }}
   <div class="table-wrap">
   <table class="table-compact" data-bulk-select>
-    <thead><tr>{{ table_select_head() }}<th>نام</th><th>قیمت</th><th class="col-hide-sm">کمیسیون</th><th>وضعیت</th><th class="col-actions"></th></tr></thead>
+    <thead><tr>{{ table_select_head() }}<th>نام</th><th>قیمت</th><th>وضعیت</th><th class="col-actions"></th></tr></thead>
     <tbody>
     {% for p in plans %}
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
         <td>{{ p.name }}{% if p.description %}<br><small class="muted">{{ p.description }}</small>{% endif %}</td>
         <td class="mono">{{ p.price | num }}</td>
-        <td class="mono col-hide-sm">{{ p.commission_percent }}%</td>
         <td>{{ "فعال" if p.is_active else "خاموش" }}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -45,7 +44,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="muted">پلنی نیست — تا پلن نسازید دکمه درخواست در بات برای کاربر بی‌فایده است</td></tr>
+      <tr><td colspan="5" class="muted">پلنی نیست — تا پلن نسازید دکمه درخواست در بات برای کاربر بی‌فایده است</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -71,11 +70,6 @@
             
             <input name="price" type="number" value="0" />
         <small class="muted">۰ = رایگان؛ فقط تأیید ادمین</small>
-          </label>
-        </div>
-        <div>
-          <label class="form-field">کمیسیون ٪
-            <input name="commission_percent" type="number" value="10" />
           </label>
         </div>
         <div>

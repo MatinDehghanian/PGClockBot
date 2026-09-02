@@ -640,6 +640,12 @@ DEFAULT_SETTINGS = {
     "referral_bonus": "0",
     "loyalty_enabled": "1",
     "points_to_wallet_rate": "100",
+    "lucky_wheel_enabled": "0",
+    "lucky_wheel_spin_cost_points": "10",
+    "lucky_wheel_daily_limit": "3",
+    "lucky_wheel_cooldown_seconds": "0",
+    "lucky_wheel_free_spins_daily": "0",
+    "loyalty_submenu_order": "loy_referral,loy_points,loy_rewards,loy_wheel,loy_history",
     "auto_approve_payments": "0",
     "faq_text": (
         "❓ حجم تمام شد چه کنم؟\nاز بخش سرویس‌ها → تمدید.\n\n"
@@ -711,6 +717,7 @@ DEFAULT_SETTINGS = {
     "btn_loyalty": "⭐ باشگاه مشتریان",
     "btn_loy_points": "⭐ امتیاز من",
     "btn_loy_rewards": "🎁 جوایز",
+    "btn_loy_wheel": "🎡 چرخ شانس",
     "btn_loy_history": "📜 تاریخچه",
     "btn_reseller_apply": "🤝 درخواست نمایندگی",
     "btn_miniapp": "📱 مینی‌اپ",
@@ -924,6 +931,7 @@ SETTING_GROUPS = {
         ("btn_referral", "دکمه دعوت دوستان", "text", "زیرمنوی باشگاه مشتریان"),
         ("btn_loy_points", "دکمه امتیاز من", "text", "زیرمنوی باشگاه مشتریان"),
         ("btn_loy_rewards", "دکمه جوایز", "text", "زیرمنوی باشگاه مشتریان"),
+        ("btn_loy_wheel", "دکمه چرخ شانس", "text", "زیرمنوی باشگاه مشتریان"),
         ("btn_loy_history", "دکمه تاریخچه باشگاه", "text", "زیرمنوی باشگاه مشتریان"),
         ("btn_reseller_apply", "دکمه درخواست نمایندگی", "text", ""),
         ("btn_miniapp", "دکمه مینی‌اپ", "text", "فقط به‌صورت اینلاین زیر پیام (محدودیت تلگرام)"),

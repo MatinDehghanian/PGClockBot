@@ -356,7 +356,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             extra_days = parse_int(days_raw)
             extra_gb = parse_float(gb_raw)
         except ValueError:
-            return _redirect_user(user_id, err="مقادیر افزایش نامعتبر است")
+            return _redirect_user(user_id, err="مقادیر تغییر مانده نامعتبر است")
         try:
             await admin_extend_service(
                 session, svc, extra_days=extra_days, extra_gb=extra_gb
@@ -364,8 +364,8 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
         except Exception as e:
-            return _redirect_user(user_id, err=f"افزایش ناموفق: {e}")
-        return _redirect_user(user_id, ok=f"سرویس #{service_id} افزایش یافت")
+            return _redirect_user(user_id, err=f"تغییر مانده ناموفق: {e}")
+        return _redirect_user(user_id, ok=f"مانده سرویس #{service_id} به‌روز شد")
 
     @app.get("/users/{user_id}/services/{service_id}/link")
     async def user_service_link(

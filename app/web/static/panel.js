@@ -2706,4 +2706,58 @@
         updateBar(table);
       });
     })();
+
+    /* Capsule numeric steppers: [data-num-stepper] − / + with editable middle */
+    (function initNumSteppers(){
+      function parseStepperNumber(raw){
+        const text = (typeof window.normalizePanelNumberText === 'function')
+          ? window.normalizePanelNumberText(raw)
+          : String(raw == null ? '' : raw);
+        const n = Number(String(text).trim());
+        return Number.isFinite(n) ? n : 0;
+      }
+      function formatStepperValue(n, step){
+        const s = Number(step);
+        if (Number.isFinite(s) && s > 0 && s < 1) {
+          const digits = Math.min(4, Math.max(1, (String(s).split('.')[1] || '').length));
+          const fixed = Number(n).toFixed(digits);
+          return fixed.replace(/\.?0+$/, '') || '0';
+        }
+        if (Number.isFinite(s) && s >= 1 && Number.isInteger(s)) {
+          return String(Math.trunc(n));
+        }
+        return String(n);
+      }
+      function clampStepper(n, root){
+        let out = n;
+        const minAttr = root.getAttribute('data-min');
+        const maxAttr = root.getAttribute('data-max');
+        if (minAttr != null && minAttr !== '' && Number.isFinite(Number(minAttr))) {
+          out = Math.max(Number(minAttr), out);
+        }
+        if (maxAttr != null && maxAttr !== '' && Number.isFinite(Number(maxAttr))) {
+          out = Math.min(Number(maxAttr), out);
+        }
+        return out;
+      }
+      function applyStep(root, dir){
+        const input = root.querySelector('.num-stepper-input');
+        if (!input) return;
+        const stepRaw = root.getAttribute('data-step') || input.getAttribute('step') || '1';
+        const step = Number(stepRaw);
+        const delta = (Number.isFinite(step) && step !== 0 ? step : 1) * (dir < 0 ? -1 : 1);
+        const next = clampStepper(parseStepperNumber(input.value) + delta, root);
+        input.value = formatStepperValue(next, step);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-num-stepper-dec], [data-num-stepper-inc]');
+        if (!btn) return;
+        const root = btn.closest('[data-num-stepper]');
+        if (!root) return;
+        e.preventDefault();
+        applyStep(root, btn.hasAttribute('data-num-stepper-dec') ? -1 : 1);
+      });
+    })();
   })();

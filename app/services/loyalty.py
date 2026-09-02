@@ -1139,7 +1139,7 @@ async def redeem_reward(
 
     try:
         if rtype in ("traffic_gb", "time_days"):
-            await _apply_service_reward(session, user, service, rtype, rval)
+            await apply_service_reward(session, user, service, rtype, rval)
         elif rtype == "wallet_credit":
             wallet_reason = f"loyalty_reward:{reward.id}:{key}"
             from app.services.wallet import credit_wallet
@@ -1208,25 +1208,34 @@ async def _unique_discount_code(session: AsyncSession) -> str:
     raise ValueError("ساخت کد تخفیف ناموفق بود")
 
 
-async def _create_discount_entitlement(
+async def issue_discount_entitlement(
     session: AsyncSession,
     user: BotUser,
-    reward: LoyaltyReward,
-    redemption: RewardRedemption,
+    *,
+    percent: int,
+    min_purchase_toman: int = 0,
+    max_discount_toman: int | None = None,
+    expires_days: int | None = None,
+    redemption_id: int | None = None,
+    wheel_spin_id: int | None = None,
 ) -> LoyaltyDiscountEntitlement:
+    """Issue a personal one-time discount (reward redeem or lucky wheel)."""
+    pct = int(percent)
+    if pct <= 0 or pct > 100:
+        raise ValueError("درصد تخفیف نامعتبر است")
     code = await _unique_discount_code(session)
     expires_at = None
-    days = reward.expires_days
-    if days is not None and int(days) > 0:
-        expires_at = datetime.now(timezone.utc) + timedelta(days=int(days))
+    if expires_days is not None and int(expires_days) > 0:
+        expires_at = datetime.now(timezone.utc) + timedelta(days=int(expires_days))
     ent = LoyaltyDiscountEntitlement(
         user_id=int(user.id),
-        redemption_id=int(redemption.id),
+        redemption_id=int(redemption_id) if redemption_id is not None else None,
+        wheel_spin_id=int(wheel_spin_id) if wheel_spin_id is not None else None,
         code=code,
-        percent=int(reward.reward_value),
-        min_purchase_toman=int(reward.min_purchase_toman or 0),
-        max_discount_toman=int(reward.max_discount_toman)
-        if reward.max_discount_toman is not None
+        percent=pct,
+        min_purchase_toman=max(0, int(min_purchase_toman or 0)),
+        max_discount_toman=int(max_discount_toman)
+        if max_discount_toman is not None
         else None,
         status="available",
         expires_at=expires_at,
@@ -1234,6 +1243,27 @@ async def _create_discount_entitlement(
     session.add(ent)
     await session.flush()
     return ent
+
+
+async def _create_discount_entitlement(
+    session: AsyncSession,
+    user: BotUser,
+    reward: LoyaltyReward,
+    redemption: RewardRedemption,
+) -> LoyaltyDiscountEntitlement:
+    return await issue_discount_entitlement(
+        session,
+        user,
+        percent=int(reward.reward_value),
+        min_purchase_toman=int(reward.min_purchase_toman or 0),
+        max_discount_toman=int(reward.max_discount_toman)
+        if reward.max_discount_toman is not None
+        else None,
+        expires_days=int(reward.expires_days)
+        if reward.expires_days is not None
+        else None,
+        redemption_id=int(redemption.id),
+    )
 
 
 def _entitlement_expired(ent: LoyaltyDiscountEntitlement, *, now: datetime | None = None) -> bool:
@@ -1408,14 +1438,14 @@ async def void_loyalty_discount_on_refund(session: AsyncSession, order: Order) -
     )
 
 
-async def _apply_service_reward(
+async def apply_service_reward(
     session: AsyncSession,
     user: BotUser,
     service: UserService,
     reward_type: str,
     reward_value: int,
 ) -> None:
-    """Apply traffic/time to Pasarguard user (additive)."""
+    """Apply traffic/time to Pasarguard user (additive). Shared by redeem + lucky wheel."""
     import time
 
     from app.services.pasarguard import get_pg, get_pg_for_reseller

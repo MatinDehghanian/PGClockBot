@@ -1205,7 +1205,7 @@ textarea[dir="ltr"] {
   -webkit-text-fill-color: var(--placeholder);
 }
 /* Number / search / all text controls: force physical right (browser UA often left-biases) */
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):not(.num-stepper-input),
 textarea {
   text-align: right;
 }
@@ -9808,4 +9808,94 @@ html[data-theme="light"] .table-bulk-op.btn-danger .table-bulk-op-count {
   background: rgba(220, 38, 38, 0.12);
   border-color: rgba(220, 38, 38, 0.35);
   color: #b91c1c;
+}
+
+/* Capsule numeric stepper — outer pill, circular ± inside, centered value */
+.num-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+  max-width: 100%;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  background: var(--control-bg);
+  box-sizing: border-box;
+  unicode-bidi: isolate;
+}
+.num-stepper-btn {
+  flex: 0 0 auto;
+  width: calc(var(--btn-h) - 6px);
+  min-width: calc(var(--btn-h) - 6px);
+  height: calc(var(--btn-h) - 6px);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  color: var(--muted-fg);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--motion-fast, 180ms) ease, background var(--motion-fast, 180ms) ease;
+}
+.num-stepper-btn:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+.num-stepper-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
+  outline-offset: 1px;
+  z-index: 1;
+}
+/* Beat global input[dir=ltr] { text-align: right } — value must stay centered */
+.num-stepper .num-stepper-input,
+.form-field > .num-stepper > .num-stepper-input,
+input.num-stepper-input[dir="ltr"] {
+  flex: 1 1 auto;
+  width: 4.5rem;
+  min-width: 3rem;
+  height: calc(var(--btn-h) - 6px);
+  margin: 0;
+  padding: 0 0.25rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--foreground);
+  direction: ltr;
+  text-align: center;
+  text-align-last: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: calc(var(--btn-h) - 6px);
+  box-shadow: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.num-stepper .num-stepper-input:focus,
+.form-field > .num-stepper > .num-stepper-input:focus,
+input.num-stepper-input[dir="ltr"]:focus {
+  outline: none;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border-radius: 8px;
+}
+.form-field > .num-stepper {
+  width: 100%;
+  order: 5;
+}
+.form-field.is-invalid > .num-stepper {
+  border-color: var(--destructive);
+}
+html[data-theme="light"] .num-stepper-btn {
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+html[data-theme="light"] .num-stepper-btn:hover {
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
 }

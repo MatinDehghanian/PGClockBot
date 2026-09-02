@@ -412,8 +412,6 @@ class ResellerProfile(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), unique=True)
-    commission_percent: Mapped[int] = mapped_column(Integer, default=10)
-    balance: Mapped[int] = mapped_column(Integer, default=0)
     can_approve_receipts: Mapped[bool] = mapped_column(Boolean, default=False)
     pg_admin_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     # Fernet ciphertext of the PasarGuard admin password (shop ops must use this, not owner).
@@ -436,7 +434,7 @@ class ResellerProfile(Base):
     # Extra Telegram IDs that get reseller panel on THIS shop's dedicated bot only
     bot_admin_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    # --- Unified Billing (PAYG is one mode; fixed = legacy commission, untouched) ---
+    # --- Unified Billing (PAYG vs fixed package type) ---
     billing_mode: Mapped[str] = mapped_column(String(16), default="fixed")  # fixed | payg
     billing_balance: Mapped[int] = mapped_column(Integer, default=0)  # mirror of shop wallet (payg)
     billing_watermark_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
@@ -526,7 +524,6 @@ class ResellerPlan(Base):
     name: Mapped[str] = mapped_column(String(128))
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     price: Mapped[int] = mapped_column(Integer, default=0)  # toman; 0 = free apply
-    commission_percent: Mapped[int] = mapped_column(Integer, default=0)
     can_approve_receipts: Mapped[bool] = mapped_column(Boolean, default=False)
     web_permissions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     bot_permissions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -534,7 +531,7 @@ class ResellerPlan(Base):
     create_web_access: Mapped[bool] = mapped_column(Boolean, default=True)
     share_pg_panel_url: Mapped[bool] = mapped_column(Boolean, default=False)
     pg_role_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    # Default billing for new resellers on this package: fixed (commission) | payg
+    # Default billing for new resellers on this package: fixed | payg
     billing_mode: Mapped[str] = mapped_column(String(16), default="fixed")
     # PAYG: toman per GB for resellers on this package (overrides global Setting via plan rate)
     price_per_gb: Mapped[int] = mapped_column(Integer, default=0)
@@ -897,7 +894,13 @@ class LoyaltyDiscountEntitlement(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
-    redemption_id: Mapped[int] = mapped_column(ForeignKey("reward_redemptions.id"), index=True)
+    # Nullable when issued by lucky wheel (no reward redemption row).
+    redemption_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("reward_redemptions.id"), nullable=True, index=True
+    )
+    wheel_spin_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("lucky_wheel_spins.id"), nullable=True, index=True
+    )
     code: Mapped[str] = mapped_column(String(64), index=True)
     percent: Mapped[int] = mapped_column(Integer)
     min_purchase_toman: Mapped[int] = mapped_column(Integer, default=0)
@@ -1030,4 +1033,90 @@ class FunnelEvent(Base):
     order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True)
     idempotency_key: Mapped[str] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LuckyWheelPrize(Base):
+    """Weighted prize segment for the shop lucky wheel."""
+
+    __tablename__ = "lucky_wheel_prizes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    label: Mapped[str] = mapped_column(String(128))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    weight: Mapped[int] = mapped_column(Integer, default=1)
+    # none | points | traffic_gb | time_days | wallet_credit | discount_percent | free_spin
+    prize_type: Mapped[str] = mapped_column(String(32), index=True)
+    prize_value: Mapped[int] = mapped_column(Integer, default=0)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    max_wins_global: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    max_wins_per_user: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    win_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Discount-only constraints (ignored for other types)
+    min_purchase_toman: Mapped[int] = mapped_column(Integer, default=0)
+    max_discount_toman: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    expires_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LuckyWheelSpin(Base):
+    """Immutable spin ledger — server-side outcome only."""
+
+    __tablename__ = "lucky_wheel_spins"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_lucky_wheel_spin_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    prize_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("lucky_wheel_prizes.id"), nullable=True, index=True
+    )
+    prize_type: Mapped[str] = mapped_column(String(32), default="none")
+    prize_value: Mapped[int] = mapped_column(Integer, default=0)
+    prize_label_snapshot: Mapped[str] = mapped_column(String(128), default="")
+    cost_points: Mapped[int] = mapped_column(Integer, default=0)
+    used_free_spin: Mapped[bool] = mapped_column(Boolean, default=False)
+    # completed | failed
+    status: Mapped[str] = mapped_column(String(32), default="completed", index=True)
+    points_tx_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("points_transactions.id"), nullable=True
+    )
+    service_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("user_services.id"), nullable=True
+    )
+    discount_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128))
+    meta_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LuckyWheelUserState(Base):
+    """Per-user wheel counters for cooldown / daily / free-spin UX."""
+
+    __tablename__ = "lucky_wheel_user_state"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_lucky_wheel_user_state_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    free_spins_balance: Mapped[int] = mapped_column(Integer, default=0)
+    last_spin_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    spins_today: Mapped[int] = mapped_column(Integer, default=0)
+    spins_day: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # YYYY-MM-DD UTC
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 

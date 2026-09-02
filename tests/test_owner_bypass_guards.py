@@ -83,8 +83,6 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
                 MagicMock(scalar_one_or_none=MagicMock(return_value=SimpleNamespace(
                     pg_admin_username="res_admin",
                     pg_admin_password_enc=None,
-                    commission_percent=10,
-                    balance=0,
                     user_id=42,
                 ))),
                 MagicMock(rowcount=1),  # release claim on failure
@@ -140,8 +138,6 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
         profile = SimpleNamespace(
             pg_admin_username="res_admin",
             pg_admin_password_enc="enc",
-            commission_percent=10,
-            balance=0,
             user_id=42,
         )
 
@@ -165,7 +161,6 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
                 MagicMock(rowcount=1),  # atomic DELIVERING claim
                 MagicMock(scalar_one=MagicMock(return_value=order)),
                 MagicMock(scalar_one_or_none=MagicMock(return_value=profile)),
-                MagicMock(rowcount=1),  # commission SQL increment
             ]
         )
 
@@ -195,14 +190,8 @@ class DeliverOrderOwnerAssignTests(unittest.IsolatedAsyncioTestCase):
         pg.set_owner_by_id.assert_not_awaited()
         pg.delete_user_by_id.assert_not_awaited()
         self.assertEqual(result.status, OrderStatus.DELIVERED.value)
-        # Commission is applied via atomic SQL UPDATE (not ORM RMW)
-        self.assertTrue(
-            any(
-                "ResellerProfile" in str(c) or "balance" in str(c)
-                for c in session.execute.await_args_list
-            )
-            or session.execute.await_count >= 3
-        )
+        # No commission credit — delivery only touches order/claim executes
+        self.assertTrue(session.execute.await_count >= 3)
 
 
 class SourceWiringGuards(unittest.TestCase):
