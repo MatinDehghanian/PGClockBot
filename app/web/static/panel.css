@@ -9809,3 +9809,78 @@ html[data-theme="light"] .table-bulk-op.btn-danger .table-bulk-op-count {
   border-color: rgba(220, 38, 38, 0.35);
   color: #b91c1c;
 }
+
+/* Capsule numeric stepper — [ − ] [ value ] [ + ] */
+.num-stepper {
+  display: inline-flex;
+  align-items: stretch;
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  background: var(--control-bg);
+  overflow: hidden;
+  box-sizing: border-box;
+  unicode-bidi: isolate;
+}
+.num-stepper-btn {
+  flex: 0 0 auto;
+  width: var(--btn-h);
+  min-width: var(--btn-h);
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-fg);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--motion-fast, 180ms) ease, background var(--motion-fast, 180ms) ease;
+}
+.num-stepper-btn:hover {
+  color: var(--foreground);
+  background: var(--control-bg-hover);
+}
+.num-stepper-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
+  outline-offset: -2px;
+  z-index: 1;
+}
+.num-stepper-input {
+  flex: 1 1 auto;
+  width: 4.5rem;
+  min-width: 3rem;
+  height: 100%;
+  margin: 0;
+  padding: 0 0.35rem;
+  border: 0;
+  border-inline: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--foreground);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  line-height: 1;
+  box-shadow: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.num-stepper-input:focus {
+  outline: none;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+.form-field > .num-stepper {
+  width: 100%;
+  order: 5;
+}
+.form-field.is-invalid > .num-stepper {
+  border-color: var(--destructive);
+}

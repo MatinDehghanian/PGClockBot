@@ -599,6 +599,22 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                     pg_limits = ov
             except Exception:
                 pg_limits = None
+        pg_subscription = None
+        if profile.pg_admin_username:
+            from app.services.formatting import format_expire_short
+            from app.services.pg_admin_subscription import get_subscription
+
+            sub = await get_subscription(session, profile.pg_admin_username)
+            if sub is not None:
+                extra = int(sub.extra_gb_purchased or 0)
+                base = int(sub.base_gb or 0)
+                exp = sub.expires_at
+                pg_subscription = {
+                    "expires_at": format_expire_short(exp) if exp else None,
+                    "extra_gb": extra,
+                    "base_gb": base,
+                    "total_gb": base + extra,
+                }
         ctx = {
             "staff": staff,
             "user": user,
@@ -612,6 +628,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             "wallet_balance": wallet_balance,
             "wallet_txs": wallet_txs,
             "pg_limits": pg_limits,
+            "pg_subscription": pg_subscription,
             "min_unsuspend": min_unsuspend,
             "format_toman": format_toman,
             "topup_nonce": secrets.token_hex(8),
@@ -729,6 +746,41 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         except ValueError as e:
             return _redirect_reseller_edit(user_id, err=str(e))
         return _redirect_reseller_edit(user_id, ok=f'شارژ کیف پول به مبلغ {amount:,} تومان ثبت شد')
+
+    @app.post("/resellers/{user_id}/subscription/adjust")
+    async def reseller_subscription_adjust(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        user = await session.get(BotUser, user_id)
+        profile = (
+            await session.execute(select(ResellerProfile).where(ResellerProfile.user_id == user_id))
+        ).scalar_one_or_none()
+        if not user or not profile:
+            return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
+        form = await request.form()
+        days_raw = str(form.get("extra_days") or "0").strip() or "0"
+        gb_raw = str(form.get("extra_gb") or "0").strip() or "0"
+        try:
+            from app.services.numbers import parse_int
+
+            extra_days = parse_int(days_raw)
+            extra_gb = parse_int(gb_raw)
+        except ValueError:
+            return _redirect_reseller_edit(user_id, err="مقادیر تغییر ظرفیت نامعتبر است")
+        from app.services.reseller_capacity import admin_adjust_reseller_subscription
+
+        try:
+            await admin_adjust_reseller_subscription(
+                session, profile, extra_days=extra_days, extra_gb=extra_gb
+            )
+        except ValueError as e:
+            return _redirect_reseller_edit(user_id, err=str(e))
+        except Exception as e:
+            return _redirect_reseller_edit(user_id, err=f"تغییر ظرفیت ناموفق: {e}")
+        return _redirect_reseller_edit(user_id, ok="ظرفیت اشتراک به‌روز شد")
 
     @app.post("/resellers/{user_id}/delete")
     async def reseller_delete(

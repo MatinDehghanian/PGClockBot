@@ -317,3 +317,18 @@ async def renew_reseller_capacity(
         "invoice": result.get("invoice"),
         "expires_at": result.get("expires_at"),
     }
+
+
+async def admin_adjust_reseller_subscription(
+    session: AsyncSession,
+    profile: ResellerProfile,
+    *,
+    extra_days: int = 0,
+    extra_gb: int = 0,
+) -> dict[str, Any]:
+    """Owner-admin free adjust — thin wrapper over pg_admin_subscription."""
+    from app.services.pg_admin_subscription import admin_adjust_reseller_subscription as _adjust
+
+    return await _adjust(
+        session, profile, extra_days=extra_days, extra_gb=extra_gb
+    )

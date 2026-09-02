@@ -1,3 +1,4 @@
+{% from "macros.html" import num_stepper %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
@@ -148,19 +149,19 @@
           </div>
         </form>
         <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/extend" class="form-stack"
-              data-confirm="روز/حجم به سرویس فعلی اضافه شود؟"
-              data-confirm-title="افزایش مانده سرویس"
-              data-confirm-label="افزایش">
+              data-confirm="روز/حجم سرویس فعلی تغییر کند؟ (مثبت = افزایش، منفی = کاهش)"
+              data-confirm-title="تغییر مانده سرویس"
+              data-confirm-label="اعمال">
           <div class="user-edit-fields user-edit-fields--2">
-            <label class="form-field">+ روز
-              <input name="extra_days" type="number" min="0" max="3650" value="0" inputmode="numeric" />
+            <label class="form-field">روز
+              {{ num_stepper('extra_days', value=0, step=1, min=-3650, max=3650, inputmode='numeric', aria_label='روز') }}
             </label>
-            <label class="form-field">+ گیگ
-              <input name="extra_gb" type="number" min="0" step="0.1" value="0" inputmode="decimal" />
+            <label class="form-field">گیگ
+              {{ num_stepper('extra_gb', value=0, step=0.1, min=-10000, max=10000, inputmode='decimal', aria_label='گیگ') }}
             </label>
           </div>
           <div class="actions user-edit-actions">
-            <button class="btn btn-sm" type="submit">افزایش مانده</button>
+            <button class="btn btn-sm" type="submit">تغییر مانده</button>
           </div>
         </form>
       </div>

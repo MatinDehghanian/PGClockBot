@@ -820,3 +820,82 @@ async def list_subscription_plans(session: AsyncSession) -> list[ResellerPlan]:
         .order_by(ResellerPlan.sort_order, ResellerPlan.id)
     )
     return list((await session.execute(q)).scalars().all())
+
+
+# Same caps as user-service extend (admin free adjust).
+MAX_ADJUST_DAYS = 3650
+MAX_ADJUST_GB = 10_000
+
+
+async def admin_adjust_reseller_subscription(
+    session: AsyncSession,
+    profile: ResellerProfile,
+    *,
+    extra_days: int = 0,
+    extra_gb: int = 0,
+) -> dict[str, Any]:
+    """Owner-admin free adjust of reseller PG subscription days/GB (signed deltas).
+
+    Not the paid buy_extra path. Fail-closed without pg username / subscription row.
+    """
+    days_n = int(extra_days or 0)
+    gb_n = int(extra_gb or 0)
+    if days_n == 0 and gb_n == 0:
+        raise ValueError("حداقل یک مقدار غیرصفر وارد کنید")
+    if abs(days_n) > MAX_ADJUST_DAYS:
+        raise ValueError("تعداد روز نامعتبر است")
+    if abs(gb_n) > MAX_ADJUST_GB:
+        raise ValueError("حجم نامعتبر است")
+
+    uname = (getattr(profile, "pg_admin_username", None) or "").strip()
+    if not uname:
+        raise ValueError("ادمین پاسارگارد برای این نماینده تنظیم نشده است")
+
+    sub = await get_subscription(session, uname)
+    if sub is None:
+        raise ValueError("اشتراک پاسارگارد برای این نماینده یافت نشد")
+
+    now = _utcnow()
+    if days_n != 0:
+        cur_exp = _as_aware(sub.expires_at)
+        if cur_exp is None:
+            if days_n < 0:
+                raise ValueError("اشتراک بدون انقضا است — کاهش روز ممکن نیست")
+            sub.expires_at = now + timedelta(days=days_n)
+        else:
+            sub.expires_at = cur_exp + timedelta(days=days_n)
+
+    if gb_n != 0:
+        base = max(0, int(sub.base_gb or 0))
+        extra = max(0, int(sub.extra_gb_purchased or 0))
+        if gb_n > 0:
+            sub.extra_gb_purchased = extra + gb_n
+        else:
+            remain = -gb_n
+            take_extra = min(extra, remain)
+            sub.extra_gb_purchased = extra - take_extra
+            remain -= take_extra
+            if remain:
+                sub.base_gb = max(0, base - remain)
+
+    await session.flush()
+    await _assert_owner_capacity_budget(
+        session,
+        target_pg_username=sub.pg_username,
+        next_total_gb=int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0),
+        next_total_users=int(sub.base_users or 0) + int(sub.extra_users_purchased or 0),
+    )
+    try:
+        await sync_pg_capacity_from_sub(session, sub)
+    except Exception:
+        logger.exception("admin adjust sync PG failed admin=%s", uname)
+        raise ValueError("همگام‌سازی ظرفیت پاسارگارد ناموفق بود") from None
+
+    await session.commit()
+    return {
+        "expires_at": sub.expires_at,
+        "base_gb": int(sub.base_gb or 0),
+        "extra_gb": int(sub.extra_gb_purchased or 0),
+        "total_gb": int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0),
+        "pg_username": sub.pg_username,
+    }

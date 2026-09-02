@@ -299,14 +299,14 @@ async def admin_extend_service(
     extra_days: int = 0,
     extra_gb: float = 0,
 ) -> ServiceSnapshot:
-    """Add days/GB on top of current PG remaining (admin)."""
+    """Adjust days/GB on current PG remaining (admin). Signed deltas allowed (±MAX)."""
     days_n = int(extra_days or 0)
     gb_n = float(extra_gb or 0)
     if days_n == 0 and gb_n == 0:
-        raise ValueError("حداقل یک مقدار افزایش وارد کنید")
-    if days_n < 0 or days_n > MAX_EXTEND_DAYS:
+        raise ValueError("حداقل یک مقدار غیرصفر وارد کنید")
+    if abs(days_n) > MAX_EXTEND_DAYS:
         raise ValueError("تعداد روز نامعتبر است")
-    if gb_n < 0 or gb_n > MAX_EXTEND_GB:
+    if abs(gb_n) > MAX_EXTEND_GB:
         raise ValueError("حجم نامعتبر است")
     if not service.pg_user_id:
         raise ValueError("سرویس به پاسارگارد وصل نیست")
@@ -317,21 +317,35 @@ async def admin_extend_service(
         raise ValueError("کاربر پاسارگارد یافت نشد")
 
     expire_ts = None
-    if days_n > 0:
+    if days_n != 0:
         from app.services.formatting import parse_expire
 
         cur = parse_expire(info.get("expire") or info.get("expire_date"))
-        base = cur if cur and cur > datetime.now(timezone.utc) else datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
+        if days_n > 0:
+            # Extend from remaining future expire, else from now
+            base = cur if cur and cur > now else now
+        else:
+            # Reduce from current expire (or now if already expired / missing)
+            base = cur if cur else now
         expire_ts = int(base.timestamp()) + days_n * 86400
+        # Guard absurd negative unix stamps; past expire is allowed (shows expired)
+        if expire_ts < 0:
+            expire_ts = 0
 
     data_limit_bytes = None
-    if gb_n > 0:
+    if gb_n != 0:
         try:
             cur_lim = int(info.get("data_limit") or 0)
         except (TypeError, ValueError):
             cur_lim = 0
-        # Unlimited (0) → start from purchased extra only
-        data_limit_bytes = (cur_lim if cur_lim > 0 else 0) + int(gb_n * GB)
+        if cur_lim <= 0:
+            if gb_n < 0:
+                raise ValueError("حجم نامحدود است")
+            # Unlimited (0) → start from purchased extra only
+            data_limit_bytes = int(gb_n * GB)
+        else:
+            data_limit_bytes = max(0, cur_lim + int(gb_n * GB))
 
     return await admin_set_service_quota(
         session,

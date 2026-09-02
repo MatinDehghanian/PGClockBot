@@ -2608,6 +2608,12 @@ def admin_reseller_actions(user_id: int, *, has_shop_services: bool = False) -> 
                 callback_data=f"adm:resellers:svcs:{user_id}",
             )
         ],
+        [
+            InlineKeyboardButton(
+                text="⏱ تغییر ظرفیت",
+                callback_data=f"adm:resellers:capadj:{user_id}",
+            )
+        ],
     ]
     if has_shop_services:
         rows.append(
@@ -2630,6 +2636,58 @@ def admin_reseller_actions(user_id: int, *, has_shop_services: bool = False) -> 
         [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:resellers:list:0")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_reseller_capacity_adjust_keyboard(
+    user_id: int,
+    *,
+    days: int = 0,
+    gb: int = 0,
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="➖",
+                    callback_data=f"adm:resellers:capadj:{user_id}:days:-",
+                ),
+                InlineKeyboardButton(
+                    text=f"{days} روز",
+                    callback_data=f"adm:resellers:capadj:{user_id}:days:input",
+                ),
+                InlineKeyboardButton(
+                    text="➕",
+                    callback_data=f"adm:resellers:capadj:{user_id}:days:+",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="➖",
+                    callback_data=f"adm:resellers:capadj:{user_id}:gb:-",
+                ),
+                InlineKeyboardButton(
+                    text=f"{gb} گیگ",
+                    callback_data=f"adm:resellers:capadj:{user_id}:gb:input",
+                ),
+                InlineKeyboardButton(
+                    text="➕",
+                    callback_data=f"adm:resellers:capadj:{user_id}:gb:+",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ اعمال تغییر",
+                    callback_data=f"adm:resellers:capadj:{user_id}:confirm",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ بازگشت",
+                    callback_data=f"adm:resellers:view:{user_id}",
+                )
+            ],
+        ]
+    )
 
 
 def admin_reseller_services_keyboard(
@@ -2798,18 +2856,69 @@ def admin_user_service_actions(user_id: int, service_id: int) -> InlineKeyboardM
             ],
             [
                 InlineKeyboardButton(
-                    text="➕ ۳۰ روز",
-                    callback_data=f"adm:users:svcext:{user_id}:{service_id}:d30",
-                ),
-                InlineKeyboardButton(
-                    text="➕ ۱۰ گیگ",
-                    callback_data=f"adm:users:svcext:{user_id}:{service_id}:g10",
-                ),
+                    text="⏱ تغییر مانده",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}",
+                )
             ],
             [
                 InlineKeyboardButton(
                     text="⬅️ سرویس‌ها",
                     callback_data=f"adm:users:svcs:{user_id}",
+                )
+            ],
+        ]
+    )
+
+
+def admin_user_service_adjust_keyboard(
+    user_id: int,
+    service_id: int,
+    *,
+    days: int = 0,
+    gb: float = 0,
+) -> InlineKeyboardMarkup:
+    """Interactive signed adjust: − | N | + for days and GB."""
+    gb_disp = int(gb) if float(gb) == int(gb) else gb
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="➖",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}:days:-",
+                ),
+                InlineKeyboardButton(
+                    text=f"{days} روز",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}:days:input",
+                ),
+                InlineKeyboardButton(
+                    text="➕",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}:days:+",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="➖",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}:gb:-",
+                ),
+                InlineKeyboardButton(
+                    text=f"{gb_disp} گیگ",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}:gb:input",
+                ),
+                InlineKeyboardButton(
+                    text="➕",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}:gb:+",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ اعمال تغییر",
+                    callback_data=f"adm:users:svcadj:{user_id}:{service_id}:confirm",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ بازگشت",
+                    callback_data=f"adm:users:svc:{user_id}:{service_id}",
                 )
             ],
         ]

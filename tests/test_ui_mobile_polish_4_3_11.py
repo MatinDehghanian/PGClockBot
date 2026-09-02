@@ -161,9 +161,9 @@ class ServicesRedesignTests(unittest.TestCase):
         self.assertNotIn("svc-card-list", USER_BODY)
         self.assertNotIn("svc-item-meta", USER_BODY)
         self.assertNotIn("expire_text", USER_BODY)
-        # Increase button uses primary (no ghost)
+        # Adjust button uses primary (no ghost)
         extend = USER_BODY.split("/extend", 1)[1].split("</form>", 1)[0]
-        self.assertIn("افزایش مانده", extend)
+        self.assertIn("تغییر مانده", extend)
         self.assertNotIn("btn-ghost", extend)
         self.assertIn(".svc-stat-row {", CSS)
         self.assertIn("gap: var(--space-2);", CSS.split(".svc-item-ops .form-stack {", 1)[1].split("}", 1)[0])
