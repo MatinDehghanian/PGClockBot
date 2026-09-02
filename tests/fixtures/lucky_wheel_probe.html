@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="../../app/web/static/panel.css" />
+  <style>body{margin:0;padding:20px;background:var(--background);color:var(--foreground)}</style>
+</head>
+<body>
+<div class="loyalty-stack">
+  <div class="card settings-card">
+    <h2>تنظیمات چرخ شانس</h2>
+    <p class="muted update-card-caption">چرخ فقط وقتی فعال است که باشگاه مشتریان هم روشن باشد. متن دکمه از «متن دکمه‌های منو» و ترتیب زیرمنو از این بخش.</p>
+    <div class="form-stack">
+      <div class="ui-switch-list">
+        <label class="ui-switch-row">
+          <span class="ui-switch-copy"><strong>فعال بودن چرخ شانس</strong></span>
+          <span class="ui-switch"><input type="checkbox" checked /><span class="ui-switch-track"></span></span>
+        </label>
+      </div>
+      <div class="form-row">
+        <label class="form-field">هزینه هر چرخش (امتیاز)<input type="number" value="10" dir="ltr" /></label>
+        <label class="form-field">سقف روزانه<input type="number" value="3" dir="ltr" /></label>
+        <label class="form-field">کولدون (ثانیه)<input type="number" value="60" dir="ltr" /></label>
+        <label class="form-field">چرخش رایگان روزانه<input type="number" value="1" dir="ltr" /></label>
+      </div>
+      <h3 class="loyalty-editor-title">ترتیب زیرمنوی باشگاه</h3>
+      <ul class="dnd-list">
+        <li class="dnd-item"><div class="meta"><strong>دعوت دوستان</strong><div class="muted">loy_referral</div></div></li>
+        <li class="dnd-item"><div class="meta"><strong>امتیاز من</strong><div class="muted">loy_points</div></div></li>
+        <li class="dnd-item"><div class="meta"><strong>جوایز</strong><div class="muted">loy_rewards</div></div></li>
+        <li class="dnd-item"><div class="meta"><strong>چرخ شانس</strong><div class="muted">loy_wheel</div></div></li>
+        <li class="dnd-item"><div class="meta"><strong>تاریخچه</strong><div class="muted">loy_history</div></div></li>
+      </ul>
+    </div>
+  </div>
+  <div class="card settings-card loyalty-editor">
+    <div class="loyalty-editor-head">
+      <div class="loyalty-editor-title">
+        <strong>۱۰ امتیاز</strong>
+        <span class="muted">امتیاز · وزن: ۴۰</span>
+        <span class="badge ok">فعال</span>
+      </div>
+    </div>
+  </div>
+  <div class="card settings-card loyalty-editor">
+    <div class="loyalty-editor-head">
+      <div class="loyalty-editor-title">
+        <strong>۱ گیگ</strong>
+        <span class="muted">حجم · وزن: ۲۰</span>
+        <span class="badge ok">فعال</span>
+      </div>
+    </div>
+  </div>
+  <div class="card settings-card loyalty-editor">
+    <div class="loyalty-editor-head">
+      <div class="loyalty-editor-title">
+        <strong>خالی</strong>
+        <span class="muted">بدون جایزه · وزن: ۴۰</span>
+        <span class="badge ok">فعال</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
