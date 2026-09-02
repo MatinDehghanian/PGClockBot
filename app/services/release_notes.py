@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "9.0.1": [
+        "رفع خطای ۵۰۰ صفحه باشگاه مشتریان (context چرخ شانس ناقص بود)",
+        "صفحات ۴۰۴/۵۰۰ با دیزاین هماهنگ پنل (برند، فونت، تم روشن/تیره)",
+        "ریستور: restore/pre-v9.0.1-v9.0.0",
+    ],
     "9.0.0": [
         "حذف ریشه‌ای کمیسیون از پلن ثابت (مدل/پنل/ربات) — ثابت بدون درصد کمیسیون",
         "استپر کپسولی روز/گیگ (±): کاهش و افزایش مانده سرویس کاربر و نماینده در وب و ربات",
