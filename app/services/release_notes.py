@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "9.0.0": [
+        "حذف ریشه‌ای کمیسیون از پلن ثابت (مدل/پنل/ربات) — ثابت بدون درصد کمیسیون",
+        "استپر کپسولی روز/گیگ (±): کاهش و افزایش مانده سرویس کاربر و نماینده در وب و ربات",
+        "چرخ شانس در باشگاه مشتریان: جوایز وزنی، سقف/کولدون، دکمه و چیدمان قابل تنظیم",
+        "مایگریشن: 0022 drop commission · 0023 lucky_wheel",
+        "ریستور: restore/pre-v9.0.0-v8.8.4",
+    ],
     "8.8.4": [
         "فوتر: هم‌ترازی سایدبار و صفحه در مرورگر (موبایل/دسکتاپ) — یک مسیر inset",
         "عملیات گروهی: دایرهٔ شمارنده با رنگ دکمه (ghost/ok/warn/danger) در هر دو تم",
