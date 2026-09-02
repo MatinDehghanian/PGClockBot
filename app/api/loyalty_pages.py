@@ -13,6 +13,7 @@ from app.db.models import (
     BotUser,
     LoyaltyReward,
     LoyaltyTier,
+    LuckyWheelPrize,
     PointsRule,
     PointsTransaction,
 )
@@ -23,6 +24,24 @@ from app.services.loyalty import (
     admin_adjust_points,
     ensure_loyalty_defaults,
     overview_metrics,
+)
+from app.services.lucky_wheel import (
+    DEFAULT_SUBMENU_ORDER,
+    PRIZE_TYPE_LABELS as WHEEL_PRIZE_TYPE_LABELS,
+    SETTING_COOLDOWN,
+    SETTING_DAILY_LIMIT,
+    SETTING_FREE_SPINS_DAILY,
+    SETTING_SPIN_COST,
+    SETTING_SUBMENU_ORDER,
+    SETTING_WHEEL_ENABLED,
+    archive_prize,
+    clamp_int,
+    list_prizes,
+    list_recent_spins,
+    overview_wheel_metrics,
+    parse_submenu_order,
+    prize_in_scope,
+    upsert_prize,
 )
 from app.services.shop_scope import (
     ShopScopeError,
@@ -54,6 +73,16 @@ def _reward_in_scope(reward: LoyaltyReward, scope: int | None) -> bool:
         return reward.reseller_id is None
     return reward.reseller_id is not None and int(reward.reseller_id) == int(scope)
 
+
+
+
+def _wheel_redirect(err: str | None = None, *, saved: bool = False) -> RedirectResponse:
+    q = "/loyalty?tab=overview&settings=wheel"
+    if saved:
+        q += "&saved=1"
+    if err:
+        q += f"&err={quote(err)}"
+    return RedirectResponse(q, status_code=303)
 
 def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
     require_loyalty = require_perm("loyalty")
@@ -458,3 +487,133 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
             f"/loyalty?tab=transactions&saved=1&msg={quote('تعدیل ثبت شد')}",
             status_code=303,
         )
+
+    @app.post("/loyalty/wheel/settings")
+    async def loyalty_wheel_settings_save(
+        staff: dict = Depends(require_loyalty),
+        session: AsyncSession = Depends(get_db),
+        lucky_wheel_enabled: str = Form("0"),
+        lucky_wheel_spin_cost_points: str = Form("10"),
+        lucky_wheel_daily_limit: str = Form("3"),
+        lucky_wheel_cooldown_seconds: str = Form("0"),
+        lucky_wheel_free_spins_daily: str = Form("0"),
+        loyalty_submenu_order: str = Form(",".join(DEFAULT_SUBMENU_ORDER)),
+    ):
+        try:
+            scope = _shop_scope(staff)
+        except ValueError:
+            return RedirectResponse("/home", status_code=303)
+        enabled = "1" if str(lucky_wheel_enabled) in {"1", "on", "true", "yes"} else "0"
+        cost = clamp_int(lucky_wheel_spin_cost_points, lo=0, hi=1_000_000, default=10)
+        daily = clamp_int(lucky_wheel_daily_limit, lo=0, hi=100, default=3)
+        cool = clamp_int(lucky_wheel_cooldown_seconds, lo=0, hi=86_400, default=0)
+        free_d = clamp_int(lucky_wheel_free_spins_daily, lo=0, hi=50, default=0)
+        order = ",".join(parse_submenu_order(loyalty_submenu_order))
+        await set_setting(session, SETTING_WHEEL_ENABLED, enabled, reseller_id=scope)
+        await set_setting(session, SETTING_SPIN_COST, str(cost), reseller_id=scope)
+        await set_setting(session, SETTING_DAILY_LIMIT, str(daily), reseller_id=scope)
+        await set_setting(session, SETTING_COOLDOWN, str(cool), reseller_id=scope)
+        await set_setting(session, SETTING_FREE_SPINS_DAILY, str(free_d), reseller_id=scope)
+        await set_setting(session, SETTING_SUBMENU_ORDER, order, reseller_id=scope)
+        return _wheel_redirect(saved=True)
+
+    @app.post("/loyalty/wheel/prizes/create")
+    async def loyalty_wheel_prize_create(
+        staff: dict = Depends(require_loyalty),
+        session: AsyncSession = Depends(get_db),
+        label: str = Form(...),
+        prize_type: str = Form(...),
+        prize_value: int = Form(0),
+        weight: int = Form(10),
+        sort_order: int = Form(100),
+        min_purchase_toman: int = Form(0),
+        max_discount_toman: str = Form(""),
+        expires_days: str = Form(""),
+    ):
+        try:
+            scope = _shop_scope(staff)
+        except ValueError:
+            return RedirectResponse("/home", status_code=303)
+        mx = str(max_discount_toman or "").strip()
+        ex = str(expires_days or "").strip()
+        try:
+            await upsert_prize(
+                session,
+                reseller_id=scope,
+                label=label,
+                prize_type=prize_type,
+                prize_value=int(prize_value),
+                weight=int(weight),
+                sort_order=int(sort_order),
+                enabled=True,
+                min_purchase_toman=max(0, int(min_purchase_toman or 0)),
+                max_discount_toman=int(mx) if mx.isdigit() else None,
+                expires_days=int(ex) if ex.isdigit() else None,
+            )
+        except ValueError as e:
+            return _wheel_redirect(str(e)[:200])
+        return _wheel_redirect(saved=True)
+
+    @app.post("/loyalty/wheel/prizes/{prize_id}/save")
+    async def loyalty_wheel_prize_save(
+        prize_id: int,
+        staff: dict = Depends(require_loyalty),
+        session: AsyncSession = Depends(get_db),
+        label: str = Form(...),
+        prize_value: int = Form(0),
+        weight: int = Form(1),
+        sort_order: int = Form(0),
+        enabled: str = Form("0"),
+        max_wins_global: str = Form(""),
+        max_wins_per_user: str = Form(""),
+        min_purchase_toman: int = Form(0),
+        max_discount_toman: str = Form(""),
+        expires_days: str = Form(""),
+    ):
+        try:
+            scope = _shop_scope(staff)
+        except ValueError:
+            return RedirectResponse("/home", status_code=303)
+        prize = await session.get(LuckyWheelPrize, int(prize_id))
+        if not prize or not prize_in_scope(prize, scope):
+            return _wheel_redirect("جایزه پیدا نشد")
+        g = str(max_wins_global or "").strip()
+        u = str(max_wins_per_user or "").strip()
+        mx = str(max_discount_toman or "").strip()
+        ex = str(expires_days or "").strip()
+        try:
+            await upsert_prize(
+                session,
+                reseller_id=scope,
+                prize_id=int(prize_id),
+                label=label,
+                prize_type=prize.prize_type,
+                prize_value=int(prize_value),
+                weight=int(weight),
+                sort_order=int(sort_order),
+                enabled=str(enabled) in {"1", "on", "true", "yes"},
+                max_wins_global=int(g) if g.isdigit() else None,
+                max_wins_per_user=int(u) if u.isdigit() else None,
+                min_purchase_toman=max(0, int(min_purchase_toman or 0)),
+                max_discount_toman=int(mx) if mx.isdigit() else None,
+                expires_days=int(ex) if ex.isdigit() else None,
+            )
+        except ValueError as e:
+            return _wheel_redirect(str(e)[:200])
+        return _wheel_redirect(saved=True)
+
+    @app.post("/loyalty/wheel/prizes/{prize_id}/archive")
+    async def loyalty_wheel_prize_archive(
+        prize_id: int,
+        staff: dict = Depends(require_loyalty),
+        session: AsyncSession = Depends(get_db),
+    ):
+        try:
+            scope = _shop_scope(staff)
+        except ValueError:
+            return RedirectResponse("/home", status_code=303)
+        ok = await archive_prize(session, int(prize_id), reseller_id=scope)
+        if not ok:
+            return _wheel_redirect("جایزه پیدا نشد")
+        return _wheel_redirect(saved=True)
+

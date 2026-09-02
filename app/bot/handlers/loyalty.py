@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -30,6 +32,13 @@ from app.services.loyalty import (
     redeem_reward,
     referral_link,
     referral_stats,
+)
+from app.services.lucky_wheel import (
+    PRIZE_TYPE_LABELS as WHEEL_PRIZE_TYPE_LABELS,
+    get_user_wheel_status,
+    list_active_pool,
+    spin as wheel_spin,
+    wheel_feature_enabled,
 )
 from app.services.message_variables import DOMAIN_REFERRAL, render_message_template
 from app.services.users import get_all_settings, get_setting, on, set_setting
@@ -343,6 +352,77 @@ async def open_loyalty_rewards_message(
     if redeem_kb is not None:
         await message.answer("برای دریافت، جایزه را انتخاب کنید:", reply_markup=redeem_kb)
 
+
+
+
+def _wheel_spin_keyboard(*, can_spin: bool) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if can_spin:
+        rows.append(
+            [InlineKeyboardButton(text="🎡 بچرخ", callback_data="loy:wheel:spin")]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="🔄 به‌روزرسانی", callback_data="loy:wheel:hub")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _build_wheel_hub_text(session: AsyncSession, db_user: BotUser) -> tuple[str, bool]:
+    status = await get_user_wheel_status(session, db_user)
+    if not status.enabled:
+        return "چرخ شانس فعلاً غیرفعال است.", False
+    pool = await list_active_pool(session, reseller_id=db_user.reseller_id)
+    lines = [
+        kv_line("⭐", "امتیاز شما", str(status.points_balance)),
+        kv_line("🎟", "هزینه هر چرخش", f"{status.spin_cost} امتیاز" if status.spin_cost else "رایگان"),
+        kv_line("🎁", "چرخش رایگان باقی‌مانده", str(status.free_spins_left)),
+    ]
+    if status.daily_limit > 0:
+        lines.append(
+            kv_line(
+                "📅",
+                "چرخش امروز",
+                f"{status.spins_today} / {status.daily_limit}",
+            )
+        )
+    if status.cooldown_remaining > 0:
+        lines.append(kv_line("⏳", "زمان انتظار", f"{status.cooldown_remaining} ثانیه"))
+    if status.block_reason:
+        lines.extend(["", f"⚠️ {html.escape(status.block_reason)}"])
+    if pool:
+        lines.extend(["", "<b>بخش‌های فعال:</b>"])
+        for p in pool[:12]:
+            type_label = WHEEL_PRIZE_TYPE_LABELS.get(p.prize_type, p.prize_type)
+            lines.append(
+                f"• {html.escape(p.label or '')} "
+                f"<i>({html.escape(type_label)}"
+                f"{f': {int(p.prize_value)}' if p.prize_type != 'none' else ''})</i>"
+            )
+    else:
+        lines.extend(["", "هنوز جایزه‌ای برای چرخ تعریف نشده است."])
+    return "\n".join(lines), status.can_spin
+
+
+async def open_loyalty_wheel_message(
+    message: Message, session: AsyncSession, db_user: BotUser
+) -> None:
+    """Lucky wheel hub: status + inline spin (reply KB stays club submenu)."""
+    ui = await get_all_settings(session)
+    if not await loyalty_enabled(session, reseller_id=db_user.reseller_id):
+        await message.answer(
+            format_message("⭐ باشگاه مشتریان", "این بخش فعلاً غیرفعال است."),
+            reply_markup=kb.loyalty_reply_keyboard(ui),
+        )
+        return
+    body, can_spin = await _build_wheel_hub_text(session, db_user)
+    await message.answer(
+        format_message("🎡 چرخ شانس", body),
+        reply_markup=kb.loyalty_reply_keyboard(ui),
+    )
+    await message.answer(
+        "چرخش:",
+        reply_markup=_wheel_spin_keyboard(can_spin=can_spin),
+    )
 
 async def open_loyalty_history_message(
     message: Message, session: AsyncSession, db_user: BotUser
@@ -983,6 +1063,90 @@ async def _do_redeem(
             ),
         )
 
+
+
+
+@router.callback_query(F.data == "loy:wheel:hub")
+async def loyalty_wheel_hub(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    await callback.answer()
+    if not await wheel_feature_enabled(session, reseller_id=db_user.reseller_id):
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                format_message("🎡 چرخ شانس", "چرخ شانس فعلاً غیرفعال است."),
+                reply_markup=None,
+            )
+        return
+    body, can_spin = await _build_wheel_hub_text(session, db_user)
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message("🎡 چرخ شانس", body),
+            reply_markup=_wheel_spin_keyboard(can_spin=can_spin),
+        )
+
+
+@router.callback_query(F.data == "loy:wheel:spin")
+async def loyalty_wheel_spin(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    """Server-side spin — callback id used for idempotency only, never as prize id."""
+    if not await wheel_feature_enabled(session, reseller_id=db_user.reseller_id):
+        await callback.answer("چرخ شانس غیرفعال است", show_alert=True)
+        return
+    key = f"tg_wheel:{callback.id}:{db_user.id}"
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message("🎡 چرخ شانس", "در حال چرخش…"),
+            reply_markup=None,
+        )
+    try:
+        result = await wheel_spin(session, db_user, idempotency_key=key)
+    except ValueError as e:
+        await callback.answer(str(e)[:180], show_alert=True)
+        body, can_spin = await _build_wheel_hub_text(session, db_user)
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                format_message("🎡 چرخ شانس", body),
+                reply_markup=_wheel_spin_keyboard(can_spin=can_spin),
+            )
+        return
+    except Exception:
+        await callback.answer("خطا در چرخش. دوباره تلاش کنید.", show_alert=True)
+        return
+
+    await callback.answer("نتیجه آماده است ✅")
+    await session.refresh(db_user)
+    type_label = WHEEL_PRIZE_TYPE_LABELS.get(result.prize_type, result.prize_type)
+    lines = [
+        "نتیجه چرخش:",
+        kv_line("🏷", "جایزه", html.escape(result.prize_label or "—")),
+        kv_line("🎁", "نوع", html.escape(type_label)),
+    ]
+    if result.prize_type != "none":
+        lines.append(kv_line("📦", "مقدار", str(result.prize_value)))
+    if result.used_free_spin:
+        lines.append(kv_line("🎟", "هزینه", "چرخش رایگان"))
+    elif result.cost_points:
+        lines.append(kv_line("🎟", "هزینه", f"{result.cost_points} امتیاز"))
+    else:
+        lines.append(kv_line("🎟", "هزینه", "رایگان"))
+    lines.append(kv_line("⭐", "امتیاز باقی‌مانده", str(int(db_user.points_balance or 0))))
+    if result.discount_code:
+        lines.extend(
+            [
+                "",
+                kv_line("🏷", "کد تخفیف", f"<code>{html.escape(result.discount_code)}</code>"),
+                "در خرید بعدی از دکمه «کد تخفیف» استفاده کنید.",
+            ]
+        )
+    body, can_spin = await _build_wheel_hub_text(session, db_user)
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message("🎡 نتیجه چرخ شانس", "\n".join(lines) + "\n\n" + body),
+            reply_markup=_wheel_spin_keyboard(can_spin=can_spin),
+        )
 
 @router.callback_query(F.data == "loy:discounts")
 async def loyalty_discounts(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):

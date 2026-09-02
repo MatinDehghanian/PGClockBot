@@ -263,6 +263,7 @@ REPLY_ACTION_LOYALTY = "loyalty"
 REPLY_ACTION_LOY_REFERRAL = "loy_referral"
 REPLY_ACTION_LOY_POINTS = "loy_points"
 REPLY_ACTION_LOY_REWARDS = "loy_rewards"
+REPLY_ACTION_LOY_WHEEL = "loy_wheel"
 REPLY_ACTION_LOY_HISTORY = "loy_history"
 REPLY_ACTION_ADMIN_LOYALTY = "adm_loyalty"
 REPLY_ACTION_ADM_LOY_OVERVIEW = "adm_loy_overview"
@@ -786,13 +787,19 @@ def _loyalty_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     """Customer club main subsets on reply keyboard (invite is one subset).
 
     Secondary actions (share link, redeem, pagination, my-discounts) stay inline.
+    Order from loyalty_submenu_order CSV; club button position uses main menu_order.
     """
-    return [
-        (REPLY_ACTION_LOY_REFERRAL, _t(ui, "btn_referral") or "👥 دعوت دوستان"),
-        (REPLY_ACTION_LOY_POINTS, _t(ui, "btn_loy_points") or "⭐ امتیاز من"),
-        (REPLY_ACTION_LOY_REWARDS, _t(ui, "btn_loy_rewards") or "🎁 جوایز"),
-        (REPLY_ACTION_LOY_HISTORY, _t(ui, "btn_loy_history") or "📜 تاریخچه"),
-    ]
+    catalog = {
+        REPLY_ACTION_LOY_REFERRAL: _t(ui, "btn_referral") or "👥 دعوت دوستان",
+        REPLY_ACTION_LOY_POINTS: _t(ui, "btn_loy_points") or "⭐ امتیاز من",
+        REPLY_ACTION_LOY_REWARDS: _t(ui, "btn_loy_rewards") or "🎁 جوایز",
+        REPLY_ACTION_LOY_WHEEL: _t(ui, "btn_loy_wheel") or "🎡 چرخ شانس",
+        REPLY_ACTION_LOY_HISTORY: _t(ui, "btn_loy_history") or "📜 تاریخچه",
+    }
+    from app.services.lucky_wheel import parse_submenu_order
+
+    order = parse_submenu_order(_t(ui, "loyalty_submenu_order"))
+    return [(key, catalog[key]) for key in order if key in catalog]
 
 
 def _admin_loyalty_submenu_entries(ui: dict | None = None, *, include_tiers: bool = True) -> list[tuple[str, str]]:

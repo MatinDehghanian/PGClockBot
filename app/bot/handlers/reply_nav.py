@@ -1953,6 +1953,7 @@ async def reply_main_nav(
         kb.REPLY_ACTION_LOY_REFERRAL,
         kb.REPLY_ACTION_LOY_POINTS,
         kb.REPLY_ACTION_LOY_REWARDS,
+        kb.REPLY_ACTION_LOY_WHEEL,
         kb.REPLY_ACTION_LOY_HISTORY,
         kb.REPLY_ACTION_REFERRAL,
         kb.REPLY_ACTION_ADMIN_LOYALTY,
@@ -2038,6 +2039,10 @@ async def reply_main_nav(
         from app.bot.handlers.loyalty import open_loyalty_rewards_message
 
         await open_loyalty_rewards_message(message, session, db_user)
+    elif action == kb.REPLY_ACTION_LOY_WHEEL:
+        from app.bot.handlers.loyalty import open_loyalty_wheel_message
+
+        await open_loyalty_wheel_message(message, session, db_user)
     elif action == kb.REPLY_ACTION_LOY_HISTORY:
         from app.bot.handlers.loyalty import open_loyalty_history_message
 

@@ -82,6 +82,15 @@
         </div>
         <strong>{{ metrics.active_rewards | num }}</strong>
       </div>
+      <div class="stat">
+        <div class="stat-top">
+          <span class="stat-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 3"/></svg>
+          </span>
+          <span>چرخ شانس</span>
+        </div>
+        <strong>{% if wheel_metrics.wheel_enabled %}{{ wheel_metrics.active_prizes | num }} بخش · {{ wheel_metrics.total_spins | num }} چرخش{% else %}خاموش{% endif %}</strong>
+      </div>
     </div>
   </section>
 </div>

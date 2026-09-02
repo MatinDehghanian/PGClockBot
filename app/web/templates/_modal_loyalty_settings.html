@@ -27,6 +27,7 @@
       {% endif %}
       <button type="button" class="tab-btn {% if loy_tab == 'rules' %}active{% endif %}" data-modal-tab="rules" role="tab">قوانین امتیاز</button>
       <button type="button" class="tab-btn {% if loy_tab == 'rewards' %}active{% endif %}" data-modal-tab="rewards" role="tab">جوایز</button>
+      <button type="button" class="tab-btn {% if loy_tab == 'wheel' %}active{% endif %}" data-modal-tab="wheel" role="tab">چرخ شانس</button>
       <button type="button" class="tab-btn {% if loy_tab == 'tiers' %}active{% endif %}" data-modal-tab="tiers" role="tab">سطوح</button>
     </nav>
     <div class="settings-modal-body">
@@ -75,6 +76,9 @@
       </div>
       <div class="modal-tab-panel" data-modal-tab-panel="rewards" {% if loy_tab != 'rewards' %}hidden{% endif %}>
         {% include "_loyalty_rewards_panel.html" %}
+      </div>
+      <div class="modal-tab-panel" data-modal-tab-panel="wheel" {% if loy_tab != 'wheel' %}hidden{% endif %}>
+        {% include "_loyalty_wheel_panel.html" %}
       </div>
       <div class="modal-tab-panel" data-modal-tab-panel="tiers" {% if loy_tab != 'tiers' %}hidden{% endif %}>
         {% include "_loyalty_tiers_panel.html" %}
