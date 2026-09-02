@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "9.0.2": [
+        "صفحات ۴۰۴/۵۰۰: کارت اتمسفری با بج وضعیت، واترمارک کد و زبان طراحی پنل",
+        "ریستور: restore/pre-v9.0.2-v9.0.1",
+    ],
     "9.0.1": [
         "رفع خطای ۵۰۰ صفحه باشگاه مشتریان (context چرخ شانس ناقص بود)",
         "صفحات ۴۰۴/۵۰۰ با دیزاین هماهنگ پنل (برند، فونت، تم روشن/تیره)",
