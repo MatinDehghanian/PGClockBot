@@ -9900,7 +9900,7 @@ html[data-theme="light"] .num-stepper-btn:hover {
   background: color-mix(in srgb, var(--foreground) 10%, transparent);
 }
 
-/* Standalone status pages (404 / 500) — panel language, no shell */
+/* Standalone status pages (404 / 500) — panel card language, atmospheric stage */
 .panel-status-body {
   margin: 0;
   min-height: 100dvh;
@@ -9924,24 +9924,61 @@ html[data-theme="light"] .num-stepper-btn:hover {
   box-sizing: border-box;
   overflow: hidden;
 }
-.panel-status-glow {
+.panel-status-atmosphere {
   pointer-events: none;
   position: absolute;
-  inset: -20% -10% auto;
-  height: 55%;
-  background:
-    radial-gradient(ellipse 60% 50% at 70% 20%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 70%),
-    radial-gradient(ellipse 50% 40% at 20% 40%, color-mix(in srgb, var(--ok-fg, #22c55e) 10%, transparent), transparent 65%);
-  opacity: 0.9;
+  inset: 0;
   z-index: -1;
+  overflow: hidden;
 }
-html[data-theme="light"] .panel-status-glow {
+.panel-status-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(48px);
   opacity: 0.55;
+  will-change: transform;
 }
+.panel-status-orb-a {
+  width: min(52vw, 420px);
+  height: min(52vw, 420px);
+  top: -12%;
+  inset-inline-end: -8%;
+  background: color-mix(in srgb, var(--primary) 34%, transparent);
+  animation: panel-status-drift-a 14s var(--ease-standard, ease) infinite alternate;
+}
+.panel-status-orb-b {
+  width: min(42vw, 320px);
+  height: min(42vw, 320px);
+  bottom: 8%;
+  inset-inline-start: -10%;
+  background: color-mix(in srgb, var(--brand) 22%, transparent);
+  animation: panel-status-drift-b 18s var(--ease-standard, ease) infinite alternate;
+}
+.panel-status[data-status="500"] .panel-status-orb-a {
+  background: color-mix(in srgb, var(--destructive) 28%, transparent);
+}
+.panel-status[data-status="500"] .panel-status-orb-b {
+  background: color-mix(in srgb, var(--caution) 18%, transparent);
+}
+.panel-status-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.22;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--border) 80%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--border) 80%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 42%, #000 20%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 42%, #000 20%, transparent 75%);
+}
+html[data-theme="light"] .panel-status-orb { opacity: 0.35; }
+html[data-theme="light"] .panel-status-grid { opacity: 0.35; }
+
 .panel-status-brand {
   display: flex;
   align-items: center;
   gap: var(--space-1_5);
+  animation: panel-status-in 480ms var(--ease-out, ease) both;
 }
 .panel-status-logo {
   width: 40px;
@@ -9961,72 +9998,196 @@ html[data-theme="light"] .panel-status-glow {
   font-weight: 700;
   letter-spacing: 0.01em;
 }
-.panel-status-brand-text .muted {
-  font-size: 12px;
-}
-.panel-status-main {
+.panel-status-brand-text .muted { font-size: 12px; }
+
+.panel-status-stage {
   flex: 1 1 auto;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  align-items: flex-start;
-  max-width: 28rem;
   width: 100%;
-  margin-inline: auto;
-  gap: var(--space-1_5);
-  padding-block: var(--space-4);
-  animation: panel-status-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  padding-block: var(--space-2);
 }
-@keyframes panel-status-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: none; }
+.panel-status-card {
+  position: relative;
+  width: min(100%, 26.5rem);
+  padding: var(--space-4) var(--space-3) var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  overflow: hidden;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--foreground) 4%, transparent),
+    0 24px 48px -28px color-mix(in srgb, #000 55%, transparent);
+  animation: panel-status-card-in 560ms var(--ease-out, ease) 60ms both;
 }
-.panel-status-code {
+html[data-theme="light"] .panel-status-card {
+  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--foreground) 4%, transparent),
+    0 28px 50px -30px color-mix(in srgb, #000 18%, transparent);
+}
+.panel-status-card-accent {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--primary) 15%, transparent),
+    var(--primary-fg, var(--primary)) 45%,
+    color-mix(in srgb, var(--brand) 70%, var(--primary)) 100%
+  );
+}
+.panel-status[data-status="500"] .panel-status-card-accent {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--destructive) 20%, transparent),
+    var(--destructive-fg, var(--destructive)) 50%,
+    color-mix(in srgb, var(--caution) 75%, var(--destructive)) 100%
+  );
+}
+.panel-status-watermark {
+  position: absolute;
+  inset-inline-end: -0.15em;
+  top: -0.12em;
   margin: 0;
-  font-size: clamp(3.5rem, 14vw, 5.5rem);
+  font-size: clamp(5.5rem, 28vw, 8rem);
   font-weight: 800;
-  letter-spacing: -0.04em;
-  line-height: 0.95;
-  color: color-mix(in srgb, var(--primary-fg, var(--primary)) 55%, var(--muted-fg));
+  letter-spacing: -0.06em;
+  line-height: 0.85;
+  color: color-mix(in srgb, var(--foreground) 5.5%, transparent);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  pointer-events: none;
+  animation: panel-status-mark 700ms var(--ease-out, ease) 120ms both;
+}
+.panel-status[data-status="500"] .panel-status-watermark {
+  color: color-mix(in srgb, var(--destructive) 9%, transparent);
+}
+.panel-status[data-status="404"] .panel-status-watermark {
+  color: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.panel-status-badge {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--primary) 12%, var(--control-bg));
+  color: var(--primary-fg, var(--primary));
+  animation: panel-status-in 520ms var(--ease-out, ease) 140ms both;
+}
+.panel-status[data-status="500"] .panel-status-badge {
+  background: color-mix(in srgb, var(--destructive) 12%, var(--control-bg));
+  color: var(--destructive-fg, var(--destructive));
+  border-color: color-mix(in srgb, var(--destructive) 28%, var(--border));
+}
+.panel-status[data-status="404"] .panel-status-badge {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
+}
+.panel-status-badge-ico {
+  width: 26px;
+  height: 26px;
+}
+
+.panel-status-kicker {
+  margin: 0 0 var(--space-0);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   font-variant-numeric: tabular-nums;
 }
-.panel-status[data-status="500"] .panel-status-code {
-  color: color-mix(in srgb, var(--destructive, #ef4444) 45%, var(--muted-fg));
-}
 .panel-status-title {
-  margin: 0;
-  font-size: clamp(1.35rem, 4.5vw, 1.75rem);
+  position: relative;
+  margin: 0 0 var(--space-1);
+  font-size: clamp(1.35rem, 4.2vw, 1.7rem);
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.35;
+  max-width: 16ch;
 }
 .panel-status-msg {
+  position: relative;
   margin: 0;
-  font-size: 15px;
-  line-height: 1.7;
-  max-width: 26ch;
+  font-size: 14.5px;
+  line-height: 1.75;
+  max-width: 28ch;
 }
 .panel-status-ref {
-  margin: var(--space-0) 0 0;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  margin: var(--space-2) 0 0;
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--control-radius);
+  border: 1px solid var(--border);
+  background: var(--control-bg);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
+  color: var(--foreground);
 }
 .panel-status-actions {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
-  margin-top: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-2_5);
+  border-top: 1px solid var(--border);
+}
+.panel-status-actions .btn {
+  flex: 1 1 auto;
+  justify-content: center;
+  min-width: 7.5rem;
 }
 .panel-status-foot {
   font-size: 12px;
   line-height: 1.6;
-  max-width: 28rem;
+  max-width: 26.5rem;
   margin-inline: auto;
   width: 100%;
+  text-align: center;
+  animation: panel-status-in 520ms var(--ease-out, ease) 220ms both;
 }
-@media (min-width: 720px) {
-  .panel-status-main {
-    align-items: flex-start;
+
+@keyframes panel-status-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes panel-status-card-in {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes panel-status-mark {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes panel-status-drift-a {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-18px, 22px, 0); }
+}
+@keyframes panel-status-drift-b {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(20px, -16px, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-status-brand,
+  .panel-status-card,
+  .panel-status-badge,
+  .panel-status-watermark,
+  .panel-status-foot,
+  .panel-status-orb {
+    animation: none !important;
   }
 }
+
