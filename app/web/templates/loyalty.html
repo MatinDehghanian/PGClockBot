@@ -89,7 +89,8 @@
           </span>
           <span>چرخ شانس</span>
         </div>
-        <strong>{% if wheel_metrics.wheel_enabled %}{{ wheel_metrics.active_prizes | num }} بخش · {{ wheel_metrics.total_spins | num }} چرخش{% else %}خاموش{% endif %}</strong>
+        {% set wm = wheel_metrics if wheel_metrics is defined and wheel_metrics else {} %}
+        <strong>{% if wm.get('wheel_enabled') %}{{ wm.get('active_prizes', 0) | num }} بخش · {{ wm.get('total_spins', 0) | num }} چرخش{% else %}خاموش{% endif %}</strong>
       </div>
     </div>
   </section>
